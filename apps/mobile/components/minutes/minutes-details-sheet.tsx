@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import {
   useEvent,
+  useRoleTiers,
   useRoles,
   useUpdateEvent,
   useUpdateMeeting,
@@ -20,7 +21,7 @@ import {
   eventInvitedRoleNames,
   type MeetingType,
 } from "@repo/validation";
-import { WhenRow } from "@/components/events/new-event-sheet";
+import { WhenRow } from "@/components/events/when-times";
 import { Segmented } from "@/components/segmented";
 import {
   SHEET_STACK_BEHAVIOR,
@@ -135,6 +136,7 @@ function DetailsForm({
   const updateMeeting = useUpdateMeeting();
   const event = useEvent(meeting.event_id ?? "");
   const roles = useRoles();
+  const tiers = useRoleTiers();
   const startAt = new Date(meeting.event_start_time);
   const endAt = meeting.event_end_time
     ? new Date(meeting.event_end_time)
@@ -162,7 +164,11 @@ function DetailsForm({
     (type === "other" && otherLabel.trim() !== (meeting.other_label ?? ""));
 
   const roleNames = event.data
-    ? eventInvitedRoleNames(event.data, toRoleOptions(roles.data))
+    ? eventInvitedRoleNames(
+        event.data,
+        toRoleOptions(roles.data),
+        tiers.data ?? [],
+      )
     : null;
 
   async function save() {

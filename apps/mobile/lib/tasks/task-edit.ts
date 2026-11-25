@@ -1,6 +1,7 @@
 import { dueEntryFields, dueTimePassed } from "@repo/formatting";
 import type { LiveTask, TaskEdit } from "@repo/hooks";
 import {
+  TASK_REPEAT_NEEDS_DUE_DATE,
   TASK_TITLE_MAX_LENGTH,
   taskFirstDue,
   taskRepeatDraftFromRule,
@@ -8,8 +9,10 @@ import {
   taskFieldSaveScope,
   taskSaveScope,
   taskSeriesLive,
+  type FrappLink,
   type RepeatDraft,
   type TaskProofKind,
+  sameFrappLinks,
 } from "@repo/validation";
 import { parsePointReward, storedDueOf, TASK_FORM_COPY } from "./create-task";
 import type { TaskRowModel } from "./board";
@@ -83,7 +86,10 @@ export function pointsSave(row: TaskRowModel, typed: string): TaskFieldSave {
   return { kind: "save", body: { point_reward: points } };
 }
 
-/** A due as the fields hold it: the device-local day and `HH:MM` or none. */
+/**
+ * A due as the fields hold it: the device-local day and `HH:MM` or none.
+ * `null` where a draft is taken is No due date (#5761).
+ */
 export interface TaskDueDraft {
   /** `YYYY-MM-DD`, device-local. */
   date: string;
@@ -91,9 +97,13 @@ export interface TaskDueDraft {
   time: string | null;
 }
 
+/** A due as picked: a day and time, or "none" for No due date (#5761). */
+export type TaskDuePick = TaskDueDraft | "none";
+
 /**
  * The task's due as the date and time fields open on it (`storedDueOf`).
- * `null` for a task with no day, which the fields can't hold.
+ * `null` for a task with no due date (#5761), which the field shows as
+ * "No due date".
  */
 export function dueDraftOf(row: TaskRowModel): TaskDueDraft | null {
   if (!row.dueDay) return null;
@@ -105,15 +115,31 @@ export function dueDraftOf(row: TaskRowModel): TaskDueDraft | null {
 }
 
 /**
+ * Whether its due can be taken off (#5761): not on a copy of a repeating
+ * task, whose series needs a day (the API refuses `due_date: null` there).
+ */
+export function dueClearable(row: TaskRowModel): boolean {
+  return row.series === null;
+}
+
+/**
  * The day and time as a pair, as the API reads them. The task's own due is
  * never refused for having passed (an overdue task's title can still
- * change); a newly picked time that has gone by today is.
+ * change); a newly picked time that has gone by today is. `"none"` takes
+ * the due off (#5761): `due_date: null`, and the time goes with it.
  */
 export function dueSave(
   row: TaskRowModel,
-  next: TaskDueDraft,
+  next: TaskDuePick,
   now: Date,
 ): TaskFieldSave {
+  if (next === "none") {
+    if (row.dueDay === null && row.dueAt === null) return NONE;
+    if (!dueClearable(row)) {
+      return { kind: "problem", message: TASK_REPEAT_NEEDS_DUE_DATE };
+    }
+    return { kind: "save", body: { due_date: null, due_at: null } };
+  }
   const stored = dueDraftOf(row);
   const kept = stored
     ? { dueDate: stored.date, dueTime: stored.time }
@@ -215,7 +241,7 @@ export function seriesScopeOf(
     { status: row.displayStatus ?? row.storedStatus ?? "", series: row.series },
     body,
     body.due_date !== undefined &&
-      body.due_date.slice(0, 10) !== day?.slice(0, 10),
+      body.due_date?.slice(0, 10) !== day?.slice(0, 10),
   );
 }
 
@@ -226,6 +252,32 @@ export function proofSave(
 ): TaskFieldSave {
   if (next === row.proofKind) return NONE;
   return { kind: "save", body: { proof_kind: next } };
+}
+
+/**
+ * From as picked (#5473): the tier, role or group the task is from, or
+ * `null` for its creator alone. On a group task's copy it goes with
+ * `scope: "group"` (`scopedEdit`), since a group follows every copy.
+ */
+export function followerSave(
+  row: TaskRowModel,
+  next: string | null,
+): TaskFieldSave {
+  if (next === row.followedBy) return NONE;
+  return { kind: "save", body: { followed_by: next } };
+}
+
+/**
+ * Attached as it should stand (`spec/behavior/frapp-links.md`): sent whole,
+ * and only when it changed. On a group task's copy it goes with
+ * `scope: "group"` (`scopedEdit`), since every copy holds the same list.
+ */
+export function attachmentsSave(
+  row: TaskRowModel,
+  next: readonly FrappLink[],
+): TaskFieldSave {
+  if (sameFrappLinks(next, row.attachments)) return NONE;
+  return { kind: "save", body: { attachments: [...next] } };
 }
 
 /**
@@ -289,6 +341,12 @@ export function rowAfter(row: TaskRowModel, body: TaskEdit): TaskRowModel {
     ...(body.due_at !== undefined ? { dueAt: body.due_at } : {}),
     ...(body.proof_kind !== undefined ? { proofKind: body.proof_kind } : {}),
     ...(body.assignee_id !== undefined ? { assigneeId: body.assignee_id } : {}),
+    ...(body.followed_by !== undefined
+      ? { followedBy: body.followed_by ?? null }
+      : {}),
+    ...(body.attachments !== undefined
+      ? { attachments: body.attachments as FrappLink[] }
+      : {}),
     ...(body.recurrence_rule !== undefined && row.series
       ? {
           series:
@@ -310,8 +368,6 @@ export interface TaskEditFacts {
   pointsAwarded: boolean;
   confirmedAt: string | null;
   assigneeId: string | null;
-  /** It has a day, which the due field needs. */
-  hasDue: boolean;
 }
 
 export function editFactsOfRow(row: TaskRowModel): TaskEditFacts {
@@ -319,7 +375,6 @@ export function editFactsOfRow(row: TaskRowModel): TaskEditFacts {
     pointsAwarded: row.pointsAwarded,
     confirmedAt: row.confirmedAt,
     assigneeId: row.assigneeId,
-    hasDue: row.dueDay !== null,
   };
 }
 
@@ -329,7 +384,6 @@ export function editFactsOfLive(live: LiveTask): TaskEditFacts {
     pointsAwarded: live.points_awarded,
     confirmedAt: live.confirmed_at,
     assigneeId: live.assignee_id ?? null,
-    hasDue: !!live.due,
   };
 }
 
@@ -337,15 +391,15 @@ export function editFactsOfLive(live: LiveTask): TaskEditFacts {
  * Who may edit a task in place (#5514), the task screen's rule and the chat
  * card's Edit gate alike, so the card never opens an edit the screen won't
  * draw: a `tasks:manage` holder, until the task is confirmed (paid, or
- * signed off), with an assignee and a day, which the fields need (a task up
- * for grabs has no assignee yet). The API refuses an edit once confirmed.
+ * signed off), with an assignee (a task up for grabs has no assignee yet).
+ * A task with no due date (#5761) is editable too: its Due field says so and
+ * can give it one. The API refuses an edit once confirmed.
  */
 export function taskEditable(task: TaskEditFacts, canManage: boolean): boolean {
   return (
     canManage &&
     !task.pointsAwarded &&
     task.confirmedAt === null &&
-    task.assigneeId !== null &&
-    task.hasDue
+    task.assigneeId !== null
   );
 }

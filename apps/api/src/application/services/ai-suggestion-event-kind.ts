@@ -6,7 +6,10 @@ import {
 import { EVENT_NAME_MAX_LENGTH } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
-import type { AiSuggestionKindHandler } from './ai-suggestion-kinds';
+import type {
+  AiSuggestionChangeLog,
+  AiSuggestionKindHandler,
+} from './ai-suggestion-kinds';
 import { EventService } from './event.service';
 
 /** How long a suggested event waits for an officer (spec: ai.md § Suggestions). */
@@ -135,6 +138,17 @@ export class EventSuggestionKind implements AiSuggestionKindHandler {
   countsAsEdited(): boolean {
     return false;
   }
+
+  /**
+   * The change log keeps the decision alone: the event is always made in
+   * its own form, from last year's, so there is no proposal to compare a
+   * field against (Paul, 2026-11-22). The last-year fill is to add its own.
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: {},
+    view: () => ({}),
+    madeInForm: () => true,
+  };
 
   assertAcceptable(payload: AiSuggestionPayload): void {
     if (!readEventPayload(payload).event_id) {

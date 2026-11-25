@@ -1,4 +1,5 @@
 import { CALENDAR_KIND_HUE } from "@repo/hooks/activity-agenda";
+import { eventInvitees } from "@repo/validation";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -41,7 +42,13 @@ const {
 
 // usingPreviewData renders from the `event` prop and gates out AttendancePanel;
 // stub the live hooks so the sheet renders without a query client / API.
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
+  // The event's Now pill (#5777) runs for real.
+  eventNowPill: (await importOriginal<typeof import("@repo/hooks")>())
+    .eventNowPill,
+  // The roster's pure rules (counts, the people shown) run for real.
+  ...(await import("@repo/hooks/event-roster")),
   useNow: () => Date.now(),
   useEvent: () => ({
     data: eventQueryState.data,
@@ -68,8 +75,19 @@ vi.mock("@repo/hooks", () => ({
     refetch: vi.fn(),
   }),
   useActiveChapterId: () => "chap-1",
+  // The invite list behind Who's coming and its headcount (#5853 thread).
+  useMembers: () => ({ data: membersState.value }),
+  useEventInvitees: (audience: Parameters<typeof eventInvitees>[0]) =>
+    eventInvitees(audience, membersState.value),
   useRequiredOfViewer: () => () => excuseState.required,
   useViewerUserId: () => excuseState.viewerId,
+}));
+
+const membersState = vi.hoisted(() => ({
+  value: [
+    { user_id: "u-1", display_name: "Ava Brooks", role_ids: ["r1"] },
+    { user_id: "u-2", display_name: "Marcus Lee", role_ids: [] },
+  ] as { user_id: string; display_name: string; role_ids: string[] }[],
 }));
 
 // Excuses (#3735): the blocks have their own spec (`event-excuses.spec.tsx`);
@@ -115,15 +133,18 @@ vi.mock("@/components/events/event-agenda", () => ({
   EventMeetingLists: ({
     lists,
     canEdit,
+    checkOffOpen,
     documentsOn,
   }: {
     lists: { agenda: { text: string }[]; attachments: { title: string }[] };
     canEdit: boolean;
+    checkOffOpen?: boolean;
     documentsOn: boolean | null;
   }) => (
     <div
       data-testid="event-lists"
       data-can-edit={String(canEdit)}
+      data-check-off={String(checkOffOpen)}
       data-documents={String(documentsOn)}
       data-agenda={lists.agenda.map((item) => item.text).join("|")}
       data-attachments={lists.attachments.map((item) => item.title).join("|")}
@@ -173,6 +194,19 @@ const baseEvent = {
   end_time: "2026-07-01T19:00:00.000Z",
 };
 
+// On now: check-in is open, so the page shows the check-in zone and, for an
+// officer, the roster (`eventPagePhase`). `baseEvent` is long over.
+const liveEvent = {
+  ...baseEvent,
+  start_time: new Date(Date.now() - 10 * 60_000).toISOString(),
+  end_time: new Date(Date.now() + 50 * 60_000).toISOString(),
+};
+
+/** Opens the header's ⋯, where Delete lives (rulebook § Page layout). */
+async function openMore(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /^More for / }));
+}
+
 const chapter = chapterSubscription(mockCurrentChapter);
 
 beforeEach(() => {
@@ -210,10 +244,9 @@ describe("EventDetailSheet who's coming", () => {
       />,
     );
 
+    // The form's own words for it (`describeAttendance`), in its row.
     expect(screen.getByText("Who's coming")).toBeInTheDocument();
-    expect(screen.getByText("Only the roles below")).toBeInTheDocument();
-    expect(screen.getByText("Exec")).toBeInTheDocument();
-    expect(screen.getByText("Required")).toBeInTheDocument();
+    expect(screen.getByText(/^Exec required/)).toBeInTheDocument();
   });
 
   it("says the default alone when no role is set apart", () => {
@@ -249,7 +282,7 @@ describe("EventDetailSheet series", () => {
     },
   ];
 
-  it("lists the series' upcoming meetings under the one it opened, and opens another", async () => {
+  it("links the series' next meeting rather than listing every date", async () => {
     const user = userEvent.setup();
     const onSelectOccurrence = vi.fn();
     render(
@@ -257,7 +290,7 @@ describe("EventDetailSheet series", () => {
         open
         onOpenChange={() => {}}
         usingPreviewData
-        event={baseEvent}
+        event={{ ...baseEvent, recurrence_rule: "WEEKLY" }}
         series={series}
         onSelectOccurrence={onSelectOccurrence}
         onRequestEdit={() => {}}
@@ -265,19 +298,28 @@ describe("EventDetailSheet series", () => {
       />,
     );
 
-    const list = within(
-      screen.getByRole("region", { name: "Upcoming in this series" }),
-    );
-    const meetings = list.getAllByRole("button");
-    expect(meetings).toHaveLength(3);
-    // The one open is marked and isn't a way to reopen itself.
-    expect(meetings[0]).toHaveAttribute("aria-current", "true");
-    expect(meetings[0]).toBeDisabled();
-
-    await user.click(meetings[2]!);
+    // Paul 2026-11-19: "don't need to see all the upcoming series events".
+    expect(screen.queryByText("Upcoming in this series")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^Next / }));
     expect(onSelectOccurrence).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "e3" }),
+      expect.objectContaining({ id: "e2" }),
     );
+  });
+
+  it("offers no next meeting from the series' last one", () => {
+    render(
+      <EventDetailSheet
+        open
+        onOpenChange={() => {}}
+        usingPreviewData
+        event={{ ...series[2]!, recurrence_rule: "WEEKLY" }}
+        series={series}
+        onSelectOccurrence={() => {}}
+        onRequestEdit={() => {}}
+        onEventDeleted={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /^Next / })).toBeNull();
   });
 
   it("badges a generated meeting with the series' rule it was handed", () => {
@@ -405,14 +447,16 @@ describe("EventDetailSheet subscription gating", () => {
     );
   }
 
-  it("disables edit and delete and names the blocker on a lapsed chapter", () => {
+  it("disables edit and delete and names the blocker on a lapsed chapter", async () => {
+    const user = userEvent.setup();
     chapter.incomplete();
     renderSheet();
 
     expect(screen.getByRole("button", { name: /edit event/i })).toBeDisabled();
+    await openMore(user);
     expect(
-      screen.getByRole("button", { name: /delete event/i }),
-    ).toBeDisabled();
+      screen.getByRole("menuitem", { name: /delete event/i }),
+    ).toHaveAttribute("data-disabled");
     expect(screen.getByText(/subscription is not active/i)).toBeInTheDocument();
   });
 
@@ -451,7 +495,8 @@ describe("EventDetailSheet subscription gating", () => {
 describe("EventDetailSheet header actions", () => {
   // components.md § Chrome weight: an object's actions are icons in its
   // header beside the close, not worded buttons opening the body.
-  it("draws Edit and Delete as named icons with tooltips", () => {
+  it("draws Edit as a named icon, and Delete behind the ⋯", async () => {
+    const user = userEvent.setup();
     chapter.active();
     render(
       <EventDetailSheet
@@ -464,11 +509,15 @@ describe("EventDetailSheet header actions", () => {
       />,
     );
 
-    for (const name of ["Edit event", "Delete event"]) {
-      const button = screen.getByRole("button", { name });
-      expect(button).toHaveTextContent(/^$/);
-      expect(button).toHaveAttribute("title", name);
-    }
+    const edit = screen.getByRole("button", { name: "Edit event" });
+    expect(edit).toHaveTextContent(/^$/);
+    expect(edit).toHaveAttribute("title", "Edit event");
+    // Destructive, so never on its own in the header.
+    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    await openMore(user);
+    expect(
+      screen.getByRole("menuitem", { name: "Delete event" }),
+    ).toBeInTheDocument();
     // The .ics export was withdrawn until calendar sync ships (#3708).
     expect(
       screen.queryByRole("button", { name: /add to calendar/i }),
@@ -484,7 +533,7 @@ describe("EventDetailSheet check-in zone", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -510,7 +559,7 @@ describe("EventDetailSheet check-in zone", () => {
         open
         onOpenChange={() => {}}
         usingPreviewData
-        event={baseEvent}
+        event={liveEvent}
         onRequestEdit={() => {}}
         onEventDeleted={async () => {}}
       />,
@@ -529,7 +578,7 @@ describe("EventDetailSheet check-in zone", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -556,7 +605,7 @@ describe("EventDetailSheet zone validity mirrors the server", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -604,7 +653,7 @@ describe("EventDetailSheet schedule and policy", () => {
     expect(screen.getByText(/· 5:00\s?– 7:00\sPM$/)).toBeInTheDocument();
   });
 
-  it("wears the events kind mark, and Required in its hue when it requires the viewer (#5560)", () => {
+  it("wears the events kind mark, and a Required chip when it requires the viewer (#5560)", () => {
     excuseState.required = true;
     const { unmount } = renderSheet(baseEvent);
     const dialog = screen.getByRole("dialog");
@@ -678,7 +727,7 @@ describe("EventDetailSheet loading", () => {
 describe("EventDetailSheet required badge", () => {
   // A status, so danger as the events list and mobile draw it, never the
   // chapter accent (components.md §5).
-  it("draws required-for-everyone as the danger badge", () => {
+  it("says required-for-everyone in words", () => {
     render(
       <EventDetailSheet
         open
@@ -689,9 +738,8 @@ describe("EventDetailSheet required badge", () => {
         onEventDeleted={() => {}}
       />,
     );
-    const badge = screen.getByText("Required for everyone");
-    expect(badge.className).toContain("text-destructive-text");
-    expect(badge.className).not.toContain("text-accent-text");
+    // Said in Who's coming's row, in the form's words.
+    expect(screen.getByText("Required for everyone")).toBeInTheDocument();
   });
 });
 
@@ -738,7 +786,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     // do this" on the member's sheet.
     expect(screen.queryByTestId("attendance-roster")).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit event" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
   });
 
   it("tells a member on a lapsed chapter nothing about editing events", () => {
@@ -780,7 +830,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     renderLive();
 
     expect(screen.queryByRole("button", { name: "Edit event" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
   });
 
   it("keeps them when the permissions read failed offline", () => {
@@ -836,11 +888,11 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
   it("says to scan once the event's read says the code is required, and no zone line contradicts it", () => {
     permissionsState.value = ["members:view"];
     eventQueryState.data = {
-      ...baseEvent,
+      ...liveEvent,
       check_in_zone: null,
       check_in_needs_code: true,
     };
-    renderLive();
+    renderLive(liveEvent);
 
     expect(screen.getByTestId("my-check-in")).toHaveAttribute(
       "data-zone",
@@ -895,7 +947,7 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Delete event" }),
+      screen.getByRole("button", { name: /^More for / }),
     ).toBeInTheDocument();
   });
 
@@ -909,8 +961,110 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Delete event" }),
+      screen.getByRole("button", { name: /^More for / }),
     ).toBeInTheDocument();
+  });
+
+  // Paul 2026-11-22: "why is the attendance fully out to see right off the
+  // bat for an event a month in the future?"
+  it("keeps the roster back until check-in opens, and lists who's coming instead", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    renderLive({
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+    });
+
+    expect(screen.queryByTestId("attendance-roster")).toBeNull();
+    const people = screen.getByRole("region", { name: "Who's coming" });
+    expect(within(people).getByText("Ava Brooks")).toBeInTheDocument();
+    expect(within(people).getByText("Marcus Lee")).toBeInTheDocument();
+  });
+
+  it("gives an officer the roster while check-in is open, with check-in leading the page", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    eventQueryState.data = liveEvent;
+    renderLive(liveEvent);
+
+    expect(screen.getByTestId("attendance-roster")).toBeInTheDocument();
+    const checkIn = screen.getByTestId("my-check-in");
+    const when = screen.getByText("When");
+    expect(
+      Boolean(
+        checkIn.compareDocumentPosition(when) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
+  it("puts check-in after the details before it opens", () => {
+    const later = {
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+    };
+    permissionsState.value = ["members:view"];
+    eventQueryState.data = later;
+    renderLive(later);
+
+    const checkIn = screen.getByTestId("my-check-in");
+    const when = screen.getByText("When");
+    expect(
+      Boolean(
+        when.compareDocumentPosition(checkIn) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
+  it("counts only the people the event invites", () => {
+    permissionsState.value = ["members:view"];
+    renderLive({
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+      required_role_ids: ["r1"],
+      others_invited: false,
+    });
+
+    // In the Who's coming row and atop the side list.
+    expect(screen.getAllByText("1 person")).toHaveLength(2);
+    const people = screen.getByRole("region", { name: "Who's coming" });
+    expect(within(people).getByText("Ava Brooks")).toBeInTheDocument();
+    expect(within(people).queryByText("Marcus Lee")).toBeNull();
+  });
+
+  it("reads details, then the agenda, then attendance (Paul 2026-11-19)", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    renderLive();
+    const details = screen.getByText("When");
+    const agenda = screen.getByTestId("event-lists");
+    const roster = screen.getByTestId("attendance-roster");
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(details, agenda)).toBe(true);
+    expect(follows(agenda, roster)).toBe(true);
+  });
+
+  it("lets the agenda be ticked off only once the meeting has started", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    const { unmount } = renderLive();
+    expect(screen.getByTestId("event-lists")).toHaveAttribute(
+      "data-check-off",
+      "true",
+    );
+    unmount();
+    const later = {
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+    };
+    eventQueryState.data = later;
+    renderLive(later);
+    expect(screen.getByTestId("event-lists")).toHaveAttribute(
+      "data-check-off",
+      "false",
+    );
   });
 
   it("hands the meeting's agenda and attachments to their sections, editable only by an officer with a real answer (#4934)", () => {
@@ -951,7 +1105,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     expect(
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
     // The roster is `events:update`'s, not `events:delete`'s.
     expect(screen.getByTestId("attendance-roster")).toBeInTheDocument();
   });
@@ -1013,7 +1169,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("asks which events to delete from a repeating series", async () => {
     const user = userEvent.setup();
     renderLive({ ...upcoming, parent_event_id: "h1" });
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     expect(screen.getByText("Delete a repeating event")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "All upcoming events" }),
@@ -1024,7 +1181,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("deletes only this one when asked", async () => {
     const user = userEvent.setup();
     renderLive({ ...upcoming, recurrence_rule: "WEEKLY" });
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     await user.click(screen.getByRole("button", { name: "This event only" }));
     expect(deleteMutate).toHaveBeenCalledWith({ id: "e1", scope: "instance" });
   });
@@ -1032,7 +1190,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("doesn't ask for a one-time event", async () => {
     const user = userEvent.setup();
     renderLive(upcoming);
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     expect(screen.queryByText("Delete a repeating event")).toBeNull();
     await user.click(
       within(
@@ -1080,5 +1239,40 @@ describe("EventDetailSheet excuses (#3735)", () => {
     permissionsState.value = ["events:update", "members:view"];
     renderLive({ ...baseEvent, created_by: "someone-else" });
     expect(screen.getByTestId("excuse-review")).toBeInTheDocument();
+  });
+});
+
+describe("EventDetailSheet Now pill (#5777)", () => {
+  it("says the event is on until its end, and nothing for one long over", () => {
+    const { unmount } = render(
+      <EventDetailSheet
+        open
+        onOpenChange={() => {}}
+        usingPreviewData
+        event={{
+          ...baseEvent,
+          start_time: new Date(Date.now() - 40 * 60_000).toISOString(),
+          end_time: new Date(Date.now() + 20 * 60_000).toISOString(),
+        }}
+        onRequestEdit={() => {}}
+        onEventDeleted={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("event-now-pill")).toHaveTextContent(
+      /^Now · until /,
+    );
+    unmount();
+
+    render(
+      <EventDetailSheet
+        open
+        onOpenChange={() => {}}
+        usingPreviewData
+        event={baseEvent}
+        onRequestEdit={() => {}}
+        onEventDeleted={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("event-now-pill")).toBeNull();
   });
 });

@@ -7,7 +7,7 @@ import { roleColor, type RoleColorHex } from "@repo/validation";
  * place's hue").
  *
  * The You tab is a list of up to ten places a member opens by habit. A hue
- * per place lets them find Study hours or Documents without reading the
+ * per place lets them find Study hours or Resources without reading the
  * labels, as iOS Settings and Telegram's settings list do. The rule that
  * keeps it from becoming decoration: **a hue names a place, never a state.**
  * It is the same every day for every member, so it carries no news. Rows
@@ -31,35 +31,50 @@ import { roleColor, type RoleColorHex } from "@repo/validation";
  * the glyph at full strength), and `member-avatar-color.spec.ts` holds that
  * pair at AA for every hue in the palette.
  *
- * Settings and Chapter settings share slate: they are the same kind of
- * place, one the member's and one the chapter's, and draw the same gear.
+ * Settings is slate. Chapter settings shared it, the same kind of place,
+ * until it left You for Chat home's chapter menu (2026-11-19).
+ *
+ * The recruitment row (#5924) is the eleventh place and the palette has ten,
+ * so it shares green with Create a chapter, the one pair that never meets:
+ * Create a chapter is drawn only for someone with no chapter, and the
+ * recruitment row only inside one ({@link SHARED_HUE_PAIRS}).
  */
 export type YouDestination =
   | "study"
   | "service"
   | "dues"
-  | "documents"
-  | "minutes"
+  | "resources"
   | "directory"
   | "settings"
   | "chapter"
   | "invite"
   | "hostCheckIn"
-  | "chapterSettings";
+  | "recruitment";
 
 export const YOU_DESTINATION_HUE: Record<YouDestination, RoleColorHex> = {
   study: roleColor("periwinkle"),
   service: NOTIFICATION_TILE_HUE.service,
   dues: NOTIFICATION_TILE_HUE.billing,
-  documents: roleColor("violet"),
-  minutes: roleColor("rose"),
+  // Documents' violet: the row opens Documents, where minutes are filed
+  // since #5949 (Minutes had rose while it was its own row).
+  resources: roleColor("violet"),
   directory: roleColor("orange"),
   settings: roleColor("slate"),
   chapter: roleColor("green"),
   invite: roleColor("lime"),
   hostCheckIn: NOTIFICATION_TILE_HUE.events,
-  chapterSettings: roleColor("slate"),
+  recruitment: roleColor("green"),
 };
+
+/**
+ * Places that share a hue because You never draws both at once (see above).
+ * Only this list may repeat a hue; `destination-hue.spec.ts` holds the rest
+ * apart.
+ */
+export const SHARED_HUE_PAIRS: readonly (readonly [
+  YouDestination,
+  YouDestination,
+])[] = [["chapter", "recruitment"]];
 
 /** The hex a place's tile and glyph draw in. */
 export function destinationHue(place: YouDestination): RoleColorHex {

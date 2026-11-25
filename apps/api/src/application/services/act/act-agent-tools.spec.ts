@@ -101,9 +101,12 @@ describe('the cards the tool loop may propose', () => {
     const tool = named('create_task');
     const args = tool.input.parse({
       title: 'Book the bus',
-      assignee: 'Jordan',
+      people: ['Jordan'],
       due_date: '2026-11-20',
       due_time: '17:00',
+      points: 10,
+      proof: 'photo',
+      steps: ['Call the company'],
     });
     const result = await tool.propose(args, context);
 
@@ -121,6 +124,14 @@ describe('the cards the tool loop may propose', () => {
         people: ['Jordan'],
         date: '2026-11-20',
         start_time: '17:00',
+        task: {
+          for_set: null,
+          who_does: null,
+          points: 10,
+          proof: 'photo',
+          steps: ['Call the company'],
+          from: null,
+        },
       }),
       NOW,
     );
@@ -129,6 +140,34 @@ describe('the cards the tool loop may propose', () => {
       card: PROPOSED,
       note: expect.stringContaining('A card is ready') as string,
     });
+  });
+
+  it('hands a role, tier or group over in place of people', async () => {
+    const { named, proposePlanned } = build();
+    const tool = named('create_task');
+    await tool.propose(
+      tool.input.parse({
+        title: 'Table at the fair',
+        people: ['Jordan'],
+        for_set: 'Recruitment Committee',
+        who_does: 'one',
+        from: 'Exec',
+      }),
+      context,
+    );
+    expect(proposePlanned).toHaveBeenCalledWith(
+      expect.anything(),
+      'create_task',
+      expect.objectContaining({
+        people: [],
+        task: expect.objectContaining({
+          for_set: 'Recruitment Committee',
+          who_does: 'one',
+          from: 'Exec',
+        }) as unknown,
+      }),
+      NOW,
+    );
   });
 
   it('hands points and an event over the same way', async () => {
@@ -150,7 +189,12 @@ describe('the cards the tool loop may propose', () => {
         name: 'Study night',
         date: '2026-11-20',
         start_time: '19:00',
-        required: true,
+        invite: {
+          required: ['Exec board'],
+          optional: ['Social Chair'],
+          everyone_else: 'not_invited',
+        },
+        event_type: 'Officer development',
         points: 2,
         repeats: 'weekly',
       }),
@@ -174,7 +218,15 @@ describe('the cards the tool loop may propose', () => {
         title: 'Study night',
         date: '2026-11-20',
         start_time: '19:00',
-        required: true,
+        // Who is invited, by the chapter's names, for the action to look
+        // up (#5853): never ids from the model.
+        invite: {
+          required: ['Exec board'],
+          optional: ['Social Chair'],
+          not_invited: [],
+          everyone_else: 'not_invited',
+        },
+        event_type: 'Officer development',
         amount: 2,
         // "every Tuesday" read by the model reaches the card (#5117).
         repeats: 'weekly',

@@ -19,6 +19,12 @@ import { CHAT_LINK_MEMBER_STATES } from '#domain/entities/chat.entity';
 import type { ChatLinkMemberStateValue } from '#domain/entities/chat.entity';
 import type { ActivityLink } from '../../application/services/activity-link.service';
 import type {
+  ActivityMinutes,
+  ActivityMinutesDraft,
+  ActivityMinutesToWrite,
+  ActivityNoteTaking,
+} from '../../application/services/activity-minutes.service';
+import type {
   ActivityReminder,
   ChatMessageReminderRef,
 } from '../../application/services/chat-reminder.service';
@@ -47,6 +53,7 @@ import type {
 } from '../../application/services/activity-standing.service';
 import type {
   ActivityArchive,
+  ActivityNow,
   ActivityCard,
   ActivityEvent,
   ActivityHoursEntry,
@@ -91,8 +98,14 @@ export class ActivityTaskDto implements ActivityTask {
   @ApiProperty()
   title: string;
 
-  @ApiProperty({ format: 'date', example: '2026-11-20' })
-  due_date: string;
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    example: '2026-11-20',
+    description: 'Null for a task with no due date (#5761).',
+  })
+  due_date: string | null;
 
   @ApiProperty({
     type: String,
@@ -214,8 +227,14 @@ export class ActivityTaskGroupDto
   @ApiProperty({ type: String, nullable: true })
   description: string | null;
 
-  @ApiProperty({ format: 'date', example: '2026-11-20' })
-  due_date: string;
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    example: '2026-11-20',
+    description: 'Null for a task with no due date (#5761).',
+  })
+  due_date: string | null;
 
   @ApiProperty({
     type: String,
@@ -527,6 +546,15 @@ export class ActivityEventDto implements ActivityEvent {
 
   @ApiProperty({
     type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'When the caller checked in, read with `checked_in`. Null when they have not, when it was not read, and when the attendance row has no time.',
+  })
+  checked_in_at: string | null;
+
+  @ApiProperty({
+    type: String,
     format: 'uuid',
     nullable: true,
     description:
@@ -559,21 +587,6 @@ export class ActivityEventDto implements ActivityEvent {
       'Until when the caller snoozed it (`PUT /v1/activity/snoozes`), while the snooze lasts; null when it isn’t snoozed. A snoozed row is not counted in `needs_you_count`; a client lists it apart and brings it back at that time, unread unless opened since. Always null in `made_by_you`.',
   })
   snoozed_until: string | null;
-}
-
-/** A file the caller uploaded. Never served since #4291; see `ActivityMadeByYouDto.files`. */
-export class ActivityFileDto {
-  @ApiProperty({ format: 'uuid' })
-  id: string;
-
-  @ApiProperty({ enum: ['document', 'backwork'] })
-  source: 'document' | 'backwork';
-
-  @ApiProperty()
-  title: string;
-
-  @ApiProperty({ format: 'date-time' })
-  created_at: string;
 }
 
 export class ActivityLinkDto implements ActivityLink {
@@ -739,6 +752,125 @@ export class ActivityReminderDto implements ActivityReminder {
   due: boolean;
 }
 
+/**
+ * A meeting that ended in the last 30 days with no minutes (#5949): the
+ * Write minutes row on the caller's To do.
+ */
+export class ActivityMinutesToWriteDto implements ActivityMinutesToWrite {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The meeting’s event: `POST /v1/meetings` with it starts the minutes, and `PUT /v1/events/{id}/no-minutes` marks it as having none.',
+  })
+  event_id: string;
+
+  @ApiProperty({ description: 'The event’s name.' })
+  name: string;
+
+  @ApiProperty({ format: 'date-time' })
+  start_time: string;
+
+  @ApiProperty({ format: 'date-time' })
+  end_time: string;
+}
+
+/** Minutes the caller started and hasn't posted (#5949). */
+export class ActivityMinutesDraftDto implements ActivityMinutesDraft {
+  @ApiProperty({ format: 'uuid' })
+  meeting_id: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Null for minutes started with no meeting, until one is linked.',
+  })
+  event_id: string | null;
+
+  @ApiProperty({ description: 'The meeting’s name, as the minutes hold it.' })
+  name: string;
+
+  @ApiProperty({ format: 'date-time' })
+  event_start_time: string;
+
+  @ApiProperty({
+    description:
+      'Whether anything is in them yet: a written section, someone’s notes, or a recording. Without, they read "Not started".',
+  })
+  started: boolean;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Who is recording them on their phone right now, else null.',
+  })
+  recording_by: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'The name of whoever is recording, when it isn’t the caller; else null.',
+  })
+  recording_by_name: string | null;
+}
+
+/**
+ * Another officer's unposted minutes the caller takes notes on (#4935,
+ * #5949): one they were added to, or joined by writing.
+ */
+export class ActivityNoteTakingDto implements ActivityNoteTaking {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Their notes are `GET /v1/meetings/{id}/notes`.',
+  })
+  meeting_id: string;
+
+  @ApiProperty({ format: 'uuid' })
+  event_id: string;
+
+  @ApiProperty({ description: 'The meeting’s name, as the minutes hold it.' })
+  name: string;
+
+  @ApiProperty({ format: 'date-time' })
+  event_start_time: string;
+
+  @ApiProperty({ description: 'Who is writing the minutes.' })
+  author_name: string;
+
+  @ApiProperty({ description: 'The caller has notes on it already.' })
+  joined: boolean;
+
+  @ApiProperty({ description: 'The author or an editor added the caller.' })
+  added: boolean;
+}
+
+/** Minutes waiting on the caller (#5949), while the chapter has Meetings on. */
+export class ActivityMinutesDto implements ActivityMinutes {
+  @ApiProperty({
+    type: [ActivityMinutesToWriteDto],
+    description:
+      'For a holder of `meetings:record`: events the caller can see that ended in the last 30 days, whose name reads as a meeting, with no minutes by anyone (a draft the caller can’t read included) and not marked "No minutes". Newest first, at most 25. Counted in `needs_you_count`.',
+  })
+  to_write: ActivityMinutesToWriteDto[];
+
+  @ApiProperty({
+    type: [ActivityMinutesDraftDto],
+    description:
+      'The caller’s own unposted minutes they may still read, newest meeting first, at most 25. Counted in `needs_you_count`.',
+  })
+  drafts: ActivityMinutesDraftDto[];
+
+  @ApiProperty({
+    type: [ActivityNoteTakingDto],
+    description:
+      'Other officers’ unposted minutes the caller takes notes on, added or joined, newest meeting first, at most 25. Empty on a server with AI off. Those with `joined` false are counted in `needs_you_count`.',
+  })
+  taking_notes: ActivityNoteTakingDto[];
+}
+
 /** `PUT /v1/reminders/messages/{messageId}`. */
 export class SetChatReminderDto {
   @ApiProperty({
@@ -895,14 +1027,6 @@ export class ActivityMadeByYouDto {
   task_items: ActivityTaskItem[];
 
   @ApiProperty({
-    type: [ActivityFileDto],
-    deprecated: true,
-    description:
-      'Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.',
-  })
-  files: ActivityFileDto[];
-
-  @ApiProperty({
     type: [ActivityEventDto],
     description:
       'Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here.',
@@ -1000,12 +1124,19 @@ export class ActivityDto implements ActivityView {
   })
   reminders: ActivityReminderDto[];
 
+  @ApiProperty({
+    type: ActivityMinutesDto,
+    description:
+      'Minutes waiting on the caller (#5949): meetings to write minutes for, their own drafts, and drafts they take notes on. Empty lists while the chapter has Meetings off. No `unread` or `snoozed_until`: these rows have neither.',
+  })
+  minutes: ActivityMinutesDto;
+
   @ApiProperty({ type: ActivityMadeByYouDto })
   made_by_you: ActivityMadeByYouDto;
 
   @ApiProperty({
     description:
-      'How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, less what the caller snoozed (`snoozed_until`).',
+      'How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, plus every `minutes.to_write` and `minutes.drafts` row and each `minutes.taking_notes` row not yet `joined`, less what the caller snoozed (`snoozed_until`).',
   })
   needs_you_count: number;
 
@@ -1045,6 +1176,23 @@ export class ActivityWeekQueryDto {
   @IsOptional()
   @IsISO8601({ strict: true })
   week_start?: string;
+}
+
+/**
+ * `GET /v1/activity`'s query: the week, and whether the client draws the
+ * Minutes run (#5949). A build from before it gets no `minutes` rows and no
+ * count of them, so its badge never counts a row it can't show.
+ */
+export class ActivityQueryDto extends ActivityWeekQueryDto {
+  @ApiProperty({
+    required: false,
+    enum: ['true'],
+    description:
+      '`true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949).',
+  })
+  @IsOptional()
+  @IsIn(['true'])
+  minutes?: 'true';
 }
 
 /**
@@ -1247,6 +1395,15 @@ export class ActivityRecapDto implements ActivityRecap {
       'Parts that could not be read this time. Each is served null; the others are unaffected.',
   })
   unavailable: RecapPart[];
+}
+
+export class ActivityNowDto implements ActivityNow {
+  @ApiProperty({
+    type: [ActivityEventDto],
+    description:
+      'Events on right now (from when check-in opens until the end, whether or not the caller checked in) that are the caller’s to see as on: invited and required of them, checked in to, or made by them, and every event on for a holder of `events:update`; never one the caller is excused from. `checked_in` and `checked_in_at` come from their attendance row: present or late counts as checked in. The one they checked in to first, then the latest start, at most 5. Empty while the chapter has Events off.',
+  })
+  events: ActivityEventDto[];
 }
 
 export class ActivityArchiveDto implements ActivityArchive {

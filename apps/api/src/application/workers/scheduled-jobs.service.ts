@@ -31,7 +31,16 @@ import {
 } from '#domain/entities';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import { SIGNET_ENGINE_VERSION } from '@repo/chapter-theme';
-import { CHECK_IN_GRACE_MINUTES, isBetaOffModule } from '@repo/validation';
+import {
+  CHECK_IN_GRACE_MINUTES,
+  RUSH_STALE_DAYS_DEFAULT,
+  isBetaOffModule,
+  isModuleEnabled,
+  rushDaysBetween,
+  rushStaleOn,
+} from '@repo/validation';
+import { RbacService } from '../services/rbac.service';
+import { SystemPermissions } from '#domain/constants/permissions';
 import {
   DEFAULT_PUSH_TIME_ZONE,
   formatDueDate,
@@ -153,6 +162,31 @@ const DAILY_REMINDER_UNTIL_HOUR = 12;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * The category of the recruitment follow-up and stale pushes (#5934). It has
+ * no switch in the notification settings, as a chat reminder's `reminder`
+ * has none: each push answers a follow-up someone set for this member, or a
+ * prospect they took on, so muting it would mean dropping the work, not the
+ * noise. Not in `NOTIFICATION_CATEGORIES`, so no stored row can mute it.
+ */
+export const RUSH_NOTIFICATION_CATEGORY = 'rush';
+
+/**
+ * The stale push's body, with the real gap: a prospect who went stale weeks
+ * before anyone owned them says weeks, not the chapter's stale days.
+ */
+function staleBody(
+  row: { last_contact_on: string | null; created_at: string },
+  todayKey: string,
+): string {
+  const since = row.last_contact_on ?? row.created_at.slice(0, 10);
+  const days = rushDaysBetween(since, todayKey);
+  const span = `${days} ${days === 1 ? 'day' : 'days'}`;
+  return row.last_contact_on === null
+    ? `Nobody has logged a contact in the ${span} since they were added.`
+    : `No contact logged in ${span}.`;
+}
+
+/**
  * Today's date key in `timeZone` (null: the member's fallback zone) when its
  * clock reads inside the daily reminder window, else null: the reminder waits
  * for a later tick. A zone this runtime cannot resolve reads as the fallback.
@@ -236,6 +270,7 @@ export class ScheduledJobsService {
     private readonly chatReports: ChatReportService,
     private readonly eventExcuses: EventExcuseService,
     private readonly taskService: TaskService,
+    private readonly rbac: RbacService,
   ) {}
 
   @ReportedCron(CronExpression.EVERY_HOUR)
@@ -272,6 +307,33 @@ export class ScheduledJobsService {
   @ReportedCron(CronExpression.EVERY_HOUR)
   async handleTaskReminderSweep(): Promise<void> {
     await this.sweepTaskReminders(new Date());
+  }
+
+  /**
+   * Hourly, like the task and invoice reminders: a recruitment follow-up and
+   * the stale alert go out in their member's morning (#5934).
+   */
+  @ReportedCron(CronExpression.EVERY_HOUR)
+  async handleRushFollowUpSweep(): Promise<void> {
+    const now = new Date();
+    // Each runs whatever the other does: a failed read in one must not cost
+    // the other its hour, which can be one of only three in a morning.
+    for (const [site, sweep] of [
+      ['rush-follow-up-sweep', () => this.sweepRushFollowUps(now)],
+      ['rush-stale-sweep', () => this.sweepRushStale(now)],
+      ['rush-bid-expiry-sweep', () => this.sweepRushBidExpiry(now)],
+    ] as const) {
+      try {
+        await sweep();
+      } catch (error) {
+        reportCaughtFailure(this.logger, {
+          level: 'error',
+          site,
+          message: `${site} failed`,
+          error,
+        });
+      }
+    }
   }
 
   /**
@@ -948,6 +1010,187 @@ export class ScheduledJobsService {
 
     if (sent > 0) this.logger.log(`task sweep: sent ${sent} reminders`);
     return { sent };
+  }
+
+  /**
+   * Recruitment follow-ups (#5934, `spec/behavior/rush.md` § Contacts, owner
+   * and follow-ups): the member a follow-up is for gets a push and an inbox item
+   * on the morning it comes due, in their own zone, as a task's due reminder
+   * goes out. One push per follow-up day; a follow-up moved to another day
+   * gets that day's.
+   *
+   * Sent only while the chapter has recruitment on and the member can still
+   * work prospects (`rush:add`), checked once the claim is won.
+   */
+  async sweepRushFollowUps(now: Date): Promise<{ sent: number }> {
+    if (isBetaOffModule('rush')) return { sent: 0 };
+    const rows = await this.repository.findRushFollowUpsDueBetween(
+      toDateKey(addDays(now, -1)),
+      toDateKey(addDays(now, 1)),
+    );
+    if (rows.length === 0) return { sent: 0 };
+    const chapters = await this.rushChapters(
+      rows.map((row) => row.chapter_id),
+      'rush-follow-up-sweep',
+    );
+    if (!chapters) return { sent: 0 };
+    const zones = await this.notificationService.timeZonesFor(
+      rows.map((row) => row.follow_up_user_id),
+    );
+
+    let sent = 0;
+    for (const row of rows) {
+      try {
+        if (!this.rushOn(chapters.enabledModules, row.chapter_id)) continue;
+        const todayKey = reminderDayKey(
+          now,
+          zones.get(row.follow_up_user_id) ?? null,
+        );
+        if (todayKey === null || row.follow_up_on !== todayKey) continue;
+        const claimed = await this.claimAndNotify({
+          chapterId: row.chapter_id,
+          entityType: 'RUSH_CANDIDATE',
+          entityId: row.id,
+          threshold: 'FOLLOW_UP',
+          dueDate: row.follow_up_on,
+          recipients: () =>
+            this.rushWorker(row.chapter_id, row.follow_up_user_id),
+          resolveFailureLevel: 'warning',
+          title: `Follow up with ${row.display_name} today`,
+          // Never what to do: that is the chapter's words about the prospect,
+          // and a push shows on a lock screen (`rush.md`: no push carries a
+          // note). The prospect's screen says it.
+          body: 'Your follow-up is due today.',
+          category: RUSH_NOTIFICATION_CATEGORY,
+          target: { screen: 'rush', candidateId: row.id },
+        });
+        if (claimed) sent += 1;
+      } catch (error) {
+        reportCaughtFailure(this.logger, {
+          level: 'warning',
+          site: 'rush-follow-up-sweep-candidate',
+          message: `rush follow-up sweep: candidate ${row.id} failed`,
+          error,
+        });
+      }
+    }
+    if (sent > 0) this.logger.log(`rush follow-up sweep: sent ${sent}`);
+    return { sent };
+  }
+
+  /**
+   * The stale alert (#5934): an open candidate nobody has logged a contact
+   * with for the chapter's stale days (default 7) needs a follow-up, and its
+   * owner is told once, on their morning. "Once" is per stretch without
+   * contact: the claim is keyed on the day it went stale, so a contact
+   * logged later and another quiet stretch tell them again. A candidate with
+   * no owner is flagged on the screens only.
+   */
+  async sweepRushStale(now: Date): Promise<{ sent: number }> {
+    if (isBetaOffModule('rush')) return { sent: 0 };
+    const rows = await this.repository.findOwnedOpenRushCandidates();
+    if (rows.length === 0) return { sent: 0 };
+    const chapters = await this.rushChapters(
+      rows.map((row) => row.chapter_id),
+      'rush-stale-sweep',
+    );
+    if (!chapters) return { sent: 0 };
+    const zones = await this.notificationService.timeZonesFor(
+      rows.map((row) => row.owner_id),
+    );
+
+    let sent = 0;
+    for (const row of rows) {
+      try {
+        if (!this.rushOn(chapters.enabledModules, row.chapter_id)) continue;
+        const todayKey = reminderDayKey(now, zones.get(row.owner_id) ?? null);
+        if (todayKey === null) continue;
+        const staleDays =
+          chapters.staleDays.get(row.chapter_id) ?? RUSH_STALE_DAYS_DEFAULT;
+        const staleOn = rushStaleOn(row, staleDays);
+        if (staleOn === null || staleOn > todayKey) continue;
+        const claimed = await this.claimAndNotify({
+          chapterId: row.chapter_id,
+          entityType: 'RUSH_CANDIDATE',
+          entityId: row.id,
+          threshold: 'STALE',
+          dueDate: staleOn,
+          recipients: () => this.rushWorker(row.chapter_id, row.owner_id),
+          resolveFailureLevel: 'warning',
+          title: `${row.display_name} needs a follow-up`,
+          body: staleBody(row, todayKey),
+          category: RUSH_NOTIFICATION_CATEGORY,
+          target: { screen: 'rush', candidateId: row.id },
+        });
+        if (claimed) sent += 1;
+      } catch (error) {
+        reportCaughtFailure(this.logger, {
+          level: 'warning',
+          site: 'rush-stale-sweep-candidate',
+          message: `rush stale sweep: candidate ${row.id} failed`,
+          error,
+        });
+      }
+    }
+    if (sent > 0) this.logger.log(`rush stale sweep: sent ${sent}`);
+    return { sent };
+  }
+
+  /**
+   * Recruitment bids past their day expire (#5973, `ifc-recruitment.md`
+   * § Bids), a recorded acceptance nobody confirmed with them. One statement
+   * in the database, a compare-and-set on the state, so two instances firing
+   * together expire each bid once and need no dispatch claim. Hourly, so a
+   * bid expires within the hour; every write and the PNM's page also refuse
+   * one whose day has passed, so the hour never lets a late answer in.
+   */
+  async sweepRushBidExpiry(now: Date): Promise<{ expired: number }> {
+    if (isBetaOffModule('rush')) return { expired: 0 };
+    const expired = await this.repository.expireRushBids(now.toISOString());
+    if (expired > 0) this.logger.log(`rush bid expiry sweep: ${expired}`);
+    return { expired };
+  }
+
+  /** The chapters' module switches and stale days, or null when unread. */
+  private async rushChapters(
+    chapterIds: readonly string[],
+    site: string,
+  ): Promise<Awaited<
+    ReturnType<IScheduledJobsRepository['findRushChapters']>
+  > | null> {
+    try {
+      return await this.repository.findRushChapters(chapterIds);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site,
+        message: `${site}: chapter read failed`,
+        error,
+      });
+      return null;
+    }
+  }
+
+  /** On only for a chapter that was read and has the module on. */
+  private rushOn(
+    enabledModules: Map<string, Record<string, boolean> | null>,
+    chapterId: string,
+  ): boolean {
+    return (
+      enabledModules.has(chapterId) &&
+      isModuleEnabled(enabledModules.get(chapterId), 'rush')
+    );
+  }
+
+  /** `[userId]` while they can still work prospects in the chapter, else `[]`. */
+  private async rushWorker(
+    chapterId: string,
+    userId: string,
+  ): Promise<string[]> {
+    const can = await this.rbac.memberHasAnyPermission(chapterId, userId, [
+      SystemPermissions.RUSH_ADD,
+    ]);
+    return can ? [userId] : [];
   }
 
   /**

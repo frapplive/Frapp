@@ -41,7 +41,8 @@ export interface IChapterGroupRepository {
   findMemberIds(chapterId: string, groupId: string): Promise<string[]>;
   /**
    * The groups one member is in that can open a channel: every kind but a
-   * class year (`groupKindOpensChannels`). For channel access only.
+   * class year or a major (`groupKindOpensChannels`). For channel access
+   * only.
    */
   findGroupIdsForUser(chapterId: string, userId: string): Promise<string[]>;
   /** Whether any channel's or category's who-can-see or who-can-post names it. */
@@ -57,4 +58,21 @@ export interface IChapterGroupRepository {
     chapterId: string,
     userIds: string[],
   ): Promise<string[] | 'group_not_found' | 'member_not_found'>;
+  /**
+   * One member put in a manual group (`POST /v1/groups/:id/members/:userId`,
+   * from a profile). Resolves to whether they were added now or already in
+   * it, or to why nothing was written: no manual group of that id in the
+   * chapter, or a user who isn't a member of it.
+   */
+  addMember(
+    groupId: string,
+    chapterId: string,
+    userId: string,
+  ): Promise<'added' | 'already' | 'group_not_found' | 'member_not_found'>;
+  /** One member taken out of a group; `false` when they weren't in it. */
+  removeMember(
+    groupId: string,
+    chapterId: string,
+    userId: string,
+  ): Promise<boolean>;
 }

@@ -38,13 +38,18 @@ import { createKeyedRateLimiter } from "./rate-limit";
  *   code, kept only when it is a short snake_case identifier;
  * - `auth_failure_kind`: `refusal`, `server`, `network` or `unknown`;
  * - `http.status_code`, when the SDK had one;
- * - `auth_expected`: `true` or `false`.
+ * - `auth_expected`: `true` or `false`;
+ * - `auth_provider`: `apple` or `google`, when the caller names one;
+ * - `auth_native_code`: a native SDK's own error code (`ERR_REQUEST_UNKNOWN`,
+ *   Google's `"10"`) that `auth_error_code` drops for not being GoTrue's
+ *   snake_case. Without it every failed native sheet reads as `unknown`.
  * The platform and build are the event's own `release`, `environment` and
  * the project it lands in (`frapp-web`, `frapp-mobile`). No email, password,
  * token, OTP or URL is ever read from the input, so none can be sent.
  *
- * **Grouping.** `['signed-out-auth', <flow>, <code or kind>]`: one issue per
- * flow and failure, so a day's count of `email_not_confirmed` on password
+ * **Grouping.** `['signed-out-auth', <flow>, <code or kind>]`, plus the
+ * provider when there is one (Apple and Google fail for different reasons and
+ * are fixed in different consoles): one issue per flow and failure, so a day's count of `email_not_confirmed` on password
  * sign-in is that issue's event count for the day.
  *
  * **Rate limit.** One report per fingerprint per
@@ -70,6 +75,8 @@ type AuthFailureFlow =
   | "sign_up"
   /** Asking for a magic link or email code. */
   | "magic_link_send"
+  /** Typing the email's six-digit code (#5625). */
+  | "email_code_verify"
   /** Resending the sign-up confirmation email. */
   | "confirmation_resend"
   /** Starting Google or Apple, in the browser or natively. */
@@ -112,6 +119,9 @@ const EXPECTED_AUTH_ERROR_CODES: ReadonlySet<string> = new Set([
   "email_confirmed",
   "flow_state_expired",
   "flow_state_not_found",
+  // A Google or Apple return whose OAuth state is stale: a second tab, a
+  // back button, or a sign-in left open too long (FRAPP-WEB-K).
+  "bad_oauth_state",
   // A PKCE link opened in another browser than the one that asked for it.
   // Web's callback names it `exchange_failed`. A spike of it (every link
   // failing, not a few) is what Beta Watch reads the daily count for.
@@ -141,7 +151,11 @@ export interface AuthFailureInput {
    * error's own code.
    */
   readonly code?: string;
+  /** The sign-in provider, for a flow that has one (`oauth_start`). */
+  readonly provider?: AuthFailureProvider;
 }
+
+type AuthFailureProvider = "apple" | "google";
 
 /** What each app's binding passes to `captureException`. */
 export interface AuthFailureReport {
@@ -162,6 +176,12 @@ export interface AuthFailureReporterOptions {
 export type AuthFailureReporter = (input: AuthFailureInput) => void;
 
 const CODE_RE = /^[a-z][a-z0-9_]{1,63}$/;
+/**
+ * A native SDK's code: upper snake case (`ERR_REQUEST_UNKNOWN`,
+ * `SIGN_IN_ERROR`) or Google's short status numbers (`10`, `12500`). Five
+ * digits at most, so a six-digit email code can never pass as one.
+ */
+const NATIVE_CODE_RE = /^(?:[A-Z][A-Z0-9_]{1,63}|-?\d{1,5})$/;
 /** `/sign-in`, `/(auth)/sign-up`, `/auth/callback`, `/join`. No ids, no query. */
 const SCREEN_SEGMENT_RE = /^(?:[a-z]+(?:-[a-z]+)*|\([a-z]+(?:-[a-z]+)*\))$/;
 const UNKNOWN_SCREEN = "unknown";
@@ -229,6 +249,8 @@ export function buildAuthFailureReport(
   const flow = input.flow;
   const screen = screenOf(input.screen);
   const label = code ?? kind;
+  const provider =
+    input.provider === "apple" || input.provider === "google" ? input.provider : undefined;
   const tags: Record<string, string> = {
     auth_flow: flow,
     auth_screen: screen,
@@ -237,6 +259,9 @@ export function buildAuthFailureReport(
   };
   if (code) tags.auth_error_code = code;
   if (status !== undefined) tags["http.status_code"] = String(status);
+  if (provider) tags.auth_provider = provider;
+  const nativeCode = nativeCodeOf(input.error);
+  if (nativeCode !== undefined) tags.auth_native_code = nativeCode;
   const error = new Error(
     expected
       ? `${flow} refused (${label})`
@@ -246,7 +271,9 @@ export function buildAuthFailureReport(
   return {
     error,
     level: expected ? "info" : "error",
-    fingerprint: ["signed-out-auth", flow, label],
+    fingerprint: provider
+      ? ["signed-out-auth", flow, label, provider]
+      : ["signed-out-auth", flow, label],
     tags,
   };
 }
@@ -281,6 +308,18 @@ function screenOf(screen: string): string {
   return segments.every((s) => s.length <= 24 && SCREEN_SEGMENT_RE.test(s))
     ? screen
     : UNKNOWN_SCREEN;
+}
+
+/**
+ * The error's own `code` (or its `cause`'s) when it is not GoTrue's snake_case but still a plain
+ * identifier: what Expo's Apple module and Google Sign-In throw. Read only as
+ * an identifier, so a sentence or a token can't pass.
+ */
+function nativeCodeOf(error: unknown): string | undefined {
+  // Google's wrapper (`MemberFacingError`) carries the SDK's error as `cause`.
+  const raw = fieldOf(error, "code") ?? fieldOf(fieldOf(error, "cause"), "code");
+  const value = typeof raw === "number" && Number.isInteger(raw) ? String(raw) : raw;
+  return typeof value === "string" && NATIVE_CODE_RE.test(value) ? value : undefined;
 }
 
 function identifierOrUndefined(value: unknown): string | undefined {

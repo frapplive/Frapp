@@ -212,6 +212,20 @@
       "build": "19",
       "sha": "0426149e14550afe0ec891dd2e2129a17ea14001",
       "recorded": "2026-11-17"
+    },
+    {
+      "platform": "ios",
+      "version": "0.14.0",
+      "build": "29",
+      "sha": "2d929f322171ea72c33f44d467b8dc4a06513061",
+      "recorded": "2026-11-24"
+    },
+    {
+      "platform": "android",
+      "version": "0.14.0",
+      "build": "20",
+      "sha": "2d929f322171ea72c33f44d467b8dc4a06513061",
+      "recorded": "2026-11-24"
     }
   ],
   "dropped": [

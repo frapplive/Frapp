@@ -36,6 +36,7 @@ function task(overrides: Partial<Task> = {}): Task {
     point_reward: null,
     points_awarded: false,
     completed_at: null,
+    completed_by: null,
     confirmed_at: null,
     sent_back_at: null,
     proof_kind: 'none',
@@ -47,6 +48,7 @@ function task(overrides: Partial<Task> = {}): Task {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: ago(5 * DAY),
     ...overrides,
   };
@@ -85,6 +87,12 @@ describe('taskDueInstant', () => {
       }),
     ).toBe(Date.parse('2026-11-16T22:00:00.000Z'));
   });
+
+  it('is never for a task with no due date (#5761)', () => {
+    expect(taskDueInstant({ due_date: null, due_at: null })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
 });
 
 describe('nudgeKindFor', () => {
@@ -114,6 +122,23 @@ describe('nudgeKindFor', () => {
       'task_overdue',
     );
     expect(nudgeKindFor(task({ due_date: '2026-11-12' }), NOW)).toBe(null);
+  });
+
+  it('never raises a task with no due date as due soon or overdue (#5761)', () => {
+    expect(nudgeKindFor(task({ due_date: null }), NOW)).toBe(null);
+  });
+
+  it('still thanks a member for finishing a task with no due date (#5761)', () => {
+    expect(
+      nudgeKindFor(
+        task({
+          due_date: null,
+          status: TaskStatus.COMPLETED,
+          completed_at: ago(HOUR),
+        }),
+        NOW,
+      ),
+    ).toBe('task_praise');
   });
 
   it('stops raising a task that has been past due for over a month', () => {
@@ -417,6 +442,28 @@ describe('buildNudgeFacts', () => {
     expect(built.daysLeft).toBe(3);
     expect(built.daysOverdue).toBeNull();
     expect(built.today).toBe('Friday, November 13, 2026');
+  });
+
+  it('thanks a member for a task with no due date without a day to count (#5761)', () => {
+    const built = buildNudgeFacts({
+      candidate: {
+        kind: 'task_praise',
+        task: task({
+          due_date: null,
+          status: TaskStatus.COMPLETED,
+          completed_at: ago(HOUR),
+        }),
+      },
+      firstName: 'Sam',
+      subtasks: [],
+      history: NO_HISTORY,
+      timeZone: 'America/New_York',
+      now: NOW,
+    });
+    expect(built.due).toBe('No due date');
+    expect(built.daysLeft).toBeNull();
+    expect(built.daysOverdue).toBeNull();
+    expect(built.finishedDaysEarly).toBeNull();
   });
 
   it('counts days past due, and carries the note only for a sent-back task', () => {

@@ -59,7 +59,8 @@ const DEMO_CHAPTER_ID = "c0ffee00-0000-4000-8000-000000000001";
  */
 const TOOL_ROUTES = [
   ...DASHBOARD_ROUTES.filter(
-    (route) => route !== "/chat" && route !== "/settings",
+    (route) =>
+      route !== "/chat" && route !== "/messages" && route !== "/settings",
   ),
   "/members?tab=alumni",
 ];
@@ -210,6 +211,42 @@ test.describe("tool pages hold the 375px floor beside chat", () => {
         measured.documentWidth,
         `${route}: the document is wider than the window beside chat`,
       ).toBeLessThanOrEqual(WINDOW.width);
+      // The page's actions are in its header beside the X (Paul,
+      // 2026-11-19, `page-actions.tsx`), outside `[data-tool-page]`, so the
+      // header is measured on its own: the actions end before the X and the
+      // title keeps room to be read.
+      const header = await page
+        .locator("[data-tool-page-header]")
+        .evaluate((el) => {
+          const slot = el.querySelector("[data-tool-page-actions]");
+          const close = el.querySelector(":scope > button");
+          const title = el.firstElementChild;
+          const actionsRight = slot
+            ? Math.max(
+                slot.getBoundingClientRect().left,
+                ...[...slot.querySelectorAll("*")].map(
+                  (node) => node.getBoundingClientRect().right,
+                ),
+              )
+            : 0;
+          return {
+            actionsRight: Math.round(actionsRight),
+            closeLeft: close
+              ? Math.round(close.getBoundingClientRect().left)
+              : Infinity,
+            titleWidth: title
+              ? Math.round(title.getBoundingClientRect().width)
+              : 0,
+          };
+        });
+      expect(
+        header.actionsRight,
+        `${route}: the header's actions run under its X beside chat`,
+      ).toBeLessThanOrEqual(header.closeLeft);
+      expect(
+        header.titleWidth,
+        `${route}: the header's actions squeeze the page title away beside chat`,
+      ).toBeGreaterThanOrEqual(48);
     });
   }
 });

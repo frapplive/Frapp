@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { EYEBROW } from "@/components/ui/typography";
 import { MODULE_SETTINGS } from "@/components/settings/settings-modules";
 import { InlineNote } from "@/components/shared/inline-note";
+import { CHAPTER_LOGS_TITLE } from "@repo/validation";
+import { SettingsSearch } from "@/components/settings/settings-search";
 
 // Board `4d`: rail rows are `height:34px;border-radius:10px;padding:0 10px`,
 // inactive `#A9A399`, active a filled gold chip (`background:#2A2410;
@@ -38,7 +40,7 @@ const RAIL_ROW_RESET =
 const RAIL_TRIGGER_CLASS = `${RAIL_ROW_RESET} h-[34px] justify-start rounded-[10px] px-[10px] text-sm text-muted-foreground enabled:hover:bg-card data-[state=active]:bg-accent-subtle data-[state=active]:font-semibold data-[state=active]:text-accent-text data-[state=active]:shadow-none enabled:data-[state=active]:text-accent-text lg:w-full lg:flex-none`;
 
 /** The rail's groups, in order. */
-type SettingsTabGroup = "chapter" | "people" | "modules";
+export type SettingsTabGroup = "chapter" | "people" | "modules";
 
 const SETTINGS_TAB_GROUP_LABELS: Readonly<Record<SettingsTabGroup, string>> = {
   chapter: "Chapter",
@@ -68,9 +70,10 @@ export type SettingsTab = {
     the last section of Plan and billing now, where a president looking for
     "cancel" goes. `?tab=danger` lands there (`SETTINGS_TAB_ALIASES`).
 
-  - **Accent is not a row any more.** It is a section of Chapter, under the
-    chapter mark: both decide how the chapter looks. `?tab=theme` still lands
-    there (`SETTINGS_TAB_ALIASES`).
+  - **Accent is not a row any more.** It is a page of Chapter, opened from
+    the Accent color row beside Chapter mark: both decide how the chapter
+    looks. `?tab=theme` still lands there (`SETTINGS_TAB_ALIASES` opens
+    Chapter, and the settings page opens its Accent color page).
   - **No `joincode`.** The board `4d` rail drew it; `apps/web` has no
     join-code surface. The board's `subscription` row is Plan and billing.
   - **One row per module** (#4073). The Modules group used to be three rows:
@@ -81,7 +84,8 @@ export type SettingsTab = {
   - **`classes` is ours**, live chapter configuration with no other home. It
     takes the chapter's own word for a class, which the page sets.
 
-  `beta` and `audit` are gone rather than reordered. They rendered
+  `beta` and the old `audit` stub are gone rather than reordered (the
+  built Logs row took the audit's place). They rendered
   `SettingsComingSoon` stubs naming "Chunk 08", generated chrome advertising
   unbuilt work.
 */
@@ -96,8 +100,13 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   */
   { value: "ai", label: "AI", group: "chapter" },
   { value: "billing", label: "Plan and billing", group: "chapter" },
-  { value: "roles", label: "Roles", group: "people" },
-  { value: "groups", label: "Groups", group: "people" },
+  /*
+    The record of officer changes (Paul, 2026-11-21), which was the
+    `#chapter-audit` channel in chat. Last in the group: read when something
+    needs looking into, not set up.
+  */
+  { value: "logs", label: CHAPTER_LOGS_TITLE, group: "chapter" },
+  { value: "roles", label: "Roles and groups", group: "people" },
   { value: "classes", label: "Pledge class", group: "people" },
   { value: "fields", label: "Member fields", group: "people" },
   ...MODULE_SETTINGS.map((module): SettingsTab => ({
@@ -117,6 +126,8 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
  */
 const SETTINGS_TAB_ALIASES: Readonly<Record<string, string>> = {
   theme: "org",
+  // Groups share the Roles page since 2026-11-19.
+  groups: "roles",
   danger: "billing",
   modules: "events",
   workflows: "hours",
@@ -145,8 +156,14 @@ export function resolveSettingsTabParam(
 export function SettingsRail({
   visibleTabs,
   onRowClick,
+  groupLabels,
+  search = true,
 }: {
   visibleTabs: readonly SettingsTab[];
+  /** A group's heading in place of the chapter's: a council's "Council" (#5933). */
+  groupLabels?: Partial<Record<SettingsTabGroup, string>>;
+  /** The settings search field; off where its index names none of the rows. */
+  search?: boolean;
   /**
    * Every click on a row, the lit one included, which Radix's
    * `onValueChange` skips: the lit row is the way back from a page opened
@@ -157,42 +174,48 @@ export function SettingsRail({
   const groups = (Object.keys(SETTINGS_TAB_GROUP_LABELS) as SettingsTabGroup[])
     .map((group) => ({
       group,
-      label: SETTINGS_TAB_GROUP_LABELS[group],
+      label: groupLabels?.[group] ?? SETTINGS_TAB_GROUP_LABELS[group],
       tabs: visibleTabs.filter((tab) => tab.group === group),
     }))
     .filter((entry) => entry.tabs.length > 0);
   return (
-    <div className="flex w-full flex-col gap-4 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-7rem)] lg:w-[200px] lg:shrink-0 lg:self-start lg:overflow-y-auto lg:py-1">
-      {groups.map((entry) => (
-        <div key={entry.group} className="flex flex-col gap-0.5">
-          <p
-            id={`settings-rail-${entry.group}`}
-            className={cn(EYEBROW, "px-[10px] pb-1 text-muted")}
-          >
-            {entry.label}
-          </p>
-          <TabsList
-            aria-labelledby={`settings-rail-${entry.group}`}
-            className="flex h-auto w-full flex-row flex-wrap justify-start gap-0.5 border-b-0 bg-transparent p-0 lg:flex-col lg:flex-nowrap lg:items-stretch"
-          >
-            {entry.tabs.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className={RAIL_TRIGGER_CLASS}
-                onClick={onRowClick ? () => onRowClick(tab.value) : undefined}
-              >
-                <span className="min-w-0 truncate">{tab.label}</span>
-                {tab.off ? (
-                  <span className="ml-auto pl-2 text-caption font-normal text-muted">
-                    Off
-                  </span>
-                ) : null}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-      ))}
+    <div className="flex w-full flex-col gap-4 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-7rem)] lg:w-[200px] lg:shrink-0 lg:self-start lg:py-1">
+      {/* Settings search (2026-11-19): every setting by name and synonym.
+          It sits outside the rows' scroll box, so its wider list is not
+          clipped to the 200px rail. */}
+      {search ? <SettingsSearch /> : null}
+      <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
+        {groups.map((entry) => (
+          <div key={entry.group} className="flex flex-col gap-0.5">
+            <p
+              id={`settings-rail-${entry.group}`}
+              className={cn(EYEBROW, "px-[10px] pb-1 text-muted")}
+            >
+              {entry.label}
+            </p>
+            <TabsList
+              aria-labelledby={`settings-rail-${entry.group}`}
+              className="flex h-auto w-full flex-row flex-wrap justify-start gap-0.5 border-b-0 bg-transparent p-0 lg:flex-col lg:flex-nowrap lg:items-stretch"
+            >
+              {entry.tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className={RAIL_TRIGGER_CLASS}
+                  onClick={onRowClick ? () => onRowClick(tab.value) : undefined}
+                >
+                  <span className="min-w-0 truncate">{tab.label}</span>
+                  {tab.off ? (
+                    <span className="ml-auto pl-2 text-caption font-normal text-muted">
+                      Off
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -203,11 +226,17 @@ export function SettingsRail({
  * `reports:export`, gets that tool's module page since #4073). They reached
  * this URL with nothing to do here, so it says who can change that.
  */
-export function SettingsNothingHere() {
+export function SettingsNothingHere({
+  council = false,
+}: {
+  /** A council's words (#5933). */
+  council?: boolean;
+}) {
   return (
     <InlineNote>
-      Nothing in Chapter settings for your role. Officer tools come with an
-      officer role; ask your chapter president if you need one.
+      {council
+        ? "Nothing in Council settings for your role. Ask your council admin if you need something changed."
+        : "Nothing in Chapter settings for your role. Officer tools come with an officer role; ask your chapter president if you need one."}
     </InlineNote>
   );
 }

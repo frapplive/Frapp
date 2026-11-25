@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { markLegalAcceptanceRecorded } from "./legal-acceptance";
+import { inviteLongDate } from "./invite-card";
 import type { components } from "@repo/api-sdk";
 
 /**
@@ -142,15 +143,27 @@ export function useCreateInvite() {
   });
 }
 
+/** What `useChapterLinks` reads (#5633). */
+export type ChapterLinkView = {
+  /** Live and expired, at most one per role, newest first. */
+  links: InviteListItem[];
+  /**
+   * The role a link made with no role gets, as the API resolves it for the
+   * caller; null when they can invite into none. The pickers start on it.
+   */
+  defaultRole: string | null;
+};
+
 /**
- * The chapter link (#3353, Paul 2026-11-19: "One chapter link, 7 days"): one
- * link an officer posts where the chapter will see it, such as its Discord.
- * Anyone who opens it joins at the chapter's default invite role until it
- * expires or an officer turns it off (`useRevokeInvite`). `null` when there
- * is none; an expired one comes back with `status: "expired"`. Under the
+ * The chapter links (#3353, Paul 2026-11-19: "One chapter link, 7 days"):
+ * links an officer posts where the chapter will see them, such as its
+ * Discord. Anyone who opens one joins at the role the officer picked for it
+ * (#5633: "Officer picks it per link"), one live link per role, until it
+ * expires or an officer turns it off (`useRevokeInvite`). Newest first; an
+ * expired one comes back with `status: "expired"`. Under the
  * `["invites", chapterId]` prefix, so every invite write refreshes it.
  */
-export function useChapterLink(options?: { enabled?: boolean }) {
+export function useChapterLinks(options?: { enabled?: boolean }) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
@@ -160,7 +173,10 @@ export function useChapterLink(options?: { enabled?: boolean }) {
         signal,
       });
       if (error) throw error;
-      return data.link;
+      return {
+        links: data.links,
+        defaultRole: data.default_role,
+      } satisfies ChapterLinkView;
     },
     staleTime: 60_000,
     enabled: (options?.enabled ?? true) && !!chapterId,
@@ -168,26 +184,31 @@ export function useChapterLink(options?: { enabled?: boolean }) {
 }
 
 /**
- * The line under the Chapter link label, on web's Invite members panel and
+ * The line under the Chapter links label, on web's Invite members panel and
  * the phone's Invite members screen alike.
  */
 export const CHAPTER_LINK_HINT =
-  "One link for the whole chapter. Post it in your group chat or Discord, and anyone with it can join for 7 days.";
+  "Post a link in your group chat or Discord. Anyone with it joins at its role for 7 days.";
 
-/** A new chapter link; the one before it stops working at once. */
+/**
+ * A new chapter link for `role` (the chapter's default invite role when
+ * left out); that role's link before it stops working at once, and other
+ * roles' links are untouched (#5633).
+ */
 export function useCreateChapterLink() {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ["invites", "create-chapter-link"],
-    mutationFn: async () => {
-      const { data, error } = await client.POST("/v1/invites/chapter-link");
+    mutationFn: async (input?: { role?: string }) => {
+      const { data, error } = await client.POST("/v1/invites/chapter-link", {
+        body: input?.role ? { role: input.role } : {},
+      });
       if (error) throw error;
       return data;
     },
-    onSuccess: (link) => {
-      queryClient.setQueryData(["invites", chapterId, "chapter-link"], link);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invites", chapterId] });
     },
   });
@@ -201,11 +222,7 @@ export function useCreateChapterLink() {
 export function chapterLinkExpiryLabel(
   link: Pick<InviteListItem, "status" | "expires_at">,
 ): string {
-  const date = new Date(link.expires_at).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  const date = inviteLongDate(link.expires_at);
   return link.status === "expired" ? `Expired ${date}` : `Works until ${date}`;
 }
 
@@ -229,10 +246,11 @@ export function useEmailInvites() {
 /**
  * Join a chapter with an invite token.
  *
- * `accept_terms_privacy` is the join screen's Terms checkbox (#2302);
- * `useJoinTermsCheckbox` decides when to send it. Without it, a user who hasn't
- * accepted the current Terms is refused with a 403 (`isTermsRequiredError`),
- * and the token stays usable.
+ * `accept_terms_privacy` is the join screen's Terms line (#2302, #5625):
+ * every join from a screen showing it sends it, since tapping Join or a
+ * Continue button under the line is the acceptance. Without it, a user who
+ * hasn't accepted the current Terms is refused with a 403
+ * (`isTermsRequiredError`), and the token stays usable.
  */
 export function useRedeemInvite() {
   const client = useFrappClient();
@@ -293,21 +311,23 @@ export function usePendingInvites(userId: string | null) {
 }
 
 /**
- * What an invite is for, read without using it up (#3352): the chapter's name,
- * school, text mark and color, who sent it and the role it grants. The join
- * screen's confirm card shows it before the member taps Join. Pass `null` for
- * no invite yet.
+ * The invite card (#5625): the chapter's name, school, text mark and color,
+ * who sent it, how many members it has, and whether the link still works
+ * (`state`). Answers for a dead link too, so its card can still say whose
+ * chapter it was and offer to ask for a new one. Needs no sign-in: it is what
+ * a visitor sees before they have an account. Pass `null` for no invite yet.
  *
- * Not retried: a 410 is a dead link and stays one, and anything else leaves
- * the card showing the bare invite, which can still be joined. Keyed by the
- * token, which is a secret, so it lives only in this query cache.
+ * Not retried: a 404 is a link that never was an invite and stays one.
+ * Keyed by the token, which is a secret, so it lives only in this query
+ * cache. Replaces the signed-in `POST /v1/invites/preview` (#3352), which
+ * stays on the API for builds already in people's hands.
  */
-export function useInvitePreview(token: string | null) {
+export function useInviteDetails(token: string | null) {
   const client = useFrappClient();
   return useQuery({
-    queryKey: ["invite-preview", token],
+    queryKey: ["invite-details", token],
     queryFn: async ({ signal }) => {
-      const { data, error } = await client.POST("/v1/invites/preview", {
+      const { data, error } = await client.POST("/v1/invites/details", {
         signal,
         body: { token: token as string },
       });
@@ -317,6 +337,31 @@ export function useInvitePreview(token: string | null) {
     enabled: !!token,
     retry: false,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * "Ask Paul for a new link" on a dead invite's card (#5625): tells whoever
+ * sent it, by name, that the signed-in caller wants a new one. A 409 means
+ * the link works after all, or the caller is already in the chapter.
+ */
+export function useAskForNewLink() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["invites", "ask-for-new-link"],
+    mutationFn: async (token: string) => {
+      const { error } = await client.POST("/v1/invites/ask-for-new-link", {
+        body: { token },
+      });
+      if (error) throw error;
+    },
+    onError: (_error, token) => {
+      // The link's state may have changed under the card: read it again.
+      void queryClient.invalidateQueries({
+        queryKey: ["invite-details", token],
+      });
+    },
   });
 }
 

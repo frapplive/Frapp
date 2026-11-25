@@ -194,6 +194,62 @@ describe('RbacService self-assignable roles (#4958)', () => {
     });
   });
 
+  // #5736: the Roles overview's Non-chapter business section creates a role
+  // already marked, in one request, under the same rule as marking it after.
+  describe('creating a role already marked (POST /v1/roles self_assignable)', () => {
+    it('creates it outside the tiers, holding nothing, marked', async () => {
+      const created = await service.createAsMember(CHAPTER_ID, USER.riskChair, {
+        name: 'Intramural soccer',
+        permissions: [],
+        tier_id: null,
+        self_assignable: true,
+      });
+      expect(roleRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Intramural soccer',
+          tier_id: null,
+          self_assignable: true,
+          system_key: null,
+        }),
+      );
+      expect(created.self_assignable).toBe(true);
+    });
+
+    it('refuses one in a tier', async () => {
+      expect(
+        await codeOf(
+          service.createAsMember(CHAPTER_ID, USER.president, {
+            name: 'Intramural soccer',
+            permissions: [],
+            tier_id: TIER.pledges,
+            self_assignable: true,
+          }),
+        ),
+      ).toEqual({
+        type: BadRequestException,
+        code: 'role.self_assignable_tiered',
+      });
+      expect(roleRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses one holding a permission beyond channels:read', async () => {
+      expect(
+        await codeOf(
+          service.createAsMember(CHAPTER_ID, USER.president, {
+            name: 'Intramural soccer',
+            permissions: ['members:view'],
+            tier_id: null,
+            self_assignable: true,
+          }),
+        ),
+      ).toEqual({
+        type: BadRequestException,
+        code: 'role.self_assignable_permissions',
+      });
+      expect(roleRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('editing a role members already pick', () => {
     it('refuses granting it a permission unless the save also unmarks it', async () => {
       expect(
@@ -304,7 +360,7 @@ describe('RbacService self-assignable roles (#4958)', () => {
       );
     });
 
-    it('refuses joining an unmarked role, but lets a holder leave it', async () => {
+    it('refuses joining an unmarked role, and leaving one an officer gave (#5650)', async () => {
       expect(
         await codeOf(
           service.setOwnSelfAssignableRole(
@@ -315,31 +371,21 @@ describe('RbacService self-assignable roles (#4958)', () => {
           ),
         ),
       ).toEqual({ type: ForbiddenException, code: 'role.not_self_assignable' });
-      expect(memberRepo.setSelfAssignedRole).not.toHaveBeenCalled();
-      // Unmarked since the member picked it, and now carrying a permission:
-      // leaving only takes from the caller, so it stays open.
+      // Held but unmarked: an officer gave it, or stopped offering it, so an
+      // officer takes it off.
       brother().role_ids.push(BRAND_NEW);
-      roleById(BRAND_NEW).permissions = ['events:update'];
-      await service.setOwnSelfAssignableRole(
-        CHAPTER_ID,
-        USER.brother,
-        BRAND_NEW,
-        false,
-      );
-      expect(memberRepo.setSelfAssignedRole).toHaveBeenCalledWith(
-        CHAPTER_ID,
-        'member-brother',
-        BRAND_NEW,
-        false,
-      );
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'role_self_left',
-          targetId: BRAND_NEW,
-          diff: { member_id: { from: 'member-brother', to: null } },
-          memberVisible: false,
-        }),
-      );
+      expect(
+        await codeOf(
+          service.setOwnSelfAssignableRole(
+            CHAPTER_ID,
+            USER.brother,
+            BRAND_NEW,
+            false,
+          ),
+        ),
+      ).toEqual({ type: ForbiddenException, code: 'role.not_self_assignable' });
+      expect(memberRepo.setSelfAssignedRole).not.toHaveBeenCalled();
+      expect(audit.record).not.toHaveBeenCalled();
     });
 
     it('records a join and a leave as exec-only audit rows', async () => {

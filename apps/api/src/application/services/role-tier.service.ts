@@ -60,6 +60,7 @@ export class RoleTierService {
   ): Promise<RoleTier> {
     const name = tierName(data.name);
     const permissions = tierPermissions(data.permissions ?? []);
+    await this.rbac.assertNoReservedPermissions(chapterId, permissions);
     const { reach, tiers } = await this.rbac.getRankContext(
       chapterId,
       actorUserId,
@@ -121,6 +122,10 @@ export class RoleTierService {
     if (data.permissions !== undefined) {
       changes.permissions = tierPermissions(data.permissions);
     }
+    await this.rbac.assertNoReservedPermissions(
+      chapterId,
+      changes.permissions ?? [],
+    );
 
     const { reach, tiers } = await this.rbac.getRankContext(
       chapterId,

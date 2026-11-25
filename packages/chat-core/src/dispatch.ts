@@ -10,7 +10,7 @@
  * fault is `{ ok: true, warning }` (#1718) — not an escaped rejection.
  */
 
-import type { TaskProofKind } from "@repo/validation";
+import { SERVER_BUSY_COPY, type TaskProofKind } from "@repo/validation";
 import {
   parseAnnounceArgs,
   parseEventArgs,
@@ -23,9 +23,6 @@ import {
   type SlashCommand,
 } from "./integrations";
 import { buildPollMessage, type PollPayload } from "./polls";
-import type { FormPayload } from "./forms";
-import type { SignupPayload } from "./signups";
-import type { RolePickerPayload } from "./role-pickers";
 import {
   sendMessage,
   insertLocalPlaceholder,
@@ -37,6 +34,7 @@ import {
 } from "./chat-client";
 import {
   isDefinitiveClientError,
+  isServerBusy,
   randomClientId,
   serverMessageOf,
 } from "@repo/api-sdk";
@@ -78,6 +76,31 @@ export interface DispatchResult {
    * (subscription, module, receipt required) it reads from its own request.
    */
   cause?: unknown;
+  /**
+   * The command named several things and ran nothing: `/<vocab> vote|bid
+   * <name>` when two prospects share the name (`ifc-recruitment.md` § Name
+   * lookup). The caller offers `options` and runs the same command again with
+   * the picked option's `args`, which name it by id. Set only with `ok:
+   * false`, so a caller that ignores it still reports a failure, never a
+   * silent pick.
+   */
+  choices?: DispatchChoices;
+}
+
+/** What {@link DispatchResult.choices} offers. */
+export interface DispatchChoices {
+  /** The picker's heading: "Several prospects match "Jake Smith"". */
+  title: string;
+  options: DispatchChoice[];
+}
+
+export interface DispatchChoice {
+  /** The row's name. */
+  label: string;
+  /** What tells it apart: "Met · added Nov 20". */
+  detail: string;
+  /** The command's arguments that run it for this one. */
+  args: string;
 }
 
 /**
@@ -227,13 +250,13 @@ type PostFormCardResult =
   | { ok: false; error: string; cause?: unknown };
 
 /**
- * The one way a + form posts a card that queues like a message: a poll, a
- * sign-up sheet, a form and a role picker. Never rejects; the outcomes are `postPoll`'s.
+ * The one way a + form posts a card that queues like a message: a poll.
+ * Never rejects; the outcomes are `postPoll`'s.
  */
 async function postFormCard(
   ctx: ChatActionContext,
   channelId: string,
-  kind: "poll" | "signup" | "form" | "role_picker",
+  kind: "poll",
   card: { content: string; payload: object },
   failureCopy: string,
 ): Promise<PostFormCardResult> {
@@ -255,68 +278,6 @@ async function postFormCard(
     // caller's error reporting, which chat-core has no port for.
     return { ok: false, error: failureCopy, cause };
   }
-}
-
-/**
- * Posts a sign-up sheet card the New sign-up sheet form built
- * (`buildSignupMessage`, #3926), on web's + card and the phone's sheet.
- * Through the outbox like a poll, so it is optimistic and survives going
- * offline, and it leaves the channel's saved draft alone. Never rejects; the
- * outcomes are `postPoll`'s.
- */
-export function postSignup(
-  ctx: ChatActionContext,
-  channelId: string,
-  signup: { content: string; payload: SignupPayload },
-): Promise<PostFormCardResult> {
-  return postFormCard(
-    ctx,
-    channelId,
-    "signup",
-    signup,
-    "Couldn't post that sign-up sheet. Try again.",
-  );
-}
-
-/**
- * Posts a form card the New form builder built (`buildFormMessage`, #3926
- * step 3). Through the outbox like a sign-up sheet: optimistic, survives
- * going offline, and leaves the channel's saved draft alone. Never rejects;
- * the outcomes are `postPoll`'s.
- */
-export function postForm(
-  ctx: ChatActionContext,
-  channelId: string,
-  form: { content: string; payload: FormPayload },
-): Promise<PostFormCardResult> {
-  return postFormCard(
-    ctx,
-    channelId,
-    "form",
-    form,
-    "Couldn't post that form. Try again.",
-  );
-}
-
-/**
- * Posts a role picker the New role picker form built
- * (`buildRolePickerMessage`, #4958), on web's + card and the phone's sheet.
- * Through the outbox like a sign-up sheet. The send route refuses it without
- * `roles:manage` or for a role no longer marked; that refusal lands on the
- * failed row. Never rejects; the outcomes are `postPoll`'s.
- */
-export function postRolePicker(
-  ctx: ChatActionContext,
-  channelId: string,
-  picker: { content: string; payload: RolePickerPayload },
-): Promise<PostFormCardResult> {
-  return postFormCard(
-    ctx,
-    channelId,
-    "role_picker",
-    picker,
-    "Couldn't post that role picker. Try again.",
-  );
 }
 
 async function dispatchAnnounce(
@@ -569,7 +530,14 @@ async function submitPointsAdjustment(
         ok: false,
         error:
           status === 429
-            ? `${REFUSED_ERROR} ${serverMessageOf(refusal) ?? RATE_LIMITED_COPY}`
+            ? `${REFUSED_ERROR} ${
+                isServerBusy({
+                  statusCode: 429,
+                  message: serverMessageOf(refusal),
+                })
+                  ? SERVER_BUSY_COPY
+                  : (serverMessageOf(refusal) ?? RATE_LIMITED_COPY)
+              }`
             : REFUSED_ERROR,
       };
     }
@@ -679,7 +647,7 @@ const EVENT_CARD_LOST_WARNING =
   "Event was created, but the chat card couldn't be posted. Check the events calendar to confirm — don't run the command again.";
 
 const HOURS_CARD_LOST_WARNING =
-  "Hours were logged, but the chat card couldn't be posted. Check the service hours page to confirm — don't run the command again.";
+  "Hours were logged, but the chat card couldn't be posted. Check your service hours on your profile to confirm — don't run the command again.";
 
 const POINTS_RECORDED_ROW_NOTE =
   "Points recorded — the chat card didn't post. Don't run this command again.";
@@ -697,7 +665,7 @@ const TASK_UNCONFIRMED_WARNING =
   "Couldn't confirm the task was created. Check the task board before you create it again.";
 
 const HOURS_UNCONFIRMED_WARNING =
-  "Couldn't confirm the hours were logged. Check the service hours page before you log them again.";
+  "Couldn't confirm the hours were logged. Check your service hours on your profile before you log them again.";
 
 /**
  * A `/task` or `/hours` write whose answer never arrived: a transport failure,
@@ -914,8 +882,8 @@ export interface TaskInput {
   title: string;
   description?: string;
   assignee_id: string;
-  /** `YYYY-MM-DD`. */
-  due_date: string;
+  /** `YYYY-MM-DD`, or null (or omitted) for no due date (#5761). */
+  due_date?: string | null;
   /** The moment it is due, when it has a time of day (#4003). */
   due_at?: string;
   /** Subtask titles, in order (#4003). */
@@ -1016,6 +984,61 @@ export async function postTask(
   // Success: the server posts the `task` card (same client_message_id); the
   // Realtime echo reconciles the placeholder via mergeServerRow. Nothing to do
   // unless `card_posted` was an explicit `false` above.
+  return { ok: true };
+}
+
+export const TASK_LINK_UNCONFIRMED_WARNING =
+  "Couldn't confirm the task was linked. Check the channel before you link it again.";
+
+/**
+ * Post an existing task's card into `channelId` (#5772): the + sheet's Task
+ * row, on web and the phone. A `loading` placeholder until the server's card
+ * reconciles it by Realtime echo; dropped on a refusal. A lost answer reads
+ * as unconfirmed, like `/task`'s, since a second link would post a second
+ * card.
+ */
+export async function linkTask(
+  ctx: ChatActionContext,
+  channelId: string,
+  task: { id: string; title: string },
+): Promise<DispatchResult> {
+  const clientMessageId = randomClientId();
+  insertLocalPlaceholder(ctx, {
+    channelId,
+    clientMessageId,
+    content: `Linking "${task.title}"…`,
+  });
+  try {
+    const result = await ctx.apiClient.POST("/v1/tasks/{id}/share", {
+      params: { path: { id: task.id } },
+      body: { channel_id: channelId, client_message_id: clientMessageId },
+    });
+    const { status, ok } = responseStatus(result);
+    if (!ok) {
+      if (!isTerminalStatus(status)) {
+        return lostResponse(
+          ctx,
+          channelId,
+          clientMessageId,
+          TASK_LINK_UNCONFIRMED_WARNING,
+        );
+      }
+      removeLocalPlaceholder(ctx, channelId, clientMessageId);
+      return {
+        ok: false,
+        error: apiErrorMessage(result.error, "Couldn't link that task"),
+        cause: result.error,
+      };
+    }
+  } catch {
+    return lostResponse(
+      ctx,
+      channelId,
+      clientMessageId,
+      TASK_LINK_UNCONFIRMED_WARNING,
+    );
+  }
+  // The card arrives by Realtime echo and replaces the placeholder.
   return { ok: true };
 }
 
@@ -1321,27 +1344,85 @@ export async function postHours(
   return { ok: true };
 }
 
-async function resolveRushCandidateId(
+/** One prospect a name matched, as the lookup's 409 lists them. */
+interface RushNameMatch {
+  id: string;
+  display_name: string;
+  stage_label: string;
+  created_at: string;
+}
+
+type RushLookup =
+  | { kind: "found"; id: string }
+  | { kind: "several"; matches: RushNameMatch[] }
+  | { kind: "none" };
+
+const RUSH_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Whether a lookup's error is the 409 that means "several match". */
+function isRushSeveralMatch(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "rush.several_match"
+  );
+}
+
+/**
+ * Every prospect a name matches, for the picker
+ * (`GET /v1/rush/candidates/matches`). The 409 only says there are several:
+ * the API's error body carries a code and a message, nothing more.
+ */
+async function rushNameMatches(
+  ctx: ChatActionContext,
+  name: string,
+): Promise<RushNameMatch[] | null> {
+  const result = await ctx.apiClient.GET("/v1/rush/candidates/matches", {
+    params: { query: { name } },
+  });
+  if (!responseStatus(result).ok || !Array.isArray(result.data)) return null;
+  const matches = (result.data as unknown[]).filter(
+    (row): row is RushNameMatch =>
+      !!row &&
+      typeof row === "object" &&
+      typeof (row as RushNameMatch).id === "string" &&
+      RUSH_UUID.test((row as RushNameMatch).id) &&
+      typeof (row as RushNameMatch).display_name === "string",
+  );
+  return matches.length > 1 ? matches : null;
+}
+
+async function resolveRushCandidate(
   ctx: ChatActionContext,
   token: string,
-): Promise<string | null> {
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      token,
-    )
-  ) {
-    return token;
-  }
+): Promise<RushLookup> {
+  if (RUSH_UUID.test(token)) return { kind: "found", id: token };
   try {
     const result = await ctx.apiClient.GET("/v1/rush/candidates", {
       params: { query: { name: token } },
     });
+    const { status, ok } = responseStatus(result);
+    if (status === 409 && isRushSeveralMatch(result.error)) {
+      const matches = await rushNameMatches(ctx, token);
+      if (matches) return { kind: "several", matches };
+    }
     const id = (result.data as { id?: string } | undefined)?.id;
-    if (!responseStatus(result).ok || typeof id !== "string") return null;
-    return id;
+    if (!ok || typeof id !== "string") return { kind: "none" };
+    return { kind: "found", id };
   } catch {
-    return null;
+    return { kind: "none" };
   }
+}
+
+/** "Met · added Nov 20", what tells two prospects with one name apart. */
+function rushMatchDetail(match: RushNameMatch): string {
+  const added = new Date(match.created_at);
+  const day = Number.isNaN(added.getTime())
+    ? null
+    : added.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const stage = match.stage_label || "No stage";
+  return day ? `${stage} · added ${day}` : stage;
 }
 
 /**
@@ -1371,10 +1452,26 @@ async function dispatchRush(
     parsed.value.action === "vote"
       ? (parsed.value.candidateId ?? parsed.value.candidateToken ?? "")
       : parsed.value.candidateToken;
-  const id = await resolveRushCandidateId(ctx, token);
-  if (!id) {
+  const lookup = await resolveRushCandidate(ctx, token);
+  if (lookup.kind === "several") {
+    const action = parsed.value.action;
+    return {
+      ok: false,
+      error: "Several prospects match that name. Pick one.",
+      choices: {
+        title: `Several prospects match "${token}"`,
+        options: lookup.matches.map((match) => ({
+          label: match.display_name,
+          detail: rushMatchDetail(match),
+          args: `${action} ${match.id}`,
+        })),
+      },
+    };
+  }
+  if (lookup.kind === "none") {
     return { ok: false, error: "No candidate matches that name" };
   }
+  const id = lookup.id;
 
   const path =
     parsed.value.action === "vote"
@@ -1431,6 +1528,9 @@ async function dispatchRushAdd(
         error: apiErrorMessage(result.error, "Couldn't add that candidate"),
       };
     }
+    // The recruitment page lists every prospect (#5924): refresh its read
+    // so a page left open shows the one just added.
+    void ctx.queryClient.invalidateQueries({ queryKey: ["rush"] });
     if (data?.card_posted === false) {
       markLocalRecorded(ctx, {
         channelId,

@@ -4,6 +4,7 @@ import { ROLE_COLOR_HEXES } from "@repo/validation";
 import { signetDarkTokens } from "@repo/theme/signet";
 import {
   destinationHue,
+  SHARED_HUE_PAIRS,
   YOU_DESTINATION_HUE,
   type YouDestination,
 } from "./destination-hue";
@@ -45,13 +46,18 @@ describe("the You tab's place hues", () => {
     expect(destinationHue("hostCheckIn")).toBe(NOTIFICATION_TILE_HUE.events);
   });
 
-  it("gives each place its own hue; only the two settings rows share one", () => {
+  it("gives each place its own hue", () => {
     const byHue = new Map<string, YouDestination[]>();
     for (const place of places) {
       const hue = destinationHue(place);
       byHue.set(hue, [...(byHue.get(hue) ?? []), place]);
     }
-    const shared = [...byHue.values()].filter((group) => group.length > 1);
-    expect(shared).toEqual([["settings", "chapterSettings"]]);
+    const allowed = new Set(
+      SHARED_HUE_PAIRS.map((pair) => [...pair].sort().join("+")),
+    );
+    const shared = [...byHue.values()]
+      .filter((group) => group.length > 1)
+      .filter((group) => !allowed.has([...group].sort().join("+")));
+    expect(shared).toEqual([]);
   });
 });

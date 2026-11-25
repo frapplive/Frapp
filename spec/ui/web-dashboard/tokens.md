@@ -420,7 +420,7 @@ contrast merits — most likely by re-pitching `--card`. The rung stays as shipp
 lane changes no value.
 
 One live call site was known to be affected and was fixed at the call site rather than by moving a
-token (`chapter-nav-header.tsx`, whose chapter-picker row hover skips to `--popover`). **It is not
+token (the chapter-picker row then in `chapter-nav-header.tsx`, now `chapter-switcher.tsx`'s recovery card, whose hover skips to `--popover`). **It is not
 the only one.** A later sweep — `git grep -n "hover:bg-card\\|bg-card" apps/web`, cross-referenced
 against the container each site is seated in — found the same rung under the nav rail, the top bar
 and the channel list. [#2399](https://github.com/pdcarlson/Frapp/issues/2399) carries the table, and

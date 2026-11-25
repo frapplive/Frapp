@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  type GestureResponderEvent,
   Linking,
   Pressable,
   StyleSheet,
@@ -9,26 +11,44 @@ import {
 } from "react-native";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { formatPhone } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
+  chipToggleName,
+  cutChips,
   dmChannelIdOf,
-  groupsOfMember,
+  memberGroupChips,
+  memberRoleChips,
+  NO_BASE_ROLE_LABEL,
+  needsBaseRole,
   useBlockedUserIds,
   useGetOrCreateDm,
   useGroups,
+  useLiftChatTimeout,
   useMemberByUserId,
   useMemberDisplayNames,
+  useMemberPhoneReach,
+  useNowDate,
   usePermissionList,
   useRemoveMember,
   useRoles,
   useViewerUserId,
+  type AssignmentChip,
 } from "@repo/hooks";
 import {
-  BIRTHDAY_COPY,
-  can,
-  resolveRoleChips,
-  roleColorOrNull,
+  PHONE_REACH_LABEL,
+  phoneReachLastOpened,
+  phoneReachSummary,
 } from "@repo/validation";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
+import {
+  TimeoutMemberSheet,
+  type TimeoutSheetTarget,
+} from "@/components/chat/timeout-member-sheet";
+import { BIRTHDAY_COPY, can } from "@repo/validation";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
 import { errorCopy } from "@repo/hooks/error-copy";
 import {
@@ -37,6 +57,7 @@ import {
 } from "@repo/hooks/member-removal-copy";
 import { presenceLabel } from "@repo/hooks/presence-status";
 import { ScreenShell } from "@/components/screen-shell";
+import { useRolesData } from "@/lib/roles/use-roles-data";
 import { BACK_TO_DIRECTORY } from "@/components/back-row";
 import { MemberAvatar } from "@/components/member-avatar";
 import { AvatarWithPresence } from "@/components/avatar-with-presence";
@@ -48,9 +69,11 @@ import {
   SkeletonRegion,
   SkeletonText,
 } from "@/components/state-block";
-import { SheetPrimaryButton } from "@/components/sheet-scaffold";
+import { ChatGlyph } from "@/components/tab-glyphs";
+import { pageSurfaces } from "@/lib/surfaces";
 import { IconButton, ICON_BUTTON_SIZE } from "@/components/icon-button";
 import { OverflowGlyph } from "@/components/chat/overflow-glyph";
+import { pressAt } from "@/components/item-actions-menu";
 import {
   MemberRolesSheet,
   type MemberRolesSession,
@@ -69,11 +92,11 @@ import {
   confirmUnblockMember,
   useBlockActions,
 } from "@/lib/chat/block-actions";
-import { useChapterBranding } from "@/lib/chapter-branding";
 import { usePledgeClassRows } from "@/lib/directory/pledge-class";
 import { selectMemberDetail } from "@/lib/directory/member-detail";
 import { showPhoneActions } from "@/lib/directory/phone-actions";
 import {
+  confirmLiftTimeout,
   confirmRemoveMember,
   memberMenuActions,
   showMemberMenu,
@@ -123,14 +146,19 @@ import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
  * a More details row, folded on every visit (Shawn, 2026-11-09).
  *
  * **Message** (#2773) opens a 1:1 DM with the member, or the one you already
- * have: the screen's one accent button, under the header. Opened from that
+ * have: a small button sized to its label, under the header, never a
+ * full-width bar (Paul, 2026-11-20: "not a big huge button guy"; Slack's and
+ * iOS Contacts' profiles draw it the same size, as web's does). Opened from that
  * very DM, it goes back instead of stacking a second copy of the thread. Who
  * it is offered for is `spec/ui/mobile/screens.md` s13's rule, implemented in
  * `lib/directory/start-dm.ts`.
  *
- * **Roles** are chips in the chapter's rank order (`resolveRoleChips`), each
- * with its role color. A viewer holding `roles:manage` gets Edit, which opens
- * {@link MemberRolesSheet}, the one role editor on mobile (Paul, 2026-11-07).
+ * **Roles, then groups**, right under Message (Paul, 2026-11-19, the same
+ * order as web's card and profile): chips in the chapter's rank order
+ * (`memberRoleChips`, as web's card), each with its color, the top three
+ * shown and "+N more" opening the rest in place (#5783, `cutChips`). A viewer holding `roles:manage`
+ * or `groups:manage` gets "+ Add role" and "+ Add to group", which open
+ * {@link MemberRolesSheet}, the one roles-and-groups editor on mobile.
  *
  * **Pledge class and order number** (#3939) show to everyone when set; the
  * same `roles:manage` holder always sees both rows and taps either to open
@@ -188,9 +216,14 @@ export function MemberProfile({
   const isShown = () => mountedRef.current && focusedRef.current;
 
   const memberQuery = useMemberByUserId(userId);
+  // Whether Frapp's notifications reach this member's phone, as web's member
+  // sheet shows it. The server sends every member's only to officers who can
+  // invite or manage roles, and anyone else only their own, so a missing
+  // entry draws no row.
+  const { reach: phoneReachMap } = useMemberPhoneReach();
+  const phoneReach = phoneReachMap?.byUserId.get(userId);
   // The same role-color resolution chat's name uses (#3860).
   const { avatarTintFor } = useMemberDisplayNames();
-  const { accent } = useChapterBranding();
   const rolesQuery = useRoles();
   // Their dot and custom line (#3917), off chapter presence: nothing until it
   // has synced, never a stand-in Offline.
@@ -201,20 +234,41 @@ export function MemberProfile({
     () => selectMemberDetail(memberQuery.data),
     [memberQuery.data],
   );
+  const rolesData = useRolesData();
+  // Ordered as web's card orders them (`memberRoleChips`): by rank
+  // (`compareRolesByRank`), the Everyone role left out.
   const roleChips = useMemo(
-    () => resolveRoleChips(rolesQuery.data, detail?.roleIds ?? []),
-    [rolesQuery.data, detail?.roleIds],
+    () =>
+      memberRoleChips({
+        roles: rolesData.roles,
+        tiers: rolesData.tiers,
+        heldRoleIds: detail?.roleIds ?? [],
+        reach: rolesData.reach,
+        canManageRoles: false,
+      }),
+    [rolesData.roles, rolesData.tiers, rolesData.reach, detail?.roleIds],
   );
   const groupsQuery = useGroups({ enabled: true });
+  // The chapter's own groups first, then the pledge class's, class year's and
+  // major's.
   const memberGroups = useMemo(
-    () => groupsOfMember(groupsQuery.data, userId),
+    () => memberGroupChips(groupsQuery.data ?? [], userId, false),
     [groupsQuery.data, userId],
   );
 
   const canEditRoles = can("roles:manage", permissions);
+  const canManageGroups = can("groups:manage", permissions);
+  // The sheet opens for whoever may change either, once the profile and the
+  // roles list it starts from are in.
+  const canOpenAssignments =
+    !!detail?.memberId &&
+    rolesQuery.isSuccess &&
+    (canEditRoles || canManageGroups);
   // The member's pledge class and order number (#3939): each drawn only when
   // set, except to an officer who sets them here (the same `roles:manage`).
   const canEditClass = canEditRoles && !!detail?.memberId;
+  const noBaseRole =
+    canEditRoles && !!detail && needsBaseRole(rolesData.roles, detail.roleIds);
   const classRows = usePledgeClassRows(detail, { canEdit: canEditClass });
   const classSheetRef = useRef<BottomSheetModal>(null);
   const [classSession, setClassSession] = useState<MemberClassSession | null>(
@@ -231,6 +285,18 @@ export function MemberProfile({
   const correctionSheetRef = useRef<BottomSheetModal>(null);
   const [correctionSession, setCorrectionSession] =
     useState<MemberCorrectionSession | null>(null);
+  // Time out (#6006): the sheet a message's long-press opens too.
+  const timeoutSheetRef = useRef<BottomSheetModal>(null);
+  const [timeoutTarget, setTimeoutTarget] = useState<TimeoutSheetTarget | null>(
+    null,
+  );
+  const liftTimeout = useLiftChatTimeout();
+  const now = useNowDate();
+  const timeoutLine = runningTimeoutLine(
+    detail?.chatTimeoutUntil,
+    detail?.chatTimeoutReason,
+    now,
+  );
   // Folded on every visit: logistics are a tap away, not the first read.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Distinct from "no role" (`[]` once the read has settled): while it is
@@ -255,6 +321,9 @@ export function MemberProfile({
     // The server's answer, as for removal below.
     canEdit:
       !!detail?.canEditProfile && !!detail.memberId && otherMemberId !== null,
+    canTimeOut:
+      !!detail?.canTimeOut && !!detail.memberId && otherMemberId !== null,
+    timedOut: timeoutLine !== null,
     canBlock: blockTarget !== null,
     isBlocked,
     // The server's answer already excludes the viewer's own profile; the
@@ -265,55 +334,97 @@ export function MemberProfile({
 
   const leave = () => leaveScreen(router, BACK_TO_DIRECTORY.href);
 
-  function openMenu() {
+  function openAssignments(focus: "roles" | "groups") {
+    if (!detail?.memberId) return;
+    setRolesSession({
+      memberId: detail.memberId,
+      userId: detail.userId,
+      focus,
+      canManageRoles: canEditRoles,
+      canManageGroups,
+      name: detail.displayName,
+      heldIds: detail.roleIds,
+      fetchedAt: memberQuery.dataUpdatedAt,
+    });
+    rolesSheetRef.current?.present();
+  }
+
+  function openMenu(event?: GestureResponderEvent) {
     if (!detail) return;
     const target = detail;
-    showMemberMenu(target.displayName, menuActions, (action) => {
-      if (action === "edit" && target.memberId) {
-        setCorrectionSession({
-          memberId: target.memberId,
-          label: target.displayName,
-          name: target.storedName,
-          graduationYear: target.graduationYear,
-        });
-        correctionSheetRef.current?.present();
-      } else if (action === "block") {
-        confirmBlockMember({
-          name: target.displayName,
-          // Listed in the directory: that is where this is.
-          inDirectory: true,
-          run: () => blockActions.block(target.userId),
-        });
-      } else if (action === "unblock") {
-        confirmUnblockMember({
-          name: target.displayName,
-          run: () => blockActions.unblock(target.userId),
-        });
-      } else if (action === "remove" && target.memberId) {
-        const memberId = target.memberId;
-        confirmRemoveMember({
-          name: target.displayName,
-          run: () => {
-            removeMutation.mutate(memberId, {
-              // They are no longer a member, so their page goes; only while
-              // it is still the one on screen (#3405).
-              onSuccess: () => {
-                if (isShown()) leave();
-              },
-              onError: (error) =>
-                Alert.alert(
-                  removeFailedTitle(target.displayName),
-                  errorCopy(error, "Try again in a moment.", {
-                    // The route's refusals are sentences for members ("You
-                    // can only remove members ranked below you.").
-                    serverWritesForMembers: true,
-                  }),
-                ),
-            });
-          },
-        });
-      }
-    });
+    const at = pressAt(event);
+    showMemberMenu(
+      target.displayName,
+      menuActions,
+      (action) => {
+        if (action === "edit" && target.memberId) {
+          setCorrectionSession({
+            memberId: target.memberId,
+            label: target.displayName,
+            name: target.storedName,
+            graduationYear: target.graduationYear,
+          });
+          correctionSheetRef.current?.present();
+        } else if (action === "time-out") {
+          setTimeoutTarget({ userId: target.userId, name: target.displayName });
+          timeoutSheetRef.current?.present();
+        } else if (action === "lift-timeout" && target.memberId) {
+          const memberId = target.memberId;
+          confirmLiftTimeout({
+            name: target.displayName,
+            run: () =>
+              liftTimeout.mutate(
+                { memberId },
+                {
+                  onError: (error) =>
+                    Alert.alert(
+                      CHAT_TIMEOUT_COPY.liftFailed,
+                      errorCopy(error, "Try again in a moment.", {
+                        serverWritesForMembers: true,
+                      }),
+                    ),
+                },
+              ),
+          });
+        } else if (action === "block") {
+          confirmBlockMember({
+            name: target.displayName,
+            // Listed in the directory: that is where this is.
+            inDirectory: true,
+            run: () => blockActions.block(target.userId),
+          });
+        } else if (action === "unblock") {
+          confirmUnblockMember({
+            name: target.displayName,
+            run: () => blockActions.unblock(target.userId),
+          });
+        } else if (action === "remove" && target.memberId) {
+          const memberId = target.memberId;
+          confirmRemoveMember({
+            name: target.displayName,
+            run: () => {
+              removeMutation.mutate(memberId, {
+                // They are no longer a member, so their page goes; only while
+                // it is still the one on screen (#3405).
+                onSuccess: () => {
+                  if (isShown()) leave();
+                },
+                onError: (error) =>
+                  Alert.alert(
+                    removeFailedTitle(target.displayName),
+                    errorCopy(error, "Try again in a moment.", {
+                      // The route's refusals are sentences for members ("You
+                      // can only remove members ranked below you.").
+                      serverWritesForMembers: true,
+                    }),
+                  ),
+              });
+            },
+          });
+        }
+      },
+      at,
+    );
   }
 
   // Not waiting on the channel-list refetch: chat home observes it and picks
@@ -443,13 +554,15 @@ export function MemberProfile({
               {statusLine}
             </Text>
           ) : null}
+          {timeoutLine ? (
+            // The member and whoever can time out see it (#6006), as on web.
+            <Text style={styles.timeoutLine}>{timeoutLine}</Text>
+          ) : null}
 
           {messageRow.kind !== "hidden" ? (
             <View style={styles.messageBlock}>
-              <SheetPrimaryButton
+              <MessageButton
                 label="Message"
-                accent={accent}
-                onAccent={tokens.color.gold.onHouse}
                 // Busy while the DM opens; disabled only while the block list
                 // can't vouch for a DM yet.
                 busy={messageRow.kind === "ready" && dmPending}
@@ -472,15 +585,78 @@ export function MemberProfile({
             </View>
           ) : null}
 
+          {/*
+            Roles, then groups (Paul, 2026-11-19: one place for both, set
+            from the person, the same rows as web's card and profile). A
+            viewer who may change them gets "+ Add role" and "+ Add to group",
+            which open one sheet of roles and groups ticked to give or take.
+          */}
+          <View style={styles.chipBlock}>
+            <Text style={styles.sectionLabel} accessibilityRole="header">
+              Roles
+            </Text>
+            {rolesStillLoading ? (
+              <Text style={styles.meta}>Loading roles</Text>
+            ) : (
+              <View style={styles.chips}>
+                {/* No base role: they see only what the whole chapter may
+                    (Paul, 2026-11-21), said as web's card says it, to
+                    whoever can give one. */}
+                {noBaseRole ? (
+                  <View style={[styles.chip, styles.addChip]}>
+                    <Text style={[styles.chipText, styles.addChipText]}>
+                      {NO_BASE_ROLE_LABEL}
+                    </Text>
+                  </View>
+                ) : null}
+                <FoldedChips chips={roleChips} noun="roles" />
+                {canOpenAssignments ? (
+                  <AddChip
+                    label="Add role"
+                    disabled={dmPending}
+                    onPress={() => openAssignments("roles")}
+                  />
+                ) : roleChips.length === 0 ? (
+                  // Everyone draws no chip: as Discord says it.
+                  <Text style={styles.meta}>No roles</Text>
+                ) : null}
+              </View>
+            )}
+          </View>
+
+          {groupsQuery.data ? (
+            <View style={styles.chipBlock}>
+              <Text style={styles.sectionLabel} accessibilityRole="header">
+                Groups
+              </Text>
+              <View style={styles.chips}>
+                <FoldedChips chips={memberGroups} noun="groups" />
+                {canOpenAssignments ? (
+                  <AddChip
+                    label="Add to group"
+                    disabled={dmPending}
+                    onPress={() => openAssignments("groups")}
+                  />
+                ) : memberGroups.length === 0 ? (
+                  <Text style={styles.meta}>No groups</Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
           <ListSection>
             {detail.phone ? (
               <ListRow
                 variant="detail"
                 label="Phone"
-                value={detail.phone}
+                value={formatPhone(detail.phone)}
                 accessibilityHint="Offers to call or text them"
-                onPress={() =>
-                  showPhoneActions(detail.displayName, detail.phone ?? "")
+                onPress={(event) =>
+                  showPhoneActions(
+                    detail.displayName,
+                    detail.phone ?? "",
+                    event,
+                  )
                 }
               />
             ) : null}
@@ -509,93 +685,15 @@ export function MemberProfile({
               label="Member since"
               value={detail.joinedLabel ?? "—"}
             />
+            {phoneReach ? (
+              <ListRow
+                variant="detail"
+                label={PHONE_REACH_LABEL}
+                value={phoneReachSummary(phoneReach)}
+                description={phoneReachLastOpened(phoneReach)}
+              />
+            ) : null}
           </ListSection>
-
-          <View style={styles.chipBlock}>
-            <View style={styles.chipBlockHeader}>
-              <Text style={styles.sectionLabel} accessibilityRole="header">
-                Roles
-              </Text>
-              {canEditRoles && rolesQuery.isSuccess && detail.memberId ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit ${detail.displayName}'s roles`}
-                  // Held while a DM with this member opens: a thread landing
-                  // under the editor would leave it drawn over the thread
-                  // (#3790).
-                  accessibilityState={
-                    dmPending ? { disabled: true } : undefined
-                  }
-                  disabled={dmPending}
-                  hitSlop={12}
-                  onPress={() => {
-                    setRolesSession({
-                      memberId: detail.memberId ?? "",
-                      name: detail.displayName,
-                      heldIds: detail.roleIds,
-                      fetchedAt: memberQuery.dataUpdatedAt,
-                    });
-                    rolesSheetRef.current?.present();
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.editLink,
-                      { color: accent },
-                      dmPending ? styles.editLinkDisabled : null,
-                    ]}
-                  >
-                    Edit
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {rolesStillLoading ? (
-              <Text style={styles.meta}>Loading roles</Text>
-            ) : roleChips.length > 0 ? (
-              <View style={styles.chips}>
-                {roleChips.map((chip) => (
-                  <ColorChip
-                    key={chip.id}
-                    name={chip.name}
-                    color={chip.color}
-                  />
-                ))}
-              </View>
-            ) : (
-              // Everyone draws no chip (#4191): as Discord says it.
-              <Text style={styles.meta}>No roles</Text>
-            )}
-          </View>
-
-          {/*
-            Groups (#4076): read-only here, as Slack's profile lists a
-            person's user groups; officers edit them in Chapter settings on
-            web. Left out until the list loads, and on a failed read, rather
-            than claiming "No groups".
-          */}
-          {groupsQuery.data ? (
-            <View style={styles.chipBlock}>
-              <View style={styles.chipBlockHeader}>
-                <Text style={styles.sectionLabel} accessibilityRole="header">
-                  Groups
-                </Text>
-              </View>
-              {memberGroups.length > 0 ? (
-                <View style={styles.chips}>
-                  {memberGroups.map((group) => (
-                    <ColorChip
-                      key={group.id}
-                      name={group.name}
-                      color={roleColorOrNull(group.color)}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.meta}>No groups</Text>
-              )}
-            </View>
-          ) : null}
 
           {classRows.length > 0 ? (
             <ListSection>
@@ -667,12 +765,142 @@ export function MemberProfile({
         ref={rolesSheetRef}
         session={rolesSession}
         options={roleOptions}
+        groups={groupsQuery.data ?? []}
       />
       <MemberClassSheet ref={classSheetRef} session={classSession} />
       <MemberCorrectionSheet
         ref={correctionSheetRef}
         session={correctionSession}
       />
+      <TimeoutMemberSheet ref={timeoutSheetRef} target={timeoutTarget} />
+    </>
+  );
+}
+
+/**
+ * Message: a compact outlined button sized to its label, under the header,
+ * web's `secondary` `sm` button on the phone.
+ */
+function MessageButton({
+  label,
+  busy,
+  disabled,
+  accessibilityHint,
+  onPress,
+}: {
+  label: string;
+  busy: boolean;
+  disabled: boolean;
+  accessibilityHint?: string;
+  onPress: () => void;
+}) {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  const inert = disabled || busy;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: inert, busy }}
+      disabled={inert}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.messageButton,
+        pressed ? styles.messageButtonPressed : null,
+        disabled ? styles.addChipDim : null,
+      ]}
+    >
+      {busy ? (
+        <ActivityIndicator
+          size="small"
+          color={tokens.color.text.mutedForeground}
+        />
+      ) : (
+        <ChatGlyph
+          focused={false}
+          accent={tokens.color.text.foreground}
+          muted={tokens.color.text.foreground}
+          size={16}
+        />
+      )}
+      <Text style={styles.messageButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * "+ Add role" or "+ Add to group": a dashed chip beside the member's own,
+ * opening the one roles-and-groups sheet. Held while a DM with this member
+ * opens, so the sheet never lands over the thread (#3790).
+ */
+function AddChip({
+  label,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={disabled ? { disabled: true } : undefined}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        styles.addChip,
+        pressed || disabled ? styles.addChipDim : null,
+      ]}
+    >
+      <Text style={[styles.chipText, styles.addChipText]}>+ {label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A roles or groups row's chips: the top three, then "+N more" opening the
+ * rest in place, and "Show less" folding them back (#5783, the same cut as
+ * web's, `cutChips`). Editing happens in the sheet, which lists every role.
+ */
+function FoldedChips({
+  chips,
+  noun,
+}: {
+  chips: readonly AssignmentChip[];
+  noun: "roles" | "groups";
+}) {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  const [expanded, setExpanded] = useState(false);
+  const cut = cutChips(chips, expanded);
+  return (
+    <>
+      {cut.shown.map((chip) => (
+        <ColorChip key={chip.id} name={chip.name} color={chip.color} />
+      ))}
+      {cut.toggle ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={chipToggleName(cut.toggle, noun)}
+          accessibilityState={{ expanded }}
+          hitSlop={8}
+          onPress={() => setExpanded(cut.toggle?.expands ?? false)}
+          style={({ pressed }) => [
+            styles.moreChip,
+            pressed ? styles.addChipDim : null,
+          ]}
+        >
+          <Text style={styles.moreChipText}>{cut.toggle.label}</Text>
+        </Pressable>
+      ) : null}
     </>
   );
 }
@@ -758,31 +986,65 @@ function createStyles(tokens: SignetTokens) {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
     },
+    timeoutLine: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.semantic.warning,
+    },
+    // At the header's start, under the name it belongs to: the phone's
+    // header is left-aligned where web's sheet centers its own.
     messageBlock: {
       gap: tokens.spacing.xs,
+      alignItems: "flex-start",
+    },
+    messageButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing.xs,
+      minHeight: 36,
+      paddingHorizontal: tokens.spacing.md,
+      borderRadius: tokens.radius.card,
+      borderWidth: 1,
+      borderColor: tokens.color.border.control,
+      backgroundColor: pageSurfaces(tokens).card,
+    },
+    messageButtonPressed: {
+      backgroundColor: pageSurfaces(tokens).raised,
+    },
+    messageButtonText: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.text.foreground,
     },
     messageNote: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
-      textAlign: "center",
     },
     chipBlock: {
       gap: tokens.spacing.sm,
-    },
-    chipBlockHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
     },
     sectionLabel: {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.text.mutedForeground,
     },
-    editLink: {
-      ...typeRole(tokens.typography.role.label),
+    addChip: {
+      borderStyle: "dashed",
     },
-    editLinkDisabled: {
+    addChipText: {
+      color: tokens.color.text.mutedForeground,
+    },
+    addChipDim: {
       opacity: 0.5,
+    },
+    // "+N more" and "Show less": the chip's step with no box, quieter than
+    // the chips it stands for.
+    moreChip: {
+      justifyContent: "center",
+      paddingHorizontal: tokens.spacing.sm,
+      paddingVertical: tokens.spacing.xs,
+      borderRadius: tokens.radius.card,
+    },
+    moreChipText: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
     },
     chips: {
       flexDirection: "row",

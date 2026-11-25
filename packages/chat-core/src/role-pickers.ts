@@ -1,8 +1,3 @@
-import {
-  ROLE_PICKER_DEFAULT_TITLE,
-  ROLE_PICKER_ROLES_MAX,
-  ROLE_PICKER_TITLE_MAX_LENGTH,
-} from "@repo/validation";
 import type { ChatMessage } from "./types";
 
 /**
@@ -19,28 +14,10 @@ import type { ChatMessage } from "./types";
  * read their own roles.
  */
 
-export {
-  ROLE_PICKER_DEFAULT_TITLE,
-  ROLE_PICKER_ROLES_MAX,
-  ROLE_PICKER_TITLE_MAX_LENGTH,
-};
-
 export interface RolePickerPayload {
   title: string;
   /** The roles the card lists, in the order the officer picked them. */
   role_ids: string[];
-}
-
-/** The message a picker posts: its title as `content`, so previews read it. */
-export function buildRolePickerMessage(input: {
-  title: string;
-  roleIds: readonly string[];
-}): { content: string; payload: RolePickerPayload } {
-  const title = input.title.trim() || ROLE_PICKER_DEFAULT_TITLE;
-  return {
-    content: title,
-    payload: { title, role_ids: [...new Set(input.roleIds)] },
-  };
 }
 
 /** The card's payload, or `null` when it can't be read (then it draws as text). */
@@ -56,8 +33,12 @@ export function readRolePickerPayload(
   return { title, role_ids: ids };
 }
 
-/** Under a role the viewer neither holds nor can join now, on web and the phone. */
-export const ROLE_PICKER_CLOSED_CAPTION = "No longer open to join";
+/**
+ * Under a role the viewer can't join or leave now, held or not, on web and the
+ * phone: an officer unmarked it, or the viewer is an alum (#5650).
+ */
+export const ROLE_PICKER_CLOSED_CAPTION =
+  "Closed. An officer can add or remove it.";
 
 /** A role the viewer can tap on the card, as `usePickableRoles` lists them. */
 export interface RolePickerRoleState {
@@ -71,9 +52,10 @@ export interface RolePickerRoleState {
  * One row of the card for this viewer:
  *
  * - `join`: a role they may join and don't hold;
- * - `leave`: a role they hold and may leave;
- * - `closed`: a role still in the chapter they can't join now (an officer
- *   unmarked it, or the viewer is an alum), drawn without a button.
+ * - `leave`: a role they hold and may leave (still marked, #5650);
+ * - `closed`: a role still in the chapter they can't join or leave now (an
+ *   officer unmarked it, or the viewer is an alum who doesn't hold it), drawn
+ *   without a button.
  *
  * A role deleted since the card was posted is left out.
  */

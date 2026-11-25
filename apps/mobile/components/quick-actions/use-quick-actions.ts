@@ -13,6 +13,7 @@ import {
   resolveQuickActions,
   writeSavedQuickActions,
 } from "@/lib/quick-actions";
+import { useIsCouncil } from "@/lib/tenant-kind";
 
 export type QuickActionsState = {
   /** What the panel shows, in order. */
@@ -48,9 +49,10 @@ export function useQuickActions(): QuickActionsState {
   const userId = useViewerUserId();
   const chapterId = useActiveChapterId() ?? null;
 
+  const council = useIsCouncil();
   const available = useMemo(
-    () => availableQuickActions({ permissions, enabledModules }),
-    [permissions, enabledModules],
+    () => availableQuickActions({ permissions, enabledModules, council }),
+    [permissions, enabledModules, council],
   );
 
   // The saved arrangement, tagged with whose it is, so a chapter switch shows

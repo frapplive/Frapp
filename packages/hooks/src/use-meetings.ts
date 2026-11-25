@@ -61,6 +61,29 @@ export function useMeetings(options?: { enabled?: boolean; eventId?: string }) {
 }
 
 /**
+ * The meetings a phone is recording right now whose events this member can
+ * see (`GET /v1/meetings/live-recordings`): who is recording, since when,
+ * and which event, for a line such as "Winston Hewitt is recording" (Paul,
+ * 2026-11-20). Read again every minute, as the recording phone beats.
+ */
+export function useLiveMeetingRecordings(options?: { enabled?: boolean }) {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  return useQuery({
+    queryKey: [...meetingsKey(chapterId), "live-recordings"] as const,
+    queryFn: async ({ signal }) => {
+      const { data, error } = await client.GET("/v1/meetings/live-recordings", {
+        signal,
+      });
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60_000,
+    enabled: (options?.enabled ?? true) && !!chapterId,
+  });
+}
+
+/**
  * A meeting's row from a Minutes list already loaded, or null: what the
  * minutes page names itself with while the minutes load, so a tap from the
  * list never opens on a blank page (Paul, 2026-11-19: "slow and poor
@@ -330,6 +353,10 @@ export function usePostMeeting() {
       void queryClient.invalidateQueries({
         queryKey: aiSuggestionKeys.all(chapterId),
       });
+      // And what files the minutes in Documents (#5949).
+      void queryClient.invalidateQueries({
+        queryKey: ["documents", chapterId],
+      });
       return queryClient.invalidateQueries({
         queryKey: meetingsKey(chapterId),
         predicate: (query) => query.queryKey[2] !== "one",
@@ -359,6 +386,10 @@ export function useDeleteMeeting() {
       // Its suggested tasks went with it (#4313).
       void queryClient.invalidateQueries({
         queryKey: aiSuggestionKeys.all(chapterId),
+      });
+      // And its row in Documents (#5949).
+      void queryClient.invalidateQueries({
+        queryKey: ["documents", chapterId],
       });
       return queryClient.invalidateQueries({
         queryKey: meetingsKey(chapterId),
@@ -901,5 +932,38 @@ export function useRemoveMeetingRecording() {
           predicate: isMeetingsList,
         }),
       ]),
+  });
+}
+
+/**
+ * Mark a meeting that ended as "No minutes", or take the mark off
+ * (`noMinutes: false`). The caller re-reads what lists it (Activity's
+ * Minutes run, since the Meetings list went in #5949).
+ */
+export function useSetMeetingNoMinutes() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  return useMutation({
+    mutationKey: ["meetings", "no-minutes"],
+    mutationFn: async ({
+      eventId,
+      noMinutes,
+    }: {
+      eventId: string;
+      noMinutes: boolean;
+    }) => {
+      const params = { path: { id: eventId } };
+      const { error } = noMinutes
+        ? await client.PUT("/v1/events/{id}/no-minutes", { params })
+        : await client.DELETE("/v1/events/{id}/no-minutes", { params });
+      if (error) throw error;
+    },
+    // A refusal can mean minutes started meanwhile: read them again.
+    onError: () =>
+      queryClient.invalidateQueries({
+        queryKey: meetingsKey(chapterId),
+        exact: true,
+      }),
   });
 }

@@ -88,11 +88,17 @@ export function useChatRealtimeBinding(): void {
     A tab that comes back from hidden may have been throttled or frozen, its
     socket dead without the client knowing yet. Catch up now rather than at
     the next heartbeat (#3698). The online edge is the manager's own.
+
+    While hidden (a background tab, the desktop app closed to its tray) the
+    member isn't reading the channel left open, so they leave its presence and
+    its pushes go out again (#4842).
   */
   useEffect(() => {
     const onVisibility = () => {
+      chatRealtime.setViewerAway(!isTabVisible());
       if (isTabVisible()) chatRealtime.resume();
     };
+    chatRealtime.setViewerAway(!isTabVisible());
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);

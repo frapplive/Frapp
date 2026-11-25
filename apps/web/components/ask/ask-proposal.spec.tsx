@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -28,6 +28,9 @@ const state = vi.hoisted(() => ({
     | undefined
     | {
         open: boolean;
+        onOpenChange: (open: boolean) => void;
+        onCloseAutoFocus?: (event: Event) => void;
+        docked?: unknown;
         template?: Record<string, unknown> | null;
         initialStartAt?: string;
         initialEndAt?: string;
@@ -35,6 +38,7 @@ const state = vi.hoisted(() => ({
         keptDraft?: string;
         onCreated?: (eventId: string) => Promise<void> | void;
       },
+  formMounts: 0,
   cards: {
     byId: new Map<string, unknown>(),
     settled: true,
@@ -48,15 +52,36 @@ vi.mock("@/components/ai/report-ai", () => ({
 }));
 
 // The form itself has its own spec (`event-editor-dialog.spec.tsx`).
-vi.mock("@/components/events/event-editor-dialog", () => ({
-  EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
-    state.eventForm = props;
-    return null;
-  },
-}));
+// Its open form hands focus back on close as the in-place panel does, from
+// its unmount, after the render that closed it.
+vi.mock("@/components/events/event-editor-dialog", async () => {
+  const { useEffect } = await vi.importActual<typeof import("react")>("react");
+  function OpenForm({ onClosed }: { onClosed?: (event: Event) => void }) {
+    useEffect(
+      () => () => {
+        onClosed?.(new Event("focus.closeAutoFocus", { cancelable: true }));
+      },
+      [onClosed],
+    );
+    return <div data-testid="event-form" />;
+  }
+  return {
+    EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
+      state.eventForm = props;
+      useEffect(() => {
+        state.formMounts += 1;
+      }, []);
+      return props.open ? <OpenForm onClosed={props.onCloseAutoFocus} /> : null;
+    },
+  };
+});
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Who a task card is for reads the chapter as the task form does.
+  useRoles: () => ({ data: [] }),
+  useRoleTiers: () => ({ data: [] }),
+  useGroups: () => ({ data: [] }),
   useActEventAudience: () => ({
     mutateAsync: state.audience,
     isPending: false,
@@ -122,7 +147,7 @@ function suggestion(kind: "points" | "task" | "new_event", payload: unknown) {
     id: "suggestion-1",
     kind,
     status: "pending",
-    source: { type: "request", id: ME, title: "Ask Frapp" },
+    source: { type: "request", id: ME, title: "Frapp Intelligence" },
     batch_id: "batch",
     task: null,
     points: null,
@@ -217,11 +242,12 @@ describe("AskProposal", () => {
     expect(
       await screen.findByText("Gave 5 points to 2 members."),
     ).toBeDefined();
+    // A role that can't read the ledger is sent to the standings (#5950).
     expect(
       screen
-        .getByRole("link", { name: ACT_COPY.open_points })
+        .getByRole("link", { name: ACT_COPY.open_standings })
         .getAttribute("href"),
-    ).toBe("/points");
+    ).toBe("/members?sort=points");
   });
 
   it("sends the members as the officer left them when one is taken off", async () => {
@@ -379,6 +405,7 @@ describe("AskProposal", () => {
 
     beforeEach(() => {
       state.eventForm = undefined;
+      state.formMounts = 0;
     });
 
     it("says a series repeats, written out", async () => {
@@ -398,6 +425,11 @@ describe("AskProposal", () => {
       );
       const form = state.eventForm!;
       expect(form.open).toBe(true);
+      // The card grows into the form in place (Paul, 2026-11-22): the form
+      // stands where the card's lines were, nothing slides over the page.
+      expect(form.docked).toBe("inline");
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(screen.queryByRole("button", { name: ACT_COPY.edit })).toBeNull();
       expect(form.template).toMatchObject({
         name: "Chapter",
         is_mandatory: false,
@@ -415,6 +447,29 @@ describe("AskProposal", () => {
         newEventId: "event-9",
       });
       expect(await screen.findByText(ACT_COPY.done_event)).toBeDefined();
+    });
+
+    it("folds the form back into the card and puts focus on Edit when it closes", async () => {
+      series();
+      await userEvent.click(
+        await screen.findByRole("button", { name: ACT_COPY.edit }),
+      );
+      await screen.findByTestId("event-form");
+      act(() => state.eventForm!.onOpenChange(false));
+      expect(screen.queryByTestId("event-form")).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(
+        screen.getByRole("button", { name: ACT_COPY.create_event }),
+      ).toBeDefined();
+      // Opened again, it is the same form, so a save still out when it closed
+      // is still that form's, not a fresh Create.
+      await userEvent.click(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(state.formMounts).toBe(1);
     });
 
     it("turns a points card's amount and reason into fields, and sends only what changed", async () => {
@@ -482,6 +537,36 @@ describe("AskProposal", () => {
           description: "Two buses, 60 seats",
         },
       });
+    });
+  });
+
+  it("sets a task's points and proof under Edit, and sends only them (2026-11-22)", async () => {
+    state.accept.mockResolvedValue({ result: null });
+    show({
+      ...base,
+      action: "create_task",
+      suggestion: suggestion("task", {
+        title: "Book the bus",
+        description: null,
+        assignee_id: JORDAN,
+        due_date: "2099-11-13",
+        due_at: null,
+        subtasks: ["Call the company"],
+      }),
+    });
+    expect(screen.getByText("1 step")).toBeDefined();
+    await userEvent.click(
+      await screen.findByRole("button", { name: ACT_COPY.edit }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(ACT_COPY.field_task_points),
+      "20",
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Photo" }));
+    await userEvent.click(screen.getByRole("button", { name: CONFIRM }));
+    expect(state.accept).toHaveBeenCalledWith({
+      id: "suggestion-1",
+      task: { point_reward: 20, proof_kind: "photo" },
     });
   });
 
@@ -571,6 +656,38 @@ describe("AskProposal", () => {
     ).toBeDefined();
     expect(screen.getByText(ACT_COPY.everyone_required)).toBeDefined();
     expect(screen.queryByText(ACT_COPY.points_missing)).toBeNull();
+  });
+
+  it("says who the event invites, and where that list came from (#5853)", async () => {
+    show({
+      ...base,
+      action: "create_event",
+      suggestion: suggestion("new_event", {
+        name: "FSL Leaders Reception",
+        description: null,
+        location: "Union Theater",
+        start_time: "2027-01-19T17:00:00",
+        end_time: "2027-01-19T18:00:00",
+        point_value: 5,
+        points_from: null,
+        event_type_id: null,
+        is_mandatory: false,
+        attendance: {
+          everyone: "not_invited",
+          roles: { "tier:t-1": "required" },
+        },
+        attendance_line: "Cabinet required, nobody else invited",
+        attendance_from: { kind: "event", name: "FSL Leaders Reception" },
+        recurrence_rule: null,
+      }),
+    });
+    expect(
+      await screen.findByText("Cabinet required, nobody else invited"),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Same as your last FSL Leaders Reception"),
+    ).toBeDefined();
+    expect(screen.queryByText(ACT_COPY.everyone_optional)).toBeNull();
   });
 
   it("asks which event, and sends the pick with the amount it was given", async () => {

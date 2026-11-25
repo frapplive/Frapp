@@ -1,0 +1,265 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import {
+  errorCopy,
+  type OwnCustomField,
+  ownCustomFieldDraft,
+  ownCustomFieldFormChanges,
+  useChapterMajors,
+  usePermissionList,
+  useUpdateOwnCustomFields,
+  useUpdateUser,
+  withoutField,
+} from "@repo/hooks";
+import { formatPhone } from "@repo/formatting";
+import {
+  type BirthdayDraftProblem,
+  can,
+  ONBOARDING_ABOUT_COPY,
+} from "@repo/validation";
+import { AuthScreen } from "@/components/auth/auth-screen";
+import { OwnCustomFieldControl } from "@/components/profile/own-custom-fields-section";
+import { ProfileAboutFields } from "@/components/profile/profile-about-fields";
+import {
+  type ProfileFields,
+  profileSaveBody,
+  profileSaveProblem,
+} from "@/components/profile/profile-save-body";
+import { Button } from "@/components/ui/button";
+import { QUIET_LINK } from "@/components/ui/quiet-link";
+import { FOCUS_RING } from "@/components/ui/focus";
+import { cn } from "@/lib/utils";
+
+/** The fields this step asks, as stored, the phone shown formatted (#5798). */
+export function aboutYouFields(saved: ProfileFields): ProfileFields {
+  return {
+    phone: saved.phone ? formatPhone(saved.phone) : (saved.phone ?? null),
+    major: saved.major ?? null,
+    graduation_year: saved.graduation_year ?? null,
+    birthday_month: saved.birthday_month ?? null,
+    birthday_day: saved.birthday_day ?? null,
+    birthday_year: saved.birthday_year ?? null,
+    birthday_visibility: saved.birthday_visibility,
+  };
+}
+
+/**
+ * About you (#5284): the optional step after `How the chapter sees you` on
+ * `/welcome`, shown only when phone, major, graduation year or birthday is
+ * empty (`needsAboutYou`). The phone's s03 asks the same, in the same words
+ * and order (`apps/mobile/app/(auth)/welcome.tsx`).
+ *
+ * The fields are `/profile`'s (`ProfileAboutFields`), and so are the rules:
+ * Go to chat sends only what changed (`profileSaveBody`) after the same
+ * checks (`profileSaveProblem`), and a failed save keeps the member here
+ * with the reason. Skip for now saves nothing.
+ *
+ * Under them, the chapter's own fields (#5926), every one behind a
+ * collapsed See more (Shawn's pick, 2026-11-24), so the step opens on the
+ * basics. Each is drawn by `/profile`'s More details control
+ * (`OwnCustomFieldControl`) and says who else sees it. They are checked and
+ * sent the way More details sends them (`ownCustomFieldFormChanges`): only
+ * what changed, and a required field left empty waits for later rather than
+ * holding the member here. A refusal opens See more, so the reason shows.
+ */
+export function WelcomeAbout({
+  saved,
+  fields,
+  leaving,
+  onDone,
+}: {
+  saved: ProfileFields;
+  /** The chapter's fields with the member's values, as loaded. */
+  fields: readonly OwnCustomField[];
+  /** The host is on its way to chat. */
+  leaving: boolean;
+  onDone: () => void;
+}) {
+  const updateUser = useUpdateUser();
+  const updateCustom = useUpdateOwnCustomFields();
+  // The chapter's majors under Major (#5778), as on `/profile`: the read
+  // needs `members:view`.
+  const canViewMembers = can("members:view", usePermissionList());
+  const majors = useChapterMajors({ enabled: canViewMembers });
+  // What the step opened on, so a refetch underneath doesn't move it.
+  const [original, setOriginal] = useState(() => aboutYouFields(saved));
+  const [draft, setDraft] = useState<ProfileFields>(original);
+  // The chapter's fields as the step opened on them, and what was typed.
+  const [customOriginal, setCustomOriginal] = useState(() => [...fields]);
+  const [customDraft, setCustomDraft] = useState<Record<string, string>>(() =>
+    ownCustomFieldDraft(fields),
+  );
+  const [customProblems, setCustomProblems] = useState<Record<string, string>>(
+    {},
+  );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [phoneInvalid, setPhoneInvalid] = useState(false);
+  const [yearInvalid, setYearInvalid] = useState(false);
+  const [birthdayProblem, setBirthdayProblem] =
+    useState<BirthdayDraftProblem | null>(null);
+  // A failed save's reason: the server's refusal, or the connection line.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const busy = saving || leaving;
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const body = profileSaveBody(original, draft);
+    const problem = profileSaveProblem(body, draft);
+    if (problem?.field === "phone") {
+      setPhoneInvalid(true);
+      return;
+    }
+    if (problem?.field === "graduationYear") {
+      setYearInvalid(true);
+      return;
+    }
+    if (problem?.field === "birthday") {
+      setBirthdayProblem(problem.problem);
+      return;
+    }
+    const custom = ownCustomFieldFormChanges(customOriginal, customDraft);
+    const refused = Object.keys(custom.problems);
+    if (refused.length > 0) {
+      setCustomProblems(custom.problems);
+      // A refusal behind See more opens it, so the reason shows.
+      setMoreOpen(true);
+      return;
+    }
+    if (Object.keys(body).length > 0 || custom.values.length > 0) {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        if (Object.keys(body).length > 0) {
+          await updateUser.mutateAsync(body);
+          // Saved: a retry after the next write fails doesn't send it again.
+          setOriginal(draft);
+        }
+        if (custom.values.length > 0) {
+          // The answer is all the member's fields, the new baseline.
+          setCustomOriginal(await updateCustom.mutateAsync(custom.values));
+        }
+      } catch (error) {
+        // A refused value names its field and why (a choice an officer
+        // removed since the step opened); anything else is the connection.
+        setSaveError(
+          errorCopy(error, ONBOARDING_ABOUT_COPY.saveFailed, {
+            serverWritesForMembers: true,
+          }),
+        );
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+    }
+    onDone();
+  }
+
+  const customControl = (field: OwnCustomField) => (
+    <OwnCustomFieldControl
+      key={field.field_id}
+      field={field}
+      value={customDraft[field.field_id] ?? ""}
+      problem={customProblems[field.field_id] ?? null}
+      disabled={busy}
+      fullWidth
+      onChange={(value) => {
+        setCustomProblems((prev) => withoutField(prev, field.field_id));
+        setSaveError(null);
+        setCustomDraft((prev) => ({ ...prev, [field.field_id]: value }));
+      }}
+    />
+  );
+
+  return (
+    <AuthScreen
+      title={ONBOARDING_ABOUT_COPY.title}
+      subtitle={ONBOARDING_ABOUT_COPY.lede}
+    >
+      <form
+        noValidate
+        className="grid gap-5"
+        onSubmit={(event) => void submit(event)}
+      >
+        <ProfileAboutFields
+          value={draft}
+          majors={majors}
+          phoneInvalid={phoneInvalid}
+          yearInvalid={yearInvalid}
+          birthdayProblem={birthdayProblem}
+          disabled={busy}
+          onChange={(patch) => {
+            if ("phone" in patch) setPhoneInvalid(false);
+            if ("graduation_year" in patch) setYearInvalid(false);
+            if ("birthday_month" in patch) setBirthdayProblem(null);
+            setSaveError(null);
+            setDraft((prev) => ({ ...prev, ...patch }));
+          }}
+        />
+        {customOriginal.length > 0 ? (
+          <div className="grid gap-5">
+            {/* Opens and closes in place; what was typed stays either way. */}
+            <button
+              type="button"
+              className={cn(
+                "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border bg-transparent px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
+                FOCUS_RING,
+              )}
+              disabled={busy}
+              aria-expanded={moreOpen}
+              aria-controls="about-you-see-more"
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <span>{ONBOARDING_ABOUT_COPY.seeMore}</span>
+              {moreOpen ? (
+                <ChevronDown
+                  className="h-4 w-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              ) : (
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+            {moreOpen ? (
+              <div id="about-you-see-more" className="grid gap-5">
+                {customOriginal.map(customControl)}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {saveError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {saveError}
+          </p>
+        ) : null}
+        <div className="grid gap-2">
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={busy}
+            aria-busy={busy}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            {ONBOARDING_ABOUT_COPY.goToChat}
+          </Button>
+          <button
+            type="button"
+            className={cn(QUIET_LINK, "justify-self-center")}
+            disabled={busy}
+            onClick={onDone}
+          >
+            {ONBOARDING_ABOUT_COPY.skip}
+          </button>
+        </div>
+      </form>
+    </AuthScreen>
+  );
+}

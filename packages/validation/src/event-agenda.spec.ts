@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  agendaItemsChanged,
+  agendaWithPending,
   agendaProblem,
-  attachmentLinkTitle,
   EVENT_AGENDA_ITEM_MAX,
-  moveEventEntry,
-  attachmentLinkProblem,
-  attachmentTitle,
+  agendaCheckOffOpen,
+  reorderEventEntry,
   readEventAgenda,
-  readEventAttachments,
   toggleAgendaItem,
 } from "./event-agenda";
 
@@ -28,36 +27,23 @@ describe("event agenda helpers (#4934)", () => {
     ]);
   });
 
-  it("reads attachments by kind and drops ones it can't open", () => {
-    expect(
-      readEventAttachments([
-        { id: "1", kind: "link", url: "https://a.example", title: "A" },
-        { id: "2", kind: "document", document_id: "d1", title: "Bylaws" },
-        { id: "3", kind: "link", title: "no url" },
-        { id: "5", kind: "link", url: "javascript:alert(1)", title: "bad" },
-        { id: "4", kind: "file", title: "unknown kind" },
-      ]),
-    ).toEqual([
-      { id: "1", kind: "link", url: "https://a.example", title: "A" },
-      { id: "2", kind: "document", document_id: "d1", title: "Bylaws" },
+  it("puts a line still in the add field on the end, when it would be taken", () => {
+    const items = [{ id: "a", text: "A", done: false }];
+    const id = () => "new";
+    expect(agendaWithPending(items, "  Budget  review ", id)).toEqual([
+      ...items,
+      { id: "new", text: "Budget review", done: false },
     ]);
+    expect(agendaWithPending(items, "   ", id)).toEqual(items);
+    expect(agendaWithPending(items, "x".repeat(201), id)).toEqual(items);
   });
 
-  it("toggles one item and moves entries within bounds", () => {
+  it("toggles one item", () => {
     const items = [
       { id: "a", text: "A", done: false },
       { id: "b", text: "B", done: false },
     ];
     expect(toggleAgendaItem(items, "b")[1].done).toBe(true);
-    expect(moveEventEntry(items, 1, -1).map((i) => i.id)).toEqual(["b", "a"]);
-    expect(moveEventEntry(items, 0, -1).map((i) => i.id)).toEqual(["a", "b"]);
-  });
-
-  it("titles an untitled link by its domain", () => {
-    expect(attachmentLinkTitle("  ", "https://www.docs.example.com/x")).toBe(
-      "docs.example.com",
-    );
-    expect(attachmentLinkTitle(" Budget ", "https://a.example")).toBe("Budget");
   });
 
   it("says why an agenda can't be saved", () => {
@@ -67,17 +53,64 @@ describe("event agenda helpers (#4934)", () => {
       agendaProblem([{ text: "x".repeat(EVENT_AGENDA_ITEM_MAX + 1) }]),
     ).toMatch(/under/);
   });
+});
 
-  it("cuts every attachment title to the API's limit", () => {
-    expect(attachmentTitle(`  ${"x".repeat(300)}  `)).toHaveLength(120);
-    expect(attachmentTitle(" Spring   budget ")).toBe("Spring budget");
+describe("agendaCheckOffOpen (Paul 2026-11-19)", () => {
+  const start = "2026-11-19T20:00:00.000Z";
+  it("waits for the meeting to start", () => {
+    expect(agendaCheckOffOpen(start, new Date("2026-11-19T19:59:00Z"))).toBe(
+      false,
+    );
   });
+  it("opens at the start and stays open after the end", () => {
+    expect(agendaCheckOffOpen(start, new Date(start))).toBe(true);
+    expect(agendaCheckOffOpen(start, new Date("2026-11-20T09:00:00Z"))).toBe(
+      true,
+    );
+  });
+  it("never locks on a start it can't read", () => {
+    expect(agendaCheckOffOpen(null, new Date())).toBe(true);
+    expect(agendaCheckOffOpen("soon", new Date())).toBe(true);
+  });
+});
 
-  it("says why a link can't be attached", () => {
-    expect(attachmentLinkProblem("https://a.example")).toBeNull();
-    expect(attachmentLinkProblem("ftp://a.example")).toMatch(/http/);
+describe("reorderEventEntry", () => {
+  const ids = (items: { id: string }[]) => items.map((item) => item.id);
+  const items = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+  it("moves an entry to where it is dropped", () => {
+    expect(ids(reorderEventEntry(items, 0, 2))).toEqual(["b", "c", "a", "d"]);
+    expect(ids(reorderEventEntry(items, 3, 0))).toEqual(["d", "a", "b", "c"]);
+  });
+  it("leaves the list as it is for an index off either end", () => {
+    expect(ids(reorderEventEntry(items, 1, 9))).toEqual(["a", "b", "c", "d"]);
+    expect(ids(reorderEventEntry(items, -1, 0))).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("agendaItemsChanged", () => {
+  const stored = [
+    { id: "a1", text: "Vote", done: false },
+    { id: "a2", text: "Rush recap", done: false },
+  ];
+  it("reads stored text as a save would normalize it", () => {
     expect(
-      attachmentLinkProblem(`https://a.example/${"x".repeat(2100)}`),
-    ).toMatch(/too long/);
+      agendaItemsChanged(stored, [
+        { id: "a1", text: "Vote ", done: false },
+        stored[1]!,
+      ]),
+    ).toBe(false);
+  });
+  it("ignores check-offs", () => {
+    expect(
+      agendaItemsChanged([{ ...stored[0]!, done: true }, stored[1]!], stored),
+    ).toBe(false);
+  });
+  it.each([
+    ["an added item", [...stored, { id: "a3", text: "New", done: false }]],
+    ["a removed item", [stored[0]!]],
+    ["a moved item", [stored[1]!, stored[0]!]],
+    ["a reworded item", [{ ...stored[0]!, text: "Revote" }, stored[1]!]],
+  ])("sees %s", (_label, next) => {
+    expect(agendaItemsChanged(next, stored)).toBe(true);
   });
 });

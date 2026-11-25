@@ -39,6 +39,7 @@ import {
   ScriptedLanguageModel,
   type ScriptedReply,
 } from '../../src/infrastructure/ai/scripted-language-model';
+import { audienceOver } from '../../src/application/services/act/act-test-kit';
 import { createEvalGateway } from './harness/eval-gateway';
 
 const HOME = '11111111-1111-4111-8111-111111111111';
@@ -176,10 +177,15 @@ function build(options: {
     { track: async () => undefined } as never,
     [
       new GivePointsActTool(people, events as never, attendance as never),
-      new CreateTaskActTool(people),
+      new CreateTaskActTool(
+        people,
+        { resolve: async () => ({ entries: [], notes: [] }) } as never,
+        { followEntriesOf: async () => [] } as never,
+      ),
       new CreateEventActTool(
         events as never,
         { list: async () => [] } as never,
+        audienceOver(),
       ),
     ],
   );
@@ -413,7 +419,7 @@ describe('the acting agent, against a model that misbehaves', () => {
       expect.objectContaining({
         chapterId: HOME,
         requestedFor: OFFICER,
-        source: { type: 'request', id: OFFICER, title: 'Ask Frapp' },
+        source: { type: 'request', id: OFFICER, title: 'Frapp Intelligence' },
         notify: [],
       }),
     );

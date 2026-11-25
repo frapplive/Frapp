@@ -10,7 +10,15 @@ import {
   type TaskWho,
 } from "@repo/validation";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  ListPlus,
+  MoreHorizontal,
+  Pencil,
+  X,
+} from "lucide-react";
 import {
   useAcceptAiSuggestion,
   useAiSuggestions,
@@ -18,6 +26,9 @@ import {
   useDismissAiSuggestion,
   useMeetings,
   useMembers,
+  useMyPermissions,
+  useSendAiSuggestionToNextAgenda,
+  useUndoAiSuggestionNextAgenda,
   existingTaskLine,
   useSimilarTasks,
   type AiSuggestion,
@@ -34,17 +45,21 @@ import {
 } from "@repo/formatting";
 import { codeOf } from "@repo/api-sdk";
 import {
+  AI_REPORT_COPY,
   AI_SUGGESTION_COPY,
   LAST_YEAR_COPY,
   SIMILAR_TASK_COPY,
   aiSuggestionRefusalLine,
+  can,
   lastYearTaskLine,
+  nextAgendaOutcomeLines,
 } from "@repo/validation";
 
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/shared/section-label";
 import {
-  DueDateField,
+  DueChip,
+  dueChipProblem,
   dueEntryPassed,
 } from "@/components/tasks/due-date-field";
 import { TaskForm, type TaskDraft } from "@/components/tasks/task-form";
@@ -54,7 +69,15 @@ import {
   meetingHref,
 } from "@/components/meetings/meeting-copy";
 import { useToast } from "@/lib/hooks/use-toast";
-import { ReportAiButton } from "@/components/ai/report-ai";
+import { ToastAction } from "@/components/ui/toast";
+import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
+import { ReportAiDialog } from "@/components/ai/report-ai";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { tasksTaskLink } from "@/lib/tasks/task-links";
 import { cn, getErrorMessage } from "@/lib/utils";
 
@@ -75,11 +98,13 @@ import { cn, getErrorMessage } from "@/lib/utils";
  * of this big wall of them"). The card says what it is, who and when, and
  * Create task makes it for whoever it names; the next one takes its place.
  * Only the card being decided waits on the server, so nothing else greys out.
- * Who and when are changed in place, because those are the two things a
- * meeting leaves unsaid ("someone should call the caterer"), and a task
- * needs both. Where the minutes left one out, Frapp fills in a suggestion
- * (`task-suggestion-guess.ts`) and says so under the field; the pencil opens
- * the board's own task form for anything else.
+ * Who and when are chips under the title, changed in place, because those
+ * are the two things a meeting leaves unsaid ("someone should call the
+ * caterer"), and a task needs both. Where the minutes left one out, Frapp
+ * fills in a suggestion (`task-suggestion-guess.ts`), drawn dashed and named
+ * as one to a screen reader. Everything else is worded behind ⋯ (Paul,
+ * 2026-11-19, the layout Linear's triage and Todoist's task rows use):
+ * Change before creating opens the board's own task form.
  *
  * A task drawn from last year's board (#3930, "this time last year") is the
  * same card under a line that says so, with one more answer: already
@@ -99,37 +124,58 @@ import { cn, getErrorMessage } from "@/lib/utils";
 const DECIDE_MAX = 50;
 
 type SuggestedTask = NonNullable<AiSuggestion["task"]>;
-type WaitingSuggestion = AiSuggestion & { task: SuggestedTask };
+export type WaitingSuggestion = AiSuggestion & { task: SuggestedTask };
 
 /** What the officer changed on a row before deciding: who, and when. */
-interface RowEdits {
+export interface RowEdits {
   /** The Who picker's pick; null when cleared, absent when untouched. */
   who?: TaskWho | null;
   /** A due entry, as `DueDateField` holds it; `""` when cleared. */
   due?: string;
 }
 
-function isWaitingTask(item: AiSuggestion): item is WaitingSuggestion {
+export function isWaitingTask(item: AiSuggestion): item is WaitingSuggestion {
   return item.kind === "task" && item.task !== null;
 }
 
-function dueEntryOf(task: SuggestedTask): string {
+export function dueEntryOf(task: SuggestedTask): string {
   return task.due_date
     ? dueEntryFromTask({ due_date: task.due_date, due_at: task.due_at })
     : "";
 }
 
 /** What Frapp filled in where the minutes left who or when out. */
-interface RowGuess {
+export interface RowGuess {
   who: TaskWho | null;
   due: string | null;
+}
+
+/**
+ * Frapp's suggestion for who and when, where the minutes said neither
+ * (`spec/behavior/meetings.md` § Suggested tasks): the one member the item's
+ * words name, and a week after the meeting. Last year's tasks name nobody on
+ * purpose (#3930).
+ */
+export function suggestionGuess(
+  item: WaitingSuggestion,
+  members: Parameters<typeof suggestTaskOwner>[1],
+  meetingStart: string | null | undefined,
+): RowGuess {
+  return {
+    who: (() => {
+      if (taskWhoOf(item.task) || item.task.last_year_on) return null;
+      const userId = suggestTaskOwner(item.quote ?? item.task.title, members);
+      return userId ? { kind: "person" as const, userId } : null;
+    })(),
+    due: item.task.due_date ? null : suggestTaskDue(meetingStart),
+  };
 }
 
 /**
  * Who and when as the row stands: the officer's pick, else what the minutes
  * said, else Frapp's suggestion.
  */
-function rowValues(
+export function rowValues(
   item: WaitingSuggestion,
   edits: RowEdits | undefined,
   guess?: RowGuess,
@@ -144,14 +190,14 @@ function rowValues(
   };
 }
 
-interface RowValues {
+export interface RowValues {
   who: TaskWho | null;
   /** A due entry, as `DueDateField` holds it; `""` when none. */
   due: string;
 }
 
 /** Only what differs from the suggestion, as the accept route takes it. */
-function editsFor(
+export function editsFor(
   item: WaitingSuggestion,
   values: RowValues,
 ): TaskSuggestionEdits | undefined {
@@ -160,11 +206,38 @@ function editsFor(
     Object.assign(edits, taskWhoSuggestionFields(values.who));
   }
   if (values.due !== dueEntryOf(item.task)) {
-    const fields = dueEntryFields(values.due);
-    edits.due_date = fields.due_date;
-    edits.due_at = fields.due_at ?? null;
+    // An emptied Due is no due date (#5761).
+    const fields = values.due ? dueEntryFields(values.due) : null;
+    edits.due_date = fields?.due_date ?? null;
+    edits.due_at = fields?.due_at ?? null;
   }
   return Object.keys(edits).length > 0 ? edits : undefined;
+}
+
+/**
+ * Whether a suggestion needs a due date to be accepted: only one up for
+ * grabs, since whoever claims it gets it by then. Any other task may have
+ * none (#5761).
+ */
+export function needsDue(who: TaskWho | null): boolean {
+  return who?.kind === "someone";
+}
+
+/**
+ * Whether Create task must ask first: who is missing, a task up for grabs
+ * has no due day, or a newly picked time has already gone by (the
+ * suggestion's own is kept). The card and an action item's row both ask
+ * it (#6051).
+ */
+export function acceptBlocked(
+  item: WaitingSuggestion,
+  values: RowValues,
+): boolean {
+  return (
+    !values.who ||
+    (!values.due && needsDue(values.who)) ||
+    dueEntryPassed(values.due, new Date(), dueEntryOf(item.task))
+  );
 }
 
 /** Why an accept or dismiss was refused, in words an officer can act on. */
@@ -206,6 +279,12 @@ export function SuggestedTasks({
   );
   const accept = useAcceptAiSuggestion();
   const dismiss = useDismissAiSuggestion();
+  const toNextAgenda = useSendAiSuggestionToNextAgenda();
+  const undoNextAgenda = useUndoAiSuggestionNextAgenda();
+  const moduleGate = useChapterModuleGateState();
+  // The next meeting's Suggested list lives on events (#5790).
+  const eventsOn =
+    moduleGate.status === "ready" && moduleGate.isModuleEnabled("events");
   const decide = useDecideAiSuggestions();
   const { toast } = useToast();
   const [edits, setEdits] = useState<Record<string, RowEdits>>({});
@@ -234,18 +313,7 @@ export function SuggestedTasks({
     return new Map<string, RowGuess>(
       items.map((item) => [
         item.id,
-        {
-          // Last year's tasks name nobody on purpose (#3930).
-          who: (() => {
-            if (taskWhoOf(item.task) || item.task.last_year_on) return null;
-            const userId = suggestTaskOwner(
-              item.quote ?? item.task.title,
-              members,
-            );
-            return userId ? { kind: "person" as const, userId } : null;
-          })(),
-          due: item.task.due_date ? null : suggestTaskDue(startOf(item)),
-        },
+        suggestionGuess(item, members, startOf(item)),
       ]),
     );
   }, [items, members, meetingsQuery.data, source, sourceStart]);
@@ -269,7 +337,7 @@ export function SuggestedTasks({
   const ready = items.filter((item) => {
     if (item.id === formFor || !similar.known || twinOf(item)) return false;
     const values = saidOf(item);
-    return values.who && values.due;
+    return values.who && (values.due || !needsDue(values.who));
   });
 
   function editRow(id: string, patch: RowEdits) {
@@ -281,12 +349,7 @@ export function SuggestedTasks({
 
   async function acceptRow(item: WaitingSuggestion) {
     const values = valuesOf(item);
-    if (
-      !values.who ||
-      !values.due ||
-      // A newly picked time already gone by; the suggestion's own is kept.
-      dueEntryPassed(values.due, new Date(), dueEntryOf(item.task))
-    ) {
+    if (acceptBlocked(item, values)) {
       setFlagged((previous) => new Set(previous).add(item.id));
       return false;
     }
@@ -345,6 +408,62 @@ export function SuggestedTasks({
     } catch (error) {
       toast({
         title: AI_SUGGESTION_COPY.dismissFailed,
+        description: suggestionRefusalLine(error),
+        variant: "destructive",
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /**
+   * Add to next meeting's agenda (#5790; Shawn, 2026-11-20): the action item
+   * goes onto the next meeting with the same people, or under Suggested there
+   * when the officer can't edit it, or waits for that meeting to be created.
+   * The toast says which, with Undo and a link to the meeting.
+   */
+  async function sendToNextAgenda(item: WaitingSuggestion) {
+    setBusyId(item.id);
+    try {
+      const outcome = await toNextAgenda.mutateAsync(item.id);
+      const lines = nextAgendaOutcomeLines(outcome);
+      toast({
+        title: lines.title,
+        description: outcome.meeting ? (
+          <span className="flex flex-col gap-1">
+            {lines.body ? <span>{lines.body}</span> : null}
+            <Link
+              href={`/events?event=${outcome.meeting.id}`}
+              className="w-fit underline underline-offset-2"
+            >
+              {AI_SUGGESTION_COPY.toAgendaOpen}
+            </Link>
+          </span>
+        ) : (
+          (lines.body ?? undefined)
+        ),
+        action: (
+          <ToastAction
+            altText={`${AI_SUGGESTION_COPY.undo}: ${item.task.title}`}
+            onClick={() =>
+              void undoNextAgenda.mutateAsync(item.id).then(
+                () => toast({ title: AI_SUGGESTION_COPY.undone }),
+                (error: unknown) =>
+                  toast({
+                    title: AI_SUGGESTION_COPY.undoFailed,
+                    description: suggestionRefusalLine(error),
+                    variant: "destructive",
+                  }),
+              )
+            }
+          >
+            {AI_SUGGESTION_COPY.undo}
+          </ToastAction>
+        ),
+      });
+    } catch (error) {
+      toast({
+        title: AI_SUGGESTION_COPY.toAgendaFailed,
         description: suggestionRefusalLine(error),
         variant: "destructive",
       });
@@ -477,6 +596,13 @@ export function SuggestedTasks({
         onEdit={(patch) => editRow(current.id, patch)}
         onAccept={() => void acceptRow(current)}
         onDismiss={() => void dismissRow(current)}
+        onToAgenda={
+          eventsOn &&
+          current.source.type === "meeting" &&
+          !current.task.last_year_on
+            ? () => void sendToNextAgenda(current)
+            : undefined
+        }
         onAlreadyDoing={
           current.task.last_year_on
             ? () => void dismissRow(current, "already_doing")
@@ -530,6 +656,7 @@ function SuggestedTaskRow({
   onEdit,
   onAccept,
   onDismiss,
+  onToAgenda,
   onAlreadyDoing,
   existing,
   onSameTask,
@@ -551,6 +678,8 @@ function SuggestedTaskRow({
   onEdit: (patch: RowEdits) => void;
   onAccept: () => void;
   onDismiss: () => void;
+  /** From minutes: offer it on the next meeting's agenda instead (#5790). */
+  onToAgenda?: () => void;
   /** Only on a "this time last year" row: the chapter is already on it. */
   onAlreadyDoing?: () => void;
   /** The open task this suggestion reads like, until the officer says. */
@@ -562,60 +691,15 @@ function SuggestedTaskRow({
   acceptWith: (task: TaskSuggestionEdits) => Promise<void>;
 }) {
   const { task } = item;
-  // The form's Who, opened on the card's and sent as the suggestion's own
-  // who-fields, so a role, a group or up for grabs survives the form.
-  // Absent until changed in the form, so it opens on the card's latest pick.
-  const [formWhoEdit, setFormWhoEdit] = useState<TaskWho | null>();
-  const formWho = formWhoEdit !== undefined ? formWhoEdit : values.who;
-  const missingWho = flagged && !values.who;
-  const missingDue = flagged && !values.due;
-  const passedDue =
-    flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(item.task));
 
   if (formOpen) {
-    const initialDraft: TaskDraft = {
-      title: task.title,
-      // Shown by the Who picker from `formWho`; the form reads it only for a
-      // single member.
-      assigneeId: values.who?.kind === "person" ? values.who.userId : "",
-      dueDate: values.due,
-      points: "",
-      description: task.description ?? "",
-      subtasks: task.subtasks,
-      // A suggestion's form has no Repeat (#5119).
-      repeat: noTaskRepeatDraft(),
-      photoFiles: [],
-      keptPhotos: [],
-      proofKind: "none",
-      showMore: false,
-    };
     return (
-      <div className="rounded-[14px] border border-border p-3">
-        <TaskForm
-          suggestion
-          who={{ value: formWho, onChange: setFormWhoEdit }}
-          initialDraft={initialDraft}
-          onDiscard={onCloseForm}
-          onDone={onCloseForm}
-          onPost={async (input) => {
-            try {
-              // The whole form, as the officer left it: the task is made
-              // from exactly these fields, as the board's form would.
-              await acceptWith({
-                title: input.title,
-                description: input.description ?? null,
-                ...taskWhoSuggestionFields(formWho),
-                due_date: input.due_date,
-                due_at: input.due_at ?? null,
-                subtasks: input.subtasks ?? [],
-              });
-              return { ok: true };
-            } catch (error) {
-              return { ok: false, error: suggestionRefusalLine(error) };
-            }
-          }}
-        />
-      </div>
+      <SuggestionTaskForm
+        item={item}
+        values={values}
+        onClose={onCloseForm}
+        acceptWith={acceptWith}
+      />
     );
   }
 
@@ -636,98 +720,229 @@ function SuggestedTaskRow({
   return (
     <div
       aria-busy={pending || undefined}
-      className="space-y-3 rounded-[14px] border border-border p-4"
+      className="space-y-2 rounded-[14px] border border-border p-4"
     >
-      <div className="space-y-1">
-        <p className="break-words text-base font-medium">{task.title}</p>
-        {/* The line of the minutes, when the title had to be cut from it. */}
-        {item.quote && item.quote !== task.title ? (
-          <p className="break-words text-caption text-muted-foreground">
-            “{item.quote}”
-          </p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-32 max-w-56 flex-1">
-          <WhoPicker
-            allow="any"
-            label={`Assignee for ${task.title}`}
-            placeholder={AI_SUGGESTION_COPY.who}
-            className="w-full"
-            value={values.who}
-            onChange={(next) => onEdit({ who: next })}
-            disabled={disabled}
-            invalid={missingWho}
-          />
-          {missingWho ? (
-            <p role="alert" className="mt-1 text-caption text-destructive-text">
-              {AI_SUGGESTION_COPY.missingWho}
-            </p>
-          ) : suggestedWho ? (
-            <p className="mt-1 text-caption text-muted-foreground">
-              {AI_SUGGESTION_COPY.suggestedWho}
+      {/*
+        One row (#5562; Paul, 2026-11-19: "can we rethink the layout"): what
+        to do, then who and when as chips, with Create task and a worded
+        menu on the right, the way Linear's triage rows carry their
+        properties. The phone's card has the same parts; there Create task
+        sits under the chips, in thumb reach, so the title keeps the width.
+      */}
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="break-words text-base font-medium">{task.title}</p>
+          {/* The line of the minutes, when the title had to be cut from it. */}
+          {item.quote && item.quote !== task.title ? (
+            <p className="break-words text-caption text-muted-foreground">
+              “{item.quote}”
             </p>
           ) : null}
         </div>
-        <div className="min-w-32 max-w-56 flex-1">
-          <DueDateField
-            aria-label={`Due date for ${task.title}`}
-            timeLabel={`Due time for ${task.title}`}
-            placeholder="Due: Fri 5pm"
-            missing={missingDue}
-            passed={passedDue}
-            value={values.due}
-            onChange={(value) => onEdit({ due: value })}
-            disabled={disabled}
-          />
-          {suggestedDue && !missingDue && !passedDue ? (
-            <p className="mt-1 text-caption text-muted-foreground">
-              {AI_SUGGESTION_COPY.suggestedDue}
-            </p>
-          ) : null}
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          <ReportAiButton
-            iconOnly
-            name={task.title}
-            target={{ subject: "ai_suggestion", subjectId: item.id }}
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={`Dismiss ${task.title}`}
-            title="Dismiss"
-            disabled={disabled}
-            onClick={onDismiss}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Last year's task has a third answer, worded as the phone's. */}
           {onAlreadyDoing ? (
             <Button
               size="sm"
-              variant="ghost"
+              variant="secondary"
               disabled={disabled}
               onClick={onAlreadyDoing}
             >
               {LAST_YEAR_COPY.alreadyDoing}
             </Button>
           ) : null}
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={`${AI_SUGGESTION_COPY.change}: ${task.title}`}
-            title={AI_SUGGESTION_COPY.change}
-            disabled={disabled}
-            onClick={onOpenForm}
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-          </Button>
           <Button size="sm" disabled={disabled} onClick={onAccept}>
             {pending ? AI_SUGGESTION_COPY.accepting : AI_SUGGESTION_COPY.accept}
           </Button>
+          <SuggestionMenu
+            item={item}
+            disabled={disabled}
+            onChange={onOpenForm}
+            onToAgenda={onToAgenda}
+            onDismiss={onDismiss}
+          />
         </div>
       </div>
+      <SuggestionChips
+        item={item}
+        values={values}
+        suggestedWho={suggestedWho}
+        suggestedDue={suggestedDue}
+        flagged={flagged}
+        disabled={disabled}
+        onEdit={onEdit}
+        idPrefix={item.id}
+      />
     </div>
+  );
+}
+
+/**
+ * Who and when as chips, each opening its own picker in place, with what is
+ * still missing said under them once Create task was pressed. The card and
+ * an action item's quick create both draw these (#6051).
+ */
+export function SuggestionChips({
+  item,
+  values,
+  suggestedWho,
+  suggestedDue,
+  flagged,
+  disabled,
+  onEdit,
+  idPrefix,
+}: {
+  item: WaitingSuggestion;
+  values: RowValues;
+  /** Who, or when, is Frapp's suggestion rather than the minutes' word. */
+  suggestedWho: boolean;
+  suggestedDue: boolean;
+  /** Create task was pressed with something missing. */
+  flagged: boolean;
+  disabled: boolean;
+  onEdit: (patch: RowEdits) => void;
+  /** Unique on the page, for the alerts' ids. */
+  idPrefix: string;
+}) {
+  const { task } = item;
+  const missingWho = flagged && !values.who;
+  const missingDue = flagged && !values.due && needsDue(values.who);
+  const passedDue =
+    flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(item.task));
+  const dueProblem = dueChipProblem({
+    value: values.due,
+    missing: missingDue,
+    passed: passedDue,
+  });
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <WhoPicker
+          chip
+          guessed={suggestedWho}
+          allow="any"
+          label={
+            suggestedWho
+              ? `Assignee for ${task.title}, ${AI_SUGGESTION_COPY.suggestedWho.toLowerCase()}`
+              : `Assignee for ${task.title}`
+          }
+          placeholder={AI_SUGGESTION_COPY.who}
+          value={values.who}
+          onChange={(next) => onEdit({ who: next })}
+          disabled={disabled}
+          invalid={missingWho}
+          aria-describedby={missingWho ? `${idPrefix}-who` : undefined}
+        />
+        <DueChip
+          label={`Due date for ${task.title}`}
+          timeLabel={`Due time for ${task.title}`}
+          placeholder={AI_SUGGESTION_COPY.when}
+          guessed={suggestedDue}
+          note={suggestedDue ? AI_SUGGESTION_COPY.suggestedDue : null}
+          missing={missingDue}
+          passed={passedDue}
+          value={values.due}
+          onChange={(value) => onEdit({ due: value })}
+          disabled={disabled}
+          aria-describedby={dueProblem ? `${idPrefix}-due` : undefined}
+        />
+      </div>
+      {missingWho ? (
+        <p
+          id={`${idPrefix}-who`}
+          role="alert"
+          className="text-caption text-destructive-text"
+        >
+          {AI_SUGGESTION_COPY.missingWho}
+        </p>
+      ) : null}
+      {/* Said here too: the chip's own field is in its closed popover. */}
+      {dueProblem ? (
+        <p
+          id={`${idPrefix}-due`}
+          role="alert"
+          className="text-caption text-destructive-text"
+        >
+          {dueProblem}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The card's other answers, worded behind ⋯ (#5562): a flag, an × and a
+ * pencil read as nothing until hovered. Change before creating opens the
+ * task form; Report this, the AI report sheet, for a member who may report.
+ */
+function SuggestionMenu({
+  item,
+  disabled,
+  onChange,
+  onToAgenda,
+  onDismiss,
+}: {
+  item: WaitingSuggestion;
+  disabled: boolean;
+  onChange?: () => void;
+  onToAgenda?: () => void;
+  onDismiss: () => void;
+}) {
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
+  const permissions = useMyPermissions().data?.permissions;
+  const mayReport = !!permissions && can("ai:use", permissions);
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`${AI_SUGGESTION_COPY.more}: ${item.task.title}`}
+            title={AI_SUGGESTION_COPY.more}
+            disabled={disabled}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {onChange ? (
+            <DropdownMenuItem onSelect={onChange}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              {AI_SUGGESTION_COPY.change}
+            </DropdownMenuItem>
+          ) : null}
+          {onToAgenda ? (
+            <DropdownMenuItem onSelect={onToAgenda}>
+              <ListPlus className="h-4 w-4" aria-hidden="true" />
+              {AI_SUGGESTION_COPY.toAgenda}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem onSelect={onDismiss}>
+            <X className="h-4 w-4" aria-hidden="true" />
+            {AI_SUGGESTION_COPY.dismiss}
+          </DropdownMenuItem>
+          {/*
+            Gone once sent, as on the phone, whose menu has no greyed rows:
+            a report can't be taken back or sent twice.
+          */}
+          {mayReport && !reported ? (
+            <DropdownMenuItem onSelect={() => setReporting(true)}>
+              <Flag className="h-4 w-4" aria-hidden="true" />
+              {AI_REPORT_COPY.action}
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {reporting ? (
+        <ReportAiDialog
+          target={{ subject: "ai_suggestion", subjectId: item.id }}
+          onClose={() => setReporting(false)}
+          onReported={() => setReported(true)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -735,7 +950,7 @@ function SuggestedTaskRow({
  * A suggestion beside the open task it reads like (#5562): the two titles
  * side by side, where the existing one stands, and the one question.
  */
-function SimilarTaskCard({
+export function SimilarTaskCard({
   item,
   existing,
   disabled,
@@ -791,21 +1006,7 @@ function SimilarTaskCard({
         </div>
       </div>
       <div className="flex items-center justify-end gap-1">
-        <ReportAiButton
-          iconOnly
-          name={task.title}
-          target={{ subject: "ai_suggestion", subjectId: item.id }}
-        />
-        <Button
-          size="icon"
-          variant="ghost"
-          aria-label={`Dismiss ${task.title}`}
-          title="Dismiss"
-          disabled={disabled}
-          onClick={onDismiss}
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <SuggestionMenu item={item} disabled={disabled} onDismiss={onDismiss} />
         <Button
           size="sm"
           variant="secondary"
@@ -818,6 +1019,74 @@ function SimilarTaskCard({
           {SIMILAR_TASK_COPY.same}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Change before creating: the board's own task form, opened on the
+ * suggestion as the card or the action item's row stands, which accepts the
+ * suggestion with exactly what the form holds.
+ */
+export function SuggestionTaskForm({
+  item,
+  values,
+  onClose,
+  acceptWith,
+}: {
+  item: WaitingSuggestion;
+  values: RowValues;
+  onClose: () => void;
+  acceptWith: (task: TaskSuggestionEdits) => Promise<void>;
+}) {
+  const { task } = item;
+  // The form's Who, opened on the card's and sent as the suggestion's own
+  // who-fields, so a role, a group or up for grabs survives the form.
+  // Absent until changed in the form, so it opens on the card's latest pick.
+  const [formWhoEdit, setFormWhoEdit] = useState<TaskWho | null>();
+  const formWho = formWhoEdit !== undefined ? formWhoEdit : values.who;
+  const initialDraft: TaskDraft = {
+    title: task.title,
+    // Shown by the Who picker from `formWho`; the form reads it only for a
+    // single member.
+    assigneeId: values.who?.kind === "person" ? values.who.userId : "",
+    dueDate: values.due,
+    points: "",
+    description: task.description ?? "",
+    subtasks: task.subtasks,
+    // A suggestion's form has no Repeat (#5119).
+    repeat: noTaskRepeatDraft(),
+    photoFiles: [],
+    keptPhotos: [],
+    proofKind: "none",
+    showMore: false,
+  };
+  return (
+    <div className="rounded-[14px] border border-border p-3">
+      <TaskForm
+        suggestion
+        who={{ value: formWho, onChange: setFormWhoEdit }}
+        initialDraft={initialDraft}
+        onDiscard={onClose}
+        onDone={onClose}
+        onPost={async (input) => {
+          try {
+            // The whole form, as the officer left it: the task is made
+            // from exactly these fields, as the board's form would.
+            await acceptWith({
+              title: input.title,
+              description: input.description ?? null,
+              ...taskWhoSuggestionFields(formWho),
+              due_date: input.due_date,
+              due_at: input.due_at ?? null,
+              subtasks: input.subtasks ?? [],
+            });
+            return { ok: true };
+          } catch (error) {
+            return { ok: false, error: suggestionRefusalLine(error) };
+          }
+        }}
+      />
     </div>
   );
 }

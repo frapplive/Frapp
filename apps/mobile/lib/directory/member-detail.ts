@@ -13,7 +13,7 @@
  * do not hold — the same "omit, don't fake" call `@repo/hooks`
  * `profile-stats.ts` makes for the drawn attendance stat no member can read.
  */
-import { parseInstant } from "@repo/formatting";
+import { formatCustomFieldValue, parseInstant } from "@repo/formatting";
 import { formatGraduationYear, memberLabel } from "@repo/hooks";
 import { formatBirthday } from "@repo/validation";
 import {
@@ -47,7 +47,7 @@ export interface MemberDetail {
   storedName: string;
   initials: string;
   email: string | null;
-  /** The member's own phone (#3711), as they typed it, or `null`. */
+  /** The member's own phone (#3711), as stored (E.164 since #5798, older ones as typed), or `null`; shown through `formatPhone`. */
   phone: string | null;
   /** "March 4" when they share their birthday with the chapter (#4959), else `null`. */
   birthday: string | null;
@@ -80,6 +80,17 @@ export interface MemberDetail {
    * this member's name and graduation year. `false` when the read doesn't say.
    */
   canEditProfile: boolean;
+  /**
+   * The API's `viewer_can_timeout` (#6006): whether this viewer may time
+   * this member out of chat, or lift it. `false` when the read doesn't say.
+   */
+  canTimeOut: boolean;
+  /**
+   * The member's chat timeout as the read serves it (to the member and to
+   * whoever can time out): until when and the reason, or nulls.
+   */
+  chatTimeoutUntil: string | null;
+  chatTimeoutReason: string | null;
 }
 
 export function selectMemberDetail(data: unknown): MemberDetail | null {
@@ -118,6 +129,9 @@ export function selectMemberDetail(data: unknown): MemberDetail | null {
     orderNumber: num(data, "order_number"),
     canRemove: data.viewer_can_remove === true,
     canEditProfile: data.viewer_can_edit_profile === true,
+    canTimeOut: data.viewer_can_timeout === true,
+    chatTimeoutUntil: str(data, "chat_timeout_until"),
+    chatTimeoutReason: str(data, "chat_timeout_reason"),
   };
 }
 
@@ -149,8 +163,8 @@ function parseCustomFields(data: unknown): MemberCustomField[] {
     const label = str(row, "label");
     const raw = str(row, "value");
     if (!fieldId || !label || !raw) return [];
-    const value =
-      str(row, "type") === "boolean" ? (raw === "true" ? "Yes" : "No") : raw;
+    // Yes or No, a phone formatted like the member's Phone row (#5798).
+    const value = formatCustomFieldValue(str(row, "type") ?? "", raw) ?? raw;
     return [{ fieldId, label, value }];
   });
 }

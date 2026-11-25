@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actTaskFactLines,
   actPointsEdits,
   actAttendanceLine,
   actConfirmRefusalLine,
@@ -22,6 +23,31 @@ import {
 import { proposedRepeatDraft } from "./repeat-draft";
 
 describe("the acting agent's words", () => {
+  it("lists a task's points, proof, steps and From, only what was set (2026-11-22)", () => {
+    expect(actTaskFactLines({}, null)).toEqual([]);
+    expect(
+      actTaskFactLines(
+        {
+          point_reward: 1500,
+          proof_kind: "link",
+          subtasks: ["Call", "Pay"],
+        },
+        "Exec board",
+      ).map((line) => line.text),
+    ).toEqual([
+      "1500 points",
+      "Needs a link to mark done",
+      "2 steps",
+      "From Exec board",
+    ]);
+    expect(
+      actTaskFactLines(
+        { point_reward: 1, proof_kind: "none", subtasks: ["x"] },
+        null,
+      ).map((line) => line.text),
+    ).toEqual(["1 point", "1 step"]);
+  });
+
   it("says the size of a points change plainly", () => {
     expect(actPointsHeadline(5, 42)).toBe("Give 5 points to 42 members");
     expect(actPointsHeadline(-10, 1)).toBe("Take 10 points away from 1 member");

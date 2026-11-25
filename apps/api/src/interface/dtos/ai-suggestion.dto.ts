@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -17,14 +18,21 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CHANNEL_ACCESS_ENTRY_PATTERN,
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
   TASK_SUBTASK_TITLE_MAX_LENGTH,
   TASK_SUBTASKS_MAX,
   TASK_PEOPLE_MAX,
+  TASK_PROOF_KINDS,
   TASK_SUGGESTION_AUDIENCES,
   TASK_TITLE_MAX_LENGTH,
+  NEXT_AGENDA_OUTCOMES,
+  type NextAgendaOutcomeKind,
+  type TaskProofKind,
   type TaskSuggestionAudience,
+  EVENT_ATTENDANCE_STATUSES,
+  type EventAttendanceStatus,
 } from '@repo/validation';
 import {
   AI_SUGGESTION_KINDS,
@@ -36,6 +44,7 @@ import {
   type AiSuggestionStatus,
 } from '#domain/entities/ai-suggestion.entity';
 import { AI_SUGGESTION_DECIDE_MAX } from '../../application/services/ai-suggestion.service';
+import type { NextAgendaOutcome } from '../../application/services/minutes-next-agenda.service';
 import type {
   AiSuggestionDecideOutcome,
   AiSuggestionDecisionResult,
@@ -74,8 +83,8 @@ export class ListAiSuggestionsQueryDto {
 
 /**
  * An officer's changes to a suggested task before accepting it. Omitted
- * fields stay as suggested. There is no points field: a suggested task never
- * carries points, and the officer adds them on the task afterwards.
+ * fields stay as suggested. `point_reward` is the officer adding points by
+ * hand: a task suggested from minutes never proposes any itself.
  */
 export class TaskSuggestionEditsDto {
   @ApiPropertyOptional({ maxLength: TASK_TITLE_MAX_LENGTH })
@@ -149,6 +158,49 @@ export class TaskSuggestionEditsDto {
   @IsOptional()
   @IsUUID()
   audience_group_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    format: 'uuid',
+    description:
+      'With `audience`: only the members holding a role in this tier (#5473, 2026-11-22).',
+  })
+  @IsOptional()
+  @IsUUID()
+  audience_tier_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    description:
+      'Points awarded on completion (2026-11-22); null or 0 for none.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(POINTS_ADJUSTMENT_MAX)
+  point_reward?: number | null;
+
+  @ApiPropertyOptional({
+    enum: TASK_PROOF_KINDS,
+    nullable: true,
+    description: 'What Mark done needs (2026-11-22).',
+  })
+  @IsOptional()
+  @IsIn(TASK_PROOF_KINDS)
+  proof_kind?: TaskProofKind | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, or null for none. The officer accepting must be in it.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(CHANNEL_ACCESS_ENTRY_PATTERN)
+  followed_by?: string | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -385,6 +437,34 @@ export class TaskSuggestionDto {
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   audience_group_id: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    description:
+      'With `audience`: only the members holding a role in this tier (2026-11-22).',
+  })
+  audience_tier_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Points on completion (2026-11-22). Only a Frapp Intelligence card proposes them, or an officer edit sets them.',
+  })
+  point_reward?: number;
+
+  @ApiPropertyOptional({
+    enum: TASK_PROOF_KINDS,
+    description:
+      'What Mark done needs, when it is more than nothing (2026-11-22).',
+  })
+  proof_kind?: TaskProofKind;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`.',
+  })
+  followed_by?: string;
+
   @ApiProperty({ type: String, nullable: true, format: 'date' })
   due_date: string | null;
 
@@ -469,6 +549,26 @@ export class NewEventPointsFromDto {
   name: string;
 }
 
+/** Who a proposed event invites (#5853): the event form's draft. */
+export class NewEventAttendanceDto {
+  @ApiProperty({
+    enum: EVENT_ATTENDANCE_STATUSES,
+    description: 'What the event asks of a member set apart by no entry.',
+  })
+  everyone: EventAttendanceStatus;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'string',
+      enum: [...EVENT_ATTENDANCE_STATUSES],
+    },
+    description:
+      'Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles.',
+  })
+  roles: Record<string, EventAttendanceStatus>;
+}
+
 /** An event the acting agent proposes to create (#718). */
 export class NewEventSuggestionDto {
   @ApiProperty()
@@ -511,8 +611,35 @@ export class NewEventSuggestionDto {
   })
   event_type_id: string | null;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must.',
+  })
   is_mandatory: boolean;
+
+  @ApiProperty({
+    type: NewEventAttendanceDto,
+    nullable: true,
+    description:
+      "Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says.",
+  })
+  attendance: NewEventAttendanceDto | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'One line for who is invited, in the chapter\'s names when the card was made ("Cabinet required, nobody else invited").',
+  })
+  attendance_line: string | null;
+
+  @ApiProperty({
+    type: NewEventPointsFromDto,
+    nullable: true,
+    description:
+      'The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one.',
+  })
+  attendance_from: NewEventPointsFromDto | null;
 
   @ApiProperty({
     type: String,
@@ -740,4 +867,54 @@ export class AiSuggestionDecideOutcomeDto {
 export class AiSuggestionDecideResponseDto {
   @ApiProperty({ type: [AiSuggestionDecideOutcomeDto] })
   outcomes: AiSuggestionDecideOutcomeDto[];
+}
+
+/** The meeting an item sent to the next agenda went to (#5790). */
+export class NextAgendaMeetingDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ format: 'date-time' })
+  start_time: string;
+}
+
+/** What Add to next meeting's agenda did (#5790). */
+export class SendToNextAgendaResponseDto {
+  @ApiProperty({
+    enum: NEXT_AGENDA_OUTCOMES,
+    description:
+      '`placed`: on `meeting`’s agenda. `offered`: under Suggested on `meeting` (the caller can’t edit it, or its agenda is full). `waiting`: no such meeting yet; it goes onto the next one created, for 30 days.',
+  })
+  outcome: NextAgendaOutcomeKind;
+
+  @ApiProperty({
+    type: NextAgendaMeetingDto,
+    nullable: true,
+    description: 'Where it went; null while it waits.',
+  })
+  meeting: NextAgendaMeetingDto | null;
+
+  @ApiProperty({
+    description:
+      'The name of the minutes’ own meeting, for “the next Chapter Meeting”.',
+  })
+  source_name: string;
+
+  @ApiProperty({ description: 'The words, as the agenda holds them.' })
+  text: string;
+
+  static from(outcome: NextAgendaOutcome): SendToNextAgendaResponseDto {
+    const { item, event } = outcome;
+    return {
+      outcome: item.state,
+      meeting: event
+        ? { id: event.id, name: event.name, start_time: event.start_time }
+        : null,
+      source_name: outcome.sourceName,
+      text: item.text,
+    };
+  }
 }

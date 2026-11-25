@@ -12,6 +12,7 @@ import {
   useDeleteSubtask,
   useRejectTask,
   useRemoveFromTaskGroup,
+  useAddToTaskGroup,
   useSetSubtaskDone,
   useTasks,
   useUpdateTask,
@@ -815,6 +816,39 @@ describe("useUpdateTask", () => {
     await act(async () => {
       await result.current.mutateAsync({ id: TASK, body: { title: "Mop" } });
     });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: activityKeys.chapter(CHAPTER),
+    });
+  });
+});
+
+describe("useAddToTaskGroup (#5905)", () => {
+  it("posts the members to add and reads every task and Activity again", async () => {
+    const queryClient = createTestQueryClient();
+    const answer = {
+      added: ["user-5"],
+      group: { id: "g1", audience: "people", total: 5, done: 0, confirmed: 0 },
+    };
+    const POST = vi.fn().mockResolvedValue({ data: answer, error: undefined });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useAddToTaskGroup(), {
+      wrapper: createWrapper({ POST }, queryClient),
+    });
+
+    let returned: unknown;
+    await act(async () => {
+      returned = await result.current.mutateAsync({
+        id: TASK,
+        assigneeIds: ["user-5"],
+      });
+    });
+
+    expect(POST).toHaveBeenCalledWith("/v1/tasks/{id}/group/add", {
+      params: { path: { id: TASK } },
+      body: { assignee_ids: ["user-5"] },
+    });
+    expect(returned).toEqual(answer);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: taskKeys.all });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: activityKeys.chapter(CHAPTER),
     });

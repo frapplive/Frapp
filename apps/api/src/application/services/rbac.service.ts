@@ -4,8 +4,10 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface';
 import type { IRoleRepository } from '#domain/repositories/role.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
@@ -20,14 +22,19 @@ import { groupKindOpensChannels } from '#domain/entities/chapter-group.entity';
 import { Role, RoleTier } from '#domain/entities/role.entity';
 import { Member } from '#domain/entities/member.entity';
 import {
-  EVERYONE_ROLE_NAME,
+  highestRankedRole,
   isEveryoneRole,
+  sortRolesByRank,
+  tierPositionsOf,
   reservedMentionName,
   permissionDefinition,
   permissionModuleLabel,
   NOT_SELF_ASSIGNABLE_CODE,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   selfAssignableRefusal,
+  isCouncilPermission,
+  keysForRecruitmentModel,
+  COUNCIL_SHARED_PERMISSIONS,
 } from '@repo/validation';
 import {
   AI_PERMISSIONS,
@@ -106,6 +113,27 @@ export interface RoleChanges {
 export const RANK_REFUSAL =
   'You can only change roles and tiers ranked below your own.';
 
+/**
+ * Refuse (400) a role marked self-assignable that isn't safe to pick (#4958):
+ * on a save that marks or keeps it marked, and on a create that marks it.
+ */
+function assertSafeToPick(role: {
+  system_key: string | null;
+  tier_id: string | null;
+  permissions: readonly string[];
+}): void {
+  const refusal = selfAssignableRefusal(role);
+  if (refusal) {
+    throw new BadRequestException({
+      // SELF_ASSIGNABLE_KEYED_CODE, SELF_ASSIGNABLE_TIERED_CODE or
+      // SELF_ASSIGNABLE_PERMISSIONS_CODE, named so the error-code
+      // classification spec sees all three.
+      code: refusal,
+      message: SELF_ASSIGNABLE_REFUSAL_COPY[refusal],
+    });
+  }
+}
+
 /** Refusal when a write would grant what the caller does not hold (#4071). */
 function grantRefusal(missing: readonly string[]): string {
   return `You can't give a role or tier a permission you don't have yourself: ${missing.join(', ')}.`;
@@ -143,41 +171,34 @@ export interface ChapterMemberAccess {
    * list the event read gate checks an invitation against (`isInvited`).
    */
   role_ids: string[];
-  /** Smallest `display_order` among held live roles; `null` when none. */
-  top_role_order: number | null;
   /**
-   * The held live role that `top_role_order` belongs to (ties broken by name,
-   * then id, so the pick is stable), or `null` when none. Chat's member list
-   * groups readers under it; `everyone` marks the chapter's Everyone role
-   * (#4191), which that list never names.
+   * Where the member's highest role sits among all the chapter's roles in
+   * rank order (`sortRolesByRank`: wildcard, tier position, the role's order
+   * in its tier, name), 0 for the top; `null` when they hold none. Lower
+   * ranks higher. Without `withTiers`, the top role's `display_order`.
+   */
+  top_role_rank: number | null;
+  /**
+   * The member's highest-ranked live role (`highestRankedRole`), their title,
+   * or `null` when none. Chat's member list orders readers by it; `everyone`
+   * marks the chapter's Everyone role (#4191), which no list names.
    */
   top_role: { id: string; name: string; everyone?: true } | null;
+  /**
+   * The highest tier any of their roles sits in (the chapter's top tier for
+   * the holder of the President's wildcard role), the heading chat's member
+   * list files them under; `null` when none of their roles is in a tier, or
+   * without `withTiers`.
+   */
+  top_tier: { id: string; name: string; position: number } | null;
   /** What the member holds for a channel's who-can-see and who-can-post lists (#3722). */
   channel_access: ChannelAccessHolder;
 }
 
-/**
- * The highest of a member's roles: lowest `display_order` (as on the Roles
- * page), ties broken by name, then id, so two calls agree.
- */
-function topRole(roles: readonly Role[]): Role | null {
-  let best: Role | null = null;
-  for (const role of roles) {
-    if (
-      !best ||
-      role.display_order < best.display_order ||
-      (role.display_order === best.display_order &&
-        (role.name.localeCompare(best.name) < 0 ||
-          (role.name === best.name && role.id < best.id)))
-    ) {
-      best = role;
-    }
-  }
-  return best;
-}
-
 @Injectable()
 export class RbacService {
+  private readonly logger = new Logger(RbacService.name);
+
   constructor(
     @Inject(ROLE_REPOSITORY) private readonly roleRepo: IRoleRepository,
     @Inject(MEMBER_REPOSITORY) private readonly memberRepo: IMemberRepository,
@@ -211,14 +232,22 @@ export class RbacService {
    * `POST /v1/roles` for a member: {@link create} behind the rank rules. The
    * role may only go into a tier ranked below the caller, or outside the
    * tiers (below every tier, so refused to a caller who ranks there too),
-   * and may only hold permissions the caller holds.
+   * and may only hold permissions the caller holds. `self_assignable: true`
+   * creates it already marked (#5736), under the same rule as marking it
+   * after (`assertSelfAssignableSave`): it must be safe to pick, and the
+   * caller already holds what it carries.
    */
   async createAsMember(
     chapterId: string,
     actorUserId: string,
     data: Pick<
       RoleChanges,
-      'name' | 'permissions' | 'display_order' | 'color' | 'mentionable'
+      | 'name'
+      | 'permissions'
+      | 'display_order'
+      | 'color'
+      | 'mentionable'
+      | 'self_assignable'
     > & { tier_id?: string | null },
   ): Promise<Role> {
     const context = await this.getRankContext(chapterId, actorUserId);
@@ -239,7 +268,17 @@ export class RbacService {
     // none takes its tier's.
     const listed = data.permissions ?? [];
     const holds = listed.length > 0 ? listed : tierPermissions;
+    // Before the held check, so a reserved key reads as reserved, not as one
+    // the caller lacks (#5933).
+    await this.assertNoReservedPermissions(chapterId, listed);
     assertPermissionsHeld(context.reach, holds);
+    if (data.self_assignable === true) {
+      assertSafeToPick({
+        system_key: null,
+        tier_id: tierId,
+        permissions: holds,
+      });
+    }
     return this.create(chapterId, actorUserId, { ...data, tier_id: tierId });
   }
 
@@ -322,6 +361,13 @@ export class RbacService {
           : context.tiers.find((candidate) => candidate.id === tierId);
       after = effectivePermissions(tier?.permissions ?? [], overrides);
     }
+    // Before the held checks, so a reserved key reads as reserved (#5933).
+    await this.assertNoReservedPermissions(chapterId, [
+      ...(data.permissions ?? []),
+      ...Object.entries(data.permission_overrides ?? {})
+        .filter(([, on]) => on === true)
+        .map(([permission]) => permission),
+    ]);
     assertPermissionsHeld(context.reach, [
       ...addedPermissions(role.permissions, after),
       ...switchedOn,
@@ -367,20 +413,11 @@ export class RbacService {
   ): void {
     const marked = data.self_assignable ?? role.self_assignable === true;
     if (!marked) return;
-    const refusal = selfAssignableRefusal({
+    assertSafeToPick({
       system_key: role.system_key,
       tier_id: tierId,
       permissions: after,
     });
-    if (refusal) {
-      throw new BadRequestException({
-        // SELF_ASSIGNABLE_KEYED_CODE, SELF_ASSIGNABLE_TIERED_CODE or
-        // SELF_ASSIGNABLE_PERMISSIONS_CODE, named so the error-code
-        // classification spec sees all three.
-        code: refusal,
-        message: SELF_ASSIGNABLE_REFUSAL_COPY[refusal],
-      });
-    }
     if (data.self_assignable === true && role.self_assignable !== true) {
       assertPermissionsHeld(context.reach, after);
     }
@@ -389,7 +426,7 @@ export class RbacService {
   /**
    * `POST /v1/roles/:id/join` and `/leave` (#4958): the caller adds a
    * self-assignable role to their own roles, or takes it off. The role must be
-   * marked and safe, checked here for the refusal's words and again by
+   * marked and safe both ways (#5650), checked here for the refusal's words and again by
    * `self_assign_role` under the role's lock, which answers for a role
    * unmarked, changed or deleted in between (409, reload).
    *
@@ -406,12 +443,13 @@ export class RbacService {
     join: boolean,
   ): Promise<{ role_ids: string[] }> {
     const role = await this.roleInChapter(roleId, chapterId);
-    // Joining needs the role marked and safe. Leaving needs only a role with
-    // no key outside the tiers, so a member who picked it can drop it after
-    // an officer unmarks it or gives it a permission (#4958 review).
-    const allowed = join
-      ? role.self_assignable === true && !selfAssignableRefusal(role)
-      : !role.system_key && !role.tier_id;
+    // Both ways need the role marked, and safe, which the database's
+    // constraint keeps every marked role. A role an officer gave, or one an
+    // officer has stopped offering, stays until an officer takes it off
+    // (Paul, 2026-11-19, #5650; until then leaving took any unkeyed role
+    // outside the tiers, #4958).
+    const allowed =
+      role.self_assignable === true && !selfAssignableRefusal(role);
     if (!allowed) {
       throw new ForbiddenException({
         code: NOT_SELF_ASSIGNABLE_CODE,
@@ -530,7 +568,7 @@ export class RbacService {
     return tier;
   }
 
-  /** 400 when `tierId` ranks above the tier holding the Everyone role. */
+  /** 400 when `tierId` ranks above the tier holding the Actives role. */
   private async assertNotAboveEveryone(
     chapterId: string,
     tierId: string,
@@ -539,13 +577,13 @@ export class RbacService {
       this.roleRepo.findByChapter(chapterId),
       this.tierRepo.findByChapter(chapterId),
     ]);
-    const everyone = roles.find((r) => r.system_key === SystemRoleKeys.MEMBER);
-    const floor = tiers.find((t) => t.id === everyone?.tier_id);
+    const actives = roles.find((r) => r.system_key === SystemRoleKeys.MEMBER);
+    const floor = tiers.find((t) => t.id === actives?.tier_id);
     const target = tiers.find((t) => t.id === tierId);
     if (floor && target && target.position < floor.position) {
       throw new BadRequestException({
         code: 'role.below_everyone',
-        message: 'New Member and Alumni stay below the Everyone tier.',
+        message: `New Member and Alumni stay at or below the ${actives?.name ?? 'Actives'} tier.`,
       });
     }
   }
@@ -567,6 +605,40 @@ export class RbacService {
   }
 
   /**
+   * `school-layer.md` § 4.2 rule 3 (#5933): a chapter's role or tier write
+   * refuses a `council:` string, `400 roles.permission.reserved`. A council
+   * key gates only council routes, which refuse a chapter by kind, so in a
+   * chapter it would be a switch that does nothing. The chapter is read only
+   * when the list holds such a string.
+   */
+  async assertNoReservedPermissions(
+    chapterId: string,
+    permissions: Iterable<string>,
+  ): Promise<void> {
+    const reserved = [...permissions].filter(isCouncilPermission);
+    if (reserved.length === 0) return;
+    const chapter = await this.chapterRepo.findById(chapterId);
+    if (chapter?.kind === 'council') {
+      // A council whose model is `none` holds no `council-recruitment` key
+      // (`council-types.md` § Default role titles), and its catalog offers
+      // none, so a write that adds one is refused the same way.
+      const model = chapter.recruitment_model ?? 'none';
+      const refused = reserved.filter(
+        (key) => keysForRecruitmentModel([key], model).length === 0,
+      );
+      if (refused.length === 0) return;
+      throw new BadRequestException({
+        code: 'roles.permission.reserved',
+        message: `This council doesn't run recruitment, so its roles can't hold ${refused.join(', ')}.`,
+      });
+    }
+    throw new BadRequestException({
+      code: 'roles.permission.reserved',
+      message: `Only a council's roles can hold ${reserved.join(', ')}.`,
+    });
+  }
+
+  /**
    * `onCreated` runs after the role is inserted and before its audit row is
    * written, for a caller that must record the new id whatever the audit write
    * then does. The audit write can fail after the role exists (#1599), and a
@@ -580,6 +652,7 @@ export class RbacService {
     data: Partial<Role>,
     onCreated?: (role: Role) => Promise<void>,
   ): Promise<Role> {
+    await this.assertNoReservedPermissions(chapterId, data.permissions ?? []);
     // Only the seeded President role may carry the wildcard: letting
     // `roles:manage` mint a new `*` role would bypass the presidency-transfer
     // safeguard entirely (spec/behavior/rbac.md).
@@ -638,6 +711,15 @@ export class RbacService {
     if (role.chapter_id !== chapterId)
       throw new ForbiddenException('Role not in current chapter');
 
+    // Only what this write adds can be refused: a list, or overrides it
+    // switches on.
+    await this.assertNoReservedPermissions(chapterId, [
+      ...(data.permissions ?? []),
+      ...Object.entries(data.permission_overrides ?? {})
+        .filter(([, on]) => on === true)
+        .map(([permission]) => permission),
+    ]);
+
     // An update may keep a wildcard the role already holds (the President
     // role's permissions stay editable) but may never introduce one — that
     // would mint a second wildcard holder outside the transfer flow.
@@ -679,36 +761,42 @@ export class RbacService {
       );
     }
 
-    // The Everyone role (#4191) is the base under every tier: it keeps its
-    // name, which `@everyone` reads, and its tier, which is where plain
-    // members rank and where presidency's claim walk stops. Its permissions
-    // and its `@everyone` switch stay editable. Two moves stay open because
-    // they only bring it to where it belongs: renaming it Everyone (a row
-    // the previous API seeded as Member after the migration ran), and
-    // putting it in a tier when it sits outside them.
-    if (role.system_key === SystemRoleKeys.MEMBER) {
-      if (
-        data.name !== undefined &&
-        data.name !== role.name &&
-        data.name !== EVERYONE_ROLE_NAME
-      ) {
+    // The Everyone role is the floor every member holds: it keeps its name,
+    // which `@everyone` reads, and stays outside the tiers, so no tier lends
+    // every member more than the chapter gave Everyone itself. Its
+    // permissions and its `@everyone` switch stay editable.
+    if (role.system_key === SystemRoleKeys.EVERYONE) {
+      if (data.name !== undefined && data.name !== role.name) {
         throw new BadRequestException({
           code: 'role.everyone_fixed',
           message: 'The Everyone role keeps its name.',
         });
       }
-      if (
-        data.tier_id !== undefined &&
-        data.tier_id !== role.tier_id &&
-        !(role.tier_id === null && data.tier_id !== null)
-      ) {
+      if (data.tier_id !== undefined && data.tier_id !== null) {
         throw new BadRequestException({
           code: 'role.everyone_fixed',
-          message: 'The Everyone role stays in its tier.',
+          message: 'The Everyone role stays outside the tiers.',
         });
       }
     } else if (data.name && data.name !== role.name) {
       assertNotReservedMentionName(data.name);
+    }
+
+    // The Actives role (the seeded Member role) stays in its tier: it is
+    // where actives rank and where presidency's claim walk and the tier
+    // reorder's floor stop, and outside the tiers it would rank below New
+    // members. The one move left open brings it to where it belongs: into a
+    // tier when it sits outside them.
+    if (
+      role.system_key === SystemRoleKeys.MEMBER &&
+      data.tier_id !== undefined &&
+      data.tier_id !== role.tier_id &&
+      !(role.tier_id === null && data.tier_id !== null)
+    ) {
+      throw new BadRequestException({
+        code: 'role.everyone_fixed',
+        message: `The ${role.name} role stays in its tier.`,
+      });
     }
 
     // New Member and Alumni rank at or below Everyone (#4548): neither moves
@@ -786,9 +874,8 @@ export class RbacService {
     if (role.is_system)
       throw new ForbiddenException('Cannot delete system roles');
 
-    // One transaction (#4547): the id leaves every holder's role_ids, and a
-    // holder left with no member-access role gets Everyone, as
-    // `rolesAfterSave` gives it back, so nobody is locked out by a delete.
+    // One transaction (#4547): the id leaves every holder's role_ids. The
+    // Everyone role stays on each row, so nobody is locked out by a delete.
     const deletion = await this.roleRepo.delete(chapterId, roleId);
     if (!deletion) throw new NotFoundException('Role not found');
     await this.chapterAuditLogService.record({
@@ -803,12 +890,6 @@ export class RbacService {
           removed_from_member_ids: {
             from: deletion.strippedMemberIds,
             to: null,
-          },
-        }),
-        ...(deletion.givenEveryoneMemberIds.length > 0 && {
-          given_everyone_member_ids: {
-            from: null,
-            to: deletion.givenEveryoneMemberIds,
           },
         }),
       } satisfies AuditDiff,
@@ -1115,11 +1196,28 @@ export class RbacService {
    * API constant's name, kept because clients already key on it; the label,
    * description, module and scope come from `PERMISSION_REGISTRY`.
    */
-  getPermissionsCatalog(): PermissionCatalogEntry[] {
+  async getPermissionsCatalog(
+    chapterId: string,
+  ): Promise<PermissionCatalogEntry[]> {
+    // The catalog filters by tenant kind (#5933, `school-layer.md` § 5.1): a
+    // chapter gets chapter keys; a council its own keys, less the
+    // `council-recruitment` ones when its model is `none`, plus the chapter
+    // keys it shares.
+    const chapter = await this.chapterRepo.findById(chapterId);
+    if (!chapter) throw new NotFoundException('Chapter not found');
+    const isCouncil = chapter.kind === 'council';
+    const model = chapter.recruitment_model ?? 'none';
+    const servesTenant = (value: string): boolean =>
+      isCouncil
+        ? COUNCIL_SHARED_PERMISSIONS.has(value) ||
+          (isCouncilPermission(value) &&
+            keysForRecruitmentModel([value], model).length > 0)
+        : !isCouncilPermission(value);
     // With the server's AI switch off, a role editor reads exactly as it did
     // before the AI permissions existed.
     const offered = Object.entries(SystemPermissions).filter(
-      ([, value]) => isAiEnabled() || !AI_PERMISSIONS.has(value),
+      ([, value]) =>
+        servesTenant(value) && (isAiEnabled() || !AI_PERMISSIONS.has(value)),
     );
     return offered.map(([key, value]) => {
       const definition = permissionDefinition(value);
@@ -1319,15 +1417,19 @@ export class RbacService {
 
   /**
    * Every member of `chapterId` with their flattened effective permissions and
-   * the rank of their highest role, from two reads (roster and roles) rather
-   * than ~2N. The one place a chapter-wide permission resolve is
+   * the rank of their highest role, from two reads (roster and roles, plus the
+   * tiers with `withTiers` and the groups with `withGroups`) rather than ~2N. The one place a chapter-wide permission resolve is
    * built, so {@link findUserIdsWithPermissions} and the channel member list
    * (`ChannelAccessService.listChannelMembers`) cannot disagree about who holds
    * what.
    *
-   * `top_role_order` is the smallest `display_order` among the member's live
-   * roles in this chapter (lower ranks higher, as on the Roles page), or `null`
-   * for a member who holds none.
+   * `top_role` is the member's highest-ranked live role in this chapter by
+   * the shared rank (`@repo/validation` `compareRolesByRank`: tier first,
+   * then the role's order in its tier), so a Discord-imported role outside
+   * the tiers at `display_order` 0 never outranks the President. The tiers
+   * are read only with `withTiers` (the channel member list, the one caller
+   * that shows ranks); without it every role counts as outside the tiers,
+   * `top_role_rank` is the top role's `display_order` and `top_tier` is null.
    *
    * **Re-scoped to the chapter twice over.** Both reads filter on
    * `chapter_id`, and the role maps below additionally drop any row whose
@@ -1349,10 +1451,25 @@ export class RbacService {
     chapterId: string,
     withGroups = false,
     roster?: () => Promise<readonly Member[]>,
+    withTiers = false,
   ): Promise<ChapterMemberAccess[]> {
-    const [members, roles, memberships] = await Promise.all([
+    const [members, roles, tiers, memberships] = await Promise.all([
       roster ? roster() : this.memberRepo.findByChapter(chapterId),
       this.roleRepo.findByChapter(chapterId),
+      // Only the channel member list shows ranks and tiers, so only it pays
+      // for the read, and a failed read costs it its tier groups (every
+      // reader then ranks by role order in one list), never anyone's access.
+      withTiers
+        ? this.tierRepo.findByChapter(chapterId).catch((error: unknown) => {
+            logThrowable(
+              this.logger,
+              'warn',
+              `Role tiers unavailable for chapter ${chapterId}`,
+              error,
+            );
+            return [] as RoleTier[];
+          })
+        : Promise.resolve([] as RoleTier[]),
       withGroups
         ? this.groupRepo.findMemberships(chapterId)
         : Promise.resolve([]),
@@ -1367,11 +1484,26 @@ export class RbacService {
       else groupsOf.set(user_id, [group_id]);
     }
 
+    const chapterRoles = roles.filter((role) => role.chapter_id === chapterId);
     const roleById = new Map(
-      roles
-        .filter((role) => role.chapter_id === chapterId)
-        .map((role) => [role.id.toLowerCase(), role] as const),
+      chapterRoles.map((role) => [role.id.toLowerCase(), role] as const),
     );
+    const positions = tierPositionsOf(tiers);
+    const tierById = new Map(tiers.map((tier) => [tier.id, tier] as const));
+    // Ranks are only read by the channel member list (`withTiers`).
+    const rankOf = withTiers
+      ? new Map(
+          sortRolesByRank(chapterRoles, positions).map(
+            (role, index) => [role.id, index] as const,
+          ),
+        )
+      : null;
+    // The President's role outranks every tier wherever it sits, so its
+    // holder files under the chapter's top tier, President first.
+    let firstTier: RoleTier | null = null;
+    for (const tier of tiers) {
+      if (!firstTier || tier.position < firstTier.position) firstTier = tier;
+    }
 
     const held = new Map<string, string[]>();
     for (const member of members) {
@@ -1393,19 +1525,38 @@ export class RbacService {
             .filter((role): role is Role => role !== undefined),
         ),
       ];
-      const top = topRole(liveRoles);
+      const top = highestRankedRole(liveRoles, positions);
+      let topTier: RoleTier | null =
+        top && top.permissions.includes(WILDCARD) ? firstTier : null;
+      for (const role of liveRoles) {
+        const tier = role.tier_id ? tierById.get(role.tier_id) : undefined;
+        if (tier && (!topTier || tier.position < topTier.position)) {
+          topTier = tier;
+        }
+      }
       return {
         user_id: userId,
         permissions: flattenPermissionSets(
           liveRoles.map((role) => role.permissions),
         ),
         role_ids: [...new Set(roleIds)],
-        top_role_order: top?.display_order ?? null,
+        top_role_rank: top
+          ? rankOf
+            ? (rankOf.get(top.id) ?? null)
+            : top.display_order
+          : null,
         top_role: top
           ? {
               id: top.id,
               name: top.name,
               ...(isEveryoneRole(top) ? { everyone: true } : {}),
+            }
+          : null,
+        top_tier: topTier
+          ? {
+              id: topTier.id,
+              name: topTier.name,
+              position: topTier.position,
             }
           : null,
         channel_access: accessHolderFromRoles(

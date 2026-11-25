@@ -25,7 +25,7 @@ export const MEETING_NOTES_MAX_LENGTH = 160_000;
 export const MEETING_DRAFT_SOURCES_MAX_LENGTH = 200_000;
 
 /** The prompt this build ships, stamped on the usage ledger. */
-export const MEETING_DRAFT_PROMPT_VERSION = "minutes-draft@v10";
+export const MEETING_DRAFT_PROMPT_VERSION = "minutes-draft@v11";
 
 const DueDate = z
   .string()
@@ -193,7 +193,7 @@ export type MeetingDraftStatus = (typeof MEETING_DRAFT_STATUSES)[number];
 export const MEETING_DRAFT_FAILURES = [
   /** The president has not turned meeting notes on. */
   "chapter_off",
-  /** The officer has not turned Frapp AI on. */
+  /** The officer has not turned Frapp Intelligence on. */
   "consent_required",
   /** The chapter's, the member's or the platform's AI limit was reached. */
   "spend_limit",
@@ -219,7 +219,7 @@ export const MEETING_DRAFT_FAILURE_COPY: Readonly<
 > = {
   chapter_off:
     "Drafting from notes is turned off for your chapter. The president can turn it on in Chapter settings.",
-  consent_required: "Turn on Frapp AI to draft from your notes.",
+  consent_required: "Turn on Frapp Intelligence to draft from your notes.",
   spend_limit:
     "Your chapter has reached its AI limit for now. Your notes are saved, and you can write the minutes yourself below.",
   unavailable:
@@ -387,6 +387,30 @@ export function meetingDraftQuoteFor(
       (source) => source.kind === kind && source.text === wanted,
     )?.quote ?? null
   );
+}
+
+/** The line a drafted item came from, whose it is, and whether it's the viewer's (#4935). */
+export type MeetingDraftQuote = {
+  quote: string;
+  from: string | null;
+  mine: boolean;
+};
+
+/**
+ * What the section editor shows under a drafted decision or action item, on
+ * the web and the phone alike: the notes' line, and whose it was ("From your
+ * notes" when the viewer's own). Null once the officer rewrote the item.
+ */
+export function meetingDraftQuote(
+  review: Pick<MeetingDraftReview, "sources"> | null | undefined,
+  kind: MeetingDraftSource["kind"],
+  text: string,
+  myName: string | null,
+): MeetingDraftQuote | null {
+  const quote = meetingDraftQuoteFor(review, kind, text);
+  if (!quote) return null;
+  const from = meetingDraftSourceFor(review, kind, text);
+  return { quote, from, mine: !!from && from === myName };
 }
 
 /**

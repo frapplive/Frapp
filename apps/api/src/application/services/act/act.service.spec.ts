@@ -331,6 +331,28 @@ describe('ActService', () => {
   });
 
   describe('the proposal', () => {
+    it('names the Ask turn, its question, and whether it read chat, when the tool loop proposes it', async () => {
+      const { service, suggestions } = build({ permissions: OFFICER_HOLDS });
+      await service.proposePlanned(
+        {
+          ...input('unused'),
+          askId: '99999999-9999-4999-8999-999999999999',
+          question: 'make a task to book the bus',
+          drewOnChat: true,
+        },
+        'create_task',
+        {} as never,
+        NOW,
+      );
+      expect(suggestions.proposeBatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          askId: '99999999-9999-4999-8999-999999999999',
+          request: 'make a task to book the bus',
+          drewOnChat: true,
+        }),
+      );
+    });
+
     it('is saved for the asker alone, replaces their last one, and pushes nobody', async () => {
       const { service, suggestions, task } = build({
         permissions: OFFICER_HOLDS,
@@ -353,10 +375,14 @@ describe('ActService', () => {
         expect.objectContaining({
           chapterId: CHAPTER,
           requestedFor: OFFICER,
-          source: { type: 'request', id: OFFICER, title: 'Ask Frapp' },
+          source: { type: 'request', id: OFFICER, title: 'Frapp Intelligence' },
           proposals: [{ kind: 'task', payload: { title: 'Book the bus' } }],
           notify: [],
           expiresWithinDays: 1,
+          // The typed request, kept sealed on the card for the change log.
+          request: 'make a task',
+          askId: null,
+          drewOnChat: false,
         }),
       );
       expect(task.draft).toHaveBeenCalledWith(

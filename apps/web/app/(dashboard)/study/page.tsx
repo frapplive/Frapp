@@ -1,9 +1,11 @@
-import { StudyPage } from "@/components/study/study-page";
+import { redirect } from "next/navigation";
+import { standingHref } from "@/components/standing/standing-doors";
 
-export const metadata = {
-  title: "Study hours",
-};
-
-export default function Study() {
-  return <StudyPage />;
+/**
+ * Study hours stopped being a page with #5950: a session runs on the phone,
+ * and a member's own sessions open from their Profile as a panel. This route
+ * only redirects old links and bookmarks there.
+ */
+export default function StudyRedirect() {
+  redirect(standingHref("study"));
 }

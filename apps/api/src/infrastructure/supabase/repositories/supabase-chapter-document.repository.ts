@@ -93,6 +93,7 @@ export class SupabaseChapterDocumentRepository implements IChapterDocumentReposi
       if (filter?.search) {
         query = query.ilike('title', `%${escapeLikePattern(filter.search)}%`);
       }
+      if (filter?.filesOnly) query = query.is('meeting_id', null);
       if (after !== null) query = query.gt('id', after);
 
       return query.order('id', { ascending: true }).limit(PAGE_SIZE);
@@ -193,6 +194,45 @@ export class SupabaseChapterDocumentRepository implements IChapterDocumentReposi
       .eq('id', id)
       .eq('chapter_id', chapterId);
     if (error) throw new SupabaseQueryError(error);
+  }
+
+  async findInFolders(
+    chapterId: string,
+    folders: readonly string[],
+  ): Promise<ChapterDocument[]> {
+    if (folders.length === 0) return [];
+    const names = [...folders];
+    return fetchAllById((after) => {
+      let query = this.supabase
+        .from('chapter_documents')
+        .select('*')
+        .eq('chapter_id', chapterId)
+        .in('folder', names);
+      if (after !== null) query = query.gt('id', after);
+      return query.order('id', { ascending: true }).limit(PAGE_SIZE);
+    });
+  }
+
+  async fileMinutes(
+    chapterId: string,
+    meetingId: string,
+  ): Promise<string | null> {
+    const { data, error } = await this.supabase.rpc('file_minutes_document', {
+      p_chapter_id: chapterId,
+      p_meeting_id: meetingId,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? null;
+  }
+
+  // Every chapter at once, on purpose: the sweep that calls it is the
+  // backfill, and the function names each row's own chapter.
+  async fileUnfiledMinutes(limit: number): Promise<number> {
+    const { data, error } = await this.supabase.rpc('file_unfiled_minutes', {
+      p_limit: limit,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? 0;
   }
 
   // Paged (#5585): sync compares Drive's tree with these, so a list cut at

@@ -13,12 +13,15 @@
  * for a permission that belongs to the chapter rather than to one module. The
  * same API spec pins that.
  *
- * `scope` is `chapter` for every entry today. It exists so a level above the
- * chapter can later add its own keys to this list without a second catalog;
- * nothing reads it yet.
+ * `scope` is `chapter` or `council` (#5933, `school-layer.md` § 5.1). A
+ * council key (`council:*`) is held only by a council's roles: the API serves
+ * it in a council's catalog and refuses it in a chapter's role writes
+ * (`roles.permission.reserved`), and every route that requires one serves the
+ * council tenant kind alone. A council's catalog also carries the chapter
+ * keys it shares ({@link COUNCIL_SHARED_PERMISSIONS}).
  */
 
-export type PermissionScope = "chapter";
+export type PermissionScope = "chapter" | "council";
 
 /**
  * The groups permissions are shown under, in display order. `label` is the
@@ -42,6 +45,10 @@ export const PERMISSION_MODULES = [
   { key: "geofences", label: "Study zones" },
   { key: "reports", label: "Reports" },
   { key: "billing", label: "Billing" },
+  // Council keys (#5933). Not module-catalog keys: a council's modules are
+  // its council profile's, and a chapter never sees these groups.
+  { key: "council", label: "Council" },
+  { key: "council-recruitment", label: "Council recruitment" },
 ] as const;
 
 export type PermissionModuleKey = (typeof PERMISSION_MODULES)[number]["key"];
@@ -66,6 +73,15 @@ function chapterPermission(
   return { permission, module, label, description, scope: "chapter" };
 }
 
+function councilPermission(
+  permission: `council:${string}`,
+  module: "council" | "council-recruitment",
+  label: string,
+  description: string,
+): PermissionDefinition {
+  return { permission, module, label, description, scope: "council" };
+}
+
 export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
   chapterPermission(
     "*",
@@ -77,7 +93,18 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "roles:manage",
     "chapter",
     "Manage roles",
-    "Create, edit and delete roles, give roles to members, edit pledge classes, and fix the names and graduation years of members ranked below them.",
+    "Create, edit and delete roles, give roles to members, edit pledge classes, and fix the names and graduation years of members ranked below them or at their own rank.",
+  ),
+  // Paul, 2026-11-20 (#5725): a switch a chapter turns on for its top tier,
+  // so one cabinet officer can make another Stewardship Chair. Without it,
+  // the roles must rank below you (#4071); a member at your own rank is
+  // reachable either way, for those roles (#5843), and so is a member ranked
+  // above you, though never for a role at your own rank (#5903).
+  chapterPermission(
+    "roles:assign_own_level",
+    "chapter",
+    "Give roles at your own level",
+    "With Manage roles, also give and take away roles at your own level, not only those below it, on members at your own level or below. On someone ranked above you, only roles below your own.",
   ),
   chapterPermission(
     "chapter-config:view",
@@ -131,6 +158,15 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "members",
     "Remove members",
     "Remove a member from the chapter.",
+  ),
+  // Chat timeouts (#6006; Paul's go, relayed by Shawn, 2026-11-25): a
+  // permission of its own rather than `channels:manage`, so a chapter can
+  // hand moderation to someone who shouldn't edit channels.
+  chapterPermission(
+    "members:timeout",
+    "members",
+    "Time out members",
+    "Stop a member ranked below them from posting or reacting in channels for up to a week. DMs aren't affected.",
   ),
   // Groups (#4076) carry no permissions, so keeping one current needs less
   // trust than `roles:manage`: a house manager can keep "Third floor" right.
@@ -272,26 +308,32 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
   chapterPermission(
     "rush:add",
     "rush",
-    "Add prospects",
-    "Add a prospect to the chapter's recruitment list.",
+    "Add and work prospects",
+    "Add a prospect to the chapter's recruitment list and move them between stages.",
   ),
   chapterPermission(
     "rush:notes",
     "rush",
-    "Write notes on prospects",
-    "Write notes on a prospect for other members to read.",
+    "Write notes and tag prospects",
+    "Write notes on a prospect and tag them.",
+  ),
+  chapterPermission(
+    "rush:read_notes",
+    "rush",
+    "Read recruitment notes",
+    "Read the notes members write on prospects.",
   ),
   chapterPermission(
     "rush:vote",
     "rush",
-    "Vote on prospects",
-    "Cast a vote on a prospect.",
+    "Vote on and rate prospects",
+    "Cast a vote on a prospect and rate them from 1 to 5.",
   ),
   chapterPermission(
     "rush:view_results",
     "rush",
     "See vote results",
-    "See how many votes a prospect has.",
+    "See how many votes a prospect has and their average rating.",
   ),
   chapterPermission(
     "rush:bid",
@@ -303,7 +345,7 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "rush:manage",
     "rush",
     "Manage recruitment",
-    "Delete prospects and export the recruitment list.",
+    "Edit the chapter's stages and tags, and delete anyone's note on a prospect.",
   ),
 
   chapterPermission(
@@ -358,7 +400,132 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "Manage billing and invoices",
     "Change the chapter's plan and create member invoices.",
   ),
+
+  // Council keys, `school-layer.md` § 5.1 and `council-types.md` § Default
+  // role titles (#5933). The explicit-grant keys (`council:grades_import`,
+  // `council:eligibility_manage`, `council:matching_operate`) are not here
+  // yet: they join with the check that keeps `*` from satisfying them (§ 4.2
+  // rule 2), so no role can hold one before that check exists.
+  councilPermission(
+    "council:chapters_manage",
+    "council",
+    "Manage member chapters",
+    "Propose, accept, suspend and end the chapters that belong to the council.",
+  ),
+  councilPermission(
+    "council:announce",
+    "council",
+    "Announce to chapters",
+    "Send announcements to member chapters' council contacts.",
+  ),
+  councilPermission(
+    "council:calendar_manage",
+    "council",
+    "Manage the council calendar",
+    "Add and change the council dates member chapters see.",
+  ),
+  councilPermission(
+    "council:campus_post",
+    "council",
+    "Post to campus",
+    "Post to the school's campus feed, once the council is verified.",
+  ),
+  councilPermission(
+    "council:campus_moderate",
+    "council",
+    "Moderate campus",
+    "Hide campus posts and messages at the council's school and act on reports.",
+  ),
+  councilPermission(
+    "council:recruitment_view",
+    "council-recruitment",
+    "See the master list",
+    "See registered PNMs, interest counts, eligibility verdicts and acceptances.",
+  ),
+  councilPermission(
+    "council:recruitment_manage",
+    "council-recruitment",
+    "Run recruitment",
+    "Run the registration form, imports and merges, season dates and rules, bid-day release, and see PNM phone numbers.",
+  ),
+  councilPermission(
+    "council:recruitment_reports",
+    "council-recruitment",
+    "Export recruitment reports",
+    "Export the reports the Greek life office asks for.",
+  ),
+  councilPermission(
+    "council:counselors_manage",
+    "council-recruitment",
+    "Manage recruitment counselors",
+    "Assign counselors to PNM groups and publish disaffiliation records.",
+  ),
+  councilPermission(
+    "council:pnm_group_view",
+    "council-recruitment",
+    "See an assigned PNM group",
+    "See the names and schedules of the PNM group you're assigned, and nothing else.",
+  ),
 ];
+
+/**
+ * The chapter keys a council's catalog carries beside its own
+ * (`school-layer.md` § 5.1): membership, roles, chat, events, documents,
+ * billing and the settings and audit log. Everything else in the registry
+ * gates a route that serves chapters only, so offering it to a council would
+ * be a switch that does nothing.
+ */
+export const COUNCIL_SHARED_PERMISSIONS: ReadonlySet<string> = new Set([
+  "*",
+  "roles:manage",
+  "roles:assign_own_level",
+  "chapter-config:view",
+  "chapter-config:manage",
+  "members:view",
+  "members:invite",
+  "members:remove",
+  // Chat timeouts (#6006): a council's channels are chat like a chapter's.
+  "members:timeout",
+  "groups:manage",
+  "channels:create",
+  "channels:manage",
+  "events:create",
+  "events:update",
+  "events:delete",
+  "billing:view",
+  "billing:manage",
+]);
+
+/** A permission string in the council namespace, system or not. */
+export function isCouncilPermission(permission: string): boolean {
+  return permission.startsWith("council:");
+}
+
+/** Every `council-recruitment` key, which a council whose model is `none` never shows or seeds. */
+export const COUNCIL_RECRUITMENT_PERMISSIONS: ReadonlySet<string> = new Set(
+  PERMISSION_REGISTRY.filter(
+    (entry) => entry.module === "council-recruitment",
+  ).map((entry) => entry.permission),
+);
+
+/**
+ * Permissions left off the role and tier pages, web and phone (through
+ * `isPermissionHidden` in `@repo/hooks`), and off a module page's "Who can"
+ * (`modulePermissions`), where both showed as switches captioned "No longer
+ * used" (#5728). They decide no channel's posters since #3722. The Discord
+ * import's read-gate picker, fed by the API catalog, still lists them.
+ *
+ * They stay in the registry, the API catalog and stored role data until
+ * #4286 retires them, because two readers remain: the Discord importer starts
+ * a read-only channel's posters from `announcements:post` holders, and the
+ * phone's Support the Chapter button shows to `alumni:post` holders. The
+ * seeded roles carry what those read. `alumni:post` also decides who may give
+ * the Alumni role, as any role's permissions do (#5729).
+ */
+export const RETIRED_PERMISSIONS: ReadonlySet<string> = new Set([
+  "alumni:post",
+  "announcements:post",
+]);
 
 const BY_PERMISSION: ReadonlyMap<string, PermissionDefinition> = new Map(
   PERMISSION_REGISTRY.map((entry) => [entry.permission, entry]),

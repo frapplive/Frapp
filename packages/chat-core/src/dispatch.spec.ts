@@ -6,8 +6,7 @@ import {
   postHours,
   postPointsAdjustment,
   postPoll,
-  postForm,
-  postSignup,
+  linkTask,
   postTask,
   retryPointsDispatch,
   trackEventCard,
@@ -446,6 +445,11 @@ describe("dispatchPoints — replay refusals and resolution (#1733 review)", () 
     ],
     ["the throttler's sentence", RATE_LIMITED_COPY, RATE_LIMITED_COPY],
     ["no message", undefined, RATE_LIMITED_COPY],
+    [
+      "Cloud Run's busy text",
+      "Rate exceeded.",
+      "Frapp is busy right now. Try again in a moment.",
+    ],
   ])(
     "tells the officer when to try again after a first-attempt 429 carrying %s (#3061)",
     async (_label, message, expected) => {
@@ -1242,80 +1246,48 @@ describe("dispatchPoll / dispatchAnnounce — sendMessage faults (#1718)", () =>
   );
 });
 
-describe("postSignup — the New sign-up sheet's send (#3926)", () => {
-  const SIGNUP = {
-    content: "Sober drivers",
-    payload: {
-      title: "Sober drivers",
-      slots: [{ id: "fri", label: "Friday", capacity: 2 }],
-    },
+describe("linkTask — the + sheet's Task row (#5772)", () => {
+  const TASK = {
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "Fix the door",
   };
-
-  it("queues a signup card with its title as the text, leaving the draft alone", async () => {
-    const post = postingApi();
-    const clearDraft = vi.fn();
-    const ctx = buildSimpleCtx(post, stubOutbox({ clearDraft }));
-
-    expect(await postSignup(ctx, CHANNEL_ID, SIGNUP)).toEqual({ ok: true });
-    expect(onlyRow(ctx).kind).toBe("signup");
-    expect(onlyRow(ctx).content).toBe("Sober drivers");
-    expect(clearDraft).not.toHaveBeenCalled();
-  });
-
-  it("says what failed, in its own words, when the outbox refuses it", async () => {
-    const ctx = buildSimpleCtx(
-      postingApi(),
-      stubOutbox({
-        enqueue: vi.fn().mockRejectedValue(new Error("QuotaExceededError")),
-      }),
+  const rows = (ctx: ChatActionContext) =>
+    selectMessages(
+      ctx.queryClient.getQueryData<ChannelCache>(chatMessagesKey(CHANNEL_ID)),
     );
-    expect(await postSignup(ctx, CHANNEL_ID, SIGNUP)).toEqual({
-      ok: false,
-      error: "Couldn't post that sign-up sheet. Try again.",
-      cause: expect.any(Error),
+
+  it("posts the share and leaves the placeholder for the card's echo", async () => {
+    const post = posted201(true);
+    const ctx = buildCtx(post);
+    expect(await linkTask(ctx, CHANNEL_ID, TASK)).toEqual({ ok: true });
+    expect(post).toHaveBeenCalledWith("/v1/tasks/{id}/share", {
+      params: { path: { id: TASK.id } },
+      body: {
+        channel_id: CHANNEL_ID,
+        client_message_id: expect.any(String),
+      },
     });
-  });
-});
-
-describe("postForm — the New form builder's send (#3926 step 3)", () => {
-  const FORM = {
-    content: "Formal housing",
-    payload: {
-      title: "Formal housing",
-      questions: [
-        {
-          id: "q1",
-          type: "multiple_choice" as const,
-          title: "What room do you want?",
-          required: true,
-          options: [{ id: "o1", label: "Single" }],
-        },
-      ],
-    },
-  };
-
-  it("queues a form card with its title as the text, leaving the draft alone", async () => {
-    const clearDraft = vi.fn();
-    const ctx = buildSimpleCtx(postingApi(), stubOutbox({ clearDraft }));
-
-    expect(await postForm(ctx, CHANNEL_ID, FORM)).toEqual({ ok: true });
-    expect(onlyRow(ctx).kind).toBe("form");
-    expect(onlyRow(ctx).content).toBe("Formal housing");
-    expect(clearDraft).not.toHaveBeenCalled();
+    expect(rows(ctx).map((row) => row.kind)).toEqual(["loading"]);
   });
 
-  it("says what failed, in its own words, when the outbox refuses it", async () => {
-    const ctx = buildSimpleCtx(
-      postingApi(),
-      stubOutbox({
-        enqueue: vi.fn().mockRejectedValue(new Error("QuotaExceededError")),
-      }),
-    );
-    expect(await postForm(ctx, CHANNEL_ID, FORM)).toEqual({
-      ok: false,
-      error: "Couldn't post that form. Try again.",
-      cause: expect.any(Error),
+  it("drops the placeholder and says why on a refusal", async () => {
+    const post = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: { message: "Access denied to this task" },
+      response: { status: 403 },
     });
+    const ctx = buildCtx(post);
+    const result = await linkTask(ctx, CHANNEL_ID, TASK);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Access denied to this task");
+    expect(rows(ctx)).toEqual([]);
+  });
+
+  it("reads a lost answer as unconfirmed, not failed", async () => {
+    const ctx = buildCtx(vi.fn().mockRejectedValue(new TypeError("offline")));
+    const result = await linkTask(ctx, CHANNEL_ID, TASK);
+    expect(result).toMatchObject({ ok: true, unconfirmed: true });
+    expect(result.warning).toMatch(/before you link it again/);
   });
 });
 
@@ -1455,6 +1427,111 @@ describe("dispatchRush — vote and bid", () => {
       error: "No candidate matches that name",
     });
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("offers a picker, and runs nothing, when a name matches several prospects", async () => {
+    const first = "11111111-1111-4111-8111-111111111111";
+    const second = "22222222-2222-4222-8222-222222222222";
+    const get = vi.fn().mockImplementation(async (path: string) =>
+      path === "/v1/rush/candidates/matches"
+        ? {
+            data: [
+              {
+                id: first,
+                display_name: "Jake Smith",
+                stage: "new",
+                stage_label: "New",
+                created_at: "2026-11-02T12:00:00Z",
+              },
+              {
+                id: second,
+                display_name: "Jake Smith",
+                stage: "met",
+                stage_label: "Met",
+                created_at: "2026-11-20T12:00:00Z",
+              },
+            ],
+            error: null,
+            response: { status: 200 },
+          }
+        : {
+            data: undefined,
+            error: {
+              code: "rush.several_match",
+              message: "Several prospects match",
+            },
+            response: { status: 409 },
+          },
+    );
+    const post = vi.fn();
+    const ctx: ChatActionContext = {
+      ...buildCtx(post),
+      apiClient: {
+        POST: post,
+        GET: get,
+      } as unknown as ChatActionContext["apiClient"],
+    };
+
+    const result = await dispatchRushVoteCmd(ctx, "vote Jake Smith");
+
+    expect(result.ok).toBe(false);
+    expect(result.choices).toEqual({
+      title: 'Several prospects match "Jake Smith"',
+      options: [
+        {
+          label: "Jake Smith",
+          detail: "New · added Nov 2",
+          args: `vote ${first}`,
+        },
+        {
+          label: "Jake Smith",
+          detail: "Met · added Nov 20",
+          args: `vote ${second}`,
+        },
+      ],
+    });
+    expect(post).not.toHaveBeenCalled();
+
+    expect(get).toHaveBeenCalledWith(
+      "/v1/rush/candidates/matches",
+      expect.objectContaining({ params: { query: { name: "Jake Smith" } } }),
+    );
+
+    // The pick runs the same command by id, with no further lookup.
+    post.mockResolvedValue({
+      data: {},
+      error: null,
+      response: { status: 200 },
+    });
+    await expect(
+      dispatchRushVoteCmd(ctx, result.choices!.options[1]!.args),
+    ).resolves.toEqual({ ok: true });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledWith(
+      "/v1/rush/candidates/{id}/vote",
+      expect.objectContaining({ params: { path: { id: second } } }),
+    );
+  });
+
+  it("treats any other 409 from the lookup as no match", async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: { message: "Conflict" },
+      response: { status: 409 },
+    });
+    const post = vi.fn();
+    const ctx: ChatActionContext = {
+      ...buildCtx(post),
+      apiClient: {
+        POST: post,
+        GET: get,
+      } as unknown as ChatActionContext["apiClient"],
+    };
+    const result = await dispatchRushVoteCmd(ctx, "vote Jake");
+    expect(result).toEqual({
+      ok: false,
+      error: "No candidate matches that name",
+    });
   });
 
   it("extends a bid by name without a placeholder", async () => {

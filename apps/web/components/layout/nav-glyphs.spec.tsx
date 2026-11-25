@@ -13,6 +13,7 @@ import {
   ActivityGlyph,
   BackworkGlyph,
   BillingGlyph,
+  ChaptersGlyph,
   ChatGlyph,
   DirectMessagesGlyph,
   DirectoryGlyph,
@@ -20,6 +21,7 @@ import {
   EventsGlyph,
   PointsGlyph,
   PollsGlyph,
+  RecruitmentGlyph,
   ReportsGlyph,
   RolesGlyph,
   ServiceGlyph,
@@ -49,6 +51,7 @@ const SHAPES: ReadonlyArray<[string, DuotoneGlyphComponent, NavGlyphName]> = [
   ["Backwork", BackworkGlyph, "backwork"],
   ["Directory", DirectoryGlyph, "directory"],
   ["Billing", BillingGlyph, "billing"],
+  ["Chapters", ChaptersGlyph, "chapter"],
   ["Settings", SettingsGlyph, "settings"],
   ["Roles", RolesGlyph, "roles"],
   ["Study zones", StudyZonesGlyph, "studyZones"],
@@ -56,6 +59,7 @@ const SHAPES: ReadonlyArray<[string, DuotoneGlyphComponent, NavGlyphName]> = [
   ["Folder", FolderGlyph, "folder"],
   ["Schedule", ScheduleGlyph, "schedule"],
   ["Invite", InviteGlyph, "invite"],
+  ["Recruitment", RecruitmentGlyph, "recruitment"],
 ];
 
 function paths(Glyph: DuotoneGlyphComponent, active?: boolean) {

@@ -33,8 +33,9 @@ import { cn } from "@/lib/utils";
  * organization that never displays its letters (FIJI) keeps them out of the
  * crest even when its stored switch was never turned off, as for a chapter
  * created before the profile knew to. The match reads the organization's name
- * inside the chapter's ("Phi Gamma Delta Tau Nu"). One function for the nav's
- * chapter row and the home view (#3779), so the two never disagree.
+ * inside the chapter's ("Phi Gamma Delta Tau Nu"). One function for every crest
+ * web draws (the sidebar's head, the chapter picker, a council's home), so they
+ * never disagree.
  */
 export function chapterMarkFor(chapter: {
   name: string;
@@ -52,14 +53,22 @@ export function chapterMarkFor(chapter: {
 }
 
 /**
- * Two sizes: `nav` is the 28px tile in the chapter row, `home` the 112px one
- * the home view centres (#3779). The same mark, fallback and step-down at both.
+ * Three sizes: `nav` is the 28px tile in the sidebar's head, `card` the
+ * 56px one on the invite card (#5625), `home` the 112px one a council's home
+ * centres (`council-home.tsx`; the chapter's home view drew it until #5946).
+ * The same mark, fallback and step-down at each.
  */
 const SIZES = {
   nav: {
     box: "h-7 w-7 rounded-[8px]",
     text: "text-[9.5px] tracking-[0.06em]",
     longText: "text-[7.5px] tracking-normal",
+  },
+  /** The invite card's tile (#5625): the chapter, before any account. */
+  card: {
+    box: "h-14 w-14 rounded-[16px]",
+    text: "text-sm tracking-[0.06em]",
+    longText: "text-caption tracking-normal",
   },
   home: {
     box: "h-28 w-28 rounded-[28px]",

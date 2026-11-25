@@ -242,11 +242,12 @@ then, and the Member rows took the chapter accent before that.
 |---|---|---|
 | Study hours | `study`, `graduation-cap` | `StudyGlyph` |
 | Service hours | `service`, `hand-heart` | `ServiceGlyph` |
+| Recruitment (#5924; two-tone since #5931) | `recruitment`, `funnel` | `RecruitmentGlyph` |
 | Dues | `billing`, `credit-card` | `BillingGlyph` |
 | Documents | `documents`, `file-text` | `DocumentsGlyph` |
 | Directory | `directory`, `users-three` | `DirectoryGlyph` |
 | Settings | `settings`, `gear-six` | `SettingsGlyph` |
-| Switch chapter, Create a chapter | `chapter`, `bank` (the columned chapter house) | none |
+| Create a chapter (Switch chapter until 2026-11-19) | `chapter`, `bank` (the columned chapter house) | none |
 | Invite members (Admin) | `invite`, `user-plus` (`InviteGlyph`) | `InviteGlyph` |
 | Host check-in (Admin) | `hostCheckIn`, `qr-code` | none |
 
@@ -275,7 +276,7 @@ except the audit card's).
 | Hours card | `ServiceHoursGlyph` (the nav set's hand-heart, the You tab's row shape) | `components/chat/card-glyphs.tsx` |
 | Recruitment candidate card | `RushGlyph` (funnel, inner line stroke-only; the module catalog's `funnel`) | `components/chat/card-glyphs.tsx` |
 | Announcement card | `AnnouncementGlyph` (megaphone, sound arc stroke-only) | `components/chat/card-glyphs.tsx` |
-| `#chapter-audit` audit line, at 14 in `--muted` in the avatar gutter (a card's eyebrow until 2026-11-06); also the audit channel's row on chat home, in the sigil's slot (#4134) | `AuditGlyph` (shield, record lines stroke-only) | `components/chat/card-glyphs.tsx` |
+| `#chapter-audit` audit line, at 14 in `--muted` in the avatar gutter (a card's eyebrow until 2026-11-06); also the audit channel's row on chat home, in the sigil's slot (#4134). The channel was removed on 2026-11-21, so nothing draws it now; the glyph stays until its removal (#5808) | `AuditGlyph` (shield, record lines stroke-only) | `components/chat/card-glyphs.tsx` |
 | A private or role-gated channel's row on chat home, in the `#` sigil's slot, size (18) and colours, and its channel start's tile (32, accent), as web draws both (#4134; the rule is `channelMarkFor` in `@repo/hooks/channel-start`) | `LockGlyph` (body filled, shackle stroke-only; web's `LockGlyph`) | `components/chat/card-glyphs.tsx` |
 | A muted channel's row on chat home, straight after the name, at 14 in `text.muted`, as web's rail draws it (#4738; a crossed-out bell until then, which drew the inbox's silhouette) | `MuteGlyph` (web's speaker, box filled, split and × stroke-only; `active` draws the × in place of the waves) | `components/chat/card-glyphs.tsx` |
 
@@ -311,7 +312,8 @@ the chapter accent in a back-row slot (2026-11-05).
 |---|---|---|---|
 | Dismiss, close, remove | `CloseGlyph` (an ×) | the network banner, the thread's error banner, the composer's reply strip (16px) and photo thumbnails (12px on a dark disc), the image viewer (24px), the service-hours proof row, Chat home's setup-checklist hide (16px), the glass close on member check-in (s18) and host QR (s22) (18px, `glass-close-button.tsx`) | Lucide `X` |
 | Try again | `RetryGlyph` (a circling arrow) | a chat photo that didn't upload, in the composer tray (22px, destructive ink) | Lucide `RotateCw` |
-| Edit | `PencilGlyph` | Messages' new-message button and Event details' Edit (Profile's back row until #3711) | Lucide `Pencil` |
+| Edit | `PencilGlyph` | Messages' new-message button, Event details' Edit, and the minutes ⋯ menu's Edit minutes (#4412) (Profile's back row until #3711) | Lucide `Pencil` |
+| Edit details (a record's facts, not its words) | `SlidersGlyph` (two sliders) | the minutes ⋯ menu's Edit details: type, visibility, linked event (#4412) | Lucide `SlidersHorizontal` |
 | Mark all read | `CheckAllGlyph` (two checks) | the Notifications screen header | None: the drawer words it, "Mark all read", since 2026-11-09 (#3929); it drew Lucide `CheckCheck` before |
 | Share | `ShareGlyph`: iOS's box with an arrow out of it, Android's three joined nodes, each platform's own mark (moved here from the image viewer's own file, 2026-11-06) | the image viewer (24px), chapter setup's `Share invite` gold button and Invite members' secondary one (`text.foreground`, 2026-11-09, #3828), in the button's ink | Lucide `Share` |
 | Invite link | `LinkGlyph` (two joined links) | chapter setup's invite step: its link card, in `gold.askText` on the ask tile, and each shared row (16px); Invite members (`(app)/invite.tsx`) draws the same card in the chapter accent on its subtle tile | Lucide `Link` |
@@ -344,6 +346,7 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Points | `PointsGlyph` | `points`, `trophy` |
 | Study hours | `StudyGlyph` | `study`, `graduation-cap` |
 | Service hours | `ServiceGlyph` | `service`, `hand-heart` |
+| Recruitment (#5924; two-tone since #5931) | `RecruitmentGlyph` | `recruitment`, `funnel` |
 | Polls (no nav row since #3871; kept for the chat composer's + menu, #3865) | `PollsGlyph` | `polls`, `chart-bar` |
 | Meetings (minutes) | `MeetingsGlyph` | `meetings`, `notebook` |
 | Documents | `DocumentsGlyph` | `documents`, `file-text` |
@@ -408,15 +411,13 @@ composer controls, 16px in card eyebrows and inline metadata (§2).
 | Bookmarked message (personal), solid while bookmarked (#4292) | `BookmarkGlyph` |
 | Attach a file | `AttachGlyph` |
 | Add a reaction | `ReactionGlyph` |
-| The composer's **+**, which opens Attach a file and every command's form (#3865): stroke only at 2, a plus has no area to fill | `PlusGlyph` |
+| The composer's **+**, which opens Attach a file, GIF, Poll, Event and Task (#3865; cut to those in #5772): stroke only at 2, a plus has no area to fill | `PlusGlyph` |
 | Poll, in the composer's **+** menu | `PollsGlyph` (shared with the nav intent) |
-| Sign-up sheet, in the composer's **+** menu (#3926): a clipboard, the board filled, the clip and a ticked line stroke-only | `SignupGlyph` |
-| Form, in the composer's **+** menu (#3926 step 3): a page of questions, each a choice dot and a line (the phone's + sheet draws the same path data) | `FormGlyph` |
-| Role picker, in the composer's **+** menu (#4958): the Roles shield, as the phone's + sheet draws it (web's card eyebrow is text, as its other cards' are) | `RolesGlyph` (shared with the in-screen Roles intent) |
 | Send a message: an up arrow, stroke only at 2.4 on the accent-filled round button, the web face of mobile's `↑` (2026-11-06) | `SendArrowGlyph` |
 | Jump to latest, on the round control over the thread's bottom-right corner: a down arrow, `SendArrowGlyph` turned over, the web face of mobile's `↓` (2026-11-12) | `JumpToLatestGlyph` |
+| New unreads, on the channel list's pill over its top or bottom edge: the same up and down arrows, pointing to where the unread channels are, the web face of mobile's `↑` and `↓` (#6045, 2026-11-25) | `SendArrowGlyph`, `JumpToLatestGlyph` |
 | Announcement | `AnnouncementGlyph` |
-| `#chapter-audit` / audit row | `AuditGlyph` |
+| `#chapter-audit` / audit row (channel removed 2026-11-21) | `AuditGlyph` |
 | Private / role-gated channel | `LockGlyph` |
 | Show or hide the channel member list (#3536), filled while shown | `MembersGlyph` (the nav set's `DirectoryGlyph`, re-exported); mobile's thread header draws the same shape, `NAV_GLYPHS.directory`, through `NavGlyph` |
 | Direct or group message | `DirectMessageGlyph` |
@@ -461,7 +462,7 @@ and [`apps/web/components/points/points-glyphs.tsx`](../../../apps/web/component
 both re-exporting the shell's silhouettes rather than redrawing them. Rendered at 20px in card titles,
 16px in table cells, and 14–16px as a badge companion (§2). Never before the title of a dialog, panel
 or sheet as decoration that repeats the button just pressed ([`components.md`](components.md#chrome-weight)
-§ Chrome weight and § Surface size, 2026-11-05). A mark that names the surface is not that: the mark on s17's "Ask Frapp" (components.md §11; the ✦ until #4702, the crest since) stays. (The onboarding slideshow's per-slide glyphs were the other example until the spotlight tour replaced it, #5080.)
+§ Chrome weight and § Surface size, 2026-11-05). A mark that names the surface is not that: the mark on s17's "Frapp Intelligence" (components.md §11; the ✦ until #4702, the crest since) stays. (The onboarding slideshow's per-slide glyphs were the other example until the spotlight tour replaced it, #5080.)
 Inside a `Button` they render at 16 whatever the call site asks for, because
 `buttonVariants` pins `[&_svg]:size-4` — which is also what keeps the required
 375px floor gate unaffected by a glyph swap.
@@ -741,9 +742,9 @@ The #920 Profile & pre-auth slice — the onboarding wizard and the routes
 outside `(dashboard)`. Family file:
 [`apps/web/components/profile/profile-glyphs.tsx`](../../../apps/web/components/profile/profile-glyphs.tsx);
 §6.2.3's rule applies, so importing across a directory is fine and redrawing
-is not. The first-run tour (#5080) draws no glyph: it lights the real controls,
-so `ProfileGlyph` and the tutorial slides' nav re-exports went with the
-slideshow that was their one consumer.
+is not. `ProfileGlyph` and the tutorial slides' nav re-exports went with the
+slideshow that was their one consumer; the first-run tour that replaced it
+(#5080) drew no glyph, and #5627 removed it too.
 
 | Semantic intent | Glyph |
 |---|---|

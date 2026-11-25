@@ -1,5 +1,6 @@
 "use client";
 
+import { NowCard } from "@/components/events/now-card";
 import {
   Fragment,
   Suspense,
@@ -30,6 +31,7 @@ import {
   useSubscriptionGate,
   type SubscriptionGate,
 } from "@/components/shared/subscription-gate";
+import { PageActions } from "@/components/layout/page-actions";
 import { SectionLabel } from "@/components/shared/section-label";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { Badge } from "@/components/ui/badge";
@@ -42,11 +44,6 @@ import { tasksGroupLink, tasksTaskLink } from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
 import { can, type ActivityCardKey } from "@repo/validation";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
-import {
-  ActivityLinkRow,
-  useActivityLinkActions,
-  type ActivityLinkActions,
-} from "./activity-link-row";
 import { ActivityPanel } from "./activity-panel";
 import {
   ActivityReminderRow,
@@ -54,6 +51,12 @@ import {
   type ActivityReminderActions,
 } from "./activity-reminder-row";
 import { ActivityRowActionButton } from "./activity-row-action";
+import {
+  useActivityMinutesActions,
+  type ActivityMinutesActions,
+  type MinutesToWriteRow,
+} from "./activity-minutes-actions";
+import { meetingHref } from "@/components/meetings/meeting-copy";
 import { activityRowActionGate } from "./activity-row-action-gate";
 import {
   ActivityAsk,
@@ -69,9 +72,7 @@ import {
   type ActivitySnoozeActions,
 } from "./activity-snooze-menu";
 import { RowMenu } from "@/components/shared/row-menu";
-import { RecapCard } from "./recap-card";
-import { SemesterStrip, SemesterStripSkeleton } from "./semester-strip";
-import { WeekCard } from "./week-card";
+import { WeekRing } from "./week-ring";
 import {
   ACTIVITY_ARCHIVE_EMPTY,
   ACTIVITY_ARCHIVE_SECTION_NAMES,
@@ -85,6 +86,7 @@ import {
   activityBadgeIsAsk,
   activityGroups,
   activityReview,
+  activityRunningCount,
   activityReviewQueue,
   activitySnoozedRows,
   activityWeekSummary,
@@ -95,9 +97,10 @@ import {
   activityStandingKeys,
   useActiveChapterId,
   useActivity,
+  useEventsOnNow,
+  nowCardEventIds,
+  withoutEvents,
   useActivityArchive,
-  useActivityRecap,
-  useActivityStanding,
   useActivityUnread,
   useActivitySnoozeWake,
   useActivityFaces,
@@ -400,19 +403,95 @@ function TaskGroupRow({
   );
 }
 
+/**
+ * A meeting to write minutes for (#5949), where the Meetings list page's
+ * Write minutes row was: the row opens the event, Write minutes on it starts
+ * the minutes and opens them, and its menu offers No minutes for this
+ * meeting (`useActivityMinutesActions`).
+ */
+function MinutesToWriteListRow({
+  row,
+  className,
+  actions,
+}: {
+  row: MinutesToWriteRow;
+  className: string;
+  actions: ActivityMinutesActions;
+}) {
+  const starting = actions.startingId === row.meeting.event_id;
+  return (
+    <RowMenu entries={actions.entriesFor(row)} label={`More for ${row.title}`}>
+      {(menuButton) => (
+        <li className="group flex items-center gap-1">
+          <div className="relative min-w-0 flex-1">
+            <Link
+              href={`/events?event=${row.meeting.event_id}`}
+              className={className}
+            >
+              <RowContent row={row} askOnRow />
+            </Link>
+            {/* Laid over the place the row keeps for its ask, as a Confirm
+                is (`PanelRowBody`). */}
+            <span className="pointer-events-none absolute right-9 top-1/2 z-10 -translate-y-1/2">
+              <Button
+                type="button"
+                variant="tinted"
+                size="sm"
+                className="pointer-events-auto h-7 shrink-0 px-2.5 text-caption"
+                disabled={actions.startingId !== null}
+                aria-busy={starting || undefined}
+                aria-label={`${row.badge?.label ?? ""}: ${row.title}`}
+                onClick={() => actions.write(row)}
+              >
+                {row.badge?.label}
+              </Button>
+            </span>
+          </div>
+          {menuButton}
+        </li>
+      )}
+    </RowMenu>
+  );
+}
+
+/**
+ * The member's own minutes, or the notes they take on another officer's
+ * (#5949): the row opens them, as the Meetings list page's rows did. Nothing
+ * to act on beside opening, so no menu.
+ */
+function MinutesLinkRow({
+  row,
+  className,
+}: {
+  row: Extract<ActivityRow, { kind: "minutes-draft" | "minutes-notes" }>;
+  className: string;
+}) {
+  const href =
+    row.kind === "minutes-draft"
+      ? meetingHref(row.draft.meeting_id)
+      : `${meetingHref(row.notes.meeting_id)}/notes`;
+  return (
+    <li>
+      <Link href={href} className={className}>
+        <RowContent row={row} />
+      </Link>
+    </li>
+  );
+}
+
 /** What every list on the page needs to draw one of its rows. */
 interface RowKit {
-  canRemoveLinks: boolean;
   snooze: ActivitySnoozeActions;
-  linkActions: ActivityLinkActions;
   reminderActions: ActivityReminderActions;
+  minutes: ActivityMinutesActions;
   rowActions: RowActions;
   onOpen: (row: ActivityRow) => void;
 }
 
 /**
- * A row as its kind draws it: a link, a card or a reminder that opens in
- * chat, or a panel.
+ * A row as its kind draws it: a card or a reminder that opens in chat, or a
+ * panel. Sign-up links are the channel's since #5779
+ * (`components/chat/channel-links-panel.tsx`), so none reach this page.
  */
 function Row({
   row,
@@ -425,16 +504,7 @@ function Row({
   onCard?: boolean;
 }) {
   const className = onCard ? ROW_ON_CARD_CLASS : ROW_CLASS;
-  return row.kind === "link" ? (
-    <ActivityLinkRow
-      row={row}
-      rowClassName={className}
-      canRemove={kit.canRemoveLinks}
-      actions={kit.linkActions}
-      onOpen={kit.onOpen}
-      leadEntries={kit.snooze.entriesFor(row)}
-    />
-  ) : row.kind === "card" ? (
+  return row.kind === "link" ? null : row.kind === "card" ? (
     <CardRow
       row={row}
       onOpen={kit.onOpen}
@@ -449,6 +519,14 @@ function Row({
     />
   ) : row.kind === "task-group" ? (
     <TaskGroupRow row={row} className={className} />
+  ) : row.kind === "minutes-to-write" ? (
+    <MinutesToWriteListRow
+      row={row}
+      className={className}
+      actions={kit.minutes}
+    />
+  ) : row.kind === "minutes-draft" || row.kind === "minutes-notes" ? (
+    <MinutesLinkRow row={row} className={className} />
   ) : (
     <PanelRow
       row={row}
@@ -477,36 +555,42 @@ function CouldNotLoad({
 
 /**
  * "To do": the member's own list by day (#4766), as Things' Today and
- * Todoist's Upcoming draw one. Overdue leads in the warning hue, then what
- * is open for check-in now, then each day. What waits on the member's review
- * is never here (`ReviewCard`).
+ * Todoist's Upcoming draw one, reminders included (#5779). Overdue leads in
+ * the warning hue, then what is open for check-in now, then each day. What
+ * waits on the member's review is never here (Running). The Calendar is one
+ * press away in its header, where the phone's Calendar card was (#5779).
  */
 function ToDoSection({
   days,
   unavailable,
   filter,
-  onCard,
   onShowAll,
   kit,
 }: {
   days: ActivityAgendaDay[];
   unavailable: ActivityGroup["unavailable"];
   filter: ActivityAgendaFilter;
-  /** The week card holds the next thing, so an empty list isn't "nothing". */
-  onCard: boolean;
   onShowAll: () => void;
   kit: RowKit;
 }) {
   const count = days.reduce((sum, day) => sum + day.rows.length, 0);
-  // Its one thing is on the week card: a heading over nothing says nothing.
-  if (count === 0 && onCard && filter === "all" && unavailable.length === 0) {
-    return null;
-  }
   return (
     <section aria-labelledby="activity-to-do" className="space-y-3">
-      <SectionLabel id="activity-to-do" count={count || null}>
-        To do
-      </SectionLabel>
+      <div className="flex items-baseline justify-between gap-3">
+        <SectionLabel id="activity-to-do" count={count || null}>
+          To do
+        </SectionLabel>
+        <Link
+          href="/events"
+          className={cn(
+            "inline-flex shrink-0 items-center gap-0.5 rounded-sm text-caption font-semibold text-accent-text hover:underline",
+            FOCUS_RING,
+          )}
+        >
+          Calendar
+          <ChevronRight aria-hidden="true" className="size-3.5" />
+        </Link>
+      </div>
       {filter !== "all" ? (
         <InlineNote>
           {activityNarrowedNote(filter, count, unavailable.length > 0)}{" "}
@@ -592,22 +676,36 @@ function DaySection({ day, kit }: { day: ActivityAgendaDay; kit: RowKit }) {
 }
 
 /**
- * A group under the To do list: Reminders (#4957), Waiting on others (the
- * polls the member posted, the events they made, the tasks they assigned),
- * or Links. The page
- * leaves a group with nothing in it out, so there is no empty line.
+ * Running (#5779): what the member is waiting on others for, To review and
+ * Waiting on others in one section. "3 to approve" leads for an officer
+ * (`ReviewCard`), then the tasks they assigned with how many are done, the
+ * events they made with who checked in, and the polls they posted, a few of
+ * each. The page leaves it out when it has nothing, so there is no empty
+ * heading.
  */
-function GroupSection({ group, kit }: { group: ActivityGroup; kit: RowKit }) {
-  const labelId = `activity-${group.id}`;
+function RunningSection({
+  review,
+  count,
+  group,
+  kit,
+}: {
+  /** The approve row, or `null` when nothing waits for the member's OK. */
+  review: ReactNode | null;
+  /** `activityRunningCount`: "28", or "28+" past the read's cap. */
+  count: string | null;
+  group: ActivityGroup | null;
+  kit: RowKit;
+}) {
   return (
-    <section aria-labelledby={labelId} className="space-y-3">
-      <SectionLabel id={labelId} count={group.rows.length || null}>
-        {group.label}
+    <section aria-labelledby="activity-running" className="space-y-3">
+      <SectionLabel id="activity-running" count={count}>
+        Running
       </SectionLabel>
-      {group.unavailable.length > 0 ? (
+      {review}
+      {group && group.unavailable.length > 0 ? (
         <CouldNotLoad sections={group.unavailable} />
       ) : null}
-      {group.parts.map((part) => (
+      {group?.parts.map((part) => (
         <GroupPart key={part.id} groupId={group.id} part={part} kit={kit} />
       ))}
     </section>
@@ -802,28 +900,7 @@ function SnoozedSection({ rows, kit }: { rows: ActivityRow[]; kit: RowKit }) {
       {open ? (
         <ul id="activity-snoozed" className={denseListClassName}>
           {rows.map((row) =>
-            row.kind === "link" ? (
-              // A snoozed link opens the link, and its menu wakes it.
-              <RowMenu
-                key={row.key}
-                entries={[kit.snooze.wakeEntry(row)]}
-                label={`More for ${row.title}`}
-              >
-                {(menuButton) => (
-                  <li className="group flex items-center gap-1">
-                    <a
-                      href={row.link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(ROW_CLASS, "min-w-0 flex-1")}
-                    >
-                      <RowContent row={row} />
-                    </a>
-                    {menuButton}
-                  </li>
-                )}
-              </RowMenu>
-            ) : row.kind === "card" ? (
+            row.kind === "card" ? (
               <CardRow
                 key={row.key}
                 row={row}
@@ -897,21 +974,22 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  * on others (#3897, `spec/behavior/activity.md`). An inbox beside chat, not a
  * home.
  *
- * Rebuilt around one ring on 2026-11-13 (#4766; Paul: "too many little cards
- * that, with the scale that we have right now, tell me no information"), the
- * phone's Activity tab on web, from the same model. Top to bottom:
+ * Cut to four parts on 2026-11-20 (#5779, Paul's direction A, "one home per
+ * question": Activity answers "what do I owe"), the phone's Activity tab on
+ * web, from the same model. Top to bottom:
  *
- * 1. The week card (`WeekCard`): done of total this week, a line per kind,
- *    and the one thing to do next.
- * 2. Last week (`RecapCard`), Sunday to Tuesday, until dismissed (#4983).
- * 3. This semester (`SemesterStrip`): up to four gauges.
- * 4. To review (`ReviewCard`): for an officer with something to sign off.
- * 5. To do: the member's own events, tasks, polls and sign-ups by day
- *    (`activityAgenda`), three to a day before "Show more". A line of the
- *    week card narrows it to one kind.
- * 6. Reminders, Waiting on others, then Links: the messages the member asked
- *    to be reminded about (#4957), what they made, and what was posted for
- *    them, each left out when it has nothing.
+ * 1. Now (`NowCard`, #5777): the event on right now, while one is.
+ * 2. To do: the member's own events, tasks, polls, sign-ups and reminders by
+ *    day (`activityAgenda`), three to a day before "Show more", with the
+ *    Calendar one press away in its header.
+ * 3. Running: "3 to approve" for an officer (`ReviewCard`), then the tasks
+ *    they assigned, the events they made and the polls they posted.
+ *
+ * The week is a small ring in the page header (`WeekRing`) beside Edit
+ * Activity; its lines narrow To do to one kind. Last week and This semester
+ * moved to the profile, beside Points, and Links to the channel they were
+ * posted in. The web has no Frapp card yet (#5520 step 5): its place in the
+ * order draws nothing.
  *
  * The page is usually a pane beside chat about a phone wide, and the whole
  * window when chat is closed, so it lays out by its own width (`@container`),
@@ -922,8 +1000,7 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  * and Later split are gone.
  *
  * A row opens the record in a panel drawn with chat's own card, where the
- * member acts on it; a sign-up link row opens the link (`ActivityLinkRow`),
- * and a sign-up or form its message in chat. When the read refreshes after
+ * member acts on it; a sign-up or form opens its message in chat. When the read refreshes after
  * an action, the panel shows the fresh row; a row that has left the list (a
  * vote cast, a completion confirmed) stays open as it was, so the member
  * sees the result of what they just did rather than having the panel vanish
@@ -931,12 +1008,6 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  */
 export function ActivityPage() {
   const activity = useActivity();
-  // How the member is doing this semester, under the week. Its own read:
-  // when it fails the rest of the page is as it was.
-  const standing = useActivityStanding();
-  // Last week, on Sunday to Tuesday only (`useActivityRecap` reads nothing
-  // the rest of the week). Its own read too, drawn only once it lands.
-  const recap = useActivityRecap();
   // The shared 30s clock the poll cards read: a poll whose time runs out
   // leaves the list within a tick, without a re-read (#4258), and the days
   // and Next stay current while the page is open.
@@ -972,9 +1043,19 @@ export function ActivityPage() {
   // page's own clock, so a snoozed row comes back within a tick of its time
   // (#4982). The week card counts from the whole read: snoozing something
   // doesn't finish it.
+  // The event the Now card shows is at the top (#5777), so To do, the week
+  // card's Next and the Frapp card leave it out rather than say it twice. One
+  // under "+N more on now" keeps its row, since the card doesn't open it.
+  const { events: onNow } = useEventsOnNow();
   const visible = useMemo(
-    () => (activity.data ? activityAwake(activity.data, now) : undefined),
-    [activity.data, now],
+    () =>
+      activity.data
+        ? withoutEvents(
+            activityAwake(activity.data, now),
+            nowCardEventIds(onNow),
+          )
+        : undefined,
+    [activity.data, now, onNow],
   );
   const snoozedRows = useMemo(
     () => (activity.data ? activitySnoozedRows(activity.data, now) : []),
@@ -993,13 +1074,17 @@ export function ActivityPage() {
     // A reminder row has no read to record (`readRef` is null) and is never
     // unread.
     if (row.unread && row.readRef) markRead([row.readRef]);
-    // A link opens in a new tab, a sign-up, form or reminder in chat, and a
-    // task for everyone on the Tasks board: no panel.
+    // A link opens in a new tab, a sign-up, form or reminder in chat, a
+    // task for everyone on the Tasks board, and minutes on their own page
+    // (#5949): no panel.
     if (
       row.kind !== "link" &&
       row.kind !== "card" &&
       row.kind !== "reminder" &&
-      row.kind !== "task-group"
+      row.kind !== "task-group" &&
+      row.kind !== "minutes-to-write" &&
+      row.kind !== "minutes-draft" &&
+      row.kind !== "minutes-notes"
     )
       setOpened(row);
   };
@@ -1028,9 +1113,7 @@ export function ActivityPage() {
       router.replace(tasksTaskLink(taskId));
     }
   };
-  // Remove (off everyone's Activity) is `channels:manage`'s, as in chat.
   const permissions = useMyPermissions();
-  const canRemoveLinks = can("channels:manage", permissions.data?.permissions);
   // The member's cards, in their order (#5520, `activity.md` § Cards), saved
   // on their account so the phone draws the same page; their role's default
   // until they save one, or while the read is out or failed.
@@ -1059,8 +1142,17 @@ export function ActivityPage() {
         }),
     });
   };
-  const linkActions = useActivityLinkActions();
   const reminderActions = useActivityReminderActions();
+  // Write minutes and No minutes on To do's minutes rows (#5949): each
+  // write takes the read again, so the row leaves.
+  const minutesActions = useActivityMinutesActions(() =>
+    chapterId
+      ? queryClient.invalidateQueries({
+          queryKey: activityKeys.chapter(chapterId),
+          exact: true,
+        })
+      : Promise.resolve(),
+  );
   const actionGate = activityRowActionGate(useSubscriptionGate());
   // Faces on the rows (#4402, item 4), from the roster chat already reads.
   const faceFor = useActivityFaces();
@@ -1126,19 +1218,29 @@ export function ActivityPage() {
   }
   // Held until the viewer is known (as the Events page holds its view): the
   // panel a row opens draws for the viewer.
+  // Now has its own read (#5777): a meeting on stays at the top while the
+  // page's read loads or fails.
   if (activity.isPending || (userLoading && !isOffline)) {
-    return <ActivityPageSkeleton />;
+    return (
+      <div className="space-y-8">
+        <NowCard />
+        <ActivityPageSkeleton />
+      </div>
+    );
   }
   // Only with nothing to show: a refetch that fails (this page refetches after
   // every action) keeps the list it already has rather than replacing it, and
   // the open panel with it, by an error page. The same guard as the task board.
   if (activity.isError && !activity.data) {
     return (
-      <ErrorState
-        title="Couldn't load your activity"
-        description={describeLoadFailure(activity.error)}
-        onRetry={() => void activity.refetch()}
-      />
+      <div className="space-y-8">
+        <NowCard />
+        <ErrorState
+          title="Couldn't load your activity"
+          description={describeLoadFailure(activity.error)}
+          onRetry={() => void activity.refetch()}
+        />
+      </div>
     );
   }
 
@@ -1169,56 +1271,47 @@ export function ActivityPage() {
     return reread();
   };
   const kit: RowKit = {
-    canRemoveLinks,
     snooze: snoozeActions,
-    linkActions,
     reminderActions,
+    minutes: minutesActions,
     rowActions: { gate: actionGate, onActed: actedOnRow },
     onOpen: openFromList,
   };
-  // The week card's next thing and the To review card's queue.
+  // The approve row's queue.
   const rowOnCard = (item: ActivityRow): ReactNode => (
     <Row key={item.key} row={item} kit={kit} onCard />
   );
   // Each card the member may move or hide, where their arrangement puts it.
-  // A card with nothing in it is null, as before. The Frapp card and the
-  // Calendar row are the phone's for now (#5520 step 5), so web keeps their
-  // place in the order and draws nothing there.
-  const group = (id: ActivityGroup["id"]) => {
-    const found = below.find((g) => g.id === id);
-    return found ? <GroupSection group={found} kit={kit} /> : null;
-  };
+  // A card with nothing in it is null. The Frapp card is the phone's for now
+  // (#5520 step 5), so web keeps its place in the order and draws nothing.
+  const running = below.find((g) => g.id === "running") ?? null;
   const cards: Record<ActivityCardKey, ReactNode> = {
     nudge: null,
-    calendar: null,
-    recap: recap.data ? <RecapCard recap={recap.data} now={now} /> : null,
-    semester: standing.isPending ? (
-      <SemesterStripSkeleton />
-    ) : standing.data ? (
-      <SemesterStrip standing={standing.data} />
-    ) : null,
-    review: review ? (
-      <ReviewCard review={review} renderRow={rowOnCard} />
-    ) : null,
     todo: agenda ? (
       <ToDoSection
         days={agenda.days}
         unavailable={agenda.unavailable}
         filter={filter}
-        // The one thing left is already on the week card.
-        onCard={agenda.next !== null}
         onShowAll={() => {
-          // The note and its button leave with the narrowing, so the
-          // week line that set it takes the focus they held.
-          document.getElementById(`activity-week-line-${filter}`)?.focus();
+          // The note and its button leave with the narrowing, so the ring
+          // that set it takes the focus they held.
+          document.getElementById("activity-week-ring")?.focus();
           setPicked("all");
         }}
         kit={kit}
       />
     ) : null,
-    reminders: group("reminders"),
-    waiting: group("made-by-you"),
-    links: group("links"),
+    running:
+      filter === "all" && (review || running) ? (
+        <RunningSection
+          review={
+            review ? <ReviewCard review={review} renderRow={rowOnCard} /> : null
+          }
+          count={activityRunningCount(review, running)}
+          group={running}
+          kit={kit}
+        />
+      ) : null,
   };
 
   return (
@@ -1250,28 +1343,32 @@ export function ActivityPage() {
           />
         ) : (
           <div className="space-y-8">
-            {summary && agenda ? (
-              <WeekCard
-                summary={summary}
-                next={agenda.next ? rowOnCard(agenda.next) : null}
-                nextLabel={agenda.nextLabel}
-                filter={filter}
-                onFilter={setPicked}
-              />
-            ) : null}
+            {/* The week and the page's one action, in the header beside the
+                title (#5779), where a full-width Edit Activity button and the
+                week card were. */}
+            <PageActions>
+              {summary ? (
+                <WeekRing
+                  summary={summary}
+                  filter={filter}
+                  onFilter={setPicked}
+                />
+              ) : null}
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                >
+                  Edit Activity
+                </Button>
+              ) : null}
+            </PageActions>
+            <NowCard />
             {arrangement.shown.map((key) => (
               <Fragment key={key}>{cards[key]}</Fragment>
             ))}
-            {canEdit ? (
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setEditing(true)}
-              >
-                Edit Activity
-              </Button>
-            ) : null}
             {snoozedRows.length > 0 ? (
               <SnoozedSection rows={snoozedRows} kit={kit} />
             ) : null}

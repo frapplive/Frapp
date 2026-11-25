@@ -15,6 +15,7 @@
 export const IPC = {
   setBadgeCount: "frapp-desktop:set-badge-count",
   openExternal: "frapp-desktop:open-external",
+  showWindow: "frapp-desktop:show-window",
 } as const;
 
 export type FrappDesktopBridge = {
@@ -23,8 +24,17 @@ export type FrappDesktopBridge = {
   readonly platform: "darwin" | "win32" | "linux";
   /** The unread count on the dock or taskbar icon; 0 clears it. */
   setBadgeCount(count: number): void;
-  /** Open the Supabase sign-in page in the member's default browser (OAuth, #4841). */
-  openExternal(url: string): void;
+  /**
+   * Open the Supabase sign-in page in the member's default browser (OAuth,
+   * #4841). Resolves to whether the browser was opened: the shell refuses any
+   * address that isn't a sign-in returning to this app.
+   */
+  openExternal(url: string): Promise<boolean>;
+  /**
+   * Bring the window forward, from the tray if it is hidden there. The page
+   * calls it when the member clicks one of its notifications (#4842).
+   */
+  showWindow(): void;
 };
 
 /** The badge stops counting where the dock does: macOS shows up to 99999. */

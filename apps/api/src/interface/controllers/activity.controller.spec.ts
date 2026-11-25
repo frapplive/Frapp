@@ -80,7 +80,7 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       enabledModules,
-      { weekStart: undefined, now: expect.any(Date) },
+      { weekStart: undefined, now: expect.any(Date), minutes: false },
     );
     expect(result).toBe(view);
   });
@@ -97,7 +97,7 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       null,
-      { weekStart, now: expect.any(Date) },
+      { weekStart, now: expect.any(Date), minutes: false },
     );
   });
 
@@ -116,7 +116,22 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       null,
-      { weekStart: yearAgo, now: expect.any(Date) },
+      { weekStart: yearAgo, now: expect.any(Date), minutes: false },
+    );
+  });
+
+  it('asks the service for the Minutes run only when the client draws it (#5949)', async () => {
+    activityService.getActivity.mockResolvedValue({ needs_you_count: 0 });
+
+    await controller.getActivity('chapter-1', 'user-1', null, {
+      minutes: 'true',
+    });
+
+    expect(activityService.getActivity).toHaveBeenCalledWith(
+      'chapter-1',
+      'user-1',
+      null,
+      { weekStart: undefined, now: expect.any(Date), minutes: true },
     );
   });
 

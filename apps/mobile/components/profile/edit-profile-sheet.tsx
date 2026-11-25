@@ -14,11 +14,19 @@ import {
   type TextInput,
 } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
-import { useFieldReveal, useUpdateUser } from "@repo/hooks";
+import {
+  useChapterMajors,
+  useFieldReveal,
+  usePermissionList,
+  useUpdateUser,
+} from "@repo/hooks";
 import {
   BIRTHDAY_COPY,
+  can,
   DISPLAY_NAME_MAX_LENGTH,
   MAJOR_MAX_LENGTH,
+  majorSuggestions,
+  NAME_LOCK_COPY,
   parseBirthdayVisibility,
   PHONE_MAX_LENGTH,
   PROFILE_ALUMNI_SECTION,
@@ -43,9 +51,14 @@ import {
 } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { Toggle } from "@/components/toggle";
+import { ListRow, ListSection } from "@/components/list-section";
 import {
   applyEdit,
+  BIRTHDAY_FIELD_ACCESSIBLE_LABELS,
   draftFromProfile,
+  tidiedPhone,
+  typedPhone,
+  YEAR_FIELD_WIDTH,
   hasChanges,
   profilePatch,
   rebaseEdits,
@@ -141,12 +154,6 @@ const BIRTHDAY_FIELDS: EditProfileField[] = [
 
 const copy = PROFILE_FIELD_COPY;
 
-/**
- * The graduation year's width beside Major: four digits at the body size plus
- * the field's padding, rounded up to the grid (foundations §9).
- */
-const YEAR_FIELD_WIDTH = 96;
-
 /** A typed graduation year as a number, or null while it isn't one. */
 function draftYear(typed: string): number | null {
   const year = typed.trim();
@@ -170,11 +177,22 @@ export const EditProfileSheet = forwardRef<
   const styles = createStyles(tokens, accent);
   const backgroundStyle = useSheetBackgroundStyle();
   const updateUser = useUpdateUser();
+  const canViewMembers = can("members:view", usePermissionList());
 
   const original = useMemo(() => draftFromProfile(profile), [profile]);
   const [edits, setEdits] = useState<ProfileEdits | null>(null);
-  const [submitFailed, setSubmitFailed] = useState(false);
+  // `true` for a failed save, or the API's own words when it refused a
+  // locked name (#5801), which a retry can't fix.
+  const [submitFailed, setSubmitFailed] = useState<boolean | string>(false);
   const [focused, setFocused] = useState<ProfileDraftField | null>(null);
+  // The chapter's majors, offered under Major while it has focus (#5778), so
+  // a member picks the spelling the chapter already pings. Read only then:
+  // the sheet stays mounted under the You tab, and the groups read (which
+  // needs `members:view`, as on web) is the whole chapter's. Once read it
+  // stays cached for the next focus.
+  const chapterMajors = useChapterMajors({
+    enabled: canViewMembers && focused === "major",
+  });
   // When a refusal shows: once the member leaves the field or presses Save,
   // never on the keystroke that is still on its way to a valid value
   // (`useFieldReveal`, components.md § Text input, "When an error shows").
@@ -190,7 +208,14 @@ export const EditProfileSheet = forwardRef<
     setTypedAgainst(original);
     setEdits(typed);
   }
-  const shown: ProfileDraft = { ...original, ...typed };
+  // A locked name (#5801) shows as stored and is never sent, even when it was
+  // typed before the lock reached this device.
+  const nameLocked = profile?.nameLocked === true;
+  const shown: ProfileDraft = {
+    ...original,
+    ...typed,
+    ...(nameLocked ? { displayName: original.displayName } : {}),
+  };
 
   const result = profilePatch(original, shown);
   // A refusal exists only once the member has typed (the sheet must not open
@@ -223,9 +248,15 @@ export const EditProfileSheet = forwardRef<
   const birthdayTyped =
     shown.birthdayMonth.trim() !== "" && shown.birthdayDay.trim() !== "";
 
+  // At most four, so the list under Major stays above the keyboard.
+  const majorOptions = majorSuggestions(chapterMajors, shown.major, 4);
+
   const edit = (field: ProfileDraftField) => (value: string) => {
     setSubmitFailed(false);
-    setEdits((latest) => applyEdit(latest, original, field, value));
+    // The phone formats as it is typed (#5798); `onChangeText` reports no
+    // caret, so it is worked out from the text before.
+    const next = field === "phone" ? typedPhone(value, shown.phone) : value;
+    setEdits((latest) => applyEdit(latest, original, field, next));
   };
 
   const resetReveal = reveal.reset;
@@ -352,7 +383,12 @@ export const EditProfileSheet = forwardRef<
         if (isSameVisit(sentFrom)) dismiss();
       },
       // The draft stays, so nothing typed is lost to a dropped connection.
-      onError: () => setSubmitFailed(true),
+      onError: (error) => {
+        const message = (error as { message?: unknown } | null)?.message;
+        setSubmitFailed(
+          message === NAME_LOCK_COPY.refusal ? NAME_LOCK_COPY.refusal : true,
+        );
+      },
       onSettled: () => {
         sending.current = false;
       },
@@ -376,6 +412,8 @@ export const EditProfileSheet = forwardRef<
       accessibleLabel?: string;
       /** A field sharing a row: its share of the width. */
       grow?: boolean;
+      /** Shown but not typed into: a name the chapter locks (#5801). */
+      readOnly?: boolean;
     },
   ) => (
     <View
@@ -400,11 +438,17 @@ export const EditProfileSheet = forwardRef<
         onChangeText={edit(name)}
         // Read-only while a save runs: the save sent what was typed when Save
         // was pressed, and anything typed after it would be dropped unsent.
-        editable={!updateUser.isPending}
+        editable={!updateUser.isPending && !options.readOnly}
         onFocus={() => setFocused(name)}
         onBlur={() => {
           setFocused((current) => (current === name ? null : current));
           reveal.blur(name);
+          // A 7-digit local number reads `555-0142` once the member leaves
+          // the field, not half-grouped as a longer one (#5798).
+          const tidy = name === "phone" ? tidiedPhone(shown.phone) : null;
+          if (tidy !== null) {
+            setEdits((latest) => applyEdit(latest, original, "phone", tidy));
+          }
         }}
         placeholder={options.placeholder}
         placeholderTextColor={tokens.color.text.muted}
@@ -418,6 +462,7 @@ export const EditProfileSheet = forwardRef<
         textAlignVertical={options.multiline ? "top" : undefined}
         style={[
           styles.field,
+          options.readOnly ? styles.fieldReadOnly : null,
           options.multiline ? styles.fieldMultiline : null,
           focused === name ? styles.fieldFocused : null,
           shownRefusal?.field === name ? styles.fieldInvalid : null,
@@ -481,6 +526,8 @@ export const EditProfileSheet = forwardRef<
           placeholder: copy.displayName.placeholder,
           autoCapitalize: "words",
           maxLength: DISPLAY_NAME_MAX_LENGTH,
+          readOnly: nameLocked,
+          hint: nameLocked ? NAME_LOCK_COPY.lockedLine : undefined,
         })}
         {field("phone", copy.phone.label, {
           placeholder: copy.phone.placeholder,
@@ -505,6 +552,26 @@ export const EditProfileSheet = forwardRef<
           })}
         </View>
         {rowError(["major", "graduationYear"])}
+        {/* The chapter's majors matching what is typed (#5778), as Mail's
+            and Contacts' fields suggest under themselves: a tap takes its
+            exact spelling, and typing on keeps a new one. */}
+        {focused === "major" && majorOptions.length > 0 ? (
+          <View
+            accessibilityRole="list"
+            accessibilityLabel={copy.major.suggestionsLabel}
+          >
+            <ListSection>
+              {majorOptions.map((major) => (
+                <ListRow
+                  key={major}
+                  label={major}
+                  action
+                  onPress={() => edit("major")(major)}
+                />
+              ))}
+            </ListSection>
+          </View>
+        ) : null}
         {/* The birthday (#4959): month, day and an optional year as digits,
             then the switch that shares it with the chapter (#5282). */}
         <View
@@ -515,21 +582,21 @@ export const EditProfileSheet = forwardRef<
         </View>
         <View style={styles.row} onLayout={anchor(BIRTHDAY_FIELDS, "bottom")}>
           {field("birthdayMonth", BIRTHDAY_COPY.monthLabel, {
-            accessibleLabel: "Birthday month, 1 to 12",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayMonth,
             placeholder: "MM",
             keyboardType: "number-pad",
             maxLength: 2,
             grow: true,
           })}
           {field("birthdayDay", BIRTHDAY_COPY.dayLabel, {
-            accessibleLabel: "Birthday day",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayDay,
             placeholder: "DD",
             keyboardType: "number-pad",
             maxLength: 2,
             grow: true,
           })}
           {field("birthdayYear", BIRTHDAY_COPY.yearLabel, {
-            accessibleLabel: "Birth year, optional",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayYear,
             placeholder: "YYYY",
             keyboardType: "number-pad",
             maxLength: 4,
@@ -593,7 +660,11 @@ export const EditProfileSheet = forwardRef<
           </>
         ) : null}
 
-        {submitFailed ? (
+        {typeof submitFailed === "string" ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {submitFailed}
+          </Text>
+        ) : submitFailed ? (
           <Text accessibilityRole="alert" style={styles.error}>
             That didn&apos;t save. Your changes are still here, so try again.
           </Text>
@@ -662,6 +733,10 @@ function createStyles(tokens: SignetTokens, accent: string) {
         tokens.spacing.sm * 2,
     },
     fieldFocused: fieldStyles.fieldFocused,
+    // A locked name (#5801): its text muted, as web's read-only field.
+    fieldReadOnly: {
+      color: tokens.color.text.mutedForeground,
+    },
     fieldInvalid: {
       borderColor: tokens.color.semantic.destructive,
     },

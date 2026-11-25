@@ -75,7 +75,7 @@ export type ParsedDriveFileLink =
  * and Slides to PDF, Sheets to .xlsx, the upload allowlist and size cap), and
  * files it as a document with a folder and who-can-see list checked as an
  * upload's are. The worker then checks Drive's modified time about every 15
- * minutes and copies the file again when it changed; Frapp AI re-reads it
+ * minutes and copies the file again when it changed; Frapp Intelligence re-reads it
  * because the copy's stored file changed.
  *
  * Which files a chapter may link (#5185 again): the service account sees
@@ -331,7 +331,9 @@ export class GoogleDriveLinkService {
         await this.dropObject(storagePath);
         return 'gone';
       }
-      await this.dropObject(document.storage_path);
+      if (document.storage_path !== null) {
+        await this.dropObject(document.storage_path);
+      }
       await this.links.finish(link.id, { last_error: null });
       return 'updated';
     } catch (error) {

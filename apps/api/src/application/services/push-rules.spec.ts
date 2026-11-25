@@ -276,37 +276,6 @@ describe('decidePush', () => {
     ).toBe('send');
   });
 
-  it('an audit mirror never pushes, whatever the member opted into', () => {
-    const optIns: ChatNotificationPreferenceRow[] = [
-      {
-        user_id: 'u',
-        chapter_id: 'c',
-        scope: 'channel',
-        scope_id: 'ch-1',
-        scope_kind: null,
-        level: 'all',
-      },
-      {
-        user_id: 'u',
-        chapter_id: 'c',
-        scope: 'kind',
-        scope_id: null,
-        scope_kind: 'system_audit',
-        level: 'all',
-      },
-    ];
-    const input = {
-      channel: ch('chapter-audit'),
-      messageKind: 'system_audit',
-      recipientIsPresent: false,
-      hasMention: false,
-      preferences: optIns,
-    };
-    expect(decidePush({ ...input, isAuditMirror: true })).toBe('skip-level');
-    // The same opt-ins still reach a server notice (no mirror flag).
-    expect(decidePush(input)).toBe('send');
-  });
-
   it('channel off pref still pushes on a mention (mute override)', () => {
     expect(
       decidePush({
@@ -437,7 +406,7 @@ describe('officer-set channel defaults and DMs (#2771)', () => {
     ).toBe('all');
   });
 
-  describe('an Ask Frapp answer posted to the channel (#4713)', () => {
+  describe('a Frapp Intelligence answer posted to the channel (#4713)', () => {
     // The member who asked chose to put it there; nobody else asked for it.
     it.each([
       ['a channel set to all', ch('general'), false],

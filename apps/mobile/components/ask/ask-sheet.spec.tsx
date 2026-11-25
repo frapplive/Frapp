@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import React from "react";
 import { act } from "react";
-import { ActionSheetIOS } from "react-native";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRouter } from "expo-router";
@@ -124,6 +123,19 @@ const dictating = vi.hoisted(() => ({
   cancel: vi.fn(),
   clean: vi.fn(async (text: string): Promise<string | null> => text),
 }));
+// A task card's who reads the chapter as the task form does.
+vi.mock("@/lib/tasks/use-who-directory", async () => {
+  const { buildWhoDirectory } = await import("@repo/hooks/task-who-picker");
+  const directory = buildWhoDirectory({ roster: [], viewerUserId: null });
+  return {
+    useWhoDirectory: () => ({
+      directory,
+      people: "ready",
+      sets: "ready",
+      followers: [],
+    }),
+  };
+});
 vi.mock("@/lib/dictation/speech", () => ({
   isDictationAvailable: () => dictating.available,
   requestDictationPermission: async () => dictating.granted,
@@ -167,6 +179,14 @@ vi.mock("@/lib/chapter-branding", () => ({
 
 import { FrappCrest } from "@/components/frapp-crest";
 import { AskSheet } from "./ask-sheet";
+import {
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
+
+afterEach(() => {
+  dismissItemMenu();
+});
 
 const modal = { present: vi.fn(), dismiss: vi.fn() };
 
@@ -591,7 +611,7 @@ describe("AskSheet", () => {
   });
 
   // #5139: search left the field for its own screen; typing lists nothing.
-  it("only asks: typing lists no places, and the field reads Ask Frapp anything", () => {
+  it("only asks: typing lists no places, and the field reads What do you need?", () => {
     const tree = render();
     open(tree);
     act(() => field(tree).props.onChangeText("rush"));
@@ -747,18 +767,13 @@ describe("AskSheet", () => {
       expect(text).toContain("Came to chapter");
       expect(text).toContain("Ana Ruiz");
       // Dismiss lives in the card's ··· menu (#5148).
-      const sheetSpy = vi
-        .spyOn(ActionSheetIOS, "showActionSheetWithOptions")
-        .mockImplementation(() => undefined);
       const more = tree.root.findAll(
         (node) =>
           typeof node.type === "string" &&
           String(node.props.accessibilityLabel ?? "").startsWith("More: "),
       )[0]!;
       act(() => more.props.onPress());
-      const [options, pick] = sheetSpy.mock.calls.at(-1)!;
-      sheetSpy.mockRestore();
-      await act(async () => pick(options.options.indexOf(ACT_COPY.dismiss)));
+      await act(async () => pickItemMenuAction(ACT_COPY.dismiss));
       expect(hooks.resolveProposal).toHaveBeenCalledWith(
         "turn-3",
         expect.objectContaining({ kind: "cancelled" }),
@@ -836,7 +851,7 @@ describe("the sheet itself (#4702)", () => {
     const tree = render();
     const background = flat(sheet(tree)!.props.backgroundStyle);
     // `surface.background`; a sheet's own fill is `surface.popover`.
-    expect(String(background.backgroundColor)).toBe("#050505");
+    expect(String(background.backgroundColor)).toBe("#0B0A0D");
     // Still a sheet's shape.
     expect(background.borderTopLeftRadius).toBeGreaterThan(0);
   });
@@ -1094,8 +1109,9 @@ describe("dictation (#5276)", () => {
     dictating.finish.mockReset();
     dictating.cancel.mockReset();
     dictating.clean.mockReset();
-    dictating.clean.mockImplementation(async (text: string) =>
-      text.replace(/^so um /, "").replace(/^./, (c) => c.toUpperCase()) + "?",
+    dictating.clean.mockImplementation(
+      async (text: string) =>
+        text.replace(/^so um /, "").replace(/^./, (c) => c.toUpperCase()) + "?",
     );
   });
   afterEach(() => {

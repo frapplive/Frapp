@@ -2,7 +2,7 @@
 import React from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSignetTokens } from "@repo/theme/signet";
 import { FrappThemeProvider, typeRole } from "@/lib/theme";
@@ -100,7 +100,19 @@ const state = vi.hoisted(() => ({
   membersError: false,
   // The Non-chapter business roles the viewer can pick (#4958).
   pickable: [] as { id: string; name: string; held: boolean }[],
+  // `GET /v1/members/phone-reach`; `null` is a read not answered yet.
+  phoneReach: null as null | {
+    scope: "chapter" | "self";
+    byUserId: Map<string, unknown>;
+  },
+  // The chapter's module switches. Points and Hours are off unless a spec
+  // turns them on, so the fraternal-order specs see only that sort (#5950).
+  modules: { points: false, hours: false } as Record<string, boolean>,
+  // Each standing's board for the period: user id to total.
+  boards: {} as Record<string, Record<string, number>>,
+  standingsError: false,
 }));
+const standingsAsked: [string | null, string][] = [];
 
 // One refetch per read, so a pull can be checked against each of them.
 const refetches = vi.hoisted(() => ({
@@ -114,6 +126,7 @@ const refetches = vi.hoisted(() => ({
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useMemberDisplayNames: () => ({ avatarTintFor: () => null }),
+  useMemberPhoneReach: () => ({ reach: state.phoneReach }),
   useActiveChapterId: () => state.chapterId,
   usePickableRoles: () => ({ roles: state.pickable, isLoading: false }),
   usePermissionList: () => state.permissions,
@@ -128,6 +141,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
           refetch: refetches.roles,
         }
       : read(state.roles, refetches.roles),
+  useGroups: () => ({ data: [] }),
   useMembers: () =>
     state.membersError
       ? {
@@ -161,8 +175,35 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
           }
         : read(state.classes, refetches.classes),
   useCurrentChapter: () => ({
-    data: state.vocabulary ? { vocabulary: state.vocabulary } : undefined,
+    data: {
+      ...(state.vocabulary ? { vocabulary: state.vocabulary } : {}),
+      enabled_modules: state.modules,
+    },
   }),
+  // The standings model has its own spec (`standings.spec.ts`).
+  DEFAULT_STANDINGS_WINDOW: "semester",
+  useStandings: (metric: string | null, window: string) => {
+    standingsAsked.push([metric, window]);
+    const board = metric ? (state.boards[metric] ?? {}) : {};
+    const totals = Object.values(board);
+    return {
+      windowOptions: [
+        { value: "semester", label: "This semester" },
+        { value: "all", label: "All time" },
+      ],
+      window,
+      totalOf: (id: string) => board[id] ?? 0,
+      rankOf: (id: string) =>
+        (board[id] ?? 0) > 0
+          ? totals.filter((total) => total > (board[id] ?? 0)).length + 1
+          : null,
+      figure: (total: number) => `${total} points`,
+      isLoading: false,
+      isError: state.standingsError,
+      refetch: () => {},
+    };
+  },
+  useViewerUserId: () => "u-1",
   useAlumni: (filters?: { company?: string }) =>
     read(filters?.company === "Acme" ? [CHARLES] : ALUMNI, refetches.alumni),
   // Off without a term, as the real query is, so a pull skips it then.
@@ -302,6 +343,20 @@ type TrailingChip = React.ReactElement<{
  * The chips after the tabs: the Alumni tab's one Filters chip, or the Actives
  * tab's Filters chip and, when offered, its sort (a fragment of both).
  */
+/** The option sheet titled `title` (Sort, Period), as the screen built it. */
+function sortSheet(tree: ReactTestRenderer, title: string) {
+  return tree.root.find(
+    (node) =>
+      node.props.title === title && typeof node.props.onSelect === "function",
+  ) as unknown as {
+    props: {
+      options: { value: string; label: string }[];
+      selected: string;
+      onSelect: (value: string | null) => void;
+    };
+  };
+}
+
 function trailingChips(tree: ReactTestRenderer): TrailingChip[] {
   const trailing = chips(tree).trailing as React.ReactElement<{
     children?: React.ReactNode;
@@ -341,6 +396,7 @@ function countOf(tree: ReactTestRenderer, value: string) {
 }
 
 beforeEach(() => {
+  state.phoneReach = null;
   state.pickable = [];
   state.chapterId = "c-1";
   state.search = [];
@@ -354,6 +410,10 @@ beforeEach(() => {
   state.vocabulary = undefined;
   state.roles = [];
   state.rolesError = false;
+  state.modules = { points: false, hours: false };
+  state.boards = {};
+  state.standingsError = false;
+  standingsAsked.length = 0;
   for (const refetch of Object.values(refetches)) {
     refetch.mockReset().mockResolvedValue(undefined);
   }
@@ -562,6 +622,7 @@ describe("s13's Actives filters (#3971)", () => {
       classes: { id: string; name: string }[];
       classWord: string;
       rolesStatus: string;
+      offerNoBaseRole?: boolean;
     };
   }
 
@@ -572,6 +633,39 @@ describe("s13's Actives filters (#3971)", () => {
   beforeEach(() => {
     state.roles = ROLES;
     state.members = ACTIVES;
+  });
+
+  it("offers No base role to whoever can give roles, in a chapter with base roles (#5802)", () => {
+    state.permissions = [];
+    expect(sheet(render()).offerNoBaseRole).toBe(false);
+
+    state.permissions = ["roles:manage"];
+    // No base roles in the chapter: nothing to be missing.
+    state.roles = [
+      { id: "r-member", name: "Member", color: null },
+      { id: "r-rush", name: "Rush Chair", color: "#ff0000" },
+    ];
+    expect(sheet(render()).offerNoBaseRole).toBe(false);
+
+    state.roles = [
+      {
+        id: "r-member",
+        name: "Actives",
+        color: null,
+        system_key: "MEMBER",
+      } as (typeof ROLES)[number],
+      ...ROLES.slice(1),
+    ];
+    state.members = [
+      { ...MARCUS, role_ids: ["r-member", "r-rush"] },
+      { ...ANDRE, role_ids: ["r-rush"] },
+    ];
+    const tree = render();
+    expect(sheet(tree).offerNoBaseRole).toBe(true);
+    pick(tree, { roleId: "no-base-role" });
+    // Marcus holds Actives; Andre holds Rush Chair alone.
+    expect(listed(tree)).toEqual(["Andre Silva"]);
+    state.permissions = [];
   });
 
   it("hands the sheet the actives' roles (not Alumni) and years, newest first", () => {
@@ -622,6 +716,58 @@ describe("s13's Actives filters (#3971)", () => {
     act(() => body().props.children.props.action!.onPress());
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
     expect(activesFiltersChip(tree).props.label).toBe("Filters");
+  });
+
+  it("offers the Phone app filter only with the chapter's reach, and narrows to who a push can't reach", () => {
+    const tree = render();
+    expect(
+      (sheet(tree) as unknown as { showPhoneReach?: boolean }).showPhoneReach,
+    ).toBe(false);
+    act(() => tree.unmount());
+
+    state.phoneReach = {
+      scope: "chapter",
+      byUserId: new Map([
+        [
+          "u-1",
+          {
+            user_id: "u-1",
+            state: "on",
+            platform: "ios",
+            last_opened_at: null,
+          },
+        ],
+        [
+          "u-2",
+          {
+            user_id: "u-2",
+            state: "web_only",
+            platform: null,
+            last_opened_at: null,
+          },
+        ],
+      ]),
+    };
+    const officer = render();
+    expect(
+      (sheet(officer) as unknown as { showPhoneReach?: boolean })
+        .showPhoneReach,
+    ).toBe(true);
+    pick(officer, { phoneReach: "unreachable" });
+    expect(listed(officer)).toEqual(["Andre Silva"]);
+    // The count line rides in the list's header, which the FlatList stand-in
+    // doesn't draw, so it is rendered on its own.
+    let header!: ReactTestRenderer;
+    act(() => {
+      header = create(
+        <FrappThemeProvider>
+          {list(officer).props.ListHeaderComponent as React.ReactElement}
+        </FrappThemeProvider>,
+      );
+    });
+    expect(screenText(header)).toContain(
+      "1 of 2 members can't get notifications",
+    );
   });
 
   it("drops a pick whose role no longer exists rather than empty the list", () => {
@@ -722,6 +868,12 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     )?.meta;
   }
 
+  /** Flip between name and the chapter's order, through the Sort sheet. */
+  function toggleOrder(tree: ReactTestRenderer) {
+    const on = orderChip(tree)!.props.on;
+    act(() => sortSheet(tree, "Sort").props.onSelect(on ? "name" : "order"));
+  }
+
   it("shows a chapter with no classes and no numbers none of it", () => {
     const tree = render();
 
@@ -753,22 +905,23 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     const tree = render();
 
     const chip = orderChip(tree)!;
-    expect(chip.props.label).toBe("Sort: roll number");
-    expect(chip.props.accessibilityLabel).toBe("Sort by roll number");
+    expect(chip.props.label).toBe("Sort: Name");
     expect(chip.props.on).toBe(false);
+    expect(sortSheet(tree, "Sort").props.options).toEqual([
+      { value: "name", label: "Name" },
+      { value: "order", label: "roll number" },
+    ]);
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
 
-    act(() => chip.props.onPress());
+    toggleOrder(tree);
 
     expect(orderChip(tree)!.props.on).toBe(true);
-    expect(orderChip(tree)!.props.accessibilityState).toEqual({
-      selected: true,
-    });
+    expect(orderChip(tree)!.props.label).toBe("Sort: roll number");
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
     // Sorted by class, the rows still name it.
     expect(metaOf(tree, "Marcus Reid")).toBe("Alpha");
 
-    act(() => orderChip(tree)!.props.onPress());
+    toggleOrder(tree);
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
   });
 
@@ -779,8 +932,9 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     ];
     const tree = render();
 
+    expect(orderChip(tree)!.props.label).toBe("Sort: Name");
+    toggleOrder(tree);
     expect(orderChip(tree)!.props.label).toBe("Sort: Fraternal order");
-    act(() => orderChip(tree)!.props.onPress());
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
   });
 
@@ -788,7 +942,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.classes = CLASSES;
     state.members = WITH_CLASSES;
     const tree = render();
-    act(() => orderChip(tree)!.props.onPress());
+    toggleOrder(tree);
 
     act(() => chips(tree).onSelect("alumni"));
 
@@ -840,7 +994,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.classes = CLASSES;
     state.members = WITH_CLASSES;
     const tree = render();
-    act(() => orderChip(tree)!.props.onPress());
+    toggleOrder(tree);
 
     state.classesFailed = "refetch";
     rerender(tree);
@@ -862,7 +1016,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.members = WITH_CLASSES;
     state.search = WITH_CLASSES.slice(0, 2);
     const tree = render();
-    act(() => orderChip(tree)!.props.onPress());
+    toggleOrder(tree);
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
 
     const field = inHeader(
@@ -1426,5 +1580,86 @@ describe("Add roles on the Directory (#4958, placement provisional)", () => {
   it("offers nothing in a chapter with none", () => {
     const tree = render();
     expect(() => addRoles(tree)).toThrow("not in the list header");
+  });
+});
+
+describe("s13 standings (#5950)", () => {
+  function sortChip(tree: ReactTestRenderer) {
+    return (
+      trailingChips(tree).find((c) => c.props.label.startsWith("Sort:")) ?? null
+    );
+  }
+
+  beforeEach(() => {
+    state.modules = { points: true, hours: true };
+  });
+
+  it("offers the standings in the Sort sheet while their modules are on", () => {
+    const tree = render();
+    expect(sortSheet(tree, "Sort").props.options.map((o) => o.label)).toEqual([
+      "Name",
+      "Most points",
+      "Most service hours",
+    ]);
+  });
+
+  it("ranks the actives by points this semester, highest first, with their place", () => {
+    state.boards.points = { "u-2": 30, "u-1": 12 };
+    const tree = render();
+    act(() => sortSheet(tree, "Sort").props.onSelect("points"));
+
+    expect(standingsAsked.at(-1)).toEqual(["points", "semester"]);
+    expect(sortChip(tree)!.props.label).toBe("Sort: Most points");
+    expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
+    // The period sits beside the order and opens its own sheet.
+    const period = trailingChips(tree).find(
+      (c) => c.props.label === "This semester",
+    );
+    expect(period).toBeDefined();
+    act(() => sortSheet(tree, "Period").props.onSelect("all"));
+    expect(standingsAsked.at(-1)).toEqual(["points", "all"]);
+  });
+
+  it("leads each row with its place and ends it with the period's total", () => {
+    state.boards.points = { "u-2": 30, "u-1": 12 };
+    const tree = render();
+    act(() => sortSheet(tree, "Sort").props.onSelect("points"));
+    const renderItem = list(tree).props.renderItem as (info: {
+      item: DirectoryRow;
+      index: number;
+    }) => React.ReactElement<{ standing?: unknown }>;
+    const rows = list(tree).props.data as DirectoryRow[];
+    expect(renderItem({ item: rows[0]!, index: 0 }).props.standing).toEqual({
+      rank: 1,
+      figure: "30 points",
+      period: "This semester",
+      isViewer: false,
+    });
+    // Marcus is the viewer here.
+    expect(renderItem({ item: rows[1]!, index: 1 }).props.standing).toMatchObject(
+      { rank: 2, isViewer: true },
+    );
+  });
+
+  it("opens on the standing a link names", () => {
+    vi.mocked(useLocalSearchParams).mockReturnValueOnce({ sort: "points" });
+    const tree = render();
+    expect(sortChip(tree)!.props.label).toBe("Sort: Most points");
+  });
+
+  it("offers no standing whose module is off", () => {
+    state.modules = { points: false, hours: true };
+    const tree = render();
+    expect(sortSheet(tree, "Sort").props.options.map((o) => o.label)).toEqual([
+      "Name",
+      "Most service hours",
+    ]);
+  });
+
+  it("draws no rows, and says so, when the standings don't load", () => {
+    state.standingsError = true;
+    const tree = render();
+    act(() => sortSheet(tree, "Sort").props.onSelect("points"));
+    expect(listed(tree)).toEqual([]);
   });
 });

@@ -11,8 +11,10 @@ describe('AiSuggestionConsentListener', () => {
       }),
     } as unknown as AiConsentService;
     const dropQuotesBy = jest.fn().mockResolvedValue(2);
+    const deleteChangesForUser = jest.fn().mockResolvedValue(1);
     const listener = new AiSuggestionConsentListener(consent, {
       dropQuotesBy,
+      deleteChangesForUser,
     } as unknown as IAiSuggestionRepository);
 
     listener.onModuleInit();
@@ -20,6 +22,8 @@ describe('AiSuggestionConsentListener', () => {
     await registered?.('user-1');
 
     expect(dropQuotesBy).toHaveBeenCalledWith('user-1');
+    // And what they changed in suggestions, with its sealed words.
+    expect(deleteChangesForUser).toHaveBeenCalledWith('user-1');
   });
 
   it('lets a failure through, so the No fails and the retry runs it again', async () => {

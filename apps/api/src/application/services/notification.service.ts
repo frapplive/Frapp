@@ -17,7 +17,10 @@ import type { IUserSettingsRepository } from '#domain/repositories/notification.
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { NOTIFICATION_PROVIDER } from '#domain/adapters/notification.interface';
-import type { INotificationProvider } from '#domain/adapters/notification.interface';
+import type {
+  INotificationProvider,
+  PushCommunication,
+} from '#domain/adapters/notification.interface';
 import type {
   Notification,
   PushToken,
@@ -159,6 +162,8 @@ export type NotifyPayload = {
   threadId?: string;
   /** The push's action buttons (`PushPayload.categoryId`). Not stored on the in-app row. */
   categoryId?: string;
+  /** Who a chat push is from (`PushPayload.communication`). Not stored on the in-app row. */
+  communication?: PushCommunication;
   /**
    * The one chat message this notification quotes (#4418): stored as the
    * row's `chat_message_id`, so deleting the message deletes the row and an
@@ -250,6 +255,7 @@ function inAppRow(
   userId: string,
   chapterId: string,
   payload: NotifyPayload,
+  effectivePriority: NonNullable<NotifyPayload['priority']>,
 ): Pick<
   Notification,
   'chapter_id' | 'user_id' | 'title' | 'body' | 'data' | 'chat_message_id'
@@ -259,7 +265,20 @@ function inAppRow(
     user_id: userId,
     title: payload.title,
     body: payload.body,
-    data: payload.data ?? {},
+    // The priority the push went out at, and `quieted` when quiet hours or
+    // Do Not Disturb are what made it `SILENT` rather than its sender. A
+    // client that raises its own banner from the row, as the desktop app
+    // does (#4842), reads both here, so the quiet rules stay in this service:
+    // it holds back a quieted row and shows a sender's `SILENT` one without
+    // a sound, as a phone does.
+    data: {
+      ...(payload.data ?? {}),
+      priority: effectivePriority,
+      ...(effectivePriority === 'SILENT' &&
+      (payload.priority ?? 'NORMAL') !== 'SILENT'
+        ? { quieted: true }
+        : {}),
+    },
     ...(payload.chatMessageId
       ? { chat_message_id: payload.chatMessageId }
       : {}),
@@ -350,7 +369,7 @@ export class NotificationService {
     payload = payloadFor(payload, userId, settings);
 
     const notification = await this.notificationRepo.create(
-      inAppRow(userId, chapterId, payload),
+      inAppRow(userId, chapterId, payload, effectivePriority),
     );
     // The message this row quotes was deleted while it was being sent (#4418):
     // the database dropped the row, and the push would carry the same words.
@@ -572,8 +591,13 @@ export class NotificationService {
     const insertResults = await Promise.allSettled(
       recipientChunks.map((chunk) =>
         this.notificationRepo.createMany(
-          chunk.map(({ userId }) =>
-            inAppRow(userId, chapterId, payloadByUser.get(userId) ?? payload),
+          chunk.map(({ userId, effectivePriority }) =>
+            inAppRow(
+              userId,
+              chapterId,
+              payloadByUser.get(userId) ?? payload,
+              effectivePriority ?? 'NORMAL',
+            ),
           ),
         ),
       ),
@@ -688,6 +712,7 @@ export class NotificationService {
         category,
         threadId: payload.threadId,
         categoryId: payload.categoryId,
+        communication: payload.communication,
       },
     );
 
@@ -968,6 +993,29 @@ export class NotificationService {
   }
 
   /**
+   * Take back what a task's Mark done told members (#5732): the completion
+   * was reopened (taken back, sent back, or handed to someone else), so the
+   * review row its creator got and the "finished" rows its followers got go
+   * from their lists. A push already on a lock screen can't be recalled; the
+   * row it opens can. Never throws: the write it follows has already landed.
+   */
+  async retractTaskCompletion(
+    chapterId: string,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationRepo.deleteTaskCompletionRows(chapterId, taskId);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'task-completion-retract',
+        message: `could not clear the completion rows for task ${taskId}`,
+        error,
+      });
+    }
+  }
+
+  /**
    * Clear notifications from the member's list (#3948): the rows named, if
    * they are the caller's in this chapter, and with `conversation` the rest
    * of that conversation's rows up to now too, so a cleared entry doesn't
@@ -999,6 +1047,7 @@ export class NotificationService {
     userId: string,
     token: string,
     deviceName?: string,
+    notificationsEnabled?: boolean,
   ): Promise<PushToken> {
     const existing = await this.pushTokenRepo.findByToken(token);
     if (existing) {
@@ -1016,6 +1065,10 @@ export class NotificationService {
           deviceName && existing.device_name !== deviceName
             ? deviceName
             : undefined,
+          // What the phone's push switch reads now (officers' Directory
+          // "Phone app" filter). Absent from an older build, which leaves the
+          // stored value as it was.
+          notificationsEnabled,
         );
         return updated ?? existing;
       }
@@ -1036,6 +1089,7 @@ export class NotificationService {
       user_id: userId,
       token,
       device_name: deviceName ?? null,
+      notifications_enabled: notificationsEnabled ?? null,
     });
     try {
       await this.dropOldestPushTokens(userId);
@@ -1112,6 +1166,12 @@ export class NotificationService {
    * a user may only read or write notification preferences for a chapter they
    * are an active member of. The chapter here comes from the request query/body
    * rather than the resolved active chapter, so it must be verified explicitly.
+   *
+   * Any tenant kind (#5933, settling #5925's review note): a council's
+   * members get its notifications as a chapter's do, so they keep
+   * preferences there too. Membership is the boundary, as `ChapterGuard`'s
+   * is; there is no chapter-only feature behind a preference to keep from a
+   * council.
    */
   private async assertChapterMembership(
     userId: string,

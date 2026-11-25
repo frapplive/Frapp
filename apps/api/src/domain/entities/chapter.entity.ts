@@ -1,4 +1,9 @@
-import type { SubscriptionStatus } from '@repo/validation';
+import type {
+  CouncilType,
+  RecruitmentModel,
+  SubscriptionStatus,
+  TenantKind,
+} from '@repo/validation';
 
 /** `@repo/validation`'s, the one declaration the clients read too. */
 export type { SubscriptionStatus };
@@ -7,6 +12,21 @@ export interface Chapter {
   id: string;
   name: string;
   university: string;
+  /**
+   * The tenant kind (ADR-27, 20261123194106): a chapter or a council, both
+   * rows of this table. `not null default 'chapter'`. Optional here only
+   * because the narrower projections don't select it. Never derived from
+   * `org_archetype`.
+   */
+  kind?: TenantKind;
+  /**
+   * A council's own fields (#5933, `school-layer.md` § 2.3), all null on a
+   * chapter: `chapters_council_fields_kind` holds them to the kind.
+   */
+  council_type?: CouncilType | null;
+  council_school_id?: string | null;
+  council_verified_at?: string | null;
+  recruitment_model?: RecruitmentModel | null;
   stripe_customer_id: string | null;
   subscription_status: SubscriptionStatus;
   subscription_id: string | null;
@@ -81,4 +101,11 @@ export interface Chapter {
    * none, the default. A deleted channel clears it (`on delete set null`).
    */
   birthday_channel_id?: string | null;
+  /**
+   * Whether settled members may change their own name (#5801). False, the
+   * default, locks it for a member of this chapter alone; officers holding
+   * `roles:manage` still can.
+   * `spec/behavior/members.md` § Profiles.
+   */
+  members_can_change_name?: boolean;
 }

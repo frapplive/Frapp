@@ -29,6 +29,7 @@ function task(overrides: Partial<Task> = {}): Task {
     point_reward: null,
     points_awarded: false,
     completed_at: null,
+    completed_by: null,
     confirmed_at: null,
     sent_back_at: null,
     proof_kind: 'none',
@@ -40,6 +41,7 @@ function task(overrides: Partial<Task> = {}): Task {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: ago(5 * DAY),
     ...overrides,
   };

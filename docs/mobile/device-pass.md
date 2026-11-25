@@ -45,7 +45,7 @@ the smoke account set up first), so row 18 still walks the You rows by hand.
 
 | # | Phone | Do | Expect | From |
 |---|---|---|---|---|
-| 3 | Both | With a direct message unread, look at the tab bar, then tap Messages | The third tab is Messages with a red count of unread conversations; it opens your conversations with no back row. Scrolled down far enough to fold the bar (with Ask Frapp on), the round keeps a red dot, or the count on Messages' own round. Calendar opens from the Calendar row at the foot of Activity's To do | #5310 |
+| 3 | Both | With a direct message unread, look at the tab bar, then tap Messages | The third tab is Messages with a red count of unread conversations; it opens your conversations with no back row. Scrolled down far enough to fold the bar (with Frapp Intelligence on), the round keeps a red dot, or the count on Messages' own round. Calendar opens from the "Calendar" link in Activity's To do header | #5310 |
 | 4 | Both | Long-press a channel, then one near the bottom of the list | A haptic, and the channel actions menu opens by your finger, not off screen. Android back closes it | #3636, #3523 |
 | 5 | Both | Arrange channels, drag one channel down, then back | A haptic on pickup, the row follows your finger, the order holds after you leave and come back | #4479 |
 
@@ -72,7 +72,7 @@ the smoke account set up first), so row 18 still walks the You rows by hand.
 
 | # | Phone | Do | Expect | From |
 |---|---|---|---|---|
-| 15 | iPhone | Activity's Calendar row, then pull down. Tap a day, then its heading, then go back twice | The month opens with `‹ Activity` and the pull refreshes. The heading opens that day's hour grid, and back lands on the month, then on Activity | #5310, #3516 |
+| 15 | iPhone | The "Calendar" link in Activity's To do header, then pull down. Tap a day, then its heading, then go back twice | The month opens with `‹ Activity` and the pull refreshes. The heading opens that day's hour grid, and back lands on the month, then on Activity | #5310, #3516 |
 | 16 | Both | Documents: upload a camera photo, then switch List and Grid, then delete it | The sheet closes at once and the "Uploading…" row turns into the document within a few seconds, not 30 | #3674, #4519, #3962 |
 | 17 | iPhone | Directory: switch to Grid, filter by a role | The grid holds faces and names. The filter narrows it | #4509, #4130 |
 | 18 | iPhone | You: open each row, and leave each by its back row | Every row opens its page, and nothing on the page is a dead end (a control that looks tappable does something) | smoke checklist §§ 2-3 |
@@ -103,16 +103,16 @@ the smoke account set up first), so row 18 still walks the You rows by hand.
 | 28 | Android | Point the Android phone's own camera app at the same code and tap the link it offers | Frapp opens on the check-in and says "You're already checked in" (row 27), not a browser page with Open in Frapp | #4763 |
 | 29 | iPhone | On the Android phone, start a second event that's happening now and show its code. On the iPhone, signed in as a member without host rights, open it, tap Scan code, and choose Don't Allow. Tap Open Settings and turn on Camera for Frapp. iOS restarts Frapp when a permission changes, so open the event again and tap Scan code | After the restart the viewport comes up with no prompt, reads the code, and checks you in | #4942 |
 
-## 9. Dictate to Ask Frapp (3 minutes)
+## 9. Dictate to Frapp Intelligence (3 minutes)
 
-Run this section on the **Frapp Staging** app, signed in to staging: Frapp AI is on there and off on
+Run this section on the **Frapp Staging** app, signed in to staging: Frapp Intelligence is on there and off on
 production ([`ENV_REFERENCE.md`](../internal/environment/ENV_REFERENCE.md), `AI_ENABLED`), and with it
-off there is no Ask Frapp to dictate into. Move these rows to the production pass once Paul turns
-Frapp AI on there.
+off there is no Frapp Intelligence to dictate into. Move these rows to the production pass once Paul turns
+Frapp Intelligence on there.
 
 | # | Phone | Do | Expect | From |
 |---|---|---|---|---|
-| 30 | Both | Open Ask Frapp and tap the mic inside the field. Allow the microphone (and Speech Recognition on iPhone). Say "so um can you remind the rush chairs that the uh bid dinner moved to Thursday no Friday at seven", then tap the check | While you talk the field shows a moving waveform in the chapter's colour and a clock, with your words faint above it. After the check they pulse for about a second, then the box reads close to "Can you remind the rush chairs that the bid dinner moved to Friday at 7?", nothing has been sent, and Original puts back what you said | #5276 |
+| 30 | Both | Open Frapp Intelligence and tap the mic inside the field. Allow the microphone (and Speech Recognition on iPhone). Say "so um can you remind the rush chairs that the uh bid dinner moved to Thursday no Friday at seven", then tap the check | While you talk the field shows a moving waveform in the chapter's colour and a clock, with your words faint above it. After the check they pulse for about a second, then the box reads close to "Can you remind the rush chairs that the bid dinner moved to Friday at 7?", nothing has been sent, and Original puts back what you said | #5276 |
 | 31 | iPhone | Tap the mic, then the X. Then put the phone in airplane mode and dictate a sentence | X leaves the box as it was. Offline the words still land, as heard, and on most iPhones the waveform and words work with no connection | #5276 |
 
 ## What the pass leaves out, and why
@@ -149,8 +149,8 @@ in Expo Workflows, against staging, with no phone in hand. How to run them is in
 pass that a script can see:
 
 - Password sign-in reaches Chat home.
-- Every tab opens, and each You row that every member sees (Service hours, Directory,
-  Settings) opens its screen and comes back through its back row; on iOS, the edge swipe from
+- Every tab opens, and each You row that every member sees (Directory, Settings; Service hours
+  until its row left You in #5950) opens its screen and comes back through its back row; on iOS, the edge swipe from
   Settings does the same, and on Android the back button. This is the smoke checklist's dead-end
   rule ("if a control looks interactive, it must do something") on the main routes, and row 18
   once the flows have run green.

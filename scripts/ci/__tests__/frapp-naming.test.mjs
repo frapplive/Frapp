@@ -366,14 +366,14 @@ export const COLLECTED = [
   {
     // The root layout's `title.template` appends " · Frapp" (#2147), so a
     // route title that names the product renders it twice. generateMetadata
-    // must be taught to the collector before it can hide a title. 18: the
-    // seventeen route titles plus (dashboard)/points/layout.tsx, which exists
-    // only to carry one for a Client Component page.
+    // must be taught to the collector before it can hide a title. 15: the
+    // route titles left once Points, Service hours and Study hours stopped
+    // being pages (#5950).
     what: "web metadata title",
     walk: "webApp",
     collect: (source) => webMetadataTitles(source).map((value) => ({ key: "title", value })),
     wrong: (value) => value === "__generateMetadata__" || /Frapp|Signet/.test(value),
-    min: 18,
+    min: 15,
   },
   {
     // Root + OG + Twitter on the layout, and one per route below the homepage.
@@ -508,7 +508,7 @@ export const PINS = [
     has: ["const DEFAULT_FROM_ADDRESS = 'Frapp <invites@mail.frapp.live>'", "RESEND_FROM_EMAIL"],
     lacks: [/const DEFAULT_FROM_ADDRESS = 'Signet /, /const DEFAULT_FROM_ADDRESS = '[^']*<invites@frapp\.live>'/, SIGNET],
   },
-  // The subject and the headline both bodies open with name the product; the
+  // The subject and the line both bodies carry name the product; the
   // chapter's own name fills "a chapter" when it is known.
   {
     file: "apps/api/src/infrastructure/email/resend-email.provider.ts",
@@ -519,9 +519,9 @@ export const PINS = [
   },
   {
     file: "apps/api/src/infrastructure/email/resend-email.provider.ts",
-    section: (source) => functionBody(source, "inviteHeadline"),
-    why: "invite email headline",
-    has: ["invited you to join ${chapter} on Frapp`", "You're invited to join ${chapter} on Frapp`"],
+    section: (source) => functionBody(source, "inviteLine"),
+    why: "invite email line",
+    has: ["`${who} on Frapp as ${role}.`", "`${who} on Frapp.`"],
     lacks: [SIGNET],
   },
   // HTML and text bodies are pinned apart, so one can't hide a leftover in the other.
@@ -529,7 +529,7 @@ export const PINS = [
     file: "apps/api/src/infrastructure/email/resend-email.provider.ts",
     section: (source) => functionBody(source, name),
     why: `${name} body`,
-    has: ["inviteHeadline(params)"],
+    has: ["inviteLine(params)"],
     lacks: [SIGNET],
   })),
 
@@ -925,7 +925,7 @@ test("every Settings recovery path names expo.name", () => {
 // replaces each held the same check on their own constants.
 test("the table keeps its floors and roots", () => {
   const floor = (what) => COLLECTED.find((row) => row.what === what).min;
-  assert.equal(floor("web metadata title"), 18);
+  assert.equal(floor("web metadata title"), 15);
   assert.equal(floor("landing metadata title"), 9);
   const pinned = (file) => PINS.filter((pin) => pin.file === file).flatMap((pin) => pin.has ?? []);
   assert.equal(pinned("apps/web/components/auth/auth-frame.tsx").length, 1);

@@ -387,6 +387,24 @@ describe("uploadDocumentPhoto", () => {
     expect(confirm.mock.lastCall?.[0]).not.toHaveProperty("who_can_see");
   });
 
+  it("sends the type only when one is held, trimmed (Paul 2026-11-22)", async () => {
+    await uploadDocumentPhoto(
+      IMAGE,
+      { title: "", folder: null, documentType: " Accreditation " },
+      mutations,
+    );
+    expect(confirm).toHaveBeenLastCalledWith(
+      expect.objectContaining({ document_type: "Accreditation" }),
+    );
+
+    await uploadDocumentPhoto(
+      IMAGE,
+      { title: "", folder: null, documentType: "" },
+      mutations,
+    );
+    expect(confirm.mock.lastCall?.[0]).not.toHaveProperty("document_type");
+  });
+
   it("retries with the list it was first sent with (#5216)", async () => {
     confirm.mockRejectedValueOnce(new TypeError("Network request failed"));
     const first = await uploadDocumentPhoto(
@@ -494,6 +512,7 @@ describe("uploadDocumentPhoto", () => {
         title: "minutes.jpg",
         folder: null,
         whoCanSee: null,
+        documentType: null,
       },
     });
   });

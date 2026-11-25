@@ -5,9 +5,9 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRouter } from "expo-router";
 import {
-  MEETING_COPY,
   MEETING_ENTRY_COPY,
   MEETING_NOTE_TAKERS_COPY,
+  MINUTES_REQUEST_COPY,
 } from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
@@ -29,6 +29,14 @@ const state = vi.hoisted(() => ({
   taking: [] as { meeting_id: string; author_name: string; joined: boolean }[],
   recorder: null as object | null,
   recorderState: { phase: "idle", refusal: null } as Record<string, unknown>,
+  takingPending: false,
+  request: null as null | {
+    meeting_id: string;
+    event_id: string;
+    requested: boolean;
+  },
+  ask: vi.fn(),
+  live: [] as { meeting_id: string; event_id: string; user_id: string }[],
 }));
 vi.mock("@/lib/minutes/recorder/session", () => ({
   useMeetingRecorder: () => ({
@@ -47,11 +55,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     };
   },
   usePermissionList: () => state.permissions,
+  useViewerUserId: () => "u-viewer",
+  useMemberDisplayNames: () => ({
+    nameFor: (id: string) => (id === "u-winston" ? "Winston Hewitt" : null),
+  }),
   useStartMeeting: () => ({ mutateAsync: state.start, isPending: false }),
   useMeetingNoteTaking: () => ({
     data: state.taking ?? [],
-    isPending: false,
+    isPending: state.takingPending,
   }),
+  useMinutesRequest: () => ({ data: state.request, isLoading: false }),
+  useRequestMinutes: () => ({ mutateAsync: state.ask, isPending: false }),
+  useLiveMeetingRecordings: () => ({ data: state.live }),
 }));
 vi.mock("@/components/minutes/note-taker-sheet", () => ({
   NoteTakerSheet: () => null,
@@ -95,6 +110,9 @@ beforeEach(() => {
   state.taking = [];
   state.recorder = null;
   state.recorderState = { phase: "idle", refusal: null };
+  state.takingPending = false;
+  state.request = null;
+  state.live = [];
 });
 
 describe("EventMinutesRow", () => {
@@ -112,7 +130,7 @@ describe("EventMinutesRow", () => {
 
   it.each([
     ["posted", MEETING_ENTRY_COPY.posted],
-    ["draft", MEETING_COPY.draftBadge],
+    ["draft", "Drafting"],
   ])("opens %s minutes the viewer may read", (status, value) => {
     state.permissions = [];
     state.meetings = [{ id: "m1", status }];
@@ -124,6 +142,25 @@ describe("EventMinutesRow", () => {
       pathname: "/minutes-details",
       params: { id: "m1" },
     });
+  });
+
+  it("says where the minutes stand, what they hold, and their TL;DR's first line, as web does", () => {
+    state.permissions = [];
+    state.meetings = [
+      {
+        id: "m1",
+        status: "posted",
+        posted_at: "2026-11-18T12:00:00Z",
+        decision_count: 2,
+        action_item_count: 3,
+        gist: "Dues are due Friday.",
+      } as never,
+    ];
+    const text = screenText(render());
+    expect(text).toMatch(
+      /Posted \w+, November 18 · 2 decisions · 3 action items/,
+    );
+    expect(text).toContain("Dues are due Friday.");
   });
 
   it("offers Take notes on someone else's draft, to a member they added (#4935)", () => {
@@ -141,6 +178,14 @@ describe("EventMinutesRow", () => {
   it("offers nothing to a member when there are no minutes", () => {
     state.permissions = [];
     expect(render().toJSON()).toBeNull();
+  });
+
+  it("tells a member who is recording minutes they can't open yet (Paul, 2026-11-20)", () => {
+    state.permissions = [];
+    state.live = [{ meeting_id: "m1", event_id: "e1", user_id: "u-winston" }];
+    const tree = render();
+    expect(screenText(tree)).toContain("Winston Hewitt is recording");
+    expect(rows(tree)).toHaveLength(0);
   });
 
   it("offers Write minutes without drafting too: the note is the Summary (#5288)", () => {
@@ -199,5 +244,52 @@ describe("EventMinutesRow", () => {
       paused: null,
     };
     expect(screenText(render())).toContain(MEETING_ENTRY_COPY.write);
+  });
+
+  describe("Request minutes (#5471)", () => {
+    beforeEach(() => {
+      state.permissions = [];
+      state.request = { meeting_id: "m7", event_id: "e1", requested: false };
+    });
+
+    it("offers Request minutes on unposted minutes the member can't open", async () => {
+      state.ask.mockResolvedValue({
+        ...state.request,
+        requested: true,
+        pinged: true,
+      });
+      const tree = render();
+      expect(screenText(tree)).toContain(MINUTES_REQUEST_COPY.request);
+      expect(screenText(tree)).toContain(MINUTES_REQUEST_COPY.notPosted);
+      await act(async () => {
+        rows(tree)[0].props.onPress();
+      });
+      expect(state.ask).toHaveBeenCalledWith("m7");
+    });
+
+    it("reads Requested once the member has asked, with nothing to press", () => {
+      state.request = { meeting_id: "m7", event_id: "e1", requested: true };
+      const tree = render();
+      expect(screenText(tree)).toContain(MINUTES_REQUEST_COPY.requested);
+      expect(screenText(tree)).not.toContain(MINUTES_REQUEST_COPY.request);
+      expect(rows(tree)).toHaveLength(0);
+    });
+
+    it("keeps Take notes for a note-taker, and waits for that read before offering Request", () => {
+      state.takingPending = true;
+      expect(screenText(render())).not.toContain(MINUTES_REQUEST_COPY.request);
+      state.takingPending = false;
+      state.taking = [{ meeting_id: "m7", author_name: "Eli", joined: false }];
+      const text = screenText(render());
+      expect(text).toContain(MEETING_NOTE_TAKERS_COPY.takeNotes);
+      expect(text).not.toContain(MINUTES_REQUEST_COPY.request);
+    });
+
+    it("offers nothing once the minutes are posted and readable", () => {
+      state.meetings = [{ id: "m7", status: "posted" }];
+      const text = screenText(render());
+      expect(text).not.toContain(MINUTES_REQUEST_COPY.request);
+      expect(text).toContain(MEETING_ENTRY_COPY.posted);
+    });
   });
 });

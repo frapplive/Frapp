@@ -9,7 +9,8 @@ export type BoardTask = {
   description: string | null;
   assignee_id: string;
   created_by: string;
-  due_date: string;
+  /** Null for a task with no due date (#5761). */
+  due_date: string | null;
   /** The moment it is due, when it has a time of day (#4003). */
   due_at?: string | null;
   /** Its checklist, in order (#4003). */
@@ -36,6 +37,8 @@ export type BoardTask = {
   point_reward: number | null;
   points_awarded: boolean;
   completed_at: string | null;
+  /** Who marked it done (#5732): null while open, and on an older completion. */
+  completed_by?: string | null;
   confirmed_at: string | null;
   created_at: string;
   /** How it repeats, on a copy of a repeating task (#5119). */
@@ -55,6 +58,14 @@ export type BoardTask = {
   } | null;
   /** The Up for grabs posting it was claimed from (2026-11-18), if any. */
   open_task_id?: string | null;
+  /**
+   * The tier, role or group it is from (#5473), `tier:<id>` and the like,
+   * and that one's name now (null once deleted).
+   */
+  followed_by?: string | null;
+  followed_by_name?: string | null;
+  /** Its Frapp links (`spec/behavior/frapp-links.md`); read with `readFrappLinks`. */
+  attachments?: unknown;
 };
 
 /**

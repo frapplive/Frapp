@@ -48,6 +48,8 @@ import {
   CreateTaskResponseDto,
   CreateTaskSubtaskDto,
   DeleteTaskQueryDto,
+  AddToTaskGroupDto,
+  AddToTaskGroupResponseDto,
   RemoveFromTaskGroupDto,
   RemoveFromTaskGroupResponseDto,
   TaskGroupSummaryDto,
@@ -60,6 +62,8 @@ import {
   RequestTaskPhotoUploadUrlDto,
   TaskPhotoUploadUrlResponseDto,
   TaskPhotoUrlResponseDto,
+  ShareTaskToChatDto,
+  ShareTaskToChatResponseDto,
 } from '../dtos/task.dto';
 import { OpenTaskDto } from '../dtos/open-task.dto';
 import { ThrottleFanOutWrite } from '../decorators/throttle-profiles.decorator';
@@ -241,6 +245,7 @@ export class TaskController {
       // neither yet) makes the very task the form would (#4313).
       audience_tier_id: dto.audience_tier_id,
       followed_by: dto.followed_by,
+      attachments: dto.attachments,
       created_by: createdBy,
       due_date: dto.due_date,
       due_at: dto.due_at ?? null,
@@ -252,6 +257,30 @@ export class TaskController {
       channel_id: dto.channel_id,
       client_message_id: dto.client_message_id,
     });
+  }
+
+  @Post(':id/share')
+  @ThrottleFanOutWrite()
+  @ApiOperation({
+    summary: "Post an existing task's card into a chat channel",
+    description:
+      "The chat + sheet's Task row (#5772). Any member who can read the task (its assignee, a `tasks:manage` holder, or a follower) may link it; the card is sent as them, and channel access is checked as for any message.",
+  })
+  @ApiCreatedResponse({ type: ShareTaskToChatResponseDto })
+  async share(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ShareTaskToChatDto,
+  ): Promise<ShareTaskToChatResponseDto> {
+    const task = await this.readableTask(chapterId, userId, id);
+    await this.taskService.shareToChat(task, {
+      chapter_id: chapterId,
+      channel_id: dto.channel_id,
+      sender_id: userId,
+      client_message_id: dto.client_message_id,
+    });
+    return { card_posted: true };
   }
 
   @Patch(':id')
@@ -427,6 +456,23 @@ export class TaskController {
   ) {
     await this.taskService.deleteSubtask(id, subtaskId, chapterId);
     return { success: true };
+  }
+
+  @Post(':id/group/add')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @ApiOperation({
+    summary:
+      'Add members to a group task: each gets a To do copy of it (#5905)',
+  })
+  @ApiOkResponse({ type: AddToTaskGroupResponseDto })
+  async addToGroup(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddToTaskGroupDto,
+  ): Promise<AddToTaskGroupResponseDto> {
+    return this.taskService.addToGroup(id, chapterId, userId, dto.assignee_ids);
   }
 
   @Post(':id/group/remove')

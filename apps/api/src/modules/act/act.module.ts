@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ActAudienceResolver } from '../../application/services/act/act-audience';
 import { ActPeopleResolver } from '../../application/services/act/act-people';
 import { actProposeTools } from '../../application/services/act/act-agent-tools';
 import {
@@ -19,9 +20,11 @@ import { AiSuggestionModule } from '../ai-suggestion/ai-suggestion.module';
 import { AiModule } from '../ai/ai.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AttendanceModule } from '../attendance/attendance.module';
+import { ChapterGroupModule } from '../chapter-group/chapter-group.module';
 import { EventModule } from '../event/event.module';
 import { MemberModule } from '../member/member.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { TaskModule } from '../task/task.module';
 
 /**
  * Asking Frapp to do something (#718).
@@ -45,11 +48,14 @@ import { RbacModule } from '../rbac/rbac.module';
     MemberModule,
     EventModule,
     AttendanceModule,
+    ChapterGroupModule,
+    TaskModule,
   ],
   controllers: [ActController],
   providers: [
     ActService,
     ActPeopleResolver,
+    ActAudienceResolver,
     AiEnabledGuard,
     GivePointsActTool,
     CreateTaskActTool,

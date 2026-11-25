@@ -1,13 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { toLibraryDocuments } from "@repo/hooks/document-library";
+import { formatWeekdayDay } from "@repo/formatting";
+import {
+  classifyFile,
+  isMinutesDocument,
+  toLibraryDocuments,
+} from "@repo/hooks/document-library";
 import {
   documentMeta,
+  documentOpenHint,
   selectDocumentFolders,
   selectDocuments,
   selectDownloadUrl,
 } from "./documents";
 
 const NOW = new Date("2026-11-09T12:00:00Z");
+
+/** A `GET /v1/documents?minutes=true` row that files a meeting's minutes. */
+const MINUTES_ROW = {
+  id: "d-m",
+  title: "Chapter meeting",
+  folder: "Minutes / Chapter meeting",
+  document_type: "Minutes",
+  uploaded_by: null,
+  storage_path: null,
+  created_at: "2026-11-04T02:00:00.000Z",
+  meeting_id: "m-1",
+  minutes: {
+    meeting_id: "m-1",
+    event_name: "Chapter meeting",
+    event_start_time: "2026-11-03T23:00:00.000Z",
+    meeting_type: "chapter",
+    other_label: null,
+    decision_count: 3,
+    action_item_count: 5,
+    recorded: true,
+    gist: "Formal moved to April",
+  },
+};
 
 function metaFor(
   rows: unknown,
@@ -42,14 +71,44 @@ describe("selectDocuments", () => {
         description: "Ratified 2025",
         folder: "Governance",
         document_type: "Bylaws",
+        effective_date: null,
         uploaded_by: "u-1",
         created_at: "2026-08-12T14:00:00.000Z",
         content_type: null,
         storage_path: "chapters/c/documents/x/bylaws.pdf",
         pinned_at: "2026-11-11T00:00:00.000Z",
         drive_file_id: null,
+        meeting_id: null,
+        minutes: null,
       },
     ]);
+  });
+
+  // A meeting's posted minutes, filed as a row with no file (#5949).
+  it("keeps a minutes row's meeting and what its row shows of the minutes", () => {
+    const [doc] = selectDocuments([MINUTES_ROW]);
+    expect(doc!.meeting_id).toBe("m-1");
+    expect(doc!.storage_path).toBeNull();
+    expect(doc!.minutes).toEqual({
+      meeting_id: "m-1",
+      event_name: "Chapter meeting",
+      event_start_time: "2026-11-03T23:00:00.000Z",
+      meeting_type: "chapter",
+      other_label: null,
+      decision_count: 3,
+      action_item_count: 5,
+      recorded: true,
+      gist: "Formal moved to April",
+    });
+    expect(isMinutesDocument(doc!)).toBe(true);
+    expect(classifyFile(doc!).label).toBe("Minutes");
+  });
+
+  it("drops a malformed minutes block rather than drawing half of it", () => {
+    const [doc] = selectDocuments([
+      { ...MINUTES_ROW, minutes: { meeting_id: "m-1" } },
+    ]);
+    expect(doc!.minutes).toBeNull();
   });
 
   // A row with no id cannot be opened — opening is what this list does.
@@ -61,6 +120,23 @@ describe("selectDocuments", () => {
         { id: "d-2", title: "Fine" },
       ]),
     ).toHaveLength(1);
+  });
+
+  it("keeps the Drive folder a synced folder came from", () => {
+    expect(
+      selectDocumentFolders([
+        { id: "f-1", name: "Chapter files", drive_folder_id: "drive-1" },
+        { id: "f-2", name: "Bylaws", drive_folder_id: null },
+      ]),
+    ).toEqual([
+      { id: "f-2", name: "Bylaws", pinned_at: null },
+      {
+        id: "f-1",
+        name: "Chapter files",
+        pinned_at: null,
+        drive_folder_id: "drive-1",
+      },
+    ]);
   });
 
   it("returns an empty list for an absent payload", () => {
@@ -84,7 +160,30 @@ describe("documentMeta", () => {
         ],
         { "u-1": "Ryan Castellano" },
       ),
-    ).toEqual(["Uploaded Aug 12 by Ryan Castellano · Governance · Bylaws"]);
+    ).toEqual(["Uploaded August 12 by Ryan Castellano · Governance · Bylaws"]);
+  });
+
+  it("says when it takes effect, as web's row does, unless that is the upload day", () => {
+    expect(
+      metaFor([
+        {
+          id: "d-1",
+          title: "Bylaws",
+          folder: "Governance",
+          created_at: "2026-08-12T14:00:00.000Z",
+          effective_date: "2026-09-01",
+        },
+        {
+          id: "d-2",
+          title: "Budget",
+          created_at: "2026-08-12T14:00:00.000Z",
+          effective_date: "2026-08-12",
+        },
+      ]),
+    ).toEqual([
+      "Uploaded August 12 · Governance · Effective September 1",
+      "Uploaded August 12",
+    ]);
   });
 
   it("says a Drive copy came from Google Drive, not who filed it (#5157)", () => {
@@ -102,7 +201,7 @@ describe("documentMeta", () => {
         ],
         { "u-1": "Ryan Castellano" },
       ),
-    ).toEqual(["From Google Drive, added Aug 12 · Rush"]);
+    ).toEqual(["From Google Drive, added August 12 · Rush"]);
   });
 
   it("leaves off an uploader the roster can't name", () => {
@@ -115,11 +214,25 @@ describe("documentMeta", () => {
           created_at: "2026-08-12T14:00:00.000Z",
         },
       ]),
-    ).toEqual(["Uploaded Aug 12"]);
+    ).toEqual(["Uploaded August 12"]);
   });
 
   it("omits the line when nothing is known", () => {
     expect(metaFor([{ id: "d-1", title: "Loose file" }])).toEqual([null]);
+  });
+
+  // Web's `documentFacts`, the same words and order (#5949): the day the
+  // meeting met, the folder, then what the minutes hold.
+  it("reads a meeting's minutes as web's row does: the day it met, the folder, what they hold", () => {
+    expect(metaFor([MINUTES_ROW], { "u-1": "Ryan Castellano" })).toEqual([
+      [
+        formatWeekdayDay("2026-11-03T23:00:00.000Z", NOW),
+        "Minutes / Chapter meeting",
+        "Recorded",
+        "3 decisions",
+        "5 action items",
+      ].join(" · "),
+    ]);
   });
 
   it("survives an unparseable timestamp without rendering Invalid Date", () => {
@@ -128,6 +241,27 @@ describe("documentMeta", () => {
         { id: "d-1", title: "Odd", folder: "Ops", created_at: "not-a-date" },
       ]),
     ).toEqual(["Ops"]);
+  });
+});
+
+describe("documentOpenHint", () => {
+  it("says a file opens the share sheet", () => {
+    const [doc] = selectDocuments([{ id: "d-1", title: "Bylaws" }]);
+    expect(documentOpenHint(doc!)).toBe(
+      "Opens the share sheet to save it or open it in another app.",
+    );
+  });
+
+  // The TL;DR line a phone row has no room to draw is still spoken (#5949).
+  it("says a meeting's minutes open the minutes, after the TL;DR's line", () => {
+    const [doc] = selectDocuments([MINUTES_ROW]);
+    expect(documentOpenHint(doc!)).toBe(
+      "Formal moved to April. Opens the minutes.",
+    );
+    const [bare] = selectDocuments([
+      { ...MINUTES_ROW, minutes: { ...MINUTES_ROW.minutes, gist: null } },
+    ]);
+    expect(documentOpenHint(bare!)).toBe("Opens the minutes.");
   });
 });
 

@@ -18,7 +18,11 @@ import {
   type EventExcuseStatus,
   type EventExcuseWithMember,
 } from "@repo/hooks";
-import { EVENT_EXCUSE_REASON_MAX, statusLabel } from "@repo/validation";
+import {
+  EVENT_EXCUSE_REASON_MAX,
+  EVENT_PAGE_COPY,
+  statusLabel,
+} from "@repo/validation";
 import { Badge, type BadgeKind } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +78,7 @@ export function MyExcuse({
   end,
   opensMinutes,
   writeAsk = 0,
+  afterCount = false,
 }: {
   eventId: string;
   /** Whether the event requires the viewer (`useRequiredOfViewer`). */
@@ -86,6 +91,11 @@ export function MyExcuse({
    * on arrival and again each time it changes while this stays mounted.
    */
   writeAsk?: number;
+  /**
+   * The line follows the headcount in the Who's coming row ("15 people ·
+   * You're required · Can't make it?"), so it opens with the separator.
+   */
+  afterCount?: boolean;
 }) {
   const mine = useMyEventExcuse(eventId, { enabled: required });
   const own = useMyAttendance(eventId);
@@ -154,68 +164,78 @@ export function MyExcuse({
     // Closed, the offer is one quiet underlined line, not a bordered row with
     // a button: declining reads quieter than going (#4933, the way Google
     // Calendar's and Luma's RSVP rows keep No secondary).
+    // It sits in the Who's coming row, after the headcount, where "You're
+    // required" says why it's offered (Paul 2026-11-22: it floated centred
+    // under the details before, attached to nothing).
     if (!writing) {
       return (
-        <button
-          type="button"
-          // Centered under the check-in block, as on the phone; a grid
-          // child stretches without it, which made the whole row the target.
-          className={cn(QUIET_LINK, "justify-self-center")}
-          onClick={() => setWriting(true)}
-        >
-          Can&apos;t make it?
-        </button>
+        <>
+          {afterCount ? <span aria-hidden="true">·</span> : null}
+          <span>{EVENT_PAGE_COPY.youreRequired}</span>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            className={QUIET_LINK}
+            onClick={() => setWriting(true)}
+          >
+            {EVENT_PAGE_COPY.cantMakeIt}
+          </button>
+        </>
       );
     }
     return (
-      <ExcuseComposer
-        label="Can't make it"
-        caption="Say why in one line. It goes to whoever runs this event."
-        submitLabel="Send"
-        submitA11y="Send excuse"
-        busy={send.isPending}
-        error={error}
-        gate={gate}
-        onSubmit={(reason) =>
-          void save(
-            () => send.mutateAsync({ eventId, reason }),
-            "Couldn't send your excuse. Try again.",
-          )
-        }
-        onCancel={cancel}
-      />
+      <div className="mt-1 basis-full text-sm text-foreground">
+        <ExcuseComposer
+          label="Can't make it"
+          caption="Say why in one line. It goes to whoever runs this event."
+          submitLabel="Send"
+          submitA11y="Send excuse"
+          busy={send.isPending}
+          error={error}
+          gate={gate}
+          onSubmit={(reason) =>
+            void save(
+              () => send.mutateAsync({ eventId, reason }),
+              "Couldn't send your excuse. Try again.",
+            )
+          }
+          onCancel={cancel}
+        />
+      </div>
     );
   }
 
   const declined = view.status === "DECLINED";
   if (writing && view.canEdit) {
     return (
-      <ExcuseComposer
-        label="Your excuse"
-        caption={
-          declined
-            ? "Change it and send it again. You're still expected until it's accepted."
-            : view.title
-        }
-        initial={view.reason}
-        submitLabel={declined ? "Send again" : "Save"}
-        submitA11y={declined ? "Send excuse again" : "Save excuse"}
-        busy={edit.isPending}
-        error={error}
-        gate={gate}
-        onSubmit={(reason) =>
-          void save(
-            () => edit.mutateAsync({ eventId, reason }),
-            "Couldn't save your excuse. Try again.",
-          )
-        }
-        onCancel={cancel}
-        withdraw={
-          view.canWithdraw
-            ? { pending: withdraw.isPending, onClick: () => void takeBack() }
-            : null
-        }
-      />
+      <div className="mt-1 basis-full text-sm text-foreground">
+        <ExcuseComposer
+          label="Your excuse"
+          caption={
+            declined
+              ? "Change it and send it again. You're still expected until it's accepted."
+              : view.title
+          }
+          initial={view.reason}
+          submitLabel={declined ? "Send again" : "Save"}
+          submitA11y={declined ? "Send excuse again" : "Save excuse"}
+          busy={edit.isPending}
+          error={error}
+          gate={gate}
+          onSubmit={(reason) =>
+            void save(
+              () => edit.mutateAsync({ eventId, reason }),
+              "Couldn't save your excuse. Try again.",
+            )
+          }
+          onCancel={cancel}
+          withdraw={
+            view.canWithdraw
+              ? { pending: withdraw.isPending, onClick: () => void takeBack() }
+              : null
+          }
+        />
+      </div>
     );
   }
 
@@ -225,7 +245,7 @@ export function MyExcuse({
   return (
     <section
       aria-label="Your excuse"
-      className="grid min-w-0 gap-1 rounded-lg border border-border p-3"
+      className="mt-1 grid min-w-0 basis-full gap-1 rounded-lg border border-border p-3 text-foreground"
     >
       <p className="text-caption text-muted-foreground">
         {view.status === "PENDING"

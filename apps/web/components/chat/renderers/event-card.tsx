@@ -25,7 +25,8 @@ import { readEventPayload } from "@repo/chat-core/cards";
 import {
   can,
   CHECK_IN_MODULE_OFF_LINE,
-  checkInWindowBounds,
+  EVENT_PAGE_COPY,
+  checkInOpenAt,
   isModuleEnabled,
 } from "@repo/validation";
 import {
@@ -116,14 +117,11 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
   // past event cards reads nothing for them.
   const start = parseInstant(payload?.start_time);
   const end = parseInstant(payload?.end_time);
-  const bounds =
-    payload && start && end
-      ? checkInWindowBounds(start, end, payload.check_in_opens_minutes)
-      : null;
   const windowOpen =
-    !!bounds &&
-    now >= bounds.opensAt.getTime() &&
-    now <= bounds.closesAt.getTime();
+    !!payload &&
+    !!start &&
+    !!end &&
+    checkInOpenAt(start, end, payload.check_in_opens_minutes, now);
   const liveId = windowOpen && !eventsOff ? eventId : "";
   const mine = useMyAttendance(liveId);
   const eventQuery = useEvent(liveId);
@@ -191,7 +189,7 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
         {eventCardRequiresViewer(payload, requiredOf) ? (
           // Required of this viewer, in the hairline kind, as the Events list
           // and the phone draw it (#3822, #4132).
-          <Badge variant="outline">Mandatory</Badge>
+          <Badge variant="outline">{EVENT_PAGE_COPY.required}</Badge>
         ) : null}
       </div>
       <p className="mt-2 text-base font-bold">{payload.name}</p>

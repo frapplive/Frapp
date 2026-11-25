@@ -1,6 +1,6 @@
 # Device pass: every tab opens, and each You row every member sees opens its
 # screen and comes back (the smoke checklist's dead-end rule, §§ 2-3). Rows
-# drawn only for some chapters or roles (Documents, Study hours, Dues, Minutes,
+# drawn only for some chapters or roles (Documents, Dues, Minutes,
 # Invite members, Host check-in, Chapter settings) are left to the hand pass.
 appId: live.frapp.mobile
 name: "Every tab and You row opens and comes back"
@@ -20,10 +20,10 @@ tags:
 - tapOn: "Back to Activity"
 - assertVisible:
     id: "tab-activity"
-# The Calendar left the tab bar for Activity (#5310): its door is Activity's
-# Calendar row, and it goes back there.
+# The Calendar left the tab bar for Activity (#5310): its door is the
+# "Calendar" link in To do's header (#5779), and it goes back there.
 - tapOn:
-    id: "activity-calendar-row"
+    id: "activity-calendar-link"
 - assertVisible: "Back to Activity"
 - takeScreenshot: calendar
 - tapOn: "Back to Activity"
@@ -40,10 +40,6 @@ tags:
 - takeScreenshot: tab-you
 # Your profile is the top of the You tab (#3839): no screen of its own.
 - assertVisible: "points"
-- runFlow:
-    file: ../subflows/open-you-row.yaml
-    env:
-      ROW: "Service hours"
 - runFlow:
     file: ../subflows/open-you-row.yaml
     env:

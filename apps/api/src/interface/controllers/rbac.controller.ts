@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -42,6 +43,8 @@ import { SystemPermissions } from '#domain/constants/permissions';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('roles')
 export class RbacController {
   constructor(private readonly rbacService: RbacService) {}
@@ -55,8 +58,10 @@ export class RbacController {
   @Get('permissions-catalog')
   @ApiOperation({ summary: 'Get system permissions catalog' })
   @ApiOkResponse({ type: PermissionCatalogEntryDto, isArray: true })
-  catalog(): PermissionCatalogEntryDto[] {
-    return this.rbacService.getPermissionsCatalog();
+  catalog(
+    @CurrentChapterId() chapterId: string,
+  ): Promise<PermissionCatalogEntryDto[]> {
+    return this.rbacService.getPermissionsCatalog(chapterId);
   }
 
   @Post()
@@ -91,8 +96,9 @@ export class RbacController {
   }
 
   // Behind the controller's `members:view` only: any member joins and leaves
-  // a role an officer marked self-assignable (#4958). The service refuses
-  // every other role, whatever the caller holds.
+  // a role an officer marked self-assignable (#4958), and only while it is
+  // marked (#5650). The service refuses every other role, whatever the
+  // caller holds.
   @Post(':id/join')
   @HttpCode(200)
   @ApiOperation({
@@ -119,7 +125,7 @@ export class RbacController {
   @ApiOperation({
     summary: 'Leave a self-assignable role',
     description:
-      "Takes the role off the caller's own roles (#4958), with the same refusals as join. Leaving a role not held changes nothing.",
+      "Takes the role off the caller's own roles (#4958). 403 `role.not_self_assignable` unless the role is still marked: a role an officer gave, or has stopped offering, stays until an officer removes it (#5650). Alumni may leave a marked role. Leaving a role not held changes nothing.",
   })
   @ApiOkResponse({ type: SelfAssignRoleResultDto })
   async leave(

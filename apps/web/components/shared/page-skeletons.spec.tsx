@@ -136,7 +136,7 @@ describe("generic loading states", () => {
     "components/chat/slash-palette.tsx",
     "components/discord-import/import-watch-panel.tsx",
     "components/events/attendance-panel.tsx",
-    "components/points/points-audit-card.tsx",
+    "components/points/points-ledger.tsx",
     "components/profile/blocked-members-card.tsx",
   ]);
 

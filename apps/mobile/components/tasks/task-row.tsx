@@ -4,13 +4,25 @@ import {
   TASK_NEEDS_CHANGES_LABEL,
   taskStatusLabel,
 } from "@repo/hooks";
-import { taskRepeatCadence } from "@repo/validation";
+import {
+  TASK_AUDIENCE_COPY,
+  TASK_FOLLOWER_COPY,
+  taskRowFacts,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
 import { pageSurfaces } from "@/lib/surfaces";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
-import { gutterBleed, PressableRow } from "@/components/list-section";
-import { SkeletonBlock, SkeletonText } from "@/components/state-block";
+import {
+  gutterBleed,
+  PressableRow,
+  SectionHeaderSkeleton,
+} from "@/components/list-section";
+import {
+  SkeletonBlock,
+  SkeletonRegion,
+  SkeletonText,
+} from "@/components/state-block";
 import {
   itemMenuAccessibility,
   longPressOf,
@@ -23,6 +35,7 @@ import {
 } from "@/lib/tasks/format";
 import { rowIsSentBack, type TaskRowModel } from "@/lib/tasks/board";
 import { markDoneLabel } from "@/lib/tasks/task-photos";
+import { rowGroupLabel } from "@/lib/tasks/task-screen";
 
 /**
  * One row of the s08 board — `canvas-screens.dc.html:282-324`.
@@ -114,45 +127,55 @@ function taskFacts(row: TaskRowModel, now: Date) {
         proof_kind: row.proofKind,
       })
     : formatDueSubtitle(row.dueDate, now);
-  // How far through its checklist it is, beside the due: "Due today · 2 of
-  // 5" (#4003). A finished task drops it; its status says enough.
-  const progress =
-    !row.isDone && row.subtasks.length > 0
-      ? `${row.subtasks.filter((subtask) => subtask.done).length} of ${row.subtasks.length}`
-      : null;
-  // Its reference photos, counted (#4635); they open from the task's screen.
-  const references = row.photos.filter(
-    (photo) => photo.kind === "reference",
-  ).length;
-  const photos =
-    !row.isDone && references > 0
-      ? `${references} ${references === 1 ? "photo" : "photos"}`
-      : null;
-  // How a copy of a repeating task repeats, after its due (#5119): "Due
-  // Monday · ↻ Weekly". The glyph is for the eye; a screen reader hears
-  // "repeats weekly".
-  const cadence = row.isDone ? null : taskRepeatCadence(row.series);
-  const lineOf = (repeat: string | null) =>
+  // How it repeats, how far through its checklist it is and its reference
+  // photos (#4003, #4635, #5119), read once with web's row (`taskRowFacts`):
+  // "Due Monday · ↻ Weekly · 2 of 5 · 1 photo". The glyph is for the eye; a
+  // screen reader hears "repeats weekly". A finished task drops them.
+  const facts = taskRowFacts({
+    done: row.isDone,
+    subtasksDone: row.subtasks.filter((subtask) => subtask.done).length,
+    subtasksTotal: row.subtasks.length,
+    photos: row.photos,
+    series: row.series,
+  });
+  // The tier, role or group it is from, last (#5473): "Due Friday · From
+  // Exec board".
+  const from = row.followedBy
+    ? TASK_FOLLOWER_COPY.chip(row.followedByName)
+    : null;
+  // A copy of a group task still says who got it, and how far they are
+  // (#5699): "Due Friday · Everyone · 14 of 20 done". Its checkbox is only
+  // this member's part, as web's My tasks row says.
+  const audience = row.group
+    ? TASK_AUDIENCE_COPY.groupLine(
+        rowGroupLabel(row),
+        row.group.done,
+        row.group.total,
+      )
+    : null;
+  const lineOf = (extra: string | null) =>
     [
       sentBack ? TASK_NEEDS_CHANGES_LABEL : null,
       statusLine,
-      repeat,
-      progress,
-      photos,
+      audience,
+      extra,
+      from,
     ]
       .filter(Boolean)
       .join(" · ") || null;
-  const subtitle = lineOf(cadence ? `↻ ${cadence}` : null);
-  const spoken = lineOf(cadence ? `repeats ${cadence.toLowerCase()}` : null);
+  const subtitle = lineOf(facts.shown);
+  const spoken = lineOf(facts.spoken);
 
   // `semantic.destructive`, never `semantic.mention` — `foundations.md:67`
   // reserves the mention red for direct address, and an overdue task is not
   // someone speaking to you.
   // Red once overdue (#4133): past the local due day, or already OVERDUE by
-  // the server's clock, which the task screen and web also read.
+  // the server's clock, which the task screen and web also read. A task
+  // with no due date (#5761) is never late.
   const urgent =
     !row.isDone &&
-    (row.isOverdue || (!!row.dueDate && isDueUrgent(row.dueDate, now)));
+    !!row.dueDate &&
+    (row.isOverdue || isDueUrgent(row.dueDate, now));
 
   const toggleLabel = row.isDone
     ? TASK_ACTION_LABELS.reopen
@@ -442,9 +465,35 @@ export function TaskRowSkeleton({ index = 0 }: { index?: number }) {
   );
 }
 
+/**
+ * The Tasks tab while the board loads: a section caption over task-shaped
+ * rows, so the real board lands in place. The caption is a bar, since which
+ * section comes first (OVERDUE, TODAY, THIS WEEK, LATER or NO DUE DATE)
+ * depends on the tasks. The rows sit flush on the page, so the region is
+ * `flush` and its bars take `--surface-1`, one step up (#5606).
+ */
+export function TaskListSkeleton() {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  return (
+    <SkeletonRegion label="Loading chapter tasks" flush style={styles.skeleton}>
+      <SectionHeaderSkeleton width="30%" />
+      <View>
+        {Array.from({ length: 3 }, (_, index) => (
+          <TaskRowSkeleton key={index} index={index} />
+        ))}
+      </View>
+    </SkeletonRegion>
+  );
+}
+
 function createStyles(tokens: SignetTokens) {
   const surfaces = pageSurfaces(tokens);
   return StyleSheet.create({
+    // `ScreenShell`'s gap, between the caption and its rows.
+    skeleton: {
+      gap: tokens.spacing.md,
+    },
     row: {
       flexDirection: "row",
       alignItems: "center",

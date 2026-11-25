@@ -14,6 +14,7 @@ import {
   OTHER_ROLES_HEADING,
   personName,
   personTicked,
+  peopleToAdd,
   pickerMode,
   ROLES_HEADING,
   setTick,
@@ -43,14 +44,29 @@ const directory = buildWhoDirectory({
     { user_id: "u-viewer", display_name: "Paul Carlson", role_ids: ["exec"] },
     { user_id: "u-alex", display_name: "Alex Kim", role_ids: ["recruit"] },
     // Alumni never get a task.
-    { user_id: "u-old", display_name: "Old Timer", role_ids: ["recruit"], is_alumni: true },
+    {
+      user_id: "u-old",
+      display_name: "Old Timer",
+      role_ids: ["recruit"],
+      is_alumni: true,
+    },
     { user_id: "u-blank", display_name: "  ", role_ids: [] },
   ],
   roles: [
-    { id: "everyone", name: "Member", system_key: "MEMBER", display_order: 0 },
+    {
+      id: "everyone",
+      name: "Everyone",
+      system_key: "EVERYONE",
+      display_order: 0,
+    },
     { id: "alumni", name: "Alumni", system_key: "ALUMNI", display_order: 1 },
     { id: "exec", name: "President", tier_id: "t-exec", display_order: 2 },
-    { id: "recruit", name: "Recruitment Committee", tier_id: "t-comm", display_order: 3 },
+    {
+      id: "recruit",
+      name: "Recruitment Committee",
+      tier_id: "t-comm",
+      display_order: 3,
+    },
     { id: "loose", name: "Historian", tier_id: null, display_order: 4 },
     { id: "empty", name: "Scholarship", tier_id: "t-exec", display_order: 5 },
   ],
@@ -60,9 +76,19 @@ const directory = buildWhoDirectory({
     { id: "t-none", name: "Chairs", position: 3 },
   ],
   groups: [
-    { id: "g-phil", name: "Philanthropy", kind: "manual", member_ids: ["u-sam", "u-old"] },
+    {
+      id: "g-phil",
+      name: "Philanthropy",
+      kind: "manual",
+      member_ids: ["u-sam", "u-old"],
+    },
     { id: "g-empty", name: "Formal planning", kind: "manual", member_ids: [] },
-    { id: "g-auto", name: "Class of 2030", kind: "class", member_ids: ["u-old"] },
+    {
+      id: "g-auto",
+      name: "Class of 2030",
+      kind: "class",
+      member_ids: ["u-old"],
+    },
   ],
 });
 
@@ -161,7 +187,12 @@ describe("ticking people", () => {
 
   it("drops to nobody when the last one is unticked", () => {
     expect(
-      togglePerson({ kind: "person", userId: "u-sam" }, "u-sam", "each", directory),
+      togglePerson(
+        { kind: "person", userId: "u-sam" },
+        "u-sam",
+        "each",
+        directory,
+      ),
     ).toBeNull();
     expect(whoFromIds([], "each", directory)).toBeNull();
   });
@@ -188,8 +219,16 @@ describe("ticking people", () => {
       roles: [{ id: "r", name: "Rush", display_order: 1 }],
     });
     expect(
-      togglePerson({ kind: "someone", target: { kind: "role", id: "r" } }, "b", "someone", big),
-    ).toEqual({ kind: "someone", target: { kind: "people", userIds: ["a", "c"] } });
+      togglePerson(
+        { kind: "someone", target: { kind: "role", id: "r" } },
+        "b",
+        "someone",
+        big,
+      ),
+    ).toEqual({
+      kind: "someone",
+      target: { kind: "people", userIds: ["a", "c"] },
+    });
   });
 });
 
@@ -197,13 +236,23 @@ describe("ticking a role or group", () => {
   it("makes it the pick from nothing or from some of its own members", () => {
     expect(toggleSet(null, RECRUIT, "each", directory)).toEqual(ROLE);
     expect(
-      toggleSet({ kind: "person", userId: "u-sam" }, RECRUIT, "each", directory),
+      toggleSet(
+        { kind: "person", userId: "u-sam" },
+        RECRUIT,
+        "each",
+        directory,
+      ),
     ).toEqual(ROLE);
   });
 
   it("switches to it from the whole chapter, narrowing down the tree", () => {
     expect(
-      toggleSet({ kind: "someone", target: { kind: "chapter" } }, PHIL, "someone", directory),
+      toggleSet(
+        { kind: "someone", target: { kind: "chapter" } },
+        PHIL,
+        "someone",
+        directory,
+      ),
     ).toEqual({ kind: "someone", target: { kind: "group", id: "g-phil" } });
     expect(toggleSet(CHAPTER, RECRUIT, "each", directory)).toEqual(ROLE);
   });
@@ -250,7 +299,9 @@ describe("the chapter", () => {
     const chapter = toggleChapter(null, "each", directory);
     expect(chapter).toEqual(CHAPTER);
     expect(chapterTick(chapter, directory)).toBe("all");
-    expect(chapterTick({ kind: "person", userId: "u-sam" }, directory)).toBe("some");
+    expect(chapterTick({ kind: "person", userId: "u-sam" }, directory)).toBe(
+      "some",
+    );
     expect(chapterTick(null, directory)).toBe("none");
     expect(toggleChapter(chapter, "each", directory)).toBeNull();
     expect(toggleChapter(ROLE, "someone", directory)).toEqual({
@@ -263,10 +314,14 @@ describe("the chapter", () => {
 describe("ticks", () => {
   it("reads a set's box as all, some or none of it", () => {
     expect(setTick(null, RECRUIT, directory)).toBe("none");
-    expect(setTick({ kind: "person", userId: "u-sam" }, RECRUIT, directory)).toBe("some");
+    expect(
+      setTick({ kind: "person", userId: "u-sam" }, RECRUIT, directory),
+    ).toBe("some");
     expect(setTick(ROLE, RECRUIT, directory)).toBe("all");
     expect(setTick(ROLE, PHIL, directory)).toBe("all");
-    expect(setTick({ kind: "person", userId: "u-viewer" }, PHIL, directory)).toBe("none");
+    expect(
+      setTick({ kind: "person", userId: "u-viewer" }, PHIL, directory),
+    ).toBe("none");
     expect(setTick(CHAPTER, RECRUIT, directory)).toBe("all");
     expect(personTicked(ROLE, "u-alex", directory)).toBe(true);
     expect(personTicked(ROLE, "u-viewer", directory)).toBe(false);
@@ -291,12 +346,18 @@ describe("the mode", () => {
 
   it("keeps the mode going down to one person and back up", () => {
     let held = pickerMode(
-      { kind: "someone", target: { kind: "people", userIds: ["u-sam", "u-alex"] } },
+      {
+        kind: "someone",
+        target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+      },
       "each",
     );
     expect(held).toBe("someone");
     let who = togglePerson(
-      { kind: "someone", target: { kind: "people", userIds: ["u-sam", "u-alex"] } },
+      {
+        kind: "someone",
+        target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+      },
       "u-alex",
       held,
       directory,
@@ -327,7 +388,10 @@ describe("the mode", () => {
 
   it("sends the pick to the endpoint it needs", () => {
     expect(
-      taskWhoRequest({ kind: "someone", target: { kind: "role", id: "recruit" } }),
+      taskWhoRequest({
+        kind: "someone",
+        target: { kind: "role", id: "recruit" },
+      }),
     ).toEqual({ endpoint: "/v1/open-tasks", fields: { role_id: "recruit" } });
     expect(
       taskWhoRequest({ kind: "each", target: { kind: "group", id: "g-phil" } }),
@@ -341,39 +405,61 @@ describe("the mode", () => {
 describe("words", () => {
   it("labels the pick", () => {
     expect(whoLabel(null, directory)).toBeNull();
-    expect(whoLabel({ kind: "person", userId: "u-sam" }, directory)).toBe("Sam Lee");
-    expect(whoLabel(CHAPTER, directory)).toBe(TASK_AUDIENCE_COPY.everyone);
-    expect(whoLabel({ kind: "someone", target: { kind: "chapter" } }, directory)).toBe(
-      TASK_AUDIENCE_COPY.anyone,
+    expect(whoLabel({ kind: "person", userId: "u-sam" }, directory)).toBe(
+      "Sam Lee",
     );
+    expect(whoLabel(CHAPTER, directory)).toBe(TASK_AUDIENCE_COPY.everyone);
+    expect(
+      whoLabel({ kind: "someone", target: { kind: "chapter" } }, directory),
+    ).toBe(TASK_AUDIENCE_COPY.anyone);
     expect(whoLabel(ROLE, directory)).toBe("Everyone in Recruitment Committee");
     expect(
-      whoLabel({ kind: "someone", target: { kind: "role", id: "recruit" } }, directory),
+      whoLabel(
+        { kind: "someone", target: { kind: "role", id: "recruit" } },
+        directory,
+      ),
     ).toBe("Someone in Recruitment Committee");
     expect(
-      whoLabel({ kind: "someone", target: { kind: "group", id: "g-phil" } }, directory),
+      whoLabel(
+        { kind: "someone", target: { kind: "group", id: "g-phil" } },
+        directory,
+      ),
     ).toBe(TASK_AUDIENCE_COPY.someoneIn("Philanthropy"));
     expect(
-      whoLabel({ kind: "each", target: { kind: "people", userIds: ["u-sam", "u-alex"] } }, directory),
+      whoLabel(
+        {
+          kind: "each",
+          target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+        },
+        directory,
+      ),
     ).toBe(TASK_AUDIENCE_COPY.peopleNames(["Sam", "Alex"]));
   });
 
   it("sums up who is in, narrowed picks included", () => {
     expect(whoSummary(CHAPTER, directory)).toBe(`${EVERYONE_IN_CHAPTER} · 4`);
-    expect(whoSummary(ROLE, directory)).toBe("Recruitment Committee · 2 members");
+    expect(whoSummary(ROLE, directory)).toBe(
+      "Recruitment Committee · 2 members",
+    );
     const two: TaskWho = {
       kind: "each",
       target: { kind: "people", userIds: ["u-alex", "u-sam"] },
     };
-    expect(whoSummary(two, directory, RECRUIT)).toBe("2 of Recruitment Committee");
+    expect(whoSummary(two, directory, RECRUIT)).toBe(
+      "2 of Recruitment Committee",
+    );
     expect(whoSummary(two, directory, PHIL)).not.toMatch(/ of /);
-    expect(whoSummary({ kind: "person", userId: "u-sam" }, directory)).toBeNull();
+    expect(
+      whoSummary({ kind: "person", userId: "u-sam" }, directory),
+    ).toBeNull();
     expect(whoCount(ROLE, directory)).toBe(2);
   });
 
   it("hints each copy, or Up for grabs", () => {
     expect(whoHint(ROLE, directory)).toBe(TASK_AUDIENCE_COPY.eachHint(2));
-    expect(whoHint(CHAPTER, directory)).toBe(TASK_AUDIENCE_COPY.everyoneHint(4));
+    expect(whoHint(CHAPTER, directory)).toBe(
+      TASK_AUDIENCE_COPY.everyoneHint(4),
+    );
     expect(whoHint({ ...ROLE, kind: "someone" }, directory)).toBe(
       TASK_AUDIENCE_COPY.someoneHint(2),
     );
@@ -421,19 +507,28 @@ describe("where the picker opens", () => {
     expect([...initialOpenTiers(null, many)]).toEqual([]);
     expect([...initialOpenTiers(CHAPTER, many)]).toEqual([]);
     expect([
-      ...initialOpenTiers({ kind: "each", target: { kind: "role", id: "r-0" } }, many),
+      ...initialOpenTiers(
+        { kind: "each", target: { kind: "role", id: "r-0" } },
+        many,
+      ),
     ]).toEqual(["t-a"]);
   });
 });
 
 describe("a tier as a pick (#5473)", () => {
   const EXEC = directory.sets.get("t-exec")!;
-  const TIER: TaskWho = { kind: "each", target: { kind: "tier", id: "t-exec" } };
+  const TIER: TaskWho = {
+    kind: "each",
+    target: { kind: "tier", id: "t-exec" },
+  };
 
   it("makes each tier with roles a set of everyone holding one of them", () => {
     expect(EXEC).toMatchObject({ kind: "tier", name: "Executive Board" });
     expect(EXEC.memberIds).toEqual(["u-viewer"]);
-    expect(directory.sets.get("t-comm")?.memberIds).toEqual(["u-alex", "u-sam"]);
+    expect(directory.sets.get("t-comm")?.memberIds).toEqual([
+      "u-alex",
+      "u-sam",
+    ]);
     // The roles in no tier have no set of their own.
     expect(directory.tiers.at(-1)?.set).toBeNull();
   });
@@ -446,12 +541,24 @@ describe("a tier as a pick (#5473)", () => {
         { user_id: "u-b", display_name: "B", role_ids: [] },
       ],
       roles: [
-        { id: "everyone", name: "Member", system_key: "MEMBER", tier_id: "t-all", display_order: 0 },
+        {
+          id: "everyone",
+          name: "Member",
+          system_key: "EVERYONE",
+          tier_id: "t-all",
+          display_order: 0,
+        },
         { id: "officer", name: "Officer", tier_id: "t-all", display_order: 1 },
       ],
       tiers: [{ id: "t-all", name: "Members", position: 1 }],
     });
-    expect(withEveryone.sets.get("t-all")?.memberIds.sort()).toEqual(["u-a", "u-b"]);
+    expect(withEveryone.sets.get("t-all")?.memberIds.sort()).toEqual([
+      "u-a",
+      "u-b",
+    ]);
+    // Which the API refuses as what a task is from.
+    expect(withEveryone.tiers[0]?.holdsEveryone).toBe(true);
+    expect(directory.tiers.every((tier) => !tier.holdsEveryone)).toBe(true);
   });
 
   it("ticks, labels, sends and opens a tier pick like a role's", () => {
@@ -465,5 +572,22 @@ describe("a tier as a pick (#5473)", () => {
     });
     expect(initialWhoTab(TIER)).toBe("sets");
     expect(initialOpenTiers(TIER, directory).has("t-exec")).toBe(true);
+  });
+});
+
+describe("peopleToAdd (#5905)", () => {
+  it("is everyone ticked minus who already has a copy", () => {
+    const who: TaskWho = {
+      kind: "each",
+      target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+    };
+    expect(peopleToAdd(who, directory, new Set(["u-sam"]))).toEqual(["u-alex"]);
+    expect(peopleToAdd(null, directory, new Set(["u-sam"]))).toEqual([]);
+  });
+
+  it("reads a whole-chapter value as its members", () => {
+    expect(
+      peopleToAdd(CHAPTER, directory, new Set(["u-viewer", "u-sam"])),
+    ).toEqual(["u-alex", "u-blank"]);
   });
 });

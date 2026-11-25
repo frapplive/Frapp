@@ -29,12 +29,14 @@ import {
   isTaskStatus,
   TASK_ACTION_LABELS,
   taskAwaitsReview,
+  taskCompletedBy,
   taskConfirmLabel,
   taskSendBackOpen,
   type TaskStatus,
 } from "@repo/hooks";
 import { formatPointsChip, formatRelativeDayTime } from "@repo/formatting";
 import {
+  TASK_FOLLOWER_COPY,
   TASK_SERIES_SCOPE_COPY,
   taskGroupLabel,
   taskSeriesLive,
@@ -160,7 +162,7 @@ export function taskScreenControls({
   const awaitsReview =
     !toggleRefused && taskAwaitsReview(reviewed, { viewerId, canManage });
   // The screen's edit in place (#5514): a confirmed task can't change, and
-  // the fields need an assignee and a day.
+  // the fields need an assignee (an undated task is editable, #5761).
   const edit = taskEditable(editFactsOfRow(row), canManage);
   return {
     // A status this build doesn't know has no sequence to send, so no Mark
@@ -366,9 +368,25 @@ export function taskHistory(
     row.createdBy ? `Assigned by ${nameOf(row.createdBy)}` : "Assigned",
     row.createdAt,
   );
-  // No name: the read has no `completed_by`, and an officer may mark a
-  // member's task done for them.
-  if (row.isDone) add("done", "Marked done", row.completedAt);
+  // Who marked it done (#5732): `completed_by`, since an officer may mark a
+  // member's task done for them; the assignee on a completion from before
+  // the API kept it. "Submitted to Exec board" when a group follows it
+  // (#5473), the words web's review header takes
+  // (`TASK_FOLLOWER_COPY.submittedTo`).
+  if (row.isDone) {
+    const doneBy = taskCompletedBy({
+      completed_by: row.completedBy,
+      assignee_id: row.assigneeId,
+    });
+    add(
+      "done",
+      doneBy ? `Marked done by ${nameOf(doneBy)}` : "Marked done",
+      row.completedAt,
+      row.followedBy
+        ? TASK_FOLLOWER_COPY.submittedTo(row.followedByName)
+        : null,
+    );
+  }
   add("sent-back", "Sent back", row.sentBackAt, row.sentBackReason);
   // A completion that needed no sign-off is confirmed as it is marked done:
   // its one line is Marked done.
@@ -551,8 +569,7 @@ export interface TaskBarLayout {
  *   an officer's usual review two rounds, Send back and More, beside
  *   "Confirm · +10 pts".
  * - Send back is a round while the bar holds fewer than three others, else
- *   More's first row. More then holds at most three rows, which Android's
- *   dialog can draw: Send back or Edit with Delete and Delete for everyone.
+ *   More's first row: Send back or Edit, then Delete and Delete for everyone.
  */
 export function taskBarLayout({
   controls,

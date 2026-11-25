@@ -105,7 +105,10 @@ export class AnswerAiConsentDto {
 }
 
 export class AiChapterSettingsDto implements AiChapterSettingsView {
-  @ApiProperty({ description: 'Ask Frapp is on for the chapter.' })
+  @ApiProperty({
+    description:
+      'The Questions and requests switch: members can ask Frapp Intelligence.',
+  })
   ask: boolean;
 
   @ApiProperty({

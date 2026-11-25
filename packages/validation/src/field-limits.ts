@@ -23,6 +23,9 @@
  */
 export const ROLE_NAME_MAX_LENGTH = 100;
 
+/** A tier's name (`role_tiers_name_len`, migration `20261111140000`). */
+export const ROLE_TIER_NAME_MAX_LENGTH = 80;
+
 /**
  * Points magnitude for a single ledger write, applied symmetrically. The
  * service only *flags* large adjustments against the anomaly threshold — it
@@ -101,9 +104,10 @@ export const GRADUATION_YEAR_MAX = 2100;
 export const MAJOR_MAX_LENGTH = 100;
 
 /**
- * A member's phone number (`users.phone`, #3711), as they typed it, trimmed.
- * Room for an international number with its spaces and an extension; the
- * column's check stops anything longer. {@link isPhoneNumber} is what the API
+ * A member's phone number (`users.phone`, #3711): stored E.164 when it is a
+ * valid number, else trimmed as typed (#5798). Room for an international
+ * number with its spaces (an extension is refused); the column's check stops
+ * anything longer. {@link isPhoneNumber} is what the API
  * and both forms accept.
  */
 export const PHONE_MAX_LENGTH = 32;

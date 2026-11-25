@@ -32,6 +32,7 @@ import {
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
   ConnectGoogleDriveDto,
+  ConnectPickedGoogleDriveDto,
   GoogleDriveStatusDto,
 } from '../dtos/google-drive.dto';
 import { ChapterDocumentDto } from '../dtos/chapter-document.dto';
@@ -83,6 +84,27 @@ export class GoogleDriveController {
       chapterId,
       userId,
       body.folder_link,
+      body.who_can_see ?? null,
+    );
+  }
+
+  @Post('picked')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      "Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, then copies its files into Documents and keeps them in sync. Google allows that share only for an empty folder: for any other the answer is 409 `google_drive.share_by_hand`, and once the officer has shared it in Drive the same request connects it.",
+  })
+  @ApiOkResponse({ type: GoogleDriveStatusDto })
+  connectPicked(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Body() body: ConnectPickedGoogleDriveDto,
+  ): Promise<GoogleDriveStatusDto> {
+    return this.drive.connectPicked(
+      chapterId,
+      userId,
+      body.folder_id,
+      body.access_token,
       body.who_can_see ?? null,
     );
   }

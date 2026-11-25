@@ -70,6 +70,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useMembers: () => ok(h.members),
     useMyPermissions: () => ok({ permissions: h.mine }),
     useViewerUserId: () => "me",
+    useViewerDisplayName: () => "Me",
+    useChapterRoleColors: () => [],
     useUpdateRole: () => mutation(h.updateRole),
     useCreateRole: () => mutation(h.createRole),
     useDeleteRole: () => mutation(h.deleteRole),
@@ -145,9 +147,9 @@ function chapter() {
     ),
     role("brother", "Brothers", "t3", MEMBERS.permissions),
     role("alum", "Alumni", null, []),
-    role("member", "Member", "t3", ["members:view", "chat:send"], {
+    role("everyone", "Everyone", null, ["members:view"], {
       is_system: true,
-      system_key: "MEMBER",
+      system_key: "EVERYONE",
     }),
     role("cabinet", "Cabinet", null, ["channels:read:cabinet"]),
   ];
@@ -234,6 +236,61 @@ describe("the tier list", () => {
     expect(screen.queryByRole("menuitem", { name: "Exec board" })).toBeNull();
     expect(
       screen.getByRole("menuitem", { name: "Delete role" }),
+    ).toBeInTheDocument();
+  });
+
+  // #5736: the section adds its own role, already pickable, and opens it.
+  it("adds a Non-chapter business role already pickable, then opens it", async () => {
+    h.createRole.mockResolvedValue({ id: "new-im" });
+    const user = userEvent.setup();
+    const onOpenRole = vi.fn();
+    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={onOpenRole} />);
+    const business = screen.getByRole("region", {
+      name: "Non-chapter business",
+    });
+    expect(business).toHaveTextContent("No roles here yet.");
+    expect(business).not.toHaveTextContent("Turn it on from");
+    await user.click(
+      within(business).getByRole("button", { name: "Add role" }),
+    );
+    await user.type(
+      within(business).getByRole("textbox", {
+        name: "New Non-chapter business role",
+      }),
+      "Intramural soccer{Enter}",
+    );
+    expect(h.createRole).toHaveBeenCalledWith({
+      name: "Intramural soccer",
+      permissions: [],
+      tier_id: null,
+      self_assignable: true,
+    });
+    expect(onOpenRole).toHaveBeenCalledWith("new-im");
+  });
+
+  it("offers no Add role under Non-chapter business to a roles manager outside the tiers", () => {
+    h.members = [{ user_id: "me", role_ids: ["alum"] }];
+    h.mine = ["roles:manage", "members:view"];
+    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    const business = screen.getByRole("region", {
+      name: "Non-chapter business",
+    });
+    expect(
+      within(business).queryByRole("button", { name: "Add role" }),
+    ).toBeNull();
+  });
+
+  it("keeps Add role under Non-chapter business once it has roles", () => {
+    h.roles = [
+      ...h.roles,
+      role("im", "Intramurals", null, [], { self_assignable: true }),
+    ];
+    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    const business = screen.getByRole("region", {
+      name: "Non-chapter business",
+    });
+    expect(
+      within(business).getByRole("button", { name: "Add role" }),
     ).toBeInTheDocument();
   });
 
@@ -580,6 +637,28 @@ describe("a role's page", () => {
     });
   });
 
+  it("leaves out the retired permissions a role holds, and keeps them on save (#5728)", async () => {
+    const user = userEvent.setup();
+    h.roles = h.roles.map((r) =>
+      r.id === "alum" ? { ...r, permissions: ["alumni:post"] } : r,
+    );
+    render(<RolePage roleId="alum" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    expect(
+      screen.queryByRole("switch", { name: /post in the alumni channel/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: /post announcements/i }),
+    ).toBeNull();
+    expect(screen.queryByText(/no longer used/i)).toBeNull();
+    await user.click(
+      screen.getByRole("switch", { name: /create events for alumni/i }),
+    );
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "alum",
+      body: { permissions: ["alumni:post", "events:create"] },
+    });
+  });
+
   it("views the app as the role, then comes back to its page", async () => {
     const user = userEvent.setup();
     render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
@@ -594,14 +673,13 @@ describe("a role's page", () => {
     expect(h.push).toHaveBeenCalledWith("/chat");
   });
 
-  it("previews a role that opens nothing on its own with Member beside it, as a join would", async () => {
+  it("previews a role with what Everyone holds beside it, as every member has it", async () => {
     const user = userEvent.setup();
     render(<RolePage roleId="cabinet" onBack={vi.fn()} onOpenTier={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "View as Cabinet" }));
     expect(useRolePreviewStore.getState().preview?.permissions).toEqual([
       "channels:read:cabinet",
       "members:view",
-      "chat:send",
     ]);
   });
 
@@ -727,13 +805,14 @@ describe("a role's page", () => {
   it("saves a picked swatch, and leaves an untouched color out", async () => {
     const user = userEvent.setup();
     render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    const swatches = within(
-      screen.getByRole("group", { name: "Color" }),
-    ).getAllByRole("button");
-    await user.click(swatches[1]!);
+    await user.click(
+      within(screen.getByRole("group", { name: "Color" })).getByRole("button", {
+        name: "Teal",
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "Save role" }));
     const body = h.updateRole.mock.calls[0]![0].body;
-    expect(typeof body.color).toBe("string");
+    expect(body.color).toBe("#3DD6C4");
     expect(body).not.toHaveProperty("permissions", expect.anything());
   });
 

@@ -1,30 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
-  profileStatsErrorNote,
+  useActiveChapterId,
+  useChapterMajors,
   useCurrentUser,
   useMemberByUserId,
   useMemberDisplayNames,
-  useMyProfileStats,
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
+import { formatPhone } from "@repo/formatting";
 import {
-  BIRTHDAY_VISIBILITY_DEFAULT,
   type BirthdayDraftProblem,
-  birthdayDraftProblem,
   type BirthdayVisibility,
   can,
   DISPLAY_NAME_MAX_LENGTH,
-  GRADUATION_YEAR_MAX,
-  GRADUATION_YEAR_MIN,
-  isPhoneNumber,
-  MAJOR_MAX_LENGTH,
-  PHONE_INVALID_MESSAGE,
-  PHONE_MAX_LENGTH,
+  isDisplayNameLocked,
+  NAME_LOCK_COPY,
   PROFILE_ALUMNI_SECTION,
   PROFILE_FIELD_COPY,
   showsAfterGraduation,
@@ -32,6 +28,14 @@ import {
   USER_CITY_MAX_LENGTH,
   USER_COMPANY_MAX_LENGTH,
 } from "@repo/validation";
+import { StandingCards } from "@/components/activity/standing-cards";
+import { StandingPanels } from "@/components/standing/standing-panels";
+import { StandingStats } from "@/components/standing/standing-stats";
+import {
+  STANDING_PARAM,
+  standingDoorFrom,
+} from "@/components/standing/standing-doors";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,15 +43,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ProfileSection } from "@/components/profile/profile-section";
-import { profileSaveBody } from "@/components/profile/profile-save-body";
+import { OwnCustomFieldsSection } from "@/components/profile/own-custom-fields-section";
+import {
+  profileSaveBody,
+  profileSaveProblem,
+} from "@/components/profile/profile-save-body";
+import { ProfileAboutFields } from "@/components/profile/profile-about-fields";
 import { PickRolesSection } from "@/components/roles/pick-roles-section";
 import { ProfilePhotoControl } from "@/components/profile/profile-photo-control";
-import { BirthdayFields } from "@/components/profile/birthday-fields";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
 import { anyReadUncached, pausedRead } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { getErrorMessage, initials, parseGuardedInt } from "@/lib/utils";
+import { getErrorMessage, initials } from "@/lib/utils";
 import { ProfilePageSkeleton } from "@/components/profile/profile-skeleton";
 
 type CurrentUser = {
@@ -69,9 +77,10 @@ type CurrentUser = {
 
 /**
  * `/profile`: who you are in the directory. Name, photo, phone, major, year,
- * bio and the after-graduation fields, with your points, service hours,
- * pledge class and order number read-only above the form (#4137), and nothing
- * else: quiet hours, chapter alerts,
+ * bio and the after-graduation fields, with your standing above the form:
+ * your points, service hours and study hours, each opening its own panel in
+ * place (`components/standing/`, #5950), then your pledge class and order
+ * number, read-only (#4137). Nothing else: quiet hours, chapter alerts,
  * chat density, blocked members, Discord history and the account controls
  * moved to the personal Settings page (`/preferences`,
  * `components/personal-settings/`, #3856).
@@ -84,17 +93,24 @@ export function ProfilePanel() {
   const { avatarTintFor } = useMemberDisplayNames();
   const ownId = (userQuery.data as CurrentUser | undefined)?.id;
   const updateUser = useUpdateUser();
-  // Points and approved service hours, read and summed as the phone's Profile
-  // does them (`@repo/hooks` `profile-stats.ts`, #4137).
-  const stats = useMyProfileStats();
-  const statsNote = profileStatsErrorNote(
-    stats.pointsFailed,
-    stats.serviceFailed,
-  );
+  // Whether the chapter locks the member's own name (#5801).
+  const nameLocked = isDisplayNameLocked(userQuery.data);
+  // Standing is the chapter's: with no active chapter there is none to read.
+  const hasChapter = !!useActiveChapterId();
+  // A council keeps no points, service hours or standing (#5933): its routes
+  // refuse those reads, so its Profile shows none of them.
+  const isCouncil = useIsCouncil();
+  // `/profile?open=points` (or `service`, `study`) opens that number's panel
+  // in place of the page; the figures and gauges below link to it.
+  const router = useRouter();
+  const openDoor = standingDoorFrom(useSearchParams().get(STANDING_PARAM));
   // Your pledge class and order number live on your membership, not on
   // `/v1/users/me`, behind the Directory's gate (`members:view`); a viewer
   // without it reads neither and sees no rows, as on the phone (#3939).
   const canViewMembers = can("members:view", usePermissionList());
+  // The chapter's majors, offered under Major (#5778), from the same
+  // `members:view` read as the Directory's groups.
+  const chapterMajors = useChapterMajors({ enabled: canViewMembers });
   const memberQuery = useMemberByUserId(canViewMembers ? (ownId ?? "") : "");
   const membership = memberQuery.data as
     | {
@@ -108,6 +124,7 @@ export function ProfilePanel() {
   // Set on a submit the phone refused, cleared when the member edits it
   // (validate on submit, not per keystroke: components.md § Text input).
   const [phoneError, setPhoneError] = useState(false);
+  const [yearError, setYearError] = useState(false);
   // Set on a submit with half a birthday, or a day its month lacks (#4959).
   const [birthdayError, setBirthdayError] =
     useState<BirthdayDraftProblem | null>(null);
@@ -118,7 +135,13 @@ export function ProfilePanel() {
 
   useEffect(() => {
     if (!userQuery.data) return;
-    const next = userQuery.data as CurrentUser;
+    const loaded = userQuery.data as CurrentUser;
+    // The Phone field shows the stored number formatted (#5798). Seeding it
+    // formatted, and comparing re-seeds the same way, keeps a stored
+    // `+15185550142` from reading as an edit the member made.
+    const next: CurrentUser = loaded.phone
+      ? { ...loaded, phone: formatPhone(loaded.phone) }
+      : loaded;
     const previous = seededFrom.current;
     seededFrom.current = next;
     setProfileDraft((draft) => {
@@ -192,21 +215,20 @@ export function ProfilePanel() {
     // before a limit never refuses an unrelated edit.
     const saved = (userQuery.data ?? {}) as CurrentUser;
     const body = profileSaveBody(saved, profileDraft);
-    if (body.phone && !isPhoneNumber(body.phone)) {
+    // A locked name is shown, never sent (#5801).
+    if (nameLocked) delete body.display_name;
+    const problem = profileSaveProblem(body, profileDraft);
+    if (problem?.field === "phone") {
       setPhoneError(true);
       return;
     }
-    // Month and day go together; the year rides with them (#4959).
-    if (body.birthday_visibility !== undefined) {
-      const birthdayProblem = birthdayDraftProblem(
-        profileDraft.birthday_month ?? null,
-        profileDraft.birthday_day ?? null,
-        profileDraft.birthday_year ?? null,
-      );
-      if (birthdayProblem) {
-        setBirthdayError(birthdayProblem);
-        return;
-      }
+    if (problem?.field === "graduationYear") {
+      setYearError(true);
+      return;
+    }
+    if (problem?.field === "birthday") {
+      setBirthdayError(problem.problem);
+      return;
     }
     try {
       if (Object.keys(body).length > 0) {
@@ -315,63 +337,36 @@ export function ProfilePanel() {
         </header>
 
         {/*
-          Your points and approved service hours, the numbers the phone's
-          Profile shows (#4137). A stat on the page surface, the label over
-          the number with no frame, as the Points page draws "My balance":
-          the phone's two cards are its grouped-list grammar, not web's.
-          s15's third card, attendance, is built on neither app: no member
-          can read an attendance rate (`profile-stats.ts`).
+          Your numbers, each a door to what is behind it (#5950): Points,
+          Service hours and Study hours were sidebar pages until then.
         */}
-        <section aria-label="Your numbers" className="space-y-2">
-          {stats.visible ? (
-            <>
-              <dl className="flex gap-10">
-                <div className="space-y-0.5">
-                  <dt className="text-caption text-muted-foreground">Points</dt>
-                  <dd className="text-headline font-bold tabular-nums text-foreground">
-                    {stats.points === null
-                      ? "—"
-                      : stats.points.toLocaleString()}
-                  </dd>
-                </div>
-                <div className="space-y-0.5">
-                  <dt className="text-caption text-muted-foreground">
-                    Service hours
-                  </dt>
-                  <dd className="text-headline font-bold tabular-nums text-foreground">
-                    {stats.serviceHours ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-              {!stats.hasChapter ? (
-                <p className="text-caption text-muted-foreground">
-                  Choose a chapter to see your points.
-                </p>
-              ) : statsNote ? (
-                <p className="text-caption text-muted-foreground">
-                  {statsNote}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-          {/*
-            Your class and number, read-only as on the phone: they are an
-            officer's to set, from your Directory profile or Settings. Each
-            shows only when set, so a chapter that keeps neither sees nothing.
-          */}
-          <MemberPledgeClassSection
-            open
-            memberId={membership?.id ?? null}
-            displayName={displayName}
-            pledgeClassId={membership?.pledge_class_id ?? null}
-            orderNumber={
-              typeof membership?.order_number === "number"
-                ? membership.order_number
-                : null
-            }
-            canEdit={false}
-          />
-        </section>
+        {isCouncil ? null : <StandingStats />}
+
+        {/*
+          Your class and number, read-only as on the phone: they are an
+          officer's to set, from your Directory profile or Settings. Each
+          shows only when set, so a chapter that keeps neither sees nothing.
+        */}
+        <MemberPledgeClassSection
+          open
+          memberId={membership?.id ?? null}
+          displayName={displayName}
+          pledgeClassId={membership?.pledge_class_id ?? null}
+          orderNumber={
+            typeof membership?.order_number === "number"
+              ? membership.order_number
+              : null
+          }
+          canEdit={false}
+        />
+
+        {/*
+          Last week and This semester, beside your numbers (#5779): how you
+          are standing, which Activity no longer shows. Its Points and Service
+          hours are this semester's, beside a goal; the figures above are all
+          time, so both stay.
+        */}
+        {hasChapter && !isCouncil ? <StandingCards /> : null}
 
         {/* Non-chapter business roles you pick yourself (#4958). */}
         {canViewMembers ? <PickRolesSection /> : null}
@@ -386,10 +381,23 @@ export function ProfilePanel() {
               <Label htmlFor="display-name">
                 {PROFILE_FIELD_COPY.displayName.label}
               </Label>
+              {/*
+                Locked by the chapter (#5801): the stored name, read-only, with
+                the fact that officers set it. The save sends only changed
+                fields, so a locked name is never sent.
+              */}
               <Input
                 id="display-name"
                 maxLength={DISPLAY_NAME_MAX_LENGTH}
-                value={profile.display_name ?? ""}
+                value={
+                  nameLocked
+                    ? ((userQuery.data as CurrentUser | undefined)
+                        ?.display_name ?? "")
+                    : (profile.display_name ?? "")
+                }
+                readOnly={nameLocked}
+                aria-describedby={nameLocked ? "display-name-hint" : undefined}
+                className={nameLocked ? "text-muted-foreground" : undefined}
                 onChange={(event) =>
                   setProfileDraft((prev) => ({
                     ...prev,
@@ -398,107 +406,26 @@ export function ProfilePanel() {
                 }
                 placeholder={PROFILE_FIELD_COPY.displayName.placeholder}
               />
+              {nameLocked ? (
+                <p
+                  id="display-name-hint"
+                  className="text-caption text-muted-foreground"
+                >
+                  {NAME_LOCK_COPY.lockedLine}
+                </p>
+              ) : null}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">{PROFILE_FIELD_COPY.phone.label}</Label>
-              <Input
-                id="phone"
-                type="tel"
-                autoComplete="tel"
-                inputMode="tel"
-                maxLength={PHONE_MAX_LENGTH}
-                value={profile.phone ?? ""}
-                aria-invalid={phoneError || undefined}
-                aria-describedby="phone-hint"
-                onChange={(event) => {
-                  setPhoneError(false);
-                  setProfileDraft((prev) => ({
-                    ...prev,
-                    phone: event.target.value,
-                  }));
-                }}
-                placeholder={PROFILE_FIELD_COPY.phone.placeholder}
-              />
-              <p
-                id="phone-hint"
-                role={phoneError ? "alert" : undefined}
-                className={
-                  phoneError
-                    ? "text-caption text-destructive-text"
-                    : "text-caption text-muted-foreground"
-                }
-              >
-                {phoneError
-                  ? PHONE_INVALID_MESSAGE
-                  : PROFILE_FIELD_COPY.phone.hint}
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
-              <div className="grid gap-2">
-                <Label htmlFor="major">{PROFILE_FIELD_COPY.major.label}</Label>
-                <Input
-                  id="major"
-                  value={profile.major ?? ""}
-                  maxLength={MAJOR_MAX_LENGTH}
-                  onChange={(event) =>
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      major: event.target.value,
-                    }))
-                  }
-                  placeholder={PROFILE_FIELD_COPY.major.placeholder}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="graduation-year">
-                  {PROFILE_FIELD_COPY.graduationYear.label}
-                </Label>
-                <Input
-                  id="graduation-year"
-                  aria-label={PROFILE_FIELD_COPY.graduationYear.accessibleLabel}
-                  type="number"
-                  inputMode="numeric"
-                  min={GRADUATION_YEAR_MIN}
-                  max={GRADUATION_YEAR_MAX}
-                  value={profile.graduation_year ?? ""}
-                  placeholder={PROFILE_FIELD_COPY.graduationYear.placeholder}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    // Cleared means "no year". The range
-                    // (`GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX`) is refused
-                    // at submit, by the input's `min`/`max` and by the API,
-                    // not here: guarding it on change would refuse the "2"
-                    // on the way to "2026" (components.md § Text input,
-                    // "When an error shows").
-                    const next =
-                      raw.trim() === "" ? null : parseGuardedInt(raw);
-                    if (next === undefined) return;
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      graduation_year: next,
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-            <BirthdayFields
-              value={{
-                month: profile.birthday_month ?? null,
-                day: profile.birthday_day ?? null,
-                year: profile.birthday_year ?? null,
-                visibility:
-                  profile.birthday_visibility ?? BIRTHDAY_VISIBILITY_DEFAULT,
-              }}
-              problem={birthdayError}
-              onChange={(next) => {
-                setBirthdayError(null);
-                setProfileDraft((prev) => ({
-                  ...prev,
-                  birthday_month: next.month,
-                  birthday_day: next.day,
-                  birthday_year: next.year,
-                  birthday_visibility: next.visibility,
-                }));
+            <ProfileAboutFields
+              value={profile}
+              majors={chapterMajors}
+              phoneInvalid={phoneError}
+              yearInvalid={yearError}
+              birthdayProblem={birthdayError}
+              onChange={(patch) => {
+                if ("phone" in patch) setPhoneError(false);
+                if ("graduation_year" in patch) setYearError(false);
+                if ("birthday_month" in patch) setBirthdayError(null);
+                setProfileDraft((prev) => ({ ...prev, ...patch }));
               }}
             />
             <div className="grid gap-2">
@@ -575,7 +502,17 @@ export function ProfilePanel() {
             </div>
           </form>
         </ProfileSection>
+
+        {/*
+          Your chapter's own fields, every tier, with who sees each (#581).
+          Behind the Directory's gate, like your pledge class above.
+        */}
+        <OwnCustomFieldsSection enabled={canViewMembers} />
       </div>
+      <StandingPanels
+        open={isCouncil ? null : openDoor}
+        onClose={() => router.replace("/profile", { scroll: false })}
+      />
     </div>
   );
 }

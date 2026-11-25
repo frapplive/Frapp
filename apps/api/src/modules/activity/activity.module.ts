@@ -6,6 +6,11 @@ import { ActivityLayoutController } from '../../interface/controllers/activity-l
 import { SupabaseActivityLayoutRepository } from '../../infrastructure/supabase/repositories/supabase-activity-layout.repository';
 import { ACTIVITY_LAYOUT_REPOSITORY } from '#domain/repositories/activity-layout.repository.interface';
 import { MeetingModule } from '../meeting/meeting.module';
+import { SupabaseMeetingNoMinutesRepository } from '../../infrastructure/supabase/repositories/supabase-meeting-no-minutes.repository';
+import { MEETING_NO_MINUTES_REPOSITORY } from '#domain/repositories/meeting-no-minutes.repository.interface';
+import { SupabaseMeetingNotesRepository } from '../../infrastructure/supabase/repositories/supabase-meeting-notes.repository';
+import { MEETING_NOTES_REPOSITORY } from '#domain/repositories/meeting-notes.repository.interface';
+import { ActivityMinutesService } from '../../application/services/activity-minutes.service';
 import { MemberNudgeModule } from '../member-nudge/member-nudge.module';
 import { ActivityService } from '../../application/services/activity.service';
 import { ActivityLinkService } from '../../application/services/activity-link.service';
@@ -90,6 +95,19 @@ import { TaskModule } from '../task/task.module';
   ],
   providers: [
     ActivityService,
+    // To do's minutes rows (#5949). The "No minutes" marks and the member's
+    // own notes rows are read here, read-only, as the chat tables are below,
+    // rather than by importing their feature modules, which would move those
+    // modules' routes in the OpenAPI document.
+    ActivityMinutesService,
+    {
+      provide: MEETING_NO_MINUTES_REPOSITORY,
+      useClass: SupabaseMeetingNoMinutesRepository,
+    },
+    {
+      provide: MEETING_NOTES_REPOSITORY,
+      useClass: SupabaseMeetingNotesRepository,
+    },
     ActivityCardService,
     ActivityLinkService,
     ActivityStandingService,
@@ -163,7 +181,7 @@ import { TaskModule } from '../task/task.module';
       useClass: SupabaseActivityLayoutRepository,
     },
   ],
-  // For Frapp AI's standing tools (#4901), which read the standing as `GET
+  // For Frapp Intelligence's standing tools (#4901), which read the standing as `GET
   // /v1/activity/standing` does.
   exports: [ActivityStandingService],
 })

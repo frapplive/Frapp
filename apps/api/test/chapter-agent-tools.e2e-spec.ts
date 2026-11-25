@@ -24,6 +24,7 @@ describe('ChapterAgentToolsModule (e2e)', () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       'find_member',
       'roster',
+      'chapter_roles',
       'my_tasks',
       'chapter_tasks',
       'events',

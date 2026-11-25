@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  SETTINGS_ENTRY_PERMISSIONS,
-  SETTINGS_TOOLS,
   hasSettingsDestination,
   isSettingsTabVisible,
   visibleSettingsTools,
 } from "./settings-access";
 
 /**
- * Who Settings is for (#2946). The nav's Settings row, the rail and the empty
+ * Who Settings is for (#2946). The chapter menu's link, the rail and the empty
  * state all answer from this module, so these pin its answers per seeded role
  * (`apps/api/src/domain/constants/permissions.ts`).
  */
@@ -31,35 +29,21 @@ const MEMBER = [
   "polls:create",
 ];
 
-describe("SETTINGS_ENTRY_PERMISSIONS", () => {
-  it("admits exactly the holders Settings has something for", () => {
-    expect([...SETTINGS_ENTRY_PERMISSIONS].sort()).toEqual(
-      [
-        "billing:view",
-        "chapter-config:view",
-        "channels:manage",
-        "geofences:manage",
-        "groups:manage",
-        "reports:export",
-        "roles:manage",
-        "semester:rollover",
-      ].sort(),
-    );
-  });
-
-  it("covers every tool, so no tool is reachable only by URL", () => {
-    for (const tool of SETTINGS_TOOLS) {
-      expect(SETTINGS_ENTRY_PERMISSIONS).toContain(tool.permission);
-    }
-  });
-});
-
 describe("isSettingsTabVisible", () => {
-  // #4076: a chair who keeps groups current needs no chapter config.
-  it("shows Groups to a groups:manage holder, and not to a config viewer without it", () => {
-    expect(isSettingsTabVisible("groups", ["groups:manage"])).toBe(true);
-    expect(isSettingsTabVisible("groups", ["chapter-config:view"])).toBe(false);
-    expect(isSettingsTabVisible("groups", ["*"])).toBe(true);
+  it("shows Logs only with both grants the audit-log route takes", () => {
+    expect(
+      isSettingsTabVisible("logs", ["chapter-config:view", "members:view"]),
+    ).toBe(true);
+    expect(isSettingsTabVisible("logs", ["chapter-config:view"])).toBe(false);
+    expect(isSettingsTabVisible("logs", ["members:view"])).toBe(false);
+    expect(isSettingsTabVisible("logs", ["*"])).toBe(true);
+  });
+
+  // #4076: a chair who keeps groups current needs no chapter config. Groups
+  // share the Roles and groups tab since 2026-11-19, which opens for them.
+  it("shows Roles and groups to a groups:manage holder with nothing else", () => {
+    expect(isSettingsTabVisible("roles", ["groups:manage"])).toBe(true);
+    expect(isSettingsTabVisible("roles", ["*"])).toBe(true);
   });
 
   it("shows every tab to the President's wildcard", () => {
@@ -125,8 +109,11 @@ describe("isSettingsTabVisible", () => {
 describe("visibleSettingsTools", () => {
   const ids = (tools: { id: string }[]) => tools.map((tool) => tool.id);
 
-  it("gives a treasurer Reports and nothing else", () => {
-    expect(ids(visibleSettingsTools(TREASURER))).toEqual(["reports"]);
+  it("gives a treasurer the points ledger and Reports, and nothing else", () => {
+    expect(ids(visibleSettingsTools(TREASURER))).toEqual([
+      "points-ledger",
+      "reports",
+    ]);
   });
 
   it("gives an ordinary member nothing", () => {
@@ -137,6 +124,8 @@ describe("visibleSettingsTools", () => {
     expect(ids(visibleSettingsTools(["*"]))).toEqual([
       "chat-admin",
       "discord-import",
+      "points-ledger",
+      "service-history",
       "study-zones",
       "reports",
     ]);

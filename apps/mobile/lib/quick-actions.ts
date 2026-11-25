@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { PLUS_MENU_PERMISSIONS } from "@repo/chat-core/plus-menu";
 import {
-  can,
-  canAll,
-  EVENT_CREATE_PERMISSIONS,
-  isModuleEnabled,
+  availableNewActions,
+  type NewActionAccess,
+  NEW_ACTION_LABELS,
+  NEW_ACTION_ORDER,
+  type NewActionKey,
 } from "@repo/validation";
 
 /**
@@ -14,18 +14,12 @@ import {
  * press-and-hold mode makes, and where the member's own arrangement is kept.
  * The panel is `components/quick-actions/quick-actions-panel.tsx`; what each
  * action opens is `components/quick-actions/quick-actions-host.tsx`.
+ *
+ * The actions, their order, their words and who may use each are the app's
+ * New list (`@repo/validation` `sections.ts`, #5943), which web's New page
+ * reads too (#5946).
  */
-export type QuickActionKey =
-  | "newMinutes"
-  | "search"
-  | "newEvent"
-  | "newTask"
-  | "invite"
-  | "message"
-  | "hostCheckIn"
-  | "logHours"
-  | "study"
-  | "upload";
+export type QuickActionKey = NewActionKey;
 
 /**
  * The panel holds at most nine, three rows of three (Paul, 2026-11-13: "cap it
@@ -65,36 +59,15 @@ export const QUICK_ACTION_COLUMNS = 3;
  * couldn't find a way to invite new members"); Host check-in, Log hours,
  * Study and Upload wait in the Add row for that officer.
  */
-const QUICK_ACTION_ORDER: readonly QuickActionKey[] = [
-  "newMinutes",
-  "search",
-  "newEvent",
-  "newTask",
-  "invite",
-  "message",
-  "hostCheckIn",
-  "logHours",
-  "study",
-  "upload",
-];
+const QUICK_ACTION_ORDER: readonly QuickActionKey[] = NEW_ACTION_ORDER;
 
-export const QUICK_ACTION_LABELS: Record<QuickActionKey, string> = {
-  newMinutes: "New minutes",
-  search: "Search",
-  newEvent: "New event",
-  newTask: "New task",
-  invite: "Invite",
-  message: "Message",
-  hostCheckIn: "Host check-in",
-  logHours: "Log hours",
-  study: "Study",
-  upload: "Upload",
-};
+export const QUICK_ACTION_LABELS: Record<QuickActionKey, string> =
+  NEW_ACTION_LABELS;
 
 /** What a screen reader says the action does, beyond its label. */
 export const QUICK_ACTION_HINTS: Record<QuickActionKey, string> = {
   newMinutes: "Starts minutes for the meeting on now, or a new one.",
-  search: "Opens search for channels, members, messages and events.",
+  search: "Opens search for channels, settings, members, messages and events.",
   newEvent: "Opens the new event sheet.",
   newTask: "Opens the new task sheet.",
   invite: "Opens invites to email or share with new members.",
@@ -105,50 +78,18 @@ export const QUICK_ACTION_HINTS: Record<QuickActionKey, string> = {
   upload: "Opens the upload document sheet.",
 };
 
-export type QuickActionAccess = {
-  permissions: readonly string[];
-  /** The chapter's `enabled_modules`, once read. Unread counts as on. */
-  enabledModules: Record<string, boolean> | null | undefined;
-};
+/** Who is asking: `availableNewActions`'s access, council included (#5933). */
+export type QuickActionAccess = NewActionAccess;
 
 /**
- * The actions this member can use in this chapter: their role grants it and
- * the module is on. The same checks the API makes on what each action does
- * (each gate names its endpoint), so the panel never offers something the
- * server would then refuse.
+ * The actions this member can use in this chapter: the app's one rule
+ * (`availableNewActions` in `@repo/validation`), which web's New page reads
+ * too, so the two never offer different things to the same member.
  */
-export function availableQuickActions({
-  permissions,
-  enabledModules,
-}: QuickActionAccess): QuickActionKey[] {
-  const on = (key: string) => isModuleEnabled(enabledModules, key);
-  const allowed: Record<QuickActionKey, boolean> = {
-    // `POST /v1/meetings` checks `meetings:record` behind the module.
-    newMinutes: on("meetings") && can("meetings:record", permissions),
-    // Members, messages and events come from `GET /v1/search`, which checks
-    // `members:view`, as the Directory behind Message does.
-    search: can("members:view", permissions),
-    // The event sheet's own gate: creating reads the roster, which the events
-    // controller guards with members:view.
-    newEvent: on("events") && canAll(EVENT_CREATE_PERMISSIONS, permissions),
-    // The route's grant, from the table the chat + reads too: `tasks:manage`
-    // under the controller's `members:view`.
-    newTask: on("tasks") && canAll(PLUS_MENU_PERMISSIONS.task, permissions),
-    // Every invite route (`POST /v1/invites`, `GET /v1/invites`) checks
-    // `members:invite`. Invites have no module switch.
-    invite: can("members:invite", permissions),
-    // The Directory lists the roster (`GET /v1/members`, `members:view`).
-    message: can("members:view", permissions),
-    hostCheckIn: on("events") && can("events:update", permissions),
-    // Filing an entry is `service:log` (`POST /v1/service-entries`), which the
-    // seeded New Member and Alumni roles don't hold.
-    logHours: on("hours") && can("service:log", permissions),
-    // A session starts against the chapter's study zones, so both modules.
-    // The study endpoints sit behind `members:view` too.
-    study: on("hours") && on("geofences") && can("members:view", permissions),
-    upload: on("documents") && can("chapter_docs:upload", permissions),
-  };
-  return QUICK_ACTION_ORDER.filter((key) => allowed[key]);
+export function availableQuickActions(
+  access: QuickActionAccess,
+): QuickActionKey[] {
+  return availableNewActions(access);
 }
 
 /**

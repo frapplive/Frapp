@@ -121,7 +121,7 @@ describe("the chapter's AI switches", () => {
     expect(
       screen.getByRole("switch", { name: /include channel messages/i }),
     ).toBeDisabled();
-    expect(screen.getByText(/turn on ask frapp first/i)).toBeInTheDocument();
+    expect(screen.getByText(/turn on questions and requests first/i)).toBeInTheDocument();
 
     state.settings = settings({ ask: true });
     rerender(<SettingsAiTab />);
@@ -138,7 +138,7 @@ describe("the chapter's AI switches", () => {
       code: "ai.settings.president_only",
     });
     render(<SettingsAiTab />);
-    await user.click(screen.getByRole("switch", { name: /ask frapp/i }));
+    await user.click(screen.getByRole("switch", { name: /questions and requests/i }));
     expect(state.toast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Couldn't change the AI setting",
@@ -148,7 +148,7 @@ describe("the chapter's AI switches", () => {
       }),
     );
     expect(
-      screen.getByRole("switch", { name: /ask frapp/i }),
+      screen.getByRole("switch", { name: /questions and requests/i }),
     ).not.toBeChecked();
   });
 
@@ -170,7 +170,7 @@ describe("the chapter's AI switches", () => {
     });
     expect(nested).toBeChecked();
     expect(nested).toBeEnabled();
-    expect(screen.queryByText(/turn on ask frapp first/i)).toBeNull();
+    expect(screen.queryByText(/turn on questions and requests first/i)).toBeNull();
     await user.click(nested);
     expect(state.update).toHaveBeenCalledWith({ chat_source: false });
   });

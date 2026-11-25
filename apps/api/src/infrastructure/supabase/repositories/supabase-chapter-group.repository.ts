@@ -9,13 +9,22 @@ import type {
   ChapterGroup,
   ChapterGroupMembership,
 } from '#domain/entities/chapter-group.entity';
+import { CHAPTER_GROUP_KINDS, groupKindOpensChannels } from '@repo/validation';
 import { SupabaseQueryError } from '../supabase-query-error';
 import { fetchAllPages } from '../supabase.utils';
 import {
+  PG_CHECK_VIOLATION,
   PG_FOREIGN_KEY_VIOLATION,
   PG_NO_DATA_FOUND,
   PG_UNIQUE_VIOLATION,
 } from '#domain/constants/postgres-error-codes';
+
+/**
+ * The kinds of group that can open a channel, read from the one rule
+ * (`groupKindOpensChannels`), so a kind added later is closed here until that
+ * rule opens it.
+ */
+const CHANNEL_KINDS = CHAPTER_GROUP_KINDS.filter(groupKindOpensChannels);
 
 /** Rows per membership page; the server's own cap may be lower. */
 const MEMBERSHIP_PAGE = 1000;
@@ -138,7 +147,7 @@ export class SupabaseChapterGroupRepository implements IChapterGroupRepository {
       .eq('chapter_id', chapterId)
       .eq('user_id', userId)
       // Only groups that can open a channel (`groupKindOpensChannels`).
-      .neq('kind', 'class_year');
+      .in('kind', CHANNEL_KINDS);
     if (error) throw new SupabaseQueryError(error);
     return (data ?? []).map((row) => row.group_id);
   }
@@ -183,5 +192,43 @@ export class SupabaseChapterGroupRepository implements IChapterGroupRepository {
       throw new SupabaseQueryError(error);
     }
     return data ?? [];
+  }
+
+  async addMember(
+    groupId: string,
+    chapterId: string,
+    userId: string,
+  ): Promise<'added' | 'already' | 'group_not_found' | 'member_not_found'> {
+    const { error } = await this.supabase
+      .from('chapter_group_members')
+      .insert({ group_id: groupId, chapter_id: chapterId, user_id: userId });
+    if (!error) return 'added';
+    if (error.code === PG_UNIQUE_VIOLATION) return 'already';
+    if (error.code === PG_FOREIGN_KEY_VIOLATION) {
+      // The composite keys don't say which one failed. The service checked
+      // the group just before, but it can be deleted since, so ask whether
+      // it is still there: if so, the member is the one missing.
+      const group = await this.findById(groupId, chapterId);
+      return group ? 'member_not_found' : 'group_not_found';
+    }
+    // `chapter_group_members_manual_only` refuses an automatic group.
+    if (error.code === PG_CHECK_VIOLATION) return 'group_not_found';
+    throw new SupabaseQueryError(error);
+  }
+
+  async removeMember(
+    groupId: string,
+    chapterId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('chapter_group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('chapter_id', chapterId)
+      .eq('user_id', userId)
+      .select('user_id');
+    if (error) throw new SupabaseQueryError(error);
+    return (data ?? []).length > 0;
   }
 }

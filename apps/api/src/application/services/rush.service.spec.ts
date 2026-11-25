@@ -10,14 +10,27 @@ import type { IRushCandidateRepository } from '#domain/repositories/rush-candida
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
+import type { RushStage } from '#domain/entities/rush-pipeline.entity';
 import { ChatService } from './chat.service';
+import { RushBidService } from './rush-bid.service';
+import { RushPipelineService } from './rush-pipeline.service';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
+
+const sees = (id: string) => ({ id, canViewResults: Promise.resolve(true) });
+const blind = (id: string) => ({
+  id,
+  canViewResults: Promise.resolve(false),
+});
 
 describe('RushService', () => {
   let service: RushService;
   let mockRushRepo: jest.Mocked<IRushCandidateRepository>;
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
   let mockChatService: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
+  let mockBids: { extend: jest.Mock };
+  let mockPipeline: jest.Mocked<
+    Pick<RushPipelineService, 'stageForNewCandidate' | 'listStages'>
+  >;
 
   const baseCandidate: RushCandidate = {
     id: 'cand-1',
@@ -26,7 +39,9 @@ describe('RushService', () => {
     name_key: 'jane doe',
     user_id: null,
     stage: 'new',
+    closed_reason: null,
     bid_status: 'none',
+    bid_state: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
   };
@@ -36,7 +51,6 @@ describe('RushService', () => {
       findById: jest.fn(),
       findByNameKey: jest.fn(),
       create: jest.fn(),
-      setBidExtended: jest.fn(),
       insertVote: jest.fn(),
       countVotes: jest.fn().mockResolvedValue(0),
       viewerHasVoted: jest.fn().mockResolvedValue(false),
@@ -50,12 +64,25 @@ describe('RushService', () => {
       sendMessage: jest.fn().mockResolvedValue({}),
     };
 
+    mockBids = { extend: jest.fn().mockResolvedValue({}) };
+    mockPipeline = {
+      stageForNewCandidate: jest.fn().mockResolvedValue('new'),
+      listStages: jest
+        .fn()
+        .mockResolvedValue([
+          { key: 'new', label: 'New' } as RushStage,
+          { key: 'met', label: 'Met' } as RushStage,
+        ]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RushService,
         { provide: RUSH_CANDIDATE_REPOSITORY, useValue: mockRushRepo },
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: ChatService, useValue: mockChatService },
+        { provide: RushPipelineService, useValue: mockPipeline },
+        { provide: RushBidService, useValue: mockBids },
       ],
     }).compile();
 
@@ -63,6 +90,22 @@ describe('RushService', () => {
   });
 
   describe('create', () => {
+    it("lands in the chapter's first visible New-category stage", async () => {
+      mockPipeline.stageForNewCandidate.mockResolvedValue('s_lead');
+      mockRushRepo.create.mockResolvedValue(baseCandidate);
+
+      await service.create({
+        chapter_id: 'ch-1',
+        display_name: 'Jane Doe',
+        created_by: 'user-1',
+      });
+
+      expect(mockPipeline.stageForNewCandidate).toHaveBeenCalledWith('ch-1');
+      expect(mockRushRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 's_lead' }),
+      );
+    });
+
     it('trims the display name and persists stage new / bid none', async () => {
       mockRushRepo.create.mockResolvedValue(baseCandidate);
 
@@ -77,7 +120,9 @@ describe('RushService', () => {
         display_name: 'Jane Doe',
         user_id: null,
         stage: 'new',
+        closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: 'user-1',
       });
       expect(result).toEqual(baseCandidate);
@@ -155,7 +200,7 @@ describe('RushService', () => {
       mockRushRepo.countVotes.mockResolvedValue(1);
       mockRushRepo.viewerHasVoted.mockResolvedValue(true);
 
-      const result = await service.vote('cand-1', 'ch-1', 'user-2');
+      const result = await service.vote('cand-1', 'ch-1', sees('user-2'));
 
       expect(result.vote_count).toBe(1);
       expect(result.viewer_has_voted).toBe(true);
@@ -164,39 +209,35 @@ describe('RushService', () => {
     it('404s when the candidate is missing', async () => {
       mockRushRepo.findById.mockResolvedValue(null);
       await expect(
-        service.vote('missing', 'ch-1', 'user-2'),
+        service.vote('missing', 'ch-1', sees('user-2')),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(mockRushRepo.insertVote).not.toHaveBeenCalled();
     });
   });
 
   describe('bid', () => {
-    it('extends none → extended', async () => {
-      mockRushRepo.findById.mockResolvedValue(baseCandidate);
-      mockRushRepo.setBidExtended.mockResolvedValue({
-        ...baseCandidate,
-        bid_status: 'extended',
-      });
-
-      const result = await service.bid('cand-1', 'ch-1', 'user-1');
-
-      expect(mockRushRepo.setBidExtended).toHaveBeenCalledWith(
-        'cand-1',
-        'ch-1',
-      );
-      expect(result.bid_status).toBe('extended');
-    });
-
-    it('is a no-op when already extended', async () => {
+    it('extends through the bid rules, then answers the card view', async () => {
       mockRushRepo.findById.mockResolvedValue({
         ...baseCandidate,
         bid_status: 'extended',
+        bid_state: 'extended',
       });
 
-      const result = await service.bid('cand-1', 'ch-1', 'user-1');
+      const result = await service.bid('cand-1', 'ch-1', sees('user-1'));
 
-      expect(mockRushRepo.setBidExtended).not.toHaveBeenCalled();
+      expect(mockBids.extend).toHaveBeenCalledWith('cand-1', 'ch-1', 'user-1');
       expect(result.bid_status).toBe('extended');
+      expect(result.bid_state).toBe('extended');
+    });
+
+    it('passes on a refusal, writing nothing (an answered bid is 409)', async () => {
+      mockBids.extend.mockRejectedValue(
+        new ConflictException('This prospect already accepted'),
+      );
+      await expect(
+        service.bid('cand-1', 'ch-1', sees('user-1')),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(mockRushRepo.findById).not.toHaveBeenCalled();
     });
   });
 
@@ -206,7 +247,7 @@ describe('RushService', () => {
       mockRushRepo.countVotes.mockResolvedValue(3);
       mockRushRepo.viewerHasVoted.mockResolvedValue(false);
 
-      const result = await service.findView('cand-1', 'ch-1', 'user-1');
+      const result = await service.findView('cand-1', 'ch-1', sees('user-1'));
 
       expect(result).toEqual({
         ...baseCandidate,
@@ -215,19 +256,113 @@ describe('RushService', () => {
       });
       expect(result).not.toHaveProperty('voters');
     });
+
+    // `rush:view_results` (#4084): the count is left out, not zeroed, and
+    // never counted; whether the viewer voted still comes back.
+    it('leaves vote_count out for a viewer without rush:view_results', async () => {
+      mockRushRepo.findById.mockResolvedValue(baseCandidate);
+      mockRushRepo.viewerHasVoted.mockResolvedValue(true);
+
+      const result = await service.findView('cand-1', 'ch-1', blind('user-1'));
+
+      expect(result).toEqual({ ...baseCandidate, viewer_has_voted: true });
+      expect(result).not.toHaveProperty('vote_count');
+      expect(mockRushRepo.countVotes).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('vote and bid without rush:view_results', () => {
+    it('a vote answers without the count', async () => {
+      mockRushRepo.findById.mockResolvedValue(baseCandidate);
+      mockRushRepo.insertVote.mockResolvedValue('inserted');
+      mockRushRepo.viewerHasVoted.mockResolvedValue(true);
+
+      const result = await service.vote('cand-1', 'ch-1', blind('user-2'));
+
+      expect(mockRushRepo.insertVote).toHaveBeenCalledWith(
+        'cand-1',
+        'ch-1',
+        'user-2',
+      );
+      expect(result).not.toHaveProperty('vote_count');
+      expect(result.viewer_has_voted).toBe(true);
+    });
+
+    it('a bid answers without the count', async () => {
+      mockRushRepo.findById.mockResolvedValue({
+        ...baseCandidate,
+        bid_status: 'extended',
+      });
+      mockRushRepo.viewerHasVoted.mockResolvedValue(false);
+
+      const result = await service.bid('cand-1', 'ch-1', blind('user-1'));
+
+      expect(result).not.toHaveProperty('vote_count');
+      expect(mockRushRepo.countVotes).not.toHaveBeenCalled();
+    });
   });
 
   describe('findViewByName', () => {
     it('404s when the name is unknown', async () => {
-      mockRushRepo.findByNameKey.mockResolvedValue(null);
+      mockRushRepo.findByNameKey.mockResolvedValue([]);
       await expect(
-        service.findViewByName('ch-1', 'user-1', 'Nobody'),
+        service.findViewByName('ch-1', sees('user-1'), 'Nobody'),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('reads the one prospect a name matches', async () => {
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate]);
+      mockRushRepo.viewerHasVoted.mockResolvedValue(false);
+      await expect(
+        service.findViewByName('ch-1', sees('user-1'), '  JANE doe '),
+      ).resolves.toMatchObject({ id: baseCandidate.id });
+      expect(mockRushRepo.findByNameKey).toHaveBeenCalledWith(
+        'ch-1',
+        'jane doe',
+      );
+    });
+
+    it('409s, never picking one, when a name matches several; the matches are their own read', async () => {
+      const second = {
+        ...baseCandidate,
+        id: 'cand-2',
+        stage: 'met',
+        created_at: '2026-11-20T00:00:00Z',
+      };
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate, second]);
+      const refusal = await service
+        .findViewByName('ch-1', sees('user-1'), baseCandidate.display_name)
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ConflictException);
+      expect((refusal as ConflictException).getResponse()).toEqual({
+        code: 'rush.several_match',
+        message: 'Several prospects match',
+      });
+      expect(mockRushRepo.viewerHasVoted).not.toHaveBeenCalled();
+
+      await expect(
+        service.findNameMatches('ch-1', ` ${baseCandidate.display_name} `),
+      ).resolves.toEqual([
+        {
+          id: baseCandidate.id,
+          display_name: baseCandidate.display_name,
+          stage: baseCandidate.stage,
+          stage_label: 'New',
+          created_at: baseCandidate.created_at,
+        },
+        {
+          id: 'cand-2',
+          display_name: baseCandidate.display_name,
+          stage: 'met',
+          stage_label: 'Met',
+          created_at: '2026-11-20T00:00:00Z',
+        },
+      ]);
     });
 
     it('rejects a blank name', async () => {
       await expect(
-        service.findViewByName('ch-1', 'user-1', '   '),
+        service.findViewByName('ch-1', sees('user-1'), '   '),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockRushRepo.findByNameKey).not.toHaveBeenCalled();
     });

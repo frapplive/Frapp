@@ -2,15 +2,22 @@ import { useRef, useState } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import {
+  useLiveMeetingRecordings,
   useMeetingNoteTaking,
   useMeetings,
+  useMemberDisplayNames,
+  useMinutesRequest,
   usePermissionList,
+  useViewerUserId,
 } from "@repo/hooks";
 import {
   MEETING_COPY,
   MEETING_ENTRY_COPY,
   MEETING_NOTE_TAKERS_COPY,
   can,
+  eventMinutesLines,
+  liveRecordingLine,
+  minutesStateWho,
 } from "@repo/validation";
 import { InlineNote } from "@/components/inline-note";
 import { ListRow, ListSection } from "@/components/list-section";
@@ -23,13 +30,16 @@ import {
   useStartMinutesFor,
 } from "@/lib/minutes/start-minutes";
 import { NoteTakerSheet } from "@/components/minutes/note-taker-sheet";
+import { RequestMinutesRow } from "@/components/minutes/request-minutes-row";
 
 /**
  * An event's way into its minutes, on the event's screen
  * (`spec/behavior/meetings.md` § Writing minutes; web's twin is
  * `event-minutes.tsx`, with the same words).
  *
- * - Minutes the viewer may read: one row that opens them.
+ * - Minutes the viewer may read: one row that opens them, saying where they
+ *   stand (posted on which day, or a draft), how many decisions and action
+ *   items they hold, and the TL;DR's first line, as web's card does.
  * - None yet, for an officer who records minutes (`meetings:record`):
  *   Record minutes where this phone can record (it starts them and opens
  *   them asking to record, notice first), else Write minutes, which starts
@@ -39,6 +49,8 @@ import { NoteTakerSheet } from "@/components/minutes/note-taker-sheet";
  * - Someone else's unposted minutes this member may take notes on (an
  *   officer who records minutes, or a member their author added, #4935):
  *   Take notes, which opens their own notes in a sheet.
+ * - Unposted minutes anyone else the event invites can't open, once it has
+ *   ended: Request minutes, which pings whoever is writing them (#5471).
  * - Anyone else, and any chapter with the meetings module off: nothing.
  *
  * Nothing is drawn until the read answers, and the row sits last on the
@@ -54,11 +66,22 @@ export function EventMinutesRow({
   const on = useMeetingsOn();
   const router = useRouter();
   const meetingsQuery = useMeetings({ enabled: on && !!eventId, eventId });
+  const viewerId = useViewerUserId();
+  const names = useMemberDisplayNames();
   const canRecord = can("meetings:record", usePermissionList());
   const canDraft = useAiSurfaces().meetingNotes;
   const start = useStartMinutesFor();
   const takingQuery = useMeetingNoteTaking({
     enabled: on && !!eventId && canDraft,
+    eventId,
+  });
+  // Who is recording, for a member the minutes don't show to yet.
+  const liveQuery = useLiveMeetingRecordings({
+    enabled: on && meetingsQuery.isSuccess && !meetingsQuery.data?.[0],
+  });
+  // Only asked once the member is known to see no minutes of their own.
+  const requestQuery = useMinutesRequest({
+    enabled: on && meetingsQuery.isSuccess && !meetingsQuery.data?.[0],
     eventId,
   });
   // Where this phone can record and holds no recording now, the row records
@@ -77,6 +100,9 @@ export function EventMinutesRow({
   // read would only meet a 409.
   if (!on || !eventId || !meetingsQuery.isSuccess) return null;
   const minutes = meetingsQuery.data?.[0];
+  const live = minutes
+    ? null
+    : liveRecordingLine(liveQuery.data, eventId, names.nameFor);
   const taking = minutes ? undefined : takingQuery.data?.[0];
   if (taking) {
     return (
@@ -88,7 +114,9 @@ export function EventMinutesRow({
                 ? MEETING_NOTE_TAKERS_COPY.takingNotes
                 : MEETING_NOTE_TAKERS_COPY.takeNotes
             }
-            description={MEETING_NOTE_TAKERS_COPY.listItem(taking.author_name)}
+            description={
+              live ?? MEETING_NOTE_TAKERS_COPY.listItem(taking.author_name)
+            }
             onPress={() => notesSheet.current?.present()}
           />
         </ListSection>
@@ -96,8 +124,24 @@ export function EventMinutesRow({
       </>
     );
   }
-  // Someone else may have started them; the note-taking read decides.
+  // Someone else may have started them; the note-taking read decides, and
+  // its Take notes wins over Request minutes.
   if (!minutes && canDraft && takingQuery.isPending) return null;
+  // Someone is recording minutes this member can't open yet: say who, and
+  // offer nothing, as the meeting is still on.
+  if (live) {
+    return (
+      <ListSection>
+        <ListRow
+          label={MEETING_ENTRY_COPY.label}
+          value={live}
+          variant="detail"
+        />
+      </ListSection>
+    );
+  }
+  const askable = minutes ? null : requestQuery.data;
+  if (askable) return <RequestMinutesRow state={askable} />;
   if (!minutes && !canRecord) return null;
 
   const open = (id: string, record = false) =>
@@ -125,23 +169,29 @@ export function EventMinutesRow({
     }
   }
 
+  const lines = minutes
+    ? eventMinutesLines(
+        minutes,
+        minutesStateWho(minutes, viewerId, names.nameFor),
+      )
+    : null;
   return (
     <>
       <ListSection>
-        {minutes ? (
+        {lines && minutes ? (
           <ListRow
             label={MEETING_ENTRY_COPY.label}
-            value={
-              minutes.status === "draft"
-                ? MEETING_COPY.draftBadge
-                : MEETING_ENTRY_COPY.posted
+            description={
+              lines.gist ? `${lines.status}\n${lines.gist}` : lines.status
             }
             accessibilityHint={MEETING_ENTRY_COPY.open}
             onPress={() => open(minutes.id)}
           />
         ) : (
           <ListRow
-            label={records ? MEETING_ENTRY_COPY.record : MEETING_ENTRY_COPY.write}
+            label={
+              records ? MEETING_ENTRY_COPY.record : MEETING_ENTRY_COPY.write
+            }
             description={MEETING_ENTRY_COPY.none}
             busy={start.isPending}
             onPress={() => void write()}

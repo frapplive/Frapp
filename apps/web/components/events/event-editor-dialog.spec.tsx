@@ -1,3 +1,4 @@
+import { EVENT_TYPES } from "@/tests/events-page";
 import { formatDateEntry, parseDateEntry } from "@repo/formatting";
 import type React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -19,8 +20,11 @@ const {
   mockPermissions,
   useEventMock,
   useEventsMock,
+  createTypeMutate,
 } = vi.hoisted(() => ({
   createMutate: vi.fn(),
+  // A type made in place from the Type menu (Paul 2026-11-20).
+  createTypeMutate: vi.fn(),
   updateMutate: vi.fn(),
   mockCurrentChapter: vi.fn(),
   mockToast: vi.fn(),
@@ -42,13 +46,18 @@ const {
 }));
 
 vi.mock("@repo/hooks", async () => ({
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   EVENT_CREATE_UNCONFIRMED: "unconfirmed-sentinel",
   useCreateEvent: () => ({ mutateAsync: createMutate, isPending: false }),
   useEvent: (id: unknown) => useEventMock(id),
   useEvents: (options?: { enabled?: boolean }) => useEventsMock(options),
   useUpdateEvent: () => ({ mutateAsync: updateMutate, isPending: false }),
-  // The two chapter types the type picker and its Edit types list read.
+  // The two chapter types the Type menu reads.
   ...(await import("@/tests/events-page")).eventTypeHooks(),
+  useCreateEventType: () => ({
+    mutateAsync: createTypeMutate,
+    isPending: false,
+  }),
   useRoles: () => ({
     data: [
       { id: "r1", name: "Exec" },
@@ -90,7 +99,11 @@ const chapter = chapterSubscription(mockCurrentChapter);
  * Open a row's menu (#5561): its trigger reads "<Row>: <value>". Safe to call
  * when it is already open.
  */
-function openRow(row: "When" | "Repeat" | "Who's coming" | "Check-in" | "Type") {
+function openRow(
+  row: "When" | "Repeat" | "Who's coming" | "Check-in" | "Type",
+) {
+  // When's fields sit in the row itself, Google Calendar's way: no menu.
+  if (row === "When") return;
   const trigger = screen.getByRole("button", {
     name: new RegExp(`^${row.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: `),
   });
@@ -102,9 +115,7 @@ function openRow(row: "When" | "Repeat" | "Who's coming" | "Check-in" | "Type") 
 /** Pick a type from the Type row's menu, or "No type" to let it go. */
 function pickType(name: string) {
   openRow("Type");
-  fireEvent.click(
-    screen.getByRole("option", { name: new RegExp(`^${name}`) }),
-  );
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(`^${name}`) }));
 }
 
 /** Open the Check-in row's menu, which holds the zone. */
@@ -112,14 +123,31 @@ function openZone() {
   openRow("Check-in");
 }
 
-/** One end of the schedule: a day typed into the date field, and a time. */
+/**
+ * One end of the schedule: the day typed into the date field, and a time.
+ * The end's day follows the start's unless the event spans days, so an end
+ * on the start's day is its time alone.
+ */
 function setSchedule(end: "Starts" | "Ends", day: string, time: string) {
-  openRow("When");
-  fireEvent.change(screen.getByLabelText(`${end}, day`), {
-    target: { value: day },
-  });
+  if (end === "Starts" || screen.queryByLabelText("Ends, day")) {
+    fireEvent.change(screen.getByLabelText(`${end}, day`), {
+      target: { value: day },
+    });
+  }
   fireEvent.change(screen.getByLabelText(`${end}, time`), {
     target: { value: time },
+  });
+}
+
+/** Name the event, create it, and check the end it was sent with. */
+async function expectCreatedEnd(end: Date) {
+  fireEvent.change(screen.getByLabelText("Event name"), {
+    target: { value: "Chapter Dinner" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+  await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+  expect(createMutate.mock.calls[0]![0]).toMatchObject({
+    end_time: end.toISOString(),
   });
 }
 
@@ -166,9 +194,9 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     expect(
       screen.getByRole("button", { name: /^Who's coming: / }),
     ).toHaveTextContent("Optional for everyone");
-    expect(
-      screen.getByRole("button", { name: /^Repeat: / }),
-    ).toHaveTextContent("Doesn't repeat");
+    expect(screen.getByRole("button", { name: /^Repeat: / })).toHaveTextContent(
+      "Doesn't repeat",
+    );
     expect(
       screen.getByRole("button", { name: /^Check-in: / }),
     ).toHaveTextContent("Opens 10 minutes early");
@@ -233,11 +261,56 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     });
   });
 
+  it("takes agenda items on create and sends them, in order (Paul 2026-11-19)", async () => {
+    renderCreate();
+    fillRequiredFields();
+    const field = screen.getByRole("textbox", { name: "Add an agenda item" });
+    fireEvent.change(field, { target: { value: "Treasurer report" } });
+    fireEvent.submit(field.closest("form")!);
+    fireEvent.change(field, { target: { value: "  Rush   recap " } });
+    fireEvent.submit(field.closest("form")!);
+    // A new event has nothing to check off.
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    const sent = createMutate.mock.calls[0]![0] as {
+      agenda: { text: string; done: boolean }[];
+    };
+    expect(sent.agenda.map((item) => [item.text, item.done])).toEqual([
+      ["Treasurer report", false],
+      ["Rush recap", false],
+    ]);
+  });
+
+  it("sends a line typed in the agenda but never entered", async () => {
+    renderCreate();
+    fillRequiredFields();
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Add an agenda item" }),
+      { target: { value: "Budget review" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    const sent = createMutate.mock.calls[0]![0] as {
+      agenda: { text: string }[];
+    };
+    expect(sent.agenda.map((item) => item.text)).toEqual(["Budget review"]);
+  });
+
+  it("sends no agenda when none was typed", async () => {
+    renderCreate();
+    fillRequiredFields();
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    expect(createMutate.mock.calls[0]![0]).not.toHaveProperty("agenda");
+  });
+
   it("creates on Ctrl+Enter from a field, not from a menu over the form", async () => {
     renderCreate();
     fillRequiredFields();
-    // From the open When menu, a portal over the form: not a create.
-    fireEvent.keyDown(screen.getByLabelText("Starts, time"), {
+    // From the open Check-in menu, a portal over the form: not a create.
+    openRow("Check-in");
+    fireEvent.keyDown(screen.getByLabelText("Zone name"), {
       key: "Enter",
       ctrlKey: true,
     });
@@ -316,7 +389,9 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     );
     openRow("Repeat");
     fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
-    expect(screen.getByText(/13 meetings, the last on Sep 23\./)).toBeTruthy();
+    expect(
+      screen.getByText(/13 meetings, the last on September 23\./),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create event" }));
 
     await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
@@ -354,7 +429,7 @@ describe("EventEditorDialog form shape and attendance by role", () => {
       target: { value: "2026-07-15" },
     });
     expect(
-      screen.getByText(/^\d meetings, the last on Jul 1\d\./),
+      screen.getByText(/^\d meetings, the last on July 1\d\./),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create event" }));
 
@@ -448,7 +523,7 @@ describe("EventEditorDialog form shape and attendance by role", () => {
 
     it("moves stored weekdays with a start moved in the same save", async () => {
       renderEdit(head);
-      // Monday Jul 5 → Tuesday Jul 6, same time, and 8 meetings.
+      // Monday July 5 → Tuesday July 6, same time, and 8 meetings.
       openRow("When");
       fireEvent.change(screen.getByLabelText("Starts, day"), {
         target: { value: "2027-07-06" },
@@ -479,7 +554,9 @@ describe("EventEditorDialog form shape and attendance by role", () => {
       fireEvent.change(screen.getByLabelText("Ends after how many meetings"), {
         target: { value: "6" },
       });
-      expect(screen.getByText(/^6 meetings, the last on Aug 9/)).toBeTruthy();
+      expect(
+        screen.getByText(/^6 meetings, the last on August 9/),
+      ).toBeTruthy();
       const body = await saved();
       expect(body).toMatchObject({
         recurrence_rule: RULE.replace("COUNT=10", "COUNT=6"),
@@ -670,7 +747,7 @@ describe("EventEditorDialog form shape and attendance by role", () => {
   // #4746: a Repeat change on a started series steps from its real next
   // meeting, read from the chapter's events, not from the rule's pattern.
   describe("Repeat on a started series", () => {
-    // Monthly on the 5th from Mon 2027-07-05; the August meeting was moved
+    // Monthly on the 5th from Monday 2027-07-05; the August meeting was moved
     // by hand to the 7th. The clock is past the head, before August.
     const RULE = "FREQ=MONTHLY;INTERVAL=1;COUNT=10;TZID=America/New_York";
     const head = {
@@ -731,13 +808,17 @@ describe("EventEditorDialog form shape and attendance by role", () => {
       renderEdit();
       expect(useEventsMock).toHaveBeenCalledWith({ enabled: true });
       shorten();
-      expect(screen.getByText(/^3 meetings, the last on Oct 7/)).toBeTruthy();
+      expect(
+        screen.getByText(/^3 meetings, the last on October 7/),
+      ).toBeTruthy();
     });
 
     it("counts from the rule's pattern when the events can't be read", () => {
       renderEdit();
       shorten();
-      expect(screen.getByText(/^3 meetings, the last on Oct 5/)).toBeTruthy();
+      expect(
+        screen.getByText(/^3 meetings, the last on October 5/),
+      ).toBeTruthy();
     });
 
     it("holds Repeat and Save while the events load", () => {
@@ -805,7 +886,7 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     ).toContain("December 5");
     expect(
       (screen.getByLabelText("Starts, time") as HTMLInputElement).value,
-    ).toBe("21:00");
+    ).toBe("9 PM");
     // Nothing is made until the officer saves.
     expect(createMutate).not.toHaveBeenCalled();
 
@@ -1374,19 +1455,19 @@ describe("EventEditorDialog opened from chat (#3773)", () => {
     });
     expect(screen.getByLabelText("Event name")).toHaveValue("Chapter Dinner");
     expect(screen.getByLabelText("Location")).toHaveValue("Main House");
-    // The day is written out (#3937); the time is the browser's own input.
+    // The day and the times are written out (#3937, Google Calendar's way).
     openRow("When");
     expect(screen.getByLabelText("Starts, day")).toHaveValue(
       formatDateEntry("2026-11-12", new Date()),
     );
     openRow("When");
-    expect(screen.getByLabelText("Starts, time")).toHaveValue("18:00");
+    expect(screen.getByLabelText("Starts, time")).toHaveValue("6 PM");
     openRow("When");
-    expect(screen.getByLabelText("Ends, time")).toHaveValue("20:00");
+    expect(screen.getByLabelText("Ends, time")).toHaveValue("8 PM");
     expect(screen.getByLabelText("Points for attending")).toHaveValue(5);
   });
 
-  it("carries the end with a moved start, keeping the length (#3937)", () => {
+  it("carries the end with a moved start, keeping the length (#3937)", async () => {
     renderFromChat({
       initialStartAt: "2026-11-12T18:00",
       initialEndAt: "2026-11-12T20:00",
@@ -1395,15 +1476,13 @@ describe("EventEditorDialog opened from chat (#3773)", () => {
     fireEvent.change(screen.getByLabelText("Starts, day"), {
       target: { value: "2026-11-13" },
     });
-    openRow("When");
-    expect(screen.getByLabelText("Ends, day")).toHaveValue(
-      formatDateEntry("2026-11-13", new Date()),
-    );
-    openRow("When");
-    expect(screen.getByLabelText("Ends, time")).toHaveValue("20:00");
+    // The end's day follows the start's, so it has no field of its own.
+    expect(screen.queryByLabelText("Ends, day")).toBeNull();
+    expect(screen.getByLabelText("Ends, time")).toHaveValue("8 PM");
+    await expectCreatedEnd(new Date("2026-11-13T20:00"));
   });
 
-  it("carries the end through a start typed a key at a time", () => {
+  it("carries the end through a start typed a key at a time", async () => {
     renderFromChat({
       initialStartAt: "2026-11-12T18:00",
       initialEndAt: "2026-11-12T20:00",
@@ -1417,12 +1496,43 @@ describe("EventEditorDialog opened from chat (#3773)", () => {
       });
     }
     const start = parseDateEntry("11/14", new Date())!;
-    openRow("When");
-    expect(screen.getByLabelText("Ends, day")).toHaveValue(
-      formatDateEntry(start, new Date()),
-    );
-    openRow("When");
-    expect(screen.getByLabelText("Ends, time")).toHaveValue("20:00");
+    expect(screen.getByLabelText("Ends, time")).toHaveValue("8 PM");
+    await expectCreatedEnd(new Date(`${start}T20:00`));
+  });
+
+  it("puts an end before the start on the next day, past midnight", async () => {
+    renderFromChat({
+      initialStartAt: "2026-11-12T22:00",
+      initialEndAt: "2026-11-12T23:00",
+    });
+    fireEvent.change(screen.getByLabelText("Ends, time"), {
+      target: { value: "1am" },
+    });
+    expect(screen.queryByLabelText("Ends, day")).toBeNull();
+    await expectCreatedEnd(new Date("2026-11-13T01:00"));
+  });
+
+  it("gives a new start an hour when there is no end yet", async () => {
+    renderFromChat();
+    fireEvent.change(screen.getByLabelText("Starts, day"), {
+      target: { value: "2026-11-12" },
+    });
+    fireEvent.change(screen.getByLabelText("Starts, time"), {
+      target: { value: "7pm" },
+    });
+    expect(screen.getByLabelText("Ends, time")).toHaveValue("8 PM");
+  });
+
+  it("asks for the end's own day only for an event that spans days", async () => {
+    renderFromChat({
+      initialStartAt: "2026-11-12T18:00",
+      initialEndAt: "2026-11-12T20:00",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ends another day" }));
+    fireEvent.change(screen.getByLabelText("Ends, day"), {
+      target: { value: "2026-11-14" },
+    });
+    await expectCreatedEnd(new Date("2026-11-14T20:00"));
   });
 
   it("posts the card in the channel it came from", async () => {
@@ -1577,9 +1687,9 @@ describe("EventEditorDialog event types (#3730)", () => {
 
   it("opens with no type held", () => {
     renderCreate();
-    expect(screen.getByRole("button", { name: "Type: none" })).toHaveTextContent(
-      "None",
-    );
+    expect(
+      screen.getByRole("button", { name: "Type: none" }),
+    ).toHaveTextContent("None");
   });
 
   it("fills the name, points and attendance from the type and sends it", async () => {
@@ -1604,6 +1714,61 @@ describe("EventEditorDialog event types (#3730)", () => {
       point_value: 10,
       is_mandatory: true,
     });
+  });
+
+  async function createType(name: string) {
+    openRow("Type");
+    fireEvent.change(screen.getByPlaceholderText("Find or add a type"), {
+      target: { value: name },
+    });
+    fireEvent.click(
+      screen.getByRole("option", { name: `Create \u201c${name}\u201d` }),
+    );
+    await waitFor(() => expect(createTypeMutate).toHaveBeenCalledTimes(1));
+  }
+
+  it("makes a type in place from the form's points and attendance, and holds it", async () => {
+    createTypeMutate.mockReset().mockResolvedValue({
+      ...EVENT_TYPES[1]!,
+      id: "type-work",
+      name: "Work party",
+      point_value: 25,
+    });
+    renderCreate();
+    fireEvent.change(screen.getByLabelText("Points for attending"), {
+      target: { value: "25" },
+    });
+    await createType("Work party");
+    expect(createTypeMutate).toHaveBeenCalledWith({
+      name: "Work party",
+      point_value: 25,
+      is_mandatory: false,
+    });
+    // The list re-reads before the create settles, so the row then names
+    // the type; this stub list doesn't, so the name stands in for it.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Event name")).toHaveValue("Work party"),
+    );
+    expect(screen.getByLabelText("Event name")).toHaveValue("Work party");
+    expect(screen.getByLabelText("Points for attending")).toHaveValue(25);
+  });
+
+  it("makes a required type while everyone is required", async () => {
+    createTypeMutate.mockReset().mockResolvedValue({
+      ...EVENT_TYPES[0]!,
+      id: "type-rush",
+      name: "Rush",
+    });
+    renderCreate();
+    pickType("Chapter meeting");
+    await createType("Rush");
+    expect(createTypeMutate).toHaveBeenCalledWith({
+      name: "Rush",
+      point_value: 10,
+      is_mandatory: true,
+    });
+    // The name the officer's earlier pick wrote stays: only a blank one fills.
+    expect(screen.getByLabelText("Event name")).toHaveValue("Chapter meeting");
   });
 
   it("keeps what was changed when the held type is picked again", () => {

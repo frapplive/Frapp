@@ -95,8 +95,29 @@ export function taskSignedOffAutomatically(task: {
 }
 
 /**
+ * A public site's name: dotted, ending in a top-level domain (letters, or an
+ * internationalized one's `xn--` form). Not `test`, `localhost`, an IP
+ * address or `example.com.`, which no officer's phone can open (#5882).
+ */
+const PUBLIC_HOSTNAME =
+  /^(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+/**
+ * Top-level names reserved for a device or network of its own (RFC 6761,
+ * RFC 6762, ICANN's `.internal`), which resolve nowhere on the open web.
+ */
+const PRIVATE_TLDS = new Set([
+  "localhost",
+  "local",
+  "test",
+  "invalid",
+  "internal",
+]);
+
+/**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
- * when it isn't one. Never fetched; shown as its domain.
+ * when it isn't one. Never fetched; shown as its domain. A new proof link
+ * or Frapp web link (`frappWebLinkOpens`) must also pass `proofLinkOpens`.
  */
 export function normalizeProofLink(value: string): string | null {
   const trimmed = value.trim();
@@ -116,6 +137,36 @@ export function normalizeProofLink(value: string): string | null {
   return trimmed;
 }
 
+/**
+ * Whether a proof link names a public site an officer's phone can open:
+ * http or https on a dotted name ending in a top-level domain. A link to a
+ * name that resolves nowhere (`https://test`, `https://localhost`, an IP
+ * address, a `.local` or `.test` name) opened in the officer's browser as "server can't be found"
+ * (#5882), so Mark done refuses one, and a stored one shows as text rather
+ * than a chip that opens.
+ */
+export function proofLinkOpens(link: string): boolean {
+  if (!normalizeProofLink(link)) return false;
+  try {
+    const host = new URL(link.trim()).hostname;
+    return (
+      PUBLIC_HOSTNAME.test(host) &&
+      !PRIVATE_TLDS.has(host.slice(host.lastIndexOf(".") + 1))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What a stored link that fails `proofLinkOpens` says beside its address,
+ * on a task's proof chip and a Frapp web link's row (#5882, #5883).
+ */
+export const LINK_NOT_WORKING_CAPTION = "not a working link";
+
+/** The same, as a screen reader hears it ahead of the address. */
+export const LINK_NOT_WORKING_LABEL = "not a working web address";
+
 /** The domain a proof link chip shows ("docs.google.com"). */
 export function proofLinkDomain(link: string): string {
   try {
@@ -124,6 +175,10 @@ export function proofLinkDomain(link: string): string {
     return link;
   }
 }
+
+/** Mark done's line for a typed link that isn't a full web address. */
+export const TASK_PROOF_LINK_INVALID_MESSAGE =
+  "Use a full web link, like https://photos.google.com/…";
 
 /** Send back's line for an empty reason, before it sends (#4635). */
 export const TASK_SEND_BACK_REASON_MISSING = "Say what needs to change.";
@@ -149,11 +204,20 @@ export function taskMarkDoneCheck(
   | { ok: true; proof: { proofLink?: string; completionNote?: string } }
   | { ok: false; problem: string } {
   const typed = draft.link.trim();
-  const link = typed ? normalizeProofLink(typed) : null;
+  // A link typed as a member writes it, `drive.google.com/…` (or with a
+  // port, `club.org:8443/x`), takes https:// rather than a refusal (#5882).
+  // Only `scheme://` counts as one typed: `javascript:…` gains https:// and
+  // is still refused, as no host.
+  const withScheme =
+    typed && !/^[a-z][a-z0-9+.-]*:\/\//i.test(typed)
+      ? `https://${typed}`
+      : typed;
+  const normalized = withScheme ? normalizeProofLink(withScheme) : null;
+  const link = normalized && proofLinkOpens(normalized) ? normalized : null;
   if (typed && !link) {
     return {
       ok: false,
-      problem: "Use a web link that starts with http:// or https://.",
+      problem: TASK_PROOF_LINK_INVALID_MESSAGE,
     };
   }
   if (task.proofKind === "photo" && draft.photoCount === 0) {

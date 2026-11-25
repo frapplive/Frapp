@@ -122,7 +122,7 @@ describe("useNotificationSyncRuntime: seen on screen (#3929)", () => {
     state.pathname = "/tasks";
     renderHook(() => useNotificationSyncRuntime());
 
-    expect(state.seen).toHaveBeenLastCalledWith(["tasks", "points"], {
+    expect(state.seen).toHaveBeenLastCalledWith(["tasks"], {
       enabled: true,
     });
   });

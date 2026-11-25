@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   AA_NORMAL,
   applyAlpha,
+  hexToHsv,
+  hexToOklch,
+  hsvToHex,
+  oklchToHex,
   contrastRatio,
   meetsContrast,
   mixHex,
@@ -140,9 +144,9 @@ describe("pickAccessibleColor", () => {
   });
 
   it("skips unparseable candidates rather than emitting them", () => {
-    expect(pickAccessibleColor(["not-a-color", "#000000"], rgb("#FFFFFF"))).toBe(
-      "#000000",
-    );
+    expect(
+      pickAccessibleColor(["not-a-color", "#000000"], rgb("#FFFFFF")),
+    ).toBe("#000000");
   });
 });
 
@@ -168,5 +172,71 @@ describe("relativeLuminance", () => {
   it("anchors at the ends of the range", () => {
     expect(relativeLuminance(rgb("#000000"))).toBe(0);
     expect(relativeLuminance(rgb("#FFFFFF"))).toBeCloseTo(1, 12);
+  });
+});
+
+describe("OKLCH", () => {
+  it("reads known colors at their published coordinates", () => {
+    const white = hexToOklch("#FFFFFF");
+    expect(white?.l).toBeCloseTo(1, 3);
+    expect(white?.c).toBeCloseTo(0, 3);
+    const red = hexToOklch("#FF0000");
+    expect(red?.l).toBeCloseTo(0.628, 3);
+    expect(red?.c).toBeCloseTo(0.2577, 3);
+    expect(red?.h).toBeCloseTo(29.23, 1);
+    expect(hexToOklch("nope")).toBeNull();
+  });
+
+  it("round-trips every sRGB color it is given", () => {
+    for (const hex of [
+      "#F2994A",
+      "#B392F0",
+      "#0B0A0D",
+      "#34323A",
+      "#5CC8F0",
+      "#000000",
+      "#FFFFFF",
+    ]) {
+      const oklch = hexToOklch(hex);
+      expect(oklch).not.toBeNull();
+      expect(oklchToHex(oklch!)).toBe(hex);
+    }
+  });
+
+  it("keeps lightness and hue and drops chroma for a color sRGB can't show", () => {
+    const hex = oklchToHex({ l: 0.8, c: 0.37, h: 265 });
+    const back = hexToOklch(hex)!;
+    expect(back.l).toBeCloseTo(0.8, 2);
+    expect(back.h).toBeCloseTo(265, 0);
+    expect(back.c).toBeLessThan(0.37);
+  });
+
+  it("never returns a non-color for non-finite input", () => {
+    expect(oklchToHex({ l: Number.NaN, c: Number.NaN, h: Number.NaN })).toBe(
+      "#000000",
+    );
+  });
+});
+
+describe("HSV", () => {
+  it("reads and writes the primaries and greys", () => {
+    expect(hsvToHex({ h: 0, s: 1, v: 1 })).toBe("#FF0000");
+    expect(hsvToHex({ h: 120, s: 1, v: 1 })).toBe("#00FF00");
+    expect(hsvToHex({ h: 240, s: 1, v: 1 })).toBe("#0000FF");
+    expect(hsvToHex({ h: 300, s: 0, v: 0.5 })).toBe("#808080");
+    expect(hexToHsv("#000000")).toEqual({ h: 0, s: 0, v: 0 });
+    expect(hexToHsv("nope")).toBeNull();
+  });
+
+  it("round-trips sRGB colors", () => {
+    for (const hex of ["#F2994A", "#B392F0", "#3DD6C4", "#0B0A0D", "#FFFFFF"]) {
+      expect(hsvToHex(hexToHsv(hex)!)).toBe(hex);
+    }
+  });
+
+  it("clamps out-of-range parts instead of making a non-color", () => {
+    expect(hsvToHex({ h: 360, s: 2, v: -1 })).toBe("#000000");
+    expect(hsvToHex({ h: -120, s: 1, v: 1 })).toBe("#0000FF");
+    expect(hsvToHex({ h: Number.NaN, s: 1, v: 1 })).toBe("#FF0000");
   });
 });

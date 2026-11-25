@@ -85,7 +85,8 @@ const LISTED_TYPES: ReadonlySet<ChannelType> = new Set([
  * hold (#3722), and the check every write of one goes through.
  *
  * The options are tiers first (highest first), then roles in the chapter's
- * role order, then groups (#4076): manual ones, pledge classes, class years.
+ * role order, then groups (#4076): manual ones and pledge classes (class
+ * years and majors never go on a list).
  * The editor groups by `kind`.
  */
 @Injectable()
@@ -304,11 +305,11 @@ export class ChannelAccessListService {
           color: role.color ?? null,
           tier_id: role.tier_id ?? null,
           user_ids: usersOf(entry),
-          hidden: role.system_key === SystemRoleKeys.MEMBER,
+          hidden: role.system_key === SystemRoleKeys.EVERYONE,
         };
       });
-    // A class year never goes on a list: members set their own graduation
-    // year (`groupKindOpensChannels`).
+    // A class year or a major never goes on a list: members set their own
+    // (`groupKindOpensChannels`).
     const groupOptions: ChannelAccessOption[] = withMembers(
       groups.filter(
         (group) =>
@@ -338,9 +339,9 @@ export class ChannelAccessListService {
    * stays `undefined` (leave it alone) and `null` stays `null` (everyone).
    *
    * An empty list is refused: it would admit nobody but `*`, which is never
-   * what an officer means by picking nobody. A list can still end up empty
-   * when the last role or tier on it is deleted; it then admits only `*`
-   * until an officer picks again.
+   * what an officer means by picking nobody. Deleting the last role, tier or
+   * group on a list hands it to the chapter's top tier instead of emptying
+   * it (`chat_access_strip_entry`, migration `20261120051720`).
    */
   async normalize(
     chapterId: string,
@@ -398,15 +399,21 @@ export class ChannelAccessListService {
           .filter((group) => group.chapter_id === chapterId)
           .map((group) => channelAccessEntry('group', group.id)),
       ]);
-      const yearIds = new Set(
+      // Class years and majors: members set their own (#4076, #5778).
+      const selfSet = new Map(
         groups
           .filter((group) => !groupKindOpensChannels(group.kind))
-          .map((group) => group.id),
+          .map((group) => [group.id, group.kind] as const),
       );
       for (const { kind, id } of parsed) {
-        if (kind === 'group' && yearIds.has(id)) {
+        const selfSetKind = kind === 'group' ? selfSet.get(id) : undefined;
+        if (selfSetKind) {
+          const [what, theirs] =
+            selfSetKind === 'major'
+              ? ['A major', 'major']
+              : ['A class year', 'graduation year'];
           throw new BadRequestException(
-            "A class year can't decide who sees a channel, because members set their own graduation year. Make a group and pick its members instead.",
+            `${what} can't decide who sees a channel, because members set their own ${theirs}. Make a group and pick its members instead.`,
           );
         }
         if (!known.has(channelAccessEntry(kind, id))) {

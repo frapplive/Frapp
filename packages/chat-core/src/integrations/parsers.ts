@@ -38,8 +38,8 @@ export interface TaskArgs {
   title: string;
   /** Assignee token with the leading `@` stripped. Resolved to a user id at dispatch. */
   assigneeToken: string;
-  /** Due date as `YYYY-MM-DD` (validated calendar date). */
-  dueDate: string;
+  /** Due date as `YYYY-MM-DD` (validated calendar date), or null for none (#5761). */
+  dueDate: string | null;
   /**
    * The moment it is due when a time was typed (`fri 5pm`, #4003), as an ISO
    * instant read in the device's zone; `null` for a date alone.
@@ -92,7 +92,7 @@ const POLL_DEFAULT_CLOSE_MINUTES = 60 * 24;
 /**
  * The longest `closes=` a `/poll` takes, in minutes. The API refuses a poll
  * that ends more than {@link SIGNUP_CLOSES_AT_MAX_AHEAD_DAYS} days out; this
- * stops a day short of that, as the card forms do (`checkCardEnd`), so a
+ * stops a day short of that, so a
  * clock a little ahead on the server can't refuse what the parser passed.
  */
 export const POLL_CLOSES_MAX_MINUTES =
@@ -285,7 +285,7 @@ export function parsePointsArgs(args: string): ParseResult<PointsArgs> {
 }
 
 const TASK_MAX_TITLE_LENGTH = TASK_TITLE_MAX_LENGTH;
-const TASK_USAGE = 'Usage: /task "<title>" @assignee <due date> [points]';
+const TASK_USAGE = 'Usage: /task "<title>" @assignee [due date] [points]';
 
 /**
  * Validates a `YYYY-MM-DD` token as a real calendar date (rejects `2026-02-30`,
@@ -342,14 +342,15 @@ function readTaskDue(
 }
 
 /**
- * Parse `/task "<title>" @assignee <due date> [points]`. The title is quoted
+ * Parse `/task "<title>" @assignee [due date] [points]`. The title is quoted
  * because chapter task titles routinely contain spaces (same rationale as
  * `/poll`). The assignee token (leading `@` stripped) is resolved to a user id
  * at dispatch — the parser is grammar-only and never touches the directory. The
- * due date is required (the backend `due_date` is non-null) and read as the
- * task forms read it ({@link readTaskDue}): everything after the `@member` is
- * the date, or the date and then the points. Points are optional and, when present, a non-negative
- * whole number.
+ * due date is read as the task forms read it ({@link readTaskDue}): everything
+ * after the `@member` is the date, or the date and then the points. Nothing
+ * after the `@member` is a task with no due date (#5761); points need a date
+ * before them. Points are optional and, when present, a non-negative whole
+ * number.
  */
 export function parseTaskArgs(
   args: string,
@@ -380,14 +381,21 @@ export function parseTaskArgs(
   }
   const assigneeToken = assigneeRaw.slice(1);
 
-  const due = readTaskDue(tokens.slice(2), now);
-  if (due === null) {
-    return { ok: false, error: "Add a due date, like 11/14 or Friday" };
+  const rest = tokens.slice(2).filter((token) => token.trim() !== "");
+  const due = rest.length === 0 ? null : readTaskDue(rest, now);
+  if (rest.length > 0 && due === null) {
+    return {
+      ok: false,
+      error:
+        "That due date can't be read. Try 11/14 or Friday, or leave it off",
+    };
   }
-  const { due_date: dueDate, due_at: dueAt = null } = dueEntryFields(due.date);
+  const fields = due ? dueEntryFields(due.date) : null;
+  const dueDate = fields?.due_date ?? null;
+  const dueAt = fields?.due_at ?? null;
 
   let pointReward: number | null = null;
-  if (due.pointsToken !== null) {
+  if (due && due.pointsToken !== null) {
     const parsed = parseNumericArg(due.pointsToken);
     if (parsed === null || !Number.isInteger(parsed) || parsed < 0) {
       return {

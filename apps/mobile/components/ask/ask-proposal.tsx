@@ -5,21 +5,18 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
-  Platform,
+  type GestureResponderEvent,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
   BottomSheetModal,
   BottomSheetTextInput,
-  useBottomSheetInternal,
 } from "@gorhom/bottom-sheet";
 import { codeOf } from "@repo/api-sdk";
 import {
@@ -59,11 +56,16 @@ import {
   actPointsHeadline,
   actPointsTotalLine,
   actWhenLine,
+  actTaskFactLines,
   meetingDueLabel,
+  taskWhoOf,
 } from "@repo/validation";
+import { followerName, whoLabel } from "@repo/hooks/task-who-picker";
+import { useWhoDirectory } from "@/lib/tasks/use-who-directory";
 import type { useAiReport } from "@/components/ai/report-ai-sheet";
 import { CloseGlyph } from "@/components/control-glyphs";
 import { OverflowGlyph } from "@/components/chat/overflow-glyph";
+import { openItemMenu, pressAt } from "@/components/item-actions-menu";
 import { AskCardGlyph, type AskCardGlyphName } from "./ask-card-glyphs";
 import { eyebrowStyle } from "@/components/eyebrow";
 import {
@@ -78,6 +80,9 @@ import {
   useTallSheetProps,
 } from "@/components/sheet-scaffold";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
+import { useFocusOnOpen } from "@/lib/overlay";
+import { FormTextInput } from "@/components/form-text-input";
+import { useHostScrollLock } from "@/lib/keep-above-keyboard";
 import {
   NewTaskSheet,
   type TaskSuggestionSeed,
@@ -120,7 +125,9 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
  * "Add to calendar" on an event found in mail opens the full event editor.
  * So Edit opens the form the officer already uses: an event opens New event
  * filled in from the card (attendance by role, the end, notes, the repeat),
- * and its Create is the confirm; a task opens the task form. A points card
+ * in the card itself, with the question still above it (2026-11-22, Paul
+ * picked "Card expands in place", as web's card does), and its Create is
+ * the confirm; a task opens the task form. A points card
  * has no form of its own on the phone, so Edit turns its amount and reason
  * into fields on the card. Both forms keep what was typed when closed (#4593).
  *
@@ -141,10 +148,12 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
 export type ActLink = { href: string; label: string };
 
 /**
- * Where a confirmed change can be seen, by the page the card named. The
- * phone has no points page to open (`notifications/targets.ts`).
+ * Where a confirmed change can be seen, by the page the card named. Points
+ * given open the Directory's standings (#5950), as on web for a role that
+ * can't read the chapter ledger, which the phone doesn't have.
  */
 const RESULT_LINKS: Record<string, ActLink> = {
+  points: { href: "/directory?sort=points", label: ACT_COPY.open_standings },
   tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
@@ -338,6 +347,7 @@ function CardDetails({
   styles: Styles;
 }) {
   const { points, task, new_event: event } = suggestion;
+  const whoRead = useWhoDirectory({ groups: !!task?.followed_by });
   if (event) return <EventFacts event={event} styles={styles} />;
   if (task) {
     return (
@@ -350,6 +360,11 @@ function CardDetails({
             {dueLine(task)}
           </Fact>
         ) : null}
+        <TaskFacts
+          task={task}
+          fromName={followerName(task.followed_by, whoRead.directory)}
+          styles={styles}
+        />
       </>
     );
   }
@@ -368,6 +383,46 @@ function CardDetails({
     );
   }
   return null;
+}
+
+/** The mark beside each of a task's facts. */
+const TASK_FACT_GLYPHS: Record<
+  ReturnType<typeof actTaskFactLines>[number]["kind"],
+  AskCardGlyphName
+> = {
+  points: "points",
+  proof: "done",
+  steps: "task",
+  from: "people",
+};
+
+/**
+ * A proposed task's points, proof, steps and the group it is from
+ * (2026-11-22), one fact each and only what was set, in the New task form's
+ * order. The web card says the same words.
+ */
+function TaskFacts({
+  task,
+  fromName,
+  styles,
+}: {
+  task: NonNullable<AiSuggestion["task"]>;
+  fromName: string | null;
+  styles: Styles;
+}) {
+  return (
+    <>
+      {actTaskFactLines(task, fromName).map((line) => (
+        <Fact
+          key={line.kind}
+          glyph={TASK_FACT_GLYPHS[line.kind]}
+          styles={styles}
+        >
+          {line.text}
+        </Fact>
+      ))}
+    </>
+  );
 }
 
 /** One detail on a card: its mark, then the words, with a quieter line under. */
@@ -443,10 +498,15 @@ function EventFacts({
           {repeat.line}
         </Fact>
       ) : null}
-      <Fact glyph="people" styles={styles}>
-        {event.is_mandatory
-          ? ACT_COPY.everyone_required
-          : ACT_COPY.everyone_optional}
+      <Fact
+        glyph="people"
+        under={actPointsFromLine(event.attendance_from) || undefined}
+        styles={styles}
+      >
+        {event.attendance_line ??
+          (event.is_mandatory
+            ? ACT_COPY.everyone_required
+            : ACT_COPY.everyone_optional)}
       </Fact>
       {pointsField ??
         (event.point_value === null ? null : (
@@ -467,36 +527,27 @@ function EventFacts({
 
 /**
  * The ··· in a card's corner (Paul, 2026-11-16, #5148: Cancel goes into the
- * menu): Dismiss, and Report this when it is offered. The iOS action sheet,
- * or Android's dialog, as the member profile's menu (`member-menu.ts`).
+ * menu): Dismiss, and Report this when it is offered, in the glass menu
+ * every ··· opens (`openItemMenu`).
  */
 function openCardMenu(
   title: string,
   reportable: boolean,
   onDismiss: () => void,
   onReport: () => void,
+  event?: GestureResponderEvent,
 ) {
-  const options = [
-    { label: ACT_COPY.dismiss, run: onDismiss },
-    ...(reportable ? [{ label: AI_REPORT_COPY.action, run: onReport }] : []),
-  ];
-  if (Platform.OS === "ios") {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title,
-        options: [...options.map((option) => option.label), ACT_COPY.cancel],
-        cancelButtonIndex: options.length,
-        userInterfaceStyle: "dark",
-      },
-      (index) => options[index]?.run(),
-    );
-    return;
-  }
-  Alert.alert(
-    title,
-    undefined,
-    options.map((option) => ({ text: option.label, onPress: option.run })),
-    { cancelable: true },
+  openItemMenu(
+    {
+      title,
+      actions: [
+        { key: "dismiss", label: ACT_COPY.dismiss, run: onDismiss },
+        ...(reportable
+          ? [{ key: "report", label: AI_REPORT_COPY.action, run: onReport }]
+          : []),
+      ],
+    },
+    pressAt(event),
   );
 }
 
@@ -614,14 +665,17 @@ function QuietButton({
   onPress,
   disabled = false,
   styles,
+  buttonRef,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   styles: Styles;
+  buttonRef?: Ref<View>;
 }) {
   return (
     <Pressable
+      ref={buttonRef}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
@@ -793,12 +847,10 @@ function CardField({
   const { tokens } = useFrappTheme();
   // A card is drawn in the Ask sheet and also under a question asked in a
   // channel, which is a screen: the sheet's own input throws outside a sheet.
-  const inSheet = useBottomSheetInternal(true) != null;
-  const Field = inSheet ? BottomSheetTextInput : TextInput;
   return (
     <View style={styles.cardRow}>
       <Text style={styles.eyebrow}>{label}</Text>
-      <Field
+      <FormTextInput
         value={value}
         onChangeText={onChangeText}
         accessibilityLabel={label}
@@ -832,10 +884,8 @@ function PointsInput({
   styles: Styles;
 }) {
   const { tokens } = useFrappTheme();
-  const inSheet = useBottomSheetInternal(true) != null;
-  const Field = inSheet ? BottomSheetTextInput : TextInput;
   return (
-    <Field
+    <FormTextInput
       value={value}
       onChangeText={onChangeText}
       accessibilityLabel={ACT_COPY.points_label}
@@ -898,6 +948,12 @@ function ActCard({
       })),
     [rosterQuery.data],
   );
+  const { task: proposedTask } = suggestion;
+  // Who a task card is for, in the Who picker's words: one person, several,
+  // or everyone or someone in a role, tier or group (2026-11-22).
+  const whoRead = useWhoDirectory({ groups: !!proposedTask });
+  const taskWho = proposedTask ? taskWhoOf(proposedTask) : null;
+  const taskWhoLine = whoLabel(taskWho, whoRead.directory);
   const nameOf = (userId: string) => {
     const member = roster.find((row) => row.userId === userId);
     if (member) return member.name ?? memberFallbackLabel(userId);
@@ -921,13 +977,25 @@ function ActCard({
   const [problem, setProblem] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const formRef = useRef<BottomSheetModal>(null);
-  // The event form mounts on the first Edit and stays, so what the officer
-  // typed is still there when they open it again (#4593).
-  const [eventFormMounted, setEventFormMounted] = useState(false);
-  const eventFormRef = useRef<BottomSheetModal>(null);
+  // The event form opens in the card on the first Edit and stays mounted
+  // after, so what the officer typed is still there when they open it again
+  // (#4593). `null` until then; then whether it shows.
+  const [eventForm, setEventForm] = useState<boolean | null>(null);
+  // In the Ask sheet the form opens in the card. In a channel it is still
+  // its own sheet: the chat list is inverted and gives a part drawn in place
+  // no way to bring its top or a focused field into view (#5907). Only the
+  // Ask thread offers the lock a part in place holds while dragging.
+  const inAskThread = useHostScrollLock() !== null;
+  const eventFormShown = !!event && eventForm === true && inAskThread;
+  const eventSheet = useRef<BottomSheetModal>(null);
   useEffect(() => {
-    if (eventFormMounted) eventFormRef.current?.present();
-  }, [eventFormMounted]);
+    if (!inAskThread && eventForm) eventSheet.current?.present();
+  }, [inAskThread, eventForm]);
+  // Closing the form gives a screen reader's focus back to Edit, which the
+  // form had taken the place of.
+  const editButton = useRef<View>(null);
+  const [backFromForm, setBackFromForm] = useState(false);
+  useFocusOnOpen(editButton, backFromForm && !eventFormShown);
   // A points card's Edit: its amount and reason as fields.
   const [editingPoints, setEditingPoints] = useState(false);
   const [amountInput, setAmountInput] = useState(
@@ -990,8 +1058,9 @@ function ActCard({
       if (changed) changes.target_user_ids = targets;
       if (Object.keys(changes).length > 0) edits = { points: changes };
     }
-    if (task && (!task.assignee_id || !task.due_date)) {
-      // A task needs who and when; the form is where the officer says them.
+    if (task && !taskWhoOf(task)) {
+      // A task needs who (a person, several, or a role, tier or group); the
+      // form is where the officer says it. It may have no due date (#5761).
       setFormOpen(true);
       return;
     }
@@ -1079,8 +1148,8 @@ function ActCard({
   function edit() {
     setProblem(null);
     if (event) {
-      if (eventFormMounted) eventFormRef.current?.present();
-      else setEventFormMounted(true);
+      setBackFromForm(false);
+      setEventForm(true);
     } else if (task) {
       setFormOpen(true);
     } else if (points) {
@@ -1141,18 +1210,22 @@ function ActCard({
   const seed: TaskSuggestionSeed | undefined = task
     ? {
         title: task.title,
-        who: task.assignee_id
-          ? { kind: "person", userId: task.assignee_id }
-          : null,
+        // One person, several, or everyone or someone in a role, tier or
+        // group (2026-11-22), as the New task form picks it.
+        who: taskWhoOf(task),
         dueDay: task.due_date,
         dueAt: task.due_at,
         subtasks: task.subtasks,
+        full: true,
+        pointReward: task.point_reward ?? null,
+        proofKind: task.proof_kind ?? null,
+        followedBy: task.followed_by ?? null,
         accept: async (form) => {
           setDeciding(true);
           try {
             await accept.mutateAsync({
               id: suggestion.id,
-              task: suggestionEdits(task, form),
+              task: suggestionEdits(task, form, { full: true }),
             });
           } finally {
             setDeciding(false);
@@ -1195,6 +1268,37 @@ function ActCard({
     </View>
   ) : null;
 
+  // The same element, by key, open or not: React keeps one form across the
+  // two shapes of the card below, so what was typed survives a close.
+  const eventFormPanel =
+    event && eventForm !== null ? (
+      <NewEventSheet
+        key="event-form"
+        ref={inAskThread ? undefined : eventSheet}
+        presentation={inAskThread ? "inline" : "sheet"}
+        open={eventForm}
+        template={proposedEventTemplate({
+          ...event,
+          // Points typed on the card go with it into the form (#5148).
+          point_value:
+            event.point_value ??
+            (typedEventPoints.ok ? typedEventPoints.value : null),
+        })}
+        onCreated={(created) => void recordMadeEvent(created.id)}
+        onClosed={() => {
+          setEventForm(false);
+          setBackFromForm(true);
+        }}
+      />
+    ) : null;
+
+  // While it is open the form is the card: the card's own words and buttons
+  // would only repeat it. The frame stays, so the question above it stays
+  // where it was.
+  if (eventFormShown) {
+    return <View style={styles.card}>{eventFormPanel}</View>;
+  }
+
   return (
     <View accessibilityLabel={title} style={styles.card}>
       <View style={styles.headRow}>
@@ -1207,12 +1311,13 @@ function ActCard({
           accessibilityState={{ disabled: busy }}
           disabled={busy}
           hitSlop={10}
-          onPress={() =>
+          onPress={(event) =>
             openCardMenu(
               title,
               report.offered && !reported,
               () => void cancel(),
               () => report.report(reportTarget),
+              event,
             )
           }
           style={({ pressed }) => [
@@ -1376,33 +1481,36 @@ function ActCard({
               pressed ? styles.pressed : null,
             ]}
           >
-            <View
-              style={[styles.chipRow, task.assignee_id ? null : styles.ask]}
-            >
+            <View style={[styles.chipRow, taskWhoLine ? null : styles.ask]}>
               <View style={styles.factGlyph}>
                 <AskCardGlyph
-                  name="person"
+                  name={
+                    taskWho && taskWho.kind !== "person" ? "people" : "person"
+                  }
                   color={tokens.color.text.mutedForeground}
                 />
               </View>
-              <Text style={task.assignee_id ? styles.factText : styles.missing}>
-                {task.assignee_id
-                  ? nameOf(task.assignee_id)
-                  : ACT_COPY.pick_member}
+              <Text style={taskWhoLine ? styles.factText : styles.missing}>
+                {taskWhoLine ?? ACT_COPY.pick_member}
               </Text>
             </View>
-            <View style={[styles.chipRow, task.due_date ? null : styles.ask]}>
+            <View style={styles.chipRow}>
               <View style={styles.factGlyph}>
                 <AskCardGlyph
                   name="clock"
                   color={tokens.color.text.mutedForeground}
                 />
               </View>
-              <Text style={task.due_date ? styles.factText : styles.missing}>
+              <Text style={styles.factText}>
                 {task.due_date ? dueLine(task) : ACT_COPY.pick_due}
               </Text>
             </View>
           </Pressable>
+          <TaskFacts
+            task={task}
+            fromName={followerName(task.followed_by, whoRead.directory)}
+            styles={styles}
+          />
         </>
       ) : null}
 
@@ -1439,6 +1547,7 @@ function ActCard({
             disabled={busy}
             onPress={edit}
             styles={styles}
+            buttonRef={editButton}
           />
         )}
         <Pressable
@@ -1475,23 +1584,12 @@ function ActCard({
           }}
         />
       ) : null}
-      {event && eventFormMounted ? (
-        <NewEventSheet
-          ref={eventFormRef}
-          template={proposedEventTemplate({
-            ...event,
-            // Points typed on the card go with it into the form (#5148).
-            point_value:
-              event.point_value ??
-              (typedEventPoints.ok ? typedEventPoints.value : null),
-          })}
-          onCreated={(created) => void recordMadeEvent(created.id)}
-        />
-      ) : null}
+      {eventFormPanel}
       {formOpen && seed ? (
         <NewTaskSheet
           ref={formRef}
           suggestion={seed}
+          offerGroups
           onClosed={() => setFormOpen(false)}
         />
       ) : null}

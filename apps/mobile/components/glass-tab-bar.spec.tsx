@@ -32,8 +32,21 @@ const rereadOnTab = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/activity/use-activity-reread", () => ({
   useActivityRereadOnTab: rereadOnTab,
 }));
-vi.mock("@repo/hooks", () => ({
-  useActivity: () => ({ data: activity.data }),
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+  useServesChapterFeatures: () => !tenant.council,
+}));
+const activityReads = vi.hoisted(() => ({ options: [] as unknown[] }));
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  activityCountChip: (await importOriginal<typeof import("@repo/hooks")>())
+    .activityCountChip,
+  useActivity: (options?: { enabled?: boolean }) => {
+    activityReads.options.push(options);
+    return { data: options?.enabled === false ? undefined : activity.data };
+  },
 }));
 // Messages' count has its own spec (`lib/chat/unread-conversations.spec.tsx`);
 // the bar only draws and names it (#5310).
@@ -41,19 +54,6 @@ const unreadConversations = vi.hoisted(() => ({ count: 0 }));
 vi.mock("@/lib/chat/unread-conversations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/chat/unread-conversations")>()),
   useUnreadConversationCount: () => unreadConversations.count,
-}));
-
-// The tour's spots are measured off the refs its anchors hand out; each stop's
-// ref is a spy here, so a spec can see which control it landed on.
-const tourAnchors = vi.hoisted(
-  () => new Map<string, ReturnType<typeof vi.fn>>(),
-);
-vi.mock("@/components/onboarding/tour", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/onboarding/tour")>()),
-  useTourAnchor: (key: string) => {
-    if (!tourAnchors.has(key)) tourAnchors.set(key, vi.fn());
-    return tourAnchors.get(key);
-  },
 }));
 
 // The You tab's avatar has its own spec (`you-tab-avatar.spec.tsx`); the bar
@@ -102,7 +102,7 @@ vi.mock("@/lib/ai/availability", () => ({
 vi.mock("@/components/quick-actions/quick-actions-panel", () => ({
   QuickActionsPanel: "QuickActionsPanel",
 }));
-// So has the Ask Frapp bar (`ask/ask-bar.spec.tsx`).
+// So has the Frapp Intelligence bar (`ask/ask-bar.spec.tsx`).
 vi.mock("@/components/ask/ask-bar", () => ({ AskBar: "AskBar" }));
 
 import { AccessibilityInfo, BackHandler } from "react-native";
@@ -143,6 +143,8 @@ beforeEach(() => {
   quick.hasAsk = false;
   quick.ask.mockClear();
   activity.data = undefined;
+  activityReads.options = [];
+  tenant.council = false;
   device.bottomInset = 0;
   vi.mocked(BackHandler.addEventListener).mockClear();
 });
@@ -295,6 +297,20 @@ describe("the bar (#3344)", () => {
     ).toBeDefined();
   });
 
+  it("reads no Activity count in a council, whose Activity tab is its home (#5933)", () => {
+    tenant.council = true;
+    activity.data = { needs_you_count: 8, unavailable: [] };
+    const tree = render();
+    expect(activityReads.options.at(-1)).toEqual({ enabled: false });
+    expect(
+      tree.root.findAll(
+        (node) =>
+          typeof node.type === "string" &&
+          node.props.testID === "tab-activity-badge",
+      ),
+    ).toHaveLength(0);
+  });
+
   // #5310: Messages took the third slot from Calendar, with the count the
   // Messages door on Chat home carried, in mention red.
   it("puts the unread conversations on Messages' tab, in mention red, and says them", () => {
@@ -345,24 +361,6 @@ describe("the bar (#3344)", () => {
     } finally {
       unreadConversations.count = 0;
     }
-  });
-
-  // The first-run tour's Messages stop spots the Messages tab (#5310).
-  it("hands the tour's messages stop the Messages tab", () => {
-    tourAnchors.get("messages")?.mockClear();
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(element("index"), {
-        createNodeMock: (node) => ({
-          label: (node.props as { accessibilityLabel?: string })
-            .accessibilityLabel,
-        }),
-      });
-    });
-    expect(tourAnchors.get("messages")).toHaveBeenCalledWith({
-      label: "Messages",
-    });
-    act(() => tree.unmount());
   });
 
   it("holds the badge's count fresh, leaving Activity's own re-read to it", () => {
@@ -482,10 +480,10 @@ describe("the +", () => {
 });
 
 /**
- * Ask Frapp's front door (#4702, Paul 2026-11-13): "in a bar above the normal
+ * Frapp Intelligence's front door (#4702, Paul 2026-11-13): "in a bar above the normal
  * liquid glass bottom, not only when you open the plus menu".
  */
-describe("the Ask Frapp bar", () => {
+describe("the Frapp Intelligence bar", () => {
   const askBar = (root: Node) =>
     root.findAll((node) => (node.type as unknown) === "AskBar")[0];
   /** The wrapper the tab bar places it with. */
@@ -585,7 +583,7 @@ describe("a confirmation", () => {
     return flat(node!.props.style).bottom as number;
   };
 
-  it("sits above the Ask Frapp bar for a member who has one, never over it", () => {
+  it("sits above the Frapp Intelligence bar for a member who has one, never over it", () => {
     quick.notice = "Assigned to Sam Rivera.";
     const without = noticeBottom(render().root);
     quick.hasAsk = true;
@@ -610,7 +608,7 @@ describe("a confirmation", () => {
 
 /**
  * The fold (#4904, Paul's direction A, 2026-11-17): reading down a tab
- * screen folds the tabs to the current one and brings the Ask Frapp bar down
+ * screen folds the tabs to the current one and brings the Frapp Intelligence bar down
  * into the row between it and the +, which never moves.
  */
 describe("the fold", () => {

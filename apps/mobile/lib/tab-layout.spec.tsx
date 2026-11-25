@@ -30,20 +30,9 @@ vi.mock("@/lib/auth-session", () => ({
   }),
 }));
 
-// The first-run tour wraps the navigator and reads the signed-in member; it
-// has its own spec (`components/onboarding/tour.spec.tsx`).
-vi.mock("@/components/onboarding/tour", () => ({
-  TourHost: ({ children }: { children: React.ReactNode }) => children,
-  useTourAnchor: () => undefined,
-  useTourReady: () => undefined,
-}));
-// So does What's new's host beside it (`components/whats-new/whats-new-host.spec.tsx`).
+// What's new's host has its own spec (`components/whats-new/whats-new-host.spec.tsx`).
 vi.mock("@/components/whats-new/whats-new-host", () => ({
   WhatsNewHost: "WhatsNewHost",
-}));
-// And Meet Frapp AI's (`components/ai/meet-frapp-ai-host.spec.tsx`).
-vi.mock("@/components/ai/meet-frapp-ai-host", () => ({
-  MeetFrappAiHost: "MeetFrappAiHost",
 }));
 vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => ({ accent: "#F4CB63" }),
@@ -248,9 +237,17 @@ describe("app stack", () => {
     );
     const pushed = stack()
       .screens.map((screen) => screen.props.name as string)
-      // `ask` only redirects to Chat home, and `chat` (a message's link,
-      // #3723) only hands off to the thread: neither draws a screen.
-      .filter((name) => !["(tabs)", "ask", "chat"].includes(name));
+      // `ask` only redirects to Chat home, `chat` (a message's link,
+      // #3723) only hands off to the thread, and `minutes` only forwards to
+      // Documents on the Minutes file type (#5949), and `channel-settings`
+      // pops down to Chat home until its screen lands (#6031): none draws a
+      // screen.
+      .filter(
+        (name) =>
+          !["(tabs)", "ask", "chat", "minutes", "channel-settings"].includes(
+            name,
+          ),
+      );
 
     // A route that only re-exports a screen kept outside `app/` (so its
     // spec can sit beside it, as the member profile's does, #5568) is read

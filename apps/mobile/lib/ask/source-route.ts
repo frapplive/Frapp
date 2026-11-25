@@ -6,7 +6,7 @@ import {
 import type { NotificationTarget } from "@/lib/notifications/targets";
 
 /**
- * Where an Ask source opens on the phone (`spec/behavior/ai.md` § Ask; #451),
+ * Where an Ask source opens on the phone (`spec/behavior/ai.md` § Frapp Intelligence; #451),
  * or `null` when this build has no screen for it. A source with no screen is
  * still listed, as plain text: kinds and targets are open strings on the wire
  * (`ask.ts`), so a newer server can cite something this build can't open.
@@ -18,8 +18,9 @@ import type { NotificationTarget } from "@/lib/notifications/targets";
  * - Minutes open the minutes screen.
  * - A channel message opens its channel. The phone's channel screen has no
  *   jump-to-message yet, so the member lands at the newest message.
- * - Live data opens the screen it was read from. Points live on the Tasks
- *   board; Dues is off for the beta, so it has no link while that holds.
+ * - Live data opens the screen it was read from: the asker's own points on
+ *   Points, the chapter's standings in the Directory sorted by points
+ *   (#5950). Dues is off for the beta, so it has no link while that holds.
  *
  * The routes are spelled `pathname: "…"` so `lib/routes.spec.ts` checks them
  * against the file tree (see `lib/notifications/targets.ts`).
@@ -32,7 +33,8 @@ export type AskSourceOpening =
 const PAGES: Record<string, NotificationTarget> = {
   members: { pathname: "/directory" },
   events: { pathname: "/events" },
-  points: { pathname: "/tasks" },
+  points: { pathname: "/points" },
+  standings: { pathname: "/directory", params: { sort: "points" } },
   dues: { pathname: "/dues" },
   tasks: { pathname: "/tasks" },
 };

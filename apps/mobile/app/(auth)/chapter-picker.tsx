@@ -22,6 +22,8 @@ import { SkeletonRegion } from "@/components/state-block";
 import { BackRow } from "@/components/back-row";
 import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
 import { useSelectChapter } from "@/lib/select-chapter";
+import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
+import { tenantRowBody } from "@/lib/tenant-kind";
 import { tintedControlStyles } from "@/components/tinted-control";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -45,10 +47,10 @@ function houseTintedBrand(tokens: SignetTokens) {
 /**
  * Chapter picker — the supporting route with no drawn Canvas screen
  * (spec/ui/mobile/screens.md § Inventory), so it reuses s02's visual language:
- * one surface, no card, with each chapter as a row like s02's two answers
- * (#3349, #3350).
+ * one surface, no card, with each chapter as a row like s02's emailed-invite
+ * offers (#3349, #3350).
  *
- * Reached deliberately, from the You tab — **not** forced on members whose
+ * Reached deliberately, from Chat home's chapter menu — **not** forced on members whose
  * token lacks an `active_chapter_id` claim. `lib/auth-gate.ts` explains why
  * that distinction is load-bearing rather than a preference: a missing claim
  * is still normal (no membership yet, or a playbook that disables the hook),
@@ -72,21 +74,22 @@ export default function ChapterPicker() {
   // which was this account's, not the next one's.
   const { signOut: signOutToSignIn } = useOnboardingSignOut();
   const selectChapter = useSelectChapter();
-  // The You tab's Switch chapter row says it opened the picker (`from:
-  // "you"`), and only then is the You tab underneath to go back to, so only
-  // then does the picker draw `‹ You` and start its column at the top. A deep link keeps
+  // Chat home's chapter menu says it opened the picker (`from: "chat"`; it
+  // was You's Switch chapter row until 2026-11-19), and only then is a tab
+  // underneath to go back to, so
+  // only then does the picker draw `‹ Chat` and start its column at the top. A deep link keeps
   // the centred layout and no row. `router.canGoBack()` can't tell the two
   // apart: `(auth)/_layout.tsx` anchors sign-in under a linked screen, so it
   // is true there too, and a row that went back would land on sign-in under a
-  // label that says You.
+  // label that says Chat.
   const { from } = useLocalSearchParams<{ from?: string | string[] }>();
-  const openedFromYou = from === "you";
+  const openedFromChat = from === "chat";
 
   // Whether the picker is still the screen in front. A switch can settle
   // after the member has gone back (Android back, or the edge swipe, which
   // nothing here holds), and `leave()` then would move whatever screen is
-  // showing by then: from You, a second `back()` would take the member off
-  // the You tab they had just gone back to.
+  // showing by then: from Chat, a second `back()` would take the member off
+  // the Chat tab they had just gone back to.
   const inFront = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +102,7 @@ export default function ChapterPicker() {
 
   /** Back to the tabs this was opened over, or into them from a link. */
   function leave() {
-    // Back, not a navigate: arriving from You means `(tabs)` is already on
+    // Back, not a navigate: arriving from Chat means `(tabs)` is already on
     // the stack underneath, and opening it again would leave a second copy
     // on top of the first. A link opened at launch has sign-in under it (the
     // `(auth)` anchor), and going back there hands the member to the layout,
@@ -205,8 +208,8 @@ export default function ChapterPicker() {
       }
 
       // Leave under our own steam rather than waiting to be redirected. The
-      // gate exempts this route so a member can open it deliberately from You,
-      // which also means it will not push them back out when the switch lands.
+      // gate exempts this route so a member can open it deliberately from
+      // Chat home's chapter menu, which also means it will not push them back out when the switch lands.
       // An earlier version waited for that redirect and spun forever.
       // Unless the picker has gone already, backed out of or covered: leaving
       // then would move whichever screen is in front instead.
@@ -233,21 +236,21 @@ export default function ChapterPicker() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.container,
-          openedFromYou ? styles.containerTop : null,
+          openedFromChat ? styles.containerTop : null,
         ]}
         keyboardShouldPersistTaps="handled"
       >
         {/*
-          `‹ You`, as every screen opened from a You row draws
+          `‹ Chat`, as every screen opened from Chat home draws
           (navigation.md § Back rows), in house gold like the rest of this
-          group. It goes back rather than navigating to You, for the reason
+          group. It goes back rather than navigating to the tab, for the reason
           `leave` gives, and holds while a switch is in flight, as the chapter
           rows do and the other `(auth)` back rows do while they wait.
         */}
-        {openedFromYou ? (
+        {openedFromChat ? (
           <BackRow
             house
-            label="You"
+            label="Chat"
             disabled={pendingId !== null}
             onPress={() => router.back()}
           />
@@ -321,7 +324,7 @@ export default function ChapterPicker() {
                   <ChoiceRow
                     key={membership.chapter_id}
                     title={membership.chapter.name}
-                    body={membership.chapter.university}
+                    body={tenantRowBody(membership)}
                     accessibilityHint={`Open ${membership.chapter.name}.`}
                     disabled={pendingId !== null}
                     dimmed={pendingId !== null && !isPendingRow}
@@ -347,6 +350,28 @@ export default function ChapterPicker() {
             empty state says what to do. */}
           {selectError && !listEmpty ? (
             <Text style={styles.errorText}>{selectError}</Text>
+          ) : null}
+
+          {/* A council's officer starts it from here (#5933), as Slack's
+            workspace list ends in "Add a workspace" and Discord's server
+            list in "Add a server". Not under the empty state, whose Join or
+            start a chapter opens s02, which offers it too. */}
+          {!listEmpty && data ? (
+            <OnboardingPressable
+              accessibilityRole="button"
+              accessibilityHint={COUNCIL_FORM_COPY.startHint}
+              disabled={pendingId !== null}
+              onPress={() => {
+                router.push({
+                  pathname: "/create-chapter",
+                  params: { kind: "council" },
+                });
+              }}
+              quiet
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.startText}>{COUNCIL_FORM_COPY.start}</Text>
+            </OnboardingPressable>
           ) : null}
 
           {/* Never disabled, and it navigates rather than trusting the gate to
@@ -391,7 +416,7 @@ function createStyles(tokens: SignetTokens) {
       backgroundColor: tokens.color.surface.background,
     },
     // Under a back row the column starts at the top, where every screen
-    // opened from You puts its row and title.
+    // opened from Chat puts its row and title.
     containerTop: {
       justifyContent: "flex-start",
       paddingTop: tokens.spacing.sm,
@@ -438,6 +463,10 @@ function createStyles(tokens: SignetTokens) {
       minHeight: tokens.touch.button,
       alignItems: "center",
       justifyContent: "center",
+    },
+    startText: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.gold.house,
     },
     secondaryButtonText: {
       ...typeRole(tokens.typography.role.label),

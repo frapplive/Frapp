@@ -8,7 +8,9 @@ import {
   ChatMentionService,
   canPingAnyRole,
   mentionRoleViews,
+  standingMentionId,
 } from './chat-mention.service';
+import { resolveMentions } from '@repo/validation';
 import type { RbacService } from './rbac.service';
 import type { ChapterPresenceReader } from './chapter-presence-reader.service';
 
@@ -51,7 +53,7 @@ const members = [
 
 const roles = [
   role('member', 'Everyone', {
-    system_key: 'MEMBER',
+    system_key: 'EVERYONE',
     display_order: 5,
     mentionable: false,
   }),
@@ -157,7 +159,7 @@ describe('mentionRoleViews', () => {
     const group = (
       id: string,
       name: string,
-      kind: 'manual' | 'pledge_class' | 'class_year' = 'manual',
+      kind: 'manual' | 'pledge_class' | 'class_year' | 'major' = 'manual',
     ) => ({
       id,
       chapter_id: 'ch-1',
@@ -167,6 +169,7 @@ describe('mentionRoleViews', () => {
       mentionable: true,
       pledge_class_id: kind === 'pledge_class' ? 'pc-1' : null,
       class_year: kind === 'class_year' ? 2027 : null,
+      major_key: kind === 'major' ? name.toLowerCase() : null,
       created_at: '2026-11-06T00:00:00Z',
       updated_at: '2026-11-06T00:00:00Z',
     });
@@ -177,6 +180,158 @@ describe('mentionRoleViews', () => {
           ? { ...r, tier_id: 't-members' }
           : r,
     );
+
+    it('leaves out a major named like a role, tier, other group or member, and keeps the rest (#5778)', () => {
+      const majors = [
+        group('m-officers', 'officers', 'major'),
+        group('m-exec', 'Exec', 'major'),
+        group('m-floor', 'Third floor', 'major'),
+        group('m-ann', 'Ann', 'major'),
+        group('m-music', 'Music', 'major'),
+      ];
+      const views = mentionRoleViews(tiered, members, {
+        tiers: [tier('t-exec', 'Exec', 1)],
+        groups: [group('g-floor', 'Third floor'), ...majors],
+        memberships: [...majors, group('g-floor', 'Third floor')].map((g) => ({
+          chapter_id: 'ch-1',
+          group_id: g.id,
+          user_id: 'u2',
+          kind: g.kind,
+        })),
+      });
+      expect(
+        views.filter((view) => view.kind === 'group').map((v) => v.role_id),
+      ).toEqual(['g-floor', 'm-music']);
+    });
+
+    describe('class standings (#5786)', () => {
+      const year = (id: string, classYear: number) => ({
+        ...group(id, `Class of ${classYear}`, 'class_year'),
+        class_year: classYear,
+      });
+      const joined = (groups: ReturnType<typeof group>[], userId = 'u3') => ({
+        groups,
+        memberships: groups.map((g) => ({
+          chapter_id: 'ch-1',
+          group_id: g.id,
+          user_id: userId,
+          kind: g.kind,
+        })),
+      });
+
+      beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-11-20T12:00:00Z'));
+      });
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      it('names each class year by its standing too, standing first, alumni years by year only', () => {
+        const views = mentionRoleViews(
+          roles,
+          members,
+          joined([
+            year('y27', 2027),
+            year('y29', 2029),
+            year('y25', 2025),
+            group('m-seniors', 'Seniors', 'major'),
+          ]),
+        );
+        expect(
+          views
+            .filter((view) => view.kind === 'group')
+            .map((view) => [view.name, view.role_id, view.member_ids]),
+        ).toEqual([
+          ['Class of 2025', 'y25', ['u3']],
+          ['Seniors', standingMentionId('y27', 'Seniors'), ['u3']],
+          ['Class of 2027', 'y27', ['u3']],
+          ['Sophomores', standingMentionId('y29', 'Sophomores'), ['u3']],
+          ['Class of 2029', 'y29', ['u3']],
+        ]);
+      });
+
+      it('moves the standing up at the June 1 rollover', () => {
+        jest.setSystemTime(new Date('2027-06-01T00:00:00Z'));
+        const views = mentionRoleViews(
+          roles,
+          members,
+          joined([year('y28', 2028), year('y27', 2027)]),
+        );
+        expect(
+          views.filter((view) => view.kind === 'group').map((v) => v.name),
+        ).toEqual(['Class of 2027', 'Seniors', 'Class of 2028']);
+      });
+
+      it("gives the standing's name way to a role the chapter made for the class", () => {
+        const withRole = [
+          ...roles,
+          role('r-soph', 'Sophomores', { display_order: 5 }),
+        ];
+        const views = mentionRoleViews(
+          withRole,
+          members,
+          joined([year('y29', 2029)]),
+        );
+        expect(
+          views
+            .filter((view) => view.name === 'Sophomores')
+            .map((view) => view.kind),
+        ).toEqual(['role']);
+      });
+
+      it('gives the standing its own UUID, the same on every read', () => {
+        const id = standingMentionId(
+          '11111111-1111-4111-8111-111111111111',
+          'Seniors',
+        );
+        expect(id).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+        expect(
+          standingMentionId('11111111-1111-4111-8111-111111111111', 'Seniors'),
+        ).toBe(id);
+        expect(
+          standingMentionId('11111111-1111-4111-8111-111111111111', 'Juniors'),
+        ).not.toBe(id);
+      });
+
+      it("follows its class year's ping switch", () => {
+        const off = { ...year('y27', 2027), mentionable: false };
+        const views = mentionRoleViews(roles, members, joined([off]));
+        expect(
+          views
+            .filter((view) => view.kind === 'group')
+            .map((view) => [view.name, view.open_to_all]),
+        ).toEqual([
+          ['Seniors', false],
+          ['Class of 2027', false],
+        ]);
+        // A member who can't ping any role reaches nobody with it.
+        const member = views.map((view) => ({
+          ...view,
+          mentionable: view.open_to_all,
+        }));
+        expect(resolveMentions('hey @Seniors', members, member)).toEqual([]);
+      });
+
+      it('offers no standing or major when the roles could not be read', () => {
+        const views = mentionRoleViews(
+          [],
+          members,
+          joined([year('y27', 2027), group('m-music', 'Music', 'major')]),
+        );
+        expect(views.map((view) => view.name)).toEqual(['Class of 2027']);
+      });
+
+      it('makes @Seniors reach the class graduating this academic year', () => {
+        const views = mentionRoleViews(
+          roles,
+          members,
+          joined([year('y27', 2027)]),
+        ).map((view) => ({ ...view, mentionable: view.open_to_all }));
+        expect(resolveMentions('hey @Seniors', members, views)).toEqual(['u3']);
+      });
+    });
 
     it('reaches every holder of any role in a tier, once each', () => {
       const views = mentionRoleViews(tiered, members, {
@@ -217,6 +372,23 @@ describe('mentionRoleViews', () => {
         member_ids: ['u1', 'u2', 'u3', 'u4'],
       });
       // A chapter that opened @everyone opens it too.
+      expect(members_(true)?.open_to_all).toBe(true);
+    });
+
+    it('makes a tier holding the Actives role follow its switch (#5802)', () => {
+      const members_ = (activesOn: boolean) =>
+        mentionRoleViews(
+          tiered.map((r) =>
+            r.id === 'brothers'
+              ? { ...r, system_key: 'MEMBER', mentionable: activesOn }
+              : r,
+          ),
+          members,
+          { tiers: [tier('t-members', 'Members', 3)] },
+        ).find((view) => view.kind === 'tier');
+
+      // The old Everyone row: @Members stays officers-only while it is.
+      expect(members_(false)?.open_to_all).toBe(false);
       expect(members_(true)?.open_to_all).toBe(true);
     });
 
@@ -408,6 +580,7 @@ describe('ChatMentionService.resolveForSend', () => {
       mentionable: true,
       pledge_class_id: null,
       class_year: null,
+      major_key: null,
       created_at: '2026-11-06T00:00:00Z',
       updated_at: '2026-11-06T00:00:00Z',
     };

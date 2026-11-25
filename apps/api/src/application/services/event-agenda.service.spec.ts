@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { FRAPP_LINK_NOT_PUBLIC_MESSAGE } from '@repo/validation';
 import { Event } from '#domain/entities/event.entity';
 import {
   baseEvent,
@@ -18,6 +19,11 @@ describe('EventService — agenda and attachments', () => {
   let mockDocumentRepo: EventServiceFixture['mockDocumentRepo'];
 
   const DOC_ID = '11111111-1111-4111-8111-111111111111';
+  const upcoming: Event = {
+    ...baseEvent,
+    start_time: '2099-01-01T18:00:00.000Z',
+    end_time: '2099-01-01T19:00:00.000Z',
+  };
   const createBase = {
     chapter_id: 'ch-1',
     name: 'Chapter Meeting',
@@ -33,7 +39,8 @@ describe('EventService — agenda and attachments', () => {
       ...row,
       id: 'evt-new',
     }));
-    mockEventRepo.findById.mockResolvedValue(baseEvent);
+    // A meeting that hasn't started: its agenda is open to any change.
+    mockEventRepo.findById.mockResolvedValue(upcoming);
     mockEventRepo.update.mockImplementation(async (id, _chapterId, data) => ({
       ...baseEvent,
       ...data,
@@ -84,7 +91,7 @@ describe('EventService — agenda and attachments', () => {
               id: 'x2',
               kind: 'document',
               document_id: DOC_ID,
-              title: 'Last week agenda',
+              title: 'Document',
             },
           ],
         }),
@@ -148,18 +155,46 @@ describe('EventService — agenda and attachments', () => {
         'A link attachment needs a web address starting with http:// or https://.',
       ],
       [
-        'an attachment with no title',
+        'a link to https://test, which no phone can open (#5883)',
         {
           attachments: [
             {
               id: 'x1',
               kind: 'link' as const,
-              url: 'https://a.example',
-              title: '  ',
+              url: 'https://test',
+              title: 'Dead',
             },
           ],
         },
-        'Every attachment needs a title.',
+        FRAPP_LINK_NOT_PUBLIC_MESSAGE,
+      ],
+      [
+        'a link to http://localhost:3000, which no phone can open (#5883)',
+        {
+          attachments: [
+            {
+              id: 'x1',
+              kind: 'link' as const,
+              url: 'http://localhost:3000',
+              title: 'Dead',
+            },
+          ],
+        },
+        FRAPP_LINK_NOT_PUBLIC_MESSAGE,
+      ],
+      [
+        'a link to https://192.168.1.20, which no phone can open (#5883)',
+        {
+          attachments: [
+            {
+              id: 'x1',
+              kind: 'link' as const,
+              url: 'https://192.168.1.20',
+              title: 'Dead',
+            },
+          ],
+        },
+        FRAPP_LINK_NOT_PUBLIC_MESSAGE,
       ],
       [
         'a document attachment with no document',
@@ -168,7 +203,7 @@ describe('EventService — agenda and attachments', () => {
             { id: 'x1', kind: 'document' as const, title: 'Agenda' },
           ],
         },
-        'A document attachment needs the document it points at.',
+        'A document link needs the document it points at.',
       ],
     ])('refuses %s with a 400 naming it', async (_label, extra, message) => {
       await expect(service.create({ ...createBase, ...extra })).rejects.toThrow(
@@ -177,7 +212,7 @@ describe('EventService — agenda and attachments', () => {
       expect(mockEventRepo.create).not.toHaveBeenCalled();
     });
 
-    it("refuses a document that isn't one of the chapter's files, by its title", async () => {
+    it("refuses a document that isn't one of the chapter's files, never naming it", async () => {
       mockDocumentRepo.findByIds.mockResolvedValue([]);
       await expect(
         service.create({
@@ -193,10 +228,82 @@ describe('EventService — agenda and attachments', () => {
         }),
       ).rejects.toThrow(
         new BadRequestException(
-          '"Bylaws" isn\'t one of this chapter\'s files any more. Remove it, or attach it again from Chapter Files.',
+          "A document you attached isn't one of this chapter's files any more. Remove it, or attach it again from Chapter Files.",
         ),
       );
       expect(mockEventRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('once the meeting has started (Paul 2026-11-20)', () => {
+    const started: Event = {
+      ...baseEvent,
+      start_time: '2026-01-01T18:00:00.000Z',
+      end_time: '2026-01-01T19:00:00.000Z',
+      agenda: [
+        { id: 'a1', text: 'Vote', done: false },
+        { id: 'a2', text: 'Rush recap', done: false },
+      ],
+    };
+    const locked = expect.objectContaining({
+      response: expect.objectContaining({ code: 'event.agenda_locked' }),
+    });
+
+    beforeEach(() => {
+      mockEventRepo.findById.mockResolvedValue(started);
+    });
+
+    it('still takes check-offs', async () => {
+      await service.update('evt-1', 'ch-1', {
+        agenda: [
+          { id: 'a1', text: 'Vote', done: true },
+          { id: 'a2', text: 'Rush recap', done: false },
+        ],
+      });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        agenda: [
+          { id: 'a1', text: 'Vote', done: true },
+          { id: 'a2', text: 'Rush recap', done: false },
+        ],
+      });
+    });
+
+    it.each([
+      [
+        'adding an item',
+        [...started.agenda, { id: 'a3', text: 'New', done: false }],
+      ],
+      ['removing an item', [started.agenda[0]]],
+      ['moving an item', [started.agenda[1], started.agenda[0]]],
+      [
+        'rewording an item',
+        [{ id: 'a1', text: 'Revote', done: false }, started.agenda[1]],
+      ],
+    ])('refuses %s', async (_label, agenda) => {
+      await expect(service.update('evt-1', 'ch-1', { agenda })).rejects.toEqual(
+        locked,
+      );
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('opens again when the same write moves the meeting later', async () => {
+      await service.update('evt-1', 'ch-1', {
+        start_time: '2099-02-01T18:00:00.000Z',
+        end_time: '2099-02-01T19:00:00.000Z',
+        agenda: [started.agenda[1]],
+      });
+      expect(mockEventRepo.update).toHaveBeenCalled();
+    });
+
+    it('refuses a suggestion added to its agenda', async () => {
+      await expect(
+        service.appendAgendaItem('evt-1', 'ch-1', {
+          id: 'a3',
+          text: 'Tabled matter',
+          done: false,
+        }),
+      ).rejects.toEqual(locked);
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
     });
   });
 
@@ -260,9 +367,90 @@ describe('EventService — agenda and attachments', () => {
       expect(mockDocumentRepo.findByIds).not.toHaveBeenCalled();
       expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
         attachments: [
+          // The name an older save stored gives way to the kind's word.
+          { ...held, title: 'Document' },
+          { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+    });
+
+    it('keeps a link the meeting already held that no phone can open (#5883)', async () => {
+      const held = {
+        id: 'x1',
+        kind: 'link' as const,
+        url: 'https://test',
+        title: 'Old',
+      };
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        attachments: [held],
+      });
+      await service.update('evt-1', 'ch-1', {
+        attachments: [
           held,
           { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
         ],
+      });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [
+          held,
+          { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+    });
+
+    it('refuses a new link that no phone can open beside a held one (#5883)', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        attachments: [
+          { id: 'x1', kind: 'link', url: 'https://test', title: 'Old' },
+        ],
+      });
+      await expect(
+        service.update('evt-1', 'ch-1', {
+          attachments: [
+            {
+              id: 'x2',
+              kind: 'link',
+              url: 'http://localhost:3000',
+              title: 'New',
+            },
+          ],
+        }),
+      ).rejects.toThrow(FRAPP_LINK_NOT_PUBLIC_MESSAGE);
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the minutes, event and message links an older phone build could not see', async () => {
+      const minutes = {
+        id: 'x3',
+        kind: 'minutes' as const,
+        meeting_id: 'm1',
+        title: 'Minutes',
+      };
+      const link = {
+        id: 'x2',
+        kind: 'link' as const,
+        url: 'https://a.example',
+        title: 'A',
+      };
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        attachments: [minutes, link],
+      });
+      // An older build sends only what it reads, and no flag.
+      await service.update('evt-1', 'ch-1', { attachments: [link] });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [link, minutes],
+      });
+      mockEventRepo.update.mockClear();
+      // This build's list replaces it.
+      await service.update('evt-1', 'ch-1', {
+        attachments: [link],
+        attachments_all_kinds: true,
+      });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [link],
       });
     });
 

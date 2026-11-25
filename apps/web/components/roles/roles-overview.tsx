@@ -10,13 +10,18 @@ import {
   useDeleteRoleTier,
   useReorderRoleTiers,
   useUpdateRole,
+  useIsPermissionHidden,
   useUpdateRoleTier,
 } from "@repo/hooks";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
+  isActiveRole,
   isEveryoneRole,
+  NEW_PICKABLE_ROLE_COPY,
+  ROLE_NAME_MAX_LENGTH,
+  ROLE_TIER_NAME_MAX_LENGTH,
   roleColorOrNull,
-  selfAssignableSectionCaption,
+  SELF_ASSIGNABLE_SECTION_CAPTION,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +44,7 @@ import {
   reachesOutside,
   reachesRole,
   reachesTier,
+  shownPermissionCount,
   type TierRow,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
@@ -272,8 +278,8 @@ function TierList({
     const editable = canManage && reachesRole(reach, role, tiers);
     // A Non-chapter business role can't sit in a tier (#4958): the API
     // refuses the move until it's unmarked on its role page, so the menu
-    // doesn't offer one.
-    const movable = !role.self_assignable;
+    // doesn't offer one. Actives (#5802) stays in its tier, as the API holds it.
+    const movable = !role.self_assignable && !isActiveRole(role);
     const entries: RowMenuEntry[] = [
       ...(movable
         ? [{ type: "label", key: "move-label", label: "Move to" } as const]
@@ -287,7 +293,7 @@ function TierList({
           disabled: !editable || !reachesTier(reach, tier),
           onSelect: () => moveRole(role, tier.id),
         })),
-      ...(role.tier_id === null
+      ...(role.tier_id === null || !movable
         ? []
         : [
             {
@@ -481,13 +487,17 @@ function TierList({
               Non-chapter business
             </h3>
             <p className="text-caption text-muted-foreground">
-              {selfAssignableSectionCaption(words.plural)}
+              {SELF_ASSIGNABLE_SECTION_CAPTION}
             </p>
           </div>
           <RoleList
             rows={pickable.map(roleRow)}
             empty="No roles here yet."
-            addRole={null}
+            addRole={
+              canManage && reachesOutside(reach) && !filtering ? (
+                <AddRoleRow placement={null} pickable onCreated={onOpenRole} />
+              ) : null
+            }
           />
         </section>
       ) : null}
@@ -565,7 +575,8 @@ function TierBlock({
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(tier.name);
   const headingId = `roles-tier-${tier.id}`;
-  const permissionCount = tier.permissions.filter((p) => p !== "*").length;
+  const isHidden = useIsPermissionHidden();
+  const permissionCount = shownPermissionCount(tier.permissions, isHidden);
 
   async function submitRename(event: FormEvent) {
     event.preventDefault();
@@ -624,7 +635,7 @@ function TierBlock({
             autoFocus
             aria-label={`${words.Singular} name`}
             value={draft}
-            maxLength={60}
+            maxLength={ROLE_TIER_NAME_MAX_LENGTH}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") setRenaming(false);
@@ -689,8 +700,22 @@ function TierBlock({
  * "Add role" as the last row of a tier: the new role starts with the tier's
  * permissions, so naming it is the whole form. Color, the @mention switch and
  * any difference from the tier are set on the role's own page after.
+ *
+ * Under Non-chapter business (`pickable`, #5736) it creates the role outside
+ * the tiers, holding nothing, and already marked for members to pick, in one
+ * request, then opens its page (`onCreated`). Discord's onboarding adds a
+ * question in place the same way, rather than sending an admin to build a
+ * role first and flag it after.
  */
-function AddRoleRow({ placement }: { placement: Placement }) {
+function AddRoleRow({
+  placement,
+  pickable = false,
+  onCreated,
+}: {
+  placement: Placement;
+  pickable?: boolean;
+  onCreated?: (roleId: string) => void;
+}) {
   const { toast } = useToast();
   const createRole = useCreateRole();
   const [open, setOpen] = useState(false);
@@ -701,21 +726,21 @@ function AddRoleRow({ placement }: { placement: Placement }) {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      // `permissions: []` means "take the tier's" (`createAsMember`).
-      await createRole.mutateAsync({
+      // `permissions: []` means "take the tier's" (`createAsMember`); outside
+      // the tiers that is nothing, which a pickable role must hold.
+      const created = await createRole.mutateAsync({
         name: trimmed,
         permissions: [],
         tier_id: placement,
+        ...(pickable ? { self_assignable: true } : {}),
       });
       setName("");
       setOpen(false);
+      if (created.id) onCreated?.(created.id);
     } catch (error) {
       toast({
-        title: "Couldn't add the role",
-        description: getErrorMessage(
-          error,
-          "Check the name isn't already used.",
-        ),
+        title: NEW_PICKABLE_ROLE_COPY.failed,
+        description: getErrorMessage(error, NEW_PICKABLE_ROLE_COPY.failedBody),
         variant: "destructive",
       });
     }
@@ -734,20 +759,22 @@ function AddRoleRow({ placement }: { placement: Placement }) {
           )}
         >
           <Plus className="h-4 w-4" aria-hidden />
-          Add role
+          {NEW_PICKABLE_ROLE_COPY.add}
         </button>
       </li>
     );
   }
   return (
     <li className="px-4 py-2">
-      <form onSubmit={submit} className="flex items-center gap-2">
+      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
         <Input
           autoFocus
-          aria-label="New role name"
-          placeholder="Philanthropy chair"
+          aria-label={pickable ? NEW_PICKABLE_ROLE_COPY.title : "New role name"}
+          placeholder={
+            pickable ? NEW_PICKABLE_ROLE_COPY.placeholder : "Philanthropy chair"
+          }
           value={name}
-          maxLength={60}
+          maxLength={ROLE_NAME_MAX_LENGTH}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") setOpen(false);
@@ -769,6 +796,11 @@ function AddRoleRow({ placement }: { placement: Placement }) {
         >
           Cancel
         </Button>
+        {pickable ? (
+          <p className="basis-full text-caption text-muted-foreground">
+            {NEW_PICKABLE_ROLE_COPY.hint}
+          </p>
+        ) : null}
       </form>
     </li>
   );
@@ -809,7 +841,7 @@ function AddTierForm({
         aria-label={`New ${words.singular} name`}
         placeholder="Committee chairs"
         value={name}
-        maxLength={60}
+        maxLength={ROLE_TIER_NAME_MAX_LENGTH}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);

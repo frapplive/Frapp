@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { pickRepeatPreset, TASK_SERIES_SCOPE_COPY } from "@repo/validation";
+import {
+  pickRepeatPreset,
+  TASK_REPEAT_NEEDS_DUE_DATE,
+  TASK_SERIES_SCOPE_COPY,
+} from "@repo/validation";
 import type { LiveTask, LiveTaskPhoto } from "@repo/hooks";
 import { toTaskRow, type TaskRowModel } from "./board";
 import {
   assigneeSave,
   descriptionSave,
+  dueClearable,
   dueDraftOf,
   dueSave,
   editFactsOfLive,
   editFactsOfRow,
+  attachmentsSave,
+  followerSave,
   photosSave,
   pointsSave,
   proofSave,
@@ -169,6 +176,55 @@ describe("the due", () => {
   });
 });
 
+describe("no due date (#5761)", () => {
+  const series = {
+    recurrence_rule: "FREQ=WEEKLY;BYDAY=WE",
+    next_due_date: "2026-10-07",
+    ended: false,
+  };
+
+  it("opens an undated task with no draft, and gives it a day", () => {
+    const undated = row({ due_date: null, due_at: null });
+    expect(dueDraftOf(undated)).toBeNull();
+    expect(dueSave(undated, { date: "2026-10-02", time: null }, NOW)).toEqual({
+      kind: "save",
+      body: { due_date: "2026-10-02", due_at: null },
+    });
+  });
+
+  it("takes the due off with due_date null, the time going with it", () => {
+    const at = new Date(2026, 8, 30, 17, 0).toISOString();
+    expect(dueSave(row({ due_at: at }), "none", NOW)).toEqual({
+      kind: "save",
+      body: { due_date: null, due_at: null },
+    });
+    expect(dueSave(row(), "none", NOW)).toEqual({
+      kind: "save",
+      body: { due_date: null, due_at: null },
+    });
+    // Already undated: nothing to send.
+    expect(dueSave(row({ due_date: null }), "none", NOW)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("keeps a copy of a repeating task's day", () => {
+    const copy = row({ series });
+    expect(dueClearable(copy)).toBe(false);
+    expect(dueClearable(row())).toBe(true);
+    expect(dueSave(copy, "none", NOW)).toEqual({
+      kind: "problem",
+      message: TASK_REPEAT_NEEDS_DUE_DATE,
+    });
+  });
+
+  it("reads the cleared due back onto the row", () => {
+    const after = rowAfter(row(), { due_date: null, due_at: null });
+    expect(after.dueDay).toBeNull();
+    expect(after.dueAt).toBeNull();
+  });
+});
+
 describe("proof, photos and who", () => {
   it("sends a changed proof kind", () => {
     expect(proofSave(row(), "photo")).toEqual({
@@ -210,6 +266,37 @@ describe("proof, photos and who", () => {
         row({ status: "IN_PROGRESS", stored_status: "IN_PROGRESS" }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("From (#5473)", () => {
+  it("sends a new follower, a cleared one, and nothing unchanged", () => {
+    expect(followerSave(row(), "tier:t-exec")).toEqual({
+      kind: "save",
+      body: { followed_by: "tier:t-exec" },
+    });
+    const followed = row({ followed_by: "tier:t-exec" });
+    expect(followed.followedBy).toBe("tier:t-exec");
+    expect(followerSave(followed, null)).toEqual({
+      kind: "save",
+      body: { followed_by: null },
+    });
+    expect(followerSave(followed, "tier:t-exec")).toEqual({ kind: "none" });
+  });
+
+  it("changes a group task's follower on every copy", () => {
+    const copy = row({ group_id: "g1" });
+    expect(scopedEdit(copy, { followed_by: "group:g-phil" })).toEqual({
+      followed_by: "group:g-phil",
+      scope: "group",
+    });
+  });
+
+  it("measures the next pick against the one on its way", () => {
+    const after = rowAfter(row(), { followed_by: "role:pres" });
+    expect(after.followedBy).toBe("role:pres");
+    expect(followerSave(after, "role:pres")).toEqual({ kind: "none" });
+    expect(rowAfter(after, { followed_by: null }).followedBy).toBeNull();
   });
 });
 
@@ -264,8 +351,9 @@ describe("who may edit, and how far it reaches", () => {
     expect(can({}, false)).toBe(false);
     expect(can({ points_awarded: true })).toBe(false);
     expect(can({ confirmed_at: "2026-09-29T10:00:00.000Z" })).toBe(false);
-    // The fields need a day and an assignee.
-    expect(can({ due_date: null })).toBe(false);
+    // The fields need an assignee; a task with no due date (#5761) is
+    // editable, and its Due field can give it one.
+    expect(can({ due_date: null })).toBe(true);
     expect(can({ assignee_id: null })).toBe(false);
   });
 
@@ -288,9 +376,9 @@ describe("who may edit, and how far it reaches", () => {
         true,
       ),
     ).toBe(false);
-    expect(
-      taskEditable(editFactsOfLive({ ...live, due: undefined }), true),
-    ).toBe(false);
+    expect(taskEditable(editFactsOfLive({ ...live, due: null }), true)).toBe(
+      true,
+    );
   });
 });
 
@@ -407,5 +495,27 @@ describe("a copy of a repeating task (#5119)", () => {
   it("measures the next change against a stopped series", () => {
     const after = rowAfter(live(), { recurrence_rule: null });
     expect(after.series?.ended).toBe(true);
+  });
+});
+
+describe("Attached (spec/behavior/frapp-links.md)", () => {
+  const doc = { id: "l1", kind: "document" as const, document_id: "d1" };
+
+  it("reads the stored list, sends a changed one whole, and nothing unchanged", () => {
+    const held = row({ attachments: [doc, { id: "x", kind: "nope" }] });
+    // An entry this build can't read is left out, never drawn half-made.
+    expect(held.attachments).toEqual([doc]);
+    expect(attachmentsSave(held, [doc])).toEqual({ kind: "none" });
+    expect(attachmentsSave(held, [])).toEqual({
+      kind: "save",
+      body: { attachments: [] },
+    });
+    expect(rowAfter(held, { attachments: [] }).attachments).toEqual([]);
+  });
+
+  it("changes a group task's list on every copy", () => {
+    expect(scopedEdit(row({ group_id: "g1" }), { attachments: [doc] })).toEqual(
+      { attachments: [doc], scope: "group" },
+    );
   });
 });

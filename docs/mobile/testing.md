@@ -77,12 +77,9 @@ except the on-screen readout of the keyboard path, which a unit test covers:
 - [ ] **Figtree** renders visibly different weights for 400, 600 and 700 on
       the sign-in screen (s01): its title is 700, its button labels 600 and its body
       copy 400. Android is the honest test, because it can't fake weights from
-      one file. A `ScreenShell` title (You, Settings) is 700 too. The invite
-      field on the join screen (s02), behind its "I have an invite" answer (an
-      account with no chapter lands on the question first), renders in a
-      monospace face.
-- [ ] **Sheets and the keyboard.** You → Service hours, then the header's
-      **+** tile (labelled "Log service hours" for a screen reader), presents
+      one file. A `ScreenShell` title (You, Settings) is 700 too.
+- [ ] **Sheets and the keyboard.** The tab bar's **+**, then **Log hours**
+      (You's Service hours row until #5950), presents
       the s20 "Log service hours" sheet with its grabber,
       header and Cancel. It drags and
       dismisses, and typing in its description field keeps the field visible
@@ -108,8 +105,9 @@ device run, check:
       [You row](interaction-smoke-checklist.md#2-primary-tab-routes) says.
 - [ ] **Profile** is the top of the You tab, with no screen of its own, and
       Chat home's header shows Search and the bell; Messages is tab 3, and
-      the Calendar opens from Activity's Calendar row.
-- [ ] A deleted path (`exp://.../--/points`, `--/task-center`) lands on home via
+      the Calendar opens from the "Calendar" link in Activity's To do header.
+- [ ] A deleted path (`exp://.../--/task-center`; `--/points` is the Points
+      screen again since #5950) lands on home via
       `+not-found` instead of an error screen.
 - [ ] **`frapp://event-details` still resolves** — open
       `frapp://event-details?id=<an event id>`, the URL `.ics` files exported
@@ -121,7 +119,7 @@ device run, check:
       must not require the claim (the hook is on in both hosted projects; the
       playbook still disables it as incident mitigation). Force-quit and reopen:
       straight to the tabs, no picker flash.
-- [ ] **Chapter picker** (You → Switch chapter): opens for any member, lists their
+- [ ] **Chapter picker** (Chat home's chapter name → Switch chapter): opens for any member, lists their
       chapters, and Sign out works from it even mid-selection.
 - [ ] **Multi-chapter switch** (needs an account in 2+ chapters): pick a chapter
       and land back in the tabs with that chapter's data. If a test token has no
@@ -134,7 +132,7 @@ device run, check:
 device pass a script can see. What they check, and what they leave to a phone in hand, is listed
 once, in [`device-pass.md` § What the automated flows cover](device-pass.md#what-the-automated-flows-cover).
 They select by what a member reads (labels, placeholders, accessibility labels) plus a few test
-IDs (the tab bar's `tab-<route>` and the +'s `tab-plus`), so renaming a You row, a tour button or
+IDs (the tab bar's `tab-<route>` and the +'s `tab-plus`), so renaming a You row, the welcome card's close or
 the composer's placeholder means updating them.
 
 They run in Expo Workflows, on an Android emulator and an iOS simulator, against staging. The
@@ -296,13 +294,14 @@ Then verify a single `node_modules/expo` at the expected version before trusting
 
 **A `waitFor` on a derived flag can be satisfied by the wrong state.**
 `useAuthSession` exposes `isChapterResolving` as
-`status === "authenticated" && !hasReadChapterClaim`
+`status === "authenticated" && !accessToken`
 ([`lib/auth-session.tsx`](../../apps/mobile/lib/auth-session.tsx)), so it reads
-`false` during `hydrating` just as it does once the first claim read has landed.
+`false` during `hydrating` just as it does once the session has arrived.
 `await waitFor(() => expect(result.current.isChapterResolving).toBe(false))`
-therefore _can_ return before `getSession()` has resolved and before any claim read
-has been issued — the wait passes for a reason the test did not intend, and
-whatever it was meant to sequence is still ahead of it. It does not fail every
+therefore _can_ return before `getSession()` has resolved — the wait passes for a
+reason the test did not intend, and whatever it was meant to sequence is still
+ahead of it. (Until #5768 the chapter claim was a network read, `getClaims`, and
+this is the trap #976 fell into; the claim is decoded from the token now.) It does not fail every
 time; see the drain below for what decides it. Assert `status === "authenticated"`
 in the same `waitFor` so the pre-authentication state cannot satisfy it.
 
@@ -320,9 +319,8 @@ the state you are trying to skip past. When the answer is the `act` above it, th
 wait is a readable assertion; when the answer is nothing, it is a bug.
 
 The corollary is that waiting on an _already-settled_ flag is a pure no-op. Where a
-later async operation is the thing under test and it changes no flag — a claim
-re-read, which deliberately leaves `hasReadChapterClaim` true — wait on the
-operation instead: await the mock's recorded promises inside `act`, and assert the
+later async operation is the thing under test and it changes no flag (#976's was a
+claim re-read) wait on the operation instead: await the mock's recorded promises inside `act`, and assert the
 call count so the wait cannot be satisfied by an earlier, unrelated call.
 
 This was the whole of #976. Two things about it are worth not repeating:
@@ -347,9 +345,9 @@ time the test continues. Machine load shifts those odds, which is why the rate i
 noisy and why a handful of green runs proves very little.
 
 **A test double that parks a call needs one resolver per parked call.** The same
-spec holds `getClaims` open to make the in-flight window observable. Storing a
-single resolver on the mock state looked sufficient, but the claim effect re-runs on
-every token change, so a token refresh parks a second read while the mount read is
+spec used to hold `getClaims` open to make the in-flight window observable. Storing a
+single resolver on the mock state looked sufficient, but the claim effect re-ran on
+every token change, so a token refresh parked a second read while the mount read was
 still behind the gate — and the second park overwrote the first resolver, stranding
 a promise that could then never settle. Keep a list of waiters and release all of
 them.

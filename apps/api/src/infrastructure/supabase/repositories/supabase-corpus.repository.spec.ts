@@ -258,8 +258,7 @@ describe('SupabaseCorpusRepository — tenant scope', () => {
         chapterId: CHAPTER_B,
         userId: USER_A,
         query: 'dues',
-        embedding: [0.25, -0.5],
-        embeddingModel: 'gemini-embedding-001',
+        embedding: { vector: [0.25, -0.5], model: 'gemini-embedding-001' },
         limit: 40,
       }),
     ).resolves.toEqual([]);
@@ -276,6 +275,23 @@ describe('SupabaseCorpusRepository — tenant scope', () => {
         },
       },
     ]);
+  });
+
+  it('match with no embedding names a model no passage has, so only words match', async () => {
+    await repo.match({
+      chapterId: CHAPTER_B,
+      userId: USER_A,
+      query: 'dues',
+      embedding: null,
+      limit: 40,
+    });
+    const args = harness.rpcCalls[0].args as {
+      p_embedding: string;
+      p_embedding_model: string;
+    };
+    expect(args.p_embedding_model).toBe('');
+    // A vector of the column's width, so the function's cast parses.
+    expect(JSON.parse(args.p_embedding)).toHaveLength(1536);
   });
 
   it('writeChunks names the source and its revision; the function takes the chapter from the source', async () => {

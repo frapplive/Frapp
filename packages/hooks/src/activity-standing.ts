@@ -3,30 +3,24 @@
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { formatMinutesRounded } from "@repo/formatting";
+import { localWeekStart } from "@repo/validation";
 import { createChapterQueryKeys } from "./chapter-query-keys";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 export type ActivityStanding = components["schemas"]["ActivityStandingDto"];
-type ActivityStandingSection = ActivityStanding["unavailable"][number];
+/** One part of the standing: `points`, `required_events`, `service` or `study`. */
+export type ActivityStandingSection = ActivityStanding["unavailable"][number];
 
 /** Chapter-scoped keys; the read is `activityStandingKeys.chapter(chapterId)`. */
 export const activityStandingKeys = createChapterQueryKeys("activity-standing");
 
-/**
- * The start of the member's week on this device: last Sunday at local
- * midnight. The phone's Study screen and More row count this week too
- * (`startOfWeek` in `apps/mobile/lib/study/format.ts` returns it).
- */
-export function localWeekStart(now: Date = new Date()): Date {
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  start.setDate(start.getDate() - start.getDay());
-  return start;
-}
+// The week rule lives in @repo/validation so the Meetings lists share it.
+export { localWeekStart };
 
 /**
  * How the member is doing this semester (`GET /v1/activity/standing`,
- * `spec/behavior/activity.md` § Standing), for the strip under Activity's
- * week card.
+ * `spec/behavior/activity.md` § Standing), for This semester on You and
+ * web's profile (on Activity until #5779).
  *
  * Never fresh, as `useActivity` isn't: points, attendance and hours change on
  * other screens, none of which knows about this read, so it is read again
@@ -206,15 +200,25 @@ export function activityStandingRows(
 }
 
 /**
- * The standing as gauges, for the strip under the week card (#4766): the
- * rows, less the ones with nothing yet and nothing to aim at. A part that
- * couldn't be read stays, so a failed read never looks like nothing. Empty
- * when no gauge is left, and the strip is not drawn at all.
+ * The standing as gauges, for the This semester strip (#4766; on You and
+ * web's profile since #5779): the rows, less the ones with nothing yet and
+ * nothing to aim at, and less any in `omit`, a number the screen already
+ * shows elsewhere, so no screen says it twice. A row in `keep` stays even
+ * at zero: on the phone's You the points and service gauges are the only
+ * doors to the member's own Points and Service hours screens (#5950), so
+ * they stay where a first point or hour will show, as web's Profile keeps
+ * its doors at zero. A part that couldn't be read stays, so a failed read
+ * never looks like nothing. Empty when no gauge is left, and the strip is
+ * not drawn at all.
  */
 export function activityStandingGauges(
   standing: ActivityStanding,
+  omit: readonly StandingRow["id"][] = [],
+  keep: readonly StandingRow["id"][] = [],
 ): StandingRow[] {
-  return activityStandingRows(standing).filter((row) => !row.empty);
+  return activityStandingRows(standing).filter(
+    (row) => (!row.empty || keep.includes(row.id)) && !omit.includes(row.id),
+  );
 }
 
 /** How far `done` is toward `goal`, 0 to 1, or `null` when there is no goal. */

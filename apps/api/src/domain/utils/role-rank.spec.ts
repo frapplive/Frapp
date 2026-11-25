@@ -1,6 +1,10 @@
 import {
   addedPermissions,
+  canAssignAt,
+  canAssignRoleOnMemberAt,
+  canCorrectProfileAt,
   canReach,
+  canSetPledgeClassOf,
   effectivePermissions,
   holderRank,
   OUTSIDE_TIERS_RANK,
@@ -81,6 +85,87 @@ describe('canReach', () => {
 
   it('lets a wildcard holder reach everything', () => {
     expect(canReach(actor(WILDCARD_RANK, ['*']), WILDCARD_RANK)).toBe(true);
+  });
+});
+
+describe('canAssignAt', () => {
+  it('reaches only below without roles:assign_own_level', () => {
+    expect(canAssignAt(actor(2), 3)).toBe(true);
+    expect(canAssignAt(actor(2), 2)).toBe(false);
+  });
+
+  it("reaches the actor's own rank too with it, never above (#5725)", () => {
+    const cabinet = actor(1, ['roles:assign_own_level']);
+    expect(canAssignAt(cabinet, 2)).toBe(true);
+    expect(canAssignAt(cabinet, 1)).toBe(true);
+    expect(canAssignAt(cabinet, WILDCARD_RANK)).toBe(false);
+  });
+
+  it('still reaches nothing from outside the tiers', () => {
+    const outside = actor(OUTSIDE_TIERS_RANK, ['roles:assign_own_level']);
+    expect(canAssignAt(outside, OUTSIDE_TIERS_RANK)).toBe(false);
+  });
+});
+
+describe('canAssignRoleOnMemberAt (#5843, #5903)', () => {
+  it('on a member below or level, follows canAssignAt', () => {
+    expect(canAssignRoleOnMemberAt(actor(2), 3, 3)).toBe(true);
+    expect(canAssignRoleOnMemberAt(actor(2), 3, 2)).toBe(true);
+    expect(canAssignRoleOnMemberAt(actor(2), 2, 2)).toBe(false);
+    const cabinet = actor(1, ['roles:assign_own_level']);
+    expect(canAssignRoleOnMemberAt(cabinet, 1, 1)).toBe(true);
+  });
+
+  it('on a member ranked above, the President included, reaches only roles below the actor', () => {
+    expect(canAssignRoleOnMemberAt(actor(2), 3, 1)).toBe(true);
+    expect(canAssignRoleOnMemberAt(actor(1), 2, WILDCARD_RANK)).toBe(true);
+    expect(canAssignRoleOnMemberAt(actor(1), OUTSIDE_TIERS_RANK, 0)).toBe(true);
+    expect(canAssignRoleOnMemberAt(actor(2), 2, 1)).toBe(false);
+    expect(canAssignRoleOnMemberAt(actor(2), 1, 1)).toBe(false);
+    expect(canAssignRoleOnMemberAt(actor(1), WILDCARD_RANK, 0)).toBe(false);
+  });
+
+  it('never reaches their own rank on a member above, even with roles:assign_own_level', () => {
+    const cabinet = actor(1, ['roles:assign_own_level']);
+    expect(canAssignRoleOnMemberAt(cabinet, 1, WILDCARD_RANK)).toBe(false);
+  });
+
+  it('reaches no other member from outside the tiers', () => {
+    const outside = actor(OUTSIDE_TIERS_RANK, ['roles:assign_own_level']);
+    expect(
+      canAssignRoleOnMemberAt(outside, OUTSIDE_TIERS_RANK, OUTSIDE_TIERS_RANK),
+    ).toBe(false);
+    expect(canAssignRoleOnMemberAt(outside, OUTSIDE_TIERS_RANK, 1)).toBe(false);
+  });
+});
+
+describe('canCorrectProfileAt (#5900)', () => {
+  it('reaches a member below or level with the actor, never above', () => {
+    expect(canCorrectProfileAt(actor(2), 3)).toBe(true);
+    expect(canCorrectProfileAt(actor(2), 2)).toBe(true);
+    expect(canCorrectProfileAt(actor(2), 1)).toBe(false);
+  });
+
+  it('never reaches a `*` holder, even from the top tier (#5903 kept this)', () => {
+    expect(canCorrectProfileAt(actor(1), WILDCARD_RANK)).toBe(false);
+  });
+
+  it('reaches a member outside the tiers, but not from outside them', () => {
+    expect(canCorrectProfileAt(actor(3), OUTSIDE_TIERS_RANK)).toBe(true);
+    expect(
+      canCorrectProfileAt(actor(OUTSIDE_TIERS_RANK), OUTSIDE_TIERS_RANK),
+    ).toBe(false);
+  });
+});
+
+describe('canSetPledgeClassOf (#5903)', () => {
+  it('reaches any member from inside the tiers, the President included', () => {
+    expect(canSetPledgeClassOf(actor(3))).toBe(true);
+    expect(canSetPledgeClassOf(actor(WILDCARD_RANK, ['*']))).toBe(true);
+  });
+
+  it('reaches no other member from outside the tiers', () => {
+    expect(canSetPledgeClassOf(actor(OUTSIDE_TIERS_RANK))).toBe(false);
   });
 });
 

@@ -48,11 +48,11 @@ const dm: ChatChannel = {
 function setup({
   reorder = true,
   channels = [general, random, alumni, exec, rush, dm],
-  sort,
+  withSidebar = false,
 }: {
   reorder?: boolean;
   channels?: ChatChannel[];
-  sort?: "chapter" | "recent" | "alpha";
+  withSidebar?: boolean;
 } = {}) {
   const controls: ChannelReorderControls = {
     onReorderChannels: vi.fn(),
@@ -69,13 +69,12 @@ function setup({
       onPick={onPick}
       reorder={reorder ? controls : undefined}
       sidebar={
-        sort
+        withSidebar
           ? {
               preferences: {
                 pinnedIds: new Set(),
                 collapsed: new Set(),
                 filters: { unreadOnly: false, hideMuted: false },
-                sort,
               },
               mutedChannelIds: new Set(),
               onSetPinned: vi.fn(),
@@ -355,6 +354,26 @@ describe("ChannelList reorder", () => {
     }
   });
 
+  // #6053: the heading's ⋯ goes while anything is held, as the + does, so
+  // the heading under the pointer stays the whole drop target.
+  it("hides a heading's ⋯ while a row is held", () => {
+    const { container } = setup({ withSidebar: true });
+    expect(
+      screen.queryAllByRole("button", { name: /^More for / }).length,
+    ).toBeGreaterThan(0);
+    const restore = hold(
+      rowOf(container, "c-gen")!,
+      rowOf(container, "c-rand")!,
+    );
+    try {
+      expect(screen.queryAllByRole("button", { name: /^More for / })).toEqual(
+        [],
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it("folds every category to its heading while a category is dragged", () => {
     const { container } = setup();
     const heading = container.querySelector<HTMLElement>(
@@ -376,23 +395,15 @@ describe("ChannelList reorder", () => {
   });
 });
 
-// The member's own sort (#2877): under Recent or A–Z the rows aren't drawn in
-// the chapter's order, so they stop dragging; categories still are, so they
-// keep dragging, and an empty one keeps its heading.
-describe("drag under the member's sort (#2877)", () => {
-  it("keeps rows still and categories draggable under A–Z", () => {
-    const { container } = setup({ sort: "alpha" });
+// Rows are always in the chapter's order (#5947), so they always drag where
+// the member may arrange the rail.
+describe("drag with the member's own arrangement", () => {
+  it("drags rows while the member has an arrangement", () => {
+    const { container } = setup({ withSidebar: true });
 
-    expect(rowOf(container, "c-gen")).toBeNull();
+    expect(rowOf(container, "c-gen")).not.toBeNull();
     expect(
       container.querySelector('[data-reorder-category="cat-exec"]'),
     ).not.toBeNull();
-    expect(screen.getByText("Archive")).toBeInTheDocument();
-  });
-
-  it("drags rows again under Chapter order", () => {
-    const { container } = setup({ sort: "chapter" });
-
-    expect(rowOf(container, "c-gen")).not.toBeNull();
   });
 });

@@ -85,7 +85,15 @@ export function useUpdateUser() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (saved) => {
+    // A refused save may mean the name was locked since the row was read
+    // (#5801): read it again so Profile shows the lock.
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["user", "me"],
+        exact: true,
+      });
+    },
+    onSuccess: (saved, body) => {
       // The PATCH answers with the whole updated row, in the shape
       // `GET /v1/users/me` serves (both sign the photo), so it goes straight
       // into the cache: a form that closes on success closes onto it, without
@@ -101,6 +109,16 @@ export function useUpdateUser() {
       // cancels a GET that left before the PATCH landed, which would
       // otherwise answer last and put the pre-save row back.
       void invalidateProfileReads(queryClient);
+      // A major or graduation year puts the member in that major's or year's
+      // automatic group at once (#5778), so the groups and the mention list
+      // that offer it are read again rather than left a minute stale.
+      if ("major" in body || "graduation_year" in body) {
+        void queryClient.invalidateQueries({
+          predicate: ({ queryKey }) =>
+            queryKey[0] === "roles" &&
+            (queryKey[2] === "groups" || queryKey[2] === "mention-roles"),
+        });
+      }
     },
   });
 }
@@ -109,8 +127,8 @@ export function useUpdateUser() {
  * Every query whose rows carry the viewer's profile (name, photo, bio,
  * graduation year, city, company): their own profile, every `["members", …]`
  * read (roster, directory, detail, search, and through the roster every chat
- * author label), the alumni directory and its city and company filters, and
- * the activity feed's actors. For the photo it matters twice over: the server
+ * author label), and the alumni directory and its city and company filters.
+ * For the photo it matters twice over: the server
  * deletes the replaced object, so a query left out here keeps rendering a URL
  * to nothing.
  *
@@ -125,7 +143,6 @@ export const PROFILE_QUERY_FILTERS: readonly InvalidateQueryFilters[] = [
   { queryKey: ["user", "me"], exact: true },
   { queryKey: ["members"] },
   { queryKey: ["alumni"] },
-  { queryKey: ["activity-feed"] },
 ];
 
 function invalidateProfileReads(

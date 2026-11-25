@@ -11,6 +11,13 @@ import {
 /**
  * List documents, optionally narrowed to a folder or a title search.
  *
+ * `minutes` adds the rows that file meetings' posted minutes (#5949). Only the
+ * Documents screens ask: those rows have no file, so a reader that counts the
+ * library (the setup checklist, the not-set-up check) or offers its rows as
+ * links (the Frapp link picker, which offers minutes as minutes) keeps the
+ * files-only list it had, and the read that leaves them out stays batchable
+ * on the first screen (`first-screen-batch.ts` skips a read with a query).
+ *
  * The chapter id is in the key but **not** in an `enabled` gate: the endpoint
  * resolves the chapter from the request header server-side, so the request is
  * well-formed either way — but two chapters' libraries must not share a cache
@@ -19,18 +26,22 @@ import {
 export function useDocuments(options?: {
   folder?: string;
   search?: string;
+  minutes?: boolean;
   enabled?: boolean;
 }) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   const folder = options?.folder;
   const search = options?.search;
+  const minutes = options?.minutes ? "true" : undefined;
   return useQuery({
-    queryKey: ["documents", chapterId, "list", folder, search],
+    queryKey: ["documents", chapterId, "list", folder, search, minutes],
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/documents", {
         signal,
-        params: { query: { folder, search } },
+        // The API leaves minutes rows out unless asked, for builds from
+        // before them as much as for the readers above.
+        params: { query: { folder, search, minutes } },
       });
       if (error) throw error;
       return data;

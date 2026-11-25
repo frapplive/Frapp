@@ -84,7 +84,7 @@ let inviteList: { token: string; used_at: string | null }[] = [];
 let invitesOptions: { enabled?: boolean; refetchInterval?: number } | undefined;
 let currentChapter: { logo_url: string | null } | undefined;
 
-// Meet Frapp AI's answers (#4790). AI is off unless a spec turns it on, so
+// Meet Frapp Intelligence's answers (#4790). AI is off unless a spec turns it on, so
 // the other beats' specs run as before.
 const aiChoice = vi.hoisted(() => ({
   consent: null as unknown,
@@ -392,7 +392,7 @@ describe("chapter setup — step order", () => {
     expect(useRouter().dismissTo).toHaveBeenCalledWith("/");
   });
 
-  describe("Meet Frapp AI (#4790)", () => {
+  describe("Meet Frapp Intelligence (#4790)", () => {
     beforeEach(() => {
       aiChoice.consent = {
         answer: null,
@@ -429,7 +429,7 @@ describe("chapter setup — step order", () => {
     it("asks the founder after the display pick, for their own account (#5294)", async () => {
       const { root } = await reachAi();
       // The new chapter's switches start on, so the screen asks about the
-      // founder's own Frapp AI only and never names the chapter.
+      // founder's own Frapp Intelligence only and never names the chapter.
       // Read through `drawnText`: the line nests the privacy link's Text.
       expect(
         root
@@ -437,7 +437,7 @@ describe("chapter setup — step order", () => {
           .map((text) => drawnText(text))
           .join("\n"),
       ).toContain(
-        "Frapp AI works with Anthropic and Google. Continuing turns it on for your account.",
+        "Frapp Intelligence works with Anthropic and Google. Continuing confirms you're 18 or older and turns it on for your account.",
       );
       await press(root, "Continue");
       expect(aiChoice.turnOn).toHaveBeenCalledTimes(1);
@@ -445,7 +445,7 @@ describe("chapter setup — step order", () => {
       expect(title(root)).toBe(SETUP_TITLES.invite);
     });
 
-    it("leaves Frapp AI off on Not now, and moves on", async () => {
+    it("leaves Frapp Intelligence off on Not now, and moves on", async () => {
       const { root } = await reachAi();
       await press(root, "Not now");
       expect(aiChoice.notNow).toHaveBeenCalledTimes(1);
@@ -465,7 +465,7 @@ describe("chapter setup — step order", () => {
           .findAllByType("Text" as never, { deep: true })
           .map((text) => drawnText(text))
           .join("\n"),
-      ).toContain("Couldn't turn on Frapp AI");
+      ).toContain("Couldn't turn on Frapp Intelligence");
     });
   });
 
@@ -1268,9 +1268,9 @@ describe("chapter setup — invite", () => {
     expect(fillOf(control(root, "Skip for now"))).toBeUndefined();
     const text = allText(root);
     expect(text).toContain("A new link for each person");
-    expect(text).toContain("app.frapp.live, good for 24 hours");
+    expect(text).toContain("app.frapp.live, good for 7 days");
     expect(text).toContain(
-      "Send each person their own link. A link lets one person in and lasts 24 hours.",
+      "Send each person their own link. A link lets one person in and lasts 7 days.",
     );
     expect(text).not.toContain("Create another link");
 

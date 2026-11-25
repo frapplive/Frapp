@@ -23,11 +23,8 @@
  */
 import type { Role } from '#domain/entities/role.entity';
 import { SystemRoleKeys, WILDCARD } from '#domain/constants/permissions';
-import {
-  permissionsNotHeld,
-  ranksAtOrAbove,
-  roleRank,
-} from '#domain/utils/role-rank';
+import { permissionsNotGivable } from '@repo/validation';
+import { ranksAtOrAbove, roleRank } from '#domain/utils/role-rank';
 import type { RankContext } from '#domain/utils/rank-context';
 
 /** Why an invite can't grant a role carrying `*`. */
@@ -39,8 +36,8 @@ const INVITE_RANK_REFUSAL =
   'You can only invite people into a role ranked below your own.';
 
 /** The chapter's Everyone role, by its rename-proof key. */
-export function memberRoleOf(context: RankContext): Role | undefined {
-  return context.roles.find((r) => r.system_key === SystemRoleKeys.MEMBER);
+export function everyoneRoleOf(context: RankContext): Role | undefined {
+  return context.roles.find((r) => r.system_key === SystemRoleKeys.EVERYONE);
 }
 
 /**
@@ -55,17 +52,18 @@ export function inviteRefusal(
   if (!role) return null;
   if (role.permissions.includes(WILDCARD)) return INVITE_PRESIDENT_REFUSAL;
   const { reach, positions } = context;
-  const member = memberRoleOf(context);
+  const everyone = everyoneRoleOf(context);
   if (
     !reach.wildcard &&
-    role.id !== member?.id &&
+    role.id !== everyone?.id &&
     ranksAtOrAbove(roleRank(role, positions), reach.rank)
   ) {
     return INVITE_RANK_REFUSAL;
   }
-  const base = new Set(member?.permissions ?? []);
-  const missing = permissionsNotHeld(reach, role.permissions).filter(
-    (permission) => !base.has(permission),
+  const missing = permissionsNotGivable(
+    { wildcard: reach.wildcard, held: reach.permissions },
+    role.permissions,
+    context.roles,
   );
   if (missing.length > 0) {
     return `You can only invite people into a role whose permissions you hold: ${missing.join(', ')}.`;

@@ -6,8 +6,10 @@ import {
   type RefObject,
   cloneElement,
   isValidElement,
+  useRef,
 } from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +23,7 @@ import {
   PinnedBackRow,
   pinnedBackClearance,
 } from "@/components/back-row";
+import { DisclosureGlyph } from "@/components/control-glyphs";
 import {
   CREATE_BUTTON_SIZE,
   type CreateAction,
@@ -35,10 +38,11 @@ import {
   ThemedRefreshControl,
   type ScreenRefresh,
 } from "@/components/pull-to-refresh";
+import { ViewLabels, type ViewOption } from "@/components/view-labels";
 import { KeyboardAvoidingArea } from "@/lib/keyboard";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
-type ScreenShellProps = {
+type ScreenShellProps<V extends string = string> = {
   title: string;
   /**
    * The `‹ You` / `‹ Calendar` row above the title, on a screen reached from
@@ -67,6 +71,24 @@ type ScreenShellProps = {
    */
   titleMark?: ReactNode;
   /**
+   * Makes the mark and title one button with a down chevron that opens a menu,
+   * as Chat home's chapter name opens the chapter menu
+   * (`components/chat/chapter-menu.tsx`), the way web's chapter row atop the
+   * nav does. `onOpen` gets the title row's frame in the window, measured at
+   * the tap, so the menu can hang under it.
+   */
+  titleMenu?: {
+    open: boolean;
+    accessibilityLabel: string;
+    onOpen: (frame: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => void;
+    onClose: () => void;
+  };
+  /**
    * A line under the title, for a fact about this one item that the title
    * can't carry. Optional since #3023: the board draws one only on s07, where
    * Event details passes the event's time. A line that says what the screen is
@@ -74,6 +96,14 @@ type ScreenShellProps = {
    * those on 2026-11-04 (`spec/ui/mobile/patterns.md` § Screen headers).
    */
   subtitle?: string;
+  /**
+   * The screen's views (Unread and All, Mine and Everyone's) as plain words on
+   * the title's line, after a hairline: `ViewLabels`, where Paul picked them on
+   * 2026-11-24 in place of a boxed switch over the list
+   * (`spec/ui/design-system/components.md` § View labels). A member with one
+   * view gets the title alone, drawn as it is without this prop.
+   */
+  views?: ScreenViews<V>;
   /**
    * Trailing control rendered on the title row, right-aligned and vertically
    * centred against the title.
@@ -125,14 +155,21 @@ type ScreenShellProps = {
    */
   avoidKeyboard?: boolean;
   /**
-   * The body's scroll view, for a screen that moves it to a part of itself:
-   * Activity's week strip jumps To do to the day pressed (#5310), as
-   * Fantastical's DayTicker jumps its list. Measure the part against a host
+   * The body's scroll view, for a screen that moves it to a part of itself
+   * (a field above the keyboard, a section a link points at). Measure the part against a host
    * view of the screen's own (a node handle is refused under the New
    * Architecture) and `scrollTo` it.
    */
   scrollRef?: RefObject<ScrollView | null>;
   children: ReactNode;
+};
+
+/** A screen's views, as `ViewLabels` takes them. */
+export type ScreenViews<T extends string = string> = {
+  accessibilityLabel: string;
+  options: readonly ViewOption<T>[];
+  value: T;
+  onChange: (next: T) => void;
 };
 
 /**
@@ -160,13 +197,15 @@ export function screenTitleStyle(tokens: SignetTokens) {
  * The title draws in `screenTitleStyle`. Which role it takes, and why, lives in
  * spec/ui/mobile/patterns.md § Screen headers.
  */
-export function ScreenShell({
+export function ScreenShell<V extends string = string>({
   title,
   back,
   backAction,
   createAction,
   titleMark,
+  titleMenu,
   subtitle,
+  views,
   headerAction,
   refresh,
   overlay,
@@ -176,7 +215,7 @@ export function ScreenShell({
   avoidKeyboard = false,
   scrollRef,
   children,
-}: ScreenShellProps) {
+}: ScreenShellProps<V>) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   // Room under the last row for the floating bar, and for the create button
@@ -189,6 +228,7 @@ export function ScreenShell({
   // title block, which scrolls away.
   const body = flattenChildren(children);
   const barScroll = useBarScroll();
+  const hasViews = views !== undefined && views.options.length > 1;
   const stickyHeaderIndices = body.flatMap((child, index) =>
     child.type === StickyHeader ? [index + 1] : [],
   );
@@ -227,10 +267,48 @@ export function ScreenShell({
             >
               <View style={styles.header}>
                 <View style={styles.headerRow}>
-                  {titleMark}
-                  <Text accessibilityRole="header" style={styles.title}>
-                    {title}
-                  </Text>
+                  {titleMenu ? (
+                    <>
+                      <TitleMenuButton
+                        title={title}
+                        titleMark={titleMark}
+                        menu={titleMenu}
+                        tokens={tokens}
+                      />
+                      {hasViews ? (
+                        <>
+                          <View style={styles.viewsRuleCentred} />
+                          <ViewLabels {...views!} />
+                        </>
+                      ) : null}
+                      {/* The row's slack, outside the button. */}
+                      <View style={styles.titleSlack} />
+                    </>
+                  ) : hasViews ? (
+                    <>
+                      {titleMark}
+                      {/* One line on the title's baseline: the title gives
+                          way (it truncates), the views never wrap. */}
+                      <View style={styles.titleAndViews}>
+                        <Text
+                          accessibilityRole="header"
+                          numberOfLines={1}
+                          style={styles.titleBesideViews}
+                        >
+                          {title}
+                        </Text>
+                        <View style={styles.viewsRule} />
+                        <ViewLabels {...views!} />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      {titleMark}
+                      <Text accessibilityRole="header" style={styles.title}>
+                        {title}
+                      </Text>
+                    </>
+                  )}
                   {headerAction ? (
                     <View style={styles.headerAction}>{headerAction}</View>
                   ) : null}
@@ -247,6 +325,65 @@ export function ScreenShell({
       </CoveredByOverlay>
       {overlay?.content}
     </View>
+  );
+}
+
+/**
+ * The title row's mark and title as one button that opens a menu, ending in a
+ * down chevron so it reads as one, as web's chapter row does. A screen reader
+ * hears one button named by `accessibilityLabel`; on iOS the title's header
+ * role merges into it, so the Headings rotor skips this title, as web's
+ * chapter row is a button and not a heading.
+ */
+function TitleMenuButton({
+  title,
+  titleMark,
+  menu,
+  tokens,
+}: {
+  title: string;
+  titleMark?: ReactNode;
+  menu: NonNullable<ScreenShellProps["titleMenu"]>;
+  tokens: SignetTokens;
+}) {
+  const styles = createStyles(tokens);
+  const ref = useRef<View>(null);
+  const openUnderTitle = () => {
+    const node = ref.current;
+    // No frame to measure (a renderer without layout): open at the top.
+    if (!node?.measureInWindow) {
+      return menu.onOpen({ x: 0, y: 0, width: 0, height: 0 });
+    }
+    node.measureInWindow((x, y, width, height) =>
+      menu.onOpen({ x, y, width, height }),
+    );
+  };
+  return (
+    <Pressable
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={menu.accessibilityLabel}
+      accessibilityState={{ expanded: menu.open }}
+      onPress={() => (menu.open ? menu.onClose() : openUnderTitle())}
+      style={({ pressed }) => [
+        styles.titleButton,
+        pressed ? styles.titlePressed : null,
+      ]}
+    >
+      {titleMark}
+      <Text
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={styles.titleInButton}
+      >
+        {title}
+      </Text>
+      <DisclosureGlyph
+        color={tokens.color.text.muted}
+        size={18}
+        direction="down"
+      />
+    </Pressable>
   );
 }
 
@@ -379,6 +516,47 @@ function createStyles(tokens: SignetTokens) {
       flex: 1,
       ...screenTitleStyle(tokens),
     },
+    titleAndViews: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "baseline",
+    },
+    titleBesideViews: {
+      flexShrink: 1,
+      ...screenTitleStyle(tokens),
+    },
+    // Stands on the title's baseline and rises its cap height, so it reads
+    // as part of the title's line. 12 from the title; the first label's own
+    // 8 of padding makes 12 on its far side too.
+    viewsRule: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      marginLeft: tokens.spacing.md,
+      marginRight: tokens.spacing.xs,
+      backgroundColor: tokens.color.border.hairline,
+    },
+    // Beside a title menu, whose row centres: the same rule, centred on it.
+    viewsRuleCentred: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      marginRight: -tokens.spacing.xs,
+      backgroundColor: tokens.color.border.hairline,
+    },
+    // The button hugs its title, so the space after the chevron is not a tap
+    // target, and the header actions keep their place at the far end.
+    titleButton: {
+      flexShrink: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing.sm,
+      minHeight: tokens.touch.minimum,
+    },
+    titleInButton: {
+      flexShrink: 1,
+      ...screenTitleStyle(tokens),
+    },
+    titlePressed: { opacity: 0.6 },
+    titleSlack: { flex: 1 },
     headerAction: {
       flexShrink: 0,
     },

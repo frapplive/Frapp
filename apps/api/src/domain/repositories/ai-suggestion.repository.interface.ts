@@ -1,5 +1,6 @@
 import type {
   AiSuggestion,
+  AiSuggestionChange,
   AiSuggestionKind,
   AiSuggestionSourceType,
 } from '../entities/ai-suggestion.entity';
@@ -21,7 +22,17 @@ export type NewAiSuggestion = Pick<
   | 'quote_author_id'
   | 'required_permission'
   | 'expires_at'
-> & { dedupe_key?: string | null };
+> & {
+  dedupe_key?: string | null;
+  ask_id?: string | null;
+  request_sealed?: string | null;
+  drew_on_chat?: boolean;
+};
+
+/** A change log row as written; `decided_at` defaults to now. */
+export type NewAiSuggestionChange = Omit<AiSuggestionChange, 'decided_at'> & {
+  decided_at?: string;
+};
 
 export interface ListPendingAiSuggestionsQuery {
   /**
@@ -139,6 +150,18 @@ export interface IAiSuggestionRepository {
   release(chapterId: string, id: string): Promise<void>;
 
   /**
+   * Puts a dismissed suggestion back to waiting with its words, for Undo of
+   * a suggestion handled another way (#5790). False when it isn't dismissed
+   * any more, or has expired since.
+   */
+  reopen(
+    chapterId: string,
+    id: string,
+    words: { payload: Record<string, unknown>; quote: string | null },
+    now: string,
+  ): Promise<boolean>;
+
+  /**
    * Puts back every accept, in every chapter, left `accepting` since before
    * `before`: the API died between Accept and the change. Returns how many.
    */
@@ -148,9 +171,33 @@ export interface IAiSuggestionRepository {
    * Expires every waiting suggestion whose time is up, in every chapter, and
    * empties its text. Returns one entry per row expired.
    */
-  expireDue(
-    now: string,
-  ): Promise<{ chapter_id: string; kind: AiSuggestionKind }[]>;
+  expireDue(now: string): Promise<
+    {
+      id: string;
+      chapter_id: string;
+      kind: AiSuggestionKind;
+      source_type: AiSuggestion['source_type'];
+      requested_for: string | null;
+      ask_id: string | null;
+    }[]
+  >;
+
+  /**
+   * Keeps what a person changed when deciding a suggestion
+   * (`ai_suggestion_changes`). A row already kept for the suggestion is left
+   * as it is, so a retried decision writes nothing twice.
+   */
+  recordChanges(rows: readonly NewAiSuggestionChange[]): Promise<void>;
+
+  /**
+   * Deletes every change log row a person decided or that was made for
+   * them, in every chapter, and empties the sealed question on their
+   * waiting cards: they said No on the AI sheet. Returns how many rows went.
+   */
+  deleteChangesForUser(userId: string): Promise<number>;
+
+  /** Deletes every change log row past its `expires_at`. Returns how many. */
+  deleteExpiredChanges(now: string): Promise<number>;
 
   /**
    * Takes a person's words out of every suggestion that quotes them, in every

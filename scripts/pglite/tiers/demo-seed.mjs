@@ -56,7 +56,8 @@ console.log("\n=== demo seed load (#2308) ===");
       members: await n(`select count(*)::int as n from members where chapter_id = '${chapterId}'`),
       users: await n(`select count(*)::int as n from users where id::text like '${userIdLike}'`),
       events: await n(`select count(*)::int as n from events where chapter_id = '${chapterId}'`),
-      documents: await n(`select count(*)::int as n from chapter_documents where chapter_id = '${chapterId}'`),
+      documents: await n(`select count(*)::int as n from chapter_documents where chapter_id = '${chapterId}' and meeting_id is null`),
+      minutesRows: await n(`select count(*)::int as n from chapter_documents where chapter_id = '${chapterId}' and meeting_id is not null`),
       backwork: await n(`select count(*)::int as n from backwork_resources where chapter_id = '${chapterId}'`),
       offLayout: await n(
         `select (select count(*) from chapter_documents
@@ -214,7 +215,8 @@ console.log("\n=== demo seed load (#2308) ===");
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const checks = [
       [marketing.members === 26 && reviewer.members === 26, `both variants seed 26 members (marketing ${marketing.members}, reviewer ${reviewer.members})`],
-      [marketing.events === 12 && marketing.documents === 10 && marketing.backwork === 11, `the chapter's events, documents and backwork land (${marketing.events}/${marketing.documents}/${marketing.backwork})`],
+      [marketing.events === 12 && marketing.documents === 7 && marketing.backwork === 11, `the chapter's events, documents and backwork land (${marketing.events}/${marketing.documents}/${marketing.backwork})`],
+      [marketing.minutesRows === 2 && reviewer.minutesRows === 2, `both variants file their two posted minutes as documents (#5949; marketing ${marketing.minutesRows}, reviewer ${reviewer.minutesRows})`],
       [marketing.offLayout === 0 && reviewer.offLayout === 0, `every document and backwork path is the API's own chapters/<chapter>/<kind>/<id>/ layout (${marketing.offLayout + reviewer.offLayout} off it)`],
       [reviewer.loginAuthId === REVIEWER_AUTH_ID, `the reviewer login is linked to its marked auth user (got ${reviewer.loginAuthId})`],
       [marketing.loginAuthId?.startsWith("c0ffee00-0000-4000-8000-2000"), "with no matching auth user, the marketing login keeps a synthetic auth id"],

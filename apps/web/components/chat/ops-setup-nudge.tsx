@@ -67,9 +67,7 @@ export function OpsSetupNudge() {
 
   /**
    * Dismissed in this session, ahead of the server round trip. Without it the
-   * card sits under the member's cursor until `GET /v1/chapters` refetches —
-   * the same reason `onboarding-tour.tsx` keeps its own `ended` beside the
-   * flag it writes.
+   * card sits under the member's cursor until `GET /v1/chapters` refetches.
    */
   const [dismissedHere, setDismissedHere] = useState<readonly string[]>([]);
 
@@ -119,6 +117,11 @@ export function OpsSetupNudge() {
 
   const nudge = useMemo(() => {
     if (!canDismiss || !activeMembership) return null;
+    // A council's modules are off by its kind, not by choice: nothing to
+    // turn on, and the modules' routes refuse a council (#5933).
+    if ((activeMembership as { kind?: unknown }).kind === "council") {
+      return null;
+    }
     return selectOpsNudge(enabledModules, [
       ...(activeMembership.dismissed_ops_nudges ?? []),
       ...dismissedHere,
@@ -142,7 +145,7 @@ export function OpsSetupNudge() {
           // a card the member just closed is worse than a dismissal that has
           // to be repeated next session. The next `GET /v1/chapters` is the
           // source of truth, and it will re-offer the nudge if the write never
-          // landed — matching how the first-run tour treats its own flag.
+          // landed.
         },
       },
     );

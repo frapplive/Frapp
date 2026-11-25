@@ -6,7 +6,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import {
   describe,
   it,
@@ -107,7 +106,8 @@ const {
    */
   mockSendReturned: vi.fn(),
   mockUseMyPermissions: vi.fn(() => ({
-    data: { permissions: [] as string[] },
+    data: { permissions: [] as string[] } as
+      { permissions: string[] } | undefined,
   })),
   searchHit: vi.fn(() => ({
     message: { id: "msg-2" },
@@ -259,7 +259,6 @@ const mockSetSidebarFilter = vi.fn();
 const sidebarState = {
   /** `GET /v1/threads` rows, for the rail's thread rows (#5300). */
   memberThreads: [] as unknown[],
-  sort: "chapter" as "chapter" | "recent" | "alpha",
   pinOptions: undefined as { onError?: () => void } | undefined,
   foldOptions: undefined as { onError?: () => void } | undefined,
   filterOptions: undefined as { onError?: () => void } | undefined,
@@ -574,13 +573,19 @@ vi.mock("@/components/members/member-detail-sheet", () => ({
     open,
     userId,
     onOpenChange,
+    docked,
   }: {
     open: boolean;
     userId: string | null;
     onOpenChange: (open: boolean) => void;
+    docked?: boolean | "here";
   }) =>
     open ? (
-      <div data-testid="member-profile" data-user-id={userId ?? ""}>
+      <div
+        data-testid="member-profile"
+        data-user-id={userId ?? ""}
+        data-docked={String(docked ?? false)}
+      >
         {/* Takes focus as it opens, as the real modal sheet does. */}
         <button autoFocus onClick={() => onOpenChange(false)}>
           close-profile
@@ -614,13 +619,34 @@ vi.mock("./all-threads-popover", () => ({
   ),
 }));
 
+// The welcome card above the timeline has its own spec
+// (`components/onboarding/welcome-card.spec.tsx`).
+vi.mock("@/components/onboarding/welcome-card", () => ({
+  WelcomeCard: () => null,
+}));
+const chatEventsNow = vi.hoisted(() => ({
+  value: { events: [] as unknown[], now: Date.now() },
+}));
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeoutState: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async () => ({
+  // The Now card's read (#5777): nothing on unless a test says so.
+  useEventsOnNow: () => chatEventsNow.value,
+  eventNowState: (
+    await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks")
+  ).eventNowState,
   // The shared helpers run for real, so the shell's use of them is under test.
   ...(await vi
     .importActual<typeof import("@repo/hooks")>("@repo/hooks")
     .then(
       ({
         canSetChannelBackground,
+        catchUpFirstRange,
+        catchUpRangesFor,
+        catchUpTargetFor,
         claimViewedChannel,
         HIDE_SETUP_CHECKLIST_LABEL,
         IMPORTANT_STRIP_DISMISS_LABEL,
@@ -637,9 +663,16 @@ vi.mock("@repo/hooks", async () => ({
         deleteChannelTypeLabel,
         DELETE_CHANNEL_CONFIRM_BODY,
         DELETE_CHANNEL_LABEL,
+        memberFallbackLabel,
+        taskLinkChoices,
       }) => ({
+        memberFallbackLabel,
+        taskLinkChoices,
         deleteChannelTypeLabel,
         canSetChannelBackground,
+        catchUpFirstRange,
+        catchUpRangesFor,
+        catchUpTargetFor,
         claimViewedChannel,
         deleteChannelConfirmTitle,
         DELETE_CHANNEL_CONFIRM_BODY,
@@ -658,6 +691,8 @@ vi.mock("@repo/hooks", async () => ({
       }),
     )),
   useBlockedUserIds: () => blockListState.value,
+  // The + card's Task picker (#5772): no tasks to link here.
+  useTasks: () => ({ data: [], isPending: false, isError: false }),
   // Chat backgrounds (#3973): decoration, read and written elsewhere's specs.
   useChatBackground: () => ({ data: undefined }),
   useChapterChatBackground: () => ({ data: undefined }),
@@ -688,6 +723,9 @@ vi.mock("@repo/hooks", async () => ({
   // The Forward dialog (#4907) mounts only once a row asks for it.
   useForwardMessage: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // Threads under their channel in the rail (#5300): none listed here.
+  // The narrow header's Threads row counts with the real rule.
+  unreadThreadCount: (threads: Array<{ unread_count: number }>) =>
+    threads.filter((t) => t.unread_count > 0).length,
   useMemberThreads: () => ({
     data: sidebarState.memberThreads,
     dataUpdatedAt: Date.now(),
@@ -730,6 +768,12 @@ vi.mock("@repo/hooks", async () => ({
   }),
   // The rows' clock (#5519): a fixed instant, so times read the same each run.
   useNowDate: () => FIXED_NOW,
+  // Chat timeouts (#6006): the viewer's own (`chatTimeoutState`), and the
+  // Time out dialog's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeoutState.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useLiftChatTimeout: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // Direct messages' order and last lines (#3774).
   useChannelLatestMessages: (options?: { enabled?: boolean }) => {
     latestReads.enabled.push(options?.enabled ?? true);
@@ -864,7 +908,6 @@ vi.mock("@repo/hooks", async () => ({
     pinnedIds: sidebarState.pinnedIds,
     collapsed: new Set<string>(),
     filters: { unreadOnly: false, hideMuted: false },
-    sort: sidebarState.sort,
   }),
   useSetChannelPinned: (options?: { onError?: () => void }) => {
     sidebarState.pinOptions = options;
@@ -958,14 +1001,11 @@ vi.mock("./channel-list", () => ({
     "Nothing changed. Check your connection and try again.",
   ChannelFilters: ({
     onChange,
-    sort,
   }: {
     onChange: (change: { hide_muted: boolean }) => void;
-    sort?: string;
   }) => (
     <button
       data-testid="filters-hide-muted"
-      data-sort={sort}
       onClick={() => onChange({ hide_muted: true })}
     >
       hide muted
@@ -1170,25 +1210,8 @@ const channelAskState = vi.hoisted(() => ({
   turns: [] as { id: string }[],
   turnsFor: [] as (string | null | undefined)[],
 }));
-// Ask Frapp's bar (#5476): who gets it is `ask-bar.tsx`'s question
+// Frapp Intelligence's bar (#5476): who gets it is `ask-bar.tsx`'s question
 // (`ask-entry.spec.tsx`); here only where the shell puts it.
-vi.mock("@/components/ask/ask-bar", () => ({
-  AskBar: ({
-    compact,
-    className,
-  }: {
-    compact?: boolean;
-    className?: string;
-  }) => (
-    <button
-      data-testid="ask-bar"
-      data-compact={compact ? "" : undefined}
-      className={className}
-    >
-      Ask Frapp
-    </button>
-  ),
-}));
 vi.mock("@/components/ask/ask-in-channel", () => ({
   useChannelAsk: () => channelAskState.ask,
   useChannelAskAccess: () =>
@@ -1241,11 +1264,13 @@ vi.mock("./composer", () => ({
     slashCommandsStatus,
     recruitmentVocab,
     canAnnounce,
+    permissions,
     onOpenCommandForm,
     commandForms,
     renderPlusForm,
     plusDrafts,
     isAuditLog,
+    timeoutNotice,
     dropAttachRef,
     onSendGif,
     ask,
@@ -1269,6 +1294,7 @@ vi.mock("./composer", () => ({
     ) => ReactNode;
     plusDrafts?: ReadonlySet<string>;
     isAuditLog?: boolean;
+    timeoutNotice?: { title: string; detail: string | null } | null;
     commandForms?: readonly { command: string; roleAllows: unknown }[];
     onOpenCommandForm?: (
       command: { name: string; implemented: boolean },
@@ -1276,6 +1302,7 @@ vi.mock("./composer", () => ({
     ) => string | null;
     recruitmentVocab?: string;
     canAnnounce?: boolean;
+    permissions?: readonly string[];
     isModuleEnabled?: (moduleKey: string) => boolean;
     slashCommandsStatus?: string;
     // The shell-to-editor handoff (#2176) is entirely carried by these two:
@@ -1323,6 +1350,7 @@ vi.mock("./composer", () => ({
       <div
         data-testid="composer"
         data-audit-log={String(isAuditLog ?? false)}
+        data-timeout={timeoutNotice?.title ?? ""}
         data-gif={onSendGif ? "on" : "off"}
         data-ask={ask ? (ask.busy ? "busy" : "ready") : "none"}
         data-ask-unknown={String(askUnknown ?? false)}
@@ -1331,6 +1359,7 @@ vi.mock("./composer", () => ({
         data-polls-enabled={String(isModuleEnabled?.("polls"))}
         data-recruitment={recruitmentVocab ?? ""}
         data-can-announce={String(canAnnounce)}
+        data-permissions={permissions ? permissions.join(",") : "unread"}
         data-command-forms={(commandForms ?? [])
           .map((form) => `${form.command}:${String(form.roleAllows)}`)
           .join(",")}
@@ -1491,8 +1520,16 @@ vi.mock("./composer", () => ({
 // they exercise the *shell's* jump wiring rather than a panel's own behaviour
 // or Radix's popover mechanics — each panel's rendering is owned by its own
 // spec, and the menu's view switching by `channel-menu.spec.tsx`.
+// The channel header measures itself (`useIsNarrow`); jsdom can't, so a test
+// sets the answer. `null` is the unmeasured header, drawn wide.
+const headerNarrow = vi.hoisted(() => ({ current: null as boolean | null }));
+vi.mock("@/lib/use-is-narrow", () => ({
+  useIsNarrow: () => [() => undefined, headerNarrow.current],
+}));
+
 vi.mock("./channel-menu", () => ({
   ChannelMenu: ({
+    threads,
     messages,
     hiddenPins,
     onJumpToSearchHit,
@@ -1505,6 +1542,7 @@ vi.mock("./channel-menu", () => ({
     searchMembers,
     notificationFromChapterLevel,
   }: {
+    threads?: { unread: number };
     notificationFromChapterLevel?: boolean;
     displayLock?: { saving: boolean; onChange: (locked: boolean) => void };
     searchChannels: Array<{ id: string; label: string }>;
@@ -1521,6 +1559,9 @@ vi.mock("./channel-menu", () => ({
     hideConversation?: { name: string; onHide: () => void };
   }) => (
     <div>
+      {threads ? (
+        <span data-testid="menu-threads">{threads.unread}</span>
+      ) : null}
       <span data-testid="menu-from-chapter-level">
         {String(Boolean(notificationFromChapterLevel))}
       </span>
@@ -1730,9 +1771,6 @@ vi.mock("./message-timeline", async () => {
 vi.mock("./deferred-panels", async () => ({
   Composer: (await import("./composer")).Composer,
   PollForm: (await import("./poll-form")).PollForm,
-  SignupForm: (await import("./signup-form")).SignupForm,
-  RolePickerForm: (await import("./role-picker-form")).RolePickerForm,
-  FormBuilder: (await import("./form-builder")).FormBuilder,
   EventQuickForm: (await import("./event-quick-form")).EventQuickForm,
   TaskForm: (await import("@/components/tasks/task-form")).TaskForm,
   LogHoursForm: (await import("@/components/service/log-hours-form"))
@@ -1826,6 +1864,10 @@ import {
 } from "@repo/chat-core/density";
 import { useOpenChatTransport } from "@repo/hooks/open-chat-transport";
 import { ChatShell, prefillLocalInput } from "./chat-shell";
+import {
+  ChannelListSlot,
+  ChannelListSlotProvider,
+} from "@/components/layout/channel-list-slot";
 
 /**
  * The notice for a jump target the channel's whole history did not hold. The
@@ -1848,6 +1890,7 @@ function chatChannelResult(
     draft: string;
     setDraft: (body: string) => void;
     typingUsers: string[];
+    unavailable: boolean;
   }> = {},
 ) {
   return {
@@ -1866,6 +1909,7 @@ function chatChannelResult(
     typingUsers: overrides.typingUsers ?? [],
     emitTyping: vi.fn(),
     connection: "live",
+    unavailable: overrides.unavailable ?? false,
     retry: vi.fn(),
     discard: vi.fn(),
     dispatchSlash: vi.fn(),
@@ -1963,6 +2007,29 @@ describe("ChatShell /announce gate (#3414)", () => {
     expect(screen.getByTestId("composer")).toHaveAttribute(
       "data-can-announce",
       "true",
+    );
+  });
+});
+
+// #4084: the palette's `/rush` row is narrowed by the member's permissions,
+// which only the shell reads; a dropped prop would offer every subcommand.
+describe("ChatShell hands the composer the member's permissions", () => {
+  it("passes the permissions read, and none while it hasn't answered", () => {
+    mockUseMyPermissions.mockReturnValue({
+      data: { permissions: ["members:view", "rush:add"] },
+    });
+    const { unmount } = render(<ChatShell />);
+    expect(screen.getByTestId("composer")).toHaveAttribute(
+      "data-permissions",
+      "members:view,rush:add",
+    );
+    unmount();
+
+    mockUseMyPermissions.mockReturnValue({ data: undefined });
+    render(<ChatShell />);
+    expect(screen.getByTestId("composer")).toHaveAttribute(
+      "data-permissions",
+      "unread",
     );
   });
 });
@@ -2269,10 +2336,10 @@ describe("ChatShell catch me up (#3946)", () => {
         unread: { count: 140, as_of: expect.any(String) },
       }),
     );
-    // The panel is up and the strip has made way for it.
-    expect(
-      screen.getByRole("complementary", { name: "Catch me up" }),
-    ).toBeInTheDocument();
+    // The summary is up in the channel, above the timeline, and the strip
+    // has made way for it.
+    const summary = screen.getByRole("region", { name: "Catch me up" });
+    expect(summary.closest("[data-chat-column]")).not.toBeNull();
     expect(
       screen.queryByText("140 new messages since you were last here."),
     ).toBeNull();
@@ -2299,6 +2366,91 @@ describe("ChatShell catch me up (#3946)", () => {
         since: expect.any(String),
       }),
     );
+  });
+});
+
+describe("ChatShell when the open channel can't be read any more (#5765)", () => {
+  it("says the channel is gone in its place, and lets go of it", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({ unavailable: channelId === "chan-general" }),
+    );
+    render(<ChatShell initialChannelId="chan-general" />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chat-channel-unavailable")).toHaveTextContent(
+        "This channel is no longer available. It was deleted, or you can no longer see it.",
+      ),
+    );
+    // The thread's subscription is released: the shell asks for no channel.
+    expect(mockUseChatChannel).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByTestId("composer")).toBeNull();
+    // The list stays beside it to pick another from.
+    expect(screen.getByTestId("channel-list")).toBeTruthy();
+  });
+
+  it("Browse channels moves on from it", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({ unavailable: channelId === "chan-general" }),
+    );
+    render(<ChatShell initialChannelId="chan-general" />);
+    const browse = await screen.findByRole("button", {
+      name: "Browse channels",
+    });
+
+    // Read again, the list let it back in.
+    mockUseChatChannel.mockImplementation(() => chatChannelResult());
+    fireEvent.click(browse);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("chat-channel-unavailable")).toBeNull(),
+    );
+    expect(mockUseChatChannel).toHaveBeenLastCalledWith("chan-general");
+  });
+
+  it("picking another channel from the rail moves on from it", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({ unavailable: channelId === "chan-general" }),
+    );
+    render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("chat-channel-unavailable");
+
+    fireEvent.click(screen.getByTestId("pick-random"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("chat-channel-unavailable")).toBeNull(),
+    );
+    expect(mockUseChatChannel).toHaveBeenLastCalledWith("chan-random");
+  });
+
+  it("switching to the other list moves on from it", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({ unavailable: channelId === "chan-general" }),
+    );
+    const { rerender } = render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("chat-channel-unavailable");
+
+    rerender(<ChatShell initialChannelId="chan-general" view="direct" />);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("chat-channel-unavailable")).toBeNull(),
+    );
+  });
+
+  it("the same channel refused again says so again", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({ unavailable: channelId === "chan-general" }),
+    );
+    render(<ChatShell initialChannelId="chan-general" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Browse channels" }),
+    );
+
+    // Opened again, still refused: the note is back, not a dead timeline.
+    await waitFor(() =>
+      expect(mockUseChatChannel).toHaveBeenCalledWith("chan-general"),
+    );
+    expect(await screen.findByTestId("chat-channel-unavailable")).toBeTruthy();
+    expect(mockUseChatChannel).toHaveBeenLastCalledWith(null);
   });
 });
 
@@ -2942,6 +3094,32 @@ describe("ChatShell audit log (#3909)", () => {
   });
 });
 
+// Chat timeouts (#6006): the shell hands the composer the viewer's own
+// timeout in a channel, which the composer draws in the editor's place.
+describe("ChatShell chat timeout", () => {
+  afterEach(() => {
+    chatTimeoutState.current = { until: null, reason: null };
+  });
+
+  it("hands the composer the timeout while it runs", async () => {
+    chatTimeoutState.current = {
+      until: new Date(FIXED_NOW.getTime() + 60 * 60_000).toISOString(),
+      reason: "spamming",
+    };
+    render(<ChatShell initialChannelId="chan-general" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("composer").dataset.timeout).toMatch(
+        /^You're timed out until /,
+      );
+    });
+  });
+
+  it("hands it nothing without one", async () => {
+    render(<ChatShell initialChannelId="chan-general" />);
+    expect((await screen.findByTestId("composer")).dataset.timeout).toBe("");
+  });
+});
+
 describe("ChatShell GIF button (#4631)", () => {
   afterEach(() => {
     gifState.value = { available: false, provider: "" };
@@ -2984,7 +3162,7 @@ describe("ChatShell carries @Frapp to the composer and the timeline (#4713)", ()
     expect(composer.dataset.askUnknown).toBe("true");
     fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
     expect(screen.getByTestId("thread-panel").dataset.refusesFrapp).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.,null",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.,null",
     );
   });
 
@@ -3016,7 +3194,7 @@ describe("ChatShell carries @Frapp to the composer and the timeline (#4713)", ()
     render(<ChatShell initialChannelId="chan-general" />);
     fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
     expect(screen.getByTestId("thread-panel").dataset.refusesFrapp).toBe(
-      "Ask Frapp from the channel, not from a reply.,null",
+      "Ask @Frapp from the channel, not from a reply.,null",
     );
   });
 
@@ -4526,13 +4704,14 @@ describe("ChatShell narrow viewports (#2142)", () => {
     return { channels, thread };
   }
 
-  it("shows one column at a time below lg, and both at lg", () => {
+  it("shows one column at a time below lg, and no list column at lg (#5946)", () => {
     render(<ChatShell />);
     const { channels, thread } = columns();
 
-    // Full width when it is the only column; 240px once both fit.
+    // Full width when it is the only column. From `lg` up the chapter's
+    // channels are in the sidebar, so this pane is not drawn there.
     expect(channels.className).toContain("w-full");
-    expect(channels.className).toContain("lg:w-60");
+    expect(channels.className).toContain("lg:hidden");
     // Exactly one of the two is hidden below lg.
     const hiddenBelowLg = [channels, thread].filter((el) =>
       el.className.includes("max-lg:hidden"),
@@ -4942,47 +5121,87 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
     window.matchMedia = realMatchMedia;
   });
 
-  it("draws one channels column, inline, with no way back to a menu", () => {
+  /** The shell, cut down: the sidebar's slot and the panel. */
+  function WithSidebar(props: React.ComponentProps<typeof ChatShell>) {
+    return (
+      <ChannelListSlotProvider>
+        <nav aria-label="Sidebar">
+          <ChannelListSlot />
+        </nav>
+        <ChatShell {...props} />
+      </ChannelListSlotProvider>
+    );
+  }
+  const sidebar = () => screen.getByRole("navigation", { name: "Sidebar" });
+
+  it("draws the chapter's channels into the sidebar from lg up, and no column of its own (#5946)", () => {
     stubWidth(1440);
-    render(<ChatShell />);
-    const channels = screen.getAllByRole("region", { name: "Channels" });
-    expect(channels).toHaveLength(1);
-    expect(channels[0]).toHaveClass("lg:w-60");
-    expect(channels[0]).not.toHaveClass("lg:hidden");
+    render(<WithSidebar />);
+    // The one list, in the sidebar.
+    expect(within(sidebar()).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "channels",
+    );
+    expect(screen.getAllByTestId("channel-list")).toHaveLength(1);
+    // No title and no control over it there (Paul, 2026-11-24): its sort
+    // and filters ride a heading instead.
+    expect(
+      within(sidebar()).queryByRole("heading", { name: "Channels" }),
+    ).toBeNull();
+    // The panel's own list pane is not drawn from `lg` up.
+    expect(screen.getByRole("region", { name: "Channels" })).toHaveClass(
+      "lg:hidden",
+    );
     expect(
       screen.queryByRole("button", { name: "Back to menu" }),
     ).not.toBeInTheDocument();
   });
 
-  it("pushes no history for a pick from lg up, where the list is already on screen (#3824)", () => {
+  it("draws nothing into the sidebar below lg, where the list is a pane of chat's page", () => {
+    stubWidth(800);
+    render(<WithSidebar />);
+    expect(within(sidebar()).queryByTestId("channel-list")).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Channels" })).getByTestId(
+        "channel-list",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("pushes no history for a pick from lg up, and tells the shell what was picked (#3824, #5946)", () => {
     stubWidth(1440);
     window.history.replaceState(null, "");
     const push = vi.spyOn(window.history, "pushState");
+    const onPick = vi.fn();
     try {
-      render(<ChatShell />);
-      fireEvent.click(screen.getByTestId("pick-random"));
+      render(<WithSidebar onPick={onPick} />);
+      fireEvent.click(within(sidebar()).getByTestId("pick-random"));
       expect(push).not.toHaveBeenCalled();
+      // The shell puts the conversation on screen (it may be docked shut).
+      expect(onPick).toHaveBeenCalledWith("channels", "chan-random");
     } finally {
       push.mockRestore();
     }
   });
 
-  it("puts Ask Frapp's bar at the foot of the Channels column with chat alone below lg only, and not beside a tool (#5476, #5560)", () => {
+  it("lists the member's conversations beside the open one on Messages, from lg up", () => {
     stubWidth(1440);
-    const view = render(<ChatShell />);
-    const bar = screen.getByTestId("ask-bar");
-    expect(bar).toHaveAttribute("data-compact");
-    // From `lg` up Ask lives in the sidebar's foot (`app-nav.tsx`), so this
-    // one hides there rather than giving the window two.
-    expect(bar).toHaveClass("lg:hidden");
-    // In the Channels column, never in the thread with its message box.
-    expect(screen.getByRole("region", { name: "Channels" })).toContainElement(
-      bar,
+    render(<WithSidebar view="direct" />);
+    const pane = screen.getByRole("region", { name: "Messages" });
+    expect(pane).toHaveClass("lg:w-60");
+    expect(pane).not.toHaveClass("lg:hidden");
+    expect(within(pane).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "direct",
     );
-    view.unmount();
-    // Beside a tool page the page's own bar asks (`dashboard-shell.tsx`).
-    render(<ChatShell toolBeside />);
-    expect(screen.queryByTestId("ask-bar")).toBeNull();
+    expect(
+      within(pane).getByRole("heading", { name: "Messages" }),
+    ).toBeVisible();
+    // The chapter's channels stay in the sidebar beside it.
+    expect(within(sidebar()).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "channels",
+    );
   });
 
   it("closes the member column beside a tool, and opens the list as a Panel instead", () => {
@@ -5000,129 +5219,54 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
     expect(document.cookie).not.toContain("frapp_chat_members_hidden=1");
   });
 
-  it("shows one pane at a time beside a tool, from lg up, with the back arrow and no history (#5575)", async () => {
-    stubWidth(1440);
-    window.history.replaceState(null, "");
-    const push = vi.spyOn(window.history, "pushState");
-    try {
-      render(<ChatShell toolBeside />);
-      const channels = screen.getByRole("region", { name: "Channels" });
-      const thread = channels.nextElementSibling as HTMLElement;
-      // The conversation first, the list hidden at every width.
-      expect(channels).toHaveClass("w-full", "hidden");
-      expect(channels).not.toHaveClass("lg:w-60");
-      expect(thread).not.toHaveClass("hidden");
-      // The way back is drawn at every width, not only below `lg`.
-      const back = screen.getByRole("button", { name: "Back to channels" });
-      expect(back).not.toHaveClass("lg:hidden");
-
-      fireEvent.click(back);
-      await waitFor(() => expect(channels).not.toHaveClass("hidden"));
-      expect(thread).toHaveClass("hidden");
-
-      fireEvent.click(screen.getByTestId("pick-random"));
-      await waitFor(() => expect(thread).not.toHaveClass("hidden"));
-      expect(channels).toHaveClass("hidden");
-      // Back still moves between pages, not within the panel.
-      expect(push).not.toHaveBeenCalled();
-    } finally {
-      push.mockRestore();
-    }
-  });
-
-  describe("the one-pane side panel beside a tool (#5575)", () => {
-    const panes = () => {
-      const channels = screen.getByRole("region", { name: "Channels" });
-      return { channels, thread: channels.nextElementSibling as HTMLElement };
-    };
-
-    it("keeps its pane through Back and Forward between tool pages", () => {
+  describe("docked beside a page (#5575, #5946)", () => {
+    it("is the conversation alone, with no list pane and no way back to one", () => {
       stubWidth(1440);
       render(<ChatShell toolBeside />);
-      expect(panes().thread).not.toHaveClass("hidden");
-      // Next's own entry for the previous tool page: no thread-pane marker.
-      act(() => {
-        window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
-      });
-      expect(panes().thread).not.toHaveClass("hidden");
-      expect(panes().channels).toHaveClass("hidden");
-    });
-
-    it("shows the list from the back arrow without going back a page", async () => {
-      // A pick below `lg` pushed its entry (#3824), then the window widened
-      // and a tool opened: Back from here would leave the tool page.
-      stubWidth(800);
-      window.history.replaceState(null, "");
-      const back = vi.spyOn(window.history, "back");
-      try {
-        const { rerender } = render(<ChatShell />);
-        fireEvent.click(
-          screen.getByRole("button", { name: "Back to channels" }),
-        );
-        fireEvent.click(screen.getByTestId("pick-random"));
-        back.mockClear();
-        stubWidth(1440);
-        rerender(<ChatShell toolBeside />);
-        fireEvent.click(
-          screen.getByRole("button", { name: "Back to channels" }),
-        );
-        await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-        expect(back).not.toHaveBeenCalled();
-      } finally {
-        back.mockRestore();
-      }
-    });
-
-    it("goes back to the list on Esc, as below lg", async () => {
-      stubWidth(1440);
-      render(<ChatShell toolBeside />);
-      fireEvent.keyDown(document.body, { key: "Escape" });
-      await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-    });
-
-    it("can be closed from the list pane too (#4223)", async () => {
-      stubWidth(1440);
-      const onClose = vi.fn();
-      render(<ChatShell toolBeside onClose={onClose} />);
-      fireEvent.click(screen.getByRole("button", { name: "Back to channels" }));
-      await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-      const closes = within(panes().channels).getAllByRole("button", {
-        name: "Close chat",
-      });
-      expect(closes).toHaveLength(1);
-      fireEvent.click(closes[0]!);
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it("shows the list the nav's row switched to", () => {
-      stubWidth(1440);
-      const { rerender } = render(<ChatShell toolBeside view="channels" />);
-      expect(panes().channels).toHaveClass("hidden");
-      rerender(<ChatShell toolBeside view="direct" />);
+      expect(screen.getByRole("region", { name: "Channels" })).toHaveClass(
+        "lg:hidden",
+      );
+      expect(screen.queryByTestId("channel-list")).toBeNull();
       expect(
-        screen.getByRole("region", { name: "Direct messages" }),
-      ).not.toHaveClass("hidden");
+        screen.getByRole("button", { name: "Back to channels" }),
+      ).toHaveClass("lg:hidden");
     });
 
-    it("stops claiming the channel while the list shows (#3824)", async () => {
+    it("keeps a docked conversation docked when the page is not Messages, whichever kind it is", async () => {
+      stubWidth(1440);
+      channelsQueryState.value = {
+        data: [
+          ...CHANNELS,
+          {
+            id: "chan-dm",
+            name: "dm-viewer-other",
+            type: "DM",
+            member_ids: ["viewer-1", "other-1"],
+          },
+        ],
+      };
+      render(<ChatShell toolBeside initialChannelId="chan-dm" />);
+      await waitFor(() => {
+        expect(screen.getByTestId("composer")).toHaveTextContent("chan-dm");
+      });
+    });
+
+    it("stops claiming the channel while the panel is out of sight (#3824)", async () => {
       stubWidth(1440);
       const { viewedChannelId } =
         await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks");
-      render(<ChatShell toolBeside initialChannelId="chan-general" />);
+      const { rerender } = render(
+        <ChatShell toolBeside initialChannelId="chan-general" />,
+      );
       expect(viewedChannelId()).toBe("chan-general");
-      fireEvent.click(screen.getByRole("button", { name: "Back to channels" }));
+      // Closed beside the page, or behind Chapter settings: still mounted for
+      // the sidebar's list, and reading nothing.
+      rerender(
+        <ChatShell toolBeside shown={false} initialChannelId="chan-general" />,
+      );
       await waitFor(() => expect(viewedChannelId()).toBeNull());
-      fireEvent.click(screen.getByTestId("pick-general"));
+      rerender(<ChatShell toolBeside initialChannelId="chan-general" />);
       await waitFor(() => expect(viewedChannelId()).toBe("chan-general"));
-    });
-
-    it("moves focus into the pane that appears when its control went with the old one", async () => {
-      stubWidth(1440);
-      render(<ChatShell toolBeside />);
-      const back = screen.getByRole("button", { name: "Back to channels" });
-      back.focus();
-      fireEvent.click(back);
-      await waitFor(() => expect(panes().channels).toHaveFocus());
     });
   });
 
@@ -6003,6 +6147,11 @@ describe("ChatShell member list", () => {
       "data-user-id",
       "u-author",
     );
+    // In the chat itself, not a card over the page beside it (#5616).
+    expect(screen.getByTestId("member-profile")).toHaveAttribute(
+      "data-docked",
+      "here",
+    );
     fireEvent.click(screen.getByRole("button", { name: "close-profile" }));
     expect(screen.queryByTestId("member-profile")).not.toBeInTheDocument();
 
@@ -6071,8 +6220,9 @@ describe("ChatShell member list", () => {
     );
     expect(document.cookie).not.toContain("frapp_chat_members_hidden");
 
-    // A row opens its popout over the list; clicking in the popout, and the
-    // full profile behind its View profile taking focus, leave the list open.
+    // A row opens its popout over the list, and clicking in the popout leaves
+    // the list open. View profile opens the full profile in the chat itself,
+    // so the list over it closes.
     fireEvent.click(
       within(list).getByRole("button", { name: "open-row-profile" }),
     );
@@ -6090,13 +6240,8 @@ describe("ChatShell member list", () => {
       "u-row",
     );
     expect(screen.getByRole("button", { name: "close-profile" })).toHaveFocus();
-    expect(screen.getByRole("dialog", { name: "Members" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Members" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "close-profile" }));
-    expect(screen.getByRole("dialog", { name: "Members" })).toBeInTheDocument();
-
-    // The button closes it again: its own pointerdown is not an outside
-    // press that would close the list for its click to reopen.
-    await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("dialog", { name: "Members" })).toBeNull();
   });
@@ -6629,7 +6774,9 @@ describe("ChatShell opens the Task, Service hours and Points forms (#3865)", () 
     });
     mockNotifyOutcome.mockClear();
     render(<ChatShell />);
+    // A bare /task opens the picker (#5772); New task turns it into the form.
     click("composer-task:");
+    fireEvent.click(screen.getByRole("button", { name: "New task" }));
     fireEvent.click(screen.getByTestId("task-form-post"));
     await waitFor(() => expect(mockPostTask).toHaveBeenCalled());
     const [channelId] = mockPostTask.mock.calls[0] as unknown as [string];
@@ -6738,11 +6885,17 @@ describe("ChatShell opens the Task, Service hours and Points forms (#3865)", () 
     mockToast.mockClear();
     render(<ChatShell />);
     expect(click("composer-points:")).toBe("refused");
-    expect(click("composer-task:")).toBe("refused");
+    // Linking a task needs only the read (#5772); typed details, which make
+    // a new one, still need the create grant.
+    expect(click("composer-task:Sweep the porch @bobby 2026-11-12")).toBe(
+      "refused",
+    );
     expect(click("composer-hours:")).toBe("refused");
     expect(screen.queryByTestId("points-form")).toBeNull();
     expect(screen.queryByTestId("task-form")).toBeNull();
     expect(screen.queryByTestId("hours-form")).toBeNull();
+    expect(click("composer-task:")).toBe("opened");
+    expect(screen.queryByRole("button", { name: "New task" })).toBeNull();
     for (const title of [
       "You can't adjust points",
       "You can't create tasks",
@@ -6770,16 +6923,14 @@ describe("ChatShell tells the composer's + which forms the role may use (#3865)"
 
   it("maps polls:create and the event grants", () => {
     expect(formsFor({ data: { permissions: ["polls:create"] } })).toBe(
-      "poll:true,signup:true,form:true,event:false,task:false,hours:false,points:false,roles:false",
+      "poll:true,event:false,task:false,hours:false,points:false",
     );
     expect(
       formsFor({ data: { permissions: ["events:create", "members:view"] } }),
-    ).toBe(
-      "poll:false,signup:true,form:true,event:true,task:false,hours:false,points:false,roles:false",
-    );
+    ).toBe("poll:false,event:true,task:true,hours:false,points:false");
     // Both event grants, not `events:create` alone: the form needs the roster.
     expect(formsFor({ data: { permissions: ["events:create"] } })).toBe(
-      "poll:false,signup:true,form:true,event:false,task:false,hours:false,points:false,roles:false",
+      "poll:false,event:false,task:false,hours:false,points:false",
     );
   });
 
@@ -6795,36 +6946,27 @@ describe("ChatShell tells the composer's + which forms the role may use (#3865)"
           ],
         },
       }),
-    ).toBe(
-      "poll:false,signup:true,form:true,event:false,task:true,hours:true,points:true,roles:false",
-    );
-    // Without `members:view` the task and points forms can't list anyone;
+    ).toBe("poll:false,event:false,task:true,hours:true,points:true");
+    // Without `members:view` no task can be read to link, and the points form
+    // can't list anyone;
     // logging your own hours needs no roster.
     expect(
       formsFor({
         data: { permissions: ["tasks:manage", "service:log", "points:adjust"] },
       }),
-    ).toBe(
-      "poll:false,signup:true,form:true,event:false,task:false,hours:true,points:false,roles:false",
-    );
-  });
-
-  it("maps roles:manage to the Role picker (#4958)", () => {
-    expect(formsFor({ data: { permissions: ["roles:manage"] } })).toBe(
-      "poll:false,signup:true,form:true,event:false,task:false,hours:false,points:false,roles:true",
-    );
+    ).toBe("poll:false,event:false,task:false,hours:true,points:false");
   });
 
   it("blames nothing on the role while permissions load, and says when they couldn't be read", () => {
     expect(formsFor({ data: undefined })).toBe(
-      "poll:loading,signup:true,form:true,event:loading,task:loading,hours:loading,points:loading,roles:loading",
+      "poll:loading,event:loading,task:loading,hours:loading,points:loading",
     );
     expect(formsFor({ data: undefined, isError: true })).toBe(
-      "poll:unknown,signup:true,form:true,event:unknown,task:unknown,hours:unknown,points:unknown,roles:unknown",
+      "poll:unknown,event:unknown,task:unknown,hours:unknown,points:unknown",
     );
     // Paused offline before it ever landed: it can't answer either.
     expect(formsFor({ data: undefined, fetchStatus: "paused" })).toBe(
-      "poll:unknown,signup:true,form:true,event:unknown,task:unknown,hours:unknown,points:unknown,roles:unknown",
+      "poll:unknown,event:unknown,task:unknown,hours:unknown,points:unknown",
     );
   });
 });
@@ -6968,7 +7110,7 @@ describe("ChatShell's two lists (#3774)", () => {
   };
   const rail = () => screen.getByTestId("channel-list");
 
-  it("lists only channels on Chat, and only direct and group messages on Direct messages", () => {
+  it("lists only channels on Chat, and only direct and group messages on Messages", () => {
     channelsQueryState.value = { data: [...CHANNELS, DM, GROUP] };
     const { unmount } = render(<ChatShell />);
     expect(rail()).toHaveAttribute("data-kind", "channels");
@@ -6980,9 +7122,7 @@ describe("ChatShell's two lists (#3774)", () => {
     render(<ChatShell view="direct" />);
     expect(rail()).toHaveAttribute("data-kind", "direct");
     expect(rail().dataset.ids).toBe("chan-dm,chan-group");
-    expect(
-      screen.getByRole("heading", { name: "Direct messages" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Messages" })).toBeVisible();
   });
 
   it("lands each list on its own last conversation", async () => {
@@ -7118,48 +7258,12 @@ describe("ChatShell's two lists (#3774)", () => {
     expect(screen.queryByTestId("composer")).not.toBeInTheDocument();
   });
 
-  it("reads the latest messages on the channels rail only under Recent, and offers the sort there alone (#2877)", () => {
+  it("never reads the latest messages for the channels rail, which is always in the chapter's order (#5947)", () => {
     latestReads.enabled = [];
-    latestReads.rows = [
-      {
-        channel_id: "chan-group",
-        sender_id: "other-1",
-        author_name: "Cole Bennett",
-        content: "hi",
-        kind: "text",
-        attachment_count: 0,
-        created_at: "2026-11-12T01:20:00.000Z",
-      },
-    ];
     channelsQueryState.value = { data: [...CHANNELS, DM, GROUP] };
-    sidebarState.sort = "recent";
-    try {
-      const { unmount } = render(<ChatShell />);
-      expect(latestReads.enabled.at(-1)).toBe(true);
-      expect(rail()).toHaveAttribute("data-latest", "chan-group");
-      // The times order the rail; no preview line is drawn from them.
-      expect(rail()).not.toHaveAttribute("data-previews");
-      expect(screen.getByTestId("filters-hide-muted")).toHaveAttribute(
-        "data-sort",
-        "recent",
-      );
-      unmount();
-
-      sidebarState.sort = "alpha";
-      latestReads.enabled = [];
-      const alpha = render(<ChatShell />);
-      expect(latestReads.enabled.every((on) => on === false)).toBe(true);
-      expect(rail()).not.toHaveAttribute("data-latest");
-      alpha.unmount();
-
-      // Direct messages always run newest first, so they offer no sort.
-      render(<ChatShell view="direct" />);
-      expect(screen.getByTestId("filters-hide-muted")).not.toHaveAttribute(
-        "data-sort",
-      );
-    } finally {
-      sidebarState.sort = "chapter";
-    }
+    render(<ChatShell />);
+    expect(latestReads.enabled.every((on) => on === false)).toBe(true);
+    expect(rail()).not.toHaveAttribute("data-latest");
   });
 
   it("reads the latest messages only for Direct messages, and words each last line (#3774)", () => {
@@ -7343,6 +7447,28 @@ describe("ChatShell's two lists (#3774)", () => {
 });
 
 describe("ChatShell All threads (#4960)", () => {
+  afterEach(() => {
+    headerNarrow.current = null;
+  });
+
+  // Paul, 2026-11-24: in a narrow header the name read "A..." beside four
+  // buttons, so Threads moves into the channel menu with its unread count.
+  it("moves Threads into the channel menu while the header is narrow", async () => {
+    headerNarrow.current = true;
+    render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("composer");
+    expect(screen.queryByTestId("all-threads-random")).toBeNull();
+    expect(screen.getByTestId("menu-threads")).toHaveTextContent("0");
+  });
+
+  it("keeps the header's own Threads button while there is room", async () => {
+    headerNarrow.current = false;
+    render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("composer");
+    expect(screen.getByTestId("all-threads-random")).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-threads")).toBeNull();
+  });
+
   it("switches to the thread's channel and opens the thread there", async () => {
     render(<ChatShell initialChannelId="chan-general" />);
     await screen.findByTestId("composer");
@@ -7376,5 +7502,35 @@ describe("ChatShell All threads (#4960)", () => {
     } finally {
       channelsQueryState.value = before;
     }
+  });
+});
+
+describe("ChatShell Now card (#5777)", () => {
+  afterEach(() => {
+    chatEventsNow.value = { events: [], now: Date.now() };
+  });
+
+  it("puts the event on now at the top of the channel rail", () => {
+    chatEventsNow.value = {
+      events: [
+        {
+          id: "recruitment",
+          name: "Recruitment Meetings",
+          location: "Chapter room",
+          start_time: new Date(Date.now() - 40 * 60_000).toISOString(),
+          end_time: new Date(Date.now() + 20 * 60_000).toISOString(),
+          check_in_opens_minutes: 10,
+          check_in_open: true,
+          checked_in: false,
+          checked_in_at: null,
+        },
+      ],
+      now: Date.now(),
+    };
+    render(<ChatShell />);
+
+    const now = screen.getByRole("region", { name: "On now" });
+    expect(now).toHaveTextContent("Recruitment Meetings");
+    expect(now).toHaveTextContent("Check-in is open");
   });
 });

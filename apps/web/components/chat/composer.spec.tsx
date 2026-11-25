@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { AUDIT_LOG_COMPOSER_NOTE } from "@repo/chat-core/audit-log-copy";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
@@ -98,6 +104,24 @@ vi.mock("@repo/hooks", () => ({
   },
   formatScheduledFor: () => "Tomorrow at 9:00 AM",
   scheduleTimeProblem: () => null,
+  // The GIF picker the + card's GIF row opens (#5772).
+  useGifSearch: () => ({
+    results: [],
+    isLoading: false,
+    isError: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    fetchNextPage: () => {},
+  }),
+  useGifFavorites: () => ({
+    favorites: [],
+    isStarred: () => false,
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+  useToggleGifFavorite: () => ({ mutate: () => {} }),
 }));
 vi.mock("@/lib/chat/photo-preview", () => ({
   describeChatPhoto: mockDescribePhoto,
@@ -244,6 +268,26 @@ describe("Composer GIF button (#4631)", () => {
     );
     expect(screen.getByRole("button", { name: "Send a GIF" })).toBeTruthy();
   });
+
+  it("opens the GIF picker from the + card's GIF row, and keeps it open (#5772)", async () => {
+    Element.prototype.scrollTo ??= function scrollTo() {};
+    const user = userEvent.setup();
+    render(
+      <Composer {...baseProps()} onSendGif={() => {}} gifProvider="KLIPY" />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /add a file, poll, event/i }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "GIF" }));
+
+    const search = await screen.findByRole("searchbox", {
+      name: "Search KLIPY",
+    });
+    // Past the + card's close and its focus return.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(search.isConnected).toBe(true);
+    expect(screen.queryByRole("menuitem", { name: "GIF" })).toBeNull();
+  });
 });
 
 /**
@@ -278,6 +322,94 @@ describe("Composer slash palette (#396)", () => {
     expect(await screen.findByRole("dialog")).toHaveAttribute(
       "aria-modal",
       "true",
+    );
+  });
+});
+
+// #4084: the composer hands the member's permissions to the palette, which
+// narrows `/rush` by them; a dropped prop would offer every subcommand.
+describe("Composer slash palette narrows /rush by the member's permissions", () => {
+  it("leaves /rush out for a role holding no rush subcommand", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps({ permissions: ["members:view"] })} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/event")).toBeInTheDocument();
+    expect(screen.queryByText("/rush")).not.toBeInTheDocument();
+  });
+
+  it("offers /rush while the permissions haven't been read", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/rush")).toBeInTheDocument();
+  });
+});
+
+// #5973: a slash command whose name matched several prospects ran nothing
+// and asks which one; the pick runs the same command again by id.
+describe("Composer asks which one when a command names several", () => {
+  afterEach(() => {
+    editorDouble.current = null;
+  });
+
+  it("shows the matches, runs the pick by id, and toasts nothing first", async () => {
+    const text = "/rush vote Jake Smith";
+    editorDouble.current = fakeEditor(text);
+    mockToast.mockClear();
+    const onSlashDispatch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "Several prospects match that name. Pick one.",
+        choices: {
+          title: 'Several prospects match "Jake Smith"',
+          options: [
+            {
+              label: "Jake Smith",
+              detail: "New · added Nov 2",
+              args: "vote id-1",
+            },
+            {
+              label: "Jake Smith",
+              detail: "Met · added Nov 20",
+              args: "vote id-2",
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ ok: true });
+    render(
+      <Composer
+        {...baseProps({
+          draft: text,
+          onSlashDispatch,
+          isModuleEnabled: () => true,
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    const picker = await screen.findByRole("dialog", {
+      name: 'Several prospects match "Jake Smith"',
+    });
+    expect(mockToast).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(picker).getByRole("button", { name: /Met · added Nov 20/ }),
+    );
+
+    await waitFor(() => expect(onSlashDispatch).toHaveBeenCalledTimes(2));
+    expect(onSlashDispatch).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "vote id-2",
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: 'Several prospects match "Jake Smith"',
+        }),
+      ).not.toBeInTheDocument(),
     );
   });
 });
@@ -2495,21 +2627,6 @@ describe("Composer + menu (#3865)", () => {
     );
   });
 
-  it("opens the sign-up sheet's form straight away: it has no command to ask about (#3926)", async () => {
-    const renderPlusForm = vi.fn((command: string) => (
-      <p>{`form:${command}`}</p>
-    ));
-    const { user, onOpenCommandForm } = await openPlus({
-      commandForms: [...FORMS, { command: "signup", roleAllows: true }],
-      renderPlusForm,
-    });
-    await user.click(
-      await screen.findByRole("menuitem", { name: /sign-up sheet/i }),
-    );
-    expect(await screen.findByText("form:signup")).toBeInTheDocument();
-    expect(onOpenCommandForm).not.toHaveBeenCalled();
-  });
-
   it("greys the rows while a reply is staged", async () => {
     await openPlus({
       replyTo: { id: "msg-1", author: "Alice Chen", preview: "the original" },
@@ -2580,20 +2697,48 @@ describe("Composer in the audit log", () => {
   });
 });
 
+// #6006: a timed-out member reads until when, and the reason, where the
+// editor would be; the server refuses their post either way.
+describe("Composer while timed out", () => {
+  it("shows the timeout in place of the editor", () => {
+    render(
+      <Composer
+        {...baseProps({
+          canPost: true,
+          timeoutNotice: {
+            title: "You're timed out until 3:40 PM",
+            detail: "Reason: spamming",
+          },
+        })}
+      />,
+    );
+    expect(
+      screen.getByText("You're timed out until 3:40 PM"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Reason: spamming")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+});
+
 /**
- * Ask Frapp has no control in the composer (#4904, Paul's pick of
+ * Frapp Intelligence has no control in the composer (#4904, Paul's pick of
  * 2026-11-13): it was a button here for a day (#4702) and read as out of
  * place. The floating Ask bar asks (#5476); `@Frapp` typed here still does
  * (#4713).
  */
-describe("Composer carries no Ask Frapp control (#4904)", () => {
+describe("Composer carries no Frapp Intelligence control (#4904)", () => {
   it.each([
     ["a channel the member can post in", {}],
     ["a channel that is read-only for the member's role", { isReadOnly: true }],
     ["an alumnus who can read but not post", { canPost: false }],
   ])("draws none in %s", (_, props) => {
     render(<Composer {...baseProps(props)} />);
-    expect(screen.queryByRole("button", { name: /ask frapp/i })).toBeNull();
+    // Every name the entry has had: a control put back would carry one.
+    expect(
+      screen.queryByRole("button", {
+        name: /ask frapp|frapp intelligence|what do you need/i,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -2962,7 +3107,7 @@ describe("Composer asks Frapp instead of posting (#4713)", () => {
     );
     expect(mockToast).toHaveBeenCalledWith({
       title:
-        "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+        "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();

@@ -30,9 +30,11 @@ export { localClock, localIsoDate } from "./local-date";
 export {
   formatDay,
   formatDayHeading,
+  formatDayWords,
   formatDayRange,
   formatDayTime,
   formatDayTimeRange,
+  formatTimeRange,
   formatClockShort,
   formatConversationTime,
   formatDueLabel,
@@ -82,3 +84,5 @@ export {
   suggestedDueTime,
   suggestTaskDue,
 } from "./due-time";
+export { formatPhone, formatPhoneInput, normalizePhone } from "./phone";
+export { formatCustomFieldValue } from "./custom-field";

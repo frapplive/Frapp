@@ -29,6 +29,7 @@ import {
   type MeetingDraftFailure,
   type MeetingDraftReview,
   type MeetingDraftStatus,
+  type MeetingSectionKey,
 } from '@repo/validation';
 import {
   MEETING_DRAFT_REPOSITORY,
@@ -92,6 +93,16 @@ import { reportCaughtFailure } from '../../infrastructure/observability/report-c
 /** The catalog task, and the AI run kind, for a draft from notes. */
 const MINUTES_DRAFT_TASK = 'minutes.draft';
 const MINUTES_NOTES_TASK = 'minutes.notes';
+/** The section the notes pass writes (`minutes-notes.ts`). */
+const NOTES_SECTION: MeetingSectionKey = 'discussion_log';
+
+/** The request with the notes section left out of what is asked for. */
+function withoutNotes(request: MinutesDraftRequest): MinutesDraftRequest {
+  return {
+    ...request,
+    sections: request.sections.filter((key) => key !== NOTES_SECTION),
+  };
+}
 const MINUTES_DRAFT_RUN_KIND = 'minutes_draft';
 
 /** What the editor reads about a meeting's draft from notes. */
@@ -687,7 +698,7 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
     const request = await this.draftRequest(chapterId, meeting, draft, userId);
     if (request.sources) {
       // Who may still contribute is checked as late as the call: a
-      // note-taker who said No to Frapp AI or left since the officer asked
+      // note-taker who said No to Frapp Intelligence or left since the officer asked
       // is not sent (#4935).
       request.sources = await this.meetingNotes.stillContributing(
         chapterId,
@@ -933,13 +944,17 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
 
       // Pass 2: the editor's read over the whole meeting
       // (`minutes-draft-review.ts`), while the notes pass is still writing.
+      // It reads each part's notes as its account of the meeting but is not
+      // asked to write them again: the notes pass replaced its copy on every
+      // draft that went well, words generated, billed and thrown away
+      // (#6058).
       // Several note-takers' conflicts are settled by the first pass and
       // pass through untouched.
       const reviewed = await this.gateway
         .generateObject(
           MINUTES_DRAFT_TASK,
           {
-            ...buildReviewPrompt(request, outputs),
+            ...buildReviewPrompt(withoutNotes(request), outputs),
             schema: ReviewedMinutesSchema,
             signal,
           },
@@ -956,20 +971,19 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
       signal?.throwIfAborted();
       const notes = noted?.status === 'ok' ? noted.value : null;
       if (noted?.status === 'ok') usages.push(noted.usage);
+      const merged = mergeParts(outputs);
       /**
        * The notes pass's summary and notes over the draft's own, when it
-       * wrote them. Without it (a failure, a refusal, the spend cap) the
-       * draft's own stand, so a draft is never lost to it.
+       * wrote them. Without it (a failure, a refusal, the spend cap, no
+       * topics) the draft's own summary and the first pass's notes stand,
+       * already written and paid for, so a draft is never lost to it.
        */
-      const withNotes = (draft: MeetingDraftOutput): MeetingDraftOutput => {
-        if (!notes) return draft;
-        const outline = notesOutline(notes);
-        return {
-          ...draft,
-          summary: notes.summary.trim() || draft.summary,
-          discussion_log: outline || draft.discussion_log,
-        };
-      };
+      const outline = notes ? notesOutline(notes) : '';
+      const withNotes = (draft: MeetingDraftOutput): MeetingDraftOutput => ({
+        ...draft,
+        summary: notes?.summary.trim() || draft.summary,
+        discussion_log: outline || merged.discussion_log,
+      });
 
       // Where each carried item stands is read by the first pass, from the
       // sources; the editor's read never sees them, so they pass through.
@@ -989,7 +1003,6 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
       // word, so whatever stopped the editor's read (a reply that didn't
       // parse, a refusal, the spend cap reached on this call, an error)
       // leaves its draft, with procedure taken out, rather than nothing.
-      const merged = mergeParts(outputs);
       return {
         status: 'ok',
         value: withNotes({

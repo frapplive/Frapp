@@ -11,6 +11,7 @@ import type {
   IAiSuggestionRepository,
   ListPendingAiSuggestionsQuery,
   NewAiSuggestion,
+  NewAiSuggestionChange,
 } from '#domain/repositories/ai-suggestion.repository.interface';
 import { SupabaseQueryError } from '../supabase-query-error';
 
@@ -19,6 +20,7 @@ const NO_TEXT = {
   payload: {},
   quote: null,
   quote_author_id: null,
+  request_sealed: null,
 } as const satisfies TablesUpdate<'ai_suggestions'>;
 
 /** An accept that didn't finish, back to waiting with its text. */
@@ -244,6 +246,28 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
     if (error) throw new SupabaseQueryError(error);
   }
 
+  async reopen(
+    chapterId: string,
+    id: string,
+    words: { payload: Record<string, unknown>; quote: string | null },
+    now: string,
+  ): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('ai_suggestions')
+      .update({
+        ...BACK_TO_WAITING,
+        payload: words.payload,
+        quote: words.quote,
+      })
+      .eq('chapter_id', chapterId)
+      .eq('id', id)
+      .eq('status', 'dismissed')
+      .gt('expires_at', now)
+      .select('id');
+    if (error) throw new SupabaseQueryError(error);
+    return data.length > 0;
+  }
+
   async releaseStale(before: string): Promise<number> {
     // Cross-chapter by design: the hourly sweep serves the whole database.
     const { data, error } = await this.supabase
@@ -256,9 +280,16 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
     return (data ?? []).length;
   }
 
-  async expireDue(
-    now: string,
-  ): Promise<{ chapter_id: string; kind: AiSuggestion['kind'] }[]> {
+  async expireDue(now: string): Promise<
+    {
+      id: string;
+      chapter_id: string;
+      kind: AiSuggestion['kind'];
+      source_type: AiSuggestion['source_type'];
+      requested_for: string | null;
+      ask_id: string | null;
+    }[]
+  > {
     // Cross-chapter by design: the hourly sweep serves the whole database.
     const update: TablesUpdate<'ai_suggestions'> = {
       ...NO_TEXT,
@@ -269,7 +300,7 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
       .update(update)
       .eq('status', 'pending')
       .lte('expires_at', now)
-      .select('chapter_id, kind');
+      .select('id, chapter_id, kind, source_type, requested_for, ask_id');
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
   }
@@ -286,6 +317,56 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
       .update(update)
       .eq('quote_author_id', userId)
       .select('id');
+    if (error) throw new SupabaseQueryError(error);
+    return data?.length ?? 0;
+  }
+
+  async recordChanges(rows: readonly NewAiSuggestionChange[]): Promise<void> {
+    if (rows.length === 0) return;
+    const inserts: readonly TablesInsert<'ai_suggestion_changes'>[] = rows;
+    const { error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .upsert(inserts, {
+        onConflict: 'suggestion_id',
+        ignoreDuplicates: true,
+      });
+    if (error) throw new SupabaseQueryError(error);
+  }
+
+  async deleteChangesForUser(userId: string): Promise<number> {
+    // Cross-chapter by design, as `dropQuotesBy`. The id goes into a filter
+    // string, so anything but a uuid is refused rather than escaped.
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      throw new Error('deleteChangesForUser: not a user id');
+    }
+    // Their question waiting sealed on a card first, so a failure after it
+    // is retried with nothing of theirs left behind.
+    const dropped = await this.supabase
+      .from('ai_suggestions')
+      .update({ request_sealed: null })
+      .eq('requested_for', userId)
+      .not('request_sealed', 'is', null);
+    if (dropped.error) throw new SupabaseQueryError(dropped.error);
+    const { data, error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .delete()
+      .or(`decided_by.eq.${userId},requested_for.eq.${userId}`)
+      .select('suggestion_id');
+    if (error) throw new SupabaseQueryError(error);
+    return data?.length ?? 0;
+  }
+
+  async deleteExpiredChanges(now: string): Promise<number> {
+    // Cross-chapter by design: the hourly sweep serves the whole database.
+    const { data, error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .delete()
+      .lte('expires_at', now)
+      .select('suggestion_id');
     if (error) throw new SupabaseQueryError(error);
     return data?.length ?? 0;
   }

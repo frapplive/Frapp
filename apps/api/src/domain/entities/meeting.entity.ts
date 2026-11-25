@@ -35,6 +35,15 @@ export interface Meeting {
   transcript: string | null;
 }
 
+/**
+ * Posted minutes as a Documents row reads them (#5949): every column but the
+ * transcript, which can run to a few hundred kilobytes, and whether there is
+ * one.
+ */
+export type PostedMeetingSummary = Omit<Meeting, 'transcript'> & {
+  has_transcript: boolean;
+};
+
 /** A chapter's minutes template (`meeting_templates`). */
 export interface MeetingTemplate {
   chapter_id: string;
@@ -183,4 +192,24 @@ export interface MeetingRecording {
   speaker_count: number | null;
   created_at: string;
   finished_at: string | null;
+}
+
+/**
+ * How long a recording phone may go unheard before the list stops saying
+ * it is recording: it beats every minute, so three missed beats (no signal,
+ * the app killed) end the "is recording" line.
+ */
+export const LIVE_RECORDING_STALE_MS = 3 * 60_000;
+
+/**
+ * A phone recording a meeting right now (`meeting_live_recordings`): the
+ * minutes, who, and when it was last heard from. A row not seen for
+ * `LIVE_RECORDING_STALE_MS` counts as not recording.
+ */
+export interface MeetingLiveRecording {
+  meeting_id: string;
+  chapter_id: string;
+  user_id: string;
+  started_at: string;
+  seen_at: string;
 }

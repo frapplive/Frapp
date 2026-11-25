@@ -11,6 +11,10 @@ const threadRepoStub = {
 };
 import { NotificationService } from '../services/notification.service';
 import { ChatPushWorkerService } from './chat-push-worker.service';
+import {
+  profilePhotoProviders,
+  signedPhotoUrl,
+} from '#test/helpers/profile-photo-url.stub';
 import { chatPushPreview } from '../services/chat-push-preview';
 import {
   CHAT_NOTIFICATION_PREFERENCE_REPOSITORY,
@@ -124,6 +128,7 @@ describe('ChatPushWorkerService', () => {
     const mod = await Test.createTestingModule({
       providers: [
         ChatPushWorkerService,
+        ...profilePhotoProviders(),
         { provide: CHAT_THREAD_REPOSITORY, useValue: threadRepoStub },
         { provide: USER_REPOSITORY, useValue: { findDisplayIdentitiesByIds } },
         ChannelCacheService,
@@ -1038,7 +1043,7 @@ describe('ChatPushWorkerService', () => {
     expect(findByChapter).not.toHaveBeenCalled();
   });
 
-  it('exits on a posted Ask Frapp answer: no push, no notification, no roster read (#4713)', async () => {
+  it('exits on a posted Frapp Intelligence answer: no push, no notification, no roster read (#4713)', async () => {
     service.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
     setMembers(['sender', 'a', 'b']);
 
@@ -1659,6 +1664,131 @@ describe('ChatPushWorkerService', () => {
       expect(findDisplayIdentitiesByIds).not.toHaveBeenCalled();
     });
 
+    describe('who the push is from, for the phone to draw (#6024)', () => {
+      const SENDER_PHOTO = 'chapters/chap-1/profiles/sender/photo.jpg';
+      const communicationFor = (recipient: string) =>
+        notifyUser.mock.calls
+          .filter((c) => c[0] === recipient)
+          .map((c) => (c[2] as { communication?: unknown }).communication);
+      const withPhoto = (avatar_url: string | null) =>
+        findDisplayIdentitiesByIds.mockImplementation(async (ids: string[]) =>
+          ids
+            .filter((id) => NAMES[id])
+            .map((id) => ({
+              id,
+              display_name: NAMES[id],
+              avatar_url: id === 'sender' ? avatar_url : null,
+            })),
+        );
+
+      it("sends a DM as one-to-one, with the sender's signed photo", async () => {
+        withPhoto(SENDER_PHOTO);
+        service.__setChannelForTest(DM);
+        setMembers(['sender', 'alice']);
+        await send(DM.id);
+        expect(communicationFor('alice')).toEqual([
+          {
+            senderId: 'sender',
+            senderName: 'Sam Rivera',
+            senderImageUrl: signedPhotoUrl(SENDER_PHOTO),
+          },
+        ]);
+      });
+
+      it('names a channel the way its title does, announcements included', async () => {
+        withPhoto(SENDER_PHOTO);
+        service.__setChannelForTest({
+          ...CHANNEL,
+          id: 'ch-gen',
+          name: 'general',
+        });
+        service.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
+        setMembers(['sender', 'a']);
+        await send('ch-gen');
+        await send(ANNOUNCEMENT_CHANNEL.id, { id: 'm2' });
+        expect(communicationFor('a')).toEqual([
+          expect.objectContaining({ groupName: '#general' }),
+          expect.objectContaining({ groupName: '#announcements' }),
+        ]);
+      });
+
+      it('names a group DM by its own name, and an unnamed one by none', async () => {
+        service.__setChannelForTest({
+          ...DM,
+          id: 'gdm-named',
+          name: 'Rush chairs',
+          type: 'GROUP_DM',
+          member_ids: ['sender', 'alice', 'bob'],
+        });
+        service.__setChannelForTest({
+          ...DM,
+          id: 'gdm-unnamed',
+          name: 'group-dm-1732500000000',
+          type: 'GROUP_DM',
+          member_ids: ['sender', 'alice', 'bob'],
+        });
+        setMembers(['sender', 'alice', 'bob']);
+        await send('gdm-named');
+        await send('gdm-unnamed', { id: 'm2' });
+        const [named, unnamed] = communicationFor('alice') as Array<
+          Record<string, unknown>
+        >;
+        expect(named).toMatchObject({ groupName: 'Rush chairs' });
+        expect(unnamed).not.toHaveProperty('groupName');
+      });
+
+      it('leaves the photo off for a sender with none, or one outside their own folder', async () => {
+        withPhoto(null);
+        service.__setChannelForTest(DM);
+        setMembers(['sender', 'alice']);
+        await send(DM.id);
+        withPhoto('chapters/chap-1/profiles/alice/photo.jpg');
+        await send(DM.id, { id: 'm2' });
+        for (const communication of communicationFor('alice')) {
+          expect(communication).toEqual({
+            senderId: 'sender',
+            senderName: 'Sam Rivera',
+          });
+        }
+      });
+
+      it('carries it on a bundled burst too', async () => {
+        withPhoto(SENDER_PHOTO);
+        service.__setChannelForTest(DM);
+        setMembers(['sender', 'alice']);
+        for (let i = 0; i < 4; i++) await send(DM.id, { id: `m${i}` });
+        const bundled = notifyUser.mock.calls
+          .map(
+            (c) =>
+              c[2] as { data: { bundled?: boolean }; communication?: unknown },
+          )
+          .filter((p) => p.data.bundled);
+        expect(bundled.length).toBeGreaterThan(0);
+        for (const payload of bundled) {
+          expect(payload.communication).toMatchObject({ senderId: 'sender' });
+        }
+      });
+
+      it('sends none for the system actor or a sender with no name', async () => {
+        service.__setChannelForTest(DM);
+        setMembers(['sender', 'alice', 'nameless']);
+        await send(DM.id, { sender_id: SYSTEM_SENDER_ID });
+        await send(DM.id, { id: 'm2', sender_id: 'nameless' });
+        expect(communicationFor('alice')).toEqual([undefined, undefined]);
+      });
+
+      it('never stores it on the in-app row', async () => {
+        withPhoto(SENDER_PHOTO);
+        service.__setChannelForTest(DM);
+        setMembers(['sender', 'alice']);
+        await send(DM.id);
+        const [payload] = notifyUser.mock.calls.map(
+          (c) => c[2] as { data: Record<string, unknown> },
+        );
+        expect(payload.data).not.toHaveProperty('communication');
+      });
+    });
+
     describe('what the in-app list draws a row by (#4346)', () => {
       const dataFor = (recipient: string) =>
         notifyUser.mock.calls
@@ -1955,6 +2085,7 @@ describe('ChatPushWorkerService', () => {
       const mod = await Test.createTestingModule({
         providers: [
           ChatPushWorkerService,
+          ...profilePhotoProviders(),
           { provide: CHAT_THREAD_REPOSITORY, useValue: threadRepoStub },
           {
             provide: USER_REPOSITORY,

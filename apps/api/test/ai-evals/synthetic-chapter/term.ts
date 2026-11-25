@@ -284,7 +284,30 @@ export interface TermEvent {
   points: number;
   /** Who did not come, for an event that has happened. Everyone else did. */
   absentIds?: readonly string[];
+  /**
+   * Who it invited, when not everyone the same way: role or tier names
+   * (`SYNTHETIC_TIERS`) by status, and everyone else (#5853).
+   */
+  invites?: {
+    required?: readonly string[];
+    optional?: readonly string[];
+    everyoneElse: 'required' | 'optional' | 'not_invited';
+  };
 }
+
+/** The chapter's event types (#5853): what an event can be one of. */
+export interface TermEventType {
+  name: string;
+  points: number;
+  required: boolean;
+}
+
+export const TERM_EVENT_TYPES: readonly TermEventType[] = [
+  { name: 'Chapter meeting', points: 5, required: true },
+  { name: 'Social', points: 0, required: false },
+  { name: 'Philanthropy', points: 10, required: false },
+  { name: 'Officer development', points: 5, required: true },
+];
 
 const event = (
   id: string,
@@ -1055,6 +1078,8 @@ export interface TermChapter {
   directMessages: readonly DirectMessage[];
   tasks: readonly TermTask[];
   events: readonly TermEvent[];
+  /** Left out: none. */
+  eventTypes?: readonly TermEventType[];
   points: Readonly<Record<string, number>>;
   requirement: typeof TERM_REQUIREMENT;
   serviceEntries: readonly ServiceEntry[];

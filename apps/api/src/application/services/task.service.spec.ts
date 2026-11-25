@@ -5,6 +5,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  TASK_PROOF_LINK_INVALID_MESSAGE,
+  TASK_REPEAT_NEEDS_DUE_DATE,
+} from '@repo/validation';
 import { TaskService, type CreateTaskInput } from './task.service';
 import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface';
 import type { ITaskRepository } from '#domain/repositories/task.repository.interface';
@@ -42,14 +46,23 @@ import {
   TASK_RESUBMIT_NEEDS_CHANGE_CODE,
 } from '@repo/validation';
 import { memberFixture, userFixture } from '#test/helpers/entity-fixtures';
+import { frappLinkRepoMocks } from '#test/helpers/frapp-link-repos.fixture';
+import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
+
+/** A send-back's caller: an officer who isn't the assignee (#5917). */
+const ADMIN = { actorUserId: 'admin-1' };
 
 describe('TaskService', () => {
   let service: TaskService;
+  let linkRepos: ReturnType<typeof frappLinkRepoMocks>;
   let mockTaskRepo: jest.Mocked<ITaskRepository>;
   let mockMemberRepo: jest.Mocked<IMemberRepository>;
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
   let mockNotificationService: jest.Mocked<
-    Pick<NotificationService, 'notifyUser' | 'notifyChapter'>
+    Pick<
+      NotificationService,
+      'notifyUser' | 'notifyChapter' | 'retractTaskCompletion'
+    >
   >;
   let mockChatService: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
   let mockRbac: jest.Mocked<
@@ -96,6 +109,7 @@ describe('TaskService', () => {
     point_reward: 10,
     points_awarded: false,
     completed_at: null,
+    completed_by: null,
     confirmed_at: null,
     sent_back_at: null,
     proof_kind: 'none',
@@ -107,6 +121,7 @@ describe('TaskService', () => {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: '2026-02-26T00:00:00.000Z',
   };
 
@@ -129,6 +144,7 @@ describe('TaskService', () => {
       findById: jest.fn(),
       findByIds: jest.fn().mockResolvedValue([]),
       findByChapter: jest.fn(),
+      findByChapterCounted: jest.fn(),
       findSince: jest.fn(),
       countByChapter: jest.fn(),
       create: jest.fn(),
@@ -162,6 +178,7 @@ describe('TaskService', () => {
       ),
       deleteGroup: jest.fn().mockResolvedValue(undefined),
       deleteGroupCopies: jest.fn().mockResolvedValue([]),
+      addGroupCopies: jest.fn().mockResolvedValue([]),
       setGroupFollower: jest.fn().mockResolvedValue(undefined),
     };
     mockRbac = {
@@ -188,6 +205,9 @@ describe('TaskService', () => {
     };
 
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -200,6 +220,7 @@ describe('TaskService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
     };
 
     mockUserRepo = {
@@ -209,6 +230,7 @@ describe('TaskService', () => {
     mockNotificationService = {
       notifyUser: jest.fn().mockResolvedValue(undefined),
       notifyChapter: jest.fn().mockResolvedValue(undefined),
+      retractTaskCompletion: jest.fn().mockResolvedValue(undefined),
     };
 
     mockStorage = {
@@ -225,6 +247,7 @@ describe('TaskService', () => {
       }),
     };
 
+    linkRepos = frappLinkRepoMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TaskService,
@@ -240,6 +263,8 @@ describe('TaskService', () => {
         { provide: CHAPTER_GROUP_REPOSITORY, useValue: mockGroupRepo },
         { provide: ROLE_TIER_REPOSITORY, useValue: mockTierRepo },
         { provide: OPEN_TASK_REPOSITORY, useValue: mockOpenTaskRepo },
+        FrappLinkChecker,
+        ...linkRepos.providers,
       ],
     }).compile();
 
@@ -498,8 +523,12 @@ describe('TaskService', () => {
       });
       expect(to('exec-2')).toMatchObject({
         title: 'Sam finished: Test Task',
-        body: 'From Exec board · An officer confirms it',
-        data: { target: { screen: 'tasks', taskId: 'task-1' } },
+        body: 'From Exec board · Waiting on an officer',
+        // Marked, so reopening the completion clears it (#5732).
+        data: {
+          about: 'task-completed',
+          target: { screen: 'tasks', taskId: 'task-1' },
+        },
       });
       // The assignee hears nothing about their own task.
       expect(pushes.filter(([id]) => id === 'user-1')).toHaveLength(0);
@@ -634,7 +663,7 @@ describe('TaskService', () => {
           name: 'Member',
           tier_id: MEMBERS,
           permissions: [],
-          system_key: 'MEMBER',
+          system_key: 'EVERYONE',
         },
       ] as never);
       mockTierRepo.findByChapter.mockResolvedValue([
@@ -674,7 +703,7 @@ describe('TaskService', () => {
           id: 'role-everyone',
           name: 'Member',
           tier_id: ALL,
-          system_key: 'MEMBER',
+          system_key: 'EVERYONE',
         },
       ] as never);
       mockTierRepo.findByChapter.mockResolvedValue([
@@ -832,6 +861,7 @@ describe('TaskService', () => {
         proof_kind: 'none',
         subtask_titles: ['Open it'],
         followed_by: null,
+        attachments: [],
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -959,7 +989,7 @@ describe('TaskService', () => {
             id: 'role-everyone',
             chapter_id: 'ch-1',
             name: 'Everyone',
-            system_key: 'MEMBER',
+            system_key: 'EVERYONE',
           },
           {
             id: 'role-alumni',
@@ -1196,17 +1226,50 @@ describe('TaskService', () => {
       expect(marks.get('copy-user-1')).toEqual({
         done: true,
         group: { done: 2, total: 2 },
+        // Everyone is said by its name, not by 150 ids (#6051).
+        who: { audience: 'everyone', audience_name: null, assignee_ids: [] },
       });
-      expect(marks.get('solo')).toEqual({ done: true, group: null });
+      expect(marks.get('solo')).toEqual({
+        done: true,
+        group: null,
+        who: { audience: null, audience_name: null, assignee_ids: ['user-1'] },
+      });
 
       mockTaskRepo.findGroupCopies.mockResolvedValue([
         copyOf('user-1', { status: TaskStatus.COMPLETED }),
         copyOf('user-2'),
       ]);
       const partway = await service.doneMarks('ch-1', ['copy-user-1']);
-      expect(partway.get('copy-user-1')).toEqual({
+      expect(partway.get('copy-user-1')).toMatchObject({
         done: false,
         group: { done: 1, total: 2 },
+      });
+    });
+
+    it('names the people of a task for several, for an officer’s minutes row (doneMarks, #6051)', async () => {
+      mockTaskRepo.findByIds.mockResolvedValue([copyOf('user-1')]);
+      mockTaskRepo.findGroups.mockResolvedValue([
+        {
+          id: 'group-1',
+          chapter_id: 'ch-1',
+          created_by: 'admin-1',
+          audience: 'people' as const,
+          target_id: null,
+          target_name: null,
+          created_at: '2026-11-17T00:00:00.000Z',
+        },
+      ]);
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1'),
+        copyOf('user-2', { status: TaskStatus.COMPLETED }),
+      ]);
+
+      const marks = await service.doneMarks('ch-1', ['copy-user-1']);
+
+      expect(marks.get('copy-user-1')?.who).toEqual({
+        audience: 'people',
+        audience_name: null,
+        assignee_ids: ['user-1', 'user-2'],
       });
     });
 
@@ -1765,6 +1828,180 @@ describe('TaskService', () => {
     });
   });
 
+  describe('addToGroup (#5905)', () => {
+    const member = (userId: string, roleIds: string[] = ['role-1']) =>
+      memberFixture({ ...baseMember, user_id: userId, role_ids: roleIds });
+    const copyOf = (assigneeId: string, over: Partial<Task> = {}): Task => ({
+      ...baseTask,
+      id: `copy-${assigneeId}`,
+      assignee_id: assigneeId,
+      group_id: 'group-1',
+      ...over,
+    });
+    const group = {
+      id: 'group-1',
+      chapter_id: 'ch-1',
+      created_by: 'admin-1',
+      audience: 'people' as const,
+      target_id: null,
+      target_name: null,
+      created_at: '2026-11-17T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        member('admin-1'),
+        member('user-1'),
+        member('user-2'),
+        member('user-3'),
+        member('alum-1', ['role-alumni']),
+      ]);
+      mockRbac.getAlumniRoleId.mockResolvedValue('role-alumni');
+      mockTaskRepo.findById.mockResolvedValue(copyOf('user-1'));
+      mockTaskRepo.findGroups.mockResolvedValue([group]);
+    });
+
+    it('gives each new member a copy made from the one asked on, pushes them, and counts them in the group', async () => {
+      mockTaskRepo.findGroupCopies
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+        ])
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+          copyOf('user-2'),
+          copyOf('user-3'),
+        ]);
+      mockTaskRepo.addGroupCopies.mockResolvedValue([
+        copyOf('user-2'),
+        copyOf('user-3'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2', 'user-3', 'user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-1',
+        ['user-2', 'user-3'],
+      );
+      const pushed = mockNotificationService.notifyUser.mock.calls.map(
+        ([id]) => id,
+      );
+      expect(pushed).toEqual(expect.arrayContaining(['user-2', 'user-3']));
+      // The group is counted after the copies are written, so the answer
+      // includes them.
+      expect(
+        mockTaskRepo.findGroupCopyStates.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        mockTaskRepo.addGroupCopies.mock.invocationCallOrder[0],
+      );
+      expect(result).toEqual({
+        added: ['user-2', 'user-3'],
+        group: {
+          id: 'group-1',
+          audience: 'people',
+          target_id: null,
+          target_name: null,
+          total: 3,
+          done: 1,
+          confirmed: 0,
+        },
+      });
+    });
+
+    it('skips a member who already has a copy, writing nothing when that is everyone asked', async () => {
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1'),
+        copyOf('user-2'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+      expect(result.added).toEqual([]);
+      expect(result.group.total).toBe(2);
+    });
+
+    it('makes the copies from an open copy when the one asked on is confirmed', async () => {
+      mockTaskRepo.findById.mockResolvedValue(
+        copyOf('user-1', { points_awarded: true }),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1', { points_awarded: true }),
+        copyOf('user-2'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it('makes them from the copy confirmed last when every copy is confirmed', async () => {
+      const paid = (id: string, at: string) =>
+        copyOf(id, { points_awarded: true, confirmed_at: at });
+      mockTaskRepo.findById.mockResolvedValue(
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+        paid('user-2', '2026-11-22T00:00:00.000Z'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it.each([
+      ['an alum', ['user-3', 'alum-1']],
+      ['someone outside the chapter', ['stranger']],
+    ])('refuses a list with %s, writing nothing', async (_label, ids) => {
+      await expect(
+        service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ids),
+      ).rejects.toThrow(
+        'Everyone you pick must be an active member of the chapter',
+      );
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+    });
+
+    it("refuses a task that isn't for a group", async () => {
+      mockTaskRepo.findById.mockResolvedValue({ ...baseTask, group_id: null });
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
+      ).rejects.toThrow("This task isn't for a group");
+    });
+
+    it('is a 404 for a task not in the chapter', async () => {
+      mockTaskRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
+      ).rejects.toThrow('Task not found');
+    });
+  });
+
   describe('repeating tasks (#5119)', () => {
     const RULE = 'FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York';
     const create = (extra: Partial<CreateTaskInput> = {}) =>
@@ -1809,6 +2046,7 @@ describe('TaskService', () => {
         first_due_at: '2026-11-17T02:00:00.000Z',
         latest_due_at: '2026-11-17T02:00:00.000Z',
         next_due_date: '2026-11-23',
+        attachments: [],
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -1835,6 +2073,14 @@ describe('TaskService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
       expect(mockTaskRepo.createSeries).not.toHaveBeenCalled();
+    });
+
+    it('refuses a repeat with no due date, writing nothing (#5761)', async () => {
+      await expect(
+        create({ due_date: null, due_at: undefined }),
+      ).rejects.toThrow(TASK_REPEAT_NEEDS_DUE_DATE);
+      expect(mockTaskRepo.createSeries).not.toHaveBeenCalled();
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
     });
 
     it('makes a plain task for a null rule', async () => {
@@ -1889,6 +2135,147 @@ describe('TaskService', () => {
     });
   });
 
+  describe('attachments (Frapp links)', () => {
+    const DOC = '00000000-0000-4000-8000-0000000000d1';
+    const MSG = '00000000-0000-4000-8000-0000000000a1';
+
+    it("stores a task's links with ids only, its message on its own channel", async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue(baseTask);
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Finish the rush schedule',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        attachments: [
+          { id: 'a', kind: 'document', document_id: DOC, title: 'Bylaws' },
+          {
+            id: 'b',
+            kind: 'message',
+            channel_id: 'sent-by-the-client',
+            message_id: MSG,
+          },
+          { id: 'c', kind: 'link', url: 'https://www.docs.google.com/x' },
+        ],
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            { id: 'a', kind: 'document', document_id: DOC },
+            {
+              id: 'b',
+              kind: 'message',
+              channel_id: `channel-of-${MSG}`,
+              message_id: MSG,
+            },
+            {
+              id: 'c',
+              kind: 'link',
+              url: 'https://www.docs.google.com/x',
+              title: 'docs.google.com',
+            },
+          ],
+        }),
+      );
+    });
+
+    it("refuses a record that is not the chapter's, writing nothing", async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      linkRepos.missing.add(DOC);
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          title: 'Read the bylaws',
+          assignee_id: 'user-1',
+          created_by: 'admin-1',
+          attachments: [{ id: 'a', kind: 'document', document_id: DOC }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a record newly attached from a module the chapter turned off', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      linkRepos.enabledModules.documents = false;
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          title: 'Read the bylaws',
+          assignee_id: 'user-1',
+          created_by: 'admin-1',
+          attachments: [{ id: 'a', kind: 'document', document_id: DOC }],
+        }),
+      ).rejects.toThrow('Chapter Files is off in this chapter');
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first when the same record comes twice', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue(baseTask);
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Read the bylaws',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        attachments: [
+          { id: 'a', kind: 'event', event_id: DOC },
+          { id: 'b', kind: 'event', event_id: DOC },
+        ],
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [{ id: 'a', kind: 'event', event_id: DOC }],
+        }),
+      );
+    });
+
+    it('keeps a record it already held, even once it is gone', async () => {
+      const held = { id: 'a', kind: 'document' as const, document_id: DOC };
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        attachments: [held],
+      });
+      mockTaskRepo.updateUnconfirmed.mockImplementation((_id, _ch, patch) =>
+        Promise.resolve({ ...baseTask, ...patch }),
+      );
+      linkRepos.missing.add(DOC);
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        attachments: [
+          held,
+          { id: 'b', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+      expect(mockTaskRepo.updateUnconfirmed).toHaveBeenCalledWith(
+        'task-1',
+        'ch-1',
+        {
+          attachments: [
+            held,
+            { id: 'b', kind: 'link', url: 'https://a.example', title: 'A' },
+          ],
+        },
+      );
+      expect(linkRepos.documentRepo.findByIds).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the list is unchanged', async () => {
+      const held = {
+        id: 'a',
+        kind: 'link' as const,
+        url: 'https://a.example',
+        title: 'A',
+      };
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        attachments: [held],
+      });
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        attachments: [held],
+      });
+      expect(mockTaskRepo.updateUnconfirmed).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     it('links a task suggested from minutes to them by id (#5562)', async () => {
       mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
@@ -1940,6 +2327,64 @@ describe('TaskService', () => {
         confirmed_at: null,
       });
       expect(result).toEqual({ ...baseTask, photos: [] });
+    });
+
+    describe('with no due date (#5761)', () => {
+      const create = (extra: Partial<CreateTaskInput> = {}) =>
+        service.create({
+          chapter_id: 'ch-1',
+          title: 'Plan the formal',
+          assignee_id: 'user-1',
+          created_by: 'admin-1',
+          ...extra,
+        });
+
+      beforeEach(() => {
+        mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+        mockTaskRepo.create.mockResolvedValue({ ...baseTask, due_date: null });
+      });
+
+      it('stores a task with the due date omitted as undated', async () => {
+        await create();
+
+        expect(mockTaskRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ due_date: null, due_at: null }),
+        );
+      });
+
+      it('stores a task sent with a null due date as undated', async () => {
+        await create({ due_date: null });
+
+        expect(mockTaskRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ due_date: null, due_at: null }),
+        );
+      });
+
+      it('refuses a due time with no day, writing nothing', async () => {
+        await expect(
+          create({ due_at: '2099-03-15T21:00:00.000Z' }),
+        ).rejects.toThrow('A due time needs a due date');
+        expect(mockTaskRepo.create).not.toHaveBeenCalled();
+      });
+
+      it('tells the assignee who it is from without naming a day', async () => {
+        mockTaskRepo.create.mockResolvedValue({
+          ...baseTask,
+          due_date: null,
+          point_reward: 10,
+        });
+        mockUserRepo.findByIds.mockResolvedValue([
+          userFixture({ id: 'admin-1', display_name: 'Paul Carlson' }),
+        ]);
+
+        await create({ point_reward: 10 });
+
+        expect(mockNotificationService.notifyUser).toHaveBeenCalledWith(
+          'user-1',
+          'ch-1',
+          expect.objectContaining({ body: 'From Paul Carlson · 10 points' }),
+        );
+      });
     });
 
     it('adds the subtasks in order after the task (#4003)', async () => {
@@ -2232,6 +2677,40 @@ describe('TaskService', () => {
     });
   });
 
+  describe('shareToChat (#5772)', () => {
+    it("posts the task's own card: its creator as assigner, its live status, sent as the linker", async () => {
+      mockUserRepo.findByIds.mockResolvedValue([
+        { id: 'admin-1', display_name: 'Admin Alice' } as User,
+        { id: 'user-1', display_name: 'Member Bob' } as User,
+      ]);
+
+      await service.shareToChat({ ...baseTask, status: 'COMPLETED' } as never, {
+        chapter_id: 'ch-1',
+        channel_id: 'channel-1',
+        sender_id: 'user-9',
+        client_message_id: 'cmid-9',
+      });
+
+      expect(mockChatService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel_id: 'channel-1',
+          sender_id: 'user-9',
+          kind: 'task',
+          system_originated: true,
+          client_message_id: 'cmid-9',
+          content: `"${baseTask.title}" for Member Bob (due ${baseTask.due_date})`,
+          payload: expect.objectContaining({
+            task_id: baseTask.id,
+            assigner_user_id: baseTask.created_by,
+            assigner_name: 'Admin Alice',
+            assignee_name: 'Member Bob',
+            status: 'COMPLETED',
+          }),
+        }),
+      );
+    });
+  });
+
   describe('updateStatus', () => {
     it('should allow TODO → IN_PROGRESS transition', async () => {
       const updated: Task = { ...baseTask, status: TaskStatus.IN_PROGRESS };
@@ -2279,6 +2758,8 @@ describe('TaskService', () => {
         expect.objectContaining({
           status: TaskStatus.COMPLETED,
           completed_at: expect.any(String),
+          // Who marked it done (#5732).
+          completed_by: 'user-1',
         }),
       );
       expect(result.status).toBe(TaskStatus.COMPLETED);
@@ -2318,6 +2799,10 @@ describe('TaskService', () => {
         expect(mockTaskRepo.update).not.toHaveBeenCalled();
         expect(result.status).toBe(TaskStatus.IN_PROGRESS);
         expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+        // Activity no longer says it was finished (#5732).
+        expect(
+          mockNotificationService.retractTaskCompletion,
+        ).toHaveBeenCalledWith('ch-1', 'task-1');
       });
 
       it('refuses once an officer has confirmed it', async () => {
@@ -2660,6 +3145,7 @@ describe('TaskService', () => {
         'task-1',
         'ch-1',
         'Needs more work',
+        ADMIN,
       );
 
       // Stamped with when it was sent back, which Activity reads as the
@@ -2684,6 +3170,10 @@ describe('TaskService', () => {
           body: '"Needs more work"',
         }),
       );
+      // Open again, so Activity stops saying it was finished (#5732).
+      expect(
+        mockNotificationService.retractTaskCompletion,
+      ).toHaveBeenCalledWith('ch-1', 'task-1');
     });
 
     it('names the officer who sent it back', async () => {
@@ -2718,15 +3208,32 @@ describe('TaskService', () => {
       'refuses a send-back with no reason (%p)',
       async (comment) => {
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', comment),
+          service.rejectCompletion('task-1', 'ch-1', comment, ADMIN),
         ).rejects.toThrow('Say what needs to change to send it back');
         expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
       },
     );
 
+    it("refuses an officer's send-back of their own task with a 403, writing nothing (#5917)", async () => {
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        assignee_id: 'admin-1',
+        status: TaskStatus.COMPLETED,
+      });
+
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow('Admins cannot send back their own task completions');
+      expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
     it('refuses a reason over 200 characters', async () => {
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201)),
+        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201), ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
     });
@@ -2744,6 +3251,7 @@ describe('TaskService', () => {
       });
 
       await service.rejectCompletion('task-1', 'ch-1', '  Blurry  ', {
+        ...ADMIN,
         requirePhoto: true,
       });
 
@@ -2773,7 +3281,7 @@ describe('TaskService', () => {
         status: TaskStatus.IN_PROGRESS,
       });
 
-      await service.rejectCompletion('task-1', 'ch-1', 'Not finished');
+      await service.rejectCompletion('task-1', 'ch-1', 'Not finished', ADMIN);
 
       expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
         'task-1',
@@ -2791,7 +3299,7 @@ describe('TaskService', () => {
       mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
     });
@@ -2807,10 +3315,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(confirmed);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(
         'Cannot reject a task that has already been confirmed and points awarded',
       );
@@ -2822,10 +3330,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(baseTask);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow('Only completed tasks can be rejected');
 
       expect(mockTaskRepo.update).not.toHaveBeenCalled();
@@ -2889,6 +3397,107 @@ describe('TaskService', () => {
       });
     });
 
+    it('listRows: bare rows and their total in one read, a member only their own (#5746)', async () => {
+      mockTaskRepo.findByChapterCounted.mockResolvedValue({
+        tasks: [baseTask],
+        total: 7,
+      });
+
+      const result = await service.listRows('ch-1', 'user-1', false, {
+        // A member's option can't widen the read past their own tasks.
+        unconfirmedOrCompletedSince: '2026-11-08T00:00:00.000Z',
+        limit: 25,
+        withTotal: true,
+      });
+
+      expect(mockTaskRepo.findByChapterCounted).toHaveBeenCalledWith(
+        'ch-1',
+        {
+          unconfirmedOrCompletedSince: '2026-11-08T00:00:00.000Z',
+          limit: 25,
+          assigneeId: 'user-1',
+        },
+        { withTotal: true },
+      );
+      // None of what `list` adds to a task: no subtask, photo, series or
+      // open-task read.
+      expect(result).toEqual({ tasks: [asView(baseTask)], total: 7 });
+      expect(mockTaskRepo.findSubtasks).not.toHaveBeenCalled();
+      expect(mockTaskRepo.findPhotos).not.toHaveBeenCalled();
+      expect(mockTaskRepo.findSeries).not.toHaveBeenCalled();
+      expect(mockOpenTaskRepo.findClaimedFrom).not.toHaveBeenCalled();
+    });
+
+    it('listRows: a tasks:manage holder reads the chapter as asked', async () => {
+      mockTaskRepo.findByChapterCounted.mockResolvedValue({
+        tasks: [],
+        total: 0,
+      });
+
+      await service.listRows('ch-1', 'user-1', true, { createdBy: 'user-1' });
+
+      expect(mockTaskRepo.findByChapterCounted).toHaveBeenCalledWith(
+        'ch-1',
+        { createdBy: 'user-1' },
+        { withTotal: undefined },
+      );
+    });
+
+    it("withGroupSummaries: every task's group from one read, null for one-person tasks", async () => {
+      mockTaskRepo.findGroups.mockResolvedValue([
+        {
+          id: 'group-1',
+          chapter_id: 'ch-1',
+          created_by: 'admin-1',
+          audience: 'everyone',
+          target_id: null,
+          target_name: null,
+          created_at: '2026-11-01T00:00:00.000Z',
+        },
+      ]);
+      mockTaskRepo.findGroupCopyStates.mockResolvedValue([
+        {
+          id: 'copy-1',
+          group_id: 'group-1',
+          assignee_id: 'user-1',
+          status: TaskStatus.COMPLETED,
+          points_awarded: true,
+          due_date: '2026-11-20',
+          due_at: null,
+        },
+        {
+          id: 'copy-2',
+          group_id: 'group-1',
+          assignee_id: 'user-2',
+          status: TaskStatus.TODO,
+          points_awarded: false,
+          due_date: '2026-11-20',
+          due_at: null,
+        },
+      ]);
+      const copy = asView({ ...baseTask, id: 'copy-1', group_id: 'group-1' });
+      const twin = asView({ ...baseTask, id: 'copy-2', group_id: 'group-1' });
+
+      const result = await service.withGroupSummaries('ch-1', [
+        copy,
+        asView(baseTask),
+        twin,
+      ]);
+
+      expect(result.map((task) => task.group)).toEqual([
+        expect.objectContaining({
+          id: 'group-1',
+          total: 2,
+          done: 1,
+          confirmed: 1,
+        }),
+        null,
+        expect.objectContaining({ id: 'group-1', total: 2 }),
+      ]);
+      expect(mockTaskRepo.findGroups).toHaveBeenCalledTimes(1);
+      expect(mockTaskRepo.findGroupCopyStates).toHaveBeenCalledTimes(1);
+    });
+
     it('refuses a calendar-invalid cursor with a 400, not a database 500', async () => {
       await expect(
         service.list('ch-1', 'user-1', true, {
@@ -2924,6 +3533,16 @@ describe('TaskService', () => {
       const result = await service.list('ch-1', 'user-1', true);
 
       expect(result[0].status).toBe(TaskStatus.OVERDUE);
+    });
+
+    it('is never overdue with no due date (#5761)', async () => {
+      mockTaskRepo.findByChapter.mockResolvedValue([
+        { ...baseTask, status: TaskStatus.TODO, due_date: null },
+      ]);
+
+      const result = await service.list('ch-1', 'user-1', true);
+
+      expect(result[0].status).toBe(TaskStatus.TODO);
     });
 
     it('is overdue from the minute of a due time, not the day after (#4003)', async () => {
@@ -3119,6 +3738,57 @@ describe('TaskService', () => {
       );
     });
 
+    it('takes the due date off with null, and its time with it (#5761)', async () => {
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        due_at: '2099-03-15T21:00:00.000Z',
+      });
+      mockTaskRepo.updateUnconfirmed.mockResolvedValue({
+        ...baseTask,
+        due_date: null,
+      });
+
+      await service.update('task-1', 'ch-1', 'admin-1', { due_date: null });
+
+      expect(mockTaskRepo.updateUnconfirmed).toHaveBeenCalledWith(
+        'task-1',
+        'ch-1',
+        { due_date: null, due_at: null },
+      );
+      expect(mockTaskRepo.releaseReminderClaims).toHaveBeenCalledWith(
+        'ch-1',
+        'task-1',
+      );
+    });
+
+    it('gives an undated task a due date (#5761)', async () => {
+      mockTaskRepo.findById.mockResolvedValue({ ...baseTask, due_date: null });
+      mockTaskRepo.updateUnconfirmed.mockResolvedValue(baseTask);
+
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        due_date: '2099-04-01',
+      });
+
+      expect(mockTaskRepo.updateUnconfirmed).toHaveBeenCalledWith(
+        'task-1',
+        'ch-1',
+        { due_date: '2099-04-01' },
+      );
+    });
+
+    it('keeps a repeating copy on its day: null is refused (#5761)', async () => {
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        series_id: 'series-1',
+        occurrence_date: '2099-03-15',
+      });
+
+      await expect(
+        service.update('task-1', 'ch-1', 'admin-1', { due_date: null }),
+      ).rejects.toThrow(TASK_REPEAT_NEEDS_DUE_DATE);
+      expect(mockTaskRepo.updateUnconfirmed).not.toHaveBeenCalled();
+    });
+
     it('refuses a time that does not fall on the due date', async () => {
       mockTaskRepo.findById.mockResolvedValue(baseTask);
 
@@ -3155,12 +3825,17 @@ describe('TaskService', () => {
           assignee_id: 'user-2',
           status: TaskStatus.TODO,
           completed_at: null,
+          completed_by: null,
           sent_back_at: null,
           sent_back_reason: null,
           proof_link: null,
           completion_note: null,
         },
       );
+      // The completion it held is gone from Activity (#5732).
+      expect(
+        mockNotificationService.retractTaskCompletion,
+      ).toHaveBeenCalledWith('ch-1', 'task-1');
       expect(mockTaskRepo.releaseReminderClaims).toHaveBeenCalled();
       expect(mockNotificationService.notifyUser).toHaveBeenCalledWith(
         'user-2',
@@ -3396,7 +4071,7 @@ describe('TaskService', () => {
           'ch-1',
           expect.objectContaining({
             title: 'A member submitted: Test Task',
-            body: 'Confirm to award 10 points',
+            body: '10 points',
             priority: 'NORMAL',
             category: 'tasks',
             threadId: 'tasks:review',
@@ -3844,18 +4519,24 @@ describe('TaskService', () => {
         expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
       });
 
-      it.each(['javascript:alert(1)', 'not a link', 'ftp://example.com/x'])(
-        'refuses an invalid link (%s)',
-        async (link) => {
-          mockTaskRepo.findById.mockResolvedValue(
-            inProgress({ proof_kind: 'link' }),
-          );
-          await expect(markDone({ proof_link: link })).rejects.toThrow(
-            'proof_link must be a web link',
-          );
-          expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
-        },
-      );
+      it.each([
+        'javascript:alert(1)',
+        'not a link',
+        'ftp://example.com/x',
+        // Names that resolve nowhere, which opened as "server can't be
+        // found" on the officer's phone (#5882).
+        'https://test',
+        'http://localhost:3000/x',
+        'https://192.168.1.20/photo.jpg',
+      ])('refuses an invalid link (%s)', async (link) => {
+        mockTaskRepo.findById.mockResolvedValue(
+          inProgress({ proof_kind: 'link' }),
+        );
+        await expect(markDone({ proof_link: link })).rejects.toThrow(
+          TASK_PROOF_LINK_INVALID_MESSAGE,
+        );
+        expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
+      });
 
       it('stores a Link task’s trimmed link with the completion', async () => {
         mockTaskRepo.findById.mockResolvedValue(
@@ -4032,7 +4713,7 @@ describe('TaskService', () => {
           'ch-1',
           expect.objectContaining({
             title: 'Shawn Klein resubmitted: Test Task',
-            body: 'Replied "Fixed the corner" · 1 photo · Confirm to award 10 points',
+            body: 'Replied "Fixed the corner" · 1 photo · 10 points',
             threadId: 'tasks:review',
           }),
         );
@@ -4054,7 +4735,7 @@ describe('TaskService', () => {
           'admin-1',
           'ch-1',
           expect.objectContaining({
-            body: 'Confirm to award 10 points',
+            body: '10 points',
           }),
         );
       });
@@ -4075,7 +4756,7 @@ describe('TaskService', () => {
         expect(result.points_awarded).toBe(true);
         const push = mockNotificationService.notifyUser.mock.calls[0][2];
         expect(push.title).toBe('A member finished: Test Task');
-        expect(push.body).toBe("Done · send it back if something's off");
+        expect(push.body).toBe('Done');
       });
 
       it('compare-and-sets on the status, points and proof kind it judged', async () => {
@@ -4268,7 +4949,7 @@ describe('TaskService', () => {
         mockTaskRepo.deletePhotos.mockResolvedValue([proofRow]);
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.deletePhotos).toHaveBeenCalledWith(
           'ch-1',
@@ -4286,7 +4967,7 @@ describe('TaskService', () => {
         mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+          service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
         ).rejects.toThrow(BadRequestException);
         expect(mockTaskRepo.deletePhotos).not.toHaveBeenCalled();
         expect(mockStorage.deleteFiles).not.toHaveBeenCalled();
@@ -4316,7 +4997,7 @@ describe('TaskService', () => {
         it('send-back refuses it', async () => {
           mockTaskRepo.findById.mockResolvedValue(officerConfirmed);
           await expect(
-            service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+            service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
           ).rejects.toThrow('already been confirmed');
           expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
         });
@@ -4333,7 +5014,7 @@ describe('TaskService', () => {
         );
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
           'task-1',

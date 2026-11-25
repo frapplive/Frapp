@@ -5,75 +5,86 @@ import {
   ChevronDown,
   Loader2,
   MessageSquare,
-  MoreHorizontal,
   Pencil,
+  Timer,
   UserMinus,
 } from "lucide-react";
 import { SectionSkeleton } from "@/components/shared/page-skeletons";
 import { SkeletonText } from "@/components/shared/async-states";
 import {
+  useLiftChatTimeout,
   useMemberByUserId,
   useMemberDisplayNames,
   useMyPermissions,
+  useNowDate,
   useRemoveMember,
-  useRoles,
-  useUpdateMemberRoles,
 } from "@repo/hooks";
+import { errorCopy } from "@repo/hooks/error-copy";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
+import { TimeoutMemberDialog } from "./timeout-member-dialog";
 import {
   BIRTHDAY_COPY,
   can,
   CORRECTION_MENU_LABEL,
   formatBirthday,
-  memberAccessRoleIds,
   phoneHref,
-  removesMemberAccess,
-  resolveRoleChips,
-  rolesAfterSave,
 } from "@repo/validation";
-import { formatDay } from "@repo/formatting";
+import {
+  formatCustomFieldValue,
+  formatDay,
+  formatPhone,
+} from "@repo/formatting";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { IconButton } from "@/components/ui/icon-button";
+import Link from "next/link";
+import { ActionMenuButton } from "@/components/shared/row-menu";
+import { useSubscriptionGate } from "@/components/shared/subscription-gate";
+import { PointsAdjustmentDialog } from "@/components/points/points-adjustment-dialog";
+import { AdjustGlyph } from "@/components/points/points-glyphs";
+import { ADJUST_POINTS_LABEL } from "@repo/validation";
+import { pointsLedgerPath } from "@/components/settings/settings-paths";
+import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
   Panel,
   PanelBody,
   PanelContent,
-  PanelFooter,
   PanelHeader,
   PanelTitle,
+  type PanelDocking,
 } from "@/components/shared/panel";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
-import { dashboardTableCheckboxClassName } from "@/components/shared/table-controls";
 import { asArray, cn, getErrorMessage, initials } from "@/lib/utils";
 import { memberLabel } from "@repo/hooks/display-names";
+import { useMemberPhoneReach } from "@repo/hooks";
+import {
+  PHONE_REACH_LABEL,
+  phoneReachLastOpened,
+  phoneReachSummary,
+} from "@repo/validation";
 import {
   memberMenuButtonLabel,
   REMOVE_CONFIRM_BODY,
   REMOVE_FROM_CHAPTER_LABEL,
   removeConfirmTitle,
 } from "@repo/hooks/member-removal-copy";
-import { parseChapterRoles } from "@repo/hooks/chapter-roles";
 import {
   DETAIL_LIST,
   DetailRow,
   metaLine,
-  RoleChip,
   stringField,
   stringIds,
   type MemberRecord,
 } from "@/components/members/member-detail-rows";
-import { MemberGroupsSection } from "@/components/members/member-groups-section";
+import { MemberAssignments } from "@/components/members/member-assignments";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { MemberCorrectionDialog } from "@/components/members/member-correction-dialog";
 
 type CustomFieldValue = {
@@ -86,10 +97,7 @@ type CustomFieldValue = {
 function formatCustomValue(
   field: CustomFieldValue & { value: string },
 ): string {
-  if (field.type === "boolean") {
-    return field.value === "true" ? "Yes" : "No";
-  }
-  return field.value;
+  return formatCustomFieldValue(field.type, field.value) ?? field.value;
 }
 
 /**
@@ -158,68 +166,13 @@ type MemberDetailSheetProps = {
   /**
    * Open inside the page that lists the member (Directory, Alumni) rather
    * than over everything (`Panel`'s `docked`, components.md § Surface size).
-   * Chat, which has no page of its own for a member, leaves it off.
+   * Chat, which has no page of its own for a member, docks it `"here"`: over
+   * the chat column, with a way back to the channel.
    */
-  docked?: boolean;
+  docked?: PanelDocking;
   /** The docked back arrow's name: where it goes ("Back to directory"). */
   backLabel?: string;
 };
-
-/**
- * One role the officer can tick. The row is the role's name alone: its id and
- * key are the system's words, never the chapter's (principles.md P2.2).
- */
-/** Mobile's words for a locked row (`apps/mobile/lib/directory/role-editor.ts`). */
-const ROLES_LOCKED_CAPTION = "Changes with Transfer presidency";
-
-function RoleChecklistItem({
-  title,
-  caption,
-  checked,
-  disabled,
-  onChange,
-}: {
-  title: string;
-  caption?: string;
-  checked: boolean;
-  disabled: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex items-center justify-between gap-3 rounded-md border border-border p-3 transition-colors",
-        disabled ? "cursor-default" : "cursor-pointer hover:bg-card-hover",
-      )}
-    >
-      <div className="min-w-0">
-        <p className="text-sm font-semibold">{title}</p>
-        {caption ? (
-          <p className="text-caption text-muted-foreground">{caption}</p>
-        ) : null}
-      </div>
-      <input
-        type="checkbox"
-        className={dashboardTableCheckboxClassName}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    </label>
-  );
-}
-
-function toggleSelection(
-  setter: React.Dispatch<React.SetStateAction<string[]>>,
-  roleId: string,
-  isChecked: boolean,
-) {
-  setter((previous) =>
-    isChecked
-      ? [...new Set([...previous, roleId])]
-      : previous.filter((id) => id !== roleId),
-  );
-}
 
 /**
  * A member's profile: one sheet for every door on web (#3726), keyed by
@@ -250,11 +203,10 @@ function toggleSelection(
  * surface's title (`PanelTitle`: the sheet's `SheetTitle`, or the docked
  * region's heading), so it is still announced by it.
  *
- * **Roles** are read-only chips for everyone. A viewer holding `roles:manage`
- * (the gate on `PATCH /v1/members/{id}/roles`) also gets Edit, which swaps the
- * chips for the checklists and puts Save and Cancel in the footer; this is how
- * an officer changes a member's roles from chat without leaving it (tester
- * report on #3726).
+ * **Roles and groups** (Paul, 2026-11-19) sit right under Message as two
+ * rows of chips, `MemberAssignments`: a viewer who may change them takes one
+ * away with its x and gives one from a single "+ Add" list of roles and
+ * groups, each saving at once. There is no Edit mode and no Save footer.
  *
  * **Remove from chapter** sits behind the `⋯` beside the close, never on the
  * face of the profile (Paul, 2026-11-11: nobody opens a profile to remove
@@ -269,7 +221,8 @@ function toggleSelection(
  *
  * **Edit name and graduation year** (#4367) is in the same `⋯`, for an officer
  * the API says may fix them (`viewer_can_edit_profile`: `roles:manage`, the
- * member ranks below them, and is in no other chapter). It opens
+ * member ranks below them or at their own rank (#5900), and is in no other
+ * chapter). It opens
  * `MemberCorrectionDialog`. Nothing else on someone's profile is an officer's
  * to change.
  */
@@ -284,28 +237,21 @@ export function MemberDetailSheet({
   backLabel,
 }: MemberDetailSheetProps) {
   const memberQuery = useMemberByUserId(userId ?? "");
-  const rolesQuery = useRoles();
+  // Whether Frapp's notifications reach this member's phone. The server sends
+  // every member's only to officers who can invite or manage roles, and
+  // anyone else only their own, so a missing entry draws no row.
+  const { reach: phoneReachMap } = useMemberPhoneReach();
+  const phoneReach = userId ? phoneReachMap?.byUserId.get(userId) : undefined;
+  const phoneLastOpened = phoneReach ? phoneReachLastOpened(phoneReach) : null;
   // The same role-color resolution chat's name uses (#3860).
   const { avatarTintFor } = useMemberDisplayNames();
   const myPermissionsQuery = useMyPermissions();
   const myPermissions = myPermissionsQuery.data?.permissions;
-  const updateRolesMutation = useUpdateMemberRoles();
+  const isCouncil = useIsCouncil();
   const removeMemberMutation = useRemoveMember();
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
-  const rolesHeadingId = useId();
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
-  // Whose roles are being edited. Keyed by member rather than a boolean, so
-  // the editor never carries over to the next member the sheet opens on.
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  // Closing drops the editor and its unsaved picks, however the sheet closed
-  // (Escape, the overlay, the X, or the parent). Reopening the same member
-  // shows the chips again, never a checklist seeded from roles that may have
-  // changed since. Adjusted during render, not in an effect, so no frame draws
-  // the stale editor.
-  if (!open && editingUserId !== null) setEditingUserId(null);
-  const editingRoles = open && userId !== null && editingUserId === userId;
-  // Whose More details are open, keyed by member like the role editor, so the
+  // Whose More details are open, keyed by member, so the
   // custom fields start folded on every member and every opening.
   const [detailsUserId, setDetailsUserId] = useState<string | null>(null);
   if (!open && detailsUserId !== null) setDetailsUserId(null);
@@ -313,6 +259,20 @@ export function MemberDetailSheet({
   const detailsRegionId = useId();
   const [correcting, setCorrecting] = useState(false);
   if (!open && correcting) setCorrecting(false);
+  // Adjust points starts from the member it is for (#5950; the Points page's
+  // own button until then, which asked who). `POST /v1/points/adjust` is
+  // paid-ops, so the item is held while the chapter's plan blocks writes.
+  const [adjusting, setAdjusting] = useState(false);
+  if (!open && adjusting) setAdjusting(false);
+  // Time out (#6006): the dialog the chat's message menu opens too.
+  const [timingOut, setTimingOut] = useState(false);
+  if (!open && timingOut) setTimingOut(false);
+  const liftTimeout = useLiftChatTimeout();
+  const now = useNowDate();
+  const adjustGate = useSubscriptionGate();
+  const moduleGate = useChapterModuleGateState();
+  const pointsOn =
+    moduleGate.status === "ready" && moduleGate.isModuleEnabled("points");
 
   const fetched =
     memberQuery.data && typeof memberQuery.data === "object"
@@ -329,32 +289,6 @@ export function MemberDetailSheet({
     () => stringIds(member?.role_ids),
     [member?.role_ids],
   );
-  const roleChips = useMemo(
-    () => resolveRoleChips(rolesQuery.data, memberRoleIds),
-    [rolesQuery.data, memberRoleIds],
-  );
-  // Distinct from "no role": while the read is in flight an empty list would
-  // flash a wrong "No roles".
-  const rolesLoading = rolesQuery.isPending;
-  // A failed roles read resolves no chip, which must not read as a member
-  // with no roles: say it failed and offer the read again.
-  const rolesFailed =
-    rolesQuery.isError &&
-    rolesQuery.data === undefined &&
-    memberRoleIds.length > 0;
-
-  const roles = useMemo(
-    () => parseChapterRoles(rolesQuery.data),
-    [rolesQuery.data],
-  );
-  // The Everyone role (#4191) is no row. A locked role (one holding `*`,
-  // President above all) is a row nobody ticks here: the API refuses to move
-  // it, so it changes hands only through Transfer presidency, as on mobile.
-  const roleOptions = useMemo(
-    () => roles.filter((role) => !role.everyone),
-    [roles],
-  );
-
   // `memberLabel`, the helper the directory row uses: this sheet opens from
   // that row, so the two must not name an unnamed member two different ways.
   const seedIdentity = !member && userId ? identity : null;
@@ -393,17 +327,6 @@ export function MemberDetailSheet({
     isPending: dmPending,
   } = useMessageMember(dmTargetUserId, () => onOpenChange(false));
 
-  // The writes' own gates, mirrored so a viewer who holds only
-  // `members:view` isn't offered controls that can only 403. Disabled while
-  // the permission read is pending, the same as a failed read. Editing waits
-  // for the roles list: until it loads, the member-access check can't tell
-  // which roles grant access, so a lockout would save without the question
-  // (#3670).
-  const canEditRoles =
-    !!memberId &&
-    !memberQuery.isError &&
-    rolesQuery.isSuccess &&
-    can("roles:manage", myPermissions);
   // The API's answer, read from the profile itself (never the directory row
   // that seeded the sheet, which carries none): it applies the rank rules the
   // removal does, which the client can't see (#4071).
@@ -421,52 +344,46 @@ export function MemberDetailSheet({
     dmTargetUserId !== currentUserId;
   const graduationYear =
     typeof member?.graduation_year === "number" ? member.graduation_year : null;
+  // Never against yourself: the API refuses an officer's own points
+  // (`PointsService`), so the item isn't offered on your own card.
+  const canAdjustPoints =
+    pointsOn &&
+    !!memberId &&
+    !!dmTargetUserId &&
+    dmTargetUserId !== currentUserId &&
+    can("points:adjust", myPermissions);
+  const canSeeLedger = pointsOn && can("points:view_all", myPermissions);
+  // The API's answer (`viewer_can_timeout`: `members:timeout`, not your own
+  // profile, not the President, and ranked below you), from the profile read
+  // only, like Remove's. The running timeout comes with it, to the member
+  // and to whoever can time out.
+  const canTimeOut =
+    !!memberId &&
+    !memberQuery.isError &&
+    fetched?.viewer_can_timeout === true &&
+    dmTargetUserId !== currentUserId;
+  const timeoutLine = runningTimeoutLine(
+    stringField(fetched, "chat_timeout_until"),
+    stringField(fetched, "chat_timeout_reason"),
+    now,
+  );
 
-  function startEditingRoles() {
-    setSelectedRoleIds(memberRoleIds);
-    setEditingUserId(userId);
-  }
-
-  async function handleSaveRoles() {
+  async function handleLiftTimeout() {
     if (!memberId) return;
-    // Taking away the last role with member access locks the member out of
-    // chat, the roster and events, the way the 2026-11-07 testers were
-    // (#3670). The API allows it, so ask first, as mobile's editor does.
-    // Asked of the roles the save ends with, Everyone settled as the API
-    // settles it (#4191): with no other role giving access they keep it.
-    if (
-      removesMemberAccess(
-        memberRoleIds,
-        rolesAfterSave(selectedRoleIds, memberRoleIds, roles),
-        memberAccessRoleIds(roles),
-      )
-    ) {
-      const confirmed = await confirm({
-        title: `Take away ${displayName}'s access?`,
-        description: `With none of these roles, ${displayName} can't open chat, the member list or events.`,
-        confirmLabel: "Take away access",
-        tone: "destructive",
-      });
-      if (!confirmed) return;
-    }
+    const confirmed = await confirm({
+      title: CHAT_TIMEOUT_COPY.liftConfirmTitle(displayName),
+      description: CHAT_TIMEOUT_COPY.liftConfirmBody,
+      confirmLabel: CHAT_TIMEOUT_COPY.lift,
+    });
+    if (!confirmed) return;
     try {
-      await updateRolesMutation.mutateAsync({
-        id: memberId,
-        role_ids: selectedRoleIds,
-      });
-      toast({
-        title: "Roles updated",
-        description: `${displayName}'s roles were saved.`,
-      });
-      setEditingUserId(null);
-      await memberQuery.refetch();
+      await liftTimeout.mutateAsync({ memberId });
     } catch (error) {
       toast({
-        title: "Could not update roles",
-        description: getErrorMessage(
-          error,
-          "Something went wrong. Please retry.",
-        ),
+        title: CHAT_TIMEOUT_COPY.liftFailed,
+        description: errorCopy(error, CHAT_TIMEOUT_COPY.liftFailed, {
+          serverWritesForMembers: true,
+        }),
         variant: "destructive",
       });
     }
@@ -527,39 +444,71 @@ export function MemberDetailSheet({
         */}
         <PanelHeader
           actions={
-            canRemove || canCorrect ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton
-                    label={memberMenuButtonLabel(displayName)}
-                    className="text-muted-foreground"
-                    disabled={removeMemberMutation.isPending}
-                  >
-                    {removeMemberMutation.isPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <MoreHorizontal aria-hidden="true" />
-                    )}
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[220px]">
-                  {canCorrect ? (
-                    <DropdownMenuItem onSelect={() => setCorrecting(true)}>
-                      <Pencil aria-hidden="true" />
-                      {CORRECTION_MENU_LABEL}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canRemove ? (
-                    <DropdownMenuItem
-                      onSelect={() => void handleRemoveMember()}
-                      className="text-destructive-text focus:bg-destructive-tint focus:text-destructive-text"
-                    >
-                      <UserMinus aria-hidden="true" />
-                      {REMOVE_FROM_CHAPTER_LABEL}
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            canRemove || canCorrect || canAdjustPoints || canTimeOut ? (
+              <ActionMenuButton
+                label={memberMenuButtonLabel(displayName)}
+                busy={removeMemberMutation.isPending || liftTimeout.isPending}
+                entries={[
+                  // Most used first; the one aimed at the person's place in
+                  // the chapter stays last (rulebook § 2).
+                  ...(canAdjustPoints
+                    ? [
+                        {
+                          type: "item" as const,
+                          key: "adjust-points",
+                          label: ADJUST_POINTS_LABEL,
+                          icon: AdjustGlyph,
+                          disabled: !adjustGate.allowed,
+                          title: adjustGate.controlProps().title,
+                          onSelect: () => setAdjusting(true),
+                        },
+                      ]
+                    : []),
+                  ...(canCorrect
+                    ? [
+                        {
+                          type: "item" as const,
+                          key: "correct",
+                          label: CORRECTION_MENU_LABEL,
+                          icon: Pencil,
+                          onSelect: () => setCorrecting(true),
+                        },
+                      ]
+                    : []),
+                  // Moderation, before the removal it stops short of.
+                  ...(canTimeOut
+                    ? [
+                        timeoutLine
+                          ? {
+                              type: "item" as const,
+                              key: "lift-timeout",
+                              label: CHAT_TIMEOUT_COPY.lift,
+                              icon: Timer,
+                              onSelect: () => void handleLiftTimeout(),
+                            }
+                          : {
+                              type: "item" as const,
+                              key: "time-out",
+                              label: CHAT_TIMEOUT_COPY.action,
+                              icon: Timer,
+                              onSelect: () => setTimingOut(true),
+                            },
+                      ]
+                    : []),
+                  ...(canRemove
+                    ? [
+                        {
+                          type: "item" as const,
+                          key: "remove",
+                          label: REMOVE_FROM_CHAPTER_LABEL,
+                          icon: UserMinus,
+                          destructive: true,
+                          onSelect: () => void handleRemoveMember(),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             ) : undefined
           }
         />
@@ -586,6 +535,9 @@ export function MemberDetailSheet({
             </PanelTitle>
             {meta ? (
               <p className="text-caption text-muted-foreground">{meta}</p>
+            ) : null}
+            {timeoutLine ? (
+              <p className="text-caption text-warning">{timeoutLine}</p>
             ) : null}
           </div>
 
@@ -622,9 +574,13 @@ export function MemberDetailSheet({
             <>
               {canMessage ? (
                 <Button
-                  // `shrink-0`: the body is a flex column that scrolls, and a
-                  // long role editor would otherwise squeeze the button.
-                  className="mt-5 w-full shrink-0"
+                  // Sized to its label under the name, not a full-width bar
+                  // (Paul, 2026-11-20: "not a big huge button guy"), as
+                  // Slack's and iOS Contacts' profiles draw their Message.
+                  // `shrink-0`: the body is a flex column that scrolls.
+                  variant="secondary"
+                  size="sm"
+                  className="mx-auto mt-4 shrink-0 gap-2"
                   onClick={handleMessage}
                   disabled={dmPending}
                 >
@@ -635,6 +591,18 @@ export function MemberDetailSheet({
                   )}
                   Message
                 </Button>
+              ) : null}
+
+              {userId ? (
+                <MemberAssignments
+                  memberId={memberId}
+                  userId={userId}
+                  roleIds={memberRoleIds}
+                  displayName={displayName}
+                  // Waits for the profile read: a write from the directory
+                  // row that seeded the sheet could drop a role it lacks.
+                  editable={fetched !== null && !memberQuery.isError}
+                />
               ) : null}
 
               <dl className={cn("mt-6", DETAIL_LIST)}>
@@ -648,10 +616,10 @@ export function MemberDetailSheet({
                           FOCUS_RING_OFFSET,
                         )}
                       >
-                        {phone}
+                        {formatPhone(phone)}
                       </a>
                     ) : (
-                      phone
+                      formatPhone(phone)
                     )}
                     {textLink ? (
                       <>
@@ -690,7 +658,37 @@ export function MemberDetailSheet({
                   {joined ?? "Not recorded"}
                 </DetailRow>
                 {typeof points === "number" ? (
-                  <DetailRow label="Points">{points}</DetailRow>
+                  <DetailRow label="Points">
+                    {points}
+                    {/* The transactions behind the number, for a role that
+                        may read them: the chapter ledger, on this member. */}
+                    {canSeeLedger && dmTargetUserId ? (
+                      <>
+                        {" · "}
+                        <Link
+                          href={pointsLedgerPath(dmTargetUserId)}
+                          className={cn(
+                            "rounded-sm underline underline-offset-2",
+                            FOCUS_RING_OFFSET,
+                          )}
+                        >
+                          Ledger
+                        </Link>
+                      </>
+                    ) : null}
+                  </DetailRow>
+                ) : null}
+                {phoneReach ? (
+                  <DetailRow label={PHONE_REACH_LABEL}>
+                    <span className="flex flex-col">
+                      <span>{phoneReachSummary(phoneReach)}</span>
+                      {phoneLastOpened ? (
+                        <span className="text-caption text-muted">
+                          {phoneLastOpened}
+                        </span>
+                      ) : null}
+                    </span>
+                  </DetailRow>
                 ) : null}
                 {onboardingPending ? (
                   <DetailRow label="Onboarding">
@@ -698,82 +696,6 @@ export function MemberDetailSheet({
                   </DetailRow>
                 ) : null}
               </dl>
-
-              <section
-                className="mt-6 space-y-2"
-                aria-labelledby={rolesHeadingId}
-              >
-                <div className="flex items-center justify-between">
-                  <h3
-                    id={rolesHeadingId}
-                    className="text-label font-semibold text-muted-foreground"
-                  >
-                    Roles
-                  </h3>
-                  {canEditRoles && !editingRoles ? (
-                    <button
-                      type="button"
-                      onClick={startEditingRoles}
-                      aria-label={`Edit ${displayName}'s roles`}
-                      className={cn(
-                        "rounded-sm text-label font-semibold text-accent-text hover:underline",
-                        FOCUS_RING_OFFSET,
-                      )}
-                    >
-                      Edit
-                    </button>
-                  ) : null}
-                </div>
-                {editingRoles ? (
-                  <div className="space-y-2">
-                    {roleOptions.map((role) => (
-                      <RoleChecklistItem
-                        key={role.id}
-                        title={role.name}
-                        caption={role.locked ? ROLES_LOCKED_CAPTION : undefined}
-                        checked={selectedRoleIds.includes(role.id)}
-                        disabled={updateRolesMutation.isPending || role.locked}
-                        onChange={(isChecked) =>
-                          toggleSelection(
-                            setSelectedRoleIds,
-                            role.id,
-                            isChecked,
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
-                ) : rolesLoading ? (
-                  <p className="text-caption text-muted-foreground">
-                    Loading roles
-                  </p>
-                ) : rolesFailed ? (
-                  <div className="flex items-center gap-2 text-caption text-muted-foreground">
-                    <span>Couldn&apos;t load roles.</span>
-                    <button
-                      type="button"
-                      onClick={() => void rolesQuery.refetch()}
-                      className={cn(
-                        "rounded-sm font-semibold text-foreground underline-offset-2 hover:underline",
-                        FOCUS_RING_OFFSET,
-                      )}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : roleChips.length > 0 ? (
-                  <ul className="flex flex-wrap gap-1.5">
-                    {roleChips.map((chip) => (
-                      <RoleChip key={chip.id} chip={chip} />
-                    ))}
-                  </ul>
-                ) : (
-                  // A plain member holds only Everyone, which draws no chip
-                  // (#4191): "No roles", as Discord shows a member with only
-                  // @everyone, not "yet", which read as an unfinished join.
-                  <p className="text-caption text-muted-foreground">No roles</p>
-                )}
-              </section>
 
               <MemberPledgeClassSection
                 // Keyed by member, so an open editor never carries over to
@@ -795,11 +717,12 @@ export function MemberDetailSheet({
                   !!memberId &&
                   fetched !== null &&
                   !memberQuery.isError &&
-                  can("roles:manage", myPermissions)
+                  can("roles:manage", myPermissions) &&
+                  // Pledge classes are a chapter's (#5933): their routes
+                  // refuse a council.
+                  !isCouncil
                 }
               />
-
-              <MemberGroupsSection userId={userId} open={open} />
 
               {customFields.length > 0 ? (
                 <section className="mt-6 space-y-2">
@@ -845,26 +768,6 @@ export function MemberDetailSheet({
           ) : null}
         </PanelBody>
 
-        {editingRoles ? (
-          <PanelFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setEditingUserId(null)}
-              disabled={updateRolesMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveRoles}
-              disabled={updateRolesMutation.isPending}
-            >
-              {updateRolesMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Save roles
-            </Button>
-          </PanelFooter>
-        ) : null}
         {/*
           Inside `SheetContent` so the confirmation renders above the sheet that
           opened it rather than behind its overlay. Focus on close is
@@ -872,6 +775,21 @@ export function MemberDetailSheet({
           this sheet while it is still open (#2302).
         */}
         {confirmDialog}
+        {canAdjustPoints && dmTargetUserId ? (
+          <PointsAdjustmentDialog
+            open={adjusting}
+            onOpenChange={setAdjusting}
+            member={{ userId: dmTargetUserId, name: displayName }}
+          />
+        ) : null}
+        {canTimeOut && dmTargetUserId ? (
+          <TimeoutMemberDialog
+            target={
+              timingOut ? { userId: dmTargetUserId, name: displayName } : null
+            }
+            onClose={() => setTimingOut(false)}
+          />
+        ) : null}
         {memberId && canCorrect ? (
           <MemberCorrectionDialog
             open={correcting}

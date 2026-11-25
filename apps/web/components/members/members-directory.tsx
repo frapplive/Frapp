@@ -1,21 +1,33 @@
 "use client";
 
-import { describeLoadFailure } from "@repo/hooks/error-copy";
+import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   InviteGlyph,
   SearchGlyph,
 } from "@/components/members/directory-glyphs";
 import {
+  useGroups,
   useLeaderboard,
+  matchesRoleFilter,
+  NO_BASE_ROLE_FILTER,
+  NO_BASE_ROLE_LABEL,
   useMemberDisplayNames,
+  useMemberPhoneReach,
   useMemberSearch,
   useMembers,
+  useMyPermissions,
   usePledgeClasses,
   fraternalOrderComparator,
   usesFraternalOrder,
+  useRoleTiers,
   useRoles,
   useUpdateMemberRoles,
+  useViewerUserId,
+  DEFAULT_STANDINGS_WINDOW,
+  useStandings,
+  type StandingsMetric,
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -29,6 +41,10 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilterChip, SortChip } from "@/components/shared/filter-chip";
+import { Badge } from "@/components/ui/badge";
+import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
+import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { SectionLabel } from "@/components/shared/section-label";
 import { anyReadUncached } from "@/components/shared/async-states";
 /*
@@ -59,6 +75,11 @@ import {
 import { useToast } from "@/lib/hooks/use-toast";
 import { InviteMemberDialog } from "@/components/members/invite-member-dialog";
 import { MemberDetailSheet } from "@/components/members/member-detail-sheet";
+import {
+  anchorFor,
+  MemberPopout,
+  type MemberPopoutAnchor,
+} from "@/components/chat/member-popout";
 import { MemberGrid } from "@/components/members/member-grid";
 import { useListLayout } from "@/lib/list-layout";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -71,7 +92,22 @@ import {
   presenceLabel,
   type PresenceStatus,
 } from "@repo/hooks/presence-status";
-import { directoryNoSearchMatches } from "@repo/validation";
+import {
+  can,
+  highestRankedRole,
+  isBaseRole,
+  tierPositionsOf,
+  directoryNoSearchMatches,
+  matchesPhoneReachFilter,
+  permissionsNotGivable,
+  PHONE_REACH_FILTER_OPTIONS,
+  PHONE_REACH_LABEL,
+  phoneReachCountLineFor,
+  phoneReachStaleNote,
+  phoneReachStateLabel,
+  type PhoneReach,
+  type PhoneReachFilter,
+} from "@repo/validation";
 import { asArray, cn, initials } from "@/lib/utils";
 import { stateMicrocopy } from "@/lib/state-microcopy";
 import {
@@ -81,7 +117,7 @@ import {
 
 const PAGE_SIZE = 25;
 
-type SortKey = "name" | "role" | "points" | "order";
+type SortKey = "name" | "role" | "points" | "service" | "order";
 type SortDir = "asc" | "desc";
 
 /**
@@ -106,14 +142,26 @@ type SortDir = "asc" | "desc";
  * Frapp and not when they joined the chapter. The fraternal-order sort takes
  * their place for a chapter that keeps pledge classes or order numbers; it is
  * added in the component, because its label is the chapter's own word.
+ *
+ * **Standings are sorts** (#5950). "Most points", "Fewest points" and "Most
+ * service hours" rank the chapter over a period, this semester unless another
+ * is picked in the same menu, and each row then leads with its place. They
+ * are the leaderboards the Points and Service hours pages drew, on the list
+ * of members that was already here: standing is a fact about a person, read
+ * on the person. Each is offered only while its module is on.
  */
-const SORT_OPTIONS = [
+const BASE_SORT_OPTIONS = [
   { value: "name:asc", label: "Name A to Z" },
   { value: "name:desc", label: "Name Z to A" },
   { value: "role:asc", label: "Role A to Z" },
   { value: "role:desc", label: "Role Z to A" },
+] as const;
+const POINTS_SORT_OPTIONS = [
   { value: "points:desc", label: "Most points" },
   { value: "points:asc", label: "Fewest points" },
+] as const;
+const SERVICE_SORT_OPTIONS = [
+  { value: "service:desc", label: "Most service hours" },
 ] as const;
 
 /**
@@ -123,7 +171,17 @@ const SORT_OPTIONS = [
  */
 const ORDER_SORT = "order:asc";
 
-type SortValue = (typeof SORT_OPTIONS)[number]["value"] | typeof ORDER_SORT;
+type SortValue =
+  | (typeof BASE_SORT_OPTIONS)[number]["value"]
+  | (typeof POINTS_SORT_OPTIONS)[number]["value"]
+  | (typeof SERVICE_SORT_OPTIONS)[number]["value"]
+  | typeof ORDER_SORT;
+
+/** `/members?sort=points` (or `service`) opens on that standing. */
+const SORT_FROM_PARAM: Readonly<Record<string, SortValue>> = {
+  points: "points:desc",
+  service: "service:desc",
+};
 
 const DEFAULT_SORT: SortValue = "name:asc";
 
@@ -157,7 +215,7 @@ function displayNameOf(member: MemberProfile): string {
 function formatJoined(value: string): string | null {
   const parsed = parseInstant(value);
   return parsed
-    ? parsed.toLocaleDateString(undefined, { month: "short", year: "numeric" })
+    ? parsed.toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : null;
 }
 
@@ -190,7 +248,21 @@ export function MembersDirectory() {
   const { isOffline } = useNetwork();
   // The roster's role-color resolution, so a row's initials match the color
   // that member's name takes in chat (#3860).
+  // The "Phone app" filter (whether Frapp's notifications reach a member's
+  // phone). Drawn only when the server serves the whole chapter's reach,
+  // which it does for officers who can invite members or manage roles.
+  const [phoneReachFilter, setPhoneReachFilter] =
+    useState<PhoneReachFilter | null>(null);
   const { avatarTintFor } = useMemberDisplayNames();
+  const { reach: phoneReach } = useMemberPhoneReach();
+  const showsPhoneReach = phoneReach?.scope === "chapter";
+  // A filter left set from before a role change that took the chapter view
+  // away reads as Any.
+  const effectivePhoneReachFilter = showsPhoneReach ? phoneReachFilter : null;
+  const phoneReachOfMember = (member: MemberProfile): PhoneReach | undefined =>
+    typeof member.user_id === "string"
+      ? phoneReach?.byUserId.get(member.user_id)
+      : undefined;
   const { toast } = useToast();
   // List or Grid (#4175), picked in the Directory's tab row.
   const [layout] = useListLayout("directory");
@@ -199,10 +271,43 @@ export function MembersDirectory() {
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [cohortFilter, setCohortFilter] = useState<string | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(null);
+  const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "pending" | null>(
     null,
   );
-  const [sort, setSort] = useState<SortValue>(DEFAULT_SORT);
+  // A link to the standings ("#2 of 23 · Standings" on a member's own points)
+  // arrives as `?sort=points`; the sort is the member's to change from there.
+  // A query-only navigation keeps this page mounted, so a later link (a
+  // standings link followed from chat beside the Directory, or the sidebar's
+  // plain `/members`) sets the sort again when the param changes.
+  const sortParam = useSearchParams().get(STANDINGS_SORT_PARAM);
+  const sortFromParam = SORT_FROM_PARAM[sortParam ?? ""] ?? DEFAULT_SORT;
+  const [sort, setSort] = useState<SortValue>(sortFromParam);
+  const [sortParamSeen, setSortParamSeen] = useState(sortParam);
+  if (sortParam !== sortParamSeen) {
+    setSortParamSeen(sortParam);
+    setSort(sortFromParam);
+  }
+  const [standingsWindow, setStandingsWindow] = useState<string>(
+    DEFAULT_STANDINGS_WINDOW,
+  );
+  // A module that is off shows no figure and offers no standing (P5.8), and
+  // its board is never read: both routes are module-guarded. Unknown until
+  // the chapter's modules answer, so nothing is drawn and then taken away.
+  // A council keeps no points, service hours or pledge classes (#5933): its
+  // routes refuse those reads, so it is treated as both modules off.
+  const tenantKind = useTenantKind();
+  const isCouncil = tenantKind === "council";
+  const moduleGate = useChapterModuleGateState();
+  const pointsOn =
+    !isCouncil &&
+    moduleGate.status === "ready" &&
+    moduleGate.isModuleEnabled("points");
+  const hoursOn =
+    !isCouncil &&
+    moduleGate.status === "ready" &&
+    moduleGate.isModuleEnabled("hours");
+  const viewerUserId = useViewerUserId();
   const [page, setPage] = useState(1);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [bulkRoleId, setBulkRoleId] = useState<string | null>(null);
@@ -211,6 +316,15 @@ export function MembersDirectory() {
   // member even once a role save moves them off this tab's list.
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [popoutOpen, setPopoutOpen] = useState(false);
+  const [popoutAnchor, setPopoutAnchor] = useState<MemberPopoutAnchor | null>(
+    null,
+  );
+  // A list row spans the Directory's width, so a card beside it has no room
+  // on either side and lands off the window's left edge (#5749); it opens
+  // below the row, as GitHub's and Linear's hover cards open under a name. A
+  // grid tile is narrow, so its card opens beside it.
+  const [popoutSide, setPopoutSide] = useState<"right" | "bottom">("bottom");
 
   const chapterWords = useChapterVocabulary();
   const trimmedQuery = query.trim();
@@ -219,10 +333,13 @@ export function MembersDirectory() {
   // directory screen's guard against firing a request per keystroke.
   const deferredQuery = useDeferredValue(trimmedQuery);
   const membersQuery = useMembers();
-  const classesQuery = usePledgeClasses();
+  const classesQuery = usePledgeClasses({ enabled: tenantKind === "chapter" });
   const searchQuery = useMemberSearch(deferredQuery);
   const rolesQuery = useRoles();
-  const leaderboardQuery = useLeaderboard();
+  // All-time points, the figure a row carries under any sort but a standing.
+  const leaderboardQuery = useLeaderboard(undefined, undefined, {
+    enabled: pointsOn,
+  });
   const updateRolesMutation = useUpdateMemberRoles();
   // Presence is chapter-wide and ephemeral (ADR-02) — it rides the Realtime
   // socket and touches no table, so this adds no query and no write. The
@@ -251,10 +368,21 @@ export function MembersDirectory() {
       : rows.filter((member) => member.is_alumni !== true);
   }, [activeQuery.data, usingSearch]);
 
+  const allRoles = useMemo(
+    () => parseChapterRoles(rolesQuery.data),
+    [rolesQuery.data],
+  );
   // The Everyone role (#4191) is no filter, column or assignment.
   const roleOptions = useMemo(
-    () => parseChapterRoles(rolesQuery.data).filter((role) => !role.everyone),
-    [rolesQuery.data],
+    () => allRoles.filter((role) => !role.everyone),
+    [allRoles],
+  );
+  // The tiers rank the roles for a member's title; until they load (or for
+  // a reader they are closed to) the roles rank by their own order.
+  const tiersQuery = useRoleTiers();
+  const tierPositions = useMemo(
+    () => tierPositionsOf(tiersQuery.data ?? []),
+    [tiersQuery.data],
   );
   const roleNameById = useMemo(
     () => new Map(roleOptions.map((role) => [role.id, role.name])),
@@ -265,10 +393,25 @@ export function MembersDirectory() {
   // through Transfer presidency, so offering it would guarantee a failing
   // action. It stays in the filter dropdown (filtering by President is valid);
   // only assignment excludes it.
-  const assignableRoleOptions = useMemo(
-    () => roleOptions.filter((role) => !role.locked),
-    [roleOptions],
-  );
+  //
+  // Nor a role carrying a permission the viewer lacks (#5730): the API
+  // refuses it for every member, so it is left out once the viewer's
+  // permissions are read (`permissionsNotGivable`, as the "+ Add" list).
+  const myPermissions = useMyPermissions();
+  const viewerPermissions = myPermissions.data?.permissions;
+  const assignableRoleOptions = useMemo(() => {
+    const caller = viewerPermissions && {
+      wildcard: viewerPermissions.includes("*"),
+      held: new Set(viewerPermissions),
+    };
+    return roleOptions.filter(
+      (role) =>
+        !role.locked &&
+        (!caller ||
+          permissionsNotGivable(caller, role.permissions, allRoles).length ===
+            0),
+    );
+  }, [roleOptions, allRoles, viewerPermissions]);
   // The filters offer what the list on screen can hold (#2484). Outside a
   // search that is actives only, so the Alumni role is left out of the role
   // filter, where it could only match nothing; a search spans both tabs, so it
@@ -284,10 +427,22 @@ export function MembersDirectory() {
   // A choice whose option has gone (Alumni picked during a search that has
   // since been cleared) reads as "any" rather than filtering on something the
   // chip no longer lists.
+  // Whoever can give roles also gets "No base role" first (#5802): the
+  // members holding none of New Member, Actives and Alumni, as the dashed
+  // chip on their profile says. Only in a chapter that has base roles.
+  const canGiveRoles = can("roles:manage", myPermissions.data?.permissions);
+  const offersNoBaseRole = canGiveRoles && allRoles.some(isBaseRole);
   const filterRoleChipOptions = useMemo(
-    () =>
-      filterRoleOptions.map((role) => ({ value: role.id, label: role.name })),
-    [filterRoleOptions],
+    () => [
+      ...(offersNoBaseRole
+        ? [{ value: NO_BASE_ROLE_FILTER, label: NO_BASE_ROLE_LABEL }]
+        : []),
+      ...filterRoleOptions.map((role) => ({
+        value: role.id,
+        label: role.name,
+      })),
+    ],
+    [filterRoleOptions, offersNoBaseRole],
   );
   const assignableRoleChipOptions = useMemo(
     () =>
@@ -306,9 +461,30 @@ export function MembersDirectory() {
       : null;
   const effectiveRoleFilter =
     roleFilter !== null &&
-    filterRoleOptions.some((role) => role.id === roleFilter)
+    filterRoleChipOptions.some((option) => option.value === roleFilter)
       ? roleFilter
       : null;
+  // Beside Role (Paul, 2026-11-19): who is In house, on a committee, in a
+  // pledge class. Every group the chapter has with someone in it, its own
+  // first; a group deleted meanwhile reads as no filter.
+  const groupsQuery = useGroups();
+  const groupChipOptions = useMemo(
+    () =>
+      (groupsQuery.data ?? [])
+        .filter((group) => group.member_ids.length > 0)
+        .map((group) => ({ value: group.id, label: group.name })),
+    [groupsQuery.data],
+  );
+  // Only a group the chip still offers filters: one that has emptied (its
+  // last member taken out from their card) reads as unpicked, as a deleted
+  // role does for the Role chip.
+  const groupMemberIds = useMemo(() => {
+    const group = (groupsQuery.data ?? []).find((g) => g.id === groupFilter);
+    return group && group.member_ids.length > 0
+      ? new Set(group.member_ids)
+      : null;
+  }, [groupsQuery.data, groupFilter]);
+  const effectiveGroupFilter = groupMemberIds ? groupFilter : null;
 
   const pointsByUserId = useMemo(() => {
     const map = new Map<string, number>();
@@ -381,24 +557,36 @@ export function MembersDirectory() {
     classesQuery.data !== undefined &&
     usesFraternalOrder(pledgeClasses, membersQuery.data);
   const sortOptions = useMemo(
-    () =>
-      offersOrderSort
-        ? [
-            ...SORT_OPTIONS,
-            // The chapter's own word, as typed: "Fraternal order", "Roll number".
-            { value: ORDER_SORT, label: vocab("order", chapterWords) } as const,
-          ]
-        : SORT_OPTIONS,
-    [offersOrderSort, chapterWords],
+    (): readonly { value: SortValue; label: string }[] => [
+      ...BASE_SORT_OPTIONS,
+      ...(pointsOn ? POINTS_SORT_OPTIONS : []),
+      ...(hoursOn ? SERVICE_SORT_OPTIONS : []),
+      // The chapter's own word, as typed: "Fraternal order", "Roll number".
+      ...(offersOrderSort
+        ? [{ value: ORDER_SORT, label: vocab("order", chapterWords) } as const]
+        : []),
+    ],
+    [pointsOn, hoursOn, offersOrderSort, chapterWords],
   );
   // A sort the chapter no longer offers (its last class was deleted while the
-  // page was open) falls back to the default rather than ordering by nothing.
-  const effectiveSort: SortValue =
-    sort === ORDER_SORT && !offersOrderSort ? DEFAULT_SORT : sort;
+  // page was open, or a link names a standing whose module is off) falls back
+  // to the default rather than ordering by nothing.
+  const effectiveSort: SortValue = sortOptions.some((o) => o.value === sort)
+    ? sort
+    : DEFAULT_SORT;
   const { key: sortKey, dir: sortDir } = parseSort(effectiveSort);
+  // Under a standings sort the rows carry a place and the period's total.
+  const standingsMetric: StandingsMetric | null =
+    sortKey === "points" || sortKey === "service" ? sortKey : null;
+  const standings = useStandings(standingsMetric, standingsWindow);
+  const standingsPeriodLabel =
+    standings.windowOptions.find((o) => o.value === standings.window)?.label ??
+    "";
 
   const pointsOf = (member: MemberProfile) =>
     pointsByUserId.get(member.user_id) ?? 0;
+  const standingTotalOf = (member: MemberProfile) =>
+    standings.totalOf(member.user_id);
   // `null` until presence has resolved for this chapter — the dot renders
   // nothing rather than claiming Offline, which would be a statement about the
   // member sourced from our own unfinished join.
@@ -411,21 +599,38 @@ export function MembersDirectory() {
   // `null`, not an em dash, for the same reason `formatJoined` returns one: an
   // absent role drops out of the `·`-joined meta line rather than rendering a
   // placeholder glyph.
-  // The first role the list knows, so the Everyone role (#4191), which it
-  // leaves out, is skipped rather than shown as a raw id. While the roles load
-  // the first id stands in, as before.
+  // The member's title: their highest-ranked role (tier first, then the
+  // role's order in its tier), the same pick chat's member list makes. A
+  // member whose highest role is the Everyone role (#4191), which no list
+  // names, has none, so a floor or class role outside the tiers never stands
+  // in as a title. While the roles or tiers load, the first id stands in.
+  // Ranking waits for the tiers too, so a title never flips from a floor role
+  // to the office once they arrive; a failed tier read ranks without them.
+  const rankReady =
+    allRoles.length > 0 &&
+    (tiersQuery.data !== undefined || tiersQuery.isError);
   const primaryRoleName = (member: MemberProfile): string | null => {
-    const known = member.role_ids.find((id) => roleNameById.has(id));
-    if (known) return roleNameById.get(known) ?? null;
-    if (roleOptions.length > 0) return null;
-    return member.role_ids[0] ?? null;
+    if (!rankReady) return member.role_ids[0] ?? null;
+    const held = new Set(member.role_ids);
+    const top = highestRankedRole(
+      allRoles.filter((role) => held.has(role.id)),
+      tierPositions,
+    );
+    if (!top || top.everyone) return null;
+    return top.name;
   };
 
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
+      if (!matchesRoleFilter(allRoles, member.role_ids, effectiveRoleFilter)) {
+        return false;
+      }
       if (
-        effectiveRoleFilter !== null &&
-        !member.role_ids.includes(effectiveRoleFilter)
+        groupMemberIds !== null &&
+        !(
+          typeof member.user_id === "string" &&
+          groupMemberIds.has(member.user_id)
+        )
       ) {
         return false;
       }
@@ -445,14 +650,27 @@ export function MembersDirectory() {
         return false;
       if (statusFilter === "pending" && member.has_completed_onboarding)
         return false;
+      if (
+        !matchesPhoneReachFilter(
+          phoneReachOfMember(member),
+          effectivePhoneReachFilter,
+        )
+      )
+        return false;
       return true;
     });
+    // `phoneReachOfMember` reads `phoneReach`, which is listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     members,
+    allRoles,
     effectiveRoleFilter,
+    groupMemberIds,
     effectiveCohortFilter,
     effectiveClassFilter,
     statusFilter,
+    effectivePhoneReachFilter,
+    phoneReach,
   ]);
 
   const sortedMembers = useMemo(() => {
@@ -461,7 +679,20 @@ export function MembersDirectory() {
     return [...filteredMembers].sort((a, b) => {
       switch (sortKey) {
         case "points":
-          return (pointsOf(a) - pointsOf(b)) * factor;
+        case "service": {
+          // A member at 0 or less has no place (`rankOf`) and lists after
+          // the ranked ones in both directions, as roleless members do under
+          // Role, so Fewest points opens on the lowest place, not on rows
+          // without one. Ties fall back to the name.
+          const totalA = standingTotalOf(a);
+          const totalB = standingTotalOf(b);
+          const placedA = totalA > 0;
+          if (placedA !== totalB > 0) return placedA ? -1 : 1;
+          return (
+            (totalA - totalB) * factor ||
+            displayNameOf(a).localeCompare(displayNameOf(b))
+          );
+        }
         case "order":
           return byFraternalOrder(a, b);
         case "role": {
@@ -492,8 +723,12 @@ export function MembersDirectory() {
     filteredMembers,
     sortKey,
     sortDir,
+    standings.totalOf,
     pointsByUserId,
     roleNameById,
+    allRoles,
+    tierPositions,
+    rankReady,
     pledgeClasses,
   ]);
 
@@ -519,17 +754,20 @@ export function MembersDirectory() {
   }, [
     trimmedQuery,
     effectiveRoleFilter,
+    effectiveGroupFilter,
     effectiveCohortFilter,
     effectiveClassFilter,
     statusFilter,
+    effectivePhoneReachFilter,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Re-sorting keeps the same population; just return to the first page.
+  // Re-sorting keeps the same population; just return to the first page. A
+  // new standings period re-ranks the list, so it does too.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- return to page 1 when sort identity changes
     setPage(1);
-  }, [effectiveSort]);
+  }, [effectiveSort, standingsWindow]);
 
   const pageMemberIds = pageMembers.map(memberId);
   const allPageSelected =
@@ -565,9 +803,11 @@ export function MembersDirectory() {
   const narrowed =
     usingSearch ||
     effectiveRoleFilter !== null ||
+    effectiveGroupFilter !== null ||
     effectiveCohortFilter !== null ||
     effectiveClassFilter !== null ||
-    statusFilter !== null;
+    statusFilter !== null ||
+    effectivePhoneReachFilter !== null;
 
   /**
    * What a member's row and tile both show, and the accessible name that
@@ -582,17 +822,41 @@ export function MembersDirectory() {
     const className = member.pledge_class_id
       ? (classNameById.get(member.pledge_class_id) ?? null)
       : null;
-    const points = pointsOf(member);
+    // The row's figure: the period's total and the member's place under a
+    // standings sort, else all-time points; nothing while Points is off.
+    // Under a standing every row is part of it; only a member with something
+    // in the period has a place.
+    const standing = standingsMetric !== null;
+    const rank = standing ? standings.rankOf(member.user_id) : null;
+    const figure = standingsMetric
+      ? standings.figure(standingTotalOf(member))
+      : pointsOn
+        ? formatPoints(pointsOf(member))
+        : null;
+    const isViewer = viewerUserId !== null && member.user_id === viewerUserId;
     const status = presenceStatusOf(member);
     const customLine = customLineOf(member);
+    // The member's reach, shown on the row only while the Phone app filter is
+    // set, so the everyday Directory stays as it was.
+    const reach =
+      effectivePhoneReachFilter !== null
+        ? phoneReachOfMember(member)
+        : undefined;
+    const reachText = reach ? phoneReachStateLabel(reach.state) : null;
+    const reachNote = reach ? phoneReachStaleNote(reach) : null;
     const label = [
-      name,
+      rank === null ? null : `ranked ${rank}`,
+      isViewer && standing ? `${name}, you` : name,
       roleName,
       className,
-      `${points} points`,
+      !standing || !figure
+        ? figure
+        : `${figure}, ${standingsPeriodLabel.toLowerCase()}`,
       joined ? `joined ${joined}` : null,
       member.email || null,
       customLine,
+      reachText,
+      reachNote,
       status ? presenceLabel(status) : null,
     ]
       .filter(Boolean)
@@ -602,9 +866,16 @@ export function MembersDirectory() {
       roleName,
       joined,
       className,
-      points,
+      figure,
+      rank,
+      standing,
+      isViewer,
       status,
       customLine,
+      reachText,
+      reachNote,
+      reachOff: reach?.state === "off",
+      reach,
       label,
     };
   }
@@ -615,10 +886,22 @@ export function MembersDirectory() {
     );
   }
 
-  function openMember(member: MemberProfile) {
+  /**
+   * A row opens the member's card beside it (Paul, 2026-11-19: a small card
+   * from the row, as chat's name does, instead of the profile taking over
+   * the Directory). Their roles and groups are set on the card; View profile
+   * opens the full record in the Directory's place.
+   */
+  function openMember(
+    member: MemberProfile,
+    opener: HTMLElement,
+    side: "right" | "bottom" = "bottom",
+  ) {
     setActiveMemberId(memberId(member));
     setActiveUserId(typeof member.user_id === "string" ? member.user_id : null);
-    setDetailSheetOpen(true);
+    setPopoutAnchor(anchorFor(opener));
+    setPopoutSide(side);
+    setPopoutOpen(true);
   }
 
   async function applyBulkRole() {
@@ -658,7 +941,12 @@ export function MembersDirectory() {
     } else {
       toast({
         title: "Some assignments failed",
-        description: `${roleName}: ${succeeded} updated, ${failed} failed. Retry the rest.`,
+        // Why the first one failed (#5730), so a refusal a retry can't fix
+        // doesn't read as one to retry.
+        description: `${roleName}: ${succeeded} updated, ${failed} failed. ${errorCopy(
+          results.find((r) => r.status === "rejected")?.reason,
+          "Retry the rest.",
+        )}`,
         variant: "destructive",
       });
       // Narrow the selection to exactly "the rest", which is what the toast
@@ -681,7 +969,14 @@ export function MembersDirectory() {
    * "looks healthy while quietly broken" state the comment on those guards
    * exists to prevent.
    */
-  if (isOffline && anyReadUncached(activeQuery, rolesQuery, leaderboardQuery)) {
+  if (
+    isOffline &&
+    anyReadUncached(
+      activeQuery,
+      rolesQuery,
+      ...(pointsOn ? [leaderboardQuery] : []),
+    )
+  ) {
     return (
       <NestedOffline
         sole
@@ -734,7 +1029,7 @@ export function MembersDirectory() {
     return <MembersRosterSkeleton />;
   }
 
-  if (rolesQuery.isError || leaderboardQuery.isError) {
+  if (rolesQuery.isError || (pointsOn && leaderboardQuery.isError)) {
     return (
       <NestedError
         sole
@@ -771,7 +1066,12 @@ export function MembersDirectory() {
           }
         >
           {/* A search spans both tabs (see `members` above), so say so. */}
-          {usingSearch ? "Actives and alumni" : "Actives"}
+          {isCouncil
+            ? // A council has members, not actives and alumni (#5933).
+              "Members"
+            : usingSearch
+              ? "Actives and alumni"
+              : "Actives"}
         </SectionLabel>
         <div className="flex flex-wrap items-center gap-2">
           {/*
@@ -820,6 +1120,15 @@ export function MembersDirectory() {
             value={effectiveRoleFilter}
             onChange={setRoleFilter}
           />
+          {groupChipOptions.length > 0 ? (
+            <FilterChip
+              label="Group"
+              anyLabel="Any group"
+              options={groupChipOptions}
+              value={effectiveGroupFilter}
+              onChange={setGroupFilter}
+            />
+          ) : null}
           <FilterChip
             label="Graduation year"
             anyLabel="Any year"
@@ -851,10 +1160,35 @@ export function MembersDirectory() {
               setStatusFilter(value as "active" | "pending" | null)
             }
           />
+          {showsPhoneReach ? (
+            <FilterChip
+              label={PHONE_REACH_LABEL}
+              anyLabel="Any"
+              options={PHONE_REACH_FILTER_OPTIONS}
+              value={effectivePhoneReachFilter}
+              onChange={(value) =>
+                setPhoneReachFilter(value as PhoneReachFilter | null)
+              }
+            />
+          ) : null}
+          {/*
+            A standings sort names its period on the chip and lists the
+            periods under the orders, in the same menu (#5950).
+          */}
           <SortChip
             options={sortOptions}
             value={effectiveSort}
             onChange={setSort}
+            detail={
+              standingsMetric
+                ? {
+                    label: "Period",
+                    options: standings.windowOptions,
+                    value: standings.window,
+                    onChange: setStandingsWindow,
+                  }
+                : undefined
+            }
           />
           {/*
           The route's primary action, at the trailing edge of the one toolbar
@@ -927,8 +1261,17 @@ export function MembersDirectory() {
         </div>
       ) : null}
 
-      {activeQuery.isLoading ? (
+      {activeQuery.isLoading || standings.isLoading ? (
         <MemberRowsSkeleton />
+      ) : standings.isError ? (
+        // A standing whose board didn't load draws no rows: ranking the
+        // chapter at 0 would be a wrong answer, not a missing one. Every
+        // other sort still works from the menu above.
+        <NestedError
+          title="Couldn't load the standings"
+          description="The totals for this period didn't load, so nobody is ranked. Try again, or pick another sort."
+          onRetry={standings.refetch}
+        />
       ) : sortedMembers.length === 0 ? (
         /*
          * One line where the rows go, not a card (empty-states plan rule 7,
@@ -950,9 +1293,11 @@ export function MembersDirectory() {
             <InlineNoteAction
               onClick={() => {
                 setRoleFilter(null);
+                setGroupFilter(null);
                 setCohortFilter(null);
                 setClassFilter(null);
                 setStatusFilter(null);
+                setPhoneReachFilter(null);
               }}
             >
               Clear filters
@@ -972,6 +1317,20 @@ export function MembersDirectory() {
           semantics of its own, so silently landing on a bare group of buttons
           would be a real regression rather than a nit.
         */}
+          {/*
+            The Phone app filter's count, over the actives only: hidden while
+            a search spans both lists, as on the phone.
+          */}
+          {effectivePhoneReachFilter !== null && phoneReach && !usingSearch ? (
+            <p className="text-caption text-muted" aria-live="polite">
+              {phoneReachCountLineFor(
+                members.map((member) =>
+                  typeof member.user_id === "string" ? member.user_id : null,
+                ),
+                phoneReach.byUserId,
+              )}
+            </p>
+          ) : null}
           {/*
             The list header, which is all that survives of the deleted
             `<thead>`: no column labels (a flush list has no columns to label)
@@ -1013,7 +1372,7 @@ export function MembersDirectory() {
               factsOf={factsOf}
               selectedIds={selectedMemberIds}
               onToggle={toggleMember}
-              onOpen={openMember}
+              onOpen={(member, opener) => openMember(member, opener, "right")}
               avatarTintFor={avatarTintFor}
             />
           ) : (
@@ -1025,9 +1384,15 @@ export function MembersDirectory() {
                   roleName,
                   joined,
                   className,
-                  points,
+                  figure,
+                  rank,
+                  standing,
+                  isViewer,
                   status,
                   customLine,
+                  reach,
+                  reachText,
+                  reachNote,
                   label,
                 } = factsOf(member);
                 const selected = selectedMemberIds.includes(id);
@@ -1082,7 +1447,9 @@ export function MembersDirectory() {
                 */}
                     <button
                       type="button"
-                      onClick={() => openMember(member)}
+                      onClick={(event) =>
+                        openMember(member, event.currentTarget)
+                      }
                       aria-label={label}
                       className={cn(
                         "flex min-h-9 min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
@@ -1099,6 +1466,12 @@ export function MembersDirectory() {
                         FOCUS_RING_OFFSET,
                       )}
                     >
+                      {/* The member's place leads the row on a standing. */}
+                      {standing ? (
+                        <span className="w-8 shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
+                          {rank === null ? null : `#${rank}`}
+                        </span>
+                      ) : null}
                       <div className="relative shrink-0">
                         <Avatar className="h-6 w-6">
                           {member.avatar_url ? (
@@ -1133,8 +1506,18 @@ export function MembersDirectory() {
                         both layouts, one muted caption line that truncates.
                       */}
                         <span className="flex min-w-0 flex-col @xl:flex-1">
-                          <span className="min-w-0 truncate text-sm font-semibold">
-                            {name}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 truncate text-sm font-semibold">
+                              {name}
+                            </span>
+                            {/* Your own row on a standing, so your place is
+                                found at a glance (Strava's and Duolingo's
+                                boards mark it the same way). */}
+                            {isViewer && standing ? (
+                              <Badge variant="outline" className="shrink-0">
+                                You
+                              </Badge>
+                            ) : null}
                           </span>
                           <CustomStatusLine line={customLine} />
                         </span>
@@ -1146,14 +1529,49 @@ export function MembersDirectory() {
                         that can run long.
                       */}
                         <span className="min-w-0 truncate text-caption text-muted @xl:flex-1">
-                          {[roleName, className, joined, member.email]
+                          {[
+                            roleName,
+                            className,
+                            joined,
+                            reachNote,
+                            member.email,
+                          ]
                             .filter(Boolean)
                             .join(" · ")}
                         </span>
                       </span>
-                      <span className="shrink-0 text-caption tabular-nums text-muted">
-                        {formatPoints(points)}
-                      </span>
+                      {/*
+                        The Phone app filter's answer for this member, in
+                        words, only while that filter is set. "Off" takes the
+                        warning tone so the ones to chase stand out; the rest
+                        stay muted.
+                      */}
+                      {reach && reachText ? (
+                        <span
+                          className={cn(
+                            "shrink-0 text-caption",
+                            reach.state === "off"
+                              ? "text-warning"
+                              : "text-muted",
+                          )}
+                        >
+                          {reachText}
+                        </span>
+                      ) : null}
+                      {figure ? (
+                        <span
+                          className={cn(
+                            "shrink-0 text-caption tabular-nums",
+                            // The number is the point of a standing; under
+                            // any other sort it is one more muted fact.
+                            standing && rank !== null
+                              ? "font-semibold text-foreground"
+                              : "text-muted",
+                          )}
+                        >
+                          {figure}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -1202,12 +1620,31 @@ export function MembersDirectory() {
         empty `sortedMembers` and renders an unknown member with its roles
         cleared and a Save that silently no-ops.
       */}
+      <MemberPopout
+        userId={activeUserId}
+        anchor={popoutAnchor}
+        side={popoutSide}
+        open={popoutOpen}
+        onOpenChange={setPopoutOpen}
+        identity={
+          activeMember
+            ? {
+                name: displayNameOf(activeMember),
+                avatarUrl:
+                  typeof activeMember.avatar_url === "string"
+                    ? activeMember.avatar_url
+                    : null,
+              }
+            : null
+        }
+        onViewProfile={() => setDetailSheetOpen(true)}
+      />
       <MemberDetailSheet
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         userId={activeUserId}
         initialMember={activeMember}
-        points={activeMember ? pointsOf(activeMember) : null}
+        points={activeMember && pointsOn ? pointsOf(activeMember) : null}
         docked
         backLabel="Back to directory"
       />

@@ -59,7 +59,7 @@ import { ProChip } from "@/components/billing/pro-chip";
  *
  * So the filter is "does a member have somewhere to go", and the maintained
  * answer to that in `apps/web` is the nav: a module key on a nav item is a
- * surface, and so is one on an officer tool behind the Settings row
+ * surface, and so is one on an officer tool inside Chapter settings
  * (`SETTINGS_TOOLS`, where Reports and Study Zones went when the Admin group
  * folded into Settings in #2946). Deriving beats a hand-kept list, which
  * would drift the first time a module shipped.
@@ -85,12 +85,17 @@ import { ProChip } from "@/components/billing/pro-chip";
  *   standing on is locked behind the purchase they are making from it. The
  *   nav derivation already excludes it; the test pins that it stays excluded.
  *
- * `rush` and `onboarding` fall out for the honest reason: the API gates `rush`
- * but `apps/web` ships no route for it, so on this surface the subscription
- * unlocks nothing a member can see.
+ * `onboarding` falls out for the honest reason: the API gates it but
+ * `apps/web` ships no route for it, so on this surface the subscription
+ * unlocks nothing a member can see. `rush` fell out the same way until its
+ * recruitment page shipped (#5924); its nav row now lists it, with no change
+ * to its tier in the catalog.
  */
 const SHIPPED_PAID_KEYS = new Set<string>([
-  ...DASHBOARD_NAV_ITEMS.flatMap((item) => (item.module ? [item.module] : [])),
+  ...DASHBOARD_NAV_ITEMS.flatMap((item) => [
+    ...(item.module ? [item.module] : []),
+    ...(item.views ?? []).flatMap((view) => view.anyModule),
+  ]),
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",
   "polls",
@@ -159,7 +164,9 @@ export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
         id="plan-matrix-heading"
         className={`${EYEBROW} text-muted-foreground`}
       >
-        {onPaidPlan ? "What your plan includes" : "What the subscription unlocks"}
+        {onPaidPlan
+          ? "What your plan includes"
+          : "What the subscription unlocks"}
       </h2>
       <div className="overflow-hidden rounded-lg border border-border">
         {/*

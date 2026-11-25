@@ -25,7 +25,7 @@ The committed assets ship **locked emblem B** — gold `#DDB844` on charcoal `#1
 | **Open Graph image**                      | Product | Preview card when a marketing URL is shared (Slack, iMessage, etc.)                                                   |
 | **Chapter logo**                          | Tenant  | In-app surfaces, PDFs, onboarding — from Storage (`logo_path`); **does not** replace product marks on marketing or docs |
 
-The product mark NEVER takes the chapter accent, and chapter accent applies inside chapter context only — see [brand-identity.md](brand-identity.md). (There is one exception since #4702, Paul's: the crest drawn as a one-colour glyph on Ask Frapp's front doors, §2 there.)
+The product mark NEVER takes the chapter accent, and chapter accent applies inside chapter context only — see [brand-identity.md](brand-identity.md). (There is one exception since #4702, Paul's: the crest drawn as a one-colour glyph on Frapp Intelligence's front doors, §2 there.)
 
 ---
 
@@ -65,7 +65,7 @@ Requirements:
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Vector master                         | `packages/brand-assets/assets/signet-emblem-B.svg` (plus `signet-emblem-B-glyph.svg`) |
 | Source rasters                        | `packages/brand-assets/assets/signet-emblem-B-1024.png`, `-180.png`, `-48.png`, `-32.png`, `-16.png`, `signet-emblem-B-glyph-1024.png`, and `signet-emblem-B.ico` (all generated) |
-| Synced copies | Every destination listed in `SYNCED` (`scripts/lib/brand-pixels.mjs`), the one list the sync copies along and the gate checks: the tab and Apple touch icons in both Next apps, `apps/web/app/favicon.ico` (the 16/32/48 container; `apps/landing` serves `icon.png` only), both apps' `public/brand/signet-emblem-B.png` tile, `apps/landing/app/opengraph-emblem.png`, and the chat system avatar (the 180² raster at `apps/web/public/brand/system-avatar.png` and `apps/mobile/assets/images/system-avatar.png`, the avatar both chats draw for Frapp's own posts) |
+| Synced copies | Every destination listed in `SYNCED` (`scripts/lib/brand-pixels.mjs`), the one list the sync copies along and the gate checks: the tab and Apple touch icons in both Next apps, `apps/web/app/favicon.ico` (the 16/32/48 container; `apps/landing` serves `icon.png` only), both apps' `public/brand/signet-emblem-B.png` tile, web's `public/brand/signet-emblem-B-glyph.png` (the glyph raster the 404 and error pages draw), `apps/landing/app/opengraph-emblem.png`, and the chat system avatar (the 180² raster at `apps/web/public/brand/system-avatar.png` and `apps/mobile/assets/images/system-avatar.png`, the avatar both chats draw for Frapp's own posts) |
 | Landing lockup (React)                | `apps/landing/components/frapp-lockup.tsx` — Frapp word plus the crest from [`signet-crest.tsx`](../../apps/landing/components/signet-crest.tsx), inlined as one path since #2366 and no longer a raster. The crest (`#DDB844`) sits on the page background with no tile since ADR-25 step 5. |
 | OG image                              | `apps/landing/app/opengraph-image.tsx`                                                                 |
 

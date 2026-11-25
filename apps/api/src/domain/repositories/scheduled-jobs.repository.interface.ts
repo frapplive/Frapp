@@ -47,6 +47,10 @@ export interface SweepTaskRow {
   assignee_id: string;
   created_by: string;
   title: string;
+  /**
+   * A sweep reads a window of due days or due times, so a task with no due
+   * date (#5761) never comes back from one.
+   */
   due_date: string;
   /** Set only on a task due at a time of day (#4003). */
   due_at?: string | null;
@@ -54,6 +58,29 @@ export interface SweepTaskRow {
   followed_by?: string | null;
   /** The group task it is a copy of (#4295 step 3), read for #5473. */
   group_id?: string | null;
+}
+
+/** A recruitment candidate whose follow-up comes due (#5934). */
+export interface SweepRushFollowUpRow {
+  id: string;
+  chapter_id: string;
+  display_name: string;
+  /** `YYYY-MM-DD`. */
+  follow_up_on: string;
+  follow_up_note: string | null;
+  follow_up_user_id: string;
+}
+
+/** An open, owned recruitment candidate, for the stale alert (#5934). */
+export interface SweepRushOwnedRow {
+  id: string;
+  chapter_id: string;
+  display_name: string;
+  owner_id: string;
+  closed_reason: string | null;
+  bid_state: string;
+  last_contact_on: string | null;
+  created_at: string;
 }
 
 export interface SweepPollRow {
@@ -182,6 +209,26 @@ export interface IScheduledJobsRepository {
       theme_palette_engine_version: number;
     },
   ): Promise<boolean>;
+  /** Open candidates with a follow-up for someone due in `[from, to]`. */
+  findRushFollowUpsDueBetween(
+    dueOnOrAfter: string,
+    dueOnOrBefore: string,
+  ): Promise<SweepRushFollowUpRow[]>;
+  /** Every open candidate with an owner, across chapters. */
+  findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]>;
+  /**
+   * Expires every open recruitment bid past its day, across chapters
+   * (`expire_rush_bids`, #5973); the count. Throws on a database error.
+   */
+  expireRushBids(now: string): Promise<number>;
+  /**
+   * Per chapter: whether the `rush` module is on, and its stale days (no
+   * entry for a chapter with no settings row). Throws on a database error.
+   */
+  findRushChapters(chapterIds: readonly string[]): Promise<{
+    enabledModules: Map<string, Record<string, boolean> | null>;
+    staleDays: Map<string, number>;
+  }>;
   /** `true` only for the caller that inserted the claim row. Never throws. */
   claimDispatch(
     chapterId: string,

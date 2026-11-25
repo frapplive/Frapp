@@ -1,9 +1,18 @@
 import type { components } from "@repo/api-sdk";
 import type { NavGlyphName } from "@repo/theme/nav-glyphs";
-import { signUpLinkKind, taskGroupLabel } from "@repo/validation";
-import { isSentBack, taskStatusLabel } from "./task-card";
+import {
+  MEETING_LIST_COPY,
+  MEETING_NOTE_TAKERS_COPY,
+  eventOnAt,
+  minutesDraftState,
+  minutesDraftStateLabel,
+  signUpLinkKind,
+  taskGroupLabel,
+} from "@repo/validation";
+import { isSentBack, localTaskStatus, taskStatusLabel } from "./task-card";
 import {
   closesAtHasPassed,
+  formatDayHeading,
   formatDueLabel,
   formatMinutesRounded,
   formatRelativeDayTime,
@@ -30,6 +39,17 @@ export type ActivityCard = components["schemas"]["ActivityCardDto"];
 /** How many have answered something the member made, of how many can (#4792). */
 type ActivityProgress = components["schemas"]["ActivityProgressDto"];
 export type ActivitySection = Activity["unavailable"][number];
+/**
+ * A meeting that ended with no minutes, for a holder of `meetings:record`
+ * (#5949): To do's Write minutes row, where the Meetings list page's was.
+ */
+export type ActivityMinutesToWrite =
+  components["schemas"]["ActivityMinutesToWriteDto"];
+/** Minutes the member started and hasn't posted (#5949). */
+export type ActivityMinutesDraft =
+  components["schemas"]["ActivityMinutesDraftDto"];
+/** Another officer's draft the member takes notes on (#4935, #5949). */
+export type ActivityNoteTaking = components["schemas"]["ActivityNoteTakingDto"];
 /** What `POST /v1/activity/reads` names: an item's kind and id. */
 export type ActivityItemRef = components["schemas"]["ActivityItemRefDto"];
 
@@ -66,7 +86,8 @@ export type ActivityGlyph =
   | "link"
   | "signup"
   | "form"
-  | "reminder";
+  | "reminder"
+  | "minutes";
 
 /**
  * The shared nav glyph each kind draws (`@repo/theme/nav-glyphs`), so a row
@@ -84,6 +105,7 @@ export const ACTIVITY_GLYPH_NAV: Record<ActivityGlyph, NavGlyphName> = {
   signup: "signup",
   form: "form",
   reminder: "schedule",
+  minutes: "meetings",
 };
 
 /**
@@ -119,7 +141,7 @@ interface RowBase {
    * it (#4402, item 4): the poster of a poll or link, whoever assigned a task
    * to the member, the member whose completion or hours wait on them. `null`
    * when there is no one else to show (an event, a task the member set
-   * themselves, Waiting on others), and the row leads with its glyph. A client that
+   * themselves, Running), and the row leads with its glyph. A client that
    * can't resolve the id on the roster (they have left) draws the glyph too.
    */
   faceId: string | null;
@@ -135,7 +157,7 @@ interface RowBase {
   /**
    * Whether the member hasn't opened it from Activity since it started
    * waiting on them (`spec/behavior/activity.md` § Unread): the row draws a
-   * dot. Never on a Waiting on others row.
+   * dot. Never on a Running row.
    */
   unread: boolean;
   /**
@@ -144,7 +166,7 @@ interface RowBase {
    */
   readRef: ActivityItemRef | null;
   /**
-   * How far along a Waiting on others row is (#4792): an open poll the member
+   * How far along a Running row is (#4792): an open poll the member
    * posted, or an event they made once its check-in has opened. A client
    * draws it as a thin bar with `label` beside it. `null` on every other row,
    * and when the read has no count for it (never "0 of 0").
@@ -250,11 +272,17 @@ export type ActivityRow = RowBase &
     | { kind: "link"; link: ActivityLink }
     | { kind: "card"; card: ActivityCard }
     | { kind: "reminder"; reminder: ActivityReminder }
+    /** A meeting to write minutes for (#5949): Write minutes on the row. */
+    | { kind: "minutes-to-write"; meeting: ActivityMinutesToWrite }
+    /** The member's own unposted minutes: the row opens them. */
+    | { kind: "minutes-draft"; draft: ActivityMinutesDraft }
+    /** Notes the member takes on another officer's minutes. */
+    | { kind: "minutes-notes"; notes: ActivityNoteTaking }
   );
 
 /**
  * A run of rows inside a group, under its own small heading: one per kind
- * under Waiting on others (#4173). A group with one part draws it with no
+ * under Running (#4173). A group with one part draws it with no
  * heading.
  */
 export interface ActivityPart {
@@ -267,7 +295,7 @@ export interface ActivityPart {
 }
 
 export interface ActivityGroup {
-  id: "reminders" | "made-by-you" | "links";
+  id: "running";
   label: string;
   /** Every row of the group, in order: the parts' rows end to end. */
   rows: ActivityRow[];
@@ -287,6 +315,7 @@ export const ACTIVITY_SECTION_NAMES: Record<ActivitySection, string> = {
   made_events: "events you made",
   links: "links",
   reminders: "reminders",
+  minutes: "minutes",
 };
 
 function channelLabel(
@@ -466,12 +495,14 @@ function cardRow(
 }
 
 function taskRow(
-  task: ActivityTask,
+  served: ActivityTask,
   group: string,
   role: "mine" | "confirm" | "assigned",
   now: Date,
   when: RowWhen = "dated",
 ): ActivityRow {
+  // Overdue by the member's own day, not the server's UTC one (#5774).
+  const task = { ...served, status: localTaskStatus(served, now) };
   // A finished task has no countdown: "Overdue by 2 days" under a task that is
   // done would be wrong.
   const finished = task.stored_status === "COMPLETED";
@@ -526,13 +557,22 @@ function taskRow(
   };
 }
 
+/** When a task is due, or null for one with no due date (#5761). */
+function dueMoment(task: {
+  due_at: string | null;
+  due_date: string | null;
+}): Date | null {
+  const raw = task.due_at ?? task.due_date;
+  return raw ? parseInstantOrBareLocalNoon(raw) : null;
+}
+
 /**
  * When an unfinished task is due, as a row says it: `soon` is "Due in 40
  * minutes" within a day, and `due` the clause the detail ends with (that, or
  * "Due Friday"; under a day's heading only its time, if it has one).
  */
 function taskDue(
-  task: { due_at: string | null; due_date: string },
+  task: { due_at: string | null; due_date: string | null },
   now: Date,
   when: RowWhen,
 ): { soon: string | null; due: string | null } {
@@ -719,6 +759,128 @@ function reminderRow(reminder: ActivityReminder, now: Date): ActivityRow {
   };
 }
 
+/**
+ * The read's minutes rows (#5949). A read cached before the API served them
+ * (a phone's persisted cache, an open tab across a deploy) has none.
+ */
+function activityMinutes(activity: Activity): Activity["minutes"] {
+  return activity.minutes ?? { to_write: [], drafts: [], taking_notes: [] };
+}
+
+/** The heading over To do's minutes rows (#5949), on both apps. */
+export const ACTIVITY_MINUTES_LABEL = "Minutes";
+
+/**
+ * A meeting on the calendar that ended in the last 30 days with no minutes
+ * (#5949, where the Meetings list page's Write minutes row was): its name,
+ * the day it met, and Write minutes, which starts them on that event in one
+ * press, as the event's own Minutes row does. No dot and no Snooze: the
+ * rows name events and meetings, which Coming up's event snooze would
+ * collide with.
+ */
+function minutesToWriteRow(
+  meeting: ActivityMinutesToWrite,
+  now: Date,
+): ActivityRow {
+  return {
+    kind: "minutes-to-write",
+    key: `minutes:write:${meeting.event_id}`,
+    meeting,
+    title: meeting.name,
+    detail: formatDayHeading(meeting.start_time, now) ?? "",
+    soon: null,
+    faceId: null,
+    badge: { label: MEETING_LIST_COPY.writeMinutes, variant: "warning" },
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * The member's own unposted minutes (#5949): the meeting's name, its day
+ * ("No meeting" first while none is linked), and where the draft stands in
+ * the words the minutes list and the event's Minutes row use
+ * (`minutesDraftStateLabel`): "Drafting", "Not started", or who is recording.
+ */
+function minutesDraftRow(draft: ActivityMinutesDraft, now: Date): ActivityRow {
+  const state = minutesDraftState({ ...draft, status: "draft" });
+  return {
+    kind: "minutes-draft",
+    key: `minutes:draft:${draft.meeting_id}`,
+    draft,
+    title: draft.name,
+    detail: [
+      draft.event_id === null ? MEETING_LIST_COPY.noMeeting : null,
+      formatDayHeading(draft.event_start_time, now),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: null,
+    badge: state
+      ? {
+          label: minutesDraftStateLabel(state, draft.recording_by_name),
+          // Recording is live, in the status red the minutes list gives it;
+          // the others are quiet state, never an ask.
+          variant: state === "recording" ? "destructive" : "outline",
+        }
+      : null,
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * Notes the member takes on another officer's minutes (#4935, #5949): the
+ * meeting, its day and whose minutes they are, then Take notes for one they
+ * were added to and haven't started, else Taking notes.
+ */
+function minutesNotesRow(notes: ActivityNoteTaking, now: Date): ActivityRow {
+  return {
+    kind: "minutes-notes",
+    key: `minutes:notes:${notes.meeting_id}`,
+    notes,
+    title: notes.name,
+    detail: [
+      formatDayHeading(notes.event_start_time, now),
+      MEETING_NOTE_TAKERS_COPY.listItem(notes.author_name),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: null,
+    badge: notes.joined
+      ? { label: MEETING_NOTE_TAKERS_COPY.takingNotes, variant: "outline" }
+      : { label: MEETING_NOTE_TAKERS_COPY.takeNotes, variant: "warning" },
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * The meeting a Write minutes row starts minutes on, as the calendar read
+ * names it (`CalendarMeeting`), for the start and the No minutes mark.
+ */
+export function activityMinutesMeeting(
+  row: Extract<ActivityRow, { kind: "minutes-to-write" }>,
+): { id: string; name: string; start_time: string; end_time: string } {
+  return {
+    id: row.meeting.event_id,
+    name: row.meeting.name,
+    start_time: row.meeting.start_time,
+    end_time: row.meeting.end_time,
+  };
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
@@ -760,8 +922,8 @@ export function activityDetailParts(
   };
 }
 
-/** How many of each kind Waiting on others draws before "Show all". */
-const ACTIVITY_MADE_BY_YOU_LIMIT = 3;
+/** How many of each kind Running draws before "Show all". */
+const ACTIVITY_RUNNING_LIMIT = 3;
 
 function part(
   id: string,
@@ -773,16 +935,18 @@ function part(
 }
 
 /**
- * The groups the page draws under the To do list, in order (#4766): Waiting
- * on others, which is what the member made (the polls they posted, the
- * events they made, the tasks they assigned), one part per kind and a few
- * rows each, so one busy kind doesn't bury the others; then Links. A client
- * leaves out a group with no rows and nothing that failed.
+ * Running (#5779, Paul's direction A, 2026-11-20): what the member made and
+ * is waiting on others for, one part per kind and a few rows each, so one
+ * busy kind doesn't bury the others. The tasks they assigned with how many
+ * are done, then the events they made with who checked in, then the polls
+ * they posted. What waits on their own OK leads the section on each client
+ * as one "to approve" row (`activityReview`), so this is To review and
+ * Waiting on others in one place. A client leaves it out when it has no
+ * rows and nothing failed.
  *
- * The member's own things are the To do list (`activityToDos`), and what
- * waits on their review is the To review card (`activityReviewRows`). Until
- * #4766 this also built "Needs you" (split into Now and Later) and "Coming
- * up", narrowed by a row of filter chips.
+ * The member's own things are the To do list (`activityToDos`), Reminders
+ * included since #5779. Links moved to the channel they were posted in
+ * (`activityChannelLinks`).
  */
 export function activityGroups(
   activity: Activity,
@@ -791,13 +955,6 @@ export function activityGroups(
   const down = new Set(activity.unavailable);
   const downFor = (sections: ActivitySection[]) =>
     sections.filter((section) => down.has(section));
-  const links = activity.links.map((link) => linkRow(link, now));
-  // Due first (the read orders by time, so the oldest due leads), then the
-  // ones still waiting, soonest first. `?? []`: a read from an API before
-  // #4957 has no field.
-  const reminders = (activity.reminders ?? []).map((reminder) =>
-    reminderRow(reminder, now),
-  );
 
   // A poll that closes, by time or by hand, leaves the list on the page's
   // clock; the next read leaves it out, and it is in the Archive (#5127).
@@ -811,51 +968,45 @@ export function activityGroups(
 
   return [
     {
-      // The member's own reminders on chat messages (#4957), apart from the
-      // To do list: Slack keeps them in Later, beside saved items.
-      id: "reminders",
-      label: "Reminders",
-      rows: reminders,
-      parts: part("all", null, reminders, null),
-      unavailable: downFor(["reminders"]),
-    },
-    {
-      // What the member made, listed for what it still waits on.
-      id: "made-by-you",
-      label: "Waiting on others",
-      rows: [...madePolls, ...madeEvents, ...madeTasks],
+      id: "running",
+      label: "Running",
+      rows: [...madeTasks, ...madeEvents, ...madePolls],
       parts: [
         ...part(
-          "polls",
-          "Polls you posted",
-          madePolls,
-          ACTIVITY_MADE_BY_YOU_LIMIT,
+          "tasks",
+          "Tasks you assigned",
+          madeTasks,
+          ACTIVITY_RUNNING_LIMIT,
         ),
         ...part(
           "events",
           "Events you made",
           madeEvents,
-          ACTIVITY_MADE_BY_YOU_LIMIT,
+          ACTIVITY_RUNNING_LIMIT,
         ),
-        ...part(
-          "tasks",
-          "Tasks you assigned",
-          madeTasks,
-          ACTIVITY_MADE_BY_YOU_LIMIT,
-        ),
+        ...part("polls", "Polls you posted", madePolls, ACTIVITY_RUNNING_LIMIT),
       ],
-      unavailable: downFor(["polls", "made_events", "tasks"]),
-    },
-    {
-      // Their own group, not the To do list: a link may or may not be for
-      // this member, and Frapp can't see one filled in (spec § Links).
-      id: "links",
-      label: "Links",
-      rows: links,
-      parts: part("all", null, links, null),
-      unavailable: downFor(["links"]),
+      unavailable: downFor(["tasks", "made_events", "polls"]),
     },
   ];
+}
+
+/**
+ * The sign-up links posted in one channel (#5779), for the channel's own
+ * Links list, where Discord keeps them beside Pins. Activity listed every
+ * channel's until then (spec § Links). It draws on Activity's read, which
+ * serves only the links still open to the member (none they posted, marked
+ * done or hid) and at most 25 across the chapter, so a busy chapter's list
+ * can miss an older one (#5809).
+ */
+export function activityChannelLinks(
+  activity: Activity,
+  channelId: string,
+  now: Date = new Date(),
+): ActivityRow[] {
+  return activity.links
+    .filter((link) => link.channel_id === channelId)
+    .map((link) => linkRow(link, now));
 }
 
 /**
@@ -867,16 +1018,24 @@ export function activityGroups(
  * confirmed ones, which are finished and in the Archive (#5127).
  */
 function madeTaskRows(activity: Activity, now: Date): ActivityRow[] {
+  // A task the member gave themselves is theirs to do: a row in To do, or in
+  // Snoozed while they put it off, which say the same thing. Running is for
+  // what others are doing (#5779). Judged by the task, not by To do's list,
+  // which a snooze empties of it.
+  const own = (task: { assignee_id: string | null; created_by: string }) =>
+    task.assignee_id === task.created_by;
   const items = activity.made_by_you.task_items ?? null;
   if (items) {
-    return items.map((item) =>
-      item.kind === "group"
-        ? taskGroupRow(item.group, now)
-        : taskRow(item.task, "made", "assigned", now),
-    );
+    return items
+      .filter((item) => item.kind === "group" || !own(item.task))
+      .map((item) =>
+        item.kind === "group"
+          ? taskGroupRow(item.group, now)
+          : taskRow(item.task, "made", "assigned", now),
+      );
   }
   return activity.made_by_you.tasks
-    .filter((task) => !task.confirmed_at)
+    .filter((task) => !task.confirmed_at && !own(task))
     .map((task) => taskRow(task, "made", "assigned", now));
 }
 
@@ -891,16 +1050,22 @@ export interface ActivityToDo {
    * closing time. A task with only a date is read as noon that day.
    */
   at: Date | null;
-  /** An event the member can check in to right now and hasn't. */
+  /** An event on now (`eventOnAt`) that the member can check in to and hasn't. */
   now: boolean;
   /** A task past its due date. */
   overdue: boolean;
+  /**
+   * A run of its own rather than a day: `minutes` for the minutes rows
+   * (#5949), which have no deadline but are not "anytime" either.
+   */
+  run?: "minutes";
 }
 
 /**
- * The member's own to-dos (#4766): their events, their open tasks, and the
- * polls, sign-ups and forms they haven't answered, in the read's order. Never
- * what waits on their review (`activityReviewRows`). A row's key is its
+ * The member's own to-dos (#4766): their events, their open tasks, the
+ * polls, sign-ups and forms they haven't answered, and their reminders on
+ * chat messages (#5779), in the read's order. Never what waits on their
+ * review (`activityReviewRows`). A row's key is its
  * record's (`needs:task:<id>`, `needs:poll:<id>`), the same on every re-read,
  * so a sheet opened on one finds it again.
  */
@@ -930,14 +1095,27 @@ export function activityToDos(
           (when) =>
             eventRow(event, needsCheckIn ? "needs" : "coming", now, when),
           parseInstant(event.start_time),
-          { now: needsCheckIn },
+          // Happening now only until its end, as the Now card and the
+          // event's pill say (#5777); check-in's grace after it still
+          // offers Check in under its day.
+          {
+            now:
+              needsCheckIn &&
+              eventOnAt(
+                event.start_time,
+                event.end_time,
+                event.check_in_opens_minutes,
+                now.getTime(),
+              ),
+          },
         );
       }),
     ...activity.needs_you.tasks.map((task) =>
       both(
         (when) => toDoTaskRow(taskRow(task, "needs", "mine", now, when)),
-        parseInstantOrBareLocalNoon(task.due_at ?? task.due_date),
-        { overdue: task.status === "OVERDUE" },
+        // No due date (#5761): no moment, so it goes under No deadline.
+        dueMoment(task),
+        { overdue: localTaskStatus(task, now) === "OVERDUE" },
       ),
     ),
     ...activity.needs_you.polls
@@ -956,7 +1134,57 @@ export function activityToDos(
           card.closes_at ? parseInstant(card.closes_at) : null,
         ),
       ),
+    // The member's reminders on chat messages (#4957), on the day they come
+    // back (#5779). One already due is today's, after today's own things, so
+    // a few left from earlier in the week never push tonight's task behind
+    // "Show more". Its row names its day either way. `?? []`: a read from an
+    // API before #4957 has no field.
+    ...(activity.reminders ?? []).map((reminder) => {
+      const at = parseInstant(reminder.remind_at);
+      const due = at !== null && at.getTime() <= now.getTime();
+      return both(
+        () => reminderRow(reminder, now),
+        due ? endOfLocalDay(now) : at,
+      );
+    }),
+    // What the Meetings list page asked of the member (#5949), in its own
+    // run: meetings to write minutes for, newest first, then their own
+    // drafts, then the notes they take on others'. The row names its day.
+    ...minutesToDos(activity, now),
   ];
+}
+
+/** The minutes rows as To do entries, in the read's order (#5949). */
+function minutesToDos(activity: Activity, now: Date): ActivityToDo[] {
+  const minutes = activityMinutes(activity);
+  const entry = (row: ActivityRow): ActivityToDo => ({
+    dated: row,
+    timed: row,
+    at: null,
+    now: false,
+    overdue: false,
+    run: "minutes",
+  });
+  return [
+    ...minutes.to_write.map((meeting) =>
+      entry(minutesToWriteRow(meeting, now)),
+    ),
+    ...minutes.drafts.map((draft) => entry(minutesDraftRow(draft, now))),
+    ...minutes.taking_notes.map((notes) => entry(minutesNotesRow(notes, now))),
+  ];
+}
+
+/** The last moment of `now`'s day on this device. */
+function endOfLocalDay(now: Date): Date {
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
 }
 
 /**

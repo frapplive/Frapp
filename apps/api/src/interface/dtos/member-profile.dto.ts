@@ -59,7 +59,7 @@ export class MemberProfileDto {
     type: String,
     nullable: true,
     description:
-      "The member's own phone number (#3711), as they typed it, or null. Only they set it.",
+      "The member's own phone number (#3711), stored E.164 when it is a valid number (#5798), else as typed, or null. Clients show it with `formatPhone` (`@repo/formatting`). Only they set it.",
   })
   phone: string | null;
 
@@ -127,10 +127,39 @@ export class MemberProfileDto {
       "Whether the requesting viewer may fix this member's name and " +
       'graduation year (PATCH /v1/members/{id}/profile): they hold ' +
       'roles:manage, it is not their own profile, the member ranks below ' +
-      'them, and the member is in no other chapter. Present only on ' +
+      'them or at their own rank, and the member is in no other chapter. ' +
+      'Present only on ' +
       'single-member reads.',
   })
   viewer_can_edit_profile?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the requesting viewer may time this member out of chat or ' +
+      'lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they ' +
+      'hold members:timeout, it is not their own profile, the member is not ' +
+      'the President, and the member ranks below them. Present only on ' +
+      'single-member reads.',
+  })
+  viewer_can_timeout?: boolean;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      "Until when the member can't post or react in the chapter's channels. " +
+      'Set only for the member themselves and for a viewer who can time ' +
+      'out; null otherwise and when there is no timeout.',
+  })
+  chat_timeout_until?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'The reason the officer gave, under the same rule.',
+  })
+  chat_timeout_reason?: string | null;
 }
 
 /**
@@ -171,7 +200,7 @@ export class MemberRosterEntryDto {
     type: String,
     nullable: true,
     description:
-      'Palette color of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it.',
+      'Color (palette or readable custom, `isPaintableRoleColor`) of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it.',
   })
   role_color: string | null;
 }
@@ -200,4 +229,44 @@ export class MemberBirthdayDto {
       'The day of the month. A 29 February birthday falls on 28 February outside leap years (`birthdayDateInYear` in `@repo/validation`).',
   })
   birthday_day: number;
+}
+
+export class MemberPhoneReachDto {
+  @ApiProperty({ format: 'uuid' })
+  user_id: string;
+
+  @ApiProperty({
+    enum: ['on', 'off', 'unknown', 'web_only'],
+    description:
+      "From the member's current phones (the one opened last, and any opened within 30 days of it). `on`: a current phone shows Frapp notifications. `off`: none does, and the phone opened last says off. `unknown`: none does, and the phone opened last is on a build that has not said yet. `web_only`: no phone signed in.",
+  })
+  state: 'on' | 'off' | 'unknown' | 'web_only';
+
+  @ApiProperty({
+    enum: ['ios', 'android'],
+    nullable: true,
+    type: String,
+    description: 'Platform of the phone opened last, when its label says.',
+  })
+  platform: 'ios' | 'android' | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    description: 'When the member last opened the app on any phone.',
+  })
+  last_opened_at: string | null;
+}
+
+export class MemberPhoneReachListDto {
+  @ApiProperty({
+    enum: ['chapter', 'self'],
+    description:
+      '`chapter` for officers who can invite members or manage roles; anyone else gets `self`, only their own entry.',
+  })
+  scope: 'chapter' | 'self';
+
+  @ApiProperty({ type: MemberPhoneReachDto, isArray: true })
+  members: MemberPhoneReachDto[];
 }

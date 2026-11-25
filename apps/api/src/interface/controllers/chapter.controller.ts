@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -42,6 +43,7 @@ import {
 } from '../dtos/chapter.dto';
 import { ChapterOnboardingDto } from '../dtos/chapter-onboarding.dto';
 import {
+  ChapterMembershipSummaryDto,
   CurrentChapterResponseDto,
   UpdateChapterResponseDto,
 } from '../dtos/chapter-response.dto';
@@ -125,7 +127,10 @@ export class ChapterController {
   @UseGuards(SupabaseAuthGuard)
   @UseInterceptors(AuthSyncInterceptor)
   @ApiOperation({ summary: 'List chapters for current user' })
-  async listForCurrentUser(@CurrentUser('id') userId: string) {
+  @ApiOkResponse({ type: [ChapterMembershipSummaryDto] })
+  async listForCurrentUser(
+    @CurrentUser('id') userId: string,
+  ): Promise<ChapterMembershipSummaryDto[]> {
     return this.chapterService.listForUser(userId);
   }
 
@@ -149,6 +154,7 @@ export class ChapterController {
 
   @Get('current')
   @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
   @ApiOperation({
     summary: 'Get current chapter (includes a signed logo_url when one is set)',
@@ -162,6 +168,7 @@ export class ChapterController {
 
   @Patch('current')
   @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(...CHAPTER_PROFILE_PERMISSIONS)
   @ApiOperation({ summary: 'Update current chapter settings' })
   @ApiOkResponse({ type: UpdateChapterResponseDto })
@@ -188,6 +195,7 @@ export class ChapterController {
   @Post('current/logo-url')
   @ThrottleFanOutWrite()
   @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(...CHAPTER_PROFILE_PERMISSIONS)
   @ApiOperation({ summary: 'Generate signed upload URL for chapter logo' })
   @ApiCreatedResponse({ type: LogoUploadUrlResponseDto })
@@ -219,6 +227,7 @@ export class ChapterController {
 
   @Post('current/logo')
   @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(...CHAPTER_PROFILE_PERMISSIONS)
   @ApiOperation({ summary: 'Confirm logo upload and update chapter' })
   async confirmLogoUpload(
@@ -240,6 +249,7 @@ export class ChapterController {
 
   @Delete('current/logo')
   @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(...CHAPTER_PROFILE_PERMISSIONS)
   @ApiOperation({ summary: 'Remove chapter logo' })
   async deleteLogo(

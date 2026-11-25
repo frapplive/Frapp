@@ -103,7 +103,7 @@ Lookups that take a chapter and a second `string` (name, code, hash) are **chapt
 Every protected endpoint runs through a consistent guard chain:
 
 1. **SupabaseAuthGuard** — validates the JWT from Supabase Auth.
-2. **ChapterGuard** — resolves the active chapter (claim/header precedence and the mismatch response: [`spec/behavior/multi-tenancy.md`](../../spec/behavior/multi-tenancy.md)), then verifies membership in it. Full chain and the four tenancy-proof idioms: [`authorization-model.md` § 1. The model in short](../security/authorization-model.md#1-the-model-in-short).
+2. **ChapterGuard** — resolves the active chapter (header/claim precedence and the tenant-kind check: [`spec/behavior/multi-tenancy.md`](../../spec/behavior/multi-tenancy.md)), then verifies membership in it. Full chain and the four tenancy-proof idioms: [`authorization-model.md` § 1. The model in short](../security/authorization-model.md#1-the-model-in-short).
 3. **PermissionsGuard** — checks permission metadata against the user's roles. When both the controller class and the route handler declare `@RequirePermissions(...)`, the guard **merges** them: the union of both lists must be satisfied (AND semantics across every listed permission). `@RequireAnyOfPermissions` on handler and class is evaluated as **two separate OR-groups** when both are present (the caller must match at least one permission in each group).
 
 ### Subscription enforcement (ChapterGuard)
@@ -164,13 +164,15 @@ Three named buckets are registered in `AppModule`; `app.module.throttlers.spec.t
 - **`read`** at 100/min and **`write`** at 30/min. The guard's `handleRequest` gates them by method, so `read` applies to `GET`/`HEAD`/`OPTIONS` and `write` to everything else. **These two are per-endpoint, not app-wide.** Their storage key is `sha256(ClassName-HandlerName-throttlerName-tracker)`, so each handler counts independently for each caller. It is a common misreading of the config — worth knowing before you reason about a limit.
 - **`unverified`** at 200/min (`UNVERIFIED_BEARER_LIMIT`) **is app-wide**: one counter per address across every route, every method (`generateKey` leaves the handler out). The guard runs it only for a request whose bearer token it found invalid, or could not check while its key list is working (a `kid` the project's JWKS does not list); a verified member, a request with no token, and a token it could not check because the JWKS is unreachable pass it untouched. When this or any other bucket refuses a request whose token the guard found invalid, the answer is the auth guard's own `401` (`Invalid or expired token`, recorded as `claims_rejected` with `authErrorCode` `unverified_limit`), because clients recover a dead or stale session only through a `401`; every other refusal, a token it could not check included, is the usual `429`. [`spec/architecture/README.md` § Security Note](../../spec/architecture/README.md#security-note-2024-03-26) has the reasoning.
 
-**Stricter per-route limits** live in `src/interface/decorators/throttle-profiles.decorator.ts` as three named profiles, applied at the handler:
+**Stricter per-route limits** live in `src/interface/decorators/throttle-profiles.decorator.ts` as five named profiles, applied at the handler:
 
 | Profile | Limit | For |
 | --- | --- | --- |
 | `@ThrottleExpensiveWrite()` | 5/min | Full-chapter aggregation, export rendering, bulk token minting. |
 | `@ThrottleFanOutWrite()` | 10/min | Cheap request, expensive consequence — chapter-wide push, signed storage URLs, credential guesses. |
 | `@ThrottleExpensiveRead()` | 20/min | Reads whose database cost is superlinear in caller input. |
+| `@ThrottlePublicTokenRead()` | 120/min | A lookup by an unguessable token that needs no account, counted per address. Raised, not lowered, because many people on one network open the same link at once. |
+| `@ThrottlePersonalNudge()` | 3/hour | A push to one person who never asked to hear from the caller. |
 
 The canonical list of which routes carry which profile is [`spec/behavior/README.md` § Per-route rate limits](../../spec/behavior/README.md#per-route-rate-limits).
 

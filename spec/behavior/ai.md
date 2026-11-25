@@ -47,11 +47,11 @@ They divide into two access paths: **documents are retrieved** from an index, an
 
 Prose, embedded once and re-embedded when its source is edited:
 
-| Source                                              | Notes                                                                                  |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Meeting minutes and transcripts                     | Stored with `meeting_type` metadata so the summarizer can vary tone (see [`meetings.md`](meetings.md)). |
-| Uploaded chapter documents                          | Bylaws, policies, calendars from Chapter Docs ([`chapter-docs.md`](chapter-docs.md)).  |
-| Channel messages                                    | Messages in chapter channels, from members who agreed, announcements included. Ranked by how well they match, like the rows above (#5179). Rules: [Chat as a source](#chat-as-a-source). |
+| Source                          | Notes                                                                                                                                                                                    |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Meeting minutes and transcripts | Stored with `meeting_type` metadata so the summarizer can vary tone (see [`meetings.md`](meetings.md)).                                                                                  |
+| Uploaded chapter documents      | Bylaws, policies, calendars from Chapter Docs ([`chapter-docs.md`](chapter-docs.md)).                                                                                                    |
+| Channel messages                | Messages in chapter channels, from members who agreed, announcements included. Ranked by how well they match, like the rows above (#5179). Rules: [Chat as a source](#chat-as-a-source). |
 
 ### Live structured data (tool-called, never embedded)
 
@@ -60,14 +60,14 @@ The model reads them at answer time by calling the same permission-guarded API e
 
 A member's contact details (phone, email, address) are never returned to a model.
 (Changed 2026-11-11 with [Consent](#consent): this paragraph used to list contacts among the fields a model reads.
-The privacy policy's Frapp AI paragraph promises no contact details are sent, so the tools don't return them.
+The privacy policy's Frapp Intelligence paragraph promises no contact details are sent, so the tools don't return them.
 An answer can still say who holds a role and link to their profile.)
 
 This is a deliberate correction to an earlier design that materialized structured data into the embedding corpus via a "facts" view.
 Embedding mutable rows has two failure modes an index cannot fix: an answer is only ever correct as of the last reindex, and an embedded row cannot be aggregated ("how many members are behind on dues?" is a query, not a similarity match).
 Reading through tools makes structured answers correct at the moment they are given, and it inherits the caller's permissions for free rather than reimplementing them at the index layer.
 
-It also follows directly from the non-goal below: structured data already *is* canon, so the AI should query canon rather than keep a stale copy of it.
+It also follows directly from the non-goal below: structured data already _is_ canon, so the AI should query canon rather than keep a stale copy of it.
 
 **The backwork catalog, never a backwork file** (Paul, 2026-11-16, [#5209](https://github.com/frapplive/Frapp/issues/5209)).
 Ask's `find_backwork` tool reads the [backwork](backwork.md) library's catalog: each file's title, course and the course's name, department, professor, type and number, semester and year, kind of copy, and whether names are blacked out.
@@ -161,6 +161,8 @@ That is the model's judgment, given the context, not a ranking rule.
 
 ## Consent
 
+Renamed 2026-11-24 (Paul, #5945): the assistant and the umbrella once called Ask Frapp and Frapp AI are Frapp Intelligence; older notes below keep the names they shipped with.
+
 Three gates stand between Frapp's data and a model.
 Each governs a different thing.
 
@@ -168,13 +170,14 @@ Each governs a different thing.
    The president switches each family separately: Ask, meeting notes, chat as a source, and nudges.
    Each is on from the chapter's creation until the president turns it off (Paul, 2026-11-17, [#5294](https://github.com/pdcarlson/Frapp/issues/5294): "I would like more AI stuff on by default"; until then each was off until the president turned it on, except nudges, as below).
    With Ask on from the start, the chapter's records are indexed from the start; nothing a member wrote or asked is sent without their own yes (gate 2).
-   *Changed 2026-11-17 by `pdcarlson` (Paul: "We should turn on nudges on activity by default"):* nudges got their own switch, on by default. Until then a nudge stood behind Ask's switch, so a chapter whose president never turned Ask on got no cards. A nudge reads only the member's own tasks (including words others wrote on them: the description an officer gave it and the note an officer sent it back with) and counts of the chapter's earlier ones, never names, for that member, and still needs gate 2, so a member who hasn't said yes gets no card and nothing is sent for them.
+   _Changed 2026-11-17 by `pdcarlson` (Paul: "We should turn on nudges on activity by default"):_ nudges got their own switch, on by default. Until then a nudge stood behind Ask's switch, so a chapter whose president never turned Ask on got no cards. A nudge reads only the member's own tasks (including words others wrote on them: the description an officer gave it and the note an officer sent it back with) and counts of the chapter's earlier ones, never names, for that member, and still needs gate 2, so a member who hasn't said yes gets no card and nothing is sent for them.
    This gate governs the chapter's records, which are the chapter's to share: documents, minutes and roster fields, whoever uploaded or posted them.
    An announcement is chat, so it also needs its author's yes ([Chat as a source](#chat-as-a-source)).
-2. **The member turned Frapp AI on, once, on Meet Frapp AI.**
+2. **The member turned Frapp Intelligence on, once, on Meet Frapp Intelligence.**
    This gate governs what is the member's to share: their own use of AI, and their own messages.
    Since #4790 (Paul, 2026-11-13: "make it one of those screens", "it's not forced... it should be encouraged during the signup process") the member answers on one onboarding screen, not on a separate sheet at the first AI feature.
-   The screen says what Frapp AI does in three short lines, names the companies it works with in one line that also says Continue turns it on, and links the privacy policy, which carries the kinds of data, what is kept, and what turning it off does ([`apps/landing/app/privacy/page.tsx`](../../apps/landing/app/privacy/page.tsx) § 4).
+   _Changed in #5627 by `pdcarlson`, 2026-11-19 (Paul's pick):_ a member who joins a chapter meets it at their first use of AI (see "Where Meet Frapp AI appears" below); a founder's chapter setup keeps it as a step.
+   The screen says what Frapp Intelligence does in three short lines, names the companies it works with in one line that also says Continue confirms the member is 18 or older and turns it on (#5627: members may join at 17, `AI_MINIMUM_AGE`; Google Cloud's terms bar generative AI for people under 18, ADR-28), and links the privacy policy, which carries the kinds of data, what is kept, and what turning it off does ([`apps/landing/app/privacy/page.tsx`](../../apps/landing/app/privacy/page.tsx) § 4).
    A prominent **Continue** is the yes; a quiet underlined **Not now** is a no.
    Paul's rule for the words: say no more about the process than the member needs.
    - Adding a provider makes a new version, and every member is asked again.
@@ -188,15 +191,15 @@ Each governs a different thing.
 
 What No means for that member:
 
-| Area | Effect |
-| --- | --- |
-| Ask and summaries | They can't use them. |
-| Their chat messages | Left out, as [Chat as a source](#chat-as-a-source) says. That includes announcements they posted and their replies under one (#4915, 2026-11-16: this row used to keep an officer's announcements in). |
-| Documents they posted as an officer | Still read. They are the chapter's records, under the president's switch. |
-| Their roster fields | Still appear in an officer's tool results. A question like "who is behind on dues" needs every member, and the fields carry no contact details. |
-| Minutes that name them | Still drafted. Notes an officer writes about a meeting are the officer's text, and minutes have always named who said and owes what. |
-| Notes they take on a meeting | Left out of the draft. Several members can take notes on one meeting, and a note-taker's own notes go to a provider only with their own yes; the minutes' author is told whose notes wait on it ([`meetings.md` § Several note-takers](meetings.md#several-note-takers)). Added 2026-11-13 (#4935). |
-| A recorded meeting | Having Frapp AI on does not stop a recording. The [recording notice](meetings.md#recording-notice) does: anyone present can object, whatever they answered, and the officer then doesn't record. |
+| Area                                | Effect                                                                                                                                                                                                                                                                                              |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ask and summaries                   | They can't use them.                                                                                                                                                                                                                                                                                |
+| Their chat messages                 | Left out, as [Chat as a source](#chat-as-a-source) says. That includes announcements they posted and their replies under one (#4915, 2026-11-16: this row used to keep an officer's announcements in).                                                                                              |
+| Documents they posted as an officer | Still read. They are the chapter's records, under the president's switch.                                                                                                                                                                                                                           |
+| Their roster fields                 | Still appear in an officer's tool results. A question like "who is behind on dues" needs every member, and the fields carry no contact details.                                                                                                                                                     |
+| Minutes that name them              | Still drafted. Notes an officer writes about a meeting are the officer's text, and minutes have always named who said and owes what.                                                                                                                                                                |
+| Notes they take on a meeting        | Left out of the draft. Several members can take notes on one meeting, and a note-taker's own notes go to a provider only with their own yes; the minutes' author is told whose notes wait on it ([`meetings.md` § Several note-takers](meetings.md#several-note-takers)). Added 2026-11-13 (#4935). |
+| A recorded meeting                  | Having Frapp Intelligence on does not stop a recording. The [recording notice](meetings.md#recording-notice) does: anyone present can object, whatever they answered, and the officer then doesn't record.                                                                                                    |
 
 How the first two gates are kept (#4308, #4790):
 
@@ -210,7 +213,7 @@ How the first two gates are kept (#4308, #4790):
   Chat as a source is not a call's switch: it decides which messages the corpus reads and whether a summary may read a channel ([Catch me up](#catch-me-up), 2026-11-12), and with it off no member's messages are read.
 - **Only the president turns the switches on or off.**
   That is the member holding the chapter's President role.
-  Each change is recorded in the audit log and shows in `#chapter-audit`.
+  Each change is recorded in the audit log, which officers read on the Logs page in Chapter settings ([`settings/README.md` § Audit Rules](settings/README.md#audit-rules)).
   Every member can see which switches are on.
 - **The answer is one per person, not per chapter.**
   It names the same providers wherever the person is a member, so one Yes covers every chapter they are in, and one No turns AI off for them in all of them.
@@ -221,27 +224,21 @@ How the first two gates are kept (#4308, #4790):
   An answer names the version the member was shown, and an answer to a version that is no longer current is refused, so a Yes never covers a company the member was not told about.
   Each version's answer is kept.
 - **A refused call says why.**
-  A route answers `ai.consent.required` when the member has not said yes, so the app shows Meet Frapp AI, and `ai.chapter_off` when the president has turned the feature off, so the app hides it.
+  A route answers `ai.consent.required` when the member has not said yes, so the app shows Meet Frapp Intelligence, and `ai.chapter_off` when the president has turned the feature off, so the app hides it.
 - **Who may use AI at all is also a permission.**
   `ai:use` is in every starting tier of a chapter created from #4308 on, so every active member holds it and Alumni do not ([`rbac.md`](rbac.md)).
   Chapters created before that grant it from the Roles page.
 
-Where Meet Frapp AI appears (#4790).
+Where Meet Frapp Intelligence appears (#4790).
 Only while the server has AI: every place waits for `GET /v1/ai/consent`, which answers 404 `ai.not_available` with it off.
 
-- **In onboarding.**
-  On the phone it is a beat of s03 after the display pick and before notifications, for a member who joined, and a step of chapter setup at the same place, for the officer who created the chapter.
-  It is shown only to a member who has never answered.
-  Either answer moves on.
-- **Once on next open**, for an account that never answered: a member who joined before the screen existed, or whose onboarding read of it never came back.
-  On the phone a sheet over the chat home a moment after launch, after What's new if both are due, and never on a launch the first-run tour is due.
-  On web a dialog right after the first-run tour, standing down while any other dialog is open.
-  Continue and Not now are both answers; closing it is not, so the next open asks again.
-- **At an AI entry point**, for a member who chose Not now.
-  Every AI entry point calls `useAiConsentGate` (web and phone): a member with Frapp AI on goes straight through, anyone else is shown the same screen, and the feature goes ahead only on Continue.
-- **In personal Settings**, as one Frapp AI switch, captioned with what it does.
+- **At the first use of an AI feature**, for a member who hasn't turned Frapp Intelligence on, whether they never answered or chose Not now.
+  Every AI entry point calls `useAiConsentGate` (web and phone): a member with Frapp Intelligence on goes straight through, anyone else is shown the same screen, and the feature goes ahead only on Continue.
+  A member who joined meets it here (Paul, 2026-11-19, #5627: Meet Frapp Intelligence moves to first use of AI). Until then it was also a beat of s03 for a member who joined, and it opened by itself once (a sheet over the phone's chat home a moment after launch, a dialog on web after the first-run tour) for an account that never answered.
+- **In chapter setup**, on the phone, for the officer who created the chapter: a step after the chat display pick and before notifications, shown only to a founder who has never answered. Either answer moves on.
+- **In personal Settings**, as one Frapp Intelligence switch, captioned with what it does.
   The companies are not named there (Paul, 2026-11-17, #5292: "that lives in the privacy policy"), and the phone's AI section links the privacy policy.
-  Turning it on opens Meet Frapp AI, so the yes is given where the companies are named and the policy is linked; turning it off is immediate.
+  Turning it on opens Meet Frapp Intelligence, so the yes is given where the companies are named and the policy is linked; turning it off is immediate.
 - **A president's Continue covers only their own account.**
   From 2026-11-13 (#4790) a president whose chapter never set its switches turned them on with the same Continue, and the screen's line said "for you and your chapter" (Paul: "why not just get these features going from the start so you don't have to like go in and add stuff").
   Since #5294 (2026-11-17) the switches start on, so that path and its wording are gone.
@@ -273,19 +270,22 @@ See [`spec/architecture/README.md`](../architecture/README.md) §13 for the mech
 
 The model is also prompted to surface conflicts ("I see two different answers — the November dues notice says $225, the September one said $200") rather than synthesize them away, and to say "I don't know" when the corpus is silent.
 
-## Ask Frapp
+## Frapp Intelligence
+
+Renamed 2026-11-24 (Paul, #5945): the assistant and the umbrella once called Ask Frapp and Frapp AI are Frapp Intelligence; older notes below keep the names they shipped with.
+The chapter's switch for it is "Questions and requests", so no switch shares the umbrella's name; code and this page still say Ask where they name the module.
 
 A member asks a question in their own words and gets an answer from what they could open themselves, with each claim tied to its source.
 Built 2026-11-12 on web (#450, #451) and on the phone (#4415; the sheet is [`../ui/mobile/screens.md`](../ui/mobile/screens.md) s17, with the same words and the same answer cutting as web).
 On the phone a channel-message source opens its channel at the newest message, since the channel screen has no jump-to-message yet.
-It is off unless the server has `AI_ENABLED` on and the chapter's president has turned Ask on, and it needs the member to have Frapp AI on.
+It is off unless the server has `AI_ENABLED` on and the chapter's president has turned Ask on, and it needs the member to have Frapp Intelligence on.
 
 - **Where it is.**
   On web the top bar's find field, which reads "Search or ask Frapp", asks from any page and opens the conversation as a dialog where Find opens (changed in #4904 by pdcarlson, 2026-11-13, Paul's pick;
   until then a button in the chat composer opened it over the thread;
   [`../ui/web-dashboard/README.md`](../ui/web-dashboard/README.md) § Top bar).
-  Changed in #5476 by pdcarlson, 2026-11-18 (Paul's pick, after Shawn and he didn't want Ask in the search bar): on web the field only finds, and a floating Ask bar with the crest opens Ask, as on the phone: at the bottom of every tool page, or at the foot of the Channels column when chat is alone, never over a message box (in a channel, `@Frapp` asks); from `lg` up it sits at the foot of the sidebar on every layout instead (changed in #5560 by pdcarlson, 2026-11-19). It opens the same dialog;
-  on the phone the Ask Frapp bar above the tab bar, on all four tabs, opens it as a full-height sheet whose field only asks, and the Search screen's last row opens it with the searched words (changed in #5139 by pdcarlson, 2026-11-16; from #4904 the field also listed places that matched what was typed;
+  Changed in #5476 by pdcarlson, 2026-11-18 (Paul's pick, after Shawn and he didn't want Ask in the search bar): on web the field only finds, and a floating Ask bar with the crest opens Ask, as on the phone: at the bottom of every tool page, or at the foot of the Channels column when chat is alone, never over a message box (in a channel, `@Frapp` asks); from `lg` up it sits at the foot of the sidebar on every layout instead (changed in #5560 by pdcarlson, 2026-11-19). It opens the same dialog (changed 2026-11-22, Paul's pick: it opens the Ask page, `/ask`, with chat beside it, and a question still being answered goes on when the member leaves the page);
+  on the phone the Frapp Intelligence bar above the tab bar, on all four tabs, opens it as a full-height sheet whose field only asks, and the Search screen's last row opens it with the searched words (changed in #5139 by pdcarlson, 2026-11-16; from #4904 the field also listed places that matched what was typed;
   [`../ui/mobile/navigation.md`](../ui/mobile/navigation.md) § Global entries).
   With Ask off for the chapter, for a member without `ai:use`, or on a server with no AI, there is no entry anywhere.
   Changed in #4702 by pdcarlson, 2026-11-13 (Paul): until then web had a pill in the top bar that opened a panel on the right edge, and the phone had a bar inside the + panel.
@@ -323,6 +323,7 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
 - **What streams is a preview.**
   Text appears as it is written, under the folded list of what Frapp did (next bullet).
   The server decides what stands after the model stops, and the checked answer replaces the preview.
+  The preview is paced on both apps (`useSmoothText` in `@repo/hooks`, 2026-11-22, Paul: "not smooth"): what arrives is revealed a few words at a time, ending on a whole word, and catches up within about a third of a second, so a reply reads as a steady flow rather than in bursts, as ChatGPT and Claude draw theirs. With Reduce Motion on it is drawn as it arrives.
 - **A working turn shows what the server is really doing** (changed in #4701 by pdcarlson, 2026-11-13: until then it was one of three fixed lines, "Searching your chapter's sources", "Reading what it found" and "Writing", whatever was read, and a turn that ended in a card said "Searching" until the card arrived; changed again in #5427 by pdcarlson, 2026-11-17, Paul's pick of direction A: one line became a list of steps, below).
   Each step is sent when that work starts, and none is shown for work that did not happen. Until #5427 each was one line that replaced the last, in these words:
   - "Searching your chapter's sources" from the moment the question is sent: the index is searched and the question is read for which live records it needs.
@@ -349,9 +350,10 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
     The folded row stays above the finished answer and replaces the past-tense "Read …" line that sat under it from #4702.
     A turn that read nothing (a greeting answered in Frapp's own words) draws no list.
   - **Nothing moves under the reader:** the list only grows at its bottom, the end of the thread, and folds before any answer text is under it. If Frapp writes and then reads again, the row stays folded and its count goes up.
-  The rules are one set of functions in `@repo/validation` (`ask-steps.ts`), read by web and the phone.
-  A build from before #5427 skips the `step` event and the new keys and shows its one line as before; a build that does not know a kind draws the plain mark.
-  A turn the member walked away from (the panel closed, or a new question sent) stops at its next wait: nothing more is read, written or kept for it.
+    The rules are one set of functions in `@repo/validation` (`ask-steps.ts`), read by web and the phone.
+    A build from before #5427 skips the `step` event and the new keys and shows its one line as before; a build that does not know a kind draws the plain mark.
+    A turn the member walked away from (the panel closed, or a new question sent) stops at its next wait: nothing more is read, written or kept for it.
+
 - **The answer reads as markdown** (#5429; Paul, 2026-11-17: "We should process the raw markdown? Packages exist for this.").
   Bold, italic, code and short lists are drawn as chat draws a message, through the same renderer on web and the phone (`@repo/chat-core/ask-markdown`), with the markers and named people and channels kept where the server put them; a list reads as lines led by a bullet or its number.
   A link is not drawn: it reads as its words and its address is dropped, so text planted in a source can't put a link in Frapp's voice ([`ai-prompt-injection.md`](../../docs/security/ai-prompt-injection.md)).
@@ -363,11 +365,12 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
   Each cited sentence carries a numbered marker, and each source is a chip under the answer with the same number and its name;
   its kind, place and full date are the chip's tooltip on web and its spoken name on both (changed in #4699 by pdcarlson, 2026-11-13: they were rows that spelled the kind and date out, which made a thread of several answers long).
   A document opens in the viewer, minutes open the meeting, a channel message opens in its channel, and live data opens its page.
+  The asker's own points open their points: the Points panel on their web Profile, the Points screen on the phone (#5950; the Points page on web and the task board on the phone until then).
   Live data has no date; it says "Read just now".
 - **Left-out messages are counted, never named.**
   When the channels an answer drew on hold messages from members who have not agreed, the answer says how many were not included.
-- **When it can't answer** it says which: the member has not turned Frapp AI on (with a button that opens Meet Frapp AI), the president turned Ask off, the chapter or the member reached its allowance, or a problem on Frapp's side kept it from answering ("Frapp couldn't answer because of a problem on its end.", with Try again in the turn's place; a reason a build does not know reads and acts the same; changed in #5082, 2026-11-15, from "Ask isn't available right now. Try again later.").
-  A provider refusal reads "Ask can't help with that question."
+- **When it can't answer** it says which: the member has not turned Frapp Intelligence on (with a button that opens Meet Frapp Intelligence), the president turned Ask off, the chapter or the member reached its allowance, or a problem on Frapp's side kept it from answering ("Frapp couldn't answer because of a problem on its end.", with Try again in the turn's place; a reason a build does not know reads and acts the same; changed in #5082, 2026-11-15, from "Ask isn't available right now. Try again later.").
+  A provider refusal reads "Frapp Intelligence can't help with that question."
 - **The stream format is versioned and defined once,** in `@repo/validation` (`ask.ts`), for the API that writes it and for web and mobile that read it.
   A reader ignores an event type, a key or a source kind it does not know, so an installed mobile build keeps working when the format grows.
 - **Limits.**
@@ -397,14 +400,14 @@ Until then the empty panel offered three fixed questions and, for an officer, on
   Until then every open began with "Ask about your chapter" and a paragraph on where answers come from and, for a member Frapp can act for, that it can do things too.
 - **The first open says what Frapp can do, once.**
   On a member's first open on a phone or in a browser, the greeting gives way to an exchange that has already happened: their own bubble asking "What can you do?" and Frapp's answer under it (where answers come from and that each links to its source; for a member Frapp can act for, that they can ask for things to be done and nothing changes until they confirm).
-  It is the product's own copy (`ASK_STARTER` in `@repo/validation`), not a model's: nothing is sent, it needs no Frapp AI consent, and it is never among the earlier turns sent with a question.
+  It is the product's own copy (`ASK_STARTER` in `@repo/validation`), not a model's: nothing is sent, it needs no Frapp Intelligence consent, and it is never among the earlier turns sent with a question.
   The device keeps, per member, that the starter was drawn, and whether it carried the line about having things done: it is recorded only once it is on screen, so an open that never drew it (a question sent as Ask opened, Ask closed at once) leaves it due, and it is shown once more to a member Frapp can act for who saw it before it could.
   Once the conversation has had a turn, New conversation brings back the greeting, not the starter.
   A device that can't read the record never shows it, so it can't come back on every open; one that can't keep it doesn't show it again until Ask is reloaded.
 
 - **Built from the member's own account, with no model call.**
   When Ask opens, the server reads what this member's account holds right now and returns at most three questions and at most one request (`GET /v1/ai/ask/suggestions`).
-  Nothing is sent to a provider, so it does not need Frapp AI on; Meet Frapp AI is still offered at the first question.
+  Nothing is sent to a provider, so it does not need Frapp Intelligence on; Meet Frapp Intelligence is still offered at the first question.
 - **The questions, in the order they are kept when there are more than three:** what the member owes on their soonest unpaid invoice (while Dues is on);
   their one open task by name, or "Which of my 3 open tasks is due first?" for several;
   when and where their next event is, with its day said the way a member would ("today", "tomorrow", "on Sunday", "on November 22"), so a meeting that repeats is asked about on the right day (one they must attend in the next seven days, before a sooner one that is optional for them;
@@ -447,7 +450,7 @@ Decided 2026-11-13 by Paul (no Ask and Do tabs, and "all proposed cards show up 
   A card is not replaced by the next thing asked: each stays live until it is confirmed or cancelled, and then reads as one line saying what happened.
   A card that stopped waiting some other way (a day passed, or it was decided on another device) still shows its buttons until Confirm or Cancel is pressed; that press finds it gone and the card becomes one line, "This is no longer waiting.
   Ask again.".
-  *(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is Dismiss in the card's ··· menu; a decided card stays drawn, greyed, under its one line; and the gone line reads "No longer waiting. Ask again to redo it." See [How a card reads](#asking-frapp-to-do-something).)*
+  _(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is Dismiss in the card's ··· menu; a decided card stays drawn, greyed, under its one line; and the gone line reads "No longer waiting. Ask again to redo it." See [How a card reads](#asking-frapp-to-do-something).)_
 - **A follow-up leans on what came before.**
   "And for elections?" after a question about quorum is answered as a question about quorum for elections.
   The turns before a question are sent with it, at most the last six: what the member typed, and Frapp's answer to it.
@@ -468,6 +471,7 @@ Decided 2026-11-13 by Paul (no Ask and Do tabs, and "all proposed cards show up 
 - **A question still being answered when Ask closes is dropped.**
   The turns before it stay.
   Changed in #4713 by pdcarlson, 2026-11-13: a question asked from a channel is left to finish, because its answer is drawn in the channel and closing Ask is not walking away from it.
+  Changed for the web by pdcarlson, 2026-11-22 (Ask as a page): leaving or closing the Ask page drops nothing; the question goes on being answered and is there when the member comes back. The phone sheet still drops it.
 - **A request has already been searched for.**
   Frapp reads what was typed as a question and as a request at the same moment, so a question waits on nothing.
   When it turns out to be a request, the search has already run and is thrown away: nothing it found is shown, no live data is read and no answer is written.
@@ -489,7 +493,7 @@ Slack draws a slash command's reply this way ("Only visible to you"), and Discor
   It is read from the text (`askMentionQuestion` in `@repo/validation`), so a typed handle, a pasted one and a picked one behave the same.
 - **Said before it is sent.**
   While the draft names `@Frapp`, the line by the message box reads "Only you will see this question and Frapp's answer."
-  On the phone it takes the typing line's place, so nothing moves, and the send button is named Ask Frapp.
+  On the phone it takes the typing line's place, so nothing moves, and the send button is named "Send to Frapp Intelligence".
 - **Frapp in the `@` list** is offered only to a member with Ask, in a message box that can ask.
   It is the first row, on a bare `@` and once its name is being typed, as Slack lists an app above people, so a member who never knew they could ask in a channel finds Frapp the first time they mention anyone; its crest is drawn in the chapter's colour on the chapter's tint.
   Enter straight after `@` picks Frapp, which still sends nothing: the line by the message box says the draft is a question, and taking `@Frapp` out undoes it.
@@ -523,13 +527,13 @@ Slack draws a slash command's reply this way ("Only visible to you"), and Discor
   One question is answered at a time across Ask and every channel.
   Both clients read a send through one function (`readChannelAsk`), so they refuse the same things in the same order.
 - **Not while editing a message,** which saves a message already posted, and **not in a thread's reply box.**
-  A thread has no place to draw a private answer, so for a member with Ask a reply that names `@Frapp` is refused with "Ask Frapp from the channel, not from a reply." and the words stay.
+  A thread has no place to draw a private answer, so for a member with Ask a reply that names `@Frapp` is refused with "Ask @Frapp from the channel, not from a reply." and the words stay.
   It is refused, not posted, because a member who expects a private answer must not find their question in the thread for everyone.
 - **A member without Ask** (Ask off for the chapter, no `ai:use`, or a server with no AI) gets no Frapp in the list, and their `@Frapp` is ordinary text.
   It still reaches nobody ([`chat/README.md` § Mentions](chat/README.md#mentions)).
 - **Until the app knows which of the two a member is, a message that names `@Frapp` is held.**
   Whether a member has Ask rests on three reads (the server has AI, the chapter's switch, the member's permissions).
-  While one is in flight or has failed, Send keeps the text and says "Still checking Ask Frapp.
+  While one is in flight or has failed, Send keeps the text and says "Still checking Frapp Intelligence.
   Try again in a moment, or take @Frapp out to post this.", in a channel and in a thread's reply box, on both clients.
   Posting it then would be the one mistake that can't be taken back.
   A member the reads already rule out (no `ai:use`, Ask off, no AI) is not held (`askAccessFrom` in `@repo/hooks`, `readChannelAsk` in `@repo/validation`).
@@ -618,7 +622,7 @@ Neither says what the wider audience could not open, which is what Paul's rule a
   A second press, or a retried request, posts nothing more: one answer is one message in a channel, and the repeat is told "This answer was already posted here.", also after the first was deleted.
   The same answer can be posted in another channel, where it is checked against that channel's readers.
 - **Asking's own conditions are asked again.**
-  If the president has turned Ask off, or the asker has said No to Frapp AI, since the answer was written, it is not posted (`ai.chapter_off`, `ai.consent.required`).
+  If the president has turned Ask off, or the asker has said No to Frapp Intelligence, since the answer was written, it is not posted (`ai.chapter_off`, `ai.consent.required`).
 - **Once posted, the asker's private copy leaves the channel.**
   It stays in Ask.
 - **Taking it down.**
@@ -700,7 +704,12 @@ How Frapp finds out whether an answer was any good, without keeping anyone's wor
 
 ### Dictation
 
-A member can speak a question into Ask's field instead of typing it (#5276).
+A member can speak a question into Ask's field instead of typing it (#5276), and, on the phone, a message into any chat composer: a channel, a DM or a thread (#5772, Paul 2026-11-21; web has no mic in either).
+Chat uses the same recogniser, the same cleanup route and the same rules below, with three differences:
+
+- **Never a DM's words.** In a DM or group DM (and while the channel is still loading) the words land as the phone heard them and nothing goes to the cleanup, because Frapp Intelligence never receives direct messages (privacy policy, Frapp Intelligence).
+- **One go holds what the cleanup takes** (1,000 characters) as well as what the message has left of its 10,000. The `full` line names the limit that stopped it: "That's all one dictation can hold." or "That's all one message can hold."
+- **Words go only where they were spoken for.** A dictation in progress is dropped when the channel changes in place or a reply or edit opens, and the Original chip goes once the box holds anything other than the tidied words.
 
 - **The phone hears it.**
   The phone's own speech recogniser turns the speech into words: on the device where the phone can, otherwise Apple's or Google's recogniser.
@@ -709,7 +718,7 @@ A member can speak a question into Ask's field instead of typing it (#5276).
   The recogniser's words go to `POST /v1/ai/ask/dictation`, one gateway call (`ask.dictation`), which takes out filler words and false starts, keeps only the last version of a self-correction ("Thursday, no, Friday" becomes "Friday"), adds punctuation and capitalisation, and writes times and counts as digits.
   It never answers the question, adds or drops a fact, changes a name, a channel name or the meaning, or translates; the member's own words and order stay.
   The words are data to tidy, never instructions: "ignore your instructions" spoken into the mic comes back as that sentence, punctuated.
-- **Only for a member with Frapp AI on and Ask on.**
+- **Only for a member with Frapp Intelligence on and Ask on.**
   The gateway checks the chapter's Ask switch and the member's yes before the call, as for a question.
   Without them the route refuses (`ai.consent.required`, `ai.chapter_off`) and the recogniser's raw words land in the field.
 - **It runs before the member sends.**
@@ -730,7 +739,7 @@ A member can speak a question into Ask's field instead of typing it (#5276).
 
 A member back to a busy channel asks for the short version and gets a few lines, each tied to the message it came from.
 Built 2026-11-12 on web (#3946) and on the phone (#3946, the mobile half, 2026-11-12).
-It is off unless the server has `AI_ENABLED` on and the chapter's president has turned on both Ask and "Include channel messages", and it needs the member to have Frapp AI on.
+It is off unless the server has `AI_ENABLED` on and the chapter's president has turned on both Ask and "Include channel messages", and it needs the member to have Frapp Intelligence on.
 
 - **Only when a member asks.**
   Nothing summarizes in the background, on a schedule, or for a channel nobody asked about.
@@ -766,7 +775,7 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
   Chat never triggers an action ([Chat as a source](#chat-as-a-source)), and a suggestion made from a private read would outlive it.
 - **Only the asker sees it, and it is not kept.**
   The summary is the response to the request.
-  The server stores no summary, no prompt and no point, the beta diagnostics window never covers it, and the client holds it only while the panel is open: closing the panel, leaving the channel or reloading ends it.
+  The server stores no summary, no prompt and no point, the beta diagnostics window never covers it, and the client holds it only while it is open: closing it, leaving the channel or reloading ends it.
 - **Report this is the one way any of it is kept.**
   A summary that stands carries Report this, as every AI-made surface does ([Stored AI text](#stored-ai-text)).
   The server seals the exchange into the response and forgets it, as it does for an Ask answer; a report hands it back, and only then is it stored: the messages the model read and the summary, encrypted, for 30 days, for the Frapp team.
@@ -777,12 +786,15 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
 - **Where it is.**
   On web: "Catch me up" in the channel's menu, a "Summarize thread" control on a thread of 5 or more messages, and a strip above the timeline when a channel opens with 20 or more new messages ([`../ui/web-dashboard/README.md` § Chat](../ui/web-dashboard/README.md#chat)).
   With summaries off for the chapter, or for a member without `ai:use`, none of these appear.
-- **On the phone** the summary is a sheet over the channel or the thread ([`../ui/mobile/screens.md`](../ui/mobile/screens.md) s05).
+- **Where the summary shows.**
+  In the conversation it summarizes, never over it: a block under the channel's header (or at the top of the thread), at most a third of the screen and scrolling inside itself, on web and on the phone alike (Paul, 2026-11-19: "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS"; until then web drew it as a panel on the window's right edge and the phone as a sheet).
+  Hide folds it to the strip "Your summary is still here." with "Back to summary", and its × ends it.
+- **On the phone** ([`../ui/mobile/screens.md`](../ui/mobile/screens.md) s05)
   The ways in are the same three, placed where a phone has room: a "Catch me up" row in the channel header's ⋯ menu, a "Summarize thread" action on the thread's reply-count line (and a strip under the thread's header at 20 or more replies), and a strip under the channel's header when it opens with 20 or more new messages.
   The mobile timeline has no unread divider to hang the offer on, so the strip counts from what Chat home held when the channel was opened; a channel opened cold, from a push, offers the last 24 hours from the menu and no strip.
-  A sheet cannot sit beside the message the way web's panel does, so pressing a line closes the sheet and scrolls to the message, and the strip then reads "Your summary is still here." with "Back to summary": the same summary comes back, with no second request.
-  Swiping the sheet away, the strip's ×, or leaving the channel ends it.
-- **When it can't** it says which: the member has not turned Frapp AI on (with a button that opens Meet Frapp AI), the president has summaries or channel messages turned off, the chapter or the member reached its allowance, or summaries are not available.
+  A phone has no room for the summary and the message at once, as a computer does, so pressing a line folds the summary to its strip and scrolls to the message; "Back to summary" brings the same summary back, with no second request.
+  The ×, on the summary or its strip, or leaving the channel ends it.
+- **When it can't** it says which: the member has not turned Frapp Intelligence on (with a button that opens Meet Frapp Intelligence), the president has summaries or channel messages turned off, the chapter or the member reached its allowance, or summaries are not available.
   A provider refusal reads "This conversation can't be summarized."
 - **Limits.**
   Ten summaries a minute per member, on top of the spend caps.
@@ -808,7 +820,7 @@ Nothing changes until they press Confirm.
 Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-12).
 
 - **Who can.**
-  A member who holds `ai:use` and `ai:act` (and `members:view`, as every member does), in a chapter whose president has Ask on, on a server with `AI_ENABLED` on, with Frapp AI on.
+  A member who holds `ai:use` and `ai:act` (and `members:view`, as every member does), in a chapter whose president has Ask on, on a server with `AI_ENABLED` on, with Frapp Intelligence on.
   No starting role holds `ai:act`: a chapter grants it on the Roles page.
   `ai:act` adds no authority of its own.
   It lets a member ask for the changes they could already make by hand.
@@ -823,13 +835,16 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   Two things differ, both because of the size of the screen.
   A member is added to a points change from the chapter's roster in a tall sheet with a search field, which is how the phone picks a member everywhere else.
   A task's who and when are changed in the ordinary New task form opened on the proposal, where web changes them on the card; Confirm on a task missing either opens that form.
-  A finished task links to Tasks and a finished event to that event; a finished points change links nowhere, because the phone has no points page.
+  A finished task links to Tasks and a finished event to that event; a finished points change links to the Directory's points standing ("See standings") on the phone, which has no chapter ledger, while web's links to the chapter ledger ("Open the ledger") for a `points:view_all` holder and to the standing for anyone else (#5950).
 - **Every card has Edit beside Cancel and Confirm** (Paul, 2026-11-15, #5117).
-  *(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is now Dismiss in the card's ··· menu, and Confirm is named for the action; see How a card reads below.)*
+  _(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is now Dismiss in the card's ··· menu, and Confirm is named for the action; see How a card reads below.)_
   An event's Edit opens the ordinary New event form filled in from the card, every row showing what it holds (who's coming by role, the end, notes, the repeat; More options until #5561), and Create in that form is the confirm: the event is made through the event route and the proposal records it, without making a second.
+  The card grows into that form in place, on web and in the phone's Ask sheet, with the conversation still above it and a close (web's X, the phone's Close) that folds it back into the card; what was typed is kept. On the phone the form's header is the sheet's (the title, then Close and Create); the form's top is brought into view as it opens, a field is kept above the keyboard, and Android back folds it. On the phone this is in the Ask sheet only: from a card in a channel the form still opens as its own sheet, since the inverted chat list gives no way to bring the form's top or a focused field into view (#5907).
+  _(Changed for the web by pdcarlson, 2026-11-22 (Paul's pick, "Card expands in place"): until then web's Edit docked the form over the whole Ask surface, or over the chat column for an answer in a channel.)_
+  _(Changed for the phone by pdcarlson, 2026-11-23, the same pick: until then the phone's Edit opened the form as its own sheet over Ask.)_
   The event is made either way, and the card says it was added.
   If the form's answer carries no event id, or the proposal can no longer record it, the proposal is taken down instead, so it is never drawn again with a Confirm that would make the event a second time.
-  A task's Edit opens the task form on the phone (as Confirm on a task missing who or when already did) and turns the task's name and details into fields on web, where who and when are already fields on the card.
+  A task's Edit opens the task form on the phone (as Confirm on a task missing who or when already did), with its points, proof and From; on web, where who and when are already fields on the card, it turns the name, details, points, proof and From into fields on the card, and steps are changed on the task once made (2026-11-22; Paul picked in place, the same day).
   A points card's Edit turns its amount and reason into fields on the card, on both; Confirm then sends only what changed.
   The forms keep what was typed when closed, as every form does (#4593).
   Comparable: Google Calendar's "Add to calendar" on an event found in mail opens its full editor; Siri's suggested reminders and Linear's issue-from-text hand the draft to the ordinary form.
@@ -838,22 +853,33 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   Its details are rows, each with a small mark in place of an all-caps label; an event's date sits in a tile beside its written-out day and times.
   Its buttons are Edit and one named action ("Create event", "Create task", "Give 5 points"); Dismiss is in the menu, because a card is far more often confirmed than dropped.
   Once decided, the card stays where it was, greyed, under a line that says what happened ("Event created", or struck through with "Dismissed. Nothing was changed."), and an event's links straight to that event.
-  *(Changed in #5148 by pdcarlson, 2026-11-16: until then the buttons were Cancel, Edit and Confirm, the details sat under all-caps labels, and a decided card shrank to its one line.)*
+  _(Changed in #5148 by pdcarlson, 2026-11-16: until then the buttons were Cancel, Edit and Confirm, the details sat under all-caps labels, and a decided card shrank to its one line.)_
   Comparable: Google Calendar's event chip in Gmail, Apple Mail's Siri-found events, Slack's approval messages and ChatGPT's tool approvals all name the action on the button and keep the item visible once handled.
 - **An event's points are never guessed** (Paul, 2026-11-16, #5148).
   Points the member said are used.
-  Otherwise they are copied from the chapter's event type the name fits (the type of that name, or the one type whose name the event's words all begin: "Chapter" fits "Chapter meeting", but "Chapter retreat" fits no "Chapter" type; none when two fit), then from the latest event of the same name the member can see from the last 180 days, and the card says which ("From your Chapter meeting event type", "Same as your last Study hours"); a matching type also sets whether the event is required, and is the event's type.
+  Otherwise they are copied from the chapter's event type the name fits (the type of that name, or the one type whose name the event's words all begin: "Chapter" fits "Chapter meeting", but "Chapter retreat" fits no "Chapter" type; none when two fit), then from the latest event of the same name the member can see from the last 400 days, and the card says which ("From your Chapter meeting event type", "Same as your last Study hours"); a matching type also sets whether the event is required, and is the event's type.
   With nothing to copy, the points field is empty and outlined, and the action waits until a number is entered (0 for none); the server refuses a proposal still missing them.
   Edit carries the points typed on the card and the matched type into the event form; a card with no points opens the form on its own visible default, for the officer to change there.
   A member without `events:update` cannot set points or make an event required ([events.md](events.md)), so their card proposes none, optional, and asks nothing.
-  *(Changed in #5148 by pdcarlson, 2026-11-16: until then the card said "The chapter's usual amount" and the event was made with 10.)*
+  _(Changed in #5148 by pdcarlson, 2026-11-16: until then the card said "The chapter's usual amount" and the event was made with 10.)_
 - **What it can do** (three actions; each needs the permission and the module of the route it stands in for, and one the member lacks is not offered):
   - **Give or take away points** (`points:adjust`), for members named, for everyone who holds a role, or for everyone who came to an event.
-  - **Create a task** for one member (`tasks:manage`).
-  - **Put one event, or a repeating series, on the calendar** (`events:create`), open to the whole chapter.
+  - **Create a task** (`tasks:manage`) for one member, several members, or a role, tier or group by the chapter's own name for it, where each of them does it (a copy each) or one of them claims it (up for grabs); with what marking it done needs (a photo or a link), its steps and the tier, role or group it is from, when the member or a source said them, and its points only when the member said them (points written in minutes or a document are not an instruction, [meetings.md § Suggested tasks](meetings.md#suggested-tasks)).
+    Ask reads the chapter's roles, tiers and groups (`chapter_roles` with `for_card task`) before it names one; a name that is none of them, or could be two, makes no card, and Ask is told to read the list again. A From the member is not in is left off, and a task up for grabs is from nobody.
+    The card names everyone it reaches and its points, proof, steps and From, before and after it is decided; its Who is the task form's Who picker on both.
+    _(Changed by pdcarlson, 2026-11-22: until then a task card was for one member only, and its points, proof, steps and From could not be set from Ask.)_
+  - **Put one event, or a repeating series, on the calendar** (`events:create`), inviting whom the event is for.
     A series is weekly, every other week or monthly, on the first meeting's weekday or day of the month, as long as the event form's own default (13 meetings weekly or every other week, 7 monthly), and the card says so ("Every Sunday until February 7, 2027", with "13 times" under it).
-    Who is invited by role, a longer or shorter series and anything else the card does not show are set through the card's Edit (and a check-in zone on web, whose event form is the only one with it).
-    *(Changed in #5117 by pdcarlson, 2026-11-15: until then a proposal was always one event, and "every Sunday at 6:48 PM" came back as one hour-long event with the repeat silently dropped.)*
+    Who is invited is decided per event, in the chapter's own role and tier names, and the card's people row says it ("Cabinet required, nobody else invited") (#5853).
+    Through the tool loop the model first reads `chapter_roles`: the chapter's tiers with their roles and holders, its event types, and who its recent events invited (read as the asker; left out when the chapter has events off).
+    It then names who is required, optional or not invited and what everyone else is: a leaders' event (a leadership reception, an FSL, council or national officers' event, officer training or transition, an exec meeting) goes to the top tier only, required, with chairs added only when named; a committee meeting to that committee's roles; a chapter meeting required for everyone; a social, philanthropy event or study hours optional for everyone; an alumni event to the alumni's role or tier.
+    A name that is none of the chapter's roles or tiers, or could be two, sends the card back to the model rather than guessing, and so does an event type the chapter does not have.
+    With no list named and nothing the member said about whether it is required, the latest event of the same name sets it, and the card says "Same as your last …" under the people row; otherwise the event type, else optional for everyone.
+    A tier is stored as the roles in it today, since events keep role ids; a role named apart from its tier keeps its own status, and a role the chapter no longer has is left out of a copied list.
+    A member without `events:update` gets the same list with nobody required.
+    A longer or shorter series and anything else the card does not show are set through the card's Edit (and a check-in zone on web, whose event form is the only one with it).
+    _(Changed in #5117 by pdcarlson, 2026-11-15: until then a proposal was always one event, and "every Sunday at 6:48 PM" came back as one hour-long event with the repeat silently dropped.)_
+    _(Changed in #5853 by pdcarlson, 2026-11-22: until then every card invited the whole chapter, and who was invited by role was set only through Edit; Paul's FSL Leaders Reception card invited everyone.)_
 - **Through the tool loop, a card can rest on what Frapp read** (changed in #4899 by pdcarlson, 2026-11-13, approved by Paul the same day; off with the loop, `ASK_AGENT=on`).
   The model that reads the chapter is also offered the three actions, for a member who holds `ai:act` in a client that draws cards, so "make a task for each action item in last night's minutes" reads the minutes and comes back with a card for each.
   The separate reading of the request is not run then.
@@ -868,7 +894,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   Web and the phone send `answer_cards` whenever they ask for a card.
   The cards sit under the answer's words and sources, in the order the server named them, each with its own ··· menu, Edit and named action (#5148); deciding one leaves the others waiting.
   A card that ended becomes one line in its place saying what happened, as a turn's single card does, and still says what it was about.
-  *(Changed in #5148 by pdcarlson, 2026-11-16: an ended card now stays drawn, greyed, under that line.)*
+  _(Changed in #5148 by pdcarlson, 2026-11-16: an ended card now stays drawn, greyed, under that line.)_
   The cards are read from the asker's own waiting requests; one that is no longer among them (decided on another device, or its day passed) reads "No longer waiting.
   Ask again to redo it." in the card's place.
   An answer that is cards and nothing else draws the cards with no words above them.
@@ -904,7 +930,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   It is not in the Suggested list, sends no push, and is gone after one day.
   Asking for something else in the conversation leaves it waiting (changed in #4699 by pdcarlson, 2026-11-13: it used to be replaced, as it still is for a request sent to `POST /v1/ai/act` by an app build from before the conversation).
 - **Confirm makes the change the ordinary way.**
-  It checks the action's permission again at that moment, then goes through the same service the Points, Tasks and Events pages use, as that officer.
+  It checks the action's permission again at that moment, then goes through the same service Adjust points, the Tasks page and the Events page use, as that officer.
   A points change is one ledger entry per member under the officer's name, in the Manual category, with the usual push to each member.
   A task and an event are created by that officer, and the usual pushes go out.
   No chat card is posted.
@@ -926,7 +952,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
 
 > **Added 2026-11-12 (#718, the building session's, Paul's to change).**
 > None of this section was stated before.
-> The choices in it: three actions, and no fines (a formal fine stays a thing an officer does on the Points page);
+> The choices in it: three actions, and no fines (a formal fine stays a thing an officer does on the Points page; since #5950, 2026-11-24, with Adjust points on a member's card or the points ledger in Chapter settings);
 > Ask's chapter switch governs Do, with no separate switch;
 > the waiting card is a saved suggestion with a one-day life, which overrides the older note on #1308 that a proposal would not be saved (ADR-28 decision 11 says proposals are suggestions, and there is one suggestions table);
 > the hourly points limit is kept and a larger change is refused whole;
@@ -1019,7 +1045,7 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
   It dismisses the suggestion; so does "Not this year" on an event.
   Why is never stored: only that it was dismissed.
 - **Where it is on the phone.**
-  One list, titled "Suggested" ([`../ui/mobile/screens.md`](../ui/mobile/screens.md), Suggested), holds the tasks from posted minutes and, under a "This time last year" heading, last year's events and tasks.
+  One list, titled "Suggested" ([`../ui/mobile/screens.md`](../ui/mobile/screens.md), Suggested), holds the tasks from posted minutes and last year's tasks, one card at a time, and under a "This time last year" heading last year's events (2026-11-19: last year's tasks joined the one-at-a-time cards).
   The "This time last year" notice opens it, and Events and Tasks each show one row leading to it while something is waiting.
   "Add to calendar" opens the phone's ordinary New event form on the same template web builds.
 - **Who sees one.**
@@ -1034,6 +1060,7 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
 > "probably not").**
 > Before this, an event's suggestion asked for "Create events", written when only officers held it.
 > Once #3709 made it a member default, any member saw these and could dismiss one, which takes it away from the officers too.
+
 - **Under a year of history, nothing, silently.**
   A chapter younger than about 46 weeks is not looked at, and an older one with nothing in last year's stretch gets no message saying so.
   Chat is never read, so a Discord import adds no history here.
@@ -1054,7 +1081,7 @@ Why it never reached him, read on staging that day: no `member_nudges` row had e
 
 ### The card and its tray
 
-Activity draws one card under the week card, from `POST /v1/activity/card`, and a tray of up to three more under it (the phone first, and web after; a phone build from before #5464 still draws only the task card, from `POST /v1/nudges/current`) (Paul's pick on #5464, 2026-11-18: one spotlight with a tray, over the spotlight alone).
+Activity draws one card under Now (under the week card until #5779 replaced it with a small ring), from `POST /v1/activity/card`, and a tray of up to three more under it (the phone first, and web after; a phone build from before #5464 still draws only the task card, from `POST /v1/nudges/current`) (Paul's pick on #5464, 2026-11-18: one spotlight with a tray, over the spotlight alone).
 
 - **What earns a card.** Any of these, for the member, under each module's own rule for who may see it, with the module on:
   an event starting today or tomorrow (in the member's time zone) that they haven't checked in to or snoozed, until it ends;
@@ -1109,7 +1136,7 @@ Activity draws one card under the week card, from `POST /v1/activity/card`, and 
   The member never waits on a card and never reads one nobody could stand behind.
 - **Words someone else wrote go only where the chapter has Ask on.**
   The task's description (usually the assigner's) and an officer's sent-back note reach the model only while the president has Ask switched on; otherwise the card is written from the title, deadline, steps and counts alone, and its place to start comes from the steps.
-  Decided by Paul, 2026-11-17, when nudges went on by default (#5309): a chapter that never turned any AI on should not send what an officer wrote, who may have said No to Frapp AI themselves.
+  Decided by Paul, 2026-11-17, when nudges went on by default (#5309): a chapter that never turned any AI on should not send what an officer wrote, who may have said No to Frapp Intelligence themselves.
 - **What people typed is read, never obeyed.**
   The task's title, description, checklist and note go to the model as data in the user turn, and the instructions are the system channel.
   The call has no tools, and what comes back is text for one reader.
@@ -1140,14 +1167,28 @@ Activity draws one card under the week card, from `POST /v1/activity/card`, and 
 
 ## Stored AI text
 
-Frapp does not keep the text of prompts or answers, with three exceptions.
+Frapp does not keep the text of prompts or answers, with four exceptions.
 
-| Exception | What is kept | Who reads it | How long |
-| --- | --- | --- | --- |
-| A member reports an answer, a draft, a suggested task or a summary | That one exchange, shown to the member before they confirm | The Frapp team | 30 days, encrypted |
-| Beta diagnostics | Questions and answers in Ask, for one chapter | The Frapp team | 14 days, encrypted, with a fixed end date |
-| Suggested agenda items | Each item the model suggested (a few words, and why), whether it was added or dismissed | The event's editors while it waits; after that only the prompt, as an example for meetings with the same audience | Until the event, or the minutes it was drawn from, is deleted |
+| Exception                                                          | What is kept                                                                            | Who reads it                                                                                                      | How long                                                      |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| A member reports an answer, a draft, a suggested task or a summary | That one exchange, shown to the member before they confirm                              | The Frapp team                                                                                                    | 30 days, encrypted                                            |
+| Beta diagnostics                                                   | Questions and answers in Ask, for one chapter                                           | The Frapp team                                                                                                    | 14 days, encrypted, with a fixed end date                     |
+| Suggested agenda items                                             | Each item the model suggested (a few words, and why), whether it was added or dismissed | The event's editors while it waits; after that only the prompt, as an example for meetings with the same audience | Until the event, or the minutes it was drawn from, is deleted |
+| What people change in a suggestion                                 | The member's question, the text the suggestion proposed and the text they saved         | The Frapp team                                                                                                    | 90 days, encrypted                                            |
 
+- A suggested task from minutes sent with **Add to next meeting's agenda** (#5790) is decided, so it keeps no text; the item it became keeps its words, which are the posted action item (no model wrote them; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)). A copy of the suggestion as it stood is kept for one day so Undo can put it back, then emptied by the hourly sweep.
+- **What people change in a suggestion is kept, so Frapp learns what it got wrong** (Paul, 2026-11-22: "we defo need to log what humans change when Frapp AI makes suggestions. that's how we learn what is good and not good").
+  When a member confirms, edits or dismisses a suggestion (an Ask card for an event, a task or points, a task suggested from minutes, or a "this time last year" event), sends it to the next meeting's agenda (kept as dismissed), or it expires untouched, Frapp keeps one record of it: how it was decided, whether through the card or the full form its Edit opened, and field by field whether what was saved kept, changed, added or removed what was proposed.
+  Who is invited (the roles, and whether anyone outside them is), who a task is for, times, days and points are kept as ids and numbers, with the shift in minutes; a text field is kept only as kept, changed, added or removed.
+  A "this time last year" event is always made in its own form from last year's, so its record holds the decision alone.
+  An event made in the form is read back as it was saved, so a change made there (who is invited, above all) is in the record.
+  A card Ask made names the Ask turn that made it, so the record can be read beside that turn's trace.
+  The words (the member's question, the proposed text and the saved text) are kept only sealed with the stored-text key, and only when the member who decided has Frapp Intelligence on (Paul's pick on 2026-11-22, over keeping the changes alone). Without the key none are kept and the record holds the changes alone. The question waits sealed on the card and is emptied with the rest of the card's text when it is decided.
+  No words are kept for a card drawn from chat: one Ask proposed after reading channel messages, or one drawn from a channel. Their authors never said their words could be kept, as the diagnostics window never keeps an answer that drew on chat.
+  A record is deleted after 90 days, and sooner when the member who decided or the member it was made for leaves the chapter, deletes their account or answers No on the AI sheet; those also empty that member's question from the cards still waiting for them.
+  Nobody in the chapter reads it; how the Frapp team does: [`docs/ops/ai-suggestion-changes.md`](../../docs/ops/ai-suggestion-changes.md).
+  The privacy page names it.
+  Minutes drafts, Backwork's fill and other AI-filled forms are to write to the same record next.
 - The diagnostics window exists for the beta only, and only on Ask.
   While it is on, Ask shows a line saying answers are being saved.
   It never covers meeting features, and it never keeps an answer that drew on chat.

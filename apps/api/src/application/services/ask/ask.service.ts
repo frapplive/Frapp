@@ -461,7 +461,7 @@ function marksText(
 }
 
 /**
- * Ask Frapp (#450, #451, `spec/behavior/ai.md`): one member's question,
+ * Frapp Intelligence (#450, #451, `spec/behavior/ai.md`): one member's question,
  * answered from what that member could open, with every claim tied to a
  * source the server checked.
  *
@@ -752,6 +752,8 @@ export class AskService {
     if (input.mayGoOn && !(await input.mayGoOn())) return;
     if (input.signal?.aborted) return;
 
+    // Set as each read comes back, before the next round can propose a card.
+    let readChat = false;
     const toolContext: AgentToolContext = {
       chapterId: input.chapterId,
       userId: input.userId,
@@ -760,6 +762,9 @@ export class AskService {
       permissions: held,
       enabledModules: input.enabledModules,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
+      askId,
+      question: input.question,
+      readChat: () => readChat,
     };
     // What the member had open, each looked up as them (`AskFromService`).
     const openAt = await this.from.read(input.from, toolContext);
@@ -879,6 +884,7 @@ export class AskService {
             kind: askStepKind(part.name),
           });
         } else if (part.type === 'read') {
+          if (part.sources.some((source) => source.chat)) readChat = true;
           yield event(askStepEnded(part));
         } else outcome = part.outcome;
       }

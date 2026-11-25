@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
+import { SELF_ASSIGNABLE_SECTION_CAPTION } from "@repo/validation";
 
 /**
  * Chapter settings and its Roles screens on the phone (#4074), rendered. They
@@ -17,13 +18,30 @@ import { screenText } from "@/test/screen-text";
  * rank rules let them change Brothers and Brother but not Officers.
  */
 const h = vi.hoisted(() => ({
+  // What the screen hands the Add role sheet (#5736), so a test can finish it.
+  pickableSheet: null as null | {
+    onCreated: (roleId: string) => void;
+    chapterRole?: {
+      placements: { value: string | null; label: string }[];
+      tierLabel: string;
+    };
+  },
+  newRolePresent: vi.fn(),
+  // What Chapter settings hands the New channel sheet (#5296).
+  channelSheet: null as null | {
+    mode: unknown;
+    onSubmit: (values: unknown) => Promise<void>;
+  },
+  createChannel: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   permissions: [] as string[],
   roles: [] as unknown[],
   rolesUpdatedAt: 0,
   tiers: [] as unknown[],
   members: [] as unknown[],
+  groups: [] as unknown[],
   vocabulary: {} as Record<string, string>,
   updateRole: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  updateGroup: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   updateTier: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   accentPresent: vi.fn(),
   backgroundPresent: vi.fn(),
@@ -33,6 +51,10 @@ const h = vi.hoisted(() => ({
   aiSettings: null as Record<string, unknown> | null,
   updateAi: vi.fn(),
   aiSaving: false,
+  // Chapter config (#5801): whether members may rename themselves.
+  config: { members_can_change_name: false } as Record<string, unknown>,
+  // The config PATCH's `mutateAsync`, which Chapter settings awaits (#6027).
+  patchConfig: vi.fn<(diff: unknown) => Promise<object>>(async () => ({})),
 }));
 
 vi.mock("react-native", async () => {
@@ -64,6 +86,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useRoles: () => ({ ...ok(h.roles), dataUpdatedAt: h.rolesUpdatedAt }),
     useRoleTiers: () => ok(h.tiers),
     useMembers: () => ok(h.members),
+    useGroups: () => ok(h.groups),
     useViewerUserId: () => "me",
     useCurrentChapter: () =>
       ok({ enabled_modules: { geofences: true }, vocabulary: h.vocabulary }),
@@ -71,9 +94,31 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useChapterChatBackground: () =>
       ok({ background: "midnight", photo_url: null }),
     useUpdateRole: () => ({ mutateAsync: h.updateRole, isPending: false }),
+    useUpdateGroup: () => ({ mutateAsync: h.updateGroup, isPending: false }),
+    useChapterRoleColors: () => [],
+    useViewerDisplayName: () => "Marcus Ellison",
     useUpdateRoleTier: () => ({ mutateAsync: h.updateTier, isPending: false }),
     useAiChapterSettings: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.aiSettings),
+    useOrgConfig: (options?: { enabled?: boolean }) =>
+      ok(options?.enabled === false ? undefined : h.config),
+    usePatchOrgConfig: () => ({
+      mutate: vi.fn(),
+      mutateAsync: h.patchConfig,
+      isPending: false,
+    }),
+    // The Chapter tab's profile and birthday posts (#6027).
+    useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannels: () => ok([]),
+    useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannelAccessOptions: () => ok([]),
+    useCreateChannel: () => ({
+      mutateAsync: h.createChannel,
+      isPending: false,
+    }),
     useUpdateAiChapterSettings: () => ({
       mutate: h.updateAi,
       isPending: h.aiSaving,
@@ -102,6 +147,34 @@ vi.mock("@/components/settings/chat-background-sheet", async () => {
       ref: React.Ref<{ present: () => void }>,
     ) {
       React.useImperativeHandle(ref, () => ({ present: h.backgroundPresent }));
+      return null;
+    }),
+  };
+});
+
+vi.mock("@/components/roles/new-role-sheet", async () => {
+  const React = await import("react");
+  return {
+    NewRoleSheet: React.forwardRef(function NewRoleSheet(
+      props: NonNullable<typeof h.pickableSheet>,
+      ref: React.Ref<{ present: () => void }>,
+    ) {
+      h.pickableSheet = props;
+      React.useImperativeHandle(ref, () => ({ present: h.newRolePresent }));
+      return null;
+    }),
+  };
+});
+
+vi.mock("@/components/chat/channel-form-sheet", async () => {
+  const React = await import("react");
+  return {
+    ChannelFormSheet: React.forwardRef(function ChannelFormSheet(
+      props: NonNullable<typeof h.channelSheet>,
+      ref: React.Ref<{ present: () => void }>,
+    ) {
+      h.channelSheet = props;
+      React.useImperativeHandle(ref, () => ({ present: vi.fn() }));
       return null;
     }),
   };
@@ -164,13 +237,39 @@ beforeEach(() => {
   h.permissions = ["*"];
   h.vocabulary = {};
   h.tiers = [
-    { id: "t-off", name: "Officers", position: 1, permissions: ["events:create", "members:invite"] },
-    { id: "t-bro", name: "Brothers", position: 2, permissions: ["members:view"] },
+    {
+      id: "t-off",
+      name: "Officers",
+      position: 1,
+      permissions: ["events:create", "members:invite"],
+    },
+    {
+      id: "t-bro",
+      name: "Brothers",
+      position: 2,
+      permissions: ["members:view"],
+    },
   ];
   h.roles = [
-    role({ id: "r-pres", name: "President", permissions: ["*"], is_system: true, system_key: "PRESIDENT" }),
-    role({ id: "r-tres", name: "Treasurer", tier_id: "t-off", permissions: ["events:create", "members:invite"] }),
-    role({ id: "r-bro", name: "Brother", tier_id: "t-bro", permissions: ["members:view"] }),
+    role({
+      id: "r-pres",
+      name: "President",
+      permissions: ["*"],
+      is_system: true,
+      system_key: "PRESIDENT",
+    }),
+    role({
+      id: "r-tres",
+      name: "Treasurer",
+      tier_id: "t-off",
+      permissions: ["events:create", "members:invite"],
+    }),
+    role({
+      id: "r-bro",
+      name: "Brother",
+      tier_id: "t-bro",
+      permissions: ["members:view"],
+    }),
     role({ id: "r-rush", name: "Rush Chair", permissions: ["members:view"] }),
   ];
   h.members = [
@@ -180,8 +279,25 @@ beforeEach(() => {
   ];
   h.updateRole.mockClear().mockResolvedValue({});
   h.updateTier.mockClear().mockResolvedValue({});
+  h.updateGroup.mockClear().mockResolvedValue({});
   h.aiConsent = null;
   h.rolesUpdatedAt = 0;
+  h.groups = [
+    {
+      id: "g-house",
+      name: "In house",
+      kind: "manual",
+      color: null,
+      member_ids: ["me", "u2"],
+    },
+    {
+      id: "g-class",
+      name: "Fall 2025",
+      kind: "pledge_class",
+      color: null,
+      member_ids: ["me"],
+    },
+  ];
   vi.mocked(useLocalSearchParams).mockReturnValue({});
 });
 
@@ -202,6 +318,37 @@ describe("Chapter settings (#4074)", () => {
     );
     expect(text).toContain("Roles");
     expect(text).not.toContain("Set by an officer");
+  });
+
+  it("lets an officer with chapter-config:manage turn member renames on (#5801)", () => {
+    h.patchConfig.mockClear();
+    h.permissions = ["*"];
+    const tree = render(<ChapterSettingsScreen />);
+    expect(screenText(tree)).toContain(
+      "Members can change their own name\nWhen off, officers who manage roles change names.",
+    );
+    const toggle = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Members can change their own name" &&
+        typeof node.props.onValueChange === "function",
+    );
+    expect(toggle.props.value).toBe(false);
+    act(() => toggle.props.onValueChange(true));
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      members_can_change_name: true,
+    });
+  });
+
+  it("shows the member-names switch read-only to a viewer without :manage (#5801)", () => {
+    h.patchConfig.mockClear();
+    h.permissions = ["chapter-config:view"];
+    const tree = render(<ChapterSettingsScreen />);
+    const toggle = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Members can change their own name" &&
+        typeof node.props.onValueChange === "function",
+    );
+    expect(toggle.props.disabled).toBe(true);
   });
 
   it("opens the accent and background sheets for an editor", () => {
@@ -230,13 +377,142 @@ describe("Chapter settings (#4074)", () => {
     ).toHaveLength(0);
   });
 
-  it("shows a roles manager only Roles, which opens the Roles screen", () => {
+  // #5296 (Shawn, 2026-11-22): the phone makes channels and roles, simply.
+  it("offers New channel to whoever can make one, opening the channel it made", async () => {
+    h.permissions = ["channels:create", "channels:manage"];
+    h.channelSheet = null;
+    h.createChannel.mockClear().mockResolvedValue({ id: "c-new" });
+    const tree = render(<ChapterSettingsScreen />);
+    expect(h.channelSheet).toBeNull();
+    act(() => pressable(tree, "New channel").props.onPress());
+    expect(h.channelSheet!.mode).toEqual({ kind: "create", categoryId: null });
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    await act(async () => {
+      await h.channelSheet!.onSubmit({
+        name: "rush-2027",
+        description: "",
+        categoryId: null,
+        isPrivate: false,
+        access: {},
+      });
+    });
+    expect(h.createChannel).toHaveBeenCalledWith({
+      name: "rush-2027",
+      description: undefined,
+      type: "PUBLIC",
+      category_id: undefined,
+    });
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/chat-thread",
+      params: { channelId: "c-new" },
+    });
+  });
+
+  it("says a refused New channel in the sheet's words, and opens nothing", async () => {
+    h.permissions = ["channels:create", "channels:manage"];
+    h.channelSheet = null;
+    h.createChannel
+      .mockClear()
+      .mockRejectedValue({ statusCode: 500, message: "boom" });
+    const tree = render(<ChapterSettingsScreen />);
+    act(() => pressable(tree, "New channel").props.onPress());
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    let caught: unknown;
+    await act(async () => {
+      await h
+        .channelSheet!.onSubmit({
+          name: "rush-2027",
+          description: "",
+          categoryId: null,
+          isPrivate: false,
+          access: {},
+        })
+        .catch((error: unknown) => {
+          caught = error;
+        });
+    });
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).not.toBe("boom");
+    expect((caught as Error).message.length).toBeGreaterThan(0);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("keeps the New role sheet, and its draft, mounted through a search", () => {
+    h.permissions = ["roles:manage", "members:view"];
+    h.pickableSheet = null;
+    const tree = render(<ChapterSettingsScreen />);
+    expect(h.pickableSheet).not.toBeNull();
+    const field = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Search settings" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => field.props.onChangeText("role"));
+    // The rows give way to the results; the sheet stays, so a draft kept on
+    // a close survives (`spec/ui/mobile/patterns.md` § Bottom sheets).
+    expect(
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "Roles and groups",
+      ),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.chapterRole !== undefined &&
+          typeof node.props.onCreated === "function",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("offers no New channel without both channel permissions", () => {
+    h.permissions = ["chapter-config:view", "channels:create"];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).not.toContain("New channel");
+  });
+
+  it("offers New role in the tiers the officer ranks above, and opens the role it made", () => {
+    // "me" is Treasurer (Officers, position 1): Brothers and outside only.
+    h.permissions = ["roles:manage", "members:view"];
+    h.pickableSheet = null;
+    h.newRolePresent.mockClear();
+    const tree = render(<ChapterSettingsScreen />);
+    act(() => pressable(tree, "New role").props.onPress());
+    expect(h.newRolePresent).toHaveBeenCalled();
+    expect(h.pickableSheet!.chapterRole).toEqual({
+      tierLabel: "Tier",
+      placements: [
+        { value: "t-bro", label: "Brothers" },
+        { value: null, label: "Outside the tiers" },
+      ],
+    });
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => h.pickableSheet!.onCreated("r-new"));
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/role",
+      params: { roleId: "r-new" },
+    });
+  });
+
+  it("offers no New role without roles:manage, and ends on the web line", () => {
+    h.permissions = ["chapter-config:view"];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).toContain("Roles and groups");
+    expect(text).not.toContain("New role");
+    expect(text).toContain("More settings are on the web dashboard.");
+  });
+
+  it("shows a roles manager only Roles and groups, which opens that screen", () => {
     h.permissions = ["roles:manage", "members:view"];
     const tree = render(<ChapterSettingsScreen />);
     expect(screenText(tree)).not.toContain("Chapter accent");
     const push = vi.mocked(useRouter().push);
     push.mockClear();
-    act(() => pressable(tree, "Roles").props.onPress());
+    act(() => pressable(tree, "Roles and groups").props.onPress());
     expect(push).toHaveBeenCalledWith("/chapter-roles");
   });
 });
@@ -265,7 +541,7 @@ describe("Chapter settings → AI (#4789)", () => {
   it("isn't drawn where the server has no AI", () => {
     h.aiSettings = settings();
     expect(screenText(render(<ChapterSettingsScreen />))).not.toContain(
-      "Ask Frapp",
+      "Questions and requests",
     );
   });
 
@@ -274,7 +550,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings();
     h.updateAi.mockClear();
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.value).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.value).toBe(true);
     act(() => aiSwitch(tree, "Minutes from notes").props.onValueChange(true));
     expect(h.updateAi).toHaveBeenCalledWith(
       { meeting_notes: true },
@@ -288,7 +564,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings({ ask: false });
     const off = render(<ChapterSettingsScreen />);
     expect(aiSwitch(off, "Include channel messages").props.disabled).toBe(true);
-    expect(screenText(off)).toContain("Turn on Ask Frapp first.");
+    expect(screenText(off)).toContain("Turn on Questions and requests first.");
 
     h.aiSettings = settings({ ask: false, chat_source: true });
     const on = render(<ChapterSettingsScreen />);
@@ -313,7 +589,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings();
     h.aiSaving = true;
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.disabled).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(aiSwitch(tree, "Minutes from notes").props.disabled).toBe(true);
   });
 
@@ -345,14 +621,14 @@ describe("Chapter settings → AI (#4789)", () => {
     h.permissions = ["roles:manage", "members:view"];
     const text = screenText(render(<ChapterSettingsScreen />));
     expect(text).toContain("Roles");
-    expect(text).not.toContain("Ask Frapp");
+    expect(text).not.toContain("Questions and requests");
   });
 
   it("shows an officer the switches read-only, saying only the president changes them", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings({ can_change: false });
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.disabled).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(screenText(tree)).toContain(
       "Only the chapter president can turn these on or off.",
     );
@@ -360,6 +636,25 @@ describe("Chapter settings → AI (#4789)", () => {
 });
 
 describe("Roles (#4074)", () => {
+  it("lists the chapter's groups after the roles, own first, with counts", () => {
+    const tree = render(<ChapterRolesScreen />);
+    const text = screenText(tree);
+    expect(text).toContain("Groups");
+    expect(text.indexOf("In house")).toBeGreaterThan(
+      text.indexOf("Rush Chair"),
+    );
+    expect(text.indexOf("Fall 2025")).toBeGreaterThan(text.indexOf("In house"));
+    expect(text).toContain("Follows pledge class");
+  });
+
+  it("shows a groups manager without roles:manage only the groups", () => {
+    h.permissions = ["groups:manage", "members:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const text = screenText(tree);
+    expect(text).toContain("In house");
+    expect(text).not.toContain("Treasurer");
+  });
+
   it("lists the tiers in rank order with their roles, then the roles outside", () => {
     const text = screenText(render(<ChapterRolesScreen />));
     expect(text).toContain("4 roles in 2 tiers");
@@ -383,7 +678,14 @@ describe("Roles (#4074)", () => {
   it("notes the President's and Everyone's roles as web's list does", () => {
     h.roles = [
       ...h.roles,
-      role({ id: "r-all", name: "Everyone", tier_id: "t-bro", permissions: ["members:view"], is_system: true, system_key: "MEMBER" }),
+      role({
+        id: "r-all",
+        name: "Everyone",
+        tier_id: null,
+        permissions: ["members:view"],
+        is_system: true,
+        system_key: "EVERYONE",
+      }),
     ];
     const text = screenText(render(<ChapterRolesScreen />));
     expect(text).toContain("Can do everything");
@@ -419,7 +721,48 @@ describe("Roles (#4074)", () => {
     });
   });
 
-  it("finds a role by name once the list is long", () => {
+  it("names a class year by its standing, and finds it by that (#5786)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    try {
+      h.groups = [
+        ...h.groups,
+        {
+          id: "g-29",
+          name: "Class of 2029",
+          kind: "class_year",
+          class_year: 2029,
+          color: null,
+          member_ids: ["u2"],
+        },
+      ];
+      h.roles = [
+        ...h.roles,
+        ...Array.from({ length: 10 }, (_, index) =>
+          role({
+            id: `r-x${index}`,
+            name: `Committee ${index}`,
+            tier_id: "t-bro",
+          }),
+        ),
+      ];
+      const tree = render(<ChapterRolesScreen />);
+      expect(screenText(tree)).toContain("Sophomores · Class of 2029");
+      const search = tree.root.find(
+        (node) =>
+          (node.type as unknown) === "TextInput" &&
+          node.props.accessibilityLabel === "Find a role or group",
+      );
+      act(() => search.props.onChangeText("soph"));
+      const text = screenText(tree);
+      expect(text).toContain("Sophomores · Class of 2029");
+      expect(text).not.toContain("In house");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("finds a role or group by name once the list is long", () => {
     h.roles = [
       ...h.roles,
       ...Array.from({ length: 10 }, (_, index) =>
@@ -434,13 +777,16 @@ describe("Roles (#4074)", () => {
     const search = tree.root.find(
       (node) =>
         (node.type as unknown) === "TextInput" &&
-        node.props.accessibilityLabel === "Find a role",
+        node.props.accessibilityLabel === "Find a role or group",
     );
     act(() => search.props.onChangeText("rush"));
     const text = screenText(tree);
     expect(text).toContain("Rush Chair");
     expect(text).not.toContain("Committee 3");
     expect(text).not.toContain("Treasurer");
+    expect(text).not.toContain("In house");
+    act(() => search.props.onChangeText("house"));
+    expect(screenText(tree)).toContain("In house");
   });
 });
 
@@ -591,7 +937,12 @@ describe("Non-chapter business on the phone (#4958)", () => {
   it("lets a marked role that became unsafe be turned off", () => {
     h.roles = [
       ...h.roles,
-      role({ id: "r-ims", name: "Intramurals", tier_id: "t-bro", self_assignable: true }),
+      role({
+        id: "r-ims",
+        name: "Intramurals",
+        tier_id: "t-bro",
+        self_assignable: true,
+      }),
     ];
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const [toggle] = pickSwitch(render(<RoleScreen />));
@@ -658,10 +1009,42 @@ describe("Non-chapter business on the phone (#4958)", () => {
     );
   });
 
-  it("tells a roles manager how to fill an empty Non-chapter business", () => {
-    expect(screenText(render(<ChapterRolesScreen />))).toContain(
-      "Turn it on from a role outside the tiers.",
+  it("offers a roles manager Add role in Non-chapter business (#5736)", () => {
+    const text = screenText(render(<ChapterRolesScreen />));
+    const business = text.indexOf("Non-chapter business");
+    expect(text).toContain(SELF_ASSIGNABLE_SECTION_CAPTION);
+    expect(text).not.toContain("Turn it on from");
+    expect(text.indexOf("Add role", business)).toBeGreaterThan(business);
+  });
+
+  it("keeps Add role once Non-chapter business has roles", () => {
+    h.roles = [
+      ...h.roles,
+      role({ id: "r-ims", name: "Intramurals", self_assignable: true }),
+    ];
+    const text = screenText(render(<ChapterRolesScreen />));
+    expect(text.indexOf("Add role")).toBeGreaterThan(
+      text.indexOf("Intramurals"),
     );
+  });
+
+  it("opens the new role's page once the sheet creates it", () => {
+    render(<ChapterRolesScreen />);
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => h.pickableSheet!.onCreated("r-new"));
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/role",
+      params: { roleId: "r-new" },
+    });
+  });
+
+  it("offers no Add role to a roles manager who sits outside the tiers", () => {
+    h.permissions = ["roles:manage", "members:view"];
+    h.members = [{ user_id: "me", role_ids: ["r-rush"] }];
+    const text = screenText(render(<ChapterRolesScreen />));
+    expect(text).toContain("Non-chapter business");
+    expect(text).not.toContain("Add role");
   });
 });
 
@@ -693,4 +1076,105 @@ describe("Switches for features not offered here (#4504)", () => {
       for (const label of AI_LABELS) expect(text).toContain(label);
     });
   }
+});
+
+describe("Role and group colors on the phone (#5966, #5791)", () => {
+  /** The color sheet's prop-holding node: the one with `previewName`. */
+  const colorSheet = (tree: ReturnType<typeof render>) =>
+    tree.root.find(
+      (node) =>
+        typeof node.props.previewName === "string" &&
+        typeof node.props.onChange === "function",
+    );
+
+  it("saves a role's color from its page, and says so when it fails", async () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
+    const tree = render(<RoleScreen />);
+    expect(screenText(tree)).toContain("No color");
+    await act(async () => {
+      colorSheet(tree).props.onChange("#00B2E0");
+    });
+    expect(h.updateRole).toHaveBeenLastCalledWith({
+      id: "r-tres",
+      body: { color: "#00B2E0" },
+    });
+    expect(screenText(tree)).toContain("Bright sky");
+    h.updateRole.mockRejectedValueOnce(new Error("boom"));
+    await act(async () => {
+      colorSheet(tree).props.onChange(null);
+    });
+    expect(screenText(tree)).toContain(
+      "Couldn't update Treasurer. The color was not changed.",
+    );
+  });
+
+  it("leaves a role's color read-only to someone who can't edit roles", () => {
+    h.permissions = ["chapter-config:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
+    const tree = render(<RoleScreen />);
+    const row = tree.root.find(
+      (node) => node.props.label === "Color" && node.props.value === "No color",
+    );
+    expect(row.props.onPress).toBeUndefined();
+  });
+
+  it("leaves the color of a role at or above the officer's own rank read-only", () => {
+    // `me` holds Treasurer (Officers): a roles manager edits only roles
+    // ranked below their own.
+    h.permissions = ["roles:manage", "members:view", "chapter-config:view"];
+    const colorRow = (roleId: string) => {
+      vi.mocked(useLocalSearchParams).mockReturnValue({ roleId });
+      const tree = render(<RoleScreen />);
+      return tree.root.find(
+        (node) =>
+          node.props.label === "Color" && node.props.value === "No color",
+      );
+    };
+    expect(colorRow("r-tres").props.onPress).toBeUndefined();
+    expect(colorRow("r-bro").props.onPress).toBeTypeOf("function");
+  });
+
+  it("puts a failed group color save on the group's row", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "In house" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    await act(async () => {
+      colorSheet(tree).props.onChange("#3DD6C4");
+    });
+    expect(screenText(tree)).toContain(
+      "Couldn't update In house. The color was not changed.",
+    );
+  });
+
+  it("lets a groups manager set a group's color from its row", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "In house" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    expect(colorSheet(tree).props.previewName).toBe("In house");
+    await act(async () => {
+      colorSheet(tree).props.onChange("#3DD6C4");
+    });
+    expect(h.updateGroup).toHaveBeenLastCalledWith({
+      id: "g-house",
+      body: { color: "#3DD6C4" },
+    });
+  });
+
+  it("gives no color control on a group to someone without groups:manage", () => {
+    h.permissions = ["members:view", "chapter-config:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find((node) => node.props.label === "In house");
+    expect(row.props.onPress).toBeUndefined();
+  });
 });

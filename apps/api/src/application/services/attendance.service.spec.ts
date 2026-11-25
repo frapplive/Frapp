@@ -82,6 +82,7 @@ describe('AttendanceService', () => {
     optional_role_ids: null,
     excluded_role_ids: null,
     others_invited: true,
+    attendance_picks: null,
     notes: null,
     check_in_zone: null,
     check_in_zone_name: null,
@@ -131,6 +132,9 @@ describe('AttendanceService', () => {
     };
 
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -143,6 +147,7 @@ describe('AttendanceService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
     };
 
     // Default: nobody holds an excuse.

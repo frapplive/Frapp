@@ -10,6 +10,8 @@ export interface IMemberRepository {
     chapterId: string,
   ): Promise<Member | null>;
   findByChapter(chapterId: string): Promise<Member[]>;
+  /** How many members a chapter has, counted in the database (#5625). */
+  countByChapter(chapterId: string): Promise<number>;
   /**
    * Every member of a chapter as `user_id` + `display_name` + `role_ids`, in
    * one query (`role_ids` since 2026-11-06, for role mentions).
@@ -33,6 +35,25 @@ export interface IMemberRepository {
   ): Promise<ChapterMemberIdentity[]>;
   create(data: Partial<Member>): Promise<Member>;
   update(id: string, data: Partial<Member>): Promise<Member>;
+  /**
+   * Clear a member's chat timeout (#6006), only while it still ends at
+   * `expectedUntil`, the value the caller read: a sweep racing an officer who
+   * just set a new one leaves the new one alone. Resolves to the cleared row,
+   * or `null` when the timeout moved or was already cleared, so exactly one
+   * caller sends the "it's over" push.
+   */
+  clearChatTimeout(id: string, expectedUntil: string): Promise<Member | null>;
+  /**
+   * Members in any chapter whose chat timeout ended at or before `at`,
+   * earliest first, at most `limit`: the sweep's batch (#6006).
+   */
+  findEndedChatTimeouts(at: string, limit: number): Promise<Member[]>;
+  /**
+   * Set `has_completed_onboarding` true, only when it is still false (#5627).
+   * `changed` is true for the one request that turned it, so two clients
+   * finishing at once announce the member once.
+   */
+  completeOnboarding(id: string): Promise<{ member: Member; changed: boolean }>;
   /**
    * Write a member's `role_ids` through the `set_member_role_ids` RPC: only
    * when the row still holds `expectedRoleIds` (the value the caller read) and

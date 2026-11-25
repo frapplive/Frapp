@@ -19,7 +19,11 @@ import {
 } from "@/components/tasks/task-action-bar";
 import { UndoBar } from "@/components/tasks/undo-bar";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
-import type { ActionMenu } from "@/lib/action-menu";
+import {
+  currentItemMenu,
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
 import { ProofField } from "@/components/tasks/task-form-fields";
 import { TASK_EDIT_COPY } from "@/lib/tasks/task-edit";
 import { TASK_AUDIENCE_COPY } from "@repo/validation";
@@ -137,8 +141,16 @@ const updateTask = vi.fn<
   (input: { id: string; body: Record<string, unknown> }) => Promise<unknown>
 >(async () => undefined);
 
+const frappLinkNames = vi.hoisted(() => ({
+  value: new Map<string, unknown>(),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Frapp links: names read live, and what the attach picker offers.
+  useFrappLinks: () => ({ resolved: frappLinkNames.value, isLoading: false }),
+  useFrappLinkCandidates: () => ({ candidates: [], isLoading: false }),
+  useDocumentDownloadUrl: () => ({ mutateAsync: vi.fn() }),
   useActiveChapterId: () => "chapter-1",
   useViewerUserId: () => ME,
   usePermissionList: () => permissions,
@@ -167,6 +179,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     mutateAsync: removeFromGroup,
     isPending: false,
   }),
+  useAddToTaskGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSetSubtaskDone: () => ({ mutate: vi.fn(), isPending: false }),
   useAddSubtask: () => ({ mutate: addSubtask, isPending: false }),
   useDeleteSubtask: () => ({ mutate: deleteSubtask, isPending: false }),
@@ -201,8 +214,17 @@ vi.mock("@/components/tasks/who-picker-sheet", async () => {
     }),
   };
 });
+// From's choices (#5473); none unless a spec gives some.
+const whoFollowers = vi.hoisted(
+  () => [] as { entry: string; kind: string; name: string; count: number }[],
+);
 vi.mock("@/lib/tasks/use-who-directory", () => ({
-  useWhoDirectory: () => ({ directory: {}, people: {}, sets: {} }),
+  useWhoDirectory: () => ({
+    directory: {},
+    people: {},
+    sets: {},
+    followers: whoFollowers,
+  }),
 }));
 vi.mock("@/components/tasks/mark-done-sheet", async () => {
   const { createElement } = await import("react");
@@ -211,11 +233,14 @@ vi.mock("@/components/tasks/mark-done-sheet", async () => {
     MarkDoneSheet: (props: object) => createElement("MarkDoneSheet", props),
   };
 });
-const menus: ActionMenu[] = [];
-vi.mock("@/lib/action-menu", () => ({
-  showActionMenu: (menu: ActionMenu) => menus.push(menu),
+// The glass menu taps one as it opens (`openItemMenu`).
+vi.mock("@/lib/haptics", () => ({
+  successHaptic: () => undefined,
+  pressHaptic: () => undefined,
 }));
-vi.mock("@/lib/haptics", () => ({ successHaptic: () => undefined }));
+/** The More menu the bar opened: the app's glass menu. */
+const moreMenu = () => currentItemMenu()!;
+const moreRowLabels = () => moreMenu().actions.map((action) => action.label);
 /** `null` online; a reason while a write would be lost. */
 const connection = vi.hoisted(() => ({
   writeBlockedReason: null as string | null,
@@ -284,12 +309,13 @@ beforeEach(() => {
   taskPending = false;
   tasks = [];
   permissions = ["members:view"];
-  menus.length = 0;
+  dismissItemMenu();
   whoPicker.presented = 0;
   vi.clearAllMocks();
 });
 
 afterEach(() => {
+  dismissItemMenu();
   vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
 });
 
@@ -317,8 +343,8 @@ describe("A member's own plain task: a little", () => {
   it("offers Start in More, and it sends the assignee's To do → In progress (#5492)", () => {
     const tree = render();
     press(tree, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual(["Start"]);
-    act(() => menus[0]!.rows[0]!.onPress());
+    expect(moreRowLabels()).toEqual(["Start"]);
+    act(() => pickItemMenuAction("Start"));
     expect(mutateStatus).toHaveBeenCalledTimes(1);
     expect(mutateStatus).toHaveBeenCalledWith({
       id: "t1",
@@ -338,6 +364,7 @@ describe("A member's own plain task: a little", () => {
     expect(control(tree, "Mark done")).toBeDefined();
     expect(control(tree, "Edit task")).toBeUndefined();
     expect(control(tree, "Remove people")).toBeUndefined();
+    expect(control(tree, "Add people")).toBeUndefined();
     await act(async () => {
       control(tree, "Mark done")!.props.onPress();
     });
@@ -383,7 +410,7 @@ describe("A member's own plain task: a little", () => {
     const tree = render();
     press(tree, "More");
     await act(async () => {
-      menus[0]!.rows[0]!.onPress();
+      pickItemMenuAction("Mark not done");
     });
     expect(screenText(tree)).toContain(
       "Couldn't mark that task not done. An officer may have confirmed it already.",
@@ -466,11 +493,12 @@ describe("The task's states", () => {
     expect(tree.root.findByType(StatusChip).props.label).toBe(
       "Waiting on an officer",
     );
-    expect(screenText(tree)).toContain("Marked done");
-    expect(screenText(tree)).not.toContain("Marked done by");
+    // Who handed it in, under the title, and in History (#5732).
+    expect(screenText(tree)).toContain("You marked it done");
+    expect(screenText(tree)).toContain("Marked done by you");
     expect(control(tree, "Mark done")).toBeUndefined();
     press(tree, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual(["Mark not done"]);
+    expect(moreRowLabels()).toEqual(["Mark not done"]);
     act(() => tree.unmount());
   });
 
@@ -487,7 +515,7 @@ describe("The task's states", () => {
     const tree = render();
     expect(tree.root.findByType(StatusChip).props.label).toBe("Done");
     press(tree, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual(["Mark not done"]);
+    expect(moreRowLabels()).toEqual(["Mark not done"]);
     act(() => tree.unmount());
   });
 
@@ -562,20 +590,32 @@ describe("An officer on a task for everyone: a lot", () => {
     expect(control(tree, "Edit task")).toBeDefined();
     expect(control(tree, "Remove people")).toBeDefined();
     press(tree, "More");
-    // Their own copy, still To do: Start leads, and three is the most.
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual([
-      "Start",
-      "Delete",
-      "Delete for everyone",
+    // Their own copy, still To do: Start leads, the deletes last and red.
+    expect(moreRowLabels()).toEqual(["Start", "Delete", "Delete for everyone"]);
+    expect(moreMenu().actions.map((action) => !!action.destructive)).toEqual([
+      false,
+      true,
+      true,
     ]);
-    expect(menus[0]!.rows.at(-1)!.style).toBe("destructive");
+    act(() => tree.unmount());
+  });
+
+  it("gives an officer Add people beside Who has it, opening the picker with who has it marked (#5905)", () => {
+    const tree = render();
+    const before = whoPicker.presented;
+    press(tree, "Add people");
+    expect(whoPicker.presented).toBe(before + 1);
+    const sheet = tree.root.find(
+      (node) => (node.type as unknown) === "WhoPickerSheet" && !!node.props.add,
+    );
+    expect(sheet.props.add.marked.has(ME)).toBe(true);
     act(() => tree.unmount());
   });
 
   it("deletes only this copy from More's plain Delete", async () => {
     const tree = render();
     press(tree, "More");
-    act(() => menus[0]!.rows.find((row) => row.label === "Delete")!.onPress());
+    act(() => pickItemMenuAction("Delete"));
     const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
     expect(title).toBe('Delete "Fill in the housing form"?');
     await act(async () => {
@@ -590,7 +630,7 @@ describe("An officer on a task for everyone: a lot", () => {
     vi.mocked(router.canGoBack).mockReturnValue(true);
     const tree = render();
     press(tree, "More");
-    act(() => menus[0]!.rows.find((row) => row.label === "Delete")!.onPress());
+    act(() => pickItemMenuAction("Delete"));
     await act(async () => {
       vi.mocked(Alert.alert)
         .mock.calls[0]![2]!.find((button) => button.style === "destructive")!
@@ -640,7 +680,8 @@ describe("An officer on a task for everyone: a lot", () => {
     expect(screenText(tree)).not.toContain("Photos");
     expect(control(tree, `Assignee: ${NAMES[ME]}`)).toBeDefined();
     const picker = tree.root.find(
-      (node) => (node.type as unknown) === "WhoPickerSheet",
+      // The edit's Assign to, not Add people's (#5905).
+      (node) => (node.type as unknown) === "WhoPickerSheet" && !node.props.add,
     );
     await act(async () => {
       picker.props.onChange({ kind: "person", userId: "u-cal" });
@@ -678,7 +719,8 @@ describe("An officer on a task for everyone: a lot", () => {
   it("deletes for everyone after the platform alert, then goes back to Tasks", async () => {
     const tree = render();
     press(tree, "More");
-    act(() => menus[0]!.rows.at(-1)!.onPress());
+    expect(moreRowLabels().at(-1)).toBe("Delete for everyone");
+    act(() => pickItemMenuAction("Delete for everyone"));
     const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
     expect(title).toBe('Delete "Fill in the housing form" for everyone?');
     const go = buttons!.find((button) => button.style === "destructive")!;
@@ -818,7 +860,7 @@ describe("A member on a task for everyone", () => {
     expect(control(tree, "Edit task")).toBeUndefined();
     // Their own copy's Start, and nothing an officer has.
     press(tree, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual(["Start"]);
+    expect(moreRowLabels()).toEqual(["Start"]);
     act(() => tree.unmount());
   });
 
@@ -853,11 +895,8 @@ describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
     task = { ...PLAIN, open_task_id: "open-1" };
     const tree = render();
     press(tree, "More");
-    const giveBack = menus[0]!.rows.find(
-      (row) => row.label === TASK_AUDIENCE_COPY.release,
-    );
-    expect(giveBack).toBeDefined();
-    act(() => giveBack!.onPress());
+    expect(moreRowLabels()).toContain(TASK_AUDIENCE_COPY.release);
+    act(() => pickItemMenuAction(TASK_AUDIENCE_COPY.release));
     expect(releaseTask).toHaveBeenCalledWith("t1", expect.anything());
     const { onSuccess } = releaseTask.mock.calls[0]![1] as {
       onSuccess: () => void;
@@ -880,12 +919,10 @@ describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
       stored_status: "COMPLETED",
       completed_at: "2026-11-18T09:00:00.000Z",
     };
-    menus.length = 0;
+    dismissItemMenu();
     const done = render();
     press(done, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).not.toContain(
-      TASK_AUDIENCE_COPY.release,
-    );
+    expect(moreRowLabels()).not.toContain(TASK_AUDIENCE_COPY.release);
     act(() => done.unmount());
   });
 
@@ -893,7 +930,7 @@ describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
     const tree = render();
     // More holds only Start on a member's ordinary open task.
     press(tree, "More");
-    expect(menus[0]!.rows.map((row) => row.label)).toEqual(["Start"]);
+    expect(moreRowLabels()).toEqual(["Start"]);
     act(() => tree.unmount());
   });
 });
@@ -920,9 +957,9 @@ describe("An officer's Confirm and Send back (#5513)", () => {
   const sendBackSheet = (tree: ReactTestRenderer) =>
     tree.root.findAll((node) => (node.type as unknown) === "SendBackSheet")[0];
   const moreLabels = (tree: ReactTestRenderer) => {
-    menus.length = 0;
+    dismissItemMenu();
     press(tree, "More");
-    return menus[0]!.rows.map((row) => row.label);
+    return moreRowLabels();
   };
 
   beforeEach(() => {
@@ -940,7 +977,7 @@ describe("An officer's Confirm and Send back (#5513)", () => {
     // Edit under More, as web's review keeps it under its ⋯ (#4693).
     expect(control(tree, "Edit task")).toBeUndefined();
     expect(moreLabels(tree)).toEqual(["Edit", "Delete"]);
-    act(() => menus[0]!.rows[0]!.onPress());
+    act(() => pickItemMenuAction("Edit"));
     // The screen turns into its editor, in place (#5514).
     expect(field(tree, "Task title").props.value).toBe("Sweep the porch");
     expect(control(tree, "Done")).toBeDefined();
@@ -1083,7 +1120,7 @@ describe("An officer's Confirm and Send back (#5513)", () => {
         "Delete",
         "Delete for everyone",
       ]);
-      act(() => menus[0]!.rows[0]!.onPress());
+      act(() => pickItemMenuAction("Send back"));
       expect(sendBackSheet(tree)).toBeDefined();
       act(() => tree.unmount());
     });
@@ -1423,6 +1460,85 @@ describe("An officer edits a task in place (#5514)", () => {
     expect(screenText(tree)).not.toContain(
       "That member isn't in this chapter.",
     );
+    act(() => tree.unmount());
+  });
+});
+
+describe("A task a group follows (#5613)", () => {
+  const EXEC = "tier:7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  const fromSheet = (tree: ReactTestRenderer) =>
+    tree.root.find(
+      (node) =>
+        node.props.title === "From" &&
+        typeof node.props.onSelect === "function",
+    );
+
+  afterEach(() => {
+    whoFollowers.splice(0, whoFollowers.length);
+  });
+
+  it("names the group as From, and keeps the giver in History", () => {
+    task = { ...PLAIN, followed_by: EXEC, followed_by_name: "Exec board" };
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("Exec board");
+    expect(text).toContain("Assigned by Jordan Lee");
+    act(() => tree.unmount());
+  });
+
+  it("says a deleted group when the follower is gone", () => {
+    task = { ...PLAIN, followed_by: EXEC, followed_by_name: null };
+    const tree = render();
+    expect(screenText(tree)).toContain("A deleted group");
+    act(() => tree.unmount());
+  });
+
+  it("changes a group task's From on every copy from edit mode", async () => {
+    permissions = ["members:view", "tasks:manage"];
+    whoFollowers.push({
+      entry: EXEC,
+      kind: "tier",
+      name: "Exec board",
+      count: 4,
+    });
+    task = copy("u-ana");
+    const tree = render();
+    press(tree, "Edit task");
+    expect(screenText(tree)).toContain("Just you");
+    await act(async () => {
+      fromSheet(tree).props.onSelect(EXEC);
+    });
+    expect(updateTask).toHaveBeenLastCalledWith({
+      id: "copy-u-ana",
+      body: { followed_by: EXEC, scope: "group" },
+    });
+    act(() => tree.unmount());
+  });
+
+  it("says a repeating task can't be from a group, in place of the row", () => {
+    permissions = ["members:view", "tasks:manage"];
+    whoFollowers.push({
+      entry: EXEC,
+      kind: "tier",
+      name: "Exec board",
+      count: 4,
+    });
+    task = {
+      ...PLAIN,
+      series: {
+        recurrence_rule: "FREQ=WEEKLY;BYDAY=MO;TZID=America/New_York",
+        next_due_date: "2026-11-24",
+        ended: false,
+      },
+    };
+    const tree = render();
+    press(tree, "Edit task");
+    expect(screenText(tree)).toContain(
+      "A repeating task can't be from a group yet.",
+    );
+    expect(
+      tree.root.findAll((node) => node.props.title === "From"),
+    ).toHaveLength(0);
     act(() => tree.unmount());
   });
 });

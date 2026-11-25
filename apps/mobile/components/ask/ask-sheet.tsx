@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import {
   Pressable,
@@ -12,6 +13,7 @@ import {
   Text,
   View,
   type NativeScrollEvent,
+  type ScrollView,
   type NativeSyntheticEvent,
 } from "react-native";
 import {
@@ -47,7 +49,7 @@ import {
   DictationNotice,
   DictationOriginal,
   DictationTidying,
-} from "@/components/ask/ask-dictation";
+} from "@/components/dictation/dictation-controls";
 import { AskOpening } from "@/components/ask/ask-opening";
 import { AskTurn } from "@/components/ask/ask-turn";
 import {
@@ -69,15 +71,16 @@ import {
 } from "@/components/sheet-scaffold";
 import { useActActions, useMayAct } from "@/lib/ai/availability";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { useDictation } from "@/lib/dictation/use-dictation";
-import {
-  fontFamilyFor,
-  tint,
-  typeRole,
-  useFrappTheme,
-} from "@/lib/theme";
+import { useFieldDictation } from "@/components/dictation/use-field-dictation";
+import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
 import { ASK_STARTER_STORE } from "@/lib/ask/starter-seen";
+import {
+  HostScrollLockProvider,
+  ScrollRevealProvider,
+  useScrollReveal,
+  type ScrollReveal,
+} from "@/lib/keep-above-keyboard";
 
 /**
  * Ask Frapp on the phone (`spec/ui/mobile/screens.md` s17;
@@ -124,7 +127,8 @@ import { ASK_STARTER_STORE } from "@/lib/ask/starter-seen";
  * field while the member typed (Paul's pick of 2026-11-13). Search is its own
  * screen now, pushed from Chat home (`components/search/search-screen.tsx`),
  * which every member has and which can hand its words to this sheet
- * (`initialDraft`). The field and the bar read "Ask Frapp anything" again.
+ * (`initialDraft`). The field and the bar read "What do you need?" ("Ask
+ * Frapp anything" until #5945).
  *
  * **It opens on the member's own account** (#4700, owner 2026-11-13: "not
  * just be like some presets"). Before the first turn the sheet offers up to
@@ -291,29 +295,16 @@ export const AskSheet = forwardRef<
   });
 
   const [draft, setDraft] = useState(initialDraft ?? "");
-  const draftRef = useRef(draft);
-  useEffect(() => {
-    draftRef.current = draft;
-  }, [draft]);
-  // Tidied dictation just landed: what the Original chip puts back, until the
-  // member types or sends (#5276).
-  const [original, setOriginal] = useState<{
-    tidied: string;
-    restore: string;
-  } | null>(null);
+  // Dictation (#5276): the room, the joining and the Original chip are the
+  // chat composer's too (`useFieldDictation`).
   const cleanDictation = useCleanDictation();
-  const dictation = useDictation({
+  const field = useFieldDictation({
+    value: draft,
+    setValue: setDraft,
+    max: ASK_QUESTION_MAX_LENGTH,
     clean: cleanDictation,
-    // What the field has left, with a space before the new words.
-    room: ASK_QUESTION_MAX_LENGTH - (draft.trim() ? draft.trimEnd().length + 1 : 0),
-    onText: (text, heard) => {
-      const before = draftRef.current;
-      const tidied = joinDraft(before, text);
-      const restore = joinDraft(before, heard);
-      setDraft(tidied);
-      setOriginal(tidied === restore ? null : { tidied, restore });
-    },
   });
+  const { dictation, original } = field;
   const listening = dictation.phase === "listening";
   const tidying = dictation.phase === "cleaning";
   const leftForSource = useRef(false);
@@ -342,6 +333,26 @@ export const AskSheet = forwardRef<
     });
   }, []);
 
+  // A part of a turn that opens in place (an event card's form, 2026-11-22)
+  // or a field in it taking focus: the member is reading that, not the
+  // newest words, so the thread stops following and brings it into view,
+  // on the next frame, after any follow its own growth asked for.
+  const revealIn = useScrollReveal(
+    scroller as unknown as RefObject<ScrollView | null>,
+    { top: 0, margin: tokens.spacing.md },
+  );
+  const reveal = useCallback<ScrollReveal>(
+    (target) => {
+      following.current = false;
+      requestAnimationFrame(() => revealIn(target));
+    },
+    [revealIn],
+  );
+
+  // A held agenda row in that form: the drag, not the thread or the sheet,
+  // follows the finger, as the event form's own sheet locks both.
+  const [locked, setLocked] = useState(false);
+
   // A new turn shows the newest words.
   useEffect(() => {
     following.current = true;
@@ -363,6 +374,7 @@ export const AskSheet = forwardRef<
   }, [working, askedHere]);
   const cancelDictation = dictation.cancel;
   const dismissDictation = dictation.dismiss;
+  const clearOriginal = field.clearOriginal;
   const onDismiss = useCallback(() => {
     setShownOpen(false);
     cancelDictation();
@@ -400,12 +412,12 @@ export const AskSheet = forwardRef<
     (text: string) => {
       if (!text.trim() || workingRef.current) return;
       setDraft("");
-      setOriginal(null);
+      clearOriginal();
       dismissDictation();
       clearNotice();
       void ask(text, options());
     },
-    [ask, options, clearNotice, dismissDictation],
+    [ask, options, clearNotice, dismissDictation, clearOriginal],
   );
 
   const pick = useCallback(
@@ -434,6 +446,7 @@ export const AskSheet = forwardRef<
         // rows, and the composer lays out below the screen edge.
         {...tallSheet}
         keyboardBehavior="interactive"
+        enableContentPanningGesture={!locked}
         backgroundStyle={backgroundStyle}
         handleComponent={SheetGrabber}
         backdropComponent={SheetScrim}
@@ -444,9 +457,12 @@ export const AskSheet = forwardRef<
       >
         <SheetBackToClose onClose={closeSheet} />
         <View style={styles.headerRow}>
-          {/* Before the first turn the opening's big crest is the mark, and
-              the bar that opened the sheet already said "Ask Frapp"; the
-              name comes back here with the conversation (#4904). */}
+          {/* Before the first turn the opening's big crest is the mark; the
+              name comes back here with the conversation (#4904). Until #5945
+              the bar that opened the sheet said the name ("Ask Frapp"); it
+              reads "What do you need?" now, so nothing visible names
+              Frapp Intelligence before the first turn. #5946 rebuilds this
+              entry and owns that. */}
           {exchanges.length > 0 ? (
             <View style={styles.headerName}>
               <FrappCrest height={20} color={accent} />
@@ -484,6 +500,7 @@ export const AskSheet = forwardRef<
           // (#5426, above).
           key={exchanges.length > 0 ? "thread" : "opening"}
           ref={scroller}
+          scrollEnabled={!locked}
           onAccessibilityEscape={closeSheet}
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -512,27 +529,34 @@ export const AskSheet = forwardRef<
           // member scrolled up to read something else.
           onContentSizeChange={follow}
         >
-          {exchanges.length > 0 ? (
-            exchanges.map((exchange) => (
-              <View key={exchange.id} style={styles.turn}>
-                <AskTurn {...turns.propsFor(exchange)} />
-                {turns.sourceFailed(exchange.id) ? (
-                  <Text accessibilityLiveRegion="polite" style={styles.caption}>
-                    {SOURCE_OPEN_FAILED}
-                  </Text>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <AskOpening
-              displayName={displayName}
-              mode={opening.mode}
-              onStarterShown={opening.starterShown}
-              canAct={canAct}
-              suggestions={suggestions}
-              onPick={pick}
-            />
-          )}
+          <HostScrollLockProvider value={setLocked}>
+            <ScrollRevealProvider value={reveal}>
+              {exchanges.length > 0 ? (
+                exchanges.map((exchange) => (
+                  <View key={exchange.id} style={styles.turn}>
+                    <AskTurn {...turns.propsFor(exchange)} />
+                    {turns.sourceFailed(exchange.id) ? (
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={styles.caption}
+                      >
+                        {SOURCE_OPEN_FAILED}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))
+              ) : (
+                <AskOpening
+                  displayName={displayName}
+                  mode={opening.mode}
+                  onStarterShown={opening.starterShown}
+                  canAct={canAct}
+                  suggestions={suggestions}
+                  onPick={pick}
+                />
+              )}
+            </ScrollRevealProvider>
+          </HostScrollLockProvider>
         </BottomSheetScrollView>
 
         <View style={styles.composer}>
@@ -549,12 +573,7 @@ export const AskSheet = forwardRef<
             />
           ) : null}
           {original !== null && dictation.phase === "idle" ? (
-            <DictationOriginal
-              onPress={() => {
-                setDraft(original.restore);
-                setOriginal(null);
-              }}
-            />
+            <DictationOriginal onPress={field.restoreOriginal} />
           ) : null}
           <View style={styles.composerRow}>
             <View
@@ -580,12 +599,7 @@ export const AskSheet = forwardRef<
                       dictated paragraph shows whole, up to five lines. */}
                   <BottomSheetTextInput
                     value={draft}
-                    onChangeText={(next) => {
-                      setDraft(next);
-                      if (original !== null && next !== original.tidied) {
-                        setOriginal(null);
-                      }
-                    }}
+                    onChangeText={setDraft}
                     onSubmitEditing={() => submit(draft)}
                     multiline
                     submitBehavior="submit"
@@ -597,12 +611,7 @@ export const AskSheet = forwardRef<
                     style={styles.composerField}
                   />
                   {dictation.available ? (
-                    <DictationMic
-                      onPress={() => {
-                        setOriginal(null);
-                        dictation.start();
-                      }}
-                    />
+                    <DictationMic onPress={field.start} />
                   ) : null}
                 </>
               )}
@@ -645,13 +654,6 @@ export const AskSheet = forwardRef<
 const FIELD_LINE_HEIGHT = 20;
 const FIELD_MAX_LINES = 5;
 const FIELD_BORDER = 1;
-
-/** Typed or tidied words after what is already in the field. */
-function joinDraft(before: string, added: string): string {
-  const head = before.trimEnd();
-  const next = head ? `${head} ${added.trim()}` : added.trim();
-  return next.slice(0, ASK_QUESTION_MAX_LENGTH);
-}
 
 function createStyles(tokens: SignetTokens) {
   // What is left of the 44pt field once one line and the border are drawn,

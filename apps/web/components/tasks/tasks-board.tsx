@@ -9,8 +9,6 @@ import {
   Link2,
   ChevronDown,
   Pencil,
-  Plus,
-  SlidersHorizontal,
   Trash2,
   Undo2,
   Users,
@@ -63,6 +61,9 @@ import {
 import { ToastAction } from "@/components/ui/toast";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Button } from "@/components/ui/button";
+import { NewButton } from "@/components/ui/new-button";
+import { useNewIntent } from "@/components/layout/new-intent";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
@@ -90,6 +91,7 @@ import {
   actionStatus,
   canReopenOwnTask,
 } from "@repo/hooks";
+import { FollowerChip } from "@/components/tasks/task-follower";
 import { asArray, cn } from "@/lib/utils";
 import { TASKS_GROUP_PARAM, TASKS_TASK_PARAM } from "@/lib/tasks/task-links";
 import { taskDueClause } from "./task-due";
@@ -107,7 +109,9 @@ import {
   GroupTaskRow,
   TASK_ROWS_CLASS,
   TaskRow,
+  copyAudience,
   lowerFirst,
+  type CopyAudience,
   type RowPerson,
 } from "./task-row";
 import { TaskPanel, type TaskPanelTarget } from "./task-panel";
@@ -115,16 +119,11 @@ import { OpenTaskPanel, UpForGrabs } from "./up-for-grabs";
 import { SuggestionsStrip } from "./suggestions-strip";
 import { TasksPageSkeleton } from "@/components/tasks/tasks-skeleton";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { FilterChip, type FilterOption } from "@/components/shared/filter-chip";
-import { SegmentedChoice } from "@/components/ui/segmented";
+  ActiveFilterChips,
+  FilterMenu,
+  type FilterMenuFilter,
+} from "@/components/shared/filter-menu";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
 
 type Task = BoardTask;
@@ -170,7 +169,8 @@ const COLUMNS: {
 type TaskGroup = {
   id: string;
   label: string;
-  empty: string;
+  /** Null: the group is drawn only when it holds a task (No due date, #5761). */
+  empty: string | null;
   tasks: Task[];
   /** Tasks for everyone drawn in this lane, ahead of its tasks. */
   groupTiles?: GroupTileData[];
@@ -182,9 +182,13 @@ function isOpenStatus(status: TaskStatus): boolean {
 }
 
 /**
- * Whose tasks the page shows (#4295 step 5). A member's read holds only their
- * own, so they always see My tasks; an officer switches between their own and
- * the chapter's board, which stays where they land, as before.
+ * Whose tasks the page shows (#4295 step 5). Everyone opens on their own
+ * (#5578, Paul and Shawn, 2026-11-19: "it should default to my tasks, not
+ * all tasks"), as Linear opens on My issues and Asana on My tasks. An
+ * officer picks Everyone's in the header's switch for the chapter's board. A
+ * member's read holds their own and, since #5473, the tasks a tier, role or
+ * group they're in follows: one who follows any gets the same choice, where
+ * Everyone's is everything they can read. Anyone else sees only their own.
  */
 type TasksView = "mine" | "all";
 /** How the chapter's board groups: its status lanes, or one group a person. */
@@ -193,9 +197,15 @@ type TasksGroupBy = "status" | "person";
 type StatusFilter = TaskStatus | "CONFIRMED";
 type DueFilter = Exclude<TaskDueBucket, "earlier">;
 
+/** A filter's value as its menu lists it. */
+type FilterOption = { value: string; label: string };
+
+/** The menu's "any" value for a filter; no task value can be it. */
+const ANY_FILTER = "\u0000any";
+
 const VIEW_OPTIONS = [
   { value: "mine", label: "My tasks" },
-  { value: "all", label: "All tasks" },
+  { value: "all", label: "Everyone's" },
 ] as const;
 
 const GROUP_BY_OPTIONS = [
@@ -373,6 +383,8 @@ export function TasksBoard() {
   // A member with nothing assigned sees one line instead of the board, and
   // the line names the next event, so the read runs only for that member and
   // only when Events is on (the module guard would refuse it otherwise).
+  // One who follows tasks (#5473) has a read that isn't empty: their page
+  // opens on Everyone's instead when none of it is theirs (below).
   const plateIsClear =
     permissionsKnown &&
     !canManage &&
@@ -420,6 +432,15 @@ export function TasksBoard() {
   } | null>(null);
   // New task bumps it, which opens the add line's More (Paul, 2026-11-18).
   const [expandSignal, setExpandSignal] = useState(0);
+  // The add line shows once New task is pressed (#5578): at rest the first
+  // task is the first thing under the header, as Linear's list is.
+  const [adding, setAdding] = useState(false);
+  // New's "New task" (`new-intent.ts`): what this page's button does.
+  useNewIntent(() => {
+    setAdding(true);
+    setExpandSignal((n) => n + 1);
+  }, canManage && gate.allowed);
+  const newTaskRef = useRef<HTMLButtonElement>(null);
   // List groups opened past their first rows.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -435,12 +456,46 @@ export function TasksBoard() {
   // an officer's own rows out of the chapter's board.
   const myUserId = (currentUser.data as { id?: string } | undefined)?.id ?? "";
 
-  const [officerView, setOfficerView] = useState<TasksView>("all");
+  // The page opens on My tasks, or on Everyone's when nothing in the read is
+  // the viewer's, so it never opens on an empty page. That first answer is
+  // kept (below), so the view changes only when the viewer picks.
+  const [viewPick, setViewPick] = useState<TasksView | null>(null);
+  // A member following someone else's task (#5473): their read holds it.
+  const follows =
+    !canManage &&
+    myUserId !== "" &&
+    tasks.some((task) => !!task.followed_by && task.assignee_id !== myUserId) &&
+    // A member's read holds only their own and followed tasks; View as a role
+    // keeps the officer's whole read, which this keeps from reading as a
+    // follower's Everyone's.
+    tasks.every((task) => task.assignee_id === myUserId || !!task.followed_by);
+  const hasOwnTask =
+    myUserId !== "" && tasks.some((task) => task.assignee_id === myUserId);
+  // Until the account is known nothing reads as the viewer's, so an officer
+  // waits on My tasks (which says it is loading) rather than flash the
+  // chapter's board and jump. An account read that failed leaves the
+  // chapter's board, which still works without it (#1346).
+  const pickedView: TasksView =
+    viewPick ??
+    (myUserId === ""
+      ? currentUser.isError
+        ? "all"
+        : "mine"
+      : hasOwnTask
+        ? "mine"
+        : "all");
+  // Keep the opening view once both reads have answered, so a task given to
+  // or taken from the viewer later never moves the page under them.
+  // Set during render, React's pattern for state derived once from props.
+  if (viewPick === null && myUserId !== "" && tasksQuery.data !== undefined)
+    setViewPick(hasOwnTask ? "mine" : "all");
+  // Whether the header offers My tasks and Everyone's.
+  const canSwitchView = canManage || (permissionsKnown && follows);
   // While permissions are unknown (the read failed) the page can't tell an
   // officer from a member, so it keeps the status board it always drew,
-  // with no switch or chips, and the add row says why it isn't there.
-  const view: TasksView = canManage
-    ? officerView
+  // with no switch or filters, and the add row says why it isn't there.
+  const view: TasksView = canSwitchView
+    ? pickedView
     : permissionsKnown
       ? "mine"
       : "all";
@@ -452,11 +507,6 @@ export function TasksBoard() {
   const filtering =
     view === "all" &&
     (assigneeFilter !== null || statusFilter !== null || dueFilter !== null);
-  function clearFilters() {
-    setAssigneeFilter(null);
-    setStatusFilter(null);
-    setDueFilter(null);
-  }
 
   // The filter chips list only values some task on the board has (the
   // filter chip's rule, `components.md` § 4).
@@ -498,9 +548,10 @@ export function TasksBoard() {
       dues.has(value),
     ).map((value) => ({
       value,
+      // Overdue and No due date (#5761) read as they are; the rest say Due.
       label:
-        value === "overdue"
-          ? TASK_DUE_BUCKET_LABELS.overdue
+        value === "overdue" || value === "none"
+          ? TASK_DUE_BUCKET_LABELS[value]
           : `Due ${TASK_DUE_BUCKET_LABELS[value].toLowerCase()}`,
     }));
     return { assignee, status, due };
@@ -514,6 +565,74 @@ export function TasksBoard() {
     dueFilter,
   ]);
 
+  // The Filter menu's rows (`FilterMenu`, the one way a list filters on web):
+  // on the chapter's board an officer's Assignee, Status and Due, each listing
+  // only values some task has, then Group; on every view List or Grid. Group
+  // and Layout are never counted or cleared, as Sort isn't on other lists.
+  const filterRow = (
+    key: string,
+    label: string,
+    anyLabel: string,
+    options: FilterOption[],
+    value: string | null,
+    onChange: (next: string | null) => void,
+  ): FilterMenuFilter => ({
+    key,
+    label,
+    options: [{ value: ANY_FILTER, label: anyLabel }, ...options],
+    value: value ?? ANY_FILTER,
+    anyValue: ANY_FILTER,
+    onChange: (next) => onChange(next === ANY_FILTER ? null : next),
+  });
+  const taskFilters: FilterMenuFilter[] = [
+    ...(view === "all" && canManage
+      ? [
+          filterRow(
+            "assignee",
+            "Assignee",
+            "Anyone",
+            filterOptions.assignee,
+            assigneeFilter,
+            setAssigneeFilter,
+          ),
+          filterRow(
+            "status",
+            "Status",
+            "Any status",
+            filterOptions.status,
+            statusFilter,
+            (next) => setStatusFilter(next as StatusFilter | null),
+          ),
+          filterRow(
+            "due",
+            "Due",
+            "Any time",
+            filterOptions.due,
+            dueFilter,
+            (next) => setDueFilter(next as DueFilter | null),
+          ),
+          {
+            key: "group",
+            label: "Group",
+            options: GROUP_BY_OPTIONS,
+            value: groupBy,
+            anyValue: "status",
+            isSort: true,
+            onChange: (next: string) => setGroupBy(next as TasksGroupBy),
+          },
+        ]
+      : []),
+    {
+      key: "layout",
+      label: "Layout",
+      options: LAYOUT_OPTIONS,
+      value: layout,
+      anyValue: "list",
+      isSort: true,
+      onChange: (next) => setLayout(next as ListLayout),
+    },
+  ];
+
   const { groups, confirmed, shown } = useMemo(() => {
     const now = new Date(nowTick);
     const nameOf = (id: string) =>
@@ -524,13 +643,15 @@ export function TasksBoard() {
       // chapter's, and so is one previewing a role without `tasks:manage`
       // (View as a role keeps the officer's reads). Until the account is
       // known an officer gets none (the page says why) and a member gets the
-      // read, which the server already keeps to their own.
+      // read, which the server keeps to their own and the tasks their groups
+      // follow (#5473); the followed ones are left out, since whose they are
+      // can't be told yet.
       pool =
         myUserId !== ""
           ? tasks.filter((task) => task.assignee_id === myUserId)
           : canManage
             ? []
-            : tasks;
+            : tasks.filter((task) => !task.followed_by);
     } else {
       pool = tasks.filter(
         (task) =>
@@ -546,7 +667,7 @@ export function TasksBoard() {
 
     let drawn: TaskGroup[];
     if (view === "mine") {
-      // Today (overdue first), This week and Later hold what is still to
+      // Overdue, Today, This week and Later hold what is still to
       // do; what waits on an officer is done from the member's side, so it
       // follows them, as Asana's My tasks moves finished work out of the
       // day lists.
@@ -681,9 +802,26 @@ export function TasksBoard() {
         });
       } else {
         await createTask.mutateAsync(create.body);
+        // Made on My tasks for someone else, it lands where this list doesn't
+        // show, so the toast offers the board it went to, as Linear's
+        // "Created issue" toast links to an issue outside the view.
+        const forViewer =
+          "assignee_id" in create.body && create.body.assignee_id === myUserId;
         toast({
           title: "Task created",
           description: `${create.body.title} is now assigned.`,
+          ...(view === "mine" && canSwitchView && !forViewer
+            ? {
+                action: (
+                  <ToastAction
+                    altText="Show everyone's tasks"
+                    onClick={() => setViewPick("all")}
+                  >
+                    {"Show everyone's"}
+                  </ToastAction>
+                ),
+              }
+            : {}),
         });
       }
       return true;
@@ -932,12 +1070,19 @@ export function TasksBoard() {
   const addRow =
     canManage || !permissionsKnown ? (
       <Can permission="tasks:manage">
-        <AddTaskRow
-          gate={gate}
-          pending={createTask.isPending || createOpenTask.isPending}
-          onCreate={createFrom}
-          expandSignal={expandSignal}
-        />
+        <div hidden={canManage && !adding}>
+          <AddTaskRow
+            gate={gate}
+            pending={createTask.isPending || createOpenTask.isPending}
+            onCreate={createFrom}
+            expandSignal={expandSignal}
+            onDismiss={() => {
+              setAdding(false);
+              // The line held focus; hand it back to what opened it.
+              requestAnimationFrame(() => newTaskRef.current?.focus());
+            }}
+          />
+        </div>
       </Can>
     ) : null;
   // Two reads the board renders without, so neither blanks it (#1346, #1209).
@@ -1005,6 +1150,9 @@ export function TasksBoard() {
       gate,
       lifecycleWritePending,
       selected: opened?.kind === "task" && opened.id === task.id,
+      // My tasks lists the viewer's copy of a group task as theirs to do,
+      // and still says who else got it (#5699).
+      audience: view === "mine" ? copyAudience(task) : null,
       onOpen: () => setOpened({ kind: "task", id: task.id }),
       onChangeStatus: (next: TaskStatus, proof?: CompletionProof) =>
         changeStatus(task, next, proof),
@@ -1017,6 +1165,7 @@ export function TasksBoard() {
     assigneeName:
       membersByUserId.get(task.assignee_id) ??
       memberFallbackLabel(task.assignee_id),
+    audience: view === "mine" ? copyAudience(task) : null,
     myUserId,
     canManage,
     gate,
@@ -1093,134 +1242,47 @@ export function TasksBoard() {
         */
         <>
           {/*
-            At most two toolbar rows over the groups, even in the Tasks
-            column beside a widened chat (down to 375px). The first: an officer's view switch
-            (Asana's My tasks beside a project, Linear's My issues beside the
-            team's), then View and New task at the trailing edge, where
-            Linear's and Asana's sit. View is one menu holding the grouping and
-            List / Grid, as Linear's Display menu holds both. The second: the
-            chapter's board's filter chips (Linear's Filter, as the
-            Directory's chips draw them).
+            The page's header holds its views and its actions
+            (`page-actions.tsx`; rulebook § Filtering a list, `components.md`
+            § Filter bar and § View labels): My tasks and Everyone's as plain
+            words beside the title, since a viewer moves between the two sets
+            all day (Asana's My tasks beside a project, Linear's My issues
+            beside the team's; Paul 2026-11-24, #5947: no boxed switch), and
+            none for a member with only their own; then the one Filter button
+            with its count and New task beside the X. Grouping and List / Grid are rows in the Filter menu, as
+            Sort is on other lists. Nothing sits between the header and the
+            first task at rest (#5578); a filter that is on shows as a
+            removable chip under the header.
           */}
-          <div className="grid gap-2">
-            <div className="flex items-center gap-2">
-              {canManage ? (
-                <SegmentedChoice
-                  label="Whose tasks"
-                  options={VIEW_OPTIONS}
-                  value={view}
-                  onChange={setOfficerView}
-                />
-              ) : null}
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="toolbar"
-                      variant="secondary"
-                      className="gap-1.5"
-                    >
-                      <SlidersHorizontal
-                        className="h-4 w-4"
-                        aria-hidden="true"
-                      />
-                      View
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" collisionPadding={12}>
-                    {view === "all" && canManage ? (
-                      <>
-                        <DropdownMenuLabel>Group tasks</DropdownMenuLabel>
-                        <DropdownMenuRadioGroup
-                          value={groupBy}
-                          onValueChange={(next) =>
-                            setGroupBy(next as TasksGroupBy)
-                          }
-                        >
-                          {GROUP_BY_OPTIONS.map((option) => (
-                            <DropdownMenuRadioItem
-                              key={option.value}
-                              value={option.value}
-                            >
-                              {option.label}
-                            </DropdownMenuRadioItem>
-                          ))}
-                        </DropdownMenuRadioGroup>
-                        <DropdownMenuSeparator />
-                      </>
-                    ) : null}
-                    <DropdownMenuLabel>Layout</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={layout}
-                      onValueChange={(next) => setLayout(next as ListLayout)}
-                    >
-                      {LAYOUT_OPTIONS.map((option) => (
-                        <DropdownMenuRadioItem
-                          key={option.value}
-                          value={option.value}
-                        >
-                          {option.label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {canManage ? (
-                  <Button
-                    type="button"
-                    size="toolbar"
-                    className="gap-1.5"
-                    {...gate.controlProps()}
-                    onClick={() => setExpandSignal((n) => n + 1)}
-                  >
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                    New task
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-            {view === "all" && canManage ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <FilterChip
-                  label="Assignee"
-                  anyLabel="Anyone"
-                  options={filterOptions.assignee}
-                  value={assigneeFilter}
-                  onChange={setAssigneeFilter}
-                />
-                <FilterChip
-                  label="Status"
-                  anyLabel="Any status"
-                  options={filterOptions.status}
-                  value={statusFilter}
-                  onChange={(next) =>
-                    setStatusFilter(next as StatusFilter | null)
-                  }
-                />
-                <FilterChip
-                  label="Due"
-                  anyLabel="Any time"
-                  options={filterOptions.due}
-                  value={dueFilter}
-                  onChange={(next) => setDueFilter(next as DueFilter | null)}
-                />
-                {filtering ? (
-                  <Button
-                    type="button"
-                    size="toolbar"
-                    variant="ghost"
-                    onClick={clearFilters}
-                  >
-                    Clear filters
-                  </Button>
-                ) : null}
-              </div>
+          <PageViews>
+            <ViewLabels
+              label="Whose tasks"
+              options={canSwitchView ? VIEW_OPTIONS : []}
+              value={view}
+              onChange={setViewPick}
+            />
+          </PageViews>
+          <PageActions>
+            <FilterMenu filters={taskFilters} thing="tasks" />
+            {canManage ? (
+              <NewButton
+                ref={newTaskRef}
+                type="button"
+                thing="task"
+                {...gate.controlProps()}
+                onClick={() => {
+                  setAdding(true);
+                  setExpandSignal((n) => n + 1);
+                }}
+              />
             ) : null}
-          </div>
+          </PageActions>
+          <ActiveFilterChips filters={taskFilters} />
           {/*
             Rule 2: the first action sits where the first item goes, so the
-            add line heads the list, as Todoist's quick add does.
+            add line heads the list once New task opens it, as Todoist's quick
+            add does. Hidden, not unmounted, when put away, so a half-typed
+            task is still there next time (rulebook: keep the draft).
           */}
           {addRow}
           <UpForGrabs
@@ -1257,8 +1319,12 @@ export function TasksBoard() {
                 const tiles = group.groupTiles ?? [];
                 const count = group.tasks.length + tiles.length;
                 // In List, a group with nothing in it draws nothing: four
-                // empty headings would push the work down the page.
-                if (!isGrid && count === 0) return null;
+                // empty headings would push the work down the page. Overdue
+                // (#5906) and No due date (#5761) draw nothing empty in Board
+                // either.
+                if ((!isGrid || group.empty === null) && count === 0) {
+                  return null;
+                }
                 const long =
                   !isGrid &&
                   !expandedGroups.has(group.id) &&
@@ -1435,6 +1501,9 @@ export function TasksBoard() {
         onReject={(task) => rejectCompletion(task)}
         onDelete={(task) => void removeTask(task)}
         onDeleteGroup={(tile) => void removeGroup(tile)}
+        groupCopies={(groupId) =>
+          tasks.filter((row) => row.group_id === groupId)
+        }
       />
       {canManage ? (
         <OpenTaskPanel
@@ -1469,6 +1538,7 @@ function TaskCard({
   task,
   showStatus = false,
   assigneeName,
+  audience = null,
   myUserId,
   canManage,
   gate,
@@ -1487,6 +1557,8 @@ function TaskCard({
    */
   showStatus?: boolean;
   assigneeName: string;
+  /** My tasks: a group copy names who it went to, not the viewer (#5699). */
+  audience?: CopyAudience | null;
   myUserId: string;
   /** Holds `tasks:manage`: may check off and edit anyone's subtasks. */
   canManage: boolean;
@@ -1564,7 +1636,23 @@ function TaskCard({
             <span aria-hidden="true">·</span>
           </>
         ) : null}
-        <span className="min-w-0 truncate">{assigneeName}</span>
+        {audience ? (
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Users className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {TASK_AUDIENCE_COPY.groupLine(
+                audience.label,
+                audience.done,
+                audience.total,
+              )}
+            </span>
+          </span>
+        ) : (
+          <span className="min-w-0 truncate">{assigneeName}</span>
+        )}
+        {task.followed_by ? (
+          <FollowerChip name={task.followed_by_name} className="ml-1" />
+        ) : null}
         {/* No `·` before it either: its ↻ separates it, as the checklist's
             icon does (#5119). */}
         {taskSeriesLive(task.series) ? (
@@ -1676,9 +1764,9 @@ function TaskCard({
              * 403, and the optimistic write would flip the label to
              * "Confirmed" and snap back. A confirmed task carries neither
              * control: it sits in the Confirmed list, which says so, and the
-             * API refuses a reject once points are awarded. Reject stays on
-             * your own unconfirmed task: it withholds points rather than
-             * awarding them, so the self-confirm rule does not cover it.
+             * API refuses a reject once points are awarded. Send back is
+             * hidden on your own task too (#5917): the API refuses it, and
+             * Mark not done takes your own "done" back.
              */}
             {cannotConfirm || !needsSignOff ? null : (
               <Button
@@ -1691,16 +1779,18 @@ function TaskCard({
                 {TASK_ACTION_LABELS.confirm}
               </Button>
             )}
-            <Button
-              size="toolbar"
-              variant="secondary"
-              className="gap-1.5"
-              {...gate.controlProps(lifecycleWritePending)}
-              onClick={onReject}
-            >
-              <Undo2 className="h-4 w-4" />
-              {TASK_ACTION_LABELS.reject}
-            </Button>
+            {cannotConfirm ? null : (
+              <Button
+                size="toolbar"
+                variant="secondary"
+                className="gap-1.5"
+                {...gate.controlProps(lifecycleWritePending)}
+                onClick={onReject}
+              >
+                <Undo2 className="h-4 w-4" />
+                {TASK_ACTION_LABELS.reject}
+              </Button>
+            )}
           </>
         ) : null}
         {/*
@@ -1845,6 +1935,9 @@ function GroupTaskCard({
               <Users className="h-3 w-3 shrink-0" aria-hidden="true" />
               <span className="truncate">{label}</span>
             </span>
+            {task.followed_by ? (
+              <FollowerChip name={task.followed_by_name} className="ml-1" />
+            ) : null}
             {task.point_reward ? (
               <Badge className="ml-1">
                 {formatPointsChip(task.point_reward)}

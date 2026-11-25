@@ -4,7 +4,7 @@ import { act } from "react";
 import { Alert } from "react-native";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHAT_CATCH_UP_COPY,
   chatCatchUpThreadOfferLine,
@@ -217,8 +217,21 @@ vi.mock("@/lib/chat/message-reminder", async (importOriginal) => ({
   useRemindMessage: () => remind,
 }));
 
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeout: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Chat timeouts (#6006): the viewer's own, read through
+  // `chatTimeout`, and the sheet's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeout.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
+  // Dictation's cleanup needs the API client; nothing here dictates.
+  useCleanDictation: () => async () => null,
   // The roster catch-up has its own spec in `@repo/hooks`.
   useRosterCatchUp: rosterCatchUp,
   useGifAvailability: () => gifs,
@@ -263,7 +276,7 @@ vi.mock("@/lib/chat/block-actions", async (importOriginal) => ({
   useBlockActions: () => ({ unblock, block: vi.fn(), reloadMaskedCopies }),
 }));
 
-/** Catch me up (#3946): the gate, and the sheet's hook, both stood in. */
+/** Catch me up (#3946): the gate, and the summary's hook, both stood in. */
 const catchUp = vi.hoisted(() => ({
   /** Whether this member has Ask (`useAiSurfaces().ask`). */
   ask: false,
@@ -284,10 +297,8 @@ vi.mock("@/lib/ai/availability", () => ({
     askAccess: catchUp.ask ? "yes" : catchUp.askUnknown ? "unknown" : "no",
   }),
 }));
-vi.mock("@/components/chat/catch-up-sheet", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/chat/catch-up-sheet")
-  >()),
+vi.mock("@/components/chat/catch-up", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/catch-up")>()),
   useCatchUp: (options: { onOpenPoint: (point: unknown) => void }) => {
     catchUp.options = options;
     return {
@@ -296,6 +307,11 @@ vi.mock("@/components/chat/catch-up-sheet", async (importOriginal) => ({
       active: catchUp.active,
       resume: catchUp.resume,
       drop: catchUp.drop,
+      // The open summary, drawn by the screen under its header.
+      block:
+        catchUp.active && !catchUp.waiting
+          ? React.createElement("Text", null, "Open summary block")
+          : null,
       sheets: null,
     };
   },
@@ -645,7 +661,7 @@ describe("MessageThreadScreen (#3785)", () => {
     expect(thread.send).not.toHaveBeenCalled();
     expect(composer().props.value).toBe("@Frapp who is driving");
     expect(composer().props.disabledHint).toBe(
-      "Ask Frapp from the channel, not from a reply.",
+      "Ask @Frapp from the channel, not from a reply.",
     );
     expect(composer().props.hintTone).toBe("error");
     // The line is about the words as they were.
@@ -679,7 +695,7 @@ describe("MessageThreadScreen (#3785)", () => {
     expect(thread.send).not.toHaveBeenCalled();
     expect(composer().props.value).toBe("@Frapp who is driving");
     expect(composer().props.disabledHint).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     );
     // The line is about the words as they were.
     act(() => composer().props.onChangeText("who is driving"));
@@ -753,6 +769,52 @@ describe("MessageThreadScreen (#3785)", () => {
     const composer = tree.root.findByType(ChatComposer);
     expect(composer.props.canSend).toBe(false);
     expect(composer.props.disabledHint).toBe(THREAD_NO_REPLY_HINT);
+    act(() => tree.unmount());
+  });
+
+  // Chat timeouts (#6006): a thread reply is in its channel, so a timed-out
+  // viewer's composer is held there, with the line that says until when; a
+  // DM's thread is untouched.
+  describe("while the viewer is timed out", () => {
+    beforeEach(() => {
+      chatTimeout.current = {
+        until: new Date(Date.now() + 60 * 60_000).toISOString(),
+        reason: "spamming",
+      };
+    });
+    afterEach(() => {
+      chatTimeout.current = { until: null, reason: null };
+    });
+
+    it("holds the composer in a channel, saying until when", () => {
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(false);
+      expect(composer.props.plusDisabled).toBe(true);
+      expect(composer.props.onSchedule).toBeUndefined();
+      expect(composer.props.disabledHint).toMatch(
+        /^You're timed out until .+ · Reason: spamming$/,
+      );
+      act(() => tree.unmount());
+    });
+
+    it("leaves a group DM's thread alone", () => {
+      channelRow = { ...channelRow, type: "GROUP_DM" };
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(true);
+      expect(composer.props.disabledHint ?? "").not.toMatch(/timed out/);
+      act(() => tree.unmount());
+    });
+  });
+
+  it("offers Time out on the long-press sheet to a moderator (#6006)", () => {
+    permissions = ["members:timeout"];
+    const tree = render();
+    const sheet = tree.root.find(
+      (node) => (node.type as unknown) === "MessageActionsSheet",
+    );
+    expect(typeof sheet.props.onTimeOut).toBe("function");
     act(() => tree.unmount());
   });
 
@@ -921,7 +983,6 @@ describe("Catch me up on a thread (#3946)", () => {
     expect(catchUp.start).toHaveBeenCalledWith({
       kind: "thread",
       channelId: CHANNEL,
-      channelName: "general",
       rootId: ROOT,
     });
     act(() => tree.unmount());
@@ -939,6 +1000,17 @@ describe("Catch me up on a thread (#3946)", () => {
     expect(catchUp.start).not.toHaveBeenCalled();
     // The divider's action is still there for a change of mind.
     expect(byLabel(tree, CHAT_CATCH_UP_COPY.thread_action)).toHaveLength(1);
+    act(() => tree.unmount());
+  });
+
+  it("draws the open summary in the thread, under the header", () => {
+    catchUp.surface = true;
+    catchUp.active = true;
+    thread = longThread(34);
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("Open summary block");
+    expect(text).not.toContain(chatCatchUpThreadOfferLine(34));
     act(() => tree.unmount());
   });
 

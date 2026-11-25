@@ -2,14 +2,14 @@ import { PHONE_MAX_LENGTH } from "./field-limits";
 
 /**
  * A member's own phone number (#3711): what the API accepts, and the links a
- * profile's Phone row opens. The number is stored as the member typed it
- * (trimmed), so `(518) 555-0142` reads back the way they wrote it; only the
- * links strip it to digits.
+ * profile's Phone row opens. Since #5798 the API stores a whole number
+ * normalized to E.164 (`normalizePhone` in `@repo/formatting`), and every
+ * screen shows it formatted (`formatPhone`); the links strip it to digits.
  */
 
 /** The fewest and most digits a phone number has (E.164 caps it at 15). */
 const PHONE_MIN_DIGITS = 7;
-const PHONE_MAX_DIGITS = 15;
+export const PHONE_MAX_DIGITS = 15;
 
 /** What the wording of a refused number says, on the API and both forms. */
 export const PHONE_INVALID_MESSAGE =

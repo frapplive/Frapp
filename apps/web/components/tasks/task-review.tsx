@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { MoreHorizontal, Pencil, SquareArrowOutUpRight } from "lucide-react";
+import { Pencil, SquareArrowOutUpRight } from "lucide-react";
 import {
   canEditCardTask,
   isAwaitingReview,
@@ -19,6 +18,7 @@ import {
   type ActivityFace,
 } from "@repo/hooks";
 import { formatPoints } from "@repo/formatting";
+import { TASK_FOLLOWER_COPY } from "@repo/validation";
 import {
   CardTaskEdit,
   TASK_CONFIRM_FAILURE,
@@ -31,12 +31,7 @@ import {
 } from "@/components/shared/subscription-gate";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ActionMenuButton } from "@/components/shared/row-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage, initials } from "@/lib/utils";
 import {
@@ -92,6 +87,13 @@ export function TaskReview({
   }, [taskId, refetch]);
 
   const live = readLiveTask(query.data);
+  // The group it is from (#5473), read as the task read carries it.
+  const followedRead = (query.data ?? null) as {
+    followed_by?: string | null;
+    followed_by_name?: string | null;
+  } | null;
+  const followedBy = followedRead?.followed_by ?? null;
+  const followedByName = followedRead?.followed_by_name ?? null;
   if (!live) {
     return query.isError ? (
       <InlineNote>
@@ -167,36 +169,36 @@ export function TaskReview({
           {review.submitted ? (
             <p className="text-caption text-muted-foreground">
               {review.submitted}
+              {/* "Submitted to Exec board" when a group follows it (#5473). */}
+              {followedBy
+                ? ` · ${TASK_FOLLOWER_COPY.submittedTo(followedByName)}`
+                : null}
             </p>
           ) : null}
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`More for ${title}`}
-              title="More"
-            >
-              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[200px]">
-            {editable ? (
-              <DropdownMenuItem onSelect={() => setEditing(true)}>
-                <Pencil aria-hidden="true" />
-                Edit task
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem asChild>
-              <Link href="/tasks">
-                <SquareArrowOutUpRight aria-hidden="true" />
-                Open Tasks
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ActionMenuButton
+          label={`More for ${title}`}
+          entries={[
+            ...(editable
+              ? [
+                  {
+                    type: "item" as const,
+                    key: "edit",
+                    label: "Edit task",
+                    icon: Pencil,
+                    onSelect: () => setEditing(true),
+                  },
+                ]
+              : []),
+            {
+              type: "item",
+              key: "open-tasks",
+              label: "Open Tasks",
+              icon: SquareArrowOutUpRight,
+              href: "/tasks",
+            },
+          ]}
+        />
       </div>
 
       <div className="grid gap-1">

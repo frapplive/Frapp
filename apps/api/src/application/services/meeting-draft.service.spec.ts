@@ -233,6 +233,22 @@ class FakeNotes {
   }
 }
 
+/** A notes pass that wrote the meeting up, so the first pass is not asked to. */
+const WRITTEN_NOTES = {
+  // No summary of its own, so each test's draft keeps the one it scripts.
+  summary: '',
+  topics: [
+    {
+      title: 'Formal',
+      points: [{ text: 'Approved up to $1,200 for a DJ.', details: [] }],
+    },
+  ],
+};
+const WRITTEN: ScriptedReply = {
+  text: JSON.stringify(WRITTEN_NOTES),
+  object: WRITTEN_NOTES,
+};
+
 interface Setup {
   reply?: ScriptedReply | ((request: LanguageModelRequest) => ScriptedReply);
   consent?: Awaited<ReturnType<IAiConsentCheck['check']>>;
@@ -514,7 +530,7 @@ describe('MeetingDraftService', () => {
 
   describe('the run', () => {
     it('puts the checked draft into the minutes the officer asked on', async () => {
-      const { ask, work, meetings, drafts, seen } = setup();
+      const { ask, work, meetings, drafts, seen } = setup({ notes: WRITTEN });
       await ask();
       const result = await work();
 
@@ -553,7 +569,7 @@ describe('MeetingDraftService', () => {
             due_date: null,
           },
         ],
-        discussion_log: '',
+        discussion_log: 'Formal\n- Approved up to $1,200 for a DJ.',
       });
       expect(drafts.row?.status).toBe('applied');
       expect(result).toEqual({
@@ -735,6 +751,7 @@ describe('MeetingDraftService', () => {
         open_questions: [],
       };
       const { ask, work, meetings, seen } = setup({
+        notes: WRITTEN,
         reply: (request) =>
           String(request.messages[0].content).includes('Candidates (D =')
             ? { text: JSON.stringify(reviewed), object: reviewed }
@@ -875,6 +892,54 @@ describe('MeetingDraftService', () => {
         'The chapter approved a DJ for formal.',
       );
     });
+
+    it('never asks the editor to write the notes again (#6058)', async () => {
+      const { ask, work, meetings, seen } = setup({ notes: WRITTEN });
+      await ask();
+      await work();
+      expect(seen).toHaveLength(2);
+      // The first pass still writes them: they are the editor's account of
+      // the meeting, and the draft's notes when the notes pass writes none.
+      expect(String(seen[0].messages[0].content)).toContain(
+        '- discussion_log:',
+      );
+      const editor = String(seen[1].messages[0].content);
+      expect(editor).toMatch(/Sections to fill: .*summary/);
+      expect(editor).not.toMatch(/Sections to fill: .*discussion_log/);
+      const [, , , save] = meetings.update.mock.calls[0];
+      expect(save.content.discussion_log).toBe(
+        'Formal\n- Approved up to $1,200 for a DJ.',
+      );
+    });
+
+    it.each([
+      ['fails', { text: 'not json', object: undefined }],
+      ['writes no topics', { text: '{}', object: { summary: '', topics: [] } }],
+    ])(
+      'keeps the first pass’s notes when the notes pass %s',
+      async (_why, notes) => {
+        const log = 'Formal\n- Approved up to $1,200 for a DJ.';
+        const drafted = { ...DRAFTED, discussion_log: log };
+        const { ask, work, meetings, seen } = setup({
+          notes,
+          reply: (request) => {
+            const prompt = String(request.messages[0].content);
+            if (!prompt.includes('Candidates (D =')) {
+              return { text: JSON.stringify(drafted), object: drafted };
+            }
+            // The editor leaves the section it was not asked for empty.
+            const reviewed = { ...scriptedReview(prompt), discussion_log: '' };
+            return { text: JSON.stringify(reviewed), object: reviewed };
+          },
+        });
+        await ask();
+        await work();
+        // No third call: the notes it keeps were already written.
+        expect(seen).toHaveLength(2);
+        const [, , , save] = meetings.update.mock.calls[0];
+        expect(save.content.discussion_log).toBe(log);
+      },
+    );
 
     it('stops the notes pass when a part of the draft fails', async () => {
       const talk = Array.from(
@@ -1473,7 +1538,7 @@ describe('MeetingDraftService', () => {
       expect(notes.others).toHaveLength(1);
     });
 
-    it('leaves out a note-taker who said No to Frapp AI after the draft was asked for', async () => {
+    it('leaves out a note-taker who said No to Frapp Intelligence after the draft was asked for', async () => {
       const { ask, work, seen, notes } = withSam();
       await ask();
       notes.droppedOut.add(SAM);

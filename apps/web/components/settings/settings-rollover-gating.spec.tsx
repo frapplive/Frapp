@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -39,13 +40,14 @@ vi.mock("@/lib/stores/chapter-store", async () =>
   (await import("@/tests/settings-harness")).chapterStore(),
 );
 
-// `tab=semester`: board `4d` gives Semester its own rail entry, so the
-// rollover form no longer sits at the bottom of the default Chapter tab.
-// Landing the page on the tab under test is also what the nav's own deep
-// links do.
+// The address bar, which each test starts at `tab=semester`: board `4d`
+// gives Semester its own rail entry, so the rollover form no longer sits at
+// the bottom of the default Chapter tab. Landing the page on the tab under
+// test is also what the nav's own deep links do. Reading the address lets a
+// Chapter tab row open its page (`?page=accent`) as it does live.
 vi.mock("next/navigation", async () =>
   (await import("@/tests/settings-harness")).navigation(
-    () => new URLSearchParams("tab=semester"),
+    () => new URLSearchParams(window.location.search),
   ),
 );
 
@@ -65,6 +67,25 @@ vi.mock("@/components/billing/plan-and-billing", () => ({
 }));
 
 const { SettingsPage } = await import("./settings-page");
+const { followLink } = await import("@/tests/settings-harness");
+
+beforeEach(() => {
+  window.history.replaceState(null, "", "/settings?tab=semester");
+});
+
+/**
+ * Goes to the Chapter tab and opens the Accent color page from its row, where
+ * the accent form lives since the tab became a page of rows.
+ */
+async function openAccentPage(
+  user: ReturnType<typeof userEvent.setup>,
+  rerender: (ui: ReactElement) => void,
+) {
+  await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+  followLink(screen.getByRole("link", { name: /^accent color/i }), () =>
+    rerender(<SettingsPage />),
+  );
+}
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
@@ -122,6 +143,9 @@ describe("settings semester rollover subscription gating", () => {
     render(<SettingsPage />);
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    // A changed field first: an unchanged profile disables Save for its own
+    // reason.
+    await user.type(screen.getByLabelText("Chapter name"), " II");
     expect(saveProfileButton()).toBeEnabled();
 
     await user.click(screen.getByRole("tab", { name: /plan and billing/i }));
@@ -129,14 +153,14 @@ describe("settings semester rollover subscription gating", () => {
   });
 
   it("leaves the accent-color write alone too", async () => {
-    // Lives on the Accent tab (board `4d`'s name for what was Theme), so it
-    // only mounts once that tab is selected — and it patches `chapter`,
-    // another `@FreeTier` route.
+    // Lives on the Accent color page a Chapter tab row opens (what was
+    // Theme), so it only mounts once that page is open — and it patches
+    // `chapter`, another `@FreeTier` route.
     chapter.incomplete();
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    await openAccentPage(user, rerender);
     // A savable draft first: an empty one disables Save for its own reason
     // (see "the accent save sends the colour the preview shows" below).
     await user.type(
@@ -219,8 +243,8 @@ describe("the accent preview draws its label in the ink previewInkFor picks", ()
       );
     try {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+      const { rerender } = render(<SettingsPage />);
+      await openAccentPage(user, rerender);
       const hex = screen.getByLabelText(/accent color hex value/i);
       await user.clear(hex);
       await user.type(hex, "#4DA3FF");
@@ -257,8 +281,8 @@ describe("the accent save sends the colour the preview shows", () => {
 
   it("saves a shorthand or padded hex as the #RRGGBB it previewed", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    const { rerender } = render(<SettingsPage />);
+    await openAccentPage(user, rerender);
     const hex = screen.getByLabelText(/accent color hex value/i);
 
     for (const [draft, saved] of [
@@ -276,8 +300,8 @@ describe("the accent save sends the colour the preview shows", () => {
 
   it("disables Save and says why for a draft that is not a hex code", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    const { rerender } = render(<SettingsPage />);
+    await openAccentPage(user, rerender);
     const hex = screen.getByLabelText(/accent color hex value/i);
 
     for (const draft of ["#8B00", "crimson", "   "]) {
@@ -297,7 +321,7 @@ describe("the accent save sends the colour the preview shows", () => {
     expect(saveButton()).toBeEnabled();
     expect(saveButton()).not.toHaveAccessibleDescription();
     expect(hexNeeded()).toBeNull();
-    expect(screen.queryByText(/hard to read on the card/i)).toBeNull();
+    expect(screen.queryByText(/hard to read on menus and dialogs/i)).toBeNull();
     expect(screen.queryByText(/under the 4\.5:1 minimum/i)).toBeNull();
   });
 
@@ -306,8 +330,8 @@ describe("the accent save sends the colour the preview shows", () => {
     // preview shows the fallback gold, so without the hint a disabled Save
     // would look like a colour that can't be saved for no stated reason.
     const user = userEvent.setup();
-    render(<SettingsPage />);
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    const { rerender } = render(<SettingsPage />);
+    await openAccentPage(user, rerender);
     await user.clear(screen.getByLabelText(/accent color hex value/i));
 
     expect(saveButton()).toBeDisabled();
@@ -329,8 +353,11 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     chapter.active();
   });
 
-  async function saveAccent(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+  async function saveAccent(
+    user: ReturnType<typeof userEvent.setup>,
+    rerender: (ui: ReactElement) => void,
+  ) {
+    await openAccentPage(user, rerender);
     const hex = screen.getByLabelText(/accent color hex value/i);
     await user.clear(hex);
     await user.type(hex, "#222222");
@@ -343,13 +370,13 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     mockUpdateChapter.mockResolvedValue({
       id: "chap-1",
       failedContrastChecks: [
-        { role: "--signet-accent-text", against: "#313131", ratio: 3.21 },
+        { role: "--signet-accent-text", against: "#2A2830", ratio: 3.21 },
       ],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
 
     expect(
       screen.getByText(/accent text on menus and dialogs reads at 3\.2:1/i),
@@ -366,13 +393,13 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     mockUpdateChapter.mockResolvedValue({
       id: "chap-1",
       failedContrastChecks: [
-        { role: "--signet-accent-text", against: "#313131", ratio: 4.47 },
+        { role: "--signet-accent-text", against: "#2A2830", ratio: 4.47 },
       ],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
 
     expect(
       screen.getByText(/accent text on menus and dialogs reads at 4\.4:1/i),
@@ -394,9 +421,9 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
       ],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
 
     expect(
       screen.getByText(/text on the accent's hover shade reads at 4\.2:1/i),
@@ -410,9 +437,9 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
       failedContrastChecks: [],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
 
     expect(screen.queryByText(/under the 4\.5:1 minimum/i)).toBeNull();
   });
@@ -429,9 +456,9 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
       ],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
     expect(screen.getByText(/under the 4\.5:1 minimum/i)).toBeInTheDocument();
 
     const hex = screen.getByLabelText(/accent color hex value/i);
@@ -450,13 +477,13 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     mockUpdateChapter.mockResolvedValue({
       id: "chap-1",
       failedContrastChecks: [
-        { role: "--signet-accent-text", against: "#313131", ratio: 3.21 },
+        { role: "--signet-accent-text", against: "#2A2830", ratio: 3.21 },
       ],
     });
     const user = userEvent.setup();
     const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
     expect(screen.getByText(/under the 4\.5:1 minimum/i)).toBeInTheDocument();
 
     mockCurrentChapter.mockReturnValue({
@@ -480,7 +507,7 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     mockUpdateChapter.mockResolvedValue({
       id: "chap-1",
       failedContrastChecks: [
-        { role: "--signet-accent-text", against: "#313131", ratio: 3.21 },
+        { role: "--signet-accent-text", against: "#2A2830", ratio: 3.21 },
         {
           role: "--signet-accent-on-primary",
           against: "--signet-accent-primary",
@@ -489,9 +516,9 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
       ],
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
-    await saveAccent(user);
+    await saveAccent(user, rerender);
 
     const warning = screen.getByText(
       /accent text on menus and dialogs/i,

@@ -29,25 +29,18 @@ import {
 } from "@repo/hooks";
 import { nextUpLine } from "@repo/formatting";
 import { TASK_AUDIENCE_COPY, canAll, isModuleEnabled } from "@repo/validation";
-import { PLUS_MENU_PERMISSIONS } from "@repo/chat-core/plus-menu";
+import { TASK_CREATE_PERMISSIONS } from "@repo/chat-core/plus-menu";
 import { SignetTokens } from "@repo/theme/signet";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import { SuggestedTasksEntry } from "@/components/tasks/suggested-tasks-entry";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_ACTIVITY } from "@/components/back-row";
-import {
-  SectionHeader,
-  SectionHeaderSkeleton,
-} from "@/components/list-section";
-import {
-  ErrorState,
-  NoChapterState,
-  SkeletonRegion,
-} from "@/components/state-block";
+import { SectionHeader } from "@/components/list-section";
+import { ErrorState, NoChapterState } from "@/components/state-block";
 import { InlineNote } from "@/components/inline-note";
 import {
+  TaskListSkeleton,
   TaskRow,
-  TaskRowSkeleton,
   TaskTile,
 } from "@/components/tasks/task-row";
 import { GridLine, toGridChunks } from "@/components/grid-line";
@@ -155,8 +148,8 @@ export default function TasksScreen() {
   // people who assign work. The C2 pattern, verbatim.
   const permissions = usePermissionList();
   // The hint points at the quick actions' New task, so it reads that action's
-  // grant (`PLUS_MENU_PERMISSIONS.task`: `tasks:manage` under `members:view`).
-  const canManageTasks = canAll(PLUS_MENU_PERMISSIONS.task, permissions);
+  // grant (`TASK_CREATE_PERMISSIONS`: `tasks:manage` under `members:view`).
+  const canManageTasks = canAll(TASK_CREATE_PERMISSIONS, permissions);
 
   // One clock for the whole render, so the two sections cannot straddle a tick
   // and disagree about what "today" means — but re-read whenever the member
@@ -314,13 +307,11 @@ export default function TasksScreen() {
   // `/tasks?assigned=<userId>`: a posting's screen handed it to that member
   // (#5570), and the line says who has it, as after New task.
   const nameOf = useMemberLabel();
-  const {
-    [RELEASED_PARAM]: released,
-    [ASSIGNED_PARAM]: assignedTo,
-  } = useLocalSearchParams<{
-    [RELEASED_PARAM]?: string;
-    [ASSIGNED_PARAM]?: string;
-  }>();
+  const { [RELEASED_PARAM]: released, [ASSIGNED_PARAM]: assignedTo } =
+    useLocalSearchParams<{
+      [RELEASED_PARAM]?: string;
+      [ASSIGNED_PARAM]?: string;
+    }>();
   const arrival =
     released === "1"
       ? "released"
@@ -538,19 +529,7 @@ export default function TasksScreen() {
     // "no tasks". Treating it as empty flashes "Nothing on your plate" on every cold
     // start, a beat before the real rows land.
     if (tasksQuery.isPending || viewerUserId === null) {
-      // A section caption over task-shaped rows, so the real board lands in
-      // place. The caption is a bar: which section comes first (TODAY, THIS
-      // WEEK or LATER) depends on the tasks.
-      return (
-        <SkeletonRegion label="Loading chapter tasks" style={styles.skeleton}>
-          <SectionHeaderSkeleton width="30%" />
-          <View>
-            {Array.from({ length: 3 }, (_, index) => (
-              <TaskRowSkeleton key={index} index={index} />
-            ))}
-          </View>
-        </SkeletonRegion>
-      );
+      return <TaskListSkeleton />;
     }
 
     if (tasksQuery.isError && tasksQuery.data === undefined) {
@@ -586,8 +565,10 @@ export default function TasksScreen() {
         {/* Up for grabs leads, when anything is open: what a member could
             pick up, before their own list. */}
         {renderUpForGrabs()}
-        {/* Today, This week, Later (#4295 step 5), each only when it has a
-            task: on a phone an empty heading is a scroll for nothing. */}
+        {/* Overdue, Today, This week, Later and No due date (#4295 step 5,
+            #5761, #5906),
+            each only when it has a task: on a phone an empty heading is a
+            scroll for nothing. */}
         {MY_TASKS_GROUPS.map((group) =>
           board.groups[group].length > 0 ? (
             <Fragment key={group}>
@@ -685,10 +666,6 @@ function createStyles(tokens: SignetTokens) {
     // A Grid section's lines, as Documents' (`document-tiles.tsx`).
     grid: {
       gap: tokens.spacing.sm,
-    },
-    // `ScreenShell`'s gap, between the caption and its rows.
-    skeleton: {
-      gap: tokens.spacing.md,
     },
     refusal: {
       ...typeRole(tokens.typography.role.caption),

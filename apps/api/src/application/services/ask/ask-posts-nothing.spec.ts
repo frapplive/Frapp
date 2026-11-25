@@ -66,6 +66,10 @@ const WRITERS = [
  */
 const CALLS = new Set([
   // Reads of the chapter's records.
+  // Who an event card can invite, by the chapter's own names (#5853).
+  'audience.options',
+  'audience.resolve',
+  'tiers.list',
   'attendance.getAttendance',
   'corpus.indexedAmong',
   'events.findByChapter',
@@ -109,6 +113,8 @@ const CALLS = new Set([
   'diagnostics.view',
   'suggestions.suggest',
   'people.resolve',
+  // The roles, groups and tiers a proposed task may say it is from (#5473).
+  'taskAudience.followEntriesOf',
   'tools.filter',
   'proposeTools.filter',
   // The tool loop (epic #4898): which reads to offer, and the loop itself,

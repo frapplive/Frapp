@@ -15,12 +15,14 @@ import {
   TASK_AUDIENCE_COPY,
   taskGroupLabel,
   taskNeedsSignOff,
+  taskRowFacts,
 } from "@repo/validation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FOCUS_RING } from "@/components/ui/focus";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
+import { FollowerChip } from "@/components/tasks/task-follower";
 import { cn, initials } from "@/lib/utils";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { MemberAvatarTint } from "@repo/hooks";
@@ -32,8 +34,9 @@ import type { BoardTask, GroupTileData } from "./board-task";
  * The Tasks page's compact list (Paul, 2026-11-18: "I had to scroll all the
  * way down"): one 40px row a task, as Linear's, Asana's and Todoist's lists
  * are, so an exec's 20 to 40 tasks fit on a screen. A row says what, who,
- * when and for how many points; everything else, and every edit, is in the
- * task's panel, which the row opens.
+ * when and for how many points, then how it repeats, its checklist and its
+ * photos as the phone's row does (`TaskFacts`, 2026-11-19); everything else,
+ * and every edit, is in the task's panel, which the row opens.
  */
 
 /** A row's hairline list, flush on the page. */
@@ -58,12 +61,19 @@ export function TaskRow({
   gate,
   lifecycleWritePending,
   selected,
+  audience = null,
   onOpen,
   onChangeStatus,
   onConfirm,
 }: {
   task: BoardTask;
   person: RowPerson;
+  /**
+   * Under My tasks, a copy of a group task names who it went to in place of
+   * the viewer's own face (#5699): it is theirs to finish, but the chapter
+   * got it too, with how far everyone is.
+   */
+  audience?: CopyAudience | null;
   /** The viewer's own task: its circle is the next step. */
   isMine: boolean;
   /** Say where it stands: no heading above it says so. */
@@ -140,14 +150,18 @@ export function TaskRow({
       <button
         type="button"
         onClick={onOpen}
+        // The title keeps at least 4rem beside chat's narrowest pane, where
+        // the facts after it otherwise took the whole row and left a row with
+        // no title (Paul, 2026-11-24): the button is never narrower than the
+        // title's floor plus its badge, and the due day truncates instead.
         className={cn(
-          "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md text-left",
+          "flex min-h-8 min-w-fit flex-1 items-center gap-2 rounded-md text-left",
           FOCUS_RING,
         )}
       >
         <span
           className={cn(
-            "min-w-0 truncate text-sm font-medium text-foreground",
+            "min-w-16 truncate text-sm font-medium text-foreground",
             status === "COMPLETED" && task.points_awarded && "text-muted-foreground",
           )}
         >
@@ -158,7 +172,10 @@ export function TaskRow({
             {TASK_NEEDS_CHANGES_LABEL}
           </Badge>
         ) : showStatus && status === "IN_PROGRESS" ? (
-          <Badge variant="outline" className="shrink-0">
+          // On a narrow pane the circle's dot says it; the words are still
+          // read out. (Waiting keeps its words: its circle is a check, which
+          // would read as settled.)
+          <Badge variant="outline" className="shrink-0 @max-md:sr-only">
             {TASK_STATUS_LABELS.IN_PROGRESS}
           </Badge>
         ) : showStatus && waiting ? (
@@ -170,9 +187,24 @@ export function TaskRow({
             {TASK_DONE_LABEL}
           </Badge>
         ) : null}
+        <TaskFacts task={task} done={status === "COMPLETED"} part="spoken" />
       </button>
-      <PersonChip person={person} />
+      {task.followed_by ? (
+        <FollowerChip
+          name={task.followed_by_name}
+          className="hidden max-w-[10rem] shrink @lg:inline-flex"
+        />
+      ) : null}
+      {audience ? (
+        <>
+          <AudienceText label={audience.label} glyphNarrow />
+          <MiniProgress done={audience.done} total={audience.total} title={task.title} />
+        </>
+      ) : (
+        <PersonChip person={person} />
+      )}
       <DueText task={task} due={due} />
+      <TaskFacts task={task} done={status === "COMPLETED"} part="shown" />
       <PointsTag points={task.point_reward} />
       {waiting && canConfirm ? (
         <Button
@@ -223,8 +255,11 @@ export function GroupTaskRow({
       <button
         type="button"
         onClick={onOpen}
+        // The title keeps at least 6rem beside chat's narrowest pane, where
+        // the facts after it otherwise took the whole row and left a row with
+        // no title (Paul, 2026-11-24); the due day truncates instead.
         className={cn(
-          "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md text-left",
+          "flex min-h-8 min-w-24 flex-1 items-center gap-2 rounded-md text-left",
           FOCUS_RING,
         )}
       >
@@ -232,14 +267,107 @@ export function GroupTaskRow({
           {task.title}
         </span>
       </button>
-      <span className="hidden min-w-0 max-w-[14rem] shrink items-center gap-1.5 text-caption text-muted-foreground @lg:inline-flex">
-        <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="truncate">{label}</span>
-      </span>
+      <AudienceText label={label} />
+      {task.followed_by ? (
+        <FollowerChip
+          name={task.followed_by_name}
+          className="hidden max-w-[10rem] shrink @xl:inline-flex"
+        />
+      ) : null}
       <MiniProgress done={tile.done} total={tile.total} title={task.title} />
       <DueText task={task} due={due} />
       <PointsTag points={task.point_reward} />
     </li>
+  );
+}
+
+/** Who a group task went to, and how far its copies are, as a row shows it. */
+export interface CopyAudience {
+  label: string;
+  done: number;
+  total: number;
+}
+
+/**
+ * Who the group task a copy belongs to went to ("Everyone", "Everyone in
+ * Exec board", "6 people") and its progress over every copy, from the
+ * `group` each task read carries; `null` for one person's own task.
+ */
+export function copyAudience(task: BoardTask): CopyAudience | null {
+  if (!task.group_id || !task.group) return null;
+  return {
+    label: taskGroupLabel({
+      audience: task.group.audience ?? "everyone",
+      target_name: task.group.target_name,
+      total: task.group.total,
+    }),
+    done: task.group.done,
+    total: task.group.total,
+  };
+}
+
+/**
+ * "Everyone" with the people glyph, the label from `@lg` up and read aloud
+ * always. `truncate` is restated at `@lg` because `not-sr-only` resets
+ * overflow and white-space, as `top-bar.tsx` notes. A group row draws nothing
+ * below `@lg`, as before; a copy's row keeps the glyph there (`glyphNarrow`),
+ * where it stands in for the person's face.
+ */
+function AudienceText({
+  label,
+  glyphNarrow = false,
+}: {
+  label: string;
+  glyphNarrow?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "min-w-0 max-w-[14rem] shrink items-center gap-1.5 text-caption text-muted-foreground",
+        glyphNarrow ? "inline-flex" : "hidden @lg:inline-flex",
+      )}
+    >
+      <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="sr-only @lg:not-sr-only @lg:truncate">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * How it repeats, how far through its checklist it is and its reference
+ * photos, after the due: "Due Monday · ↻ Weekly · 2 of 5 · 1 photo", the
+ * facts and order the phone's row says (`taskRowFacts`, 2026-11-19). Drawn
+ * after the due, muted, from a medium pane up; in a narrower one the row has
+ * room only for its title, person and due, so the facts are spoken with the
+ * title instead (`part="spoken"`, inside the row's button), never lost.
+ */
+function TaskFacts({
+  task,
+  done,
+  part,
+}: {
+  task: BoardTask;
+  done: boolean;
+  part: "shown" | "spoken";
+}) {
+  const facts = taskRowFacts({
+    done,
+    subtasksDone: (task.subtasks ?? []).filter((subtask) => subtask.done_at)
+      .length,
+    subtasksTotal: task.subtasks?.length ?? 0,
+    photos: task.photos,
+    series: task.series,
+  });
+  const line = part === "shown" ? facts.shown : facts.spoken;
+  if (!line) return null;
+  if (part === "spoken") return <span className="sr-only">{`, ${line}`}</span>;
+  return (
+    <span
+      aria-hidden="true"
+      className="hidden min-w-0 max-w-[14rem] shrink truncate text-caption text-muted-foreground @md:inline"
+    >
+      {line}
+    </span>
   );
 }
 
@@ -302,7 +430,7 @@ function DueText({
   return (
     <span
       className={cn(
-        "shrink-0 text-caption",
+        "min-w-0 truncate text-caption",
         due.overdue ? "text-destructive-text" : "text-muted-foreground",
       )}
       title={

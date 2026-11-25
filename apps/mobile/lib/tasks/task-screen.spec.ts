@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Alert } from "react-native";
+import {
+  currentItemMenu,
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
 import { toTaskRow, type TaskRowModel } from "./board";
 import {
   confirmBarLabel,
@@ -59,9 +64,35 @@ describe("taskHistory", () => {
     );
     expect(lines.map((line) => line.title)).toEqual([
       "Assigned by Name officer",
-      "Marked done",
+      "Marked done by you",
       "Confirmed",
     ]);
+  });
+
+  it("names who marked it done, an officer doing it for them too (#5732)", () => {
+    const done = taskHistory(
+      row({
+        assignee_id: "moiz",
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        completed_at: new Date(2026, 10, 17, 10, 0).toISOString(),
+        completed_by: "officer",
+      }),
+      nameOf,
+      NOW,
+    );
+    expect(done.at(-1)!.title).toBe("Marked done by Name officer");
+    const older = taskHistory(
+      row({
+        assignee_id: "moiz",
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        completed_at: new Date(2026, 10, 17, 10, 0).toISOString(),
+      }),
+      nameOf,
+      NOW,
+    );
+    expect(older.at(-1)!.title).toBe("Marked done by Name moiz");
   });
 
   it("gives a send-back its reason, and a task that needed no sign-off no Confirmed", () => {
@@ -92,6 +123,74 @@ describe("taskHistory", () => {
       NOW,
     );
     expect(auto.map((line) => line.key)).toEqual(["assigned", "done"]);
+  });
+});
+
+describe("taskHistory: a task a group follows (#5473)", () => {
+  it("says it was submitted to the group on Marked done", () => {
+    const done = taskHistory(
+      row({
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        completed_at: new Date(2026, 10, 17, 10, 0).toISOString(),
+        followed_by: "tier:t-exec",
+        followed_by_name: "Exec board",
+      }),
+      nameOf,
+      NOW,
+    );
+    expect(done.at(-1)!.meta).toContain("Submitted to Exec board");
+    const gone = taskHistory(
+      row({
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        completed_at: new Date(2026, 10, 17, 10, 0).toISOString(),
+        followed_by: "group:g-gone",
+        followed_by_name: null,
+      }),
+      nameOf,
+      NOW,
+    );
+    expect(gone.at(-1)!.meta).toContain("Submitted to a deleted group");
+  });
+
+  it("says nothing more on a task from its creator alone", () => {
+    const done = taskHistory(
+      row({
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        completed_at: new Date(2026, 10, 17, 10, 0).toISOString(),
+      }),
+      nameOf,
+      NOW,
+    );
+    expect(done.at(-1)!.meta).not.toContain("Submitted");
+  });
+});
+
+describe("duplicateWho: a tier's task (#5473)", () => {
+  it("goes to the same tier, a copy each", () => {
+    const copy = row({
+      group_id: "g1",
+      group: {
+        audience: "tier",
+        target_id: "t-exec",
+        target_name: "Exec board",
+        total: 4,
+        done: 0,
+        confirmed: 0,
+      },
+    });
+    expect(duplicateWho(copy, [])).toEqual({
+      kind: "each",
+      target: { kind: "tier", id: "t-exec" },
+    });
+  });
+
+  it("keeps who it is from", () => {
+    expect(
+      taskDuplicateOf(row({ followed_by: "role:pres" }), [], NOW).followedBy,
+    ).toBe("role:pres");
   });
 });
 
@@ -469,6 +568,7 @@ describe("taskDuplicateOf (#5492)", () => {
       subtasks: ["Sweep", "Mop"],
       due: { kind: "date", date: "2026-11-20" },
       dueTime: null,
+      followedBy: null,
     });
   });
 
@@ -476,6 +576,12 @@ describe("taskDuplicateOf (#5492)", () => {
     expect(
       taskDuplicateOf(row({ due_date: "2026-11-01" }), [], NOW).due,
     ).toEqual(DEFAULT_DUE_CHOICE);
+  });
+
+  it("keeps a task with no due date undated (#5761)", () => {
+    const prefill = taskDuplicateOf(row({ due_date: null }), [], NOW);
+    expect(prefill.due).toEqual({ kind: "none" });
+    expect(prefill.dueTime).toBeNull();
   });
 
   it("keeps today but drops a time already passed, so New task opens ready to create", () => {
@@ -637,6 +743,9 @@ describe("Mark done in the bar", () => {
 });
 
 describe("Delete on a repeating task (#5119)", () => {
+  afterEach(() => {
+    dismissItemMenu();
+  });
   const series = {
     recurrence_rule: "FREQ=WEEKLY;BYDAY=MO;TZID=America/New_York",
     next_due_date: "2026-11-30",
@@ -646,19 +755,34 @@ describe("Delete on a repeating task (#5119)", () => {
   const buttonsOf = () =>
     vi.mocked(Alert.alert).mock.calls.at(-1)![2] as Button[];
 
-  it("asks This task only or All upcoming tasks, and hands back the scope", async () => {
+  it("asks This task only or All upcoming tasks, both red, and hands back the scope", async () => {
     vi.mocked(Alert.alert).mockClear();
     const picked: string[] = [];
     confirmTaskDelete(row({ series }), false, (scope) => picked.push(scope));
-    expect(vi.mocked(Alert.alert).mock.calls.at(-1)![0]).toBe(
-      "Delete a repeating task",
-    );
-    buttonsOf().find((b) => b.text === "All upcoming tasks")!.onPress!();
+    expect(Alert.alert).not.toHaveBeenCalled();
+    const menu = currentItemMenu()!;
+    expect(menu.title).toBe("Delete a repeating task");
+    expect(
+      menu.actions.map((action) => [action.label, !!action.destructive]),
+    ).toEqual([
+      ["This task only", true],
+      ["All upcoming tasks", true],
+    ]);
+    pickItemMenuAction("All upcoming tasks");
     await Promise.resolve();
     confirmTaskDelete(row({ series }), false, (scope) => picked.push(scope));
-    buttonsOf().find((b) => b.text === "This task only")!.onPress!();
+    pickItemMenuAction("This task only");
     await Promise.resolve();
     expect(picked).toEqual(["series", "instance"]);
+  });
+
+  it("deletes nothing when the repeating task's question is dismissed", async () => {
+    const picked: string[] = [];
+    confirmTaskDelete(row({ series }), false, (scope) => picked.push(scope));
+    dismissItemMenu();
+    await Promise.resolve();
+    expect(currentItemMenu()).toBeNull();
+    expect(picked).toEqual([]);
   });
 
   it("asks the plain question for a task that doesn't repeat, or a stopped series", () => {

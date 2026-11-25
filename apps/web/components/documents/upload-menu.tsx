@@ -1,8 +1,15 @@
 "use client";
 
-import { useRef } from "react";
-import { ChevronDown, FolderSync, FolderUp } from "lucide-react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { ChevronDown, FilePlus2, FolderSync, FolderUp } from "lucide-react";
 import { useGoogleDriveStatus, type DocumentTypeRow } from "@repo/hooks";
+import { useKeptPanel } from "@repo/hooks/kept-drafts";
+import { useNewIntent } from "@/components/layout/new-intent";
+import { NEW_ACTION_LABELS } from "@repo/validation";
+import {
+  MINUTES_DRAFT,
+  StartMinutesPanel,
+} from "@/components/meetings/start-minutes-panel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,10 +29,6 @@ import {
   driveFolderShown,
   driveNeedsAttention,
 } from "@/components/documents/drive-folder-panel";
-import type {
-  ChapterDocument,
-  FolderRow,
-} from "@/components/documents/document-types";
 
 /**
  * Documents' one way in (#5576): an outlined Upload button, and beside it a
@@ -43,10 +46,11 @@ export function UploadMenu({
   typeOptions,
   typeRows,
   importContext,
-  documents,
-  folderRows,
+  onOpenDriveFolder,
   canUpload,
   canManage,
+  canStartMinutes,
+  minutesOpenerRef,
 }: {
   gate: SubscriptionGate;
   upload: DocumentUpload;
@@ -54,13 +58,54 @@ export function UploadMenu({
   typeOptions: readonly string[];
   typeRows: readonly DocumentTypeRow[] | null;
   importContext: ImportContext;
-  documents: readonly ChapterDocument[];
-  folderRows: readonly FolderRow[];
+  /**
+   * Shows the connected Google Drive folder in Documents, where it is
+   * managed (its line and ⋯). The menu's Google Drive item calls it once a
+   * folder is connected; before that the item connects one.
+   */
+  onOpenDriveFolder?: () => void;
   /** `chapter_docs:upload`: Upload and Import a folder. */
   canUpload: boolean;
-  /** `chapter_docs:manage`: Google Drive. */
+  /** `chapter_docs:manage`: Google Drive, and renaming and deleting types. */
   canManage: boolean;
+  /**
+   * `meetings:record` with the meetings module on: New minutes (#5949).
+   * Posted minutes are filed here, so starting them is one more way in, as
+   * the Meetings page's New minutes was before that page folded into
+   * Documents.
+   */
+  canStartMinutes: boolean;
+  /**
+   * Set to open New minutes from elsewhere on the page: the Minutes filter's
+   * empty line offers it (#5949). Null while it isn't offered.
+   */
+  minutesOpenerRef?: MutableRefObject<(() => void) | null>;
 }) {
+  const [startingMinutes, setStartingMinutes] = useState(false);
+  // New's New minutes (#5946) lands here, on the Minutes filter (#5949).
+  useNewIntent(
+    () => setStartingMinutes(true),
+    canStartMinutes,
+    undefined,
+    "minutes",
+  );
+  useEffect(() => {
+    if (!minutesOpenerRef) return;
+    minutesOpenerRef.current = canStartMinutes
+      ? () => setStartingMinutes(true)
+      : null;
+    return () => {
+      minutesOpenerRef.current = null;
+    };
+  }, [canStartMinutes, minutesOpenerRef]);
+  // Reopens on return when the page was left mid-form (#4593).
+  useKeptPanel({
+    page: "documents",
+    form: MINUTES_DRAFT,
+    open: startingMinutes,
+    setOpen: setStartingMinutes,
+    ready: canStartMinutes,
+  });
   const openImport = useRef<(() => void) | null>(null);
   const openDrive = useRef<(() => void) | null>(null);
   // Drive's status is `chapter_docs:manage` only on the API, so nobody else
@@ -72,7 +117,7 @@ export function UploadMenu({
   // The items carry the gate's reason and its notice, as the buttons did.
   const { title, "aria-describedby": describedBy } = gate.controlProps();
   const gateReason = { title, "aria-describedby": describedBy };
-  const hasMenu = canUpload || showDrive;
+  const hasMenu = canUpload || showDrive || canStartMinutes;
   if (!hasMenu) return null;
 
   return (
@@ -84,6 +129,7 @@ export function UploadMenu({
           folders={folders}
           typeOptions={typeOptions}
           typeRows={typeRows}
+          canManageTypes={canManage}
           triggerClassName="rounded-r-none"
         />
       ) : null}
@@ -91,7 +137,7 @@ export function UploadMenu({
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
-            variant="secondary"
+            variant="action"
             size="toolbar"
             className={canUpload ? "-ml-px rounded-l-none px-2" : "gap-2"}
             aria-label={
@@ -121,11 +167,28 @@ export function UploadMenu({
               Import a folder
             </DropdownMenuItem>
           ) : null}
+          {canStartMinutes ? (
+            // Minutes aren't a subscription-gated write here: the panel's
+            // own start says so if the chapter's subscription refuses it.
+            <DropdownMenuItem onSelect={() => setStartingMinutes(true)}>
+              <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+              {NEW_ACTION_LABELS.newMinutes}
+            </DropdownMenuItem>
+          ) : null}
           {showDrive ? (
             <DropdownMenuItem
-              disabled={!gate.allowed}
+              // Connected, the item opens the folder in Documents, or the
+              // top of Documents, where its line shows for an officer who
+              // can't open it (or before the first pass makes it).
+              disabled={
+                !gate.allowed || (!!driveData?.connection && !onOpenDriveFolder)
+              }
               {...gateReason}
-              onSelect={() => openDrive.current?.()}
+              onSelect={() =>
+                driveData?.connection
+                  ? onOpenDriveFolder?.()
+                  : openDrive.current?.()
+              }
             >
               <FolderSync className="h-4 w-4" aria-hidden="true" />
               {driveData?.connection ? "Google Drive" : "Connect Google Drive"}
@@ -143,13 +206,14 @@ export function UploadMenu({
           openerRef={openImport}
         />
       ) : null}
-      {canManage ? (
-        <DriveFolderPanel
-          gate={gate}
-          documents={documents}
-          folders={folderRows}
-          openerRef={openDrive}
+      {canStartMinutes ? (
+        <StartMinutesPanel
+          open={startingMinutes}
+          onOpenChange={setStartingMinutes}
         />
+      ) : null}
+      {canManage ? (
+        <DriveFolderPanel gate={gate} openerRef={openDrive} />
       ) : null}
     </div>
   );

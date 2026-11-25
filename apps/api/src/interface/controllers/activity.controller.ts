@@ -25,6 +25,7 @@ import { ActivityService } from '../../application/services/activity.service';
 import { ActivityLinkService } from '../../application/services/activity-link.service';
 import type {
   ActivityArchive,
+  ActivityNow,
   ActivityView,
 } from '../../application/services/activity.service';
 import {
@@ -48,11 +49,13 @@ import {
   ActivityArchiveDto,
   ActivityDto,
   ActivityItemRefDto,
+  ActivityNowDto,
   ActivityRecapDto,
   ActivityRecapQueryDto,
   ActivityStandingDto,
   ActivityTaskItemGroupDto,
   ActivityTaskItemTaskDto,
+  ActivityQueryDto,
   ActivityWeekQueryDto,
   MarkActivityReadDto,
   SetActivityLinkStateDto,
@@ -98,7 +101,7 @@ export class ActivityController {
   @ApiOperation({
     summary: 'Get what needs the caller and what they made',
     description:
-      'The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat. Not `GET /v1/activity-feed`, which is a feed of what happened in the chapter.',
+      'The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat.',
   })
   @ApiOkResponse({ type: ActivityDto })
   @ApiBadRequestResponse({
@@ -108,7 +111,7 @@ export class ActivityController {
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
     @CurrentEnabledModules() enabledModules: Record<string, boolean> | null,
-    @Query() query: ActivityWeekQueryDto,
+    @Query() query: ActivityQueryDto,
   ): Promise<ActivityView> {
     // A week the standing would refuse is not refused here: the service
     // counts the default week instead. This read is the whole page and the
@@ -117,6 +120,25 @@ export class ActivityController {
     // over a number at the top.
     return this.activityService.getActivity(chapterId, userId, enabledModules, {
       weekStart: query.week_start ? new Date(query.week_start) : undefined,
+      now: new Date(),
+      minutes: query.minutes === 'true',
+    });
+  }
+
+  @Get('now')
+  @VerifySessionLocally()
+  @ApiOperation({
+    summary: 'Get the events on right now for the caller',
+    description:
+      'The Now card on Chat, Activity and the event (`spec/behavior/activity.md` § Now). An event is on from when its check-in opens until its end, whether or not the caller checked in. Listed when it invites the caller and requires them, they checked in to it, or they made it, and every event on for a holder of `events:update`; never one the caller is excused from. The one they checked in to first, then the latest start, at most 5. Rows are the shape of `coming_up`. Its own small read, so a screen that shows only Now does not read the whole page. Empty while the chapter has Events off.',
+  })
+  @ApiOkResponse({ type: ActivityNowDto })
+  async getNow(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentEnabledModules() enabledModules: Record<string, boolean> | null,
+  ): Promise<ActivityNow> {
+    return this.activityService.getNow(chapterId, userId, enabledModules, {
       now: new Date(),
     });
   }

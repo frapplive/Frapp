@@ -315,7 +315,7 @@ export function notificationPreview(
 /**
  * Where a row falls and what time it shows, on the viewer's own calendar day
  * (#1058): today's rows show a clock time ("4:00 PM"), a row from the last
- * week its weekday ("Mon"), and anything older its date ("Aug 12"). `null`
+ * week its weekday ("Monday"), and anything older its date ("August 12"). `null`
  * for a timestamp that doesn't parse, which drops the row on both surfaces.
  */
 export function notificationWhen(
@@ -340,8 +340,8 @@ export function notificationWhen(
     isToday: false,
     time:
       days < 7
-        ? at.toLocaleDateString(undefined, { weekday: "short" })
-        : at.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        ? at.toLocaleDateString(undefined, { weekday: "long" })
+        : at.toLocaleDateString(undefined, { month: "long", day: "numeric" }),
   };
 }
 
@@ -389,6 +389,27 @@ export function notificationSourceKey(data: unknown): string | null {
   return threadRootId
     ? `chat:${channelId}:thread:${threadRootId}`
     : `chat:${channelId}`;
+}
+
+/**
+ * Count of unread rows whose target is not chat: the notification half of the
+ * number on an app icon (the phone's, and the desktop app's dock or taskbar
+ * icon), `spec/behavior/notifications.md` § Badge Count.
+ *
+ * The chat push worker writes a row (`target.screen: "chat"`) for every chat
+ * push it sends, on top of the read-receipt count `useChannelUnreadCounts`
+ * returns for the same channel, so adding every unread row to the channel
+ * counts would count those messages twice. "Mark all read" still clears chat
+ * rows; only the icon's sum leaves them out.
+ */
+export function unreadNonChatNotificationCount(data: unknown): number {
+  if (!Array.isArray(data)) return 0;
+  return data.filter((row) => {
+    if (!isRecord(row) || stringAt(row, "read_at") !== null) return false;
+    const target =
+      isRecord(row.data) && isRecord(row.data.target) ? row.data.target : null;
+    return !target || stringAt(target, "screen") !== "chat";
+  }).length;
 }
 
 /**

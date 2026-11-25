@@ -1,4 +1,5 @@
 import type {
+  FrappLink,
   TaskGroupAudience,
   TaskGroupProgress,
   TaskProofKind,
@@ -18,7 +19,12 @@ export interface Task {
   description: string | null;
   assignee_id: string;
   created_by: string;
-  due_date: string;
+  /**
+   * The calendar day the task is due (`YYYY-MM-DD`), or null for a task with
+   * no due date (#5761): never overdue, no due reminders, sorted after every
+   * dated task, and never repeating.
+   */
+  due_date: string | null;
   /**
    * The moment the task is due, when it has a time of day (#4003). Null for a
    * task due on `due_date` with no time. When set, `due_date` is still the
@@ -29,6 +35,12 @@ export interface Task {
   point_reward: number | null;
   points_awarded: boolean;
   completed_at: string | null;
+  /**
+   * Who marked it done (#5732): the assignee, or an officer marking it done
+   * for them. Set with `completed_at`, cleared with it. Null on a completion
+   * from before the column, which reads as the assignee's.
+   */
+  completed_by: string | null;
   confirmed_at: string | null;
   /**
    * When an officer last sent the completion back to the assignee; `null`
@@ -80,6 +92,13 @@ export interface Task {
    * finished or overdue; it grants nothing else.
    */
   followed_by: string | null;
+  /**
+   * What is attached (`spec/behavior/frapp-links.md`), in order, at most
+   * `FRAPP_LINKS_MAX`. A record link stores ids only, never a name: the
+   * screens read each one's name for the member looking. A group's copies
+   * hold the same list; a series' copies are made with its template's.
+   */
+  attachments: FrappLink[];
   created_at: string;
 }
 
@@ -152,6 +171,8 @@ export interface TaskSeries {
   proof_kind: TaskProofKind;
   /** The checklist each copy starts with, in order. */
   subtask_titles: string[];
+  /** What each copy is made with (Frapp links). */
+  attachments: FrappLink[];
   /** Copies' time of day on the rule's wall clock (`HH:MM:SS`), or null. */
   due_time: string | null;
   /** The rule, in the event rule format with an open end allowed. */

@@ -44,15 +44,34 @@ describe('getOptionalChapterId', () => {
     ).toBe(CHAPTER_A);
   });
 
-  it('prefers the JWT active_chapter_id claim over the header', () => {
+  it('prefers the x-chapter-id header over the JWT claim (ADR-27, #5918)', () => {
+    // Header A, claim B: a tab in chapter A on a token whose claim is B gets
+    // A's analytics group, as ChapterGuard serves it A.
     expect(
       getOptionalChapterId(
         request({
-          jwtClaims: claims(CHAPTER_A),
-          headers: { 'x-chapter-id': CHAPTER_B },
+          jwtClaims: claims(CHAPTER_B),
+          headers: { 'x-chapter-id': CHAPTER_A },
         }),
       ),
     ).toBe(CHAPTER_A);
+  });
+
+  it('falls back to the JWT claim when no header is sent', () => {
+    expect(
+      getOptionalChapterId(request({ jwtClaims: claims(CHAPTER_B) })),
+    ).toBe(CHAPTER_B);
+  });
+
+  it('treats an empty header as absent', () => {
+    expect(
+      getOptionalChapterId(
+        request({
+          jwtClaims: claims(CHAPTER_B),
+          headers: { 'x-chapter-id': '' },
+        }),
+      ),
+    ).toBe(CHAPTER_B);
   });
 
   it('prefers ChapterGuard-resolved request.chapterId over JWT and header', () => {

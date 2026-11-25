@@ -4,6 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import type { WebSocketLikeConstructor } from '@supabase/realtime-js';
 import type { Database, FrappSupabaseClient } from './database.types';
+import {
+  createSupabaseDispatcher,
+  createSupabaseFetch,
+} from './supabase-fetch';
 
 export const SUPABASE_CLIENT = 'SUPABASE_CLIENT';
 
@@ -40,6 +44,7 @@ export const supabaseProvider: Provider = {
     return createClient<Database>(url, serviceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
       realtime: { transport },
+      global: { fetch: createSupabaseFetch(createSupabaseDispatcher()) },
     });
   },
 };

@@ -14,6 +14,7 @@ import {
 } from '#domain/adapters/language-model.interface';
 import {
   GoogleLanguageModel,
+  embeddingLocation,
   type GoogleModelsClient,
 } from './google-language-model';
 
@@ -96,6 +97,53 @@ describe('GoogleLanguageModel', () => {
         if (previous === undefined) delete process.env.GEMINI_API_KEY;
         else process.env.GEMINI_API_KEY = previous;
       }
+    });
+
+    it('sends embeddings to a region when the location is global, where the model is not served', () => {
+      const settings = {
+        project: 'frapp-ai-staging',
+        credentials: {
+          type: 'service_account',
+          client_email: 'unit-test@example.invalid',
+          private_key: 'unit-test-value',
+        },
+      };
+      const clients = (location: string) =>
+        GoogleLanguageModel.fromSettings({
+          ...settings,
+          location,
+        }) as unknown as { client: unknown; embedClient: unknown };
+
+      expect(embeddingLocation('global')).toBe('us-central1');
+      const global = clients('global');
+      expect(global.embedClient).not.toBe(global.client);
+
+      // A regional location already serves both, so one client does.
+      expect(embeddingLocation('europe-west4')).toBe('europe-west4');
+      const regional = clients('europe-west4');
+      expect(regional.embedClient).toBe(regional.client);
+    });
+
+    it('embeds through the embedding client, not the generation one', async () => {
+      const generation = { embedContent: jest.fn() };
+      const embedding = {
+        embedContent: jest.fn().mockResolvedValue({
+          embeddings: [{ values: [3, 4], statistics: { tokenCount: 2 } }],
+        }),
+      };
+      const model = new GoogleLanguageModel(
+        { models: generation } as unknown as GoogleModelsClient,
+        { models: embedding } as unknown as GoogleModelsClient,
+      );
+      const result = await model.embed({
+        task: 'corpus.embed',
+        model: 'gemini-embedding-001',
+        texts: ['one'],
+        dimensions: 2,
+      });
+      expect(result.vectors).toEqual([[0.6, 0.8]]);
+      expect(embedding.embedContent).toHaveBeenCalledTimes(1);
+      expect(generation.embedContent).not.toHaveBeenCalled();
     });
   });
 

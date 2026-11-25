@@ -1150,7 +1150,7 @@ describe('ChatService', () => {
         expect(mockReadReceiptRepo.findHiddenChannelIds).not.toHaveBeenCalled();
       });
 
-      it('leaves getChannels (the activity feed’s read) without the hidden lookup', async () => {
+      it('leaves getChannels (the Activity page’s read) without the hidden lookup', async () => {
         mockChannelRepo.findByChapter.mockResolvedValue(everything);
 
         const result = await service.getChannels('ch-1', 'user-1');
@@ -3744,7 +3744,7 @@ describe('ChatService', () => {
       });
     });
 
-    it('refuses a client that sends an Ask Frapp answer of its own (#4713)', async () => {
+    it('refuses a client that sends a Frapp Intelligence answer of its own (#4713)', async () => {
       // Only `AskPostService` writes the kind, from an answer the server
       // sealed. A member who could send one would be writing as Frapp.
       mockChannelRepo.findById.mockResolvedValue(baseChannel);
@@ -4149,7 +4149,8 @@ describe('ChatService', () => {
         {
           user_id: 'user-2',
           channel_access: EMPTY_ACCESS_HOLDER,
-          top_role_order: 0,
+          top_role_rank: 0,
+          top_tier: null,
           top_role: null,
         },
       ]);
@@ -4374,7 +4375,7 @@ describe('ChatService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    describe('an Ask Frapp answer posted to the channel (#4713)', () => {
+    describe('a Frapp Intelligence answer posted to the channel (#4713)', () => {
       const posted = {
         ...baseMessage,
         sender_id: '00000000-0000-0000-0000-000000000000',
@@ -6545,7 +6546,7 @@ describe('ChatService', () => {
           role('r-officers', 'Officers'),
           // The Everyone role (#4191): pinged as @everyone, off by default.
           role('r-member', 'Everyone', {
-            system_key: 'MEMBER',
+            system_key: 'EVERYONE',
             display_order: 9,
             mentionable: false,
           }),

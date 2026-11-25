@@ -773,6 +773,49 @@ function validateLedgerCoverage(migrations) {
  */
 export const EDITED_MIGRATION_EXCEPTIONS = Object.freeze([
   {
+    file: "supabase/migrations/20261123183858_task_attachments.sql",
+    removed: true,
+    reason:
+      "Renamed to 20261124034200 with the same SQL. #5923 merged 8 seconds after #5925's " +
+      "20261123194106 (the #4795 race); staging applied 194106 first and db push then refused " +
+      "183858, so Deploy staging stopped from 2026-11-24 03:34 UTC. Neither hosted database " +
+      "had applied it at the rename (checked 2026-11-24).",
+  },
+  {
+    file: "supabase/migrations/20261120214633_meeting_live_recordings.sql",
+    removed: true,
+    reason:
+      "Renamed to 20261121173300 with the same SQL. #5793 merged after #5785's " +
+      "20261120220934 had reached staging, so db push refused 214633 and Deploy staging " +
+      "stopped from 2026-11-21 00:06 UTC. Neither hosted database had applied it at the rename " +
+      "(checked 2026-11-21).",
+  },
+  {
+    file: "supabase/migrations/20261120215726_major_groups.sql",
+    removed: true,
+    reason:
+      "Renamed to 20261121173330 with the same SQL. #5796 merged after #5785's " +
+      "20261120220934 had reached staging, so db push refused 215726 and Deploy staging " +
+      "stopped from 2026-11-21 00:06 UTC. Neither hosted database had applied it at the rename " +
+      "(checked 2026-11-21).",
+  },
+  {
+    file: "supabase/migrations/20261120000243_member_joined_via_invite.sql",
+    removed: true,
+    reason:
+      "Renamed to 20261120030209 with the same SQL. #5711 merged 17 seconds after #5714's " +
+      "20261120004849 (the #4795 race); staging applied 004849 first and db push then refused " +
+      "000243. Neither hosted database had applied it at the rename (checked 2026-11-20).",
+  },
+  {
+    file: "supabase/migrations/20261119210432_chat_messages_signup_form_cards_index.sql",
+    removed: true,
+    reason:
+      "Renamed to 20261119222241 with the same SQL. #5660 merged after " +
+      "20261119210457 had reached staging, so db push refused 210432 and Deploy staging " +
+      "stopped. Neither hosted database had applied it at the rename (checked 2026-11-19).",
+  },
+  {
     file: "supabase/migrations/20261113130014_roles_name_not_blank.sql",
     removed: true,
     reason:

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   foldMentionName,
+  GROUP_MEMBERS_MAX,
   GROUPS_MAX,
   reservedMentionName,
 } from '@repo/validation';
@@ -71,11 +72,12 @@ export type ChapterGroupView = ChapterGroup & { member_ids: string[] };
  * can do is let them see a channel listing it, so once a channel or category
  * list names a group, changing its members or deleting it also needs
  * `channels:manage` ({@link ChapterGroupService.assertMayChangeAccess}). A
- * class year can't go on a list at all (members set their own year).
+ * class year or a major can't go on a list at all (members set their own).
  *
  * Only a manual group's name and members are written here. An automatic
- * group (a pledge class's, a graduation year's) follows the members' data,
- * which the database keeps (`20261113040007_chapter_groups.sql`); its color
+ * group (a pledge class's, a graduation year's, a major's) follows the
+ * members' data, which the database keeps (`20261113040007_chapter_groups.sql`,
+ * `20261121173330_major_groups.sql`); its color
  * and ping switch are the chapter's.
  *
  * Every change writes a `chapter_audit_log` row mirrored to `#chapter-audit`,
@@ -95,8 +97,9 @@ export class ChapterGroupService {
 
   /**
    * Every group with its members: manual ones first, in the order they were
-   * made, then pledge classes and class years. An automatic group nobody is
-   * in is left out (a class with no members yet, a year everyone left).
+   * made, then pledge classes, class years and majors. An automatic group
+   * nobody is in is left out (a class with no members yet, a year everyone
+   * left, a major nobody has any more).
    */
   async list(chapterId: string): Promise<ChapterGroupView[]> {
     const [groups, memberships] = await Promise.all([
@@ -173,7 +176,7 @@ export class ChapterGroupService {
 
   /**
    * Rename, recolor or switch pinging. Only a manual group may be renamed; an
-   * automatic one's name is its class's or year's.
+   * automatic one's name is its class's, year's or major's.
    */
   async update(
     id: string,
@@ -195,7 +198,7 @@ export class ChapterGroupService {
       if (group.kind !== 'manual') {
         if (name !== group.name) {
           throw new BadRequestException(
-            "This group's name follows its pledge class or graduation year",
+            "This group's name follows its pledge class, graduation year or major",
           );
         }
       } else if (name !== group.name) {
@@ -246,10 +249,7 @@ export class ChapterGroupService {
     actorUserId: string,
     memberIds: string[],
   ): Promise<ChapterGroupView> {
-    const group = await this.groupRepo.findById(id, chapterId);
-    if (!group) throw new NotFoundException(NOT_FOUND);
-    if (group.kind !== 'manual') throw new BadRequestException(AUTOMATIC);
-
+    const group = await this.manualGroup(id, chapterId);
     await this.assertMayChangeAccess(chapterId, actorUserId, id);
 
     const before = await this.memberIdsOf(chapterId, id);
@@ -262,21 +262,90 @@ export class ChapterGroupService {
     const added = after.filter((userId) => !before.includes(userId));
     const removed = before.filter((userId) => !after.includes(userId));
     if (added.length > 0 || removed.length > 0) {
-      await this.audit.record({
-        chapterId,
-        actorUserId,
-        action: 'chapter_group_members_set',
-        targetType: AUDIT_TARGET_TYPE,
-        targetId: id,
-        diff: { members: { from: before, to: after } },
-      });
+      await this.recordMembers(chapterId, actorUserId, id, before, after);
     }
     return { ...group, member_ids: after };
   }
 
   /**
+   * Put one member in a manual group, or take them out, from their profile
+   * (Paul, 2026-11-19: groups set where the person is, not only from the
+   * group's editor). The same gates as a whole-list save: `groups:manage`
+   * (the controller), and `channels:manage` too when a channel list names
+   * the group. A change that changes nothing (already in, already out) is
+   * no write and no audit row. Answers the group with who is in it after.
+   */
+  async addMember(
+    id: string,
+    chapterId: string,
+    actorUserId: string,
+    userId: string,
+  ): Promise<ChapterGroupView> {
+    const group = await this.manualGroup(id, chapterId);
+    await this.assertMayChangeAccess(chapterId, actorUserId, id);
+    const before = await this.memberIdsOf(chapterId, id);
+    if (!before.includes(userId) && before.length >= GROUP_MEMBERS_MAX) {
+      throw new BadRequestException(GROUP_FULL);
+    }
+    const result = await this.groupRepo.addMember(id, chapterId, userId);
+    if (result === 'group_not_found') throw new NotFoundException(NOT_FOUND);
+    if (result === 'member_not_found') {
+      throw new BadRequestException(NOT_A_MEMBER);
+    }
+    // One row in or out, so the list after is the one before with it: no
+    // second read of a list that can hold thousands.
+    if (result !== 'added') return { ...group, member_ids: before };
+    const after = [...before, userId];
+    await this.recordMembers(chapterId, actorUserId, id, before, after);
+    return { ...group, member_ids: after };
+  }
+
+  /** See {@link ChapterGroupService.addMember}. */
+  async removeMember(
+    id: string,
+    chapterId: string,
+    actorUserId: string,
+    userId: string,
+  ): Promise<ChapterGroupView> {
+    const group = await this.manualGroup(id, chapterId);
+    await this.assertMayChangeAccess(chapterId, actorUserId, id);
+    const before = await this.memberIdsOf(chapterId, id);
+    const removed = await this.groupRepo.removeMember(id, chapterId, userId);
+    if (!removed) return { ...group, member_ids: before };
+    const after = before.filter((memberId) => memberId !== userId);
+    await this.recordMembers(chapterId, actorUserId, id, before, after);
+    return { ...group, member_ids: after };
+  }
+
+  private async manualGroup(id: string, chapterId: string) {
+    const group = await this.groupRepo.findById(id, chapterId);
+    if (!group) throw new NotFoundException(NOT_FOUND);
+    if (group.kind !== 'manual') throw new BadRequestException(AUTOMATIC);
+    return group;
+  }
+
+  /** The same audit row a whole-list save writes, so the feed reads alike. */
+  private recordMembers(
+    chapterId: string,
+    actorUserId: string,
+    groupId: string,
+    before: string[],
+    after: string[],
+  ) {
+    return this.audit.record({
+      chapterId,
+      actorUserId,
+      action: 'chapter_group_members_set',
+      targetType: AUDIT_TARGET_TYPE,
+      targetId: groupId,
+      diff: { members: { from: before, to: after } },
+    });
+  }
+
+  /**
    * Delete a manual group. Every channel list naming it loses the entry (a
-   * trigger), so a channel only it could see is left to `*` until an officer
+   * trigger), so a channel only it could see falls to the chapter's top tier
+   * (migration `20261120051720`) until an officer
    * picks again, as when a role is deleted.
    */
   async remove(id: string, chapterId: string, actorUserId: string) {
@@ -350,7 +419,14 @@ export class ChapterGroupService {
     const names = [
       ...roles.filter((r) => r.chapter_id === chapterId).map((r) => r.name),
       ...tiers.filter((t) => t.chapter_id === chapterId).map((t) => t.name),
-      ...groups.filter((g) => g.id !== selfId).map((g) => g.name),
+      // Not a major's group (#5778): members type their own major, so one
+      // must not lock an officer out of a name (the row of a major nobody has
+      // any more is hidden and can't be deleted). A major gives way instead:
+      // one named like another set isn't a mention target
+      // (`namesAutomaticGroupsGiveWayTo` in chat-mention.service.ts).
+      ...groups
+        .filter((g) => g.id !== selfId && g.kind !== 'major')
+        .map((g) => g.name),
     ];
     if (names.some((other) => foldMentionName(other) === folded)) {
       throw new ConflictException(NAME_TAKEN);
@@ -365,8 +441,9 @@ const NAME_TAKEN =
   'A role, tier or group already has that name. Pick another so @mentions reach the right people.';
 const NOT_A_MEMBER =
   'Someone you picked is no longer in the chapter. Reload and pick again.';
+const GROUP_FULL = `A group can hold ${GROUP_MEMBERS_MAX.toLocaleString('en-US')} members.`;
 const AUTOMATIC =
-  "This group follows pledge classes or graduation years, so who's in it changes with them.";
+  "This group follows pledge classes, graduation years or majors, so who's in it changes with them.";
 
 /** Each group with the `users.id` of every member in it, sorted. */
 export function withMembers(
@@ -383,6 +460,7 @@ export function withMembers(
     manual: 0,
     pledge_class: 1,
     class_year: 2,
+    major: 3,
   };
   return [...groups]
     .sort(
@@ -390,7 +468,9 @@ export function withMembers(
         order[a.kind] - order[b.kind] ||
         (a.kind === 'class_year'
           ? (a.class_year ?? 0) - (b.class_year ?? 0)
-          : a.created_at.localeCompare(b.created_at)),
+          : a.kind === 'major'
+            ? a.name.localeCompare(b.name)
+            : a.created_at.localeCompare(b.created_at)),
     )
     .map((group) => ({
       ...group,

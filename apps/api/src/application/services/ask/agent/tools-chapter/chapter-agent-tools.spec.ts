@@ -22,6 +22,7 @@ const byName = new Map(tools.map((tool) => [tool.name, tool]));
 const GATES: Record<string, { permission: string; module: string | null }> = {
   find_member: { permission: 'members:view', module: null },
   roster: { permission: 'members:view', module: null },
+  chapter_roles: { permission: 'members:view', module: null },
   my_tasks: { permission: 'members:view', module: 'tasks' },
   chapter_tasks: { permission: 'tasks:manage', module: 'tasks' },
   events: { permission: 'members:view', module: 'events' },
@@ -161,6 +162,7 @@ describe('Chapter agent tools', () => {
  */
 const READS = new Set([
   'attendance.getAttendance',
+  'audience.options',
   'attendance.getMyAttendance',
   'attendance.getMyAttendanceForEvents',
   'backwork.findByChapter',
@@ -168,6 +170,7 @@ const READS = new Set([
   'backwork.getDepartments',
   'backwork.getProfessors',
   'events.findByChapter',
+  'eventTypes.list',
   'excuses.getMine',
   'groups.list',
   'invoices.findByUser',

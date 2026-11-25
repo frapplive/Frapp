@@ -80,6 +80,11 @@ function loadConfig() {
     PRODUCTION_UPDATE_SENTRY_DSN_ERROR: string;
     STAGING_PROFILE: string;
     STAGING_IDENTITY: { name: string; scheme: string; applicationId: string };
+    STAGING_GOOGLE_SIGN_IN: {
+      webClientId: string;
+      iosClientId: string;
+      androidClientId: string;
+    };
     APP_VARIANT_VALUE_ERROR: string;
     STAGING_RUNTIME_ERROR: string;
     APP_VARIANT_PROFILE_ERROR: string;
@@ -604,6 +609,46 @@ describe("the staging variant (#2511)", () => {
     expect(result.android.adaptiveIcon).toEqual(
       (appJson.android as { adaptiveIcon: unknown }).adaptiveIcon,
     );
+  });
+
+  it("signs in with Google through its own clients, never the store app's (#4148)", () => {
+    const { applyMobileConfig, STAGING_GOOGLE_SIGN_IN } = loadConfig();
+    // Store clients that differ from staging's, so a variant that inherits
+    // app.json's would show here.
+    const storeClients = {
+      webClientId: "store-web.apps.googleusercontent.com",
+      iosClientId: "store-ios.apps.googleusercontent.com",
+      androidClientId: "store-android.apps.googleusercontent.com",
+    };
+    const withStoreClients = {
+      ...appJson,
+      extra: { ...(appJson.extra as object), googleSignIn: storeClients },
+    } as typeof appJson;
+    const result = applyMobileConfig(withStoreClients, {
+      env: stagingBuildEnv,
+      existsSync: missing,
+    }) as { extra: { googleSignIn: Record<string, string> }; plugins: unknown[] };
+    expect(result.extra.googleSignIn).toEqual(STAGING_GOOGLE_SIGN_IN);
+    expect(result.extra.googleSignIn).not.toEqual(storeClients);
+    expect(STAGING_GOOGLE_SIGN_IN.webClientId).toMatch(
+      /\.apps\.googleusercontent\.com$/,
+    );
+    // Its iOS client brings the plugin with the reversed ID as the URL
+    // scheme, which the app also queries before it uses Google's SDK.
+    const scheme =
+      "com.googleusercontent.apps.661618060468-60r0l5n3vck4g04u5n2p7ep3t4h1q67n";
+    expect(result.plugins).toContainEqual([
+      "@react-native-google-signin/google-signin",
+      { iosUrlScheme: scheme },
+    ]);
+    expect(
+      (result as unknown as { ios: { infoPlist: Record<string, unknown> } }).ios
+        .infoPlist.LSApplicationQueriesSchemes,
+    ).toContain(scheme);
+    // The rest of extra (the EAS project) is kept.
+    expect(
+      (result.extra as unknown as { eas: unknown }).eas,
+    ).toEqual((appJson.extra as { eas: unknown }).eas);
   });
 
   it("claims no links when its dashboard is not an https origin of its own", () => {

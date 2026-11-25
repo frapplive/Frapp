@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChatTimeoutHere } from "@/lib/chat/use-chat-timeout-here";
 import { ChatBackground } from "@/components/chat/chat-background";
 import {
   Alert,
@@ -72,7 +73,7 @@ import {
   type AskAccess,
   type ChatCatchUpPoint,
 } from "@repo/validation";
-import { CatchUpStrip, useCatchUp } from "@/components/chat/catch-up-sheet";
+import { CatchUpStrip, useCatchUp } from "@/components/chat/catch-up";
 import { useAiSurfaces } from "@/lib/ai/availability";
 import type { SendOptions } from "@/lib/chat/use-chat-channel";
 import { useJumpToImportant } from "@/lib/chat/use-jump-to-important";
@@ -256,6 +257,11 @@ export function MessageThreadScreen({
       }),
     [channelQuery.data, queryClient, channelId, viewerId, roster.byId],
   );
+  // Chat timeouts (#6006): a thread reply is in its channel, so the
+  // composer's hint and Time out follow the channel's.
+  const timeoutHere = useChatTimeoutHere(openChannel?.channel ?? null);
+  const timedOutHint = timeoutHere.hint;
+  const timeOutTargetFor = timeoutHere.targetFor;
   const channelTitle = threadTitleFor(openChannel, channelQuery.isFetching);
 
   // The viewer's block list, as s05 applies it: a held row isn't drawn, a
@@ -545,10 +551,9 @@ export function MessageThreadScreen({
     startCatchUp({
       kind: "thread",
       channelId,
-      channelName: openChannel?.channel.name ?? null,
       rootId,
     });
-  }, [startCatchUp, channelId, openChannel, rootId]);
+  }, [startCatchUp, channelId, rootId]);
   const [offerDismissed, setOfferDismissed] = useState(false);
 
   // Unblock from a tombstone, as s05 offers it; the thread is read again so
@@ -729,6 +734,11 @@ export function MessageThreadScreen({
         canDelete: actions.canDelete,
         canReport: actions.canReport,
         blockUserId: actions.canBlock ? message.sender_id : null,
+        timeOut: timeOutTargetFor(
+          message,
+          viewerId,
+          resolveAuthorName(message, nameFor),
+        ),
         senderName: resolveAuthorName(message, nameFor),
         senderLabel: resolveAuthorLabel(message, nameFor, viewerId),
         sentAt: message.created_at,
@@ -749,6 +759,7 @@ export function MessageThreadScreen({
       canManageChannel,
       refetchRoster,
       nameFor,
+      timeOutTargetFor,
     ],
   );
   // Save message on the root and on replies (#3723), as web's thread panel
@@ -997,12 +1008,14 @@ export function MessageThreadScreen({
             ) : null}
           </View>
 
+          {catchUp.block}
           {catchUp.waiting ? (
             <CatchUpStrip
               line={CHAT_CATCH_UP_COPY.resume_line}
               action={CHAT_CATCH_UP_COPY.resume_action}
               onAction={catchUp.resume}
               onDismiss={catchUp.drop}
+              dismissLabel={CHAT_CATCH_UP_COPY.close}
             />
           ) : canSummarize &&
             !catchUp.active &&
@@ -1068,24 +1081,29 @@ export function MessageThreadScreen({
             onChangeText={onChangeText}
             onSend={staging.submit}
             onPickMember={staging.addMentionPick}
+            dictationTarget={`${channelId}|${rootId}`}
+            tidyDictation={
+              !!openChannel && !isDirectChannel(openChannel.channel)
+            }
             // Search needs the network, and the + isn't offered while editing.
             onOpenPlus={
               gifs.available && !staging.isEditing ? openGif : undefined
             }
             plusLabel="Send a GIF"
             onSchedule={
-              !writeBlockedReason && !staging.isEditing
+              !writeBlockedReason && !timedOutHint && !staging.isEditing
                 ? scheduleSend.openSchedule
                 : undefined
             }
             scheduled={scheduleSend.scheduled}
-            plusDisabled={!!writeBlockedReason || !canReply}
+            plusDisabled={!!writeBlockedReason || !canReply || !!timedOutHint}
             canSend={
               !!viewerId &&
               !writeBlockedReason &&
               // The composer keys its input's `editable` on this, so an emptied
               // edit stays typeable; it greys Save out itself, and the hint says
               // why (`useComposerStaging`).
+              !timedOutHint &&
               (staging.isEditing ? !staging.isSavingEdit : canReply)
             }
             placeholder={
@@ -1099,9 +1117,11 @@ export function MessageThreadScreen({
                   : staging.editError
                 : !canReply
                   ? THREAD_NO_REPLY_HINT
-                  : writeBlockedReason
-                    ? THREAD_OFFLINE_HINT
-                    : sendError
+                  : timedOutHint
+                    ? timedOutHint
+                    : writeBlockedReason
+                      ? THREAD_OFFLINE_HINT
+                      : sendError
             }
             hintTone={
               !writeBlockedReason &&
@@ -1140,7 +1160,9 @@ export function MessageThreadScreen({
         onUnreact={onUnreact}
         onSetSaved={setSaved}
         onRemind={remind}
+        onTimeOut={timeoutHere.open}
       />
+      {timeoutHere.sheet}
       <FormFillPage state={formFill} message={filledRow} nameFor={nameFor} />
     </SafeAreaView>
   );

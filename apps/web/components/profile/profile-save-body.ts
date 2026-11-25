@@ -1,7 +1,13 @@
 import type { components } from "@repo/api-sdk";
+import { normalizePhone } from "@repo/formatting";
 import {
   BIRTHDAY_VISIBILITY_DEFAULT,
+  type BirthdayDraftProblem,
+  birthdayDraftProblem,
   type BirthdayVisibility,
+  GRADUATION_YEAR_MAX,
+  GRADUATION_YEAR_MIN,
+  isPhoneNumber,
 } from "@repo/validation";
 
 /** The `PATCH /v1/users/me` body, the generated `UpdateUserDto`. */
@@ -61,9 +67,11 @@ export function profileSaveBody(
     if (next !== (saved[field] ?? "").trim()) body[field] = next;
   }
 
-  // Blank clears it; the API trims and stores null.
-  const phone = (draft.phone ?? "").trim();
-  if (phone !== (saved.phone ?? "").trim()) body.phone = phone;
+  // Blank clears it; the API trims and stores null. The field shows the number
+  // formatted and the API stores it normalized (#5798), so the two compare
+  // normalized: `(518) 555-0142` against a stored `+15185550142` is no change.
+  const phone = normalizePhone(draft.phone ?? "");
+  if (phone !== normalizePhone(saved.phone ?? "")) body.phone = phone;
 
   const year = draft.graduation_year ?? null;
   if (year !== (saved.graduation_year ?? null)) body.graduation_year = year;
@@ -84,4 +92,43 @@ export function profileSaveBody(
   }
 
   return body;
+}
+
+/** Why a Save can't be sent yet, on the field the member must fix. */
+export type ProfileSaveProblem =
+  | { field: "phone" }
+  | { field: "graduationYear" }
+  | { field: "birthday"; problem: BirthdayDraftProblem };
+
+/**
+ * The checks a Save runs before it sends `body` (from `profileSaveBody`):
+ * a phone the API would refuse (`isPhoneNumber`), a graduation year outside
+ * `GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX` (the API's own range, checked
+ * here rather than by the input's `min`/`max`, which a `noValidate` form
+ * skips), or half a birthday or a day its month lacks (#4959). Shared by `/profile` and `/welcome`'s About
+ * you, so the two refuse the same values in the same words.
+ */
+export function profileSaveProblem(
+  body: ProfileSaveBody,
+  draft: ProfileFields,
+): ProfileSaveProblem | null {
+  if (body.phone && !isPhoneNumber(body.phone)) return { field: "phone" };
+  const year = body.graduation_year;
+  if (
+    year !== undefined &&
+    year !== null &&
+    (year < GRADUATION_YEAR_MIN || year > GRADUATION_YEAR_MAX)
+  ) {
+    return { field: "graduationYear" };
+  }
+  // Month and day go together; the year rides with them.
+  if (body.birthday_visibility !== undefined) {
+    const problem = birthdayDraftProblem(
+      draft.birthday_month ?? null,
+      draft.birthday_day ?? null,
+      draft.birthday_year ?? null,
+    );
+    if (problem) return { field: "birthday", problem };
+  }
+  return null;
 }

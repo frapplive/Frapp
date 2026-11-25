@@ -12,6 +12,10 @@
 import { askPostRefusalCopy } from "./ask-post";
 import { AUDIT_LOG_READ_ONLY_REFUSAL } from "./chat-audit-log";
 import { moduleRefusalFromServerMessage } from "./module-refusal";
+import {
+  ROLE_ASSIGN_OUT_OF_REACH_CODE,
+  ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
+} from "./role-assignment";
 import { subscriptionRefusalFromServerMessage } from "./subscription";
 import {
   SELF_ASSIGNABLE_REFUSAL_COPY,
@@ -23,6 +27,14 @@ export const TRY_AGAIN = "Try again in a moment.";
 
 /** A member's name sent blank, on their own profile or an officer's fix. */
 export const BLANK_NAME_REFUSAL = "Enter a name.";
+
+/**
+ * A 429 sent from in front of the API because every copy of it was full
+ * (`isServerBusy` in `@repo/api-sdk`): nothing the member did, and it passes
+ * when the load does. writing.md § Rate limited (global).
+ */
+export const SERVER_BUSY_COPY =
+  "Frapp is busy right now. Try again in a moment.";
 
 export const OFFLINE_COPY =
   "Couldn't reach Frapp. Check your connection and try again.";
@@ -79,6 +91,14 @@ export function copyForErrorCode(code: string | null): string | null {
   if (code in SELF_ASSIGNABLE_REFUSAL_COPY) {
     return SELF_ASSIGNABLE_REFUSAL_COPY[code as SelfAssignableRefusal];
   }
+  // Giving or taking a role the rank rules refuse (#5730,
+  // `spec/behavior/rbac.md` § Rank).
+  if (code === ROLE_ASSIGN_OUT_OF_REACH_CODE) {
+    return "That role, or this member, ranks too high for your role to change.";
+  }
+  if (code === ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE) {
+    return "This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.";
+  }
   if (code === "service_entry.receipt_required") {
     return "Add a photo of your proof, then submit.";
   }
@@ -97,7 +117,7 @@ export function copyForErrorCode(code: string | null): string | null {
     return "Accept the Terms and Privacy Policy to continue.";
   }
   if (code === "ai.consent.required") {
-    return "Turn on Frapp AI in Settings to use this.";
+    return "Turn on Frapp Intelligence in Settings to use this.";
   }
   if (code === "ai.chapter_off") {
     // Every switch starts on (#5294), so it is off only by the president's
@@ -105,12 +125,12 @@ export function copyForErrorCode(code: string | null): string | null {
     return "Your chapter's president has this turned off.";
   }
   if (code === "ai.consent.stale_sheet") {
-    return "Frapp AI changed since you opened this. Look again, then answer.";
+    return "Frapp Intelligence changed since you opened this. Look again, then answer.";
   }
   if (code === "ai.settings.president_only") {
     return "Only your chapter's president can turn AI features on or off.";
   }
-  // Posting an Ask Frapp answer to a channel (#4713).
+  // Posting a Frapp Intelligence answer to a channel (#4713).
   return askPostRefusalCopy(code);
 }
 
@@ -211,6 +231,15 @@ export const SERVER_MESSAGE_COPY: Readonly<Record<string, string>> = {
     "You need to be near the officer's screen to check in.",
   "Cannot mark auto-absent before the grace period ends":
     "Wait until the grace period ends to mark absences.",
+  // Chat backgrounds (#3973, #4262): `chat-background.service.ts`'s refusals.
+  "storage_path does not reference an uploaded photo":
+    "The photo didn't finish uploading. Pick it again.",
+  // Already member copy (#4454); mapped so it isn't lost to the fallback.
+  "A photo background is announced in a channel every member can post in. Mark one as the default channel first.":
+    "A photo background is announced in a channel every member can post in. Mark one as the default channel first.",
+  "This channel can't have a background":
+    "This channel can't have a background.",
+  "A DM or group DM has no background": "DMs can't have a background.",
   // Chat
   "You do not have access to this channel":
     "You don't have access to this channel.",
@@ -303,8 +332,8 @@ export const SERVER_MESSAGE_COPY: Readonly<Record<string, string>> = {
   "A rollover has already been performed this calendar month":
     "The semester was already rolled over this month.",
   // Pledge classes (`PledgeClassService.assign`), already in an officer's words.
-  "You can only set the class of members ranked below you, and your own.":
-    "You can only set the class of members ranked below you, and your own.",
+  "Your role isn't in any tier, so you can't change another member's class.":
+    "Your role isn't in any tier, so you can't change another member's class.",
   "A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.":
     "A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.",
   // Points and hours
@@ -335,6 +364,8 @@ export const SERVER_MESSAGE_COPY: Readonly<Record<string, string>> = {
     "Points were already given for this task.",
   "Admins cannot confirm their own task completions":
     "You can't confirm your own task. Ask another officer.",
+  "Admins cannot send back their own task completions":
+    "You can't send back your own task. Use Mark not done.",
   "Only the assignee or an admin can update task status":
     "Only the person it's assigned to can change this task.",
   "Coordinates must form a polygon with at least 3 points":

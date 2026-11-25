@@ -6,6 +6,7 @@ import {
   EVENT_DESCRIPTION_MAX_LENGTH,
   OFFLINE_COPY,
   REQUEST_VALIDATION_FAILED_CODE,
+  SERVER_BUSY_COPY,
   SERVER_MESSAGE_COPY,
   STATUS_ERROR_COPY,
   tooLongRefusal,
@@ -39,6 +40,25 @@ describe("errorCopy", () => {
     expect(errorCopy(nest(500, "Internal server error"), FALLBACK)).toBe(
       FALLBACK,
     );
+  });
+
+  it("words a refused role change by the rule that refused it (#5730)", () => {
+    expect(
+      errorCopy(
+        nest(
+          403,
+          "You can only give roles whose permissions you hold: backwork:upload.",
+          "role.assign_permission_not_held",
+        ),
+      ),
+    ).toMatch(/^This role has a permission your role doesn't/);
+    expect(
+      errorCopy(nest(403, "whatever", "role.assign_out_of_reach")),
+    ).toMatch(/^That role, or this member, ranks too high/);
+    // Not the bare 403's guess, which told an officer to ask an officer.
+    expect(
+      errorCopy(nest(403, "x", "role.assign_permission_not_held")),
+    ).not.toBe(STATUS_ERROR_COPY[403]);
   });
 
   it("rewrites the refusals that carry a reason", () => {
@@ -306,6 +326,25 @@ describe("errorCopy", () => {
       expect(line).toMatch(/^[A-Z].*\.$/);
       expect(line).not.toMatch(/[A-Z]{3,}|_/);
     }
+  });
+});
+
+describe("a busy server's 429", () => {
+  const busy = { statusCode: 429, message: "Rate exceeded." };
+
+  it("reads busy, never too many requests, on a load and an action", () => {
+    expect(describeLoadFailure(busy)).toBe(SERVER_BUSY_COPY);
+    expect(errorCopy(busy, FALLBACK)).toBe(SERVER_BUSY_COPY);
+  });
+
+  it("offers Try again, because the same call will pass once the load does", () => {
+    expect(canTryAgain(busy)).toBe(true);
+  });
+
+  it("leaves the throttler's own 429 as it was", () => {
+    const throttled = nest(429, STATUS_ERROR_COPY[429]!);
+    expect(describeLoadFailure(throttled)).toBe(STATUS_ERROR_COPY[429]);
+    expect(canTryAgain(throttled)).toBe(false);
   });
 });
 

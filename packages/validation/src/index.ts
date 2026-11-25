@@ -25,7 +25,7 @@ export {
 // `isModuleEnabled`, and `subscriptionWriteState`.
 export * from "./analytics-opt-out";
 export * from "./api-error-codes";
-// Ask Frapp (#450): the request, the versioned stream format, and its copy.
+// Frapp Intelligence (#450): the request, the versioned stream format, and its copy.
 export * from "./ask";
 // People and channels named in an Ask answer (#4904).
 export * from "./ask-cards";
@@ -35,7 +35,7 @@ export * from "./ask-entities";
 export * from "./ask-feedback";
 // What Ask opens on: the day, a greeting, the first-open starter (#4904).
 export * from "./ask-greeting";
-// An Ask Frapp answer posted to a channel (#4713).
+// A Frapp Intelligence answer posted to a channel (#4713).
 export * from "./ask-post";
 export * from "./ask-source-chip";
 // Ask's working state as a list of steps (#5427).
@@ -50,8 +50,12 @@ export * from "./channel-access-lists";
 export * from "./chapter-branding";
 export * from "./chapter-config";
 export * from "./chapter-goals";
+export * from "./chapter-groups";
+// Logs (Paul, 2026-11-21): the chapter's record of officer changes.
+export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
+export * from "./chapter-settings-copy";
 // The audit log (#3909): what may change on a line already in it.
 export * from "./chat-audit-log";
 export * from "./chat-backgrounds";
@@ -61,16 +65,25 @@ export * from "./chat-message";
 export * from "./chat-message-flags";
 export * from "./chat-notification-defaults";
 export * from "./chat-sidebar";
+export * from "./chat-timeout";
 // The check-in QR as a link the phone camera opens. See ./check-in-link.
 export * from "./check-in-link";
 export * from "./check-in-window";
 export * from "./check-in-zone-copy";
 // The request headers the SDK sets and the API reads (time zone, client version).
 export * from "./client-headers";
+// What already tracks each Coming up date: its event and its tasks (#5672).
+export * from "./coming-up-tracking";
 // Connection state machine (`spec/ui/resilience/connection-state.md`). Shared so web and
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// Councils (#5933): profiles, role packs and recruitment models.
+export * from "./council";
+// Affiliations and PNM records (#5974): link states, offers, codes, copy.
+export * from "./council-chapters";
+// A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
 // this used to be two copies of the same scanner.
@@ -80,6 +93,7 @@ export * from "./discord-export";
 export * from "./discord-import";
 // The " / " a Drive-synced folder's path is joined with (#5337).
 export * from "./document-folders";
+export * from "./document-links";
 export * from "./error-copy";
 // An event's agenda and attachments (#4934): their limits and shapes, which
 // the API enforces and both editors read.
@@ -95,16 +109,27 @@ export * from "./event-edit";
 export * from "./event-excuse";
 // The event form's rows: order, words and values both apps draw (#5561).
 export * from "./event-form-rows";
-// The chapter's Everyone role, the Member role renamed and hidden (#4191).
+// What is on right now, and the Now card's words (#5777).
+export * from "./event-now";
+export * from "./event-page";
+// The chapter's Everyone role, the floor every member holds, and the three
+// base roles an officer gives (Paul, 2026-11-21).
 export {
+  ACTIVE_ROLE_NAME,
+  ACTIVE_ROLE_SYSTEM_KEY,
+  BASE_ROLE_SYSTEM_KEYS,
+  baseRoleIds,
   EVERYONE_MEMBER_LIST_HEADING,
   EVERYONE_MENTION_NAME,
   EVERYONE_ROLE_NAME,
   EVERYONE_ROLE_SYSTEM_KEY,
   HERE_MENTION_NAME,
   type HereMentionSource,
+  isActiveRole,
+  isBaseRole,
   isEveryoneRole,
   mentionRoleHint,
+  needsBaseRole,
   reservedMentionName,
   rolesAfterSave,
   withHereMention,
@@ -113,7 +138,16 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
+// A chapter's public interest form (#5977): limits, the approved consent
+// text, refusal codes and the page's words.
+export * from "./interest-form";
 export * from "./invite-emails";
+// The invite card funnel (#5663): steps, closed property sets, shapes.
+export * from "./invite-funnel";
+// The invite carried through an install by the clipboard (#5626). See
+// ./invite-paste.
+export * from "./invite-paste";
 // Invite paste/URL extraction and https minting, shared so web `/join`,
 // mobile s02, the API email helper, and the landing `/join` redirect cannot
 // drift on what a copied join link is or whether a public http: origin is
@@ -141,12 +175,18 @@ export * from "./member-nudge";
 export * from "./mentions";
 export * from "./message-link";
 export * from "./message-text";
+// The minutes' section editor, shared by the web and the phone (#4412).
+export * from "./minutes-edit";
 // Minutes drafted first: start, drafting and review, in both apps' words.
 export * from "./minutes-flow";
 // How both apps lay minutes out to read, and the words of its ⋯ menu (#5562).
 export * from "./minutes-read";
+export * from "./minutes-request-copy";
+// Which meetings on the calendar need minutes, and the next one coming.
+export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
+export * from "./name-lock";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen
 // default and the app-link files name one app. See ./native-app.
@@ -164,6 +204,9 @@ export * from "./notification-categories";
 // The inbox's first page, which the API bootstrap, the SDK batch and
 // `useNotifications` must agree on (#4962).
 export * from "./notification-inbox";
+// The "You" screen after joining, web and phone (#5627).
+export * from "./onboarding-about";
+export * from "./onboarding-you";
 // ── Ops-setup nudges (issue #492) ────────────────────────────────────────────
 // Shared for the same reason as the categories above: each `key` is written
 // verbatim into `members.dismissed_ops_nudges`, the column is an unconstrained
@@ -184,6 +227,11 @@ export * from "./permission-registry";
 // `apps/web/lib/auth/can.ts` with #994 so the wildcard rule has one definition.
 export * from "./permissions";
 export * from "./phone";
+export * from "./phone-reach";
+// What each points category is called, and the officer action's one name,
+// on web and phone (#5950).
+export * from "./point-category";
+export * from "./point-history";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";
@@ -203,9 +251,11 @@ export {
   nextReleaseNoteSnapshot,
   parseReleaseNoteSnapshot,
   parseReleaseNoteVersion,
+  RELEASE_NOTE_TIME_ZONE,
   RELEASE_NOTE_VERSION_PATTERN,
   RELEASE_NOTES,
   type ReleaseNote,
+  releaseNoteDay,
   releaseNoteGroups,
   type ReleaseNoteSnapshot,
   releaseNoteStoreText,
@@ -217,8 +267,19 @@ export {
 // The Repeat control's state, read and written the same way by the web
 // editor and the phone's New event sheet (#4488).
 export * from "./repeat-draft";
+// Giving a member a role: the "hold what you give" rule and its refusal
+// codes, shared by the API and both apps (#5730).
+export * from "./role-assignment";
 export * from "./role-colors";
+export * from "./role-rank";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
+// School-email verification (#5929): limits, refusal codes and the step's words.
+export * from "./school-verification";
 export * from "./screen-copy";
+// The names of the app's places and of what New starts, one list for web and
+// the phone (#5943).
+export * from "./sections";
 // Roles members pick themselves (#4958): the safety rule and its words.
 export * from "./self-assignable-roles";
 export * from "./service-points";
@@ -236,14 +297,19 @@ export * from "./study-zone-shape";
 export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
+export * from "./task-due";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";
+export * from "./task-row-facts";
 // Who a suggested task names, guessed from its own words (Paul, 2026-11-18).
 export * from "./task-suggestion-guess";
+// Tenant kinds and URL slugs (ADR-27 decision 5, #5918).
+export * from "./tenant-slug";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";
+export * from "./type-menu";
 // ── Upload MIME / extension allowlists + size caps (25 MB; backwork 100 MB) ──
 export {
   acceptAttribute,
@@ -268,5 +334,7 @@ export {
   normalizeExtension,
   type UploadKind,
 } from "./upload-allowlists";
+export * from "./week-start";
+export * from "./welcome-card";
 // Point-in-polygon, shared by the API's geofence check and the phone's s10 screen.
 export * from "./zone-geometry";

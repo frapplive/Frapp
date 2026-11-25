@@ -21,10 +21,13 @@ import {
  * ## What the API actually emits
  *
  * Grepping `category: '…'` across `apps/api/src` yields the notification
- * categories (beside Ask Frapp's unrelated safety ones), and the recap push
+ * categories (beside Frapp Intelligence's unrelated safety ones), and the recap push
  * names its own, `recap`, through `RECAP_NOTIFICATION_CATEGORY` (#4985).
  * Seven are here. The chat reminder's `reminder` answers a reminder the member
- * set themselves, so it has no switch. Three more are deliberately absent:
+ * set themselves, so it has no switch. Recruitment's `rush` (#5934) has none
+ * either: a follow-up someone set for the member, or the stale alert on a
+ * prospect they own, is the work itself, not noise around it
+ * (`RUSH_NOTIFICATION_CATEGORY` in `scheduled-jobs.service.ts`). Three more are deliberately absent:
  *
  * - **`chat`** — dropped as a switch on 2026-11-06 (the owner's iOS testing:
  *   "Do we really want users to be able to turn off chat?"). It silenced every
@@ -61,8 +64,8 @@ import {
  *   themselves, so none gets one. The
  *   report alert uses it rather than `chat` because it is moderation work, not
  *   a message. "New member joined" was here too until #4008 moved it to its
- *   own `members` switch; "invite accepted" is a system line in the inviter's
- *   DM, not a push, and "role change" sends nothing yet.
+ *   own `members` switch, with the inviter's "invite accepted" and "asked for
+ *   a new invite" (#5625); "role change" sends nothing yet.
  *
  * `default` is the fallback the service substitutes when a payload omits a
  * category — never a member preference. There is no `study` category at all
@@ -152,7 +155,8 @@ export const NOTIFICATION_CATEGORIES = [
     defaultEnabled: true,
   },
   {
-    // "<Name> joined" (#4008). Only the members who are sent it see the
+    // "<Name> joined" (#4008), and the inviter's own "accepted your invite"
+    // and "asked for a new invite" (#5625). Only the members who are sent it see the
     // switch: `MEMBER_JOINED_AUDIENCE` is both who `InviteService` pushes and
     // who `shownNotificationCategories` draws this row for. Chat reports and
     // the Discord import notice stay on `admin`, unswitchable (docblock above).
@@ -160,7 +164,8 @@ export const NOTIFICATION_CATEGORIES = [
     // Named for what sets it off rather than a noun like the rows above:
     // Shawn found "New members" didn't say what the switch does (#4008).
     label: "Someone joins the chapter",
-    description: "A notice each time a new member joins.",
+    description:
+      "A notice each time a new member joins, and when someone asks you for a new invite.",
     defaultEnabled: true,
     audience: MEMBER_JOINED_AUDIENCE,
   },

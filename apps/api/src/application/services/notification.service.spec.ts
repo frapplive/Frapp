@@ -72,6 +72,7 @@ describe('NotificationService', () => {
       deleteMany: jest.fn(),
       deleteConversation: jest.fn(),
       rewriteChatMessageBody: jest.fn(),
+      deleteTaskCompletionRows: jest.fn(),
     };
     mockPushTokenRepo = {
       create: jest.fn(),
@@ -96,6 +97,9 @@ describe('NotificationService', () => {
       setTimeZone: jest.fn(),
     };
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -108,6 +112,7 @@ describe('NotificationService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
     };
     mockPushProvider = {
       sendToUser: jest.fn().mockResolvedValue({ invalidTokens: [] }),
@@ -152,6 +157,7 @@ describe('NotificationService', () => {
     device_name: 'iPhone',
     created_at: '2026-02-27T00:00:00.000Z',
     last_registered_at: '2026-02-27T00:00:00.000Z',
+    notifications_enabled: null,
   };
 
   const basePreference: NotificationPreference = {
@@ -523,7 +529,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'New Announcement',
         body: 'Chapter meeting moved to 6pm',
-        data: {},
+        data: { priority: 'URGENT' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -550,6 +556,31 @@ describe('NotificationService', () => {
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
         expect.objectContaining({ threadId: 'chat:channel-1' }),
+      );
+    });
+
+    it('forwards who a chat push is from and keeps it off the in-app row (#6024)', async () => {
+      mockPreferenceRepo.findByUserChapterCategory.mockResolvedValue(null);
+      mockSettingsRepo.findByUser.mockResolvedValue(null);
+      mockNotificationRepo.create.mockResolvedValue(baseNotification);
+      mockPushTokenRepo.findByUser.mockResolvedValue([basePushToken]);
+      const communication = { senderId: 'u-sam', senderName: 'Sam Rivera' };
+
+      await service.notifyUser('u-1', 'ch-1', {
+        title: 'Sam Rivera',
+        body: 'hi',
+        category: 'chat',
+        communication,
+      });
+
+      const [row] = mockNotificationRepo.create.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(row).not.toHaveProperty('communication');
+      expect(row.data).not.toHaveProperty('communication');
+      expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
+        [basePushToken.token],
+        expect.objectContaining({ communication }),
       );
     });
 
@@ -617,7 +648,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'Test',
         body: 'Body',
-        data: {},
+        data: { priority: 'NORMAL' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -648,9 +679,20 @@ describe('NotificationService', () => {
         title: 'Test',
         body: 'Body',
         priority: 'NORMAL',
+        data: { target: { screen: 'events' } },
       });
 
       expectSilentPush();
+      // The row says so too, for a client that raises its own banner (#4842).
+      expect(mockNotificationRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            target: { screen: 'events' },
+            priority: 'SILENT',
+            quieted: true,
+          },
+        }),
+      );
 
       jest.useRealTimers();
     });
@@ -1098,6 +1140,8 @@ describe('NotificationService', () => {
           user_id: 'u-1',
           title: 'for u-1',
           body: 'zone America/Chicago',
+          // Its sender's own SILENT, not the member's quiet hours (#4842).
+          data: { priority: 'SILENT' },
         }),
         expect.objectContaining({
           user_id: 'u-2',
@@ -1298,6 +1342,11 @@ describe('NotificationService', () => {
       });
 
       expectSilentPush();
+      expect(mockNotificationRepo.createMany).toHaveBeenCalledWith([
+        expect.objectContaining({
+          data: { priority: 'SILENT', quieted: true },
+        }),
+      ]);
 
       jest.useRealTimers();
     });
@@ -1493,8 +1542,42 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         token: 'ExponentPushToken[xxx]',
         device_name: 'iPhone',
+        notifications_enabled: null,
       });
       expect(result).toEqual(basePushToken);
+    });
+
+    it("stores whether the phone's notifications are on with a new token", async () => {
+      mockPushTokenRepo.findByToken.mockResolvedValue(null);
+      mockPushTokenRepo.findByUser.mockResolvedValue([basePushToken]);
+      mockPushTokenRepo.create.mockResolvedValue(basePushToken);
+
+      await service.registerPushToken(
+        'u-1',
+        'ExponentPushToken[xxx]',
+        'ios 26.1 · iPhone',
+        false,
+      );
+
+      expect(mockPushTokenRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ notifications_enabled: false }),
+      );
+    });
+
+    it("passes a re-register's notifications answer through, and leaves it alone when the phone sends none", async () => {
+      mockPushTokenRepo.findByToken.mockResolvedValue(basePushToken);
+      mockPushTokenRepo.markRegistered.mockResolvedValue(basePushToken);
+
+      await service.registerPushToken(
+        'u-1',
+        'ExponentPushToken[xxx]',
+        undefined,
+        true,
+      );
+      await service.registerPushToken('u-1', 'ExponentPushToken[xxx]');
+
+      expect(mockPushTokenRepo.markRegistered.mock.calls[0][4]).toBe(true);
+      expect(mockPushTokenRepo.markRegistered.mock.calls[1][4]).toBeUndefined();
     });
 
     it('moves a token another account registered to the caller, and logs the move without the token', async () => {
@@ -1585,6 +1668,7 @@ describe('NotificationService', () => {
         'u-1',
         expect.any(String),
         undefined,
+        undefined,
       );
       const now = mockPushTokenRepo.markRegistered.mock.calls[0][2];
       expect(Number.isNaN(Date.parse(now))).toBe(false);
@@ -1608,6 +1692,7 @@ describe('NotificationService', () => {
         'u-1',
         expect.any(String),
         'ios 26.1 · iPhone',
+        undefined,
       );
       expect(mockPushTokenRepo.create).not.toHaveBeenCalled();
       expect(result).toEqual(labelled);
@@ -1630,6 +1715,7 @@ describe('NotificationService', () => {
         'u-1',
         expect.any(String),
         'ios 26.2 · iPhone',
+        undefined,
       );
       expect(result).toEqual(after);
     });
@@ -1662,6 +1748,7 @@ describe('NotificationService', () => {
         basePushToken.id,
         'u-1',
         expect.any(String),
+        undefined,
         undefined,
       );
       expect(result).toEqual(basePushToken);

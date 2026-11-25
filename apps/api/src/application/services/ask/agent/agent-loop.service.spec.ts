@@ -120,7 +120,7 @@ function input(over: Partial<AgentLoopInput> = {}): AgentLoopInput {
   return {
     task: 'ask.agent',
     promptVersion: 'ask.agent@v1',
-    system: 'You are Ask Frapp.',
+    system: 'You are Frapp Intelligence.',
     messages: [{ role: 'user', content: 'What do I owe?' }],
     context: [],
     tools: [tool('search_messages')],

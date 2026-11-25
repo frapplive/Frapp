@@ -74,15 +74,13 @@ export function selfAssignableRefusal(
 /** What each refusal tells the officer, on the API's 400 and in the clients. */
 /**
  * The member-facing picker's words (#4958), one copy for web and the phone:
- * the onboarding step's title, the line under it and the pickers' hint, and
- * the caption under a role the member holds but can't join again (one an
- * officer stopped offering, or any picked role once they're an alum).
- * `spec/ui/design-system/writing.md` § Pick your roles.
+ * the pickers' hint, and the caption under a role an alum holds, which they may leave but not join
+ * again. A role an officer stopped offering isn't listed: only an officer
+ * takes it off (#5650). `spec/ui/design-system/writing.md` § Pick your roles.
  */
 export const PICK_ROLES_COPY = {
-  title: "Pick your roles",
-  lede: "Pick what you're into. Each role adds its channels to Chat, and you can leave any time.",
-  leaveOnly: "No longer open to join. You can leave it.",
+  lede: "Pick what you're into. Each role adds its channels to Chat, and you can leave it here while it's offered.",
+  leaveOnly: "Alumni don't join roles. You can leave this one.",
 } as const;
 
 export const SELF_ASSIGNABLE_REFUSAL_COPY: Record<
@@ -102,15 +100,29 @@ export const SELF_ASSIGNABLE_REFUSAL_COPY: Record<
  * web and the phone, while the role can be marked.
  */
 export const SELF_ASSIGNABLE_SWITCH_DESCRIPTION =
-  "Members add and remove this role themselves, like an intramurals team or a study group. It opens its channels, and any event that lists it counts them in.";
+  "Members add and remove this role themselves, like an intramurals team or a study group. It opens its channels, and any event that lists it counts them in. Turn it off and members who have it keep it until an officer takes it off.";
 
 /**
  * What the Roles overview says about its Non-chapter business section, on web
- * and the phone. `tierPlural` is the chapter's word for tiers.
+ * and the phone. It points at the section's own Add role (#5736), not at
+ * another page.
  */
-export function selfAssignableSectionCaption(tierPlural: string): string {
-  return `Members add and remove these themselves, like intramurals or a study group. Each opens its channels, and any event that lists it counts them in. Turn it on from a role outside the ${tierPlural}.`;
-}
+export const SELF_ASSIGNABLE_SECTION_CAPTION =
+  "Members add and remove these themselves, like intramurals or a study group. Each opens the channels that list it, and any event that lists it counts them in.";
+
+/**
+ * The section's Add role (#5736), on web and the phone: it creates a role
+ * already outside the tiers, holding nothing, and marked for members to pick
+ * (`POST /v1/roles` with `self_assignable: true`), then opens its page.
+ */
+export const NEW_PICKABLE_ROLE_COPY = {
+  add: "Add role",
+  title: "New Non-chapter business role",
+  placeholder: "Intramural soccer",
+  hint: "Members can join it as soon as it's added. To open a channel to it, edit the channel and add this role to who can see it.",
+  failed: "Couldn't add the role",
+  failedBody: "Check the name isn't already used, then try again.",
+} as const;
 
 /**
  * A role picker in chat (`kind: "role_picker"`, #4958): a card an officer

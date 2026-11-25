@@ -356,7 +356,10 @@ export function useUpdateBackworkDrafts() {
   const chapterId = useActiveChapterId();
   return useMutation({
     mutationKey: ["backwork", "update-backwork-drafts"],
-    mutationFn: async (body: { ids: string[]; fields: BackworkDraftFields }) => {
+    mutationFn: async (body: {
+      ids: string[];
+      fields: BackworkDraftFields;
+    }) => {
       const result = await client.PATCH("/v1/backwork/drafts", {
         body,
       });

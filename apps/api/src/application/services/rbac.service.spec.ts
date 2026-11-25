@@ -37,6 +37,12 @@ import type { Role, RoleTier } from '#domain/entities/role.entity';
 import type { Member } from '#domain/entities/member.entity';
 import type { Chapter } from '#domain/entities/chapter.entity';
 import {
+  CHAPTER_ID as TIERED_CHAPTER_ID,
+  USER as TIERED_USER,
+  ROLE as TIERED_ROLE,
+  tieredRankContext,
+} from '#test/helpers/tiered-chapter.fixture';
+import {
   chapterFixture,
   memberFixture,
   roleFixture,
@@ -76,6 +82,9 @@ describe('RbacService', () => {
     };
 
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -86,6 +95,7 @@ describe('RbacService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
       findByUser: jest.fn(),
       findChapterMemberIdentities: jest.fn(),
     };
@@ -101,6 +111,8 @@ describe('RbacService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -266,7 +278,6 @@ describe('RbacService', () => {
     mockRoleRepo.update.mockResolvedValue({ ...role, name: 'Renamed' });
     mockRoleRepo.delete.mockResolvedValue({
       strippedMemberIds: [],
-      givenEveryoneMemberIds: [],
     });
     mockChapterAuditLogService.record.mockRejectedValue(
       new Error('audit insert failed'),
@@ -519,10 +530,17 @@ describe('RbacService', () => {
     expect(mockRoleRepo.update).not.toHaveBeenCalled();
   });
 
-  describe('the Everyone role (#4191)', () => {
+  describe('the Everyone and Actives roles (2026-11-21)', () => {
     const everyone: Role = roleFixture({
       id: 'role-everyone',
       name: 'Everyone',
+      system_key: 'EVERYONE',
+      is_system: true,
+      tier_id: null,
+    });
+    const actives: Role = roleFixture({
+      id: 'role-actives',
+      name: 'Actives',
       system_key: 'MEMBER',
       is_system: true,
       tier_id: 'tier-3',
@@ -556,7 +574,7 @@ describe('RbacService', () => {
       });
     });
 
-    it('keeps its name and tier, and leaves the rest editable', async () => {
+    it('keeps Everyone named and outside the tiers', async () => {
       mockRoleRepo.findById.mockResolvedValue(everyone);
       await expect(
         service.update('role-everyone', 'ch-1', ACTOR, { name: 'Members' }),
@@ -564,17 +582,35 @@ describe('RbacService', () => {
         response: expect.objectContaining({ code: 'role.everyone_fixed' }),
       });
       await expect(
-        service.update('role-everyone', 'ch-1', ACTOR, { tier_id: null }),
+        service.update('role-everyone', 'ch-1', ACTOR, { tier_id: 'tier-3' }),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'role.everyone_fixed' }),
       });
       expect(mockRoleRepo.update).not.toHaveBeenCalled();
     });
 
-    // #4548: New Member and Alumni stay at or below Everyone, so neither
-    // moves into a tier above Everyone's; a move at or below it goes through.
+    it('lets a chapter rename Actives, but keeps it in its tier', async () => {
+      mockRoleRepo.findById.mockResolvedValue(actives);
+      mockRoleRepo.findByChapterAndName.mockResolvedValue(null);
+      mockRoleRepo.update.mockResolvedValue({ ...actives, name: 'Brothers' });
+      await service.update('role-actives', 'ch-1', ACTOR, {
+        name: 'Brothers',
+      });
+      expect(mockRoleRepo.update).toHaveBeenCalledWith(
+        'role-actives',
+        expect.objectContaining({ name: 'Brothers' }),
+      );
+      await expect(
+        service.update('role-actives', 'ch-1', ACTOR, { tier_id: null }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'role.everyone_fixed' }),
+      });
+    });
+
+    // #4548: New Member and Alumni stay at or below Actives, so neither
+    // moves into a tier above Actives'; a move at or below it goes through.
     it.each(['NEW_MEMBER', 'ALUMNI'])(
-      'keeps the %s role out of tiers above Everyone',
+      'keeps the %s role out of tiers above Actives',
       async (key) => {
         const keyed = roleFixture({
           id: 'role-keyed',
@@ -593,7 +629,11 @@ describe('RbacService', () => {
           updated_at: '2026-11-13T00:00:00Z',
         });
         mockRoleRepo.findById.mockResolvedValue(keyed);
-        mockRoleRepo.findByChapter.mockResolvedValue([everyone, keyed]);
+        mockRoleRepo.findByChapter.mockResolvedValue([
+          everyone,
+          actives,
+          keyed,
+        ]);
         mockTierRepo.findByChapter.mockResolvedValue([
           tier('tier-2', 2),
           tier('tier-3', 3),
@@ -618,21 +658,12 @@ describe('RbacService', () => {
       },
     );
 
-    it('lets it take the name Everyone, and go into a tier from outside them', async () => {
-      // A row the previous API seeded as Member after the migration ran.
-      const stray: Role = { ...everyone, name: 'Member', tier_id: null };
+    it('lets Actives go into a tier from outside them', async () => {
+      const stray: Role = { ...actives, tier_id: null };
       mockRoleRepo.findById.mockResolvedValue(stray);
-      mockRoleRepo.findByChapterAndName.mockResolvedValue(null);
-      mockRoleRepo.update.mockResolvedValue({ ...stray, name: 'Everyone' });
-      await service.update('role-everyone', 'ch-1', ACTOR, {
-        name: 'Everyone',
-      });
-      expect(mockRoleRepo.update).toHaveBeenCalledWith(
-        'role-everyone',
-        expect.objectContaining({ name: 'Everyone' }),
-      );
+      mockRoleRepo.update.mockResolvedValue({ ...stray, tier_id: 'tier-3' });
       await expect(
-        service.update('role-everyone', 'ch-1', ACTOR, { tier_id: 'tier-3' }),
+        service.update('role-actives', 'ch-1', ACTOR, { tier_id: 'tier-3' }),
       ).resolves.not.toThrow();
     });
   });
@@ -659,7 +690,6 @@ describe('RbacService', () => {
     mockRoleRepo.findById.mockResolvedValue(role);
     mockRoleRepo.delete.mockResolvedValue({
       strippedMemberIds: [],
-      givenEveryoneMemberIds: [],
     });
 
     await service.delete('role-1', 'ch-1', ACTOR);
@@ -677,13 +707,13 @@ describe('RbacService', () => {
   });
 
   // #4547: the delete takes the role off its holders in the same
-  // transaction, and the audit row says who lost it and who got Everyone.
-  it('records who lost a deleted role and who was given Everyone', async () => {
+  // transaction, and the audit row says who lost it. Since #5802 nobody is
+  // given a role in its place.
+  it('records who lost a deleted role', async () => {
     const role: Role = roleFixture();
     mockRoleRepo.findById.mockResolvedValue(role);
     mockRoleRepo.delete.mockResolvedValue({
       strippedMemberIds: ['m-1', 'm-2'],
-      givenEveryoneMemberIds: ['m-2'],
     });
 
     await service.delete('role-1', 'ch-1', ACTOR);
@@ -694,7 +724,6 @@ describe('RbacService', () => {
         diff: {
           role: { from: role, to: null },
           removed_from_member_ids: { from: ['m-1', 'm-2'], to: null },
-          given_everyone_member_ids: { from: null, to: ['m-2'] },
         },
       }),
     );
@@ -1568,6 +1597,207 @@ describe('RbacService', () => {
     });
   });
 
+  /** The catalog a tenant of `kind` (and, for a council, `model`) is served. */
+  const catalogFor = (
+    kind: 'chapter' | 'council',
+    model: 'open_bidding' | 'none' = 'open_bidding',
+  ) => {
+    mockChapterRepo.findById.mockResolvedValue(
+      chapterFixture({
+        id: 'chapter-1',
+        kind,
+        ...(kind === 'council'
+          ? { council_type: 'ifc', recruitment_model: model }
+          : {}),
+      }),
+    );
+    return service.getPermissionsCatalog('chapter-1');
+  };
+  /** Every system key a chapter's catalog offers: all but the council's. */
+  const CHAPTER_KEYS = Object.entries(SystemPermissions).filter(
+    ([, permission]) => !permission.startsWith('council:'),
+  );
+
+  // `school-layer.md` § 5.1 (#5933): the catalog filters by tenant kind.
+  describe('the catalog by tenant kind', () => {
+    it('gives a chapter no council key', async () => {
+      const permissions = (await catalogFor('chapter')).map(
+        (r) => r.permission,
+      );
+      expect(permissions.some((p) => p.startsWith('council:'))).toBe(false);
+      expect(permissions).toContain('points:adjust');
+    });
+
+    it('gives a council its own keys and the chapter keys it shares, nothing else', async () => {
+      const rows = await catalogFor('council');
+      const permissions = rows.map((r) => r.permission);
+      expect(permissions).toContain('council:recruitment_view');
+      expect(permissions).toContain('council:announce');
+      expect(permissions).toContain('roles:manage');
+      expect(permissions).toContain('members:invite');
+      expect(permissions).not.toContain('points:adjust');
+      expect(permissions).not.toContain('rush:view');
+      expect(
+        rows.find((r) => r.permission === 'council:announce'),
+      ).toMatchObject({
+        scope: 'council',
+        module: 'council',
+        module_label: 'Council',
+      });
+    });
+
+    it('gives a council whose model is none no council-recruitment key', async () => {
+      const permissions = (await catalogFor('council', 'none')).map(
+        (r) => r.permission,
+      );
+      expect(permissions).not.toContain('council:recruitment_view');
+      expect(permissions).not.toContain('council:recruitment_manage');
+      expect(permissions).toContain('council:announce');
+    });
+  });
+
+  // `school-layer.md` § 4.2 rule 3 and § 4.3 test 4 (#5933).
+  describe('reserved council keys', () => {
+    const asChapter = () =>
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: 'chapter-1', kind: 'chapter' }),
+      );
+    const expectReserved = (error: unknown) => {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: 'roles.permission.reserved',
+      });
+    };
+
+    // The reserved check runs before the held check, so an officer without
+    // `*` reads the reserved code too, not "you don't hold this".
+    it('refuses a reserved key to a Vice President as reserved, on create and update', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: TIERED_CHAPTER_ID, kind: 'chapter' }),
+      );
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: TIERED_ROLE.brother, chapter_id: TIERED_CHAPTER_ID }),
+      );
+      jest
+        .spyOn(service, 'getRankContext')
+        .mockResolvedValue(tieredRankContext(TIERED_USER.vicePresident));
+      expectReserved(
+        await service
+          .createAsMember(TIERED_CHAPTER_ID, TIERED_USER.vicePresident, {
+            name: 'Liaison',
+            permissions: ['council:recruitment_view'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .updateAsMember(
+            TIERED_ROLE.brother,
+            TIERED_CHAPTER_ID,
+            TIERED_USER.vicePresident,
+            {
+              permission_overrides: { 'council:announce': true },
+            },
+          )
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.create).not.toHaveBeenCalled();
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an update that lists a reserved key, or switches one on', async () => {
+      asChapter();
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: 'role-1', chapter_id: 'chapter-1', permissions: [] }),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permissions: ['council:announce'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permission_overrides: { 'council:recruitment_view': true },
+          })
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses recruitment keys in a council whose model is none, and keeps its other keys', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({
+          id: 'chapter-1',
+          kind: 'council',
+          council_type: 'nphc',
+          recruitment_model: 'none',
+        }),
+      );
+      expectReserved(
+        await service
+          .assertNoReservedPermissions('chapter-1', [
+            'council:recruitment_manage',
+          ])
+          .catch((e: unknown) => e),
+      );
+      await expect(
+        service.assertNoReservedPermissions('chapter-1', ['council:announce']),
+      ).resolves.toBeUndefined();
+    });
+
+    beforeEach(() => {
+      mockRoleRepo.findByChapterAndName.mockResolvedValue(null);
+      mockRoleRepo.create.mockImplementation(async (role) =>
+        roleFixture({ ...role, id: 'role-new' }),
+      );
+    });
+
+    it('refuses council:recruitment_view on a chapter role, and writes nothing', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: 'chapter-1', kind: 'chapter' }),
+      );
+      const error = await service
+        .create('chapter-1', 'user-1', {
+          name: 'Liaison',
+          permissions: ['members:view', 'council:recruitment_view'],
+        })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: 'roles.permission.reserved',
+      });
+      expect(mockRoleRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('lets a council role hold a council key', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({
+          id: 'chapter-1',
+          kind: 'council',
+          council_type: 'ifc',
+          recruitment_model: 'open_bidding',
+        }),
+      );
+      await expect(
+        service.create('chapter-1', 'user-1', {
+          name: 'Liaison',
+          permissions: ['members:view', 'council:announce'],
+        }),
+      ).resolves.toMatchObject({ id: 'role-new' });
+    });
+
+    it('reads no chapter for a list without council keys', async () => {
+      await service.create('chapter-1', 'user-1', {
+        name: 'Liaison',
+        permissions: ['members:view'],
+      });
+      expect(mockChapterRepo.findById).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the AI permissions in the catalog', () => {
     const original = process.env.AI_ENABLED;
     afterEach(() => {
@@ -1575,23 +1805,21 @@ describe('RbacService', () => {
       else process.env.AI_ENABLED = original;
     });
 
-    it('are left out while the server AI switch is off', () => {
+    it('are left out while the server AI switch is off', async () => {
       delete process.env.AI_ENABLED;
-      const permissions = service
-        .getPermissionsCatalog()
-        .map((row) => row.permission);
+      const permissions = (await catalogFor('chapter')).map(
+        (row) => row.permission,
+      );
       expect(permissions).not.toContain('ai:use');
       expect(permissions).not.toContain('ai:act');
-      expect(permissions).toHaveLength(
-        Object.keys(SystemPermissions).length - 2,
-      );
+      expect(permissions).toHaveLength(CHAPTER_KEYS.length - 2);
     });
 
-    it('are offered once it is on', () => {
+    it('are offered once it is on', async () => {
       process.env.AI_ENABLED = 'true';
-      const catalog = service.getPermissionsCatalog();
+      const catalog = await catalogFor('chapter');
       expect(catalog.map(({ key, permission }) => [key, permission])).toEqual(
-        Object.entries(SystemPermissions),
+        CHAPTER_KEYS,
       );
       expect(catalog.find((row) => row.permission === 'ai:use')).toMatchObject({
         key: 'AI_USE',
@@ -1601,17 +1829,15 @@ describe('RbacService', () => {
     });
   });
 
-  it('should return permissions catalog', () => {
+  it('should return permissions catalog', async () => {
     // The catalog depends on the AI switch; pin it off whatever the shell has.
     const aiEnabled = process.env.AI_ENABLED;
     delete process.env.AI_ENABLED;
-    const result = service.getPermissionsCatalog();
+    const result = await catalogFor('chapter');
     if (aiEnabled !== undefined) process.env.AI_ENABLED = aiEnabled;
 
     expect(result.map(({ key, permission }) => [key, permission])).toEqual(
-      Object.entries(SystemPermissions).filter(
-        ([, permission]) => !AI_PERMISSIONS.has(permission),
-      ),
+      CHAPTER_KEYS.filter(([, permission]) => !AI_PERMISSIONS.has(permission)),
     );
     expect(
       result.some((r) => r.key === 'WILDCARD' && r.permission === '*'),
@@ -2247,7 +2473,8 @@ describe('RbacService', () => {
           user_id: 'user-officer',
           permissions: new Set([SystemPermissions.CHANNELS_MANAGE]),
           role_ids: ['role-member', 'role-officer'],
-          top_role_order: 2,
+          top_role_rank: 2,
+          top_tier: null,
           top_role: { id: 'role-officer', name: 'role-role-officer' },
           channel_access: {
             entries: new Set(['role:role-member', 'role:role-officer']),
@@ -2259,11 +2486,133 @@ describe('RbacService', () => {
           user_id: 'user-none',
           permissions: new Set(),
           role_ids: [],
-          top_role_order: null,
+          top_role_rank: null,
+          top_tier: null,
           top_role: null,
           channel_access: EMPTY_ACCESS_HOLDER,
         },
       ]);
+    });
+
+    it('ranks by tier before display_order, and files under the highest tier', async () => {
+      // Staging, 2026-11-20: an untiered "First Floor" at display_order 0
+      // outranked the member's office and became their title.
+      const tier = (id: string, position: number) => ({
+        id,
+        chapter_id: 'ch-1',
+        position,
+        name: `tier-${id}`,
+        permissions: [],
+        mentionable: true,
+        created_at: '2026-11-20T00:00:00Z',
+        updated_at: '2026-11-20T00:00:00Z',
+      });
+      mockTierRepo.findByChapter.mockResolvedValue([
+        tier('cabinet', 1),
+        tier('brothers', 4),
+      ]);
+      mockRoleRepo.findByChapter.mockResolvedValue([
+        { ...role('role-floor', 0), tier_id: null },
+        { ...role('role-treasurer', 2), tier_id: 'cabinet' },
+        { ...role('role-everyone', 5), tier_id: 'brothers' },
+      ]);
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        memberFixture({
+          id: 'm-1',
+          user_id: 'user-gabe',
+          role_ids: ['role-floor', 'role-everyone', 'role-treasurer'],
+        }),
+        memberFixture({
+          id: 'm-2',
+          user_id: 'user-plain',
+          role_ids: ['role-floor', 'role-everyone'],
+        }),
+      ]);
+
+      const result = await service.getChapterMemberAccess(
+        'ch-1',
+        false,
+        undefined,
+        true,
+      );
+      const byUser = new Map(result.map((entry) => [entry.user_id, entry]));
+
+      expect(byUser.get('user-gabe')).toMatchObject({
+        top_role: { id: 'role-treasurer' },
+        top_role_rank: 0,
+        top_tier: { id: 'cabinet', name: 'tier-cabinet', position: 1 },
+      });
+      expect(byUser.get('user-plain')).toMatchObject({
+        top_role: { id: 'role-everyone' },
+        top_role_rank: 1,
+        top_tier: { id: 'brothers', name: 'tier-brothers', position: 4 },
+      });
+    });
+
+    it("files the President's holder under the top tier, and reads no tiers unless asked", async () => {
+      const tier = (id: string, position: number) => ({
+        id,
+        chapter_id: 'ch-1',
+        position,
+        name: `tier-${id}`,
+        permissions: [],
+        mentionable: true,
+        created_at: '2026-11-20T00:00:00Z',
+        updated_at: '2026-11-20T00:00:00Z',
+      });
+      mockTierRepo.findByChapter.mockResolvedValue([
+        tier('brothers', 4),
+        tier('cabinet', 1),
+      ]);
+      mockRoleRepo.findByChapter.mockResolvedValue([
+        // A President's role moved out of the tiers still leads Cabinet.
+        { ...role('role-pres', 1, ['*']), tier_id: null },
+        { ...role('role-everyone', 5), tier_id: 'brothers' },
+      ]);
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        memberFixture({
+          user_id: 'user-pres',
+          role_ids: ['role-everyone', 'role-pres'],
+        }),
+      ]);
+
+      const [ranked] = await service.getChapterMemberAccess(
+        'ch-1',
+        false,
+        undefined,
+        true,
+      );
+      expect(ranked).toMatchObject({
+        top_role: { id: 'role-pres' },
+        top_role_rank: 0,
+        top_tier: { id: 'cabinet', position: 1 },
+      });
+
+      mockTierRepo.findByChapter.mockClear();
+      const [plain] = await service.getChapterMemberAccess('ch-1');
+      expect(mockTierRepo.findByChapter).not.toHaveBeenCalled();
+      expect(plain.top_tier).toBeNull();
+    });
+
+    it('lists the members without tiers when the tier read fails', async () => {
+      mockTierRepo.findByChapter.mockRejectedValue(new Error('timeout'));
+      mockRoleRepo.findByChapter.mockResolvedValue([
+        { ...role('role-everyone', 5), tier_id: 'brothers' },
+      ]);
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        memberFixture({ user_id: 'user-1', role_ids: ['role-everyone'] }),
+      ]);
+
+      const [entry] = await service.getChapterMemberAccess(
+        'ch-1',
+        false,
+        undefined,
+        true,
+      );
+      expect(entry).toMatchObject({
+        top_role: { id: 'role-everyone' },
+        top_tier: null,
+      });
     });
 
     it('carries group entries with groups, and never a class year (#4076)', async () => {
@@ -2344,7 +2693,8 @@ describe('RbacService', () => {
         // As stored: the event read gate matches an invitation against the
         // member's own list, and no event of this chapter names this role.
         role_ids: ['role-foreign'],
-        top_role_order: null,
+        top_role_rank: null,
+        top_tier: null,
         top_role: null,
         // A foreign role's `*` must not pass a channel's lists either.
         channel_access: EMPTY_ACCESS_HOLDER,
@@ -2371,7 +2721,8 @@ describe('RbacService', () => {
             SystemPermissions.CHANNELS_MANAGE,
           ]),
           role_ids: ['role-a', 'role-b'],
-          top_role_order: 1,
+          top_role_rank: 1,
+          top_tier: null,
           top_role: { id: 'role-b', name: 'role-role-b' },
           channel_access: {
             entries: new Set(['role:role-a', 'role:role-b']),
@@ -2412,7 +2763,7 @@ describe('RbacService', () => {
           id: 'r-everyone',
           chapter_id: 'ch-1',
           name: 'Everyone',
-          system_key: 'MEMBER',
+          system_key: 'EVERYONE',
           display_order: 5,
         }),
       ]);

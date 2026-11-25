@@ -623,7 +623,7 @@ describe("ChannelList hide and reopen (#2303)", () => {
 //
 // The arrangement itself (pins, sort, filters, folds) is pinned in
 // `@repo/hooks`' `channel-sidebar.spec.ts`. These cases pin what the rail adds:
-// that it renders that output, draws the fold control and the folded badge,
+// that it renders that output, draws the fold control and the heading's menu,
 // offers pin, and shows the filtered-out empty state.
 
 const announcements: ChatChannel = {
@@ -642,7 +642,6 @@ function sidebarControls(
       pinnedIds: new Set(),
       collapsed: new Set(),
       filters: { unreadOnly: false, hideMuted: false },
-      sort: "chapter",
     },
     mutedChannelIds: new Set(),
     onSetPinned: vi.fn(),
@@ -695,7 +694,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(["c-exec"]),
           collapsed: new Set(),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -733,14 +731,15 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     }
   });
 
-  it("shows a folded section's total on its header, red when it holds a mention", () => {
+  // #6053, Discord's collapsed categories: folding hides what the member has
+  // read, never what is new, so the heading needs no count of its own.
+  it("keeps the channels with something new under a folded heading, which stays quiet", () => {
     renderArranged(
       sidebarControls({
         preferences: {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map([
@@ -749,29 +748,153 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
       ]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
+    const header = screen.getByRole("button", { name: "Channels" });
     expect(header).toHaveAttribute("aria-expanded", "false");
-    expect(header).toHaveTextContent("@ 1");
-    expect(screen.getByLabelText("1 mention, 5 unread")).toBeInTheDocument();
-    // Folded: no rows drawn under it.
-    expect(screen.queryByRole("list", { name: /Channels/ })).toBeNull();
+    expect(header).toHaveTextContent(/^Channels$/);
+    expect(header.className).not.toMatch(/\bfont-bold\b/);
+    const rows = screen.getByRole("list", { name: "Channels" });
+    expect(rows).toHaveTextContent("general");
+    expect(rows).toHaveTextContent("announcements");
+    // exec has nothing new, so it folds away.
+    expect(rows).not.toHaveTextContent("exec");
   });
 
-  it("draws a folded section over plain unread bold, as an unread row reads", () => {
+  it("folds a section with nothing new to its heading alone", () => {
     renderArranged(
       sidebarControls({
         preferences: {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
-      new Map([["c-gen", { unreadCount: 3, mentionCount: 0 }]]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
-    expect(header).toHaveClass("font-bold", "text-foreground");
+    expect(screen.queryByRole("list", { name: "Channels" })).toBeNull();
+  });
+
+  describe("a heading's menu (#6053)", () => {
+    const execRow: ChatChannel = {
+      id: "c-exec",
+      name: "exec-board",
+      type: "PUBLIC",
+      category_id: "cat-exec",
+    };
+    function renderWithCategory(onSetCollapsed = vi.fn()) {
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(),
+              collapsed: new Set(["category:cat-exec"]),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      return onSetCollapsed;
+    }
+    async function openMenu(heading: string): Promise<string[]> {
+      fireEvent.contextMenu(screen.getByRole("button", { name: heading }));
+      const items = await screen.findAllByRole("menuitem");
+      return items.map((item) => item.textContent ?? "");
+    }
+
+    it("folds this heading, or every section at once", async () => {
+      renderWithCategory();
+      expect(await openMenu("Channels")).toEqual([
+        "Fold Channels",
+        "Fold all categories",
+        "Unfold all categories",
+      ]);
+    });
+
+    it("names a folded heading's own entry Unfold", async () => {
+      renderWithCategory();
+      expect((await openMenu("Executive"))[0]).toBe("Unfold Executive");
+    });
+
+    it("writes only the sections Fold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("writes only the sections Unfold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("runs the heading's own entry: Fold, or Unfold once folded", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Fold Channels" }));
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("unfolds a folded heading from its own entry", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Executive");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold Executive" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("has a visible ⋯ too, shown while the heading is hovered", () => {
+      renderWithCategory();
+      const more = screen.getByRole("button", { name: "More for Channels" });
+      // RowMenu's ⋯ appears on `group-hover`: the heading's row is that group.
+      expect(more).toHaveClass("group-hover:opacity-100");
+      expect(more.closest(".group")).toBe(
+        screen.getByRole("button", { name: "Channels" }).parentElement,
+      );
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", async () => {
+      // Every channel of Executive is pinned, so Executive draws no heading:
+      // folding it would hide what comes back once the member unpins.
+      const onSetCollapsed = vi.fn();
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(["c-exec"]),
+              collapsed: new Set(),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
   });
 
   it("keeps the open channel under its folded header", () => {
@@ -781,7 +904,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map(),
@@ -802,7 +924,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(["c-exec"]),
           collapsed: new Set(),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -829,7 +950,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
         pinnedIds: new Set([dm.id]),
         collapsed: new Set(),
         filters: { unreadOnly: false, hideMuted: false },
-        sort: "chapter",
       },
     });
     const renderHidden = (activeChannelId: string | null) =>
@@ -875,7 +995,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(),
           filters: { unreadOnly: true, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -923,7 +1042,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
             pinnedIds: new Set(),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: true },
-            sort: "chapter",
           },
         })}
       />,
@@ -965,22 +1083,21 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     );
   });
 
-  it("announces a folded Direct messages header as direct messages", () => {
+  it("keeps an unread DM under a folded Direct messages heading", () => {
     renderArranged(
       sidebarControls({
         preferences: {
           pinnedIds: new Set(),
           collapsed: new Set(["direct"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map([["c-dm", { unreadCount: 3, mentionCount: 0 }]]),
     );
 
     expect(
-      screen.getByLabelText("3 unread messages, including direct messages"),
-    ).toBeInTheDocument();
+      screen.getByRole("list", { name: "Direct messages" }),
+    ).toHaveTextContent("Alice Chen");
   });
 
   it("offers no fold or pin control without `sidebar`", () => {
@@ -1026,7 +1143,7 @@ describe("ChannelFilters (#2877)", () => {
   });
 });
 
-describe("ChannelList member sort (#2877)", () => {
+describe("ChannelList order: always the chapter's (Paul, 2026-11-24, #5947)", () => {
   const zulu: ChatChannel = {
     id: "c-z",
     name: "zulu",
@@ -1046,81 +1163,29 @@ describe("ChannelList member sort (#2877)", () => {
       (li) => li.querySelector("span.truncate")?.textContent ?? "",
     );
 
-  function renderSorted(
-    sort: "chapter" | "recent" | "alpha",
-    latestAt?: ReadonlyMap<string, string>,
-  ) {
-    return render(
+  it("draws the chapter's order, even with every channel's latest message known", () => {
+    render(
       <ChannelList
         channels={[alpha, mike, zulu]}
         activeChannelId={null}
         viewerId={VIEWER}
         memberNames={NAMES}
-        latestAt={latestAt}
+        latestAt={
+          new Map([
+            ["c-m", "2026-11-14T12:00:00.000Z"],
+            ["c-a", "2026-11-14T09:00:00.000Z"],
+          ])
+        }
         onPick={vi.fn()}
-        sidebar={sidebarControls({
-          preferences: {
-            pinnedIds: new Set(),
-            collapsed: new Set(),
-            filters: { unreadOnly: false, hideMuted: false },
-            sort,
-          },
-        })}
+        sidebar={sidebarControls()}
       />,
     );
-  }
-
-  it("draws the chapter's order by default", () => {
-    renderSorted("chapter");
     expect(rowsIn("Channels")).toEqual(["zulu", "alpha", "mike"]);
-  });
-
-  it("draws A–Z when the member picks it", () => {
-    renderSorted("alpha");
-    expect(rowsIn("Channels")).toEqual(["alpha", "mike", "zulu"]);
-  });
-
-  it("draws the newest activity first under Recent", () => {
-    renderSorted(
-      "recent",
-      new Map([
-        ["c-m", "2026-11-14T12:00:00.000Z"],
-        ["c-a", "2026-11-14T09:00:00.000Z"],
-      ]),
-    );
-    expect(rowsIn("Channels")).toEqual(["mike", "alpha", "zulu"]);
   });
 });
 
-describe("ChannelFilters sort (#2877)", () => {
-  it("offers the three sorts and sends the one picked", () => {
-    const onChange = vi.fn();
-    render(
-      <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="chapter"
-        onChange={onChange}
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
-    );
-
-    const group = screen.getByRole("radiogroup", { name: "Sort" });
-    expect(
-      within(group)
-        .getAllByRole("radio")
-        .map((radio) => radio.textContent),
-    ).toEqual(["Chapter order", "Recent", "A–Z"]);
-    expect(
-      within(group).getByRole("radio", { name: "Chapter order" }),
-    ).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.click(within(group).getByRole("radio", { name: "Recent" }));
-    expect(onChange).toHaveBeenCalledWith({ sort: "recent" });
-  });
-
-  it("offers no sort without one, and says so in its name, as on the Direct messages panel", () => {
+describe("ChannelFilters: filters only, no sort (#5947)", () => {
+  it("offers the two filters and no sort", () => {
     render(
       <ChannelFilters
         filters={{ unreadOnly: false, hideMuted: false }}
@@ -1130,37 +1195,20 @@ describe("ChannelFilters sort (#2877)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filter channels" }));
 
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sort")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Unread only")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hide muted")).toBeInTheDocument();
   });
 
-  it("tells someone who can drag that dragging needs Chapter order", () => {
+  it("says when a filter is on", () => {
     render(
       <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="alpha"
-        reorderable
+        filters={{ unreadOnly: true, hideMuted: false }}
         onChange={vi.fn()}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
-    );
-
     expect(
-      screen.getByText("Switch to Chapter order to drag channels."),
-    ).toBeInTheDocument();
-  });
-
-  it("lights no dot for a sort alone, since it hides nothing", () => {
-    render(
-      <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="recent"
-        onChange={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
+      screen.getByRole("button", { name: "Filter channels, filters on" }),
     ).toBeInTheDocument();
   });
 });
@@ -1254,7 +1302,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(),
             collapsed: new Set(["direct"]),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1299,7 +1346,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(["c-third"]),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1361,7 +1407,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(["c-third", "c-group"]),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1409,10 +1454,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
                 readStatus: "read" as const,
               },
             ],
-            [
-              "c-group",
-              { time: "4:46 PM", timeLabel: null, readStatus: null },
-            ],
+            ["c-group", { time: "4:46 PM", timeLabel: null, readStatus: null }],
           ])
         }
         sidebar={sidebarControls()}
@@ -1727,7 +1769,6 @@ describe("ChannelList threads under their channel (#5300)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(),
           filters: { unreadOnly: true, hideMuted: false },
-          sort: "chapter",
         },
       }),
     });
@@ -1743,21 +1784,50 @@ describe("ChannelList threads under their channel (#5300)", () => {
     expect(generalRow).not.toHaveClass("font-bold");
   });
 
-  it("reads a folded section as unread over a thread with new replies", () => {
+  it("keeps a channel whose thread has new replies under a folded heading", () => {
     renderThreads(new Map([["c-gen", [thread({ unread_count: 1 })]]]), {
       sidebar: sidebarControls({
         preferences: {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     });
 
-    expect(screen.getByRole("button", { name: /Channels/ })).toHaveClass(
-      "font-bold",
-      "text-foreground",
+    const channels = screen.getByRole("list", { name: "Channels" });
+    expect(channels).toHaveTextContent("general");
+    expect(channels).not.toHaveTextContent("exec");
+  });
+});
+
+describe("ChannelList in the sidebar: the list's own control on its first heading (#5946)", () => {
+  const execRow: ChatChannel = {
+    id: "c-exec",
+    name: "exec-board",
+    type: "PUBLIC",
+    category_id: "cat-exec",
+  };
+
+  it("draws the control once, on the first heading, and nothing over the list", () => {
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+        headingControl={<button type="button">Sort and filter</button>}
+      />,
     );
+    const controls = screen.getAllByRole("button", { name: "Sort and filter" });
+    expect(controls).toHaveLength(1);
+    // It rides a heading row, beside that heading's fold button.
+    const heading = controls[0]!.closest(".group\\/head");
+    expect(heading).not.toBeNull();
+    expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
   });
 });

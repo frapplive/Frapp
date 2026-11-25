@@ -16,6 +16,7 @@ import { AppState } from "react-native";
 import { signInWithNativeApple } from "./apple-auth";
 import { signInWithNativeGoogle } from "./google-auth";
 import { MemberFacingError } from "@repo/hooks/error-copy";
+import { describeEmailCodeError } from "@repo/hooks/auth-error-copy";
 import {
   describeAuthReturnError,
   describeOAuthKickoffError,
@@ -48,6 +49,26 @@ function chapterClaimOf(token: string): unknown {
   return accessTokenPayload(token)?.[ACTIVE_CHAPTER_CLAIM];
 }
 
+/**
+ * The chapter the token names, or `null` when it names none.
+ *
+ * Decoded on the phone, never verified, and never sent anywhere: it picks
+ * which chapter the app renders and which `x-chapter-id` it sends, and the
+ * API re-reads the same claim from the verified token on every request
+ * (`ChapterGuard`, `spec/behavior/multi-tenancy.md`). Web reads it the same
+ * way (`apps/web/lib/auth/active-chapter-claim.ts`).
+ *
+ * It used to come from `supabase.auth.getClaims()`, which on Hermes (no
+ * WebCrypto `subtle`) falls back to `getUser()`: a round trip to Supabase Auth
+ * that every launch waited on before the first screen could mount, for up to
+ * eight seconds on a bad connection, to learn what the token in hand already
+ * said (#5768).
+ */
+function chapterIdOf(token: string): string | null {
+  const claim = chapterClaimOf(token);
+  return typeof claim === "string" && claim.length > 0 ? claim : null;
+}
+
 export type AuthMethod = "password" | "magic_link";
 
 type AuthStatus = "hydrating" | "authenticated" | "unauthenticated";
@@ -64,16 +85,17 @@ type AuthSessionContextValue = {
   /** Resolved from the access token's `active_chapter_id` claim; see below. */
   chapterId: string | null;
   /**
-   * True while the first claim read for the current token is still in flight.
+   * True while the member is signed in but no access token is in hand yet, so
+   * the chapter claim can't be read.
    *
-   * `chapterId` is `null` both before the claim has been read and after it has
-   * resolved to "no chapter", and a caller that treats those alike will act on
+   * `chapterId` is `null` both before the claim can be read and when the
+   * token names no chapter, and a caller that treats those alike will act on
    * a not-yet-known answer. Anything gating on `chapterId === null` MUST wait
    * for this to be false — `lib/auth-gate.ts` is the one place that does, and
    * it is where the consequences are documented.
    *
-   * It goes false on a bounded timeout as well as on settle, so a hung network
-   * cannot leave a caller waiting forever.
+   * The claim is decoded from the token on the phone, so this never waits on
+   * the network (#5768).
    */
   isChapterResolving: boolean;
   /** False when `EXPO_PUBLIC_SUPABASE_*` are missing — sign-in cannot work. */
@@ -85,6 +107,13 @@ type AuthSessionContextValue = {
     password: string;
   }) => Promise<void>;
   sendMagicLink: (input: { email: string }) => Promise<void>;
+  /**
+   * Signs in with the six-digit code from the same email a magic link sends
+   * (#5625), so the invite card never has to leave the app. Needs the Auth
+   * email template to print `{{ .Token }}`; until it does, the link is the
+   * way in.
+   */
+  verifyEmailCode: (input: { email: string; code: string }) => Promise<void>;
   /**
    * Sends the sign-up confirmation email again, for a password account that
    * was never confirmed (`email_not_confirmed`, #3833). Its link opens the app
@@ -101,12 +130,6 @@ type AuthSessionContextValue = {
 };
 
 const AuthSessionContext = createContext<AuthSessionContextValue | null>(null);
-
-/**
- * How long the routing gate will wait on the first chapter-claim read before
- * letting the app through without it.
- */
-const CLAIM_READ_TIMEOUT_MS = 8_000;
 
 const NOT_CONFIGURED_MESSAGE =
   "Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.";
@@ -276,36 +299,6 @@ export function AuthSessionProvider({
     supabase ? "hydrating" : "unauthenticated",
   );
   const [session, setSession] = useState<Session | null>(null);
-  /**
-   * Last successfully read chapter claim, tagged with the user it belongs to.
-   *
-   * Chapter id and "has the first claim been read" are *derived* from this plus
-   * the current session. An effect that `setState(null)` on user change would
-   * lag one paint behind a magic-link account swap; deriving means the previous
-   * member's chapter cannot appear on the new member's first render.
-   */
-  const [claimedChapter, setClaimedChapter] = useState<{
-    userId: string | null;
-    chapterId: string | null;
-  }>({ userId: null, chapterId: null });
-  /**
-   * User id for whom the *first* chapter-claim read has finished.
-   *
-   * Deliberately not "a read is in flight". The claim is re-read on every token
-   * change — the hourly auto-refresh, every foreground, every chapter switch —
-   * and the routing gate renders nothing while resolving. Gating on in-flight
-   * would therefore blank and remount the whole tab navigator about once an
-   * hour, losing composer drafts and scroll position. A re-read only ever
-   * confirms or changes a chapter, so only the first one is worth waiting for.
-   *
-   * The distinction is load-bearing rather than theoretical: `chapterId` is
-   * null whenever the claim is absent — no membership yet, or an incident that
-   * disabled the hook — so "we already have a chapter" cannot be the thing
-   * that skips the wait — this has to be.
-   */
-  const [claimReadForUserId, setClaimReadForUserId] = useState<string | null>(
-    null,
-  );
   const [callbackError, setCallbackError] = useState<string | null>(null);
   /**
    * Last auth uid observed in `applySession`.
@@ -331,24 +324,12 @@ export function AuthSessionProvider({
   const accessToken = session?.access_token ?? null;
   const userId = session?.user?.id ?? null;
   /**
-   * Key for the derived claim store. Prefer `user.id` so a magic-link account
-   * swap drops the previous chapter on the same render. When the session has a
-   * token but no user id (tests, some hydrations), a stable sentinel still
-   * lets the claim read run — using the access token itself would re-key on
-   * every refresh and re-block the routing gate.
+   * Derived from the token on every render, so a magic-link account swap or a
+   * chapter switch's refreshed token changes the chapter on the same render as
+   * the session, with no read to wait on and nothing of the previous member's
+   * to retain.
    */
-  const claimKey = accessToken ? (userId ?? "__no_user_id__") : null;
-  const chapterId =
-    claimKey && claimedChapter.userId === claimKey
-      ? claimedChapter.chapterId
-      : null;
-  /**
-   * Whether the *first* chapter-claim read for the current account has finished.
-   * False with no token (do not treat the pre-`getSession()` mount as resolved)
-   * and false the moment `claimKey` changes, even before the claim effect re-runs.
-   */
-  const hasReadChapterClaim =
-    Boolean(claimKey) && claimReadForUserId === claimKey;
+  const chapterId = accessToken ? chapterIdOf(accessToken) : null;
 
   // Hydrate from persisted storage, then follow every subsequent change.
   useEffect(() => {
@@ -435,95 +416,16 @@ export function AuthSessionProvider({
     }
   }, [accessToken, status]);
 
-  /**
-   * Chapter context comes from the token claim, never from a local pick.
-   *
-   * Per `spec/behavior/multi-tenancy.md`, the `active_chapter_id` claim is
-   * authoritative and `x-chapter-id` is only a fallback — if the two disagree
-   * the API rejects *every* request with 403 `chapter.context.mismatch`.
-   * Reading the claim makes disagreement impossible by construction.
-   *
-   * `null` is a safe resolution, not a failure: the API resolves a sole
-   * membership server-side when no claim is present, so single-chapter members
-   * work regardless. A multi-chapter member with no selection reaches the
-   * picker from the You tab (#764) — see `lib/auth-gate.ts` for why that is
-   * not a forced redirect.
-   *
-   * Selecting a chapter goes through `lib/select-chapter.ts`, which activates
-   * server-side and then refreshes the session — the new token arrives here as
-   * a changed `accessToken` and this effect re-reads the claim. That is why
-   * there is still no local override: the claim stays the only source.
-   *
-   * Retention on a failed *read* is scoped to `claimedChapter.userId`. A magic
-   * link can swap accounts with no sign-out; deriving `chapterId` from that tag
-   * drops the previous member's chapter on the same render as the new session,
-   * without an effect `setState(null)` that would lag one paint.
-   */
-  useEffect(() => {
-    if (!supabase) return;
-
-    if (!accessToken || !claimKey) {
-      // Do NOT mark the claim as read here. This branch runs on mount, before
-      // `getSession()` has resolved, and marking it read would let the gate
-      // commit a render of the whole tab navigator on the next tick — which
-      // then blanks and remounts the moment the real read starts. `chapterId`
-      // and `hasReadChapterClaim` already derive to "not ready" without token.
-      return;
-    }
-
-    const claimUserId = claimKey;
-    let cancelled = false;
-
-    // Stop *waiting* on the claim after a bounded delay — but keep listening.
-    //
-    // The routing gate renders nothing while the first read is in flight, and
-    // this read is a real network call with no timeout of its own (React
-    // Native's fetch has no default, and auth-js falls back to `getUser` here
-    // because Hermes has no WebCrypto `subtle`). A captive portal accepts the
-    // connection and then never answers, which would otherwise leave a blank
-    // screen behind an already-hidden splash for as long as the socket hangs.
-    //
-    // Proceeding without the claim is safe by design — see `lib/auth-gate.ts`.
-    // The request is deliberately not aborted: if it lands later, the claim
-    // still applies.
-    const resolveTimer = setTimeout(() => {
-      if (!cancelled) setClaimReadForUserId(claimUserId);
-    }, CLAIM_READ_TIMEOUT_MS);
-
-    supabase.auth
-      .getClaims()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        // A failed *read* is not a resolved absence, and the two must not
-        // collapse: the gate evicts a member with no chapter to the picker, so
-        // nulling here on a network blip would throw someone out of the app
-        // mid-use. `getClaims` is a real round trip on this platform — Hermes
-        // has no WebCrypto `subtle`, so auth-js falls back to `getUser()` — and
-        // it re-runs on every hourly refresh and every foreground. Keep the
-        // last known chapter and let the next token try again.
-        if (error || !data?.claims) return;
-        const claim = data.claims[ACTIVE_CHAPTER_CLAIM];
-        setClaimedChapter({
-          userId: claimUserId,
-          chapterId:
-            typeof claim === "string" && claim.length > 0 ? claim : null,
-        });
-      })
-      .catch(() => {
-        // Same reasoning as above — retain, do not demote.
-      })
-      .finally(() => {
-        // Each run owns its own `cancelled`, so a superseded read can never
-        // clear the flag out from under the newer one that replaced it.
-        if (!cancelled) setClaimReadForUserId(claimUserId);
-        clearTimeout(resolveTimer);
-      });
-
-    return () => {
-      cancelled = true;
-      clearTimeout(resolveTimer);
-    };
-  }, [supabase, accessToken, claimKey]);
+  // Chapter context comes from the token claim, never from a local pick
+  // (`chapterId` above). Reading the claim and sending it as `x-chapter-id`
+  // makes the two agree by construction. (Until ADR-27, #5918, the API
+  // rejected a disagreeing header with 403 `chapter.context.mismatch`; it now
+  // serves the header's chapter, and mobile moves to the route's tenant in
+  // step 3.) `null` is
+  // a safe resolution, not a failure: the API resolves a sole membership
+  // server-side when no claim is present (`lib/auth-gate.ts`). Selecting a
+  // chapter goes through `lib/select-chapter.ts`, which activates server-side
+  // and refreshes the session; the new token's claim is the new chapter.
 
   // supabase-js refreshes tokens on a timer, and the OS suspends timers in the
   // background. Restart the loop whenever the app is foregrounded, or a session
@@ -605,6 +507,30 @@ export function AuthSessionProvider({
     [supabase],
   );
 
+  const verifyEmailCode = useCallback(
+    async ({ email, code }: { email: string; code: string }) => {
+      if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
+      setCallbackError(null);
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: "email",
+      });
+      if (error) {
+        // A mistyped code is the member's, not a failure to report.
+        if (!describeEmailCodeError(error).wrongCode) {
+          reportAuthFailure({
+            flow: "email_code_verify",
+            screen: "/join",
+            error,
+          });
+        }
+        throw error;
+      }
+    },
+    [supabase],
+  );
+
   const resendConfirmation = useCallback(
     async ({ email }: { email: string }) => {
       if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
@@ -629,13 +555,32 @@ export function AuthSessionProvider({
   const signInWithOAuthProvider = useCallback(
     async (provider: OAuthProvider) => {
       // Each failure below is reported once, here, as `oauth_start` with the
-      // error it came from (#3832). A return that reached the app but didn't
+      // error it came from (#3832). A native token Supabase refused for setup
+      // reasons is reported too, before the browser fallback, so one attempt
+      // can send two reports, or one for a sign-in that then worked. A return that reached the app but didn't
       // become a session was already reported by `createSessionFromUrl` as
       // `auth_callback`, so its rethrow is not reported again. A cancel is
       // not a failure.
       const startFailed = (error: unknown): unknown => {
-        reportAuthFailure({ flow: "oauth_start", screen: "/sign-in", error });
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          error,
+        });
         return error;
+      };
+      // Supabase refused the native token for setup reasons and the member
+      // goes on to the browser flow. They never see it, but only a dashboard
+      // change fixes it, so it is reported at error (FRAPP-MOBILE-16).
+      const nativeRefused = (error: unknown) => {
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          code: "native_token_refused",
+          error,
+        });
       };
       if (!supabase) throw startFailed(new Error(NOT_CONFIGURED_MESSAGE));
       setCallbackError(null);
@@ -643,9 +588,9 @@ export function AuthSessionProvider({
       let native: "completed" | "cancelled" | "unavailable" = "unavailable";
       try {
         if (provider === "apple") {
-          native = await signInWithNativeApple(supabase);
+          native = await signInWithNativeApple(supabase, nativeRefused);
         } else if (provider === "google") {
-          native = await signInWithNativeGoogle(supabase);
+          native = await signInWithNativeGoogle(supabase, nativeRefused);
         }
       } catch (error) {
         throw startFailed(error);
@@ -736,15 +681,13 @@ export function AuthSessionProvider({
     clearProductQueryCache();
     previousAuthUserIdRef.current = null;
     setSession(null);
-    setClaimedChapter({ userId: null, chapterId: null });
-    setClaimReadForUserId(null);
     setStatus("unauthenticated");
     resetObservabilityOnLogout();
   }, [supabase]);
 
-  // Only the first read blocks, and only while signed in — see the state's own
-  // comment for why an in-flight re-read must not.
-  const isChapterResolving = status === "authenticated" && !hasReadChapterClaim;
+  // Signed in with no token yet: the claim can't be read. Decoding is
+  // synchronous, so this is false on the same render the session arrives.
+  const isChapterResolving = status === "authenticated" && !accessToken;
 
   const value = useMemo<AuthSessionContextValue>(
     () => ({
@@ -757,6 +700,7 @@ export function AuthSessionProvider({
       callbackError,
       signInWithPassword,
       sendMagicLink,
+      verifyEmailCode,
       resendConfirmation,
       signInWithOAuthProvider,
       signOut,
@@ -774,6 +718,7 @@ export function AuthSessionProvider({
       signOut,
       status,
       userId,
+      verifyEmailCode,
     ],
   );
 

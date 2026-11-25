@@ -121,8 +121,18 @@ export function BackworkGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.backwork} {...props} />;
 }
 
+/** Recruitment (#5931): the pipeline's funnel. */
+export function RecruitmentGlyph(props: NavGlyphProps) {
+  return <NavGlyph paths={NAV_GLYPHS.recruitment} {...props} />;
+}
+
 export function DirectoryGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.directory} {...props} />;
+}
+
+/** A council's Chapters (#5974): the shared set's `chapter`, the phone's More row for chapters. */
+export function ChaptersGlyph(props: NavGlyphProps) {
+  return <NavGlyph paths={NAV_GLYPHS.chapter} {...props} />;
 }
 
 export function BillingGlyph(props: NavGlyphProps) {

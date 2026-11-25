@@ -21,8 +21,8 @@ import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
  * s20's photo proof: the "Add photo proof" row on the Log service hours sheet
  * (`components/service-hours/log-hours-sheet.tsx`).
  *
- * The same two wire steps as web's log dialog
- * (`apps/web/components/service/service-page.tsx`): mint a signed URL with
+ * The same two wire steps as web's Log hours form
+ * (`apps/web/components/service/log-hours-form.tsx`): mint a signed URL with
  * `POST /v1/service-entries/proof-upload-url`, PUT the bytes, then send the
  * returned `storage_path` as the create's `proof_path`. The pick and the PUT
  * are `lib/chat/attachment-upload.ts`'s, the pipeline chat, the profile photo,

@@ -38,6 +38,9 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // The pacing is `use-smooth-text.spec.ts`'s; here a preview is drawn as
+  // it arrives.
+  useSmoothText: (text: string) => text,
   useAsk: () => ({
     exchanges: state.exchanges,
     working: state.exchanges.some(
@@ -168,7 +171,7 @@ beforeEach(() => {
 });
 
 describe("asking from a channel", () => {
-  it("gives a member without Ask nothing: no way to ask, no turns, no Meet Frapp AI", async () => {
+  it("gives a member without Ask nothing: no way to ask, no turns, no Meet Frapp Intelligence", async () => {
     state.exchanges = [DONE];
     mount(false);
     expect(screen.getByTestId("ask")).toHaveTextContent("none");

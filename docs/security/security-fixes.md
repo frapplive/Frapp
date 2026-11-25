@@ -80,7 +80,7 @@ The declared floor was moved to `^11.1.28` rather than left at `^11.1.24`. The o
 
 The `overrides.undici` range was `>=6.24.0 <8.0.0` — a floor four minors *below* the patched release — so it still resolved `7.26.0`, squarely inside the vulnerable 7.0.0–7.28.0 band, defeating the point of having pinned an override at all. Narrowed to `>=7.29.0 <8.0.0`, clearing 12 advisories including TLS certificate-validation bypass via SOCKS5 ProxyAgent, HTTP header injection via `Set-Cookie` percent-decoding, cross-user cache poisoning, and response-queue poisoning via keep-alive socket reuse. **Four of the twelve have range `<7.29.0`, so `7.28.x` would not have sufficed.**
 
-undici reaches the *production* image (`apps/api` → `expo-server-sdk` → `undici`), not just test tooling, so this floor is load-bearing for the deployed artifact. The `<8.0.0` ceiling is retained, though its original `node:20-alpine` engine reason lapsed with the Node 24 move recorded above — see #2360.
+undici reaches the *production* image (`apps/api` → `expo-server-sdk` → `undici`, and since 2026-11-24 as a direct `apps/api` dependency for its Supabase connection pool), not just test tooling, so this floor is load-bearing for the deployed artifact. The `<8.0.0` ceiling is retained, though its original `node:20-alpine` engine reason lapsed with the Node 24 move recorded above — see #2360.
 
 ### Result
 
@@ -439,7 +439,7 @@ Any chapter-wide list endpoint over a per-user-visible resource must go through 
 
 `GET /v1/chapters` leaked the same columns from the same root cause: `mapMembershipSummary` embedded the raw chapter object, so the chapter-picker payload carried them **for every chapter the caller belongs to**, on a route with no billing permission at all. `packages/hooks/src/use-chapters.ts` already typed `stripe_customer_id` and `subscription_id` on that response, so this was live rather than theoretical.
 
-This is over-exposure **inside** a tenant, not a cross-tenant leak. `ChapterGuard` still hard-403s (in `readRequestedChapter`; `resolveChapterContext` before #3728) a JWT/header mismatch (`chapter.context.mismatch`), so no caller could read another chapter's row through either route.
+This is over-exposure **inside** a tenant, not a cross-tenant leak. `ChapterGuard` still hard-403s (in `readRequestedChapter`; `resolveChapterContext` before #3728) a JWT/header mismatch (`chapter.context.mismatch`), so no caller could read another chapter's row through either route. *(Corrected 2026-11-23, #5918: since ADR-27 the guard serves the header's chapter rather than refusing a mismatch. The reason no cross-tenant read happens is the membership re-check on whichever chapter the request resolves to, which was true then as well.)*
 
 A third surface leaked the same columns through the *write* path. `PATCH /v1/chapters/current` admitted `roles:manage` **or** `billing:manage` at the time, and returned the updated row verbatim — so a custom role carrying `roles:manage` without `billing:view` read the identifiers straight out of the write response. Custom roles take arbitrary permission sets (`chapter_custom_roles`), so that combination is constructible, not hypothetical. Found while verifying the two read routes against a running instance. (#2575 since moved that route to `chapter-config:view` **and** `chapter-config:manage`, `CHAPTER_PROFILE_PERMISSIONS` in `@repo/validation`. Neither implies `billing:view`, so the projection is still load-bearing.)
 

@@ -12,8 +12,6 @@ export const activityKeys = createChapterQueryKeys("activity");
  * The Activity page's read (`GET /v1/activity`, `spec/behavior/activity.md`):
  * what waits on the member and what they made.
  *
- * Not `useActivityFeed`, which is the chapter feed no screen renders.
- *
  * A poll row carries no tallies; draw chat's own card from the message it
  * points at. Invalidate `activityKeys.chapter(chapterId)` after acting on a row (a vote, a
  * task transition, an approval) so the row leaves the list.
@@ -30,7 +28,11 @@ export function useActivity(options: { enabled?: boolean } = {}) {
       // Sunday the standing read counts study from.
       const { data, error } = await client.GET("/v1/activity", {
         signal,
-        params: { query: { week_start: localWeekStart().toISOString() } },
+        // `minutes`: this build draws the Minutes run (#5949), so its rows
+        // come back and count toward the badge.
+        params: {
+          query: { week_start: localWeekStart().toISOString(), minutes: "true" },
+        },
       });
       if (error) throw error;
       return data;

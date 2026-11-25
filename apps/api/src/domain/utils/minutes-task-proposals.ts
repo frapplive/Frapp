@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
-  TASK_TITLE_MAX_LENGTH,
+  minutesActionItemMatchKey,
   readMeetingContent,
+  taskTitleFrom,
   type MeetingActionItem,
 } from '@repo/validation';
 
@@ -39,23 +40,14 @@ export interface MinutesTaskProposal {
 /**
  * The same item after a fix to its capitals, spacing or punctuation is still
  * the same item, so an officer who tidies posted minutes is not asked about
- * a task twice.
+ * a task twice. The words are matched as both apps match an item to its
+ * suggestion (`minutesActionItemMatchKey`, #6051), so the two never drift.
  */
 export function actionItemKey(text: string): string {
-  const normalized = text
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-  return createHash('sha256').update(normalized).digest('hex').slice(0, 32);
-}
-
-/** A title the task form would take: cut at a word when the item runs long. */
-function titleFrom(text: string): string {
-  if (text.length <= TASK_TITLE_MAX_LENGTH) return text;
-  const cut = text.slice(0, TASK_TITLE_MAX_LENGTH - 1);
-  const atWord = cut.replace(/\s+\S*$/, '');
-  return `${(atWord.length > TASK_TITLE_MAX_LENGTH / 2 ? atWord : cut).trimEnd()}…`;
+  return createHash('sha256')
+    .update(minutesActionItemMatchKey(text))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 /**
@@ -85,7 +77,7 @@ export function taskProposalsFromMinutes(
       continue;
     }
     seen.add(dedupeKey);
-    const title = titleFrom(text);
+    const title = taskTitleFrom(text);
     proposals.push({
       dedupeKey,
       payload: {

@@ -45,6 +45,11 @@ const usePledgeClasses = vi.fn((options?: { enabled?: boolean }) =>
     ? { data: undefined, isPending: true, isSuccess: false }
     : { data: pledgeClasses, isPending: false, isSuccess: true },
 );
+// More details is its own spec's business (#581, `lib/more/own-custom-fields.spec.ts`).
+vi.mock("@/components/you/own-custom-fields", () => ({
+  OwnCustomFieldsSection: () => null,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   // The hub's own reads, answered empty: `you-screen.spec.tsx` owns them.
@@ -56,6 +61,15 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useStudySessions: () => ({ data: undefined }),
   useInvoices: () => ({ data: [] }),
   useMyGoals: () => ({ data: undefined }),
+  // The Edit sheet's Major suggestions (#5778) are its own spec's business.
+  useChapterMajors: () => [],
+  // Last week and This semester (#5779): nothing to say here.
+  useActivityStanding: () => ({
+    data: undefined,
+    isPending: false,
+    refetch: () => Promise.resolve(),
+  }),
+  useActivityRecap: () => ({ data: undefined }),
   useOwnAvatarTint: () => null,
   useCurrentUser: () => currentUser,
   useViewerUserId: () => viewerUserId,
@@ -230,6 +244,20 @@ describe("Profile tap to edit (#3711)", () => {
       ["Bio", "bio"],
     ]);
     expect(present).toHaveBeenCalledTimes(rows.length);
+    tree.unmount();
+  });
+
+  // #5798: the Phone row shows the stored number formatted.
+  it("shows the stored phone formatted on the Phone row", () => {
+    currentUser = {
+      ...LOADED_USER,
+      data: { ...LOADED_USER.data, phone: "+15185550142" },
+    };
+    const { tree } = renderWithSheet();
+    const row = detailListRows(tree).find(
+      (candidate) => candidate.props.label === "Phone",
+    );
+    expect(row?.props.value).toBe("(518) 555-0142");
     tree.unmount();
   });
 

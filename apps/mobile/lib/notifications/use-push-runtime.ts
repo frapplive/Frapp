@@ -26,7 +26,8 @@
  * Mounting above the auth gate means this starts before anyone is routed. That
  * is handled rather than avoided: a cold-start target is **held pending** until
  * the session has restored, and dropped if the member signs out first. It waits
- * on the chapter claim having been *read*, never on it having a value — see the
+ * on the chapter having been settled (`isChapterResolving`), never on the
+ * claim having a value — see the
  * comment on the release effect, and `lib/auth-gate.ts` for why the difference
  * is the whole ballgame: a missing claim is a normal working state, not a
  * reason to hold a deep link forever (`lib/auth-gate.ts`).
@@ -56,7 +57,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AccessibilityInfo, Alert } from "react-native";
+import { AccessibilityInfo, Alert, AppState } from "react-native";
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import {
   useActiveChapterId,
@@ -97,9 +98,25 @@ import {
   onPushPermissionGranted,
   registerCurrentPushToken,
   sessionOwnsPushRegistration,
+  shouldReportOnForeground,
   type RegisterPushTokenBody,
 } from "./push-token-lifecycle";
 import { readPushDeviceName } from "./push-device-name";
+import { pushIsOn, readPushState } from "./push-state";
+
+/**
+ * What the phone's push switch reads, for the register body (officers'
+ * Directory "Phone app" filter). `undefined` when it can't be read, so the
+ * server keeps what it had rather than storing a guess.
+ */
+async function readNotificationsEnabled(): Promise<boolean | undefined> {
+  try {
+    const state = await readPushState();
+    return state ? pushIsOn(state) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 import {
   NOTIFICATION_FALLBACK_PATHNAME,
   notificationIdFrom,
@@ -267,7 +284,7 @@ export function usePushRuntime(): void {
       setPendingTap(null);
       return;
     }
-    // Wait on the claim *read*, never on the claim's value. `lib/auth-gate.ts`
+    // Wait on the chapter being settled, never on the claim's value. `lib/auth-gate.ts`
     // spells out why at length: a token with no `active_chapter_id` is a
     // normal working state (no membership yet, or the hook disabled as
     // incident mitigation), so `chapterId` can be `null` for a signed-in
@@ -326,6 +343,7 @@ export function usePushRuntime(): void {
   const tokenLifecycleDeps = {
     getToken: getExpoPushToken,
     getDeviceName: readPushDeviceName,
+    getNotificationsEnabled: readNotificationsEnabled,
     register: (body: RegisterPushTokenBody) =>
       registerRef.current.mutateAsync(body),
     remove: (id: string) => removeRef.current.mutateAsync(id),
@@ -407,10 +425,21 @@ export function usePushRuntime(): void {
     };
     const subscription = addPushTokenListener(reregister);
     const unsubscribeGrant = onPushPermissionGranted(reregister);
+    // Back from the background: the member may have turned Frapp's
+    // notifications on or off in the OS settings. Re-register only when the
+    // answer differs from the one last sent, so an ordinary app switch posts
+    // nothing.
+    const appState = AppState.addEventListener("change", (next) => {
+      if (next !== "active") return;
+      void readNotificationsEnabled().then((enabled) => {
+        if (shouldReportOnForeground(enabled)) reregister();
+      });
+    });
     return () => {
       cancelled = true;
       subscription?.remove();
       unsubscribeGrant();
+      appState.remove();
     };
     // Subscribe once; the handler reads authRef / mutation refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above

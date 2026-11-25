@@ -58,8 +58,9 @@ vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: state.toast }),
 }));
 
-const { DiscordRow, DISCORD_LINK_OUTCOME_MESSAGES, linkedMessage } =
-  await import("./discord-row");
+const { DISCORD_LINK_RETURN_COPY, discordLinkedMessage: linkedMessage } =
+  await import("@repo/hooks");
+const { DiscordRow } = await import("./discord-row");
 
 function renderCard(client = new QueryClient()) {
   return render(
@@ -169,7 +170,7 @@ describe("DiscordRow (#2878, #5407)", () => {
 
     expect(screen.getByText("jkslayer")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Discord options" }),
+      screen.getByRole("button", { name: "More for Discord" }),
     );
     await userEvent.click(
       await screen.findByRole("menuitem", { name: "Unlink" }),
@@ -200,7 +201,7 @@ describe("DiscordRow (#2878, #5407)", () => {
     renderCard(client);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discord options" }),
+      screen.getByRole("button", { name: "More for Discord" }),
     );
     await userEvent.click(
       await screen.findByRole("menuitem", { name: "Unlink" }),
@@ -318,7 +319,7 @@ describe("DiscordRow (#2878, #5407)", () => {
     await waitFor(() =>
       expect(state.toast).toHaveBeenCalledWith({
         variant: undefined,
-        description: DISCORD_LINK_OUTCOME_MESSAGES.declined,
+        description: DISCORD_LINK_RETURN_COPY.declined,
       }),
     );
     expect(state.confirm).not.toHaveBeenCalled();

@@ -15,9 +15,9 @@ import * as ts from 'typescript';
  * enumerated the rest. So this file **enumerates, and fails on anything it
  * enumerates that is unclassified**:
  *
- * - every operation `openapi.json` gives one of `CHAT_CONTROLLERS`. Four reads
- *   on other controllers serve chat content too (search, the activity feed,
- *   the Activity page, the notification list) and are listed by hand, so a
+ * - every operation `openapi.json` gives one of `CHAT_CONTROLLERS`. Three reads
+ *   on other controllers serve chat content too (search, the Activity page,
+ *   the notification list) and are listed by hand, so a
  *   chat read added to some other controller is the one case this does not
  *   catch;
  * - every policy any migration creates that can read, which is how a client
@@ -250,6 +250,14 @@ const HTTP_LEDGER: Record<string, Entry> = {
       test: 'refuses to hand out URLs for a message whose sender the caller has blocked',
     },
   },
+  // #5667: the batch form of the route above, one request per message list.
+  ChatController_listMessagesAttachments_v1: {
+    status: 'masked',
+    proof: {
+      spec: CHAT_ATTACHMENT_SERVICE_SPEC,
+      test: 'withholds the files of a sender the caller has blocked, and signs nothing for them',
+    },
+  },
   ChatController_resolveAuthorAvatars_v1: {
     status: 'not-hidden',
     why: 'Imported archive authors only (`sender_id: null`). Blocks are keyed on `users.id`, so there is nobody to have blocked.',
@@ -416,19 +424,6 @@ const HTTP_LEDGER: Record<string, Entry> = {
       test: 'masks a hit from a member the caller has blocked',
     },
   },
-  ActivityFeedController_getFeed_v1: {
-    // Its announcement items are chat, and masked: a blocked author's
-    // announcement is left out, reading as the caller. Its other items are
-    // chapter records carrying text a member wrote (a backwork title beside
-    // its uploader, an event name, a points reason), which a block does not
-    // hide (#2498).
-    status: 'not-hidden',
-    why: "Announcements are masked. The record items carrying a member's own text (a backwork title, an event name, a points reason) are not: a block is a chat control, and the spec's table row for non-chat modules says so.",
-    proof: {
-      spec: 'application/services/activity-feed.service.spec.ts',
-      test: 'leaves out an announcement whose author the caller has blocked, reading as the caller',
-    },
-  },
   ActivityController_getActivity_v1: {
     // Its poll rows are chat (a card's question, from a channel the caller
     // can read), and masked: a blocked author's poll is left out. Its
@@ -436,7 +431,7 @@ const HTTP_LEDGER: Record<string, Entry> = {
     // timeline's tombstone (`chat-reminder.service.spec.ts`). Its other
     // rows are chapter records carrying text a member wrote (a task title, a
     // service entry's description, an event name), which a block does not
-    // hide (#2498), as on the activity feed above.
+    // hide (#2498).
     status: 'not-hidden',
     why: "Poll rows are masked. The record rows carrying a member's own text (a task title, a service entry's description, an event name) are not: a block is a chat control, and the spec's table row for non-chat modules says so.",
     proof: {
@@ -452,7 +447,7 @@ const HTTP_LEDGER: Record<string, Entry> = {
     // when the list is read, by the sender each row records (#2715). The
     // non-chat rows that quote a member's text are MEMBER_TEXT, which a block
     // does not hide (#2498), so the route as a whole serves another member's
-    // text on purpose, like the activity feed.
+    // text on purpose, like the Activity page.
     status: 'not-hidden',
     why: "Chat rows are masked, including ones written before the block. The non-chat rows carrying a member's own text (a task title, an event name) are not hidden, by the spec's table row for non-chat modules.",
     proof: {
@@ -537,6 +532,11 @@ const DIRECT_READ_LEDGER: Record<string, Entry & { creates: number }> = {
     status: 'no-foreign-content',
     why: '`to supabase_auth_admin` only, as `auth_admin_can_read_users`.',
   },
+  'public.chapters auth_admin_can_read_chapters': {
+    creates: 1,
+    status: 'no-foreign-content',
+    why: "`to supabase_auth_admin` only, as `auth_admin_can_read_users`: the token hook reads each membership's tenant kind (#5933).",
+  },
   'public.member_custom_field_values member_custom_field_values_service_role': {
     creates: 1,
     status: 'no-foreign-content',
@@ -610,6 +610,12 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
       },
     ],
   },
+  // A reminder the member set on a Coming up date in minutes (#5672): its
+  // push quotes the date's words, which an officer wrote in the minutes.
+  'application/workers/meeting-date-reminder-sweep.service.ts': {
+    calls: 1,
+    entries: [MEMBER_TEXT],
+  },
   // The weekly recap push (#4985): the member's own figures from last week,
   // under the chapter's name.
   'application/workers/activity-recap-push.service.ts': {
@@ -648,12 +654,21 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
       },
     ],
   },
-  'application/services/invite.service.ts': {
-    calls: 2,
+  'application/services/interest-form.service.ts': {
+    calls: 1,
     entries: [
       {
         status: 'not-hidden',
-        why: 'A push naming the member who joined, and a system DM naming the member who accepted. A system message that merely names a member is not hidden.',
+        why: 'A new interest-form submission, to rush:manage and the recruitment contacts (#5977). It names a prospect, never a member, so a block has nothing to hide.',
+      },
+    ],
+  },
+  'application/services/invite.service.ts': {
+    calls: 3,
+    entries: [
+      {
+        status: 'not-hidden',
+        why: 'Notifications naming the member who joined (to the inviter and the officer roster) and the member who asked for a new invite (to its sender) (#5625). A notice that merely names a member is not hidden.',
       },
     ],
   },
@@ -677,6 +692,26 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
   // Scheduled messages (#4956): tells the author their own message did not
   // post. It names the channel only when the failure isn't lost access, so
   // never one the author can no longer see; nothing another member wrote.
+  // Chat timeouts (#6006): tell a member an officer timed them out, lifted
+  // it, or that it ran out.
+  'application/services/chat-timeout.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Tells a member about their own timeout: who set or lifted it, how long, and the reason the officer wrote for them. It quotes no chat message.',
+      },
+    ],
+  },
+  'application/workers/chat-timeout-sweep.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Hands an ended timeout to `ChatTimeoutService.notifyEnded`, whose fixed sentence quotes nothing.',
+      },
+    ],
+  },
   'application/services/chat-scheduled-message.service.ts': {
     calls: 1,
     entries: [
@@ -735,6 +770,12 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     calls: 1,
     entries: [MEMBER_TEXT],
   },
+  // "Minutes requested" to whoever is writing them (#5471): names the
+  // meeting's event and the members who asked, never the minutes.
+  'application/services/meeting-minutes-request.service.ts': {
+    calls: 1,
+    entries: [MEMBER_TEXT],
+  },
   // The hand-off to `MeetingService.notifyRecordingUploaded` (#712).
   'application/services/meeting-recording.service.ts': {
     calls: 1,
@@ -767,7 +808,10 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     // +1 for a task for everyone (#4295 step 3): each copy's assignment push.
     // +3 for a following group (#5473): "finished" to its members, the
     // review push to one who can confirm, as the creator's names the task.
-    calls: 12,
+    // +2 for Add people (#5905): a group's assignment pushes go through
+    // `notifyEachAssigned`, called once from a new group and once for
+    // members added later; the same push each copy always got.
+    calls: 14,
     entries: [MEMBER_TEXT],
   },
   'application/workers/scheduled-jobs.service.ts': {
@@ -775,7 +819,10 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     // "stopped repeating" notice, both titled with the task as task pushes are.
     // +1 for a group task's following group (#5473): its overdue line, once
     // for the group, titled with the task.
-    calls: 19,
+    // +2 for recruitment (#5934): a follow-up's morning push and the stale
+    // alert, each to one member who can work prospects, naming the prospect
+    // and the follow-up's own words as a member set them.
+    calls: 21,
     entries: [MEMBER_TEXT],
   },
   'application/workers/discord-import-worker.service.ts': {
@@ -798,8 +845,6 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
 const API_SUBSCRIPTIONS: Record<string, string> = {
   chat_messages:
     'chat-push-worker. Its audience drops blockers (PUSH_LEDGER above).',
-  chapter_audit_log:
-    'chat-bridge-worker. Posts into #chapter-audit as the system actor, which cannot be blocked.',
 };
 
 /**

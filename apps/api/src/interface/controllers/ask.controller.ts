@@ -80,7 +80,7 @@ const KEEPALIVE_MS = 15_000;
 export const ASK_QUESTION_EVENT = 'ai-question-asked';
 
 /**
- * Ask Frapp (#450, `spec/behavior/ai.md`): a member's question, answered
+ * Frapp Intelligence (#450, `spec/behavior/ai.md`): a member's question, answered
  * from their chapter's sources, streamed. For a client that shows proposal
  * cards (`actions`), words that ask for something to be done end in a card
  * to confirm instead (`AskConversationService`); the route still changes
@@ -303,7 +303,7 @@ export class AskController {
   @ApiOperation({
     summary: 'Tidy up words dictated into Ask',
     description:
-      'The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Ask Frapp, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp AI’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.',
+      'The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Frapp Intelligence, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp Intelligence’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.',
   })
   @ApiOkResponse({ type: AskDictationResponseDto })
   @ApiForbiddenResponse({

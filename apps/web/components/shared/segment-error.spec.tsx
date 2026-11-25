@@ -7,7 +7,7 @@ vi.mock("@sentry/nextjs", () => ({ captureException }));
 
 // The chunk remedy replaces the document; jsdom's real `location.reload`
 // throws "not implemented", so stand in for it and assert it was called.
-// Same stand-in `chapter-nav-header.spec.tsx` makes for `location.assign`.
+// Same stand-in `chapter-switcher.spec.tsx` makes for `location.assign`.
 const reload = vi.fn();
 Object.defineProperty(window, "location", {
   value: { ...window.location, reload },

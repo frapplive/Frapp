@@ -118,7 +118,7 @@ The filesystem is cached but running processes are not, so work is split:
 | Phase | Script | Runs | Does |
 |-------|--------|------|------|
 | Setup (cached) | `scripts/cloud-sandbox-setup.sh` | once, as root, before the agent | writes the `/etc/frapp-cloud-sandbox` marker; installs Node 24 into `/opt/node24` (see below); `npm ci` on it; transient dockerd + `docker login` + `supabase start`/`stop` purely to **pull + cache images** |
-| Per-session | `scripts/cloud-sandbox-up.sh` | every session, in the background | put Node 24 on `PATH`, installing it when the setup cache lacks it; build the workspace packages (`packages/*`), non-fatally and before any Docker step; start dockerd; `docker login`; `supabase start` (fast — images cached); `db push --local`; repair local Postgres default ACLs; write `apps/api/.env.local` + `apps/web/.env.local`; verify `node_modules` is usable (**last**, so a broken npm never costs the database) |
+| Per-session | `scripts/cloud-sandbox-up.sh` | every session, in the background | put Node 24 on `PATH`, installing it when the setup cache lacks it; build the workspace packages (`packages/*`), non-fatally and before any Docker step; start dockerd; `docker login`; `supabase start` (fast — images cached); `db push --local`; repair local Postgres default ACLs; write `apps/api/.env.local`, `apps/web/.env.local` and `apps/mobile/.env.local`; verify `node_modules` is usable (**last**, so a broken npm never costs the database) |
 
 Both source `scripts/lib/cloud-sandbox-common.sh` (`cs_log`, `cs_ensure_docker_daemon`,
 `cs_docker_login_if_creds`, `cs_supabase`, `cs_retry`, `cs_classify_failure`,
@@ -211,7 +211,8 @@ The ACL repair is sequenced **after `db push`** because it fixes the tables thos
 just created: the pinned Postgres image grants `anon`/`authenticated`/`service_role` no DML on
 objects created by `postgres`, so without it the API's first query is `42501 permission
 denied`. It also resets the schema's *default* privileges, so migrations added in a later
-session inherit working grants.
+session inherit working grants. It repairs `service_role` only, the API's role: the client
+roles keep exactly the narrow grants migration 20261119210325 gives them, as on hosted.
 
 It is sequenced **after `write_env_files`** for a different reason: the repair is fatal, and
 nothing in the env file depends on the grants. Running it earlier meant a failed repair
@@ -322,8 +323,8 @@ bringup starts cannot report the dead stack. Where the kernel exposes no boot id
 trusts the lock and sentinel as it always has. The session is **never blocked** on the ~60-90s
 bringup. Before using the DB or booting the API, wait for one of:
 
-- `.cloud-sandbox-up.done` — success (timestamp). Stack is up and `apps/api/.env.local` + `apps/web/.env.local`
-  is written.
+- `.cloud-sandbox-up.done` — success (timestamp). Stack is up and `apps/api/.env.local` is written
+  (`apps/web/.env.local` and `apps/mobile/.env.local` too, unless the log warns one could not be).
 - `.cloud-sandbox-up.failed` — error (timestamp + reason). Inspect
   `/tmp/cloud-sandbox-up.log`.
 
@@ -348,17 +349,20 @@ npm run start:dev -w apps/api   # bypasses the infisical-wrapped dev:api script
 
 ### What bringup provisions, per app
 
-Two files, both gitignored, both regenerated from the same `supabase status` read each session.
+Three files, all gitignored, all regenerated from the same `supabase status` read each session.
 Nothing else is written; anything not listed here has a working default or is not needed to build.
 
 | File | Serves | Contents |
 |---|---|---|
-| `apps/api/.env.local` | `npm run start:dev -w apps/api` | The full `supabase status -o env` dump remapped to `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`, plus the three `STRIPE_*` vars (real test keys when the session has them, clearly-marked placeholders otherwise), `PORT=3001`, `NODE_ENV=development` |
+| `apps/api/.env.local` | `npm run start:dev -w apps/api` | The full `supabase status -o env` dump remapped to `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`, plus the three `STRIPE_*` vars (real test keys when the session has them, clearly-marked placeholders otherwise), `PORT=3001`, `NODE_ENV=development`, and `EVENT_CHECK_IN_TOKEN_SECRET` (the session's own when it has one, else a local default, so the host check-in screen can mint a code) |
 | `apps/web/.env.local` | `npm run build -w apps/web`, `npm run dev -w apps/web` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL=http://127.0.0.1:3001` |
+| `apps/mobile/.env.local` | The phone app's web build, which the capture scripts drive (`npx expo start --web --port 3002` in `apps/mobile`; [`demo-data.md` § Mobile setup](../../guides/demo-data.md#mobile-setup)) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_API_URL=http://localhost:3001`, `EXPO_PUBLIC_WEB_SECURE_STORE=1` (sandbox only: it keeps the session in `localStorage`, and must never be set for a hosted build) |
 
-`apps/landing` and `apps/mobile` get **nothing, deliberately**. Landing's only `NEXT_PUBLIC_*` var
-defaults to the production origin in `apps/landing/lib/auth-urls.ts`, and mobile has no build script
-and reads its Supabase vars with `?? ""`. Both are fine unconfigured.
+`apps/landing` gets **nothing, deliberately**: its only `NEXT_PUBLIC_*` var defaults to the
+production origin in `apps/landing/lib/auth-urls.ts`, so it is fine unconfigured. `apps/mobile` got
+nothing until 2026-11-24, on the ground that it has no build script and reads its Supabase vars with
+`?? ""`. That was true of building it and false of running it: its web build, which the capture
+scripts drive, drew a sign-in screen that could never sign in.
 
 The web file carries the two Supabase vars and **only** those two. `NEXT_PUBLIC_*` is inlined into
 the client bundle by Next, so the service-role key — which is present in the same `supabase status`
@@ -422,7 +426,7 @@ every session), so skim the log even when bringup succeeds.
 | The hook says bringup "already finished", but `docker` cannot connect and `uptime` is minutes old | The VM restarted and the lock plus sentinel from before it were trusted. Since #2515 the hook detects a lock from an earlier boot (by boot id, or by age for a lock written before boot ids) and relaunches on its own, so this now means a host that exposes no boot id | `bash scripts/cloud-sandbox-up.sh` |
 | Log ends mid-step with no `.done`/`.failed` (e.g. frozen at "Starting Docker daemon") | A prior bringup was killed when the session paused/was reclaimed, leaving a stale `/tmp/cloud-sandbox-up.lock` | Self-heals — the SessionStart hook clears the stale lock and relaunches next session. To force it now: `bash scripts/cloud-sandbox-up.sh`. If that refuses because the old bringup is still alive but hung, `bash scripts/cloud-sandbox-up.sh --stop`, then run it again |
 | `Error: No matching Supabase CLI binary package found for linux-x64` (from `supabase/dist/supabase.js`), then a sentinel reading `'supabase start' failed (toolchain)` | The Supabase v2 CLI ships its binary as a platform-specific **optionalDependency** (`@supabase/cli-<platform>`). If that optional install is skipped, the launcher finds no binary and throws — and npx caches the broken tree under `~/.npm/_npx`, so it stays broken all session | **Repo fix, not an env change** — already handled: both scripts go through `cs_supabase`, which installs a pinned CLI into `.cache/supabase-cli/` and probes it by running `--version`. If it recurs, delete `.cache/supabase-cli/` to force a clean reinstall |
-| API logs `42501 permission denied for table <name>` and `/health` reports `{"database":"error"}` / `degraded`, on a bringup that otherwise succeeded | The pinned `supabase/postgres` image (17.6.x) ships a default ACL for role `postgres` in schema `public` granting `anon`/`authenticated`/`service_role` only `Dxtm` — the DML bits `arwd` are missing. Migrations are applied as `postgres`, so every table inherits it. The **defect** is not cleared by `supabase db reset --local` — a reset rebuilds from the same template and reintroduces it (and drops the repair) | **Already handled at bringup** — `frapp_repair_local_acls` (shared with the laptop path via `scripts/lib/local-postgres-acl.sh`) runs after `db push`, granting table/sequence DML and fixing the schema's default privileges for future migrations. **Re-run `bash scripts/cloud-sandbox-up.sh` after any `supabase db reset --local`**, which is the usual way this reappears mid-session (bringup takes the session-start lock itself, so a resumed session does not launch a second one alongside it). Confirm with `select defaclacl from pg_default_acl where pg_get_userbyid(defaclrole)='postgres' and defaclnamespace::regnamespace::text='public' and defaclobjtype='r';` — healthy shows `anon=arwdDxtm/postgres`, broken shows `anon=Dxtm/postgres`. On an API that is still running, re-check with `/health/ready`, since `/health` reuses its probe for up to 60 s. The repair deliberately never grants function `EXECUTE` (the RPC migrations lock that down explicitly) |
+| API logs `42501 permission denied for table <name>` and `/health` reports `{"database":"error"}` / `degraded`, on a bringup that otherwise succeeded | The pinned `supabase/postgres` image (17.6.x) ships a default ACL for role `postgres` in schema `public` granting `anon`/`authenticated`/`service_role` only `Dxtm` — the DML bits `arwd` are missing. Migrations are applied as `postgres`, so every table inherits it. The **defect** is not cleared by `supabase db reset --local` — a reset rebuilds from the same template and reintroduces it (and drops the repair) | **Already handled at bringup** — `frapp_repair_local_acls` (shared with the laptop path via `scripts/lib/local-postgres-acl.sh`) runs after `db push`, granting `service_role` table/sequence DML and fixing the schema's default privileges for future migrations. **Re-run `bash scripts/cloud-sandbox-up.sh` after any `supabase db reset --local`**, which is the usual way this reappears mid-session (bringup takes the session-start lock itself, so a resumed session does not launch a second one alongside it). Confirm with `select defaclacl from pg_default_acl where pg_get_userbyid(defaclrole)='postgres' and defaclnamespace::regnamespace::text='public' and defaclobjtype='r';` — healthy shows `service_role=arwdDxtm/postgres` and no `anon` or `authenticated` entry (migration 20261119210325 revokes the client roles' defaults), broken shows `service_role=Dxtm/postgres`. On an API that is still running, re-check with `/health/ready`, since `/health` reuses its probe for up to 60 s. The repair deliberately never grants function `EXECUTE` (the RPC migrations lock that down explicitly) |
 
 Env var and network changes **apply to new sessions only** — the user must start a fresh
 session for them to take effect.
@@ -467,7 +471,8 @@ Or step through it: start the daemon (`sudo dockerd &>/tmp/dockerd.log &`, wait 
 `.cache/supabase-cli/node_modules/.bin/supabase start`, then `… db push --local` — then **repair
 the default ACLs** (see below), and build `apps/api/.env.local` from `… status -o env` + the
 Stripe vars plus `apps/web/.env.local` carrying the same URL and anon key under
-`NEXT_PUBLIC_` names (and `NEXT_PUBLIC_API_URL=http://127.0.0.1:3001`). (Source `scripts/lib/cloud-sandbox-common.sh` and call `cs_supabase` to get the
+`NEXT_PUBLIC_` names (and `NEXT_PUBLIC_API_URL=http://127.0.0.1:3001`), and `apps/mobile/.env.local`
+as the table above lists it. (Source `scripts/lib/cloud-sandbox-common.sh` and call `cs_supabase` to get the
 install-on-first-use behaviour instead of managing that path by hand.) For migration
 validation without Docker at all, use the PGlite harness (`npm run check:pglite-migrations`).
 
@@ -481,12 +486,12 @@ apply it. To call it directly, source
 `EXECUTE`:
 
 ```sql
-grant select, insert, update, delete on all tables in schema public to anon, authenticated, service_role;
-grant usage, select on all sequences in schema public to anon, authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
 alter default privileges for role postgres in schema public
-  grant select, insert, update, delete on tables to anon, authenticated, service_role;
+  grant select, insert, update, delete on tables to service_role;
 alter default privileges for role postgres in schema public
-  grant usage, select on sequences to anon, authenticated, service_role;
+  grant usage, select on sequences to service_role;
 ```
 
 ⚠️ **`supabase db reset --local` undoes this.** The reset rebuilds the database from the

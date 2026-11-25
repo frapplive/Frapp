@@ -168,7 +168,11 @@ export function mixHex(a: string, b: string, ratio: number): string {
 }
 
 /** Flattens `hex` at `alpha` over an opaque `background` — what CSS would composite. */
-export function applyAlpha(hex: string, alpha: number, background: string): string {
+export function applyAlpha(
+  hex: string,
+  alpha: number,
+  background: string,
+): string {
   const foreground = parseHex(hex) ?? { r: 0, g: 0, b: 0 };
   const base = parseHex(background) ?? { r: 0, g: 0, b: 0 };
 
@@ -176,6 +180,98 @@ export function applyAlpha(hex: string, alpha: number, background: string): stri
     r: Math.round(foreground.r * alpha + base.r * (1 - alpha)),
     g: Math.round(foreground.g * alpha + base.g * (1 - alpha)),
     b: Math.round(foreground.b * alpha + base.b * (1 - alpha)),
+  });
+}
+
+// ── OKLCH ────────────────────────────────────────────────────────────────────
+
+/**
+ * A color in OKLCH: perceptual lightness `l` (0–1), chroma `c` (0 to about
+ * 0.37) and hue `h` in degrees (0–360). Hue is the one people mean by "a
+ * color": a role color picker moves along it while lightness is set for
+ * contrast (#5784).
+ */
+export type Oklch = { l: number; c: number; h: number };
+
+// sRGB's own transfer curve (IEC 61966-2-1), for the OKLab round trip.
+// `linearize` above keeps WCAG 2's 0.03928 knee, which contrast is defined
+// with; the two differ only for channel values below 11/255.
+function srgbToLinear(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(value: number): number {
+  const encoded =
+    value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055;
+  return encoded * 255;
+}
+
+/** `null` when the input is not a hex color. Achromatic colors report hue 0. */
+export function hexToOklch(input: string): Oklch | null {
+  const rgb = parseHex(input);
+  if (!rgb) return null;
+  const r = srgbToLinear(rgb.r);
+  const g = srgbToLinear(rgb.g);
+  const b = srgbToLinear(rgb.b);
+  // Björn Ottosson's OKLab matrices (linear sRGB → LMS → OKLab).
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const lightness = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+  const bAxis = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  const chroma = Math.hypot(a, bAxis);
+  const hue =
+    chroma < 1e-6 ? 0 : ((Math.atan2(bAxis, a) * 180) / Math.PI + 360) % 360;
+  return { l: lightness, c: chroma, h: hue };
+}
+
+/** Linear sRGB channels for an OKLCH color, unclamped (out of gamut reads < 0 or > 1). */
+function oklchToLinear({ l, c, h }: Oklch): [number, number, number] {
+  const radians = (h * Math.PI) / 180;
+  const a = c * Math.cos(radians);
+  const b = c * Math.sin(radians);
+  const lPrime = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const mPrime = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const sPrime = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [
+    4.0767416621 * lPrime - 3.3077115913 * mPrime + 0.2309699292 * sPrime,
+    -1.2684380046 * lPrime + 2.6097574011 * mPrime - 0.3413193965 * sPrime,
+    -0.0041960863 * lPrime - 0.7034186147 * mPrime + 1.707614701 * sPrime,
+  ];
+}
+
+function inGamut(channels: readonly number[]): boolean {
+  const EPSILON = 1e-4;
+  return channels.every((value) => value >= -EPSILON && value <= 1 + EPSILON);
+}
+
+/**
+ * The `#RRGGBB` for an OKLCH color. A color sRGB can't show keeps its
+ * lightness and hue and loses chroma until it fits (the CSS Color 4 approach,
+ * without its perceptual tolerance), so the result is always the nearest
+ * displayable color of that lightness and hue.
+ */
+export function oklchToHex(color: Oklch): string {
+  const l = Math.max(0, Math.min(1, Number.isFinite(color.l) ? color.l : 0));
+  const h = Number.isFinite(color.h) ? ((color.h % 360) + 360) % 360 : 0;
+  let c = Math.max(0, Number.isFinite(color.c) ? color.c : 0);
+  if (!inGamut(oklchToLinear({ l, c, h }))) {
+    let low = 0;
+    let high = c;
+    for (let step = 0; step < 24; step += 1) {
+      const mid = (low + high) / 2;
+      if (inGamut(oklchToLinear({ l, c: mid, h }))) low = mid;
+      else high = mid;
+    }
+    c = low;
+  }
+  const [r, g, b] = oklchToLinear({ l, c, h });
+  return toHex({
+    r: linearToSrgb(Math.max(0, Math.min(1, r))),
+    g: linearToSrgb(Math.max(0, Math.min(1, g))),
+    b: linearToSrgb(Math.max(0, Math.min(1, b))),
   });
 }
 
@@ -211,3 +307,62 @@ function toHex({ r, g, b }: Rgb): string {
  * API-side copy to keep in agreement with this file. The build-order constraint
  * above still applies to any future direct import from `apps/api`.
  */
+
+// ── HSV ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A color as a picker's square and hue bar hold it: hue `h` in degrees
+ * (0–360), saturation `s` and value (brightness) `v` from 0 to 1. The square
+ * is saturation across and brightness up, the bar is hue, the way Discord's,
+ * Figma's and the macOS color pickers lay them out (#5966).
+ */
+export type Hsv = { h: number; s: number; v: number };
+
+const clampUnit = (value: number) =>
+  Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+/** The `#RRGGBB` for an HSV color; out-of-range parts are clamped. */
+export function hsvToHex({ h, s, v }: Hsv): string {
+  const hue = Number.isFinite(h) ? ((h % 360) + 360) % 360 : 0;
+  const saturation = clampUnit(s);
+  const value = clampUnit(v);
+  const chroma = value * saturation;
+  const sector = hue / 60;
+  const second = chroma * (1 - Math.abs((sector % 2) - 1));
+  const [r, g, b] =
+    sector < 1
+      ? [chroma, second, 0]
+      : sector < 2
+        ? [second, chroma, 0]
+        : sector < 3
+          ? [0, chroma, second]
+          : sector < 4
+            ? [0, second, chroma]
+            : sector < 5
+              ? [second, 0, chroma]
+              : [chroma, 0, second];
+  const base = value - chroma;
+  return toHex({
+    r: Math.round((r + base) * 255),
+    g: Math.round((g + base) * 255),
+    b: Math.round((b + base) * 255),
+  });
+}
+
+/** `null` when the input is not a hex color. A grey reports hue 0. */
+export function hexToHsv(input: string): Hsv | null {
+  const rgb = parseHex(input);
+  if (!rgb) return null;
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  let h = 0;
+  if (delta > 0) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  return { h: (h + 360) % 360, s: max === 0 ? 0 : delta / max, v: max };
+}

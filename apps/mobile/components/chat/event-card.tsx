@@ -14,7 +14,12 @@ import {
   usePermissionList,
   useRequiredOfViewer,
 } from "@repo/hooks";
-import { can, isModuleEnabled, statusLabel } from "@repo/validation";
+import {
+  can,
+  EVENT_PAGE_COPY,
+  isModuleEnabled,
+  statusLabel,
+} from "@repo/validation";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
 import { EventsGlyph } from "@/components/tab-glyphs";
 import { HairlineChip } from "@/components/status-chip";
@@ -239,7 +244,11 @@ export function EventCard({
           <CardEyebrow
             label="Event"
             glyph={EventsGlyph}
-            trailing={required ? <HairlineChip label="Mandatory" /> : null}
+            trailing={
+              required ? (
+                <HairlineChip label={EVENT_PAGE_COPY.required} />
+              ) : null
+            }
           />
           <CardTitle>{payload.name}</CardTitle>
           <CardMeta

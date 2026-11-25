@@ -38,11 +38,18 @@ vi.mock("@repo/hooks", () => ({
     invitesCalls.push(userId);
     return userId
       ? invites
-      : { data: undefined, isSuccess: false, isError: false, isFetching: false };
+      : {
+          data: undefined,
+          isSuccess: false,
+          isError: false,
+          isFetching: false,
+        };
   },
 }));
 
-const { auth } = vi.hoisted(() => ({ auth: { userId: "user-1" as string | null } }));
+const { auth } = vi.hoisted(() => ({
+  auth: { userId: "user-1" as string | null },
+}));
 vi.mock("@/lib/auth/use-auth-user-id", () => ({
   useAuthUserId: () => auth.userId,
 }));
@@ -170,7 +177,7 @@ describe("the chapter wizard gate's own boundary", () => {
 
   it("waits out a refetch of a cached empty list, which is how a join lands (#5078)", () => {
     // `/join` leaves `[]` cached and its redeem refetches it; the shell mounts
-    // on `/chat` mid-refetch. Latching here put the wizard behind the tour.
+    // on `/chat` mid-refetch. Latching here opened the wizard for a member.
     chapters.isFetching = true;
     const { container, rerender } = render(<ChapterWizardGate />);
     expect(container.innerHTML).toBe("");

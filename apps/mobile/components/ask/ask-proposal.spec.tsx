@@ -1,8 +1,7 @@
 /** @vitest-environment jsdom */
 import React, { act, useState } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { ActionSheetIOS } from "react-native";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ActResponse,
   AskCardEnd,
@@ -18,7 +17,13 @@ import {
   actPointsDoneLine,
   actPointsHeadline,
 } from "@repo/validation";
+import {
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
+import { AccessibilityInfo } from "react-native";
 import { FrappThemeProvider } from "@/lib/theme";
+import { HostScrollLockProvider } from "@/lib/keep-above-keyboard";
 import { screenText } from "@/test/screen-text";
 
 /**
@@ -36,7 +41,13 @@ const hooks = vi.hoisted(() => ({
     | {
         template?: Record<string, unknown>;
         onCreated?: (created: { id: string | null }) => void;
+        presentation?: string;
+        open?: boolean;
+        onClosed?: () => void;
       },
+  eventFormMounted: vi.fn(),
+  eventSheetPresent: vi.fn(),
+  hostLock: vi.fn(),
   cards: { byId: new Map<string, unknown>(), settled: true, failed: false },
 }));
 // A purple chapter: Confirm takes its solid accent pair (#4702).
@@ -72,6 +83,28 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The hook has its own spec (`use-ask-cards.spec.tsx`).
   useAskCards: () => hooks.cards,
 }));
+// Who a task card is for reads the chapter as the task form does; here, the
+// roster above.
+vi.mock("@/lib/tasks/use-who-directory", async () => {
+  const { buildWhoDirectory } = await import("@repo/hooks/task-who-picker");
+  const directory = buildWhoDirectory({
+    roster: [
+      { user_id: "me", display_name: "Paul Carlson" },
+      { user_id: "u1", display_name: "Ana Ruiz" },
+      { user_id: "u2", display_name: "Jordan Lee" },
+      { user_id: "u3", display_name: "Sam Park" },
+    ],
+    viewerUserId: "me",
+  });
+  return {
+    useWhoDirectory: () => ({
+      directory,
+      people: "ready",
+      sets: "ready",
+      followers: [],
+    }),
+  };
+});
 vi.mock("@/components/tasks/new-task-sheet", async () => {
   const { forwardRef } = await import("react");
   return {
@@ -85,13 +118,25 @@ vi.mock("@/components/tasks/new-task-sheet", async () => {
 });
 
 vi.mock("@/components/events/new-event-sheet", async () => {
-  const { forwardRef } = await import("react");
+  const { forwardRef, useEffect, useImperativeHandle } = await import("react");
   return {
-    NewEventSheet: forwardRef(function NewEventSheet(props: {
-      template?: Record<string, unknown>;
-      onCreated?: (created: { id: string | null }) => void;
-    }) {
-      hooks.eventForm = props;
+    NewEventSheet: forwardRef(function NewEventSheet(
+      props: {
+        template?: Record<string, unknown>;
+        onCreated?: (created: { id: string | null }) => void;
+        presentation?: string;
+        open?: boolean;
+        onClosed?: () => void;
+      },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ present: hooks.eventSheetPresent }));
+      useEffect(() => {
+        hooks.eventForm = props;
+      });
+      useEffect(() => {
+        hooks.eventFormMounted();
+      }, []);
       return null;
     }),
   };
@@ -140,13 +185,26 @@ function Turn({ first, shown = true }: { first: unknown; shown?: boolean }) {
   );
 }
 
-function show(proposal: unknown): ReactTestRenderer {
+function show(
+  proposal: unknown,
+  { inAsk = false }: { inAsk?: boolean } = {},
+): ReactTestRenderer {
   let tree!: ReactTestRenderer;
+  const turn = <Turn first={proposal} />;
   act(() => {
     tree = create(
       <FrappThemeProvider>
-        <Turn first={proposal} />
+        {/* The Ask sheet's thread offers the lock; a channel doesn't. */}
+        {inAsk ? (
+          <HostScrollLockProvider value={hooks.hostLock}>
+            {turn}
+          </HostScrollLockProvider>
+        ) : (
+          turn
+        )}
       </FrappThemeProvider>,
+      // A host view for each ref, so focus can be sent back to one.
+      { createNodeMock: () => ({}) },
     );
   });
   return tree;
@@ -168,28 +226,21 @@ const CONFIRM = /^(Give|Take away) \d+ points?$|^Create (event|task)$/;
 const MORE = /^More: /;
 
 /**
- * Picks a row from a card's ··· menu (#5148): the iOS action sheet, as the
- * suite runs, read from its call instead of drawn.
+ * Picks a row from a card's ··· menu (#5148): the app's glass menu, read from
+ * what it holds instead of drawn.
  */
 async function fromMenu(
   tree: ReactTestRenderer,
   row: string,
   index = 0,
 ): Promise<void> {
-  const sheet = vi
-    .spyOn(ActionSheetIOS, "showActionSheetWithOptions")
-    .mockImplementation(() => undefined);
   const more = tree.root.findAll(
     (node) =>
       (node.type as unknown) === "Pressable" &&
       labelMatches(node.props.accessibilityLabel, MORE),
   )[index]!;
   act(() => more.props.onPress());
-  const [options, pick] = sheet.mock.calls.at(-1) ?? [];
-  sheet.mockRestore();
-  const at = (options?.options ?? []).indexOf(row);
-  if (at < 0 || !pick) throw new Error(`No "${row}" in the card's menu`);
-  await act(async () => pick(at));
+  await act(async () => pickItemMenuAction(row));
 }
 
 const BASE = {
@@ -239,6 +290,10 @@ const TASK = {
   },
 };
 
+afterEach(() => {
+  dismissItemMenu();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   hooks.seed = undefined;
@@ -285,7 +340,9 @@ describe("a proposal in the Ask conversation", () => {
     expect(after).toContain("Came to chapter");
     expect(after).toContain(actPointsDoneLine(5, 2, 0));
     expect(byLabel(tree, CONFIRM)).toBeUndefined();
-    // The phone has no points page to open.
+    // The phone has no chapter ledger, so a finished points change links to
+    // the standings in the Directory (#5950), and opens nothing by itself.
+    expect(after).toContain(ACT_COPY.open_standings);
     expect(onOpen).not.toHaveBeenCalled();
   });
 
@@ -431,6 +488,34 @@ describe("a proposal in the Ask conversation", () => {
     },
   };
 
+  it("says who the card invites, and Edit opens the form on that list (#5853)", () => {
+    const tree = show({
+      ...STUDY_NIGHT,
+      suggestion: {
+        ...STUDY_NIGHT.suggestion,
+        new_event: {
+          ...STUDY_NIGHT.suggestion.new_event,
+          attendance: {
+            everyone: "not_invited",
+            roles: { "role-president": "required" },
+          },
+          attendance_line: "Cabinet required, nobody else invited",
+          attendance_from: { kind: "event", name: "FSL Leaders Reception" },
+        },
+      },
+    });
+    const text = screenText(tree);
+    expect(text).toContain("Cabinet required, nobody else invited");
+    expect(text).not.toContain(ACT_COPY.everyone_optional);
+    act(() => byLabel(tree, ACT_COPY.edit).props.onPress());
+    expect(hooks.eventForm!.template).toMatchObject({
+      attendance: {
+        everyone: "not_invited",
+        roles: { "role-president": "required" },
+      },
+    });
+  });
+
   it("confirms an event proposal, and opens the event it made", async () => {
     hooks.accept.mockResolvedValue({
       result: { kind: "new_event", id: "ev-1" },
@@ -539,6 +624,49 @@ describe("a proposal in the Ask conversation", () => {
       expect(screenText(tree)).toContain(ACT_COPY.done_event);
     });
 
+    it("opens the form in the card, and Close folds it back keeping one form", async () => {
+      const tree = show(EVENT, { inAsk: true });
+      act(() => byLabel(tree, ACT_COPY.edit).props.onPress());
+      expect(hooks.eventForm).toMatchObject({
+        presentation: "inline",
+        open: true,
+      });
+      // The form is the card while open: no second Create or Edit beside it.
+      expect(
+        tree.root.findAll(
+          (node) =>
+            node.props.accessibilityLabel === ACT_COPY.edit &&
+            typeof node.type === "string",
+        ),
+      ).toHaveLength(0);
+
+      act(() => hooks.eventForm!.onClosed?.());
+      expect(hooks.eventForm!.open).toBe(false);
+      expect(screenText(tree)).toContain("Chapter");
+      // A screen reader's focus goes back to Edit, which the form replaced.
+      vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(AccessibilityInfo.sendAccessibilityEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        "focus",
+      );
+      act(() => byLabel(tree, ACT_COPY.edit).props.onPress());
+      expect(hooks.eventForm!.open).toBe(true);
+      // One form across close and reopen, so what was typed is kept.
+      expect(hooks.eventFormMounted).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens the form as its own sheet in a channel (#5907)", () => {
+      const tree = show(EVENT);
+      act(() => byLabel(tree, ACT_COPY.edit).props.onPress());
+      expect(hooks.eventForm).toMatchObject({ presentation: "sheet" });
+      expect(hooks.eventSheetPresent).toHaveBeenCalledTimes(1);
+      // The card stays as it is under the sheet.
+      expect(byLabel(tree, ACT_COPY.edit)).toBeTruthy();
+    });
+
     it("says the event was added even when the proposal can't record it", async () => {
       hooks.accept.mockRejectedValueOnce(new Error("expired"));
       const tree = show(EVENT);
@@ -641,6 +769,7 @@ describe("a proposal in the Ask conversation", () => {
         audience: null,
         audience_role_id: null,
         audience_group_id: null,
+        audience_tier_id: null,
       },
     });
     expect(screenText(tree)).toContain(ACT_COPY.done_task);

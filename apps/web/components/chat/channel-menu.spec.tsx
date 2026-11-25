@@ -125,6 +125,43 @@ vi.mock("./notification-level-popover", () => ({
   ),
 }));
 
+// The Links panel reads Activity's own query (#5779); its rendering is
+// `channel-links-panel.spec.tsx`'s. The stub keeps that read out of this file
+// and lets a test set what the row counts.
+const linkState = vi.hoisted(() => ({
+  count: undefined as number | undefined,
+}));
+vi.mock("./channel-links-panel", () => ({
+  ChannelLinksPanel: ({ channelId }: { channelId: string }) => (
+    <div data-testid="links-panel" data-channel={channelId}>
+      links panel
+    </div>
+  ),
+  useChannelLinkCount: (channelId: string | null) =>
+    channelId ? linkState.count : undefined,
+}));
+
+// The narrow header's Threads row (Paul, 2026-11-24): the list is
+// `all-threads-popover.spec.tsx`'s; here only the count and the hand-off.
+vi.mock("./all-threads-popover", async () => ({
+  ...(await vi.importActual<typeof import("./all-threads-popover")>(
+    "./all-threads-popover",
+  )),
+  AllThreadsPanel: ({
+    onOpenThread,
+  }: {
+    onOpenThread: (channelId: string, rootId: string) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="threads-panel"
+      onClick={() => onOpenThread("chan-2", "root-9")}
+    >
+      thread
+    </button>
+  ),
+}));
+
 import { ChannelMenu } from "./channel-menu";
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -346,6 +383,41 @@ describe("ChannelMenu (#2142)", () => {
     expect(screen.queryByTestId("notifications-panel")).not.toBeInTheDocument();
   });
 
+  it("opens this channel's Links from its own row, with their count (#5779)", async () => {
+    // Activity listed every channel's sign-up links until #5779 moved them
+    // here, so the row names the open channel to the panel.
+    linkState.count = 2;
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+
+    await user.click(screen.getByRole("button", { name: "Links, 2" }));
+    expect(screen.getByTestId("links-panel")).toHaveAttribute(
+      "data-channel",
+      "chan-1",
+    );
+  });
+
+  it("states no Links count until Activity's read is in (#5779)", async () => {
+    linkState.count = undefined;
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+
+    expect(screen.getByRole("button", { name: "Links" })).toBeInTheDocument();
+  });
+
+  it("offers no Links row with no channel open (#5779)", async () => {
+    linkState.count = 1;
+    const user = userEvent.setup();
+    renderMenu({ activeChannelId: null });
+    await openMenu(user);
+
+    expect(
+      screen.queryByRole("button", { name: /^Links/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("stays usable with no channel open, because two panels are chapter-wide", async () => {
     // Gating the one surviving header control on a channel would take Saved and
     // chapter-wide search offline in exactly the states this lane keeps the
@@ -493,7 +565,10 @@ describe("ChannelMenu pin to top (#2877)", () => {
     const unpin = screen.getByRole("button", { name: "Unpin from top" });
     expect(unpin).toBeInTheDocument();
     // The pin reads as on: solid, not the outline (#4292).
-    expect(unpin.querySelector("svg path")).toHaveAttribute("fill-opacity", "1");
+    expect(unpin.querySelector("svg path")).toHaveAttribute(
+      "fill-opacity",
+      "1",
+    );
   });
 
   describe("search pickers (#3958)", () => {
@@ -613,5 +688,44 @@ describe("ChannelMenu Always formal (#3787)", () => {
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
     expect(onChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("ChannelMenu Threads row (narrow header, 2026-11-24)", () => {
+  const threads = (unread = 0) => ({
+    unread,
+    channelNameFor: () => "general",
+    nameFor: () => "Someone",
+    viewerId: "u1",
+    onOpenThread: vi.fn(),
+  });
+
+  it("draws no Threads row while the header has its own button", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+    expect(
+      screen.queryByRole("button", { name: /^Threads/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leads with Threads and its unread count, and opens a thread from it", async () => {
+    const user = userEvent.setup();
+    const props = threads(1);
+    renderMenu({ threads: props, catchUp: { onStart: vi.fn() } });
+    // The header's dot moves onto the menu button with the row.
+    await user.click(
+      screen.getByRole("button", {
+        name: "Channel menu, 1 thread with new replies",
+      }),
+    );
+    const rows = screen.getAllByRole("listitem");
+    // Ahead of Catch up too: it stands in for a header button.
+    expect(rows[0]).toHaveTextContent("Threads");
+    expect(rows[1]).toHaveTextContent("Catch");
+    await user.click(screen.getByRole("button", { name: "Threads, 1" }));
+    await user.click(screen.getByTestId("threads-panel"));
+    expect(props.onOpenThread).toHaveBeenCalledWith("chan-2", "root-9");
+    expect(screen.queryByTestId("threads-panel")).not.toBeInTheDocument();
   });
 });

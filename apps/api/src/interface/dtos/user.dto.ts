@@ -37,6 +37,7 @@ import {
   USER_CITY_MAX_LENGTH,
   USER_COMPANY_MAX_LENGTH,
 } from '@repo/validation';
+import { normalizePhone } from '@repo/formatting';
 import { Trim } from '../decorators/trim.decorator';
 
 /**
@@ -52,6 +53,18 @@ class PhoneNumberConstraint implements ValidatorConstraintInterface {
   defaultMessage(): string {
     return PHONE_INVALID_MESSAGE;
   }
+}
+
+/**
+ * A phone number stored normalized (#5798): E.164 (`+15185550142`) when it is
+ * a valid number, so search and `tel:` links see one shape whatever the app
+ * sent; a shipped build that sends `(518) 555-0142` still saves.
+ * `normalizePhone` leaves a value `isPhoneNumber` refuses as it was, so the
+ * validation below still refuses it.
+ */
+function normalizedPhone(value: unknown): unknown {
+  const blank = blankToNull(value);
+  return typeof blank === 'string' ? normalizePhone(blank) : blank;
 }
 
 /** Trims a string, and turns a blank one into null (cleared). */
@@ -274,11 +287,11 @@ export class UpdateUserDto {
     nullable: true,
     maxLength: PHONE_MAX_LENGTH,
     description:
-      "The member's own phone number (#3711), stored as typed and trimmed. Members of their chapters see it on their profile. Null or an empty string clears it.",
+      "The member's own phone number (#3711). Any common format is accepted; it is stored normalized to E.164 (`+15185550142`, a number without `+` read as US) when it is a valid number, else trimmed as typed, a 7-digit local number as `555-0142` (#5798). Members of their chapters see it on their profile. Null or an empty string clears it.",
     example: '(518) 555-0142',
   })
   @IsOptional()
-  @Transform(({ value }) => blankToNull(value))
+  @Transform(({ value }) => normalizedPhone(value))
   @ValidateIf((_obj, value) => value !== null)
   @IsString()
   @Validate(PhoneNumberConstraint)

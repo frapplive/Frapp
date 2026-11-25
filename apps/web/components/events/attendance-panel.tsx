@@ -1,26 +1,38 @@
 "use client";
 
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { useId, useMemo, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { DirectoryGlyph } from "@/components/events/chapter-ops-glyphs";
+import { useMemo, useState } from "react";
+import { Loader2, Search, UserX } from "lucide-react";
 import {
+  ATTENDANCE_SEARCH_FROM,
+  EVENT_PAGE_COPY,
+  eventInvitees,
+  type EventAttendanceFields,
+  type EventPagePhase,
+} from "@repo/validation";
+import {
+  eventRosterCounts,
+  eventRosterMarks,
+  eventRosterRows,
+  eventRosterStatusText,
+  eventRosterTally,
+  orderEventRoster,
   useAttendance,
   useAutoAbsent,
+  useMarkEventRosterRow,
   useMembers,
-  useNow,
-  useUpdateAttendanceStatus,
+  type EventRosterRow,
 } from "@repo/hooks";
-import { memberFallbackLabel, memberLabel } from "@repo/hooks/display-names";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, type BadgeKind } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { NestedError, NestedLoading } from "@/components/shared/nested-states";
 import {
   SubscriptionNotice,
@@ -28,7 +40,7 @@ import {
 } from "@/components/shared/subscription-gate";
 import { toastFailure } from "@/lib/failure-toast";
 import { useToast } from "@/lib/hooks/use-toast";
-import { asArray, getErrorMessage } from "@/lib/utils";
+import { asArray, cn, getErrorMessage } from "@/lib/utils";
 import { Can } from "@/components/shared/can";
 import {
   attendanceStatusKind,
@@ -36,9 +48,10 @@ import {
 } from "@/components/events/attendance-status";
 import type { AttendanceStatus } from "@/components/events/attendance-status";
 import { checkInLabel } from "@/components/events/event-labels";
-import { formatRelativeDayTime } from "@repo/formatting";
-import { checkInClosesAt } from "@/components/events/check-in-close";
 import { InlineNote } from "@/components/shared/inline-note";
+
+/** The roster's view: everyone, those who came (present or late), the rest. */
+type AttendanceFilter = "ALL" | "IN" | "OUT";
 
 type AttendanceRow = {
   id?: string;
@@ -52,52 +65,41 @@ type AttendanceRow = {
 export function AttendancePanel({
   eventId,
   eventStart,
-  eventEnd,
+  audience,
+  phase = "live",
 }: {
   eventId: string;
+  /**
+   * Who the event invites, by role. The roster is those members, plus anyone
+   * with a row the rule wouldn't list (a member whose roles changed since),
+   * so its count is the page's "15 people", not the whole chapter.
+   */
+  audience?: EventAttendanceFields;
+  /** Live while check-in is open, past after: the words and the bulk action. */
+  phase?: Exclude<EventPagePhase, "upcoming">;
   /**
    * The event's `start_time`, so a check-in on the event's own day reads as a
    * time alone ("Checked in 5:03 PM") and one on another day names the day.
    */
   eventStart?: unknown;
-  /**
-   * The event's `end_time`. Auto-absent is refused (400) until check-in
-   * closes, so the button waits for the same instant. Without it the button
-   * is offered and the server's answer stands.
-   */
-  eventEnd?: unknown;
 }) {
   const { toast } = useToast();
   const attendanceQuery = useAttendance(eventId);
   const membersQuery = useMembers();
-  const updateStatus = useUpdateAttendanceStatus();
+  const markRow = useMarkEventRosterRow(eventId);
   const autoAbsent = useAutoAbsent();
   // `PATCH /v1/events/:eventId/attendance/:userId` and the auto-absent POST
   // carry no `@FreeTier`, so both are paid-ops and mirror the gate (#841).
   // Reading attendance stays live — `enforceSubscription` returns early for
   // GET, so a lapsed chapter can still see who showed up.
   const gate = useSubscriptionGate();
-  const now = useNow();
-  const closesAt = checkInClosesAt(eventEnd, now);
-  const autoAbsentGateProps = gate.controlProps(
-    autoAbsent.isPending || closesAt !== null,
-  );
-  /*
-    Why the button waits, said in visible text: a disabled Button takes no
-    pointer events, so a `title` alone is never seen. Only when the gate
-    allows writes: a lapsed chapter's button stays disabled past the close,
-    and its own notice says why, so a promise about the close would be false.
-  */
-  const waitingNoticeId = useId();
-  const waitingForClose = closesAt !== null && gate.allowed;
-  const autoAbsentControlProps = {
-    ...autoAbsentGateProps,
-    ...(waitingForClose ? { "aria-describedby": waitingNoticeId } : {}),
-  };
+  // Auto-absent is refused until check-in closes, which is when the page
+  // turns past, so the button is only offered then (`eventPagePhase`).
+  const autoAbsentControlProps = gate.controlProps(autoAbsent.isPending);
 
-  const [statusFilter, setStatusFilter] = useState<
-    "ALL" | AttendanceStatus | "UNRECORDED"
-  >("ALL");
+  const [statusFilter, setStatusFilter] = useState<AttendanceFilter>("ALL");
+  const [search, setSearch] = useState("");
+  const needle = search.trim().toLowerCase();
 
   // Live updates come from the event sheet, which holds the one
   // `attendance:<eventId>` subscription for every viewer (a topic takes one
@@ -108,92 +110,69 @@ export function AttendancePanel({
     () => asArray<AttendanceRow>(attendanceQuery.data),
     [attendanceQuery.data],
   );
-  const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
+  const members = useMemo(() => {
+    const all = (membersQuery.data ?? []).filter((member) => !!member.user_id);
+    return audience ? eventInvitees(audience, all) : all;
+  }, [membersQuery.data, audience]);
 
-  type Row = {
-    userId: string;
-    displayName: string;
-    email: string;
-    status: AttendanceStatus | "UNRECORDED";
-    checkInTime: string | null;
-    excuseReason: string | null;
-    attendanceId: string | null;
-  };
-
-  const rows: Row[] = useMemo(() => {
-    const result = new Map<string, Row>();
-
-    for (const member of members) {
-      if (!member.user_id) continue;
-      result.set(String(member.user_id), {
-        userId: String(member.user_id),
-        displayName: memberLabel(member.display_name, member.user_id),
-        email: member.email ?? "",
-        status: "UNRECORDED",
-        checkInTime: null,
-        excuseReason: null,
-        attendanceId: null,
-      });
-    }
-
-    for (const entry of attendance) {
-      const userId = entry.user_id ? String(entry.user_id) : "";
-      if (!userId) continue;
-      // Reached only when `result` has no row for this attendee — and `result`
-      // was just built from every member with a `user_id`, so by construction
-      // this attendee is not on the roster. A roster lookup here can therefore
-      // only miss; it used to be one, keyed and guarded identically to the loop
-      // above, which made the literals below read as a last resort rather than
-      // the only outcome.
-      const base =
-        result.get(userId) ??
-        ({
-          userId,
-          // A departed member, most often: the same `Member <6>` label the
-          // leaderboard and task board give them, so two off-roster attendees
-          // stay distinguishable rather than both reading as one phrase.
-          displayName: memberFallbackLabel(userId),
-          email: "",
-          status: "UNRECORDED" as const,
-          checkInTime: null,
-          excuseReason: null,
-          attendanceId: null,
-        } as Row);
-
-      result.set(userId, {
-        ...base,
-        status: entry.status ?? "UNRECORDED",
-        checkInTime: entry.check_in_time ?? null,
-        excuseReason: entry.excuse_reason ?? null,
-        attendanceId: entry.id ? String(entry.id) : null,
-      });
-    }
-
-    return Array.from(result.values()).sort((a, b) =>
-      a.displayName.localeCompare(b.displayName),
+  // An answer just clicked shows lit at once, before the roster reads it
+  // back, so a run of clicks down the list doesn't flicker; a refused one
+  // goes back with its toast. Each new read of the roster replaces the
+  // answers whose writes have finished; one still being sent stays, since
+  // the read the first write asked for can land before the second is saved.
+  const [marked, setMarked] = useState<Record<string, AttendanceStatus>>({});
+  const [sending, setSending] = useState<Record<string, number>>({});
+  const [markedAt, setMarkedAt] = useState(attendanceQuery.dataUpdatedAt);
+  if (markedAt !== attendanceQuery.dataUpdatedAt) {
+    setMarkedAt(attendanceQuery.dataUpdatedAt);
+    setMarked((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([userId]) => sending[userId]),
+      ),
     );
-  }, [attendance, members]);
+  }
 
-  const filteredRows = rows.filter((row) =>
-    statusFilter === "ALL" ? true : row.status === statusFilter,
+  const rows = useMemo(
+    () => eventRosterRows(members, attendance, marked),
+    [attendance, members, marked],
   );
 
-  async function changeStatus(
-    userId: string,
-    next: AttendanceStatus,
-    previous: AttendanceStatus | "UNRECORDED",
-  ) {
+  // After the event, who didn't come reads first: it's what an exec checks
+  // the day after. During it, the list keeps name order, so rows don't jump
+  // as people check in.
+  const ordered = orderEventRoster(rows, phase);
+  const filteredRows = ordered.filter(
+    (row) =>
+      (statusFilter === "ALL"
+        ? true
+        : statusFilter === "IN"
+          ? row.status === "PRESENT" || row.status === "LATE"
+          : row.status !== "PRESENT" && row.status !== "LATE") &&
+      (!needle ||
+        row.displayName.toLowerCase().includes(needle) ||
+        row.email.toLowerCase().includes(needle)),
+  );
+
+  async function changeStatus(row: EventRosterRow, next: AttendanceStatus) {
+    const { userId } = row;
+    setMarked((current) => ({ ...current, [userId]: next }));
+    const sent = (by: number) =>
+      setSending((current) => {
+        const count = (current[userId] ?? 0) + by;
+        const rest = { ...current };
+        if (count > 0) rest[userId] = count;
+        else delete rest[userId];
+        return rest;
+      });
+    sent(1);
     try {
-      await updateStatus.mutateAsync({
-        eventId,
-        userId,
-        body: { status: next },
-      });
-      toast({
-        title: "Attendance updated",
-        description: `${attendanceStatusLabel(next)} recorded for this member.`,
-      });
+      await markRow(row, next);
     } catch (error) {
+      setMarked((current) => {
+        const rest = { ...current };
+        delete rest[userId];
+        return rest;
+      });
       toast({
         title: "Couldn't update attendance",
         description: getErrorMessage(
@@ -202,9 +181,9 @@ export function AttendancePanel({
         ),
         variant: "destructive",
       });
-      throw error;
+    } finally {
+      sent(-1);
     }
-    return previous;
   }
 
   async function runAutoAbsent() {
@@ -283,196 +262,198 @@ export function AttendancePanel({
     );
   }
 
-  const counts: Record<AttendanceStatus | "UNRECORDED", number> = {
-    PRESENT: 0,
-    LATE: 0,
-    EXCUSED: 0,
-    ABSENT: 0,
-    UNRECORDED: 0,
+  const counts = eventRosterCounts(rows);
+  // The per-row write is gated as the bulk one is, with the same notice.
+  const rowGate = gate.controlProps() as {
+    disabled?: boolean;
+    "aria-describedby"?: string;
   };
-  for (const row of rows) counts[row.status] += 1;
+  const here = counts.PRESENT + counts.LATE;
+  const filters: { value: AttendanceFilter; label: string }[] = [
+    { value: "ALL", label: EVENT_PAGE_COPY.filterAll },
+    { value: "IN", label: EVENT_PAGE_COPY.filterHere(phase) },
+    { value: "OUT", label: EVENT_PAGE_COPY.filterNotHere(phase) },
+  ];
+  // The counts as one muted line, the states that have someone in them.
+  const tally = eventRosterTally(counts, phase);
 
+  /*
+    The roster takes the side list once check-in opens (Paul 2026-11-22: a
+    month early it was the biggest thing on the page and nothing on it could
+    be marked). Check-ins fill it; a hand mark is the exception, so each
+    person carries one status chip that opens the four answers (Paul's pick
+    2026-11-22), not four buttons a row: 600 buttons at 150 members. It is
+    web's value picker, `Select` (rulebook § 9), so it shows the answer it
+    holds. Meetup's and Luma's host lists set attendance out the same way,
+    one status per guest. The three views split who came from who didn't,
+    the two sets an exec reads during and after.
+  */
   return (
-    <section className="rounded-lg border border-border p-4">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="flex items-center gap-2 text-lg font-semibold">
-            <DirectoryGlyph className="h-4 w-4 text-muted-foreground" />
-            Attendance
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {counts.PRESENT + counts.LATE} checked in · {counts.EXCUSED} excused
-            · {counts.ABSENT} absent · {counts.UNRECORDED} unrecorded
-          </p>
+    <section aria-label="Attendance" className="grid gap-3">
+      <div className="grid gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold">Attendance</h3>
+          <span className="text-caption text-muted-foreground">
+            {phase === "past"
+              ? EVENT_PAGE_COPY.came(here, rows.length)
+              : EVENT_PAGE_COPY.checkedIn(here, rows.length)}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Not gated: filtering is a read, and §5 gates writes only. */}
-          <Select
-            value={statusFilter}
-            onValueChange={(value) =>
-              setStatusFilter(value as typeof statusFilter)
-            }
-          >
-            <SelectTrigger
-              className="w-full sm:w-[180px]"
-              aria-label="Filter attendance by status"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All members</SelectItem>
-              <SelectItem value="PRESENT">Present</SelectItem>
-              <SelectItem value="LATE">Late</SelectItem>
-              <SelectItem value="EXCUSED">Excused</SelectItem>
-              <SelectItem value="ABSENT">Absent</SelectItem>
-              <SelectItem value="UNRECORDED">Unrecorded</SelectItem>
-            </SelectContent>
-          </Select>
-          <Can permission="events:update">
+        {tally.length > 0 ? (
+          <p className="text-caption text-muted-foreground">
+            {tally.map((entry, index) => (
+              <span key={entry.label}>
+                {index > 0 ? " · " : null}
+                <span className="font-semibold text-foreground">
+                  {entry.count}
+                </span>{" "}
+                {entry.label}
+              </span>
+            ))}
+          </p>
+        ) : null}
+      </div>
+      {/* Not gated: filtering is a read, and §5 gates writes only. */}
+      <ViewLabels
+        flush
+        label="Show"
+        options={filters}
+        value={statusFilter}
+        onChange={setStatusFilter}
+      />
+      {rows.length >= ATTENDANCE_SEARCH_FROM ? (
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Find a member"
+            aria-label="Find a member"
+            className="pl-8"
+          />
+        </div>
+      ) : null}
+      {/*
+        Disable, don't hide (§5 rule 4): the roster, the counts, and the
+        filter keep working for a lapsed chapter; only recording attendance
+        stops, and this says why.
+      */}
+      <Can permission="events:update" offlineFallback={null}>
+        <SubscriptionNotice gate={gate} feature="managing events" />
+      </Can>
+      {filteredRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {needle ? "No member matches that." : "Nobody here."}
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {filteredRows.map((row) => {
+            const checkedIn =
+              row.status === "PRESENT" || row.status === "LATE"
+                ? checkInLabel(row.checkInTime, eventStart)
+                : null;
+            const note =
+              checkedIn ??
+              (row.status === "EXCUSED" && row.excuseReason
+                ? row.excuseReason
+                : null);
+            const statusText = eventRosterStatusText(row.status, phase);
+            return (
+              <li
+                key={row.userId}
+                className="flex min-h-11 min-w-0 items-center gap-2 py-1"
+              >
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-sm font-semibold"
+                    title={row.email || undefined}
+                  >
+                    {row.displayName}
+                  </p>
+                  {note ? (
+                    <p className="truncate text-caption text-muted-foreground">
+                      {note}
+                    </p>
+                  ) : null}
+                </div>
+                <Can
+                  permission="events:update"
+                  deniedFallback={
+                    <Badge variant={attendanceStatusKind(row.status)}>
+                      {statusText}
+                    </Badge>
+                  }
+                >
+                  {/*
+                    The per-row write hits the same guard as the bulk action,
+                    so it is gated too, disabled rather than hidden.
+                  */}
+                  <Select
+                    value={row.status === "UNRECORDED" ? "" : row.status}
+                    disabled={rowGate.disabled}
+                    onValueChange={(next) =>
+                      void changeStatus(row, next as AttendanceStatus)
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label={`Attendance for ${row.displayName}: ${statusText}`}
+                      aria-describedby={rowGate["aria-describedby"]}
+                      className={cn(
+                        "h-7 w-auto shrink-0 gap-1 rounded-md border-border bg-transparent px-2 text-caption pointer-coarse:h-11",
+                        STATUS_TEXT[attendanceStatusKind(row.status)],
+                      )}
+                    >
+                      <span>{statusText}</span>
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      {eventRosterMarks(row).map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {attendanceStatusLabel(status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Can>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {phase === "past" ? (
+        <Can permission="events:update">
+          <div className="grid gap-1 border-t border-border pt-3">
             <Button
               variant="secondary"
               size="sm"
+              className="justify-self-start"
               {...autoAbsentControlProps}
               onClick={runAutoAbsent}
             >
               {autoAbsent.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
-                <AlertCircle className="h-4 w-4" />
+                <UserX className="h-4 w-4" aria-hidden="true" />
               )}
-              Run auto-absent
+              Mark no-shows absent
             </Button>
-          </Can>
-        </div>
-      </div>
-      {waitingForClose ? (
-        <Can permission="events:update">
-          <p
-            id={waitingNoticeId}
-            className="mt-2 text-caption text-muted-foreground"
-          >
-            Auto-absent can run once check-in closes (
-            {formatRelativeDayTime(closesAt, new Date(now))}).
-          </p>
+            <p className="text-caption text-muted-foreground">
+              Members this event requires who didn&apos;t check in and
+              aren&apos;t excused.
+            </p>
+          </div>
         </Can>
       ) : null}
-      <div className="mt-4 space-y-3">
-        {/*
-          Disable, don't hide (§5 rule 4): the roster, the counts, and the
-          filter keep working for a lapsed chapter — only recording attendance
-          stops, and this says why.
-        */}
-        {/*
-          Scoped to the same permission as the controls it describes. A member
-          with attendance read access but not `events:update` sees the "View
-          only" fallback on every row and no auto-absent button — an explanation
-          for restoring writes they could never perform is pure noise, and its
-          `aria-describedby` id would have nothing pointing at it.
-        */}
-        {/*
-          Silent on purpose, and the only three gates that are. This wraps a
-          `SubscriptionNotice` — an explanation of why *another* control is
-          disabled — not an affordance. There is nothing here for a member to act
-          on, so a second notice saying we cannot check their access states a
-          problem about a sentence rather than about anything they can do, and
-          stacks a duplicate of the chip the gated control already shows. §5 rule
-          4's "disable, don't hide" is about controls; supplementary copy has
-          nothing to disable. `can-fallback.spec.tsx` derives this rather than
-          listing it: a lone `SubscriptionNotice` child both may and must be
-          `null` here.
-        */}
-        <Can permission="events:update" offlineFallback={null}>
-          <SubscriptionNotice gate={gate} feature="managing events" />
-        </Can>
-        {filteredRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No members match that filter.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {filteredRows.map((row) => {
-              const checkedIn =
-                row.status === "PRESENT" || row.status === "LATE"
-                  ? checkInLabel(row.checkInTime, eventStart)
-                  : null;
-              return (
-                <li
-                  key={row.userId}
-                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">
-                      {row.displayName}
-                    </p>
-                    {row.email ? (
-                      <p className="truncate text-caption text-muted-foreground">
-                        {row.email}
-                      </p>
-                    ) : null}
-                    {checkedIn ? (
-                      <p className="text-caption text-muted-foreground">
-                        {checkedIn}
-                      </p>
-                    ) : null}
-                    {row.status === "EXCUSED" && row.excuseReason ? (
-                      <p className="text-caption text-muted-foreground">
-                        Reason: {row.excuseReason}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant={attendanceStatusKind(row.status)}>
-                      {attendanceStatusLabel(row.status)}
-                    </Badge>
-                    <Can
-                      permission="events:update"
-                      deniedFallback={
-                        <span className="text-caption text-muted-foreground">
-                          View only
-                        </span>
-                      }
-                    >
-                      <Select
-                        value={row.status === "UNRECORDED" ? "" : row.status}
-                        onValueChange={(value) => {
-                          if (!value) return;
-                          void changeStatus(
-                            row.userId,
-                            value as AttendanceStatus,
-                            row.status,
-                          );
-                        }}
-                      >
-                        {/*
-                        The per-row status write hits the same guard as
-                        auto-absent, so gating only the header button would
-                        have the panel claim writes are blocked while still
-                        offering one per member. The props go on the trigger
-                        rather than the Radix root — the root is not a DOM
-                        node, so `aria-describedby` would be dropped there.
-                      */}
-                        <SelectTrigger
-                          className="w-full sm:w-[150px]"
-                          aria-label={`Update attendance for ${row.displayName}`}
-                          {...gate.controlProps()}
-                        >
-                          <SelectValue placeholder="Set status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="PRESENT">Present</SelectItem>
-                          <SelectItem value="LATE">Late</SelectItem>
-                          <SelectItem value="EXCUSED">Excused</SelectItem>
-                          <SelectItem value="ABSENT">Absent</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Can>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
     </section>
   );
 }
+
+/** A status chip's text colour, by the badge kind that states it. */
+const STATUS_TEXT: Partial<Record<BadgeKind, string>> = {
+  success: "text-success",
+  warning: "text-warning",
+  destructive: "text-destructive-text",
+};

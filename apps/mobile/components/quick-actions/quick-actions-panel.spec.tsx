@@ -73,7 +73,7 @@ describe("the panel at rest", () => {
     const labels = pressables(tree.root)
       .map((node) => node.props.accessibilityLabel)
       .filter(Boolean);
-    expect(labels).toEqual(["Message", "Invite", "Log hours"]);
+    expect(labels).toEqual(["New message", "Invite", "Log hours"]);
 
     act(() => byLabel(tree.root, "Invite")!.props.onPress());
     expect(props.onRun).toHaveBeenCalledWith("invite");
@@ -114,7 +114,7 @@ describe("the panel at rest", () => {
 
   it("starts editing on a hold, on an action or between them", () => {
     const tree = render(["message", "invite"]);
-    act(() => byLabel(tree.root, "Message")!.props.onLongPress());
+    act(() => byLabel(tree.root, "New message")!.props.onLongPress());
     expect(props.onEditingChange).toHaveBeenCalledWith(true);
     expect(haptic).toHaveBeenCalledTimes(1);
 
@@ -127,7 +127,7 @@ describe("the panel at rest", () => {
 
   it("offers editing to a screen reader as a named action", () => {
     const tree = render(["message"]);
-    const button = byLabel(tree.root, "Message")!;
+    const button = byLabel(tree.root, "New message")!;
     expect(button.props.accessibilityActions).toEqual([
       { name: "longpress", label: "Edit quick actions" },
     ]);
@@ -141,7 +141,7 @@ describe("the panel at rest", () => {
 
   it("runs actions but offers no editing while the role loads", () => {
     const tree = render(["message"], false, OFFICER, false);
-    const button = byLabel(tree.root, "Message")!;
+    const button = byLabel(tree.root, "New message")!;
     expect(button.props.accessibilityActions).toEqual([]);
     expect(button.props.onLongPress).toBeUndefined();
     const surface = pressables(tree.root).find(
@@ -165,7 +165,7 @@ describe("the panel at rest", () => {
 describe("editing in place", () => {
   it("puts a remove control on each placed action", () => {
     const tree = render(["message", "invite"], true);
-    act(() => byLabel(tree.root, "Remove Message")!.props.onPress());
+    act(() => byLabel(tree.root, "Remove New message")!.props.onPress());
     expect(props.onSave).toHaveBeenCalledWith(["invite"]);
   });
 
@@ -202,7 +202,7 @@ describe("editing in place", () => {
       (placed(label).props.accessibilityActions as { name: string }[]).map(
         (action) => action.name,
       );
-    expect(names("Message")).toEqual(["remove", "moveLater"]);
+    expect(names("New message")).toEqual(["remove", "moveLater"]);
     expect(names("Invite")).toEqual(["remove", "moveEarlier", "moveLater"]);
     expect(names("Log hours")).toEqual(["remove", "moveEarlier"]);
 
@@ -308,11 +308,11 @@ describe("editing in place", () => {
 });
 
 /**
- * Ask Frapp left the panel for a bar above the tab bar (#4702, Paul
+ * Frapp Intelligence left the panel for a bar above the tab bar (#4702, Paul
  * 2026-11-13: "not only when you open the plus menu"), so the panel is the
  * actions and nothing else.
  */
-describe("Ask Frapp", () => {
+describe("Frapp Intelligence", () => {
   it("has no row in the panel", () => {
     let tree!: ReactTestRenderer;
     act(() => {
@@ -333,7 +333,10 @@ describe("Ask Frapp", () => {
       tree.root.findAll(
         (node) =>
           typeof node.props.accessibilityLabel === "string" &&
-          node.props.accessibilityLabel.includes("Ask"),
+          // Every name the entry has had: a row put back would carry one.
+          /Ask|Frapp Intelligence|What do you need/.test(
+            node.props.accessibilityLabel,
+          ),
       ),
     ).toHaveLength(0);
   });

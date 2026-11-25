@@ -6,12 +6,19 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  RUSH_BID_STATES,
+  RUSH_CLOSED_REASONS,
+  type RushBidState,
+  type RushClosedReason,
+} from '@repo/validation';
 import type {
   RushBidStatus,
   RushCandidate,
   RushCandidateView,
 } from '#domain/entities/rush-candidate.entity';
 import type { AssertNever } from './drift-guard';
+import type { RushNameMatch } from '../../application/services/rush.service';
 
 export class CreateRushCandidateDto {
   @ApiProperty({ maxLength: 200 })
@@ -79,11 +86,34 @@ export class CreateRushCandidateResponseDto implements RushCandidate {
   @ApiProperty()
   stage: string;
 
-  @ApiProperty({ enum: ['none', 'extended'] })
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
+
+  @ApiProperty({
+    enum: ['none', 'extended'],
+    description:
+      'The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.',
+  })
   bid_status: RushBidStatus;
 
-  @ApiProperty({ format: 'uuid' })
-  created_by: string;
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description: 'The bid’s full state (#5973).',
+  })
+  bid_state: RushBidState;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      "Who added the candidate; null for one the PNM's own interest form created (#5977).",
+  })
+  created_by: string | null;
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;
@@ -114,17 +144,43 @@ export class RushCandidateViewDto implements RushCandidateView {
   @ApiProperty()
   stage: string;
 
-  @ApiProperty({ enum: ['none', 'extended'] })
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
+
+  @ApiProperty({
+    enum: ['none', 'extended'],
+    description:
+      'The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.',
+  })
   bid_status: RushBidStatus;
 
-  @ApiProperty({ format: 'uuid' })
-  created_by: string;
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description: 'The bid’s full state (#5973).',
+  })
+  bid_state: RushBidState;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      "Who added the candidate; null for one the PNM's own interest form created (#5977).",
+  })
+  created_by: string | null;
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;
 
-  @ApiProperty({ description: 'Ballot count. Voter names are never returned.' })
-  vote_count: number;
+  @ApiPropertyOptional({
+    description:
+      'Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0.',
+  })
+  vote_count?: number;
 
   @ApiProperty({
     description: 'Whether the authenticated caller has already voted.',
@@ -154,3 +210,25 @@ export type RushCandidateViewDtoMissingFields = AssertNever<
 export type RushCandidateViewDtoExtraFields = AssertNever<
   Exclude<keyof RushCandidateViewDto, keyof RushCandidateView>
 >;
+
+export class RushNameMatchDto implements RushNameMatch {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty()
+  display_name: string;
+
+  @ApiProperty({ description: 'The stage key.' })
+  stage: string;
+
+  @ApiProperty({
+    description: "The stage's name in this chapter, to tell two matches apart.",
+  })
+  stage_label: string;
+
+  @ApiProperty({ format: 'date-time' })
+  created_at: string;
+}
+
+/** `GET /v1/rush/candidates/matches?name=`: the matches, for a picker. */
+export class LookupRushNameMatchesQueryDto extends LookupRushCandidateQueryDto {}

@@ -56,17 +56,17 @@ function Entry({ onResult }: { onResult: (ok: boolean) => void }) {
 }
 
 /**
- * Meet Frapp AI at an AI entry point (#4790): a member who chose Not now
+ * Meet Frapp Intelligence at an AI entry point (#4790): a member who chose Not now
  * reaches for Ask and is offered the same screen once more.
  */
-describe("Meet Frapp AI at an AI entry point", () => {
+describe("Meet Frapp Intelligence at an AI entry point", () => {
   beforeEach(() => {
     state.turnOn.mockReset();
     state.notNow.mockReset();
     state.readError = null;
   });
 
-  it("goes straight through for a member who has Frapp AI on", async () => {
+  it("goes straight through for a member who has Frapp Intelligence on", async () => {
     const user = userEvent.setup();
     state.consent = consent({ answer: "yes" });
     const onResult = vi.fn();
@@ -96,10 +96,10 @@ describe("Meet Frapp AI at an AI entry point", () => {
     render(<Entry onResult={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Ask" }));
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Meet Frapp AI");
+    expect(dialog).toHaveTextContent("Meet Frapp Intelligence");
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     expect(dialog).toHaveTextContent(
-      "Frapp AI works with Anthropic and Google. Continuing turns it on for your account.",
+      "Frapp Intelligence works with Anthropic and Google. Continuing confirms you're 18 or older and turns it on for your account.",
     );
     expect(
       screen.getByRole("link", { name: "Privacy policy" }),

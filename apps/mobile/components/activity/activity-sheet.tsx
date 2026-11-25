@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
@@ -8,7 +9,14 @@ import {
 } from "@repo/chat-core/activity-cards";
 import { readEventPayload, readHoursPayload } from "@repo/chat-core/cards";
 import type { ChatMessage } from "@repo/chat-core/types";
-import { useReviewServiceEntry, type ActivityRow } from "@repo/hooks";
+import {
+  approvePointsPreview,
+  useGetServiceProofUrl,
+  useReviewServiceEntry,
+  useServiceEntry,
+  useServicePointsRate,
+  type ActivityRow,
+} from "@repo/hooks";
 import {
   MESSAGE_REMINDER_PRESETS,
   messageReminderPresetTime,
@@ -54,7 +62,9 @@ type RowOf<K extends ActivityRow["kind"]> = Extract<ActivityRow, { kind: K }>;
 /**
  * What a sign-up link's sheet can do. The screen owns these, not the sheet:
  * Done, Hide and Remove take the row off the list at once, which closes the
- * sheet, and the "Undo" bar that follows has to outlive it.
+ * sheet, and the "Undo" bar that follows has to outlive it
+ * (`lib/activity/use-link-actions.ts`). A channel's Links list opens these
+ * sheets since #5779 (`components/chat/message-list-sheet.tsx`).
  */
 export interface LinkSheetActions {
   canRemove: boolean;
@@ -96,7 +106,8 @@ function frameFor(message: ChatMessage, viewerId: string): ChatCardFrameProps {
 }
 
 /**
- * The sheet an Activity row opens: the record, drawn with the card chat draws
+ * The sheet an Activity row opens, and a channel's sign-up link (#5779): the
+ * record, drawn with the card chat draws
  * for it, so a member votes or checks in here with the controls they already
  * know from chat (#3897). Web's twin is
  * `apps/web/components/activity/activity-panel.tsx`. Every task row pushes
@@ -108,11 +119,14 @@ function frameFor(message: ChatMessage, viewerId: string): ChatCardFrameProps {
  * live state by id and its buttons call the same routes they call in chat.
  * Two things are added under them, because the cards do not carry them:
  * - a poll gets "Open in chat", which opens the channel the poll lives in;
- * - a pending service entry gets Approve and Reject. Chat's hours card is a
- *   read-only record, and the phone has no other screen that reviews hours.
+ * - a pending service entry gets Approve and Reject, with what Approve will
+ *   award and the member's proof. Chat's hours card is a read-only record,
+ *   and Activity is the one place hours are reviewed on both apps (#5950).
  *
  * A sign-up link has no chat card: its sheet is `LinkSheet` below, the link
- * and the screen's own actions for it (`LinkSheetActions`).
+ * and the screen's own actions for it (`LinkSheetActions`). A screen that
+ * opens no link rows (or no reminders) passes no actions for them, and the
+ * sheet draws nothing for such a row.
  *
  * A tall sheet, as `spec/ui/mobile/patterns.md` § Bottom sheets gives a sheet
  * that holds a whole record.
@@ -141,8 +155,10 @@ export function ActivitySheet({
   rowActionState?: ActivityRowActionState;
   onClosed: () => void;
   onActed: () => void;
-  linkActions: LinkSheetActions;
-  reminderActions: ReminderSheetActions;
+  /** For a sign-up link row; a screen that opens none leaves it out. */
+  linkActions?: LinkSheetActions;
+  /** For a message reminder row; a screen that opens none leaves it out. */
+  reminderActions?: ReminderSheetActions;
 }) {
   const sheet = useRef<BottomSheetModal>(null);
   const closeSheet = useSheetClose(sheet);
@@ -215,8 +231,8 @@ function SheetCard({
   onActed: () => void;
   /** Closes the sheet before leaving this screen for another. */
   onNavigate: () => void;
-  linkActions: LinkSheetActions;
-  reminderActions: ReminderSheetActions;
+  linkActions?: LinkSheetActions;
+  reminderActions?: ReminderSheetActions;
 }) {
   switch (row.kind) {
     case "task":
@@ -242,17 +258,17 @@ function SheetCard({
         />
       );
     case "link":
-      return (
+      return linkActions ? (
         <LinkSheet row={row} actions={linkActions} onNavigate={onNavigate} />
-      );
+      ) : null;
     case "reminder":
-      return (
+      return reminderActions ? (
         <ReminderSheet
           row={row}
           actions={reminderActions}
           onNavigate={onNavigate}
         />
-      );
+      ) : null;
     case "card":
       // A sign-up or form row opens its message in chat, never this sheet.
       return null;
@@ -385,14 +401,14 @@ function LinkSheet({
         />
         <CardButton
           label="Done"
-          accessibilityHint="You filled it in. Takes it off your Activity."
+          accessibilityHint="You filled it in. Takes it off your list."
           onPress={then(actions.done)}
         />
       </CardActions>
       <CardActions>
         <CardButton
           label="Hide"
-          accessibilityHint="Not chapter business. Takes it off your Activity."
+          accessibilityHint="Not chapter business. Takes it off your list."
           onPress={then(actions.hide)}
         />
         <CardButton
@@ -409,7 +425,7 @@ function LinkSheet({
         <CardActions>
           <CardButton
             label="Remove for everyone"
-            accessibilityHint="Takes it off every member's Activity. The message stays in chat."
+            accessibilityHint="Takes it off every member's list. The message stays in chat."
             onPress={then(actions.remove)}
           />
         </CardActions>
@@ -555,6 +571,33 @@ function HoursSheet({
   const message = useMemo(() => activityHoursMessage(row.entry), [row.entry]);
   const payload = readHoursPayload(message);
   const reviewEntry = useReviewServiceEntry();
+  // What an approver decides by (#5950, as web's review shows it): what
+  // Approve will award at the chapter's rate, and the member's proof. The
+  // rate has its own `service:approve` route; unknown leaves the line off
+  // rather than guessing. The proof's path is on the entry, not the row.
+  const pointsRate = useServicePointsRate();
+  const pointsPreview = approvePointsPreview(
+    row.entry.duration_minutes,
+    pointsRate.data?.minutes_per_point,
+  );
+  const liveEntry = useServiceEntry(row.entry.id).data as
+    { proof_path?: string | null } | undefined;
+  const getProofUrl = useGetServiceProofUrl();
+  const [proofFailure, setProofFailure] = useState<string | null>(null);
+  const openProof = async () => {
+    setProofFailure(null);
+    try {
+      const data = await getProofUrl.mutateAsync(row.entry.id);
+      const url =
+        data && typeof data === "object" && "url" in data
+          ? (data as { url?: string }).url
+          : null;
+      if (!url) throw new Error("no url");
+      await Linking.openURL(url);
+    } catch {
+      setProofFailure("Couldn't open the proof. Try again in a moment.");
+    }
+  };
   // A review has no outbox, so it is held while a write would be lost, as
   // the cards hold theirs.
   const { writeBlockedReason } = useConnection();
@@ -600,6 +643,20 @@ function HoursSheet({
       {payload ? (
         <HoursCard {...frameFor(message, viewerId)} payload={payload} />
       ) : null}
+      {pointsPreview && !shownReview ? <CardNote text={pointsPreview} /> : null}
+      {/* A read, so it stays open while writes are held. */}
+      {liveEntry?.proof_path ? (
+        <CardActions>
+          <CardButton
+            label="View proof"
+            variant="link"
+            disabled={getProofUrl.isPending}
+            accessibilityHint="Opens the photo or file the member attached."
+            onPress={() => void openProof()}
+          />
+        </CardActions>
+      ) : null}
+      {proofFailure ? <CardNote tone="error" text={proofFailure} /> : null}
       {shownReview ? (
         <CardNote tone="success" text={REVIEWED_NOTE[shownReview]} />
       ) : (

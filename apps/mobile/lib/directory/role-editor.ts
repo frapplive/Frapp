@@ -5,15 +5,11 @@
  * 2026-11-07).
  *
  * Sized for a real chapter, not a seed: Paul's has 113 roles after its Discord
- * import, so the list is searched, and its order is fixed when the editor
- * opens (held roles first) so a row never jumps out from under a finger.
+ * import, so the list is searched. Its rows and their order come from
+ * `memberAssignmentSections` (`@repo/hooks`), shared with web.
  */
 import type { ChapterRole } from "@repo/hooks/chapter-roles";
-import {
-  memberAccessRoleIds,
-  removesMemberAccess,
-  rolesAfterSave,
-} from "@repo/validation";
+import { rolesAfterSave } from "@repo/validation";
 
 /**
  * A role as the editor lists it: `GET /v1/roles` read once, by
@@ -24,78 +20,24 @@ import {
 export type RoleOption = ChapterRole;
 
 /**
- * The editor's row order, taken once when it opens: the roles the member holds,
- * then the rest, each by name. Toggling never re-sorts, so the row under a
- * finger stays put.
- */
-export function orderRoleOptions(
-  options: readonly RoleOption[],
-  heldIds: readonly string[],
-): RoleOption[] {
-  const held = new Set(heldIds);
-  const byName = (a: RoleOption, b: RoleOption) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-  // The Everyone role is no row (#4191).
-  const listed = options.filter((o) => !o.everyone);
-  return [
-    ...listed.filter((o) => held.has(o.id)).sort(byName),
-    ...listed.filter((o) => !held.has(o.id)).sort(byName),
-  ];
-}
-
-export function filterRoleOptions(
-  options: readonly RoleOption[],
-  search: string,
-): readonly RoleOption[] {
-  const needle = search.trim().toLowerCase();
-  if (needle.length === 0) return options;
-  return options.filter((o) => o.name.toLowerCase().includes(needle));
-}
-
-/**
- * The member's role ids with `roleId` turned on or off. Ids the list doesn't
- * know are kept: the API exempts ids a member already holds, and dropping
- * them here would be a change the officer never made. A role delete takes its
- * id off its holders (#4547), so one only lingers here from a stale read.
+ * The member's role ids with `roleId` turned on or off, settled as the API
+ * settles them (`rolesAfterSave`): the Everyone role stays, and a base role
+ * (New Member, Actives, Alumni) turned on takes the others away. Ids the list
+ * doesn't know are kept: the API exempts ids a member already holds, and
+ * dropping them here would be a change the officer never made. A role delete
+ * takes its id off its holders (#4547), so one only lingers from a stale read.
  */
 export function toggleRole(
   heldIds: readonly string[],
   roleId: string,
+  options: readonly RoleOption[] = [],
 ): string[] {
   const unique = [...new Set(heldIds)];
-  return unique.includes(roleId)
+  const toggled = unique.includes(roleId)
     ? unique.filter((id) => id !== roleId)
     : [...unique, roleId];
+  return rolesAfterSave(toggled, unique, options);
 }
-
-/**
- * True when this change is the one that takes away chat, the roster and
- * events. A member who already lacked base access is not warned again on
- * every tap. The rule is web's too (`removesMemberAccess` in
- * `@repo/validation`), asked of the roles the save ends with once the API
- * settles the Everyone role (`rolesAfterSave`, #4191): a member left with no
- * other role giving access keeps or gets Everyone.
- */
-export function removesBaseAccess(
-  before: readonly string[],
-  after: readonly string[],
-  options: readonly RoleOption[],
-): boolean {
-  const settled = rolesAfterSave(after, before, options);
-  return removesMemberAccess(before, settled, memberAccessRoleIds(options));
-}
-
-export const ROLES_LOCKED_CAPTION = "Changes with Transfer presidency";
-
-export function removeBaseAccessTitle(name: string): string {
-  return `Take away ${name}'s access?`;
-}
-
-export function removeBaseAccessBody(name: string): string {
-  return `With none of these roles, ${name} can't open chat, the member list or events.`;
-}
-
-export const ROLES_SAVE_FAILED_TITLE = "Couldn't save roles";
 
 /**
  * Why a save failed, by the API's answer: a 400 is a role deleted since the
@@ -105,12 +47,20 @@ export const ROLES_SAVE_FAILED_TITLE = "Couldn't save roles";
  * roles, such as a role deleted mid-save (#4830). None is fixed by trying
  * again from the same list. `name` is set when the officer
  * has already moved on to someone else, so the alert says whose change it was.
+ *
+ * `refusal` is what the refusal itself says, in the chapter's words
+ * (`serverCopyOf`), when the API named its reason: a rank rule it refused
+ * by (#5730) says which, rather than the bare 403's guess.
  */
 export function rolesSaveFailedBody(
   status: number | undefined,
   name: string | null = null,
+  refusal: string | null = null,
 ): string {
   const change = name ? `Your change to ${name}'s roles` : "The change";
+  if (status === 403 && refusal) {
+    return `${change} was put back. ${refusal}`;
+  }
   if (status === 400) {
     return `One of those roles was just deleted. ${change} was put back and the list refreshed.`;
   }

@@ -1,9 +1,13 @@
-import { forwardRef, type ReactNode } from "react";
+import { Fragment, forwardRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import {
+  BottomSheetModal,
+  BottomSheetTextInput,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SignetTokens } from "@repo/theme/signet";
-import { typeRole, useFrappTheme } from "@/lib/theme";
+import { fieldTypeRole, typeRole, useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { CheckGlyph } from "@/components/control-glyphs";
 import {
@@ -29,6 +33,12 @@ export interface SheetOption {
    * in the label role, so the two lines read as a title and its detail.
    */
   detail?: ReactNode;
+  /**
+   * A heading drawn above this row, starting a section of the list: the
+   * task form's From splits Tiers, Roles and Groups (#5473), as a select
+   * splits two kinds (`components.md` § select).
+   */
+  heading?: string;
   /** What a screen reader hears for the row; the label when absent. */
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -54,12 +64,30 @@ export const TWO_LINE_ROW_WEIGHT = 4 / 3;
 /** Whether a list of these rows opens sized to them rather than scrolling. */
 export function fitsContent(options: readonly SheetOption[]): boolean {
   const height = options.reduce(
-    (sum, option) => sum + (option.detail ? TWO_LINE_ROW_WEIGHT : 1),
+    (sum, option) =>
+      sum +
+      (option.detail ? TWO_LINE_ROW_WEIGHT : 1) +
+      (option.heading ? 1 : 0),
     0,
   );
   return height <= MAX_ROWS_SIZED_TO_CONTENT + 1e-9;
 }
 const LONG_LIST_SNAP_POINTS = ["70%"];
+
+/**
+ * The sheet props for a list that {@link fitsContent} sized: dynamic sizing
+ * for one that fits, else the fixed {@link LONG_LIST_SNAP_POINTS} detent with
+ * a scroller inside. Shared by every pick-one sheet (the event form's Type
+ * sheet too), so they all stop growing at the same height.
+ */
+export function pickSheetSizing(fits: boolean) {
+  return fits
+    ? ({ enableDynamicSizing: true } as const)
+    : ({
+        enableDynamicSizing: false,
+        snapPoints: LONG_LIST_SNAP_POINTS,
+      } as const);
+}
 
 /**
  * One pick from a short list, in a sheet sized to it (#5278): a titled list
@@ -77,10 +105,28 @@ export const OptionSheet = forwardRef<
     selected: string | null;
     /** The pick. The sheet closes itself after it, so the host doesn't dismiss. */
     onSelect: (value: string | null) => void;
+    /**
+     * Several picks instead of one (a prospect's tags, #5924): a check on
+     * each value listed here, and a tap that hands `onSelect` the row to put
+     * on or take off while the sheet stays up, as Gmail's label picker does.
+     * `selected` is ignored.
+     */
+    checked?: readonly string[];
     /** The sheet closed, however it closed. */
     onDismiss?: () => void;
+    /**
+     * A search field under the title once the list runs past
+     * {@link MAX_ROWS_SIZED_TO_CONTENT} rows (rulebook § 9: "search appears
+     * past 8 options"), named by this placeholder: a prospect's owner picked
+     * from the whole roster (#5934). It matches the rows' labels, ignoring
+     * case, and keeps any row whose value is `null` (the "none" choice).
+     */
+    searchPlaceholder?: string;
   }
->(function OptionSheet({ title, options, selected, onSelect, onDismiss }, ref) {
+>(function OptionSheet(
+  { title, options, selected, onSelect, onDismiss, checked, searchPlaceholder },
+  ref,
+) {
   const closeSheet = useSheetClose(ref);
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
@@ -89,23 +135,35 @@ export const OptionSheet = forwardRef<
   const backgroundStyle = useSheetBackgroundStyle();
   const fits = fitsContent(options);
   const bottomPad = { paddingBottom: insets.bottom + tokens.spacing.md };
+  const [query, setQuery] = useState("");
+  const searchable = searchPlaceholder !== undefined && !fits;
+  const needle = searchable ? query.trim().toLowerCase() : "";
+  const shown = needle
+    ? options.filter(
+        (option) =>
+          option.value === null || option.label.toLowerCase().includes(needle),
+      )
+    : options;
 
-  const rows = options.map((option, index) => {
-    const on = option.value === selected;
-    return (
+  const many = checked !== undefined;
+  const rows = shown.map((option, index) => {
+    const on = many
+      ? option.value !== null && checked.includes(option.value)
+      : option.value === selected;
+    const row = (
       <Pressable
         key={option.value ?? "any"}
-        accessibilityRole="radio"
+        accessibilityRole={many ? "checkbox" : "radio"}
         accessibilityState={{ checked: on }}
         accessibilityLabel={option.accessibilityLabel ?? option.label}
         accessibilityHint={option.accessibilityHint}
         onPress={() => {
           onSelect(option.value);
-          closeSheet();
+          if (!many) closeSheet();
         }}
         style={({ pressed }) => [
           styles.row,
-          index === options.length - 1 ? styles.rowLast : null,
+          index === shown.length - 1 ? styles.rowLast : null,
           pressed ? styles.rowPressed : null,
         ]}
       >
@@ -128,24 +186,36 @@ export const OptionSheet = forwardRef<
         {on ? <CheckGlyph color={accent} size={20} /> : null}
       </Pressable>
     );
+    return option.heading ? (
+      <Fragment key={option.value ?? "any"}>
+        <Text accessibilityRole="header" style={styles.heading}>
+          {option.heading}
+        </Text>
+        {row}
+      </Fragment>
+    ) : (
+      row
+    );
   });
 
   return (
     <BottomSheetModal
       ref={ref}
       stackBehavior={SHEET_STACK_BEHAVIOR}
-      {...(fits
-        ? { enableDynamicSizing: true }
-        : { enableDynamicSizing: false, snapPoints: LONG_LIST_SNAP_POINTS })}
+      {...pickSheetSizing(fits)}
       backgroundStyle={backgroundStyle}
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
-      onDismiss={onDismiss}
+      keyboardBehavior={searchable ? "interactive" : undefined}
+      onDismiss={() => {
+        setQuery("");
+        onDismiss?.();
+      }}
     >
       <SheetBackToClose onClose={closeSheet} />
       {fits ? (
         <BottomSheetView
-          accessibilityRole="radiogroup"
+          accessibilityRole={many ? undefined : "radiogroup"}
           onAccessibilityEscape={closeSheet}
           style={[styles.body, bottomPad]}
         >
@@ -154,12 +224,32 @@ export const OptionSheet = forwardRef<
         </BottomSheetView>
       ) : (
         <BottomSheetScrollView
-          accessibilityRole="radiogroup"
+          accessibilityRole={many ? undefined : "radiogroup"}
           onAccessibilityEscape={closeSheet}
           contentContainerStyle={[styles.body, bottomPad]}
+          keyboardShouldPersistTaps="handled"
         >
           <SheetHeader title={title} />
+          {searchable ? (
+            <BottomSheetTextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={tokens.color.text.muted}
+              accessibilityLabel={searchPlaceholder}
+              autoCorrect={false}
+              returnKeyType="search"
+              style={styles.search}
+            />
+          ) : null}
           {rows}
+          {needle && !shown.some((option) => option.value !== null) ? (
+            // A search that matched nothing is one line where the rows were
+            // (P1.3).
+            <Text
+              style={styles.miss}
+            >{`No matches for "${query.trim()}".`}</Text>
+          ) : null}
         </BottomSheetScrollView>
       )}
     </BottomSheetModal>
@@ -179,6 +269,29 @@ function createStyles(tokens: SignetTokens) {
       paddingVertical: tokens.spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: tokens.color.border.hairline,
+    },
+    search: {
+      borderRadius: tokens.radius.control,
+      borderWidth: 1,
+      borderColor: tokens.color.border.control,
+      backgroundColor: tokens.color.surface.surface1,
+      paddingHorizontal: tokens.spacing.md,
+      minHeight: tokens.touch.minimum,
+      marginBottom: tokens.spacing.sm,
+      // Single-line: no lineHeight, or iOS sits the text low.
+      ...fieldTypeRole(tokens.typography.role.body),
+      color: tokens.color.text.foreground,
+    },
+    miss: {
+      ...typeRole(tokens.typography.role.body),
+      color: tokens.color.text.mutedForeground,
+      paddingVertical: tokens.spacing.sm,
+    },
+    heading: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.text.mutedForeground,
+      paddingTop: tokens.spacing.md,
+      paddingBottom: tokens.spacing.xs,
     },
     rowLast: {
       borderBottomWidth: 0,

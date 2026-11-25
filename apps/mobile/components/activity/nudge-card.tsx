@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  type GestureResponderEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { ActivityNudge } from "@repo/hooks";
 import type { SignetTokens } from "@repo/theme/signet";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { isMemberNudgePraise } from "@repo/validation";
+import { openItemMenu, pressAt } from "@/components/item-actions-menu";
 import { LEAD_TILE_GLYPH, LeadTile } from "@/components/lead-tile";
 import { NavGlyph } from "@/components/nav-glyph";
 import { pageSurfaces } from "@/lib/surfaces";
@@ -58,8 +65,8 @@ function kindLook(
  *   it on Frapp's gold rule.
  * - **The tray.** Up to three chips, each in its kind's colour. Pressing one
  *   brings that item into the card in place; nothing opens over the page.
- * - **No filled button.** The week card's Next holds the screen's one filled
- *   action, so the card's buttons are outlined.
+ * - **No filled button.** The card's buttons are outlined, as every action on
+ *   Activity is since the week card's filled Next went (#5779).
  * - **Waving off.** The close mark waves off what the card shows, and it is
  *   not raised again. "More" holds turning the card off.
  */
@@ -75,7 +82,7 @@ export function NudgeCard({
 }: {
   card: ActivityNudge;
   tray: readonly ActivityNudge[];
-  /** Ask Frapp is on for this member. Off: no "Ask about this". */
+  /** Frapp Intelligence is on for this member. Off: no "Ask about this". */
   canAsk: boolean;
   onOpen: (item: ActivityNudge) => void;
   onAsk: (item: ActivityNudge) => void;
@@ -102,12 +109,22 @@ export function NudgeCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, seen]);
 
-  const more = () =>
-    Alert.alert("This card", undefined, [
-      { text: "Hide this one", onPress: () => onDismiss(shown) },
-      { text: "Turn these off", style: "destructive", onPress: onTurnOff },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const more = (event?: GestureResponderEvent) =>
+    openItemMenu(
+      {
+        title: "This card",
+        actions: [
+          { key: "hide", label: "Hide this one", run: () => onDismiss(shown) },
+          {
+            key: "turn-off",
+            label: "Turn these off",
+            destructive: true,
+            run: onTurnOff,
+          },
+        ],
+      },
+      pressAt(event),
+    );
 
   return (
     <View style={styles.card} testID="activity-nudge-card">

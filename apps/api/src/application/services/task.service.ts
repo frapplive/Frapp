@@ -10,6 +10,7 @@ import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface'
 import type {
   ITaskRepository,
   TaskListCursor,
+  TaskListFilter,
 } from '#domain/repositories/task.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
@@ -30,12 +31,15 @@ import { TaskStatus } from '#domain/entities/task.entity';
 import { taskDueInstant } from '#domain/utils/member-nudge';
 import {
   normalizeProofLink,
+  proofLinkOpens,
   TASK_COMPLETION_NOTE_MAX,
   TASK_PHOTOS_MAX,
+  TASK_PROOF_LINK_INVALID_MESSAGE,
   TASK_PROOF_LINK_REQUIRED_MESSAGE,
   TASK_PROOF_REQUIRED_CODE,
   TASK_PROOF_REQUIRED_MESSAGE,
   TASK_RESUBMIT_NEEDS_CHANGE_CODE,
+  TASK_REPEAT_NEEDS_DUE_DATE,
   TASK_RESUBMIT_NEEDS_CHANGE_MESSAGE,
   TASK_SEND_BACK_REASON_MAX,
   TASK_SUBTASKS_MAX,
@@ -46,8 +50,16 @@ import {
   parseTaskFollower,
   type TaskAudience,
   type TaskGroupAudience,
+  type FrappLink,
   type TaskProofKind,
+  readFrappLinks,
+  sameFrappLinks,
 } from '@repo/validation';
+import {
+  normalizeFrappLinks,
+  type FrappLinkInput,
+} from './frapp-link/frapp-link-input';
+import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
 import type { IOpenTaskRepository } from '#domain/repositories/open-task.repository.interface';
 import {
@@ -171,6 +183,38 @@ export interface TaskListOptions {
   limit?: number;
 }
 
+/**
+ * {@link TaskListOptions} for {@link TaskService.listRows}, which can also read
+ * a member's unconfirmed tasks together with what they finished since
+ * (`TaskListFilter.unconfirmedOrCompletedSince`, #5746).
+ */
+export type TaskRowListOptions = TaskListOptions &
+  Pick<TaskListFilter, 'unconfirmedOrCompletedSince'> & {
+    /**
+     * `true`: also count every matching row past `limit`, in the same request
+     * (`total`). Otherwise `total` is null unless the read is uncapped.
+     */
+    withTotal?: boolean;
+  };
+
+/**
+ * Whether a task is done, for the minutes' checkbox (`doneMarks`), and who
+ * it went to, for an officer's row (#6051).
+ */
+export interface TaskDoneMark {
+  done: boolean;
+  /** A task for everyone: how many of its copies are done. */
+  group: { done: number; total: number } | null;
+  who: {
+    /** A task for everyone's audience; null for a task for one member. */
+    audience: TaskGroupSummary['audience'] | null;
+    /** The role's, group's or tier's name, when it went to one. */
+    audience_name: string | null;
+    /** The member, or the named people of a task for several. */
+    assignee_ids: string[];
+  };
+}
+
 /** A copy's state with its display status, as a group row reads it (#5492). */
 export type TaskGroupCopyView = TaskGroupCopyState & {
   stored_status: TaskStatus;
@@ -227,8 +271,11 @@ export interface CreateTaskInput {
    * `role:<id>` or `group:<id>`; the creator must be in it.
    */
   followed_by?: string | null;
+  /** What is attached (Frapp links), as sent; checked before anything is written. */
+  attachments?: FrappLinkInput[];
   created_by: string;
-  due_date: string;
+  /** The day it is due; omitted or null for a task with no due date (#5761). */
+  due_date?: string | null;
   /** The moment it is due, when it has a time of day. */
   due_at?: string | null;
   /** Subtask titles, in order (#4003). */
@@ -280,6 +327,8 @@ export interface UpdateTaskInput {
    * A new one must name one the editor is in.
    */
   followed_by?: string | null;
+  /** What is attached, whole: replaces the list; `[]` clears it. */
+  attachments?: FrappLinkInput[];
 }
 
 /** Mark done's proof and reply (#4635). Only read with `COMPLETED`. */
@@ -325,7 +374,23 @@ export class TaskService {
     private readonly audiences: TaskAudienceService,
     @Inject(OPEN_TASK_REPOSITORY)
     private readonly openTaskRepo: IOpenTaskRepository,
+    private readonly links: FrappLinkChecker,
   ) {}
+
+  /**
+   * A write's attachments, normalized and each newly added record checked as
+   * the chapter's (`FrappLinkChecker`); undefined when the write sends none.
+   * `stored` is what the task already holds, which passes unchecked.
+   */
+  async checkedAttachments(
+    chapterId: string,
+    input: readonly FrappLinkInput[] | undefined,
+    stored: readonly FrappLink[] = [],
+  ): Promise<FrappLink[] | undefined> {
+    const links = normalizeFrappLinks(input, 'task', stored);
+    if (!links) return undefined;
+    return this.links.checked(chapterId, links, stored);
+  }
 
   /**
    * A signed upload URL for a task photo (#4565), under the chapter's
@@ -524,23 +589,27 @@ export class TaskService {
    * Whether each of these tasks is done, by task id, in two reads whatever
    * the count: a task for everyone is done once every copy is (#4295 step 3),
    * and comes with its counts. Tasks that no longer exist are left out. For
-   * the checkboxes on posted minutes, which show nothing else of the task.
+   * the checkboxes on posted minutes; `who` (who it went to) is for the
+   * callers that may show it, an officer who manages tasks (#6051).
    */
   async doneMarks(
     chapterId: string,
     ids: string[],
-  ): Promise<
-    Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >
-  > {
+  ): Promise<Map<string, TaskDoneMark>> {
     const tasks = await this.taskRepo.findByIds(chapterId, [...new Set(ids)]);
-    const groups = await this.groupSummaries(chapterId, tasks);
-    const marks = new Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >();
+    const { summaries: groups, copies } = await this.readGroups(
+      chapterId,
+      tasks,
+    );
+    // Each group's people, read once however many of its copies are asked.
+    const assigneesOf = new Map<string, string[]>();
+    for (const copy of copies) {
+      if (!copy.group_id) continue;
+      const list = assigneesOf.get(copy.group_id) ?? [];
+      list.push(copy.assignee_id);
+      assigneesOf.set(copy.group_id, list);
+    }
+    const marks = new Map<string, TaskDoneMark>();
     for (const task of tasks) {
       const summary = task.group_id ? groups.get(task.group_id) : undefined;
       const group = summary
@@ -551,6 +620,22 @@ export class TaskService {
           ? group.total > 0 && group.done >= group.total
           : task.status === TaskStatus.COMPLETED,
         group,
+        who: summary
+          ? {
+              audience: summary.audience,
+              audience_name: summary.target_name,
+              // Named people only: a role, a group or everyone is said by
+              // its name, however many copies it has.
+              assignee_ids:
+                summary.audience === 'people'
+                  ? (assigneesOf.get(summary.id) ?? [])
+                  : [],
+            }
+          : {
+              audience: null,
+              audience_name: null,
+              assignee_ids: [task.assignee_id],
+            },
       });
     }
     return marks;
@@ -642,17 +727,34 @@ export class TaskService {
     chapterId: string,
     tasks: Task[],
   ): Promise<Map<string, TaskGroupSummary>> {
+    return (await this.readGroups(chapterId, tasks)).summaries;
+  }
+
+  /**
+   * {@link groupSummaries}, with the copies it counted, for a caller that
+   * also names a group's people (`doneMarks`, #6051).
+   */
+  private async readGroups(
+    chapterId: string,
+    tasks: Task[],
+  ): Promise<{
+    summaries: Map<string, TaskGroupSummary>;
+    copies: TaskGroupCopyState[];
+  }> {
     const ids = [
       ...new Set(
         tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
       ),
     ];
-    if (ids.length === 0) return new Map();
+    if (ids.length === 0) return { summaries: new Map(), copies: [] };
     const [groups, copies] = await Promise.all([
       this.taskRepo.findGroups(chapterId, ids),
       this.taskRepo.findGroupCopyStates(chapterId, ids),
     ]);
-    return this.summarize(chapterId, groups, copies);
+    return {
+      summaries: await this.summarize(chapterId, groups, copies),
+      copies,
+    };
   }
 
   /**
@@ -931,6 +1033,51 @@ export class TaskService {
     };
   }
 
+  /**
+   * {@link list}'s tasks as bare rows, with how many match before `limit`
+   * (#5746): one request for a list that fits a page, where `list` makes an
+   * empty one after it and reads each task's subtasks, photos, series, group
+   * and the open task it was claimed from. For a reader that draws only the
+   * task's own columns, such as Activity; add {@link withGroupSummaries} for
+   * `group`. The same rule as `list`: without `tasks:manage`, only the
+   * caller's own tasks.
+   */
+  async listRows(
+    chapterId: string,
+    userId: string,
+    isAdmin: boolean,
+    options: TaskRowListOptions = {},
+  ): Promise<{ tasks: TaskView[]; total: number | null }> {
+    const { withTotal, ...query } = options;
+    instantOrThrow('before', query.after?.created_at);
+    const { tasks, total } = await this.taskRepo.findByChapterCounted(
+      chapterId,
+      {
+        ...query,
+        // Last, so no option widens a member's read past their own tasks.
+        ...(isAdmin ? {} : { assigneeId: userId }),
+      },
+      { withTotal },
+    );
+    return { tasks: toDisplayStatusList(tasks), total };
+  }
+
+  /**
+   * Each task with its group's progress as `group` (null for a one-person
+   * task), as {@link list} gives it, from one read of the groups and their
+   * copies for every task passed, whichever list it came from (#5746).
+   */
+  async withGroupSummaries(
+    chapterId: string,
+    tasks: TaskView[],
+  ): Promise<TaskView[]> {
+    const groups = await this.groupSummaries(chapterId, tasks);
+    return tasks.map((task) => ({
+      ...task,
+      group: task.group_id ? (groups.get(task.group_id) ?? null) : null,
+    }));
+  }
+
   /** How many tasks {@link list} would return with no `limit`, counted in SQL. */
   async count(
     chapterId: string,
@@ -1089,6 +1236,9 @@ export class TaskService {
           input.followed_by,
         )
       : null;
+    const attachments =
+      (await this.checkedAttachments(input.chapter_id, input.attachments)) ??
+      [];
     if (input.audience) {
       return this.createForGroup(
         input,
@@ -1100,6 +1250,7 @@ export class TaskService {
               ? { kind: 'tier', id: input.audience_tier_id }
               : { kind: 'chapter' },
         followedBy,
+        attachments,
       );
     }
     if (input.assignee_ids != null && people.length !== 1) {
@@ -1107,6 +1258,7 @@ export class TaskService {
         input,
         { kind: 'people', userIds: people },
         followedBy,
+        attachments,
       );
     }
     const assigneeId = input.assignee_id ?? people[0];
@@ -1115,16 +1267,13 @@ export class TaskService {
     }
     // A list of one is that person's task, held to the list's rule: active
     // members only, as two or more are (`TaskAudienceReader.resolve`).
-    if (
-      input.assignee_ids != null &&
-      !(await this.audiences.reader(input.chapter_id)).activeIds.has(assigneeId)
-    ) {
-      throw new BadRequestException(
-        'Everyone you pick must be an active member of the chapter',
-      );
+    if (input.assignee_ids != null) {
+      (await this.audiences.reader(input.chapter_id)).assertActive([
+        assigneeId,
+      ]);
     }
-    checkedDueDate(input.due_date);
-    const dueAt = checkedDueAt(input.due_date, input.due_at);
+    const dueDate = checkedDueDate(input.due_date ?? null);
+    const dueAt = checkedDueAt(dueDate, input.due_at);
     const subtaskTitles = checkedSubtaskTitles(input.subtasks ?? []);
     const referencePhotos = await this.checkedPhotoPaths(
       input.chapter_id,
@@ -1140,7 +1289,7 @@ export class TaskService {
       throw new BadRequestException('Assignee must be a member of the chapter');
     }
 
-    const repeat = this.checkedRepeat(input, dueAt);
+    const repeat = this.checkedRepeat(input, dueDate, dueAt);
     const task = repeat
       ? await this.taskRepo.createSeries({
           chapter_id: input.chapter_id,
@@ -1153,10 +1302,12 @@ export class TaskService {
           subtask_titles: subtaskTitles,
           due_time: repeat.due_time,
           recurrence_rule: repeat.rule,
-          first_due_date: input.due_date.slice(0, 10),
+          // `checkedRepeat` refuses a repeat with no due date.
+          first_due_date: repeat.first_due_date,
           first_due_at: dueAt,
           latest_due_at: repeat.latest_due_at,
           next_due_date: repeat.next_due_date,
+          attachments,
         })
       : await this.taskRepo.create({
           chapter_id: input.chapter_id,
@@ -1164,7 +1315,7 @@ export class TaskService {
           description: input.description ?? null,
           assignee_id: assigneeId,
           created_by: input.created_by,
-          due_date: input.due_date,
+          due_date: dueDate,
           due_at: dueAt,
           status: TaskStatus.TODO,
           point_reward: input.point_reward ?? null,
@@ -1174,6 +1325,7 @@ export class TaskService {
           proof_kind: input.proof_kind ?? 'none',
           ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
           ...(followedBy ? { followed_by: followedBy } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
         });
 
     // Reference photos go in after their task, like the checklist below. A
@@ -1260,8 +1412,9 @@ export class TaskService {
     input: CreateTaskInput,
     target: TaskAudienceTarget,
     followedBy: string | null,
+    attachments: FrappLink[],
   ): Promise<CreateTaskResult> {
-    checkedDueDate(input.due_date);
+    const dueDate = checkedDueDate(input.due_date ?? null);
     if (input.recurrence_rule != null) {
       throw new BadRequestException(TASK_AUDIENCE_COPY.noRepeat);
     }
@@ -1273,7 +1426,7 @@ export class TaskService {
         "A task for everyone can't be posted to chat yet",
       );
     }
-    const dueAt = checkedDueAt(input.due_date, input.due_at);
+    const dueAt = checkedDueAt(dueDate, input.due_at);
     const subtaskTitles = checkedSubtaskTitles(input.subtasks ?? []);
     const reader = await this.audiences.reader(input.chapter_id);
     const resolved = await reader.resolve(target);
@@ -1289,24 +1442,17 @@ export class TaskService {
       assignee_ids: resolved.userIds,
       title: input.title,
       description: input.description ?? null,
-      due_date: input.due_date,
+      due_date: dueDate,
       due_at: dueAt,
       point_reward: input.point_reward ?? null,
       proof_kind: input.proof_kind ?? 'none',
       subtask_titles: subtaskTitles,
       ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
       followed_by: followedBy,
+      attachments,
     });
 
-    // `notifyAssigned` reports its own failures, so one member's push can't
-    // stop the rest.
-    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
-      await Promise.all(
-        copies
-          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
-          .map((copy) => this.notifyAssigned(copy, input.created_by)),
-      );
-    }
+    await this.notifyEachAssigned(copies, input.created_by);
 
     const own =
       copies.find((copy) => copy.assignee_id === input.created_by) ?? copies[0];
@@ -1377,6 +1523,13 @@ export class TaskService {
       return this.findById(id, chapterId);
     }
     input = rest;
+    // Checked once against the asked copy's list (the copies share one),
+    // not once per copy.
+    const checkedLinks = await this.checkedAttachments(
+      chapterId,
+      input.attachments,
+      task.attachments ?? [],
+    );
     const open = (
       await this.taskRepo.findGroupCopies(chapterId, [groupId])
     ).filter((copy) => !copy.points_awarded);
@@ -1394,7 +1547,9 @@ export class TaskService {
     for (let i = 0; i < open.length; i += GROUP_NOTIFY_CONCURRENCY) {
       const batch = open.slice(i, i + GROUP_NOTIFY_CONCURRENCY);
       const results = await Promise.allSettled(
-        batch.map((copy) => this.applyEdit(copy, chapterId, actorId, input)),
+        batch.map((copy) =>
+          this.applyEdit(copy, chapterId, actorId, input, checkedLinks),
+        ),
       );
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') return;
@@ -1493,21 +1648,96 @@ export class TaskService {
   }
 
   /**
+   * Add members to a group task after it's made (#5905), the mirror of
+   * {@link removeFromGroup}: each gets a copy at To do, made from the
+   * group's current title, notes, due, points, proof, checklist,
+   * attachments and follower. A cabinet member who sent a task to four brothers hands it
+   * to a fifth (Winston, 2026-11-23).
+   *
+   * The copy it's made from is {@link groupTemplate}'s: the one asked on
+   * unless it is confirmed, since a confirmed copy kept what it was paid on
+   * while later edits to everyone's copy passed it by ({@link updateGroup}). Everyone listed must be an active
+   * member, as when the task was made. A member who already has a copy is
+   * skipped, so a retry finishes the job; the repository holds the group
+   * locked while it writes, so two adds can't give one member two copies.
+   * Each member added gets the usual assignment push. Returns them and the
+   * group as it now stands.
+   */
+  async addToGroup(
+    id: string,
+    chapterId: string,
+    actorId: string,
+    assigneeIds: string[],
+  ): Promise<{ added: string[]; group: TaskGroupSummary }> {
+    const { task, groupId } = await this.groupCopyOrThrow(id, chapterId);
+    const asked = [...new Set(assigneeIds)];
+    (await this.audiences.reader(chapterId)).assertActive(asked);
+    const copies = await this.taskRepo.findGroupCopies(chapterId, [groupId]);
+    const has = new Set(copies.map((copy) => copy.assignee_id));
+    const fresh = asked.filter((userId) => !has.has(userId));
+    let made: Task[] = [];
+    if (fresh.length > 0) {
+      const template = groupTemplate(task, copies);
+      made = await this.taskRepo.addGroupCopies(
+        chapterId,
+        groupId,
+        template.id,
+        fresh,
+      );
+      await this.notifyEachAssigned(made, actorId);
+    }
+    const summary = (await this.groupSummaries(chapterId, [task])).get(groupId);
+    if (!summary) throw new NotFoundException('Task not found');
+    return { added: made.map((copy) => copy.assignee_id), group: summary };
+  }
+
+  /**
    * A new task's repeat (#5119): its rule, checked, and the schedule its
    * series starts with. Null for a task that doesn't repeat.
    */
-  private checkedRepeat(input: CreateTaskInput, dueAt: string | null) {
+  private checkedRepeat(
+    input: CreateTaskInput,
+    dueDate: string | null,
+    dueAt: string | null,
+  ) {
     // Null, like omitted, is a task that doesn't repeat.
     if (input.recurrence_rule == null) return null;
+    // A repeat counts from the task's day (#5761).
+    if (dueDate === null) {
+      throw new BadRequestException(TASK_REPEAT_NEEDS_DUE_DATE);
+    }
     const rule = readTaskRule(input.recurrence_rule);
     if (!rule) throw new BadRequestException("That repeat rule can't be read");
-    const start = planSeriesStart(rule, input.due_date.slice(0, 10), dueAt);
+    const firstDueDate = dueDate.slice(0, 10);
+    const start = planSeriesStart(rule, firstDueDate, dueAt);
     if (!start) {
       throw new BadRequestException(
         'The end date leaves no task after the first. Choose a later end date',
       );
     }
-    return { rule: input.recurrence_rule, ...start };
+    return {
+      rule: input.recurrence_rule,
+      first_due_date: firstDueDate,
+      ...start,
+    };
+  }
+
+  /**
+   * {@link notifyAssigned} for each of a group's new copies, a few at a time.
+   * `notifyAssigned` reports its own failures, so one member's push can't
+   * stop the rest.
+   */
+  private async notifyEachAssigned(
+    copies: Task[],
+    assignerId: string,
+  ): Promise<void> {
+    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
+      await Promise.all(
+        copies
+          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
+          .map((copy) => this.notifyAssigned(copy, assignerId)),
+      );
+    }
   }
 
   /**
@@ -1530,7 +1760,10 @@ export class TaskService {
     const body = (timeZone: string | null, labelZone: boolean) =>
       joinFacts(
         assigner ? `From ${assigner}` : 'Assigned to you',
-        `due ${formatTaskDue(task.due_date, task.due_at, { timeZone, labelZone })}`,
+        // A task with no due date (#5761) names no day.
+        task.due_date === null
+          ? null
+          : `due ${formatTaskDue(task.due_date, task.due_at, { timeZone, labelZone })}`,
         task.point_reward ? `${task.point_reward} points` : null,
       );
     await this.safeNotifyUser(
@@ -1576,6 +1809,8 @@ export class TaskService {
     chapterId: string,
     actorId: string,
     input: UpdateTaskInput,
+    /** `input.attachments` already checked, by a series edit that checked it once. */
+    checkedLinks?: FrappLink[],
   ): Promise<TaskView> {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) throw new NotFoundException('Task not found');
@@ -1586,7 +1821,13 @@ export class TaskService {
         'Change who a group task is from on every copy, with scope "group"',
       );
     }
-    const updated = await this.applyEdit(task, chapterId, actorId, input);
+    const updated = await this.applyEdit(
+      task,
+      chapterId,
+      actorId,
+      input,
+      checkedLinks,
+    );
     const [view] = await this.withSubtasks(chapterId, [
       toDisplayStatus(updated),
     ]);
@@ -1622,6 +1863,7 @@ export class TaskService {
     chapterId: string,
     actorId: string,
     input: UpdateTaskInput,
+    checkedLinks?: FrappLink[],
   ): Promise<Task> {
     const id = task.id;
     if (task.points_awarded) {
@@ -1649,17 +1891,29 @@ export class TaskService {
     }
 
     if (input.due_date !== undefined || input.due_at !== undefined) {
-      if (input.due_date === null) {
-        throw new BadRequestException('A task needs a due date');
+      // Null takes the due date off (#5761); a repeating copy keeps its day.
+      if (input.due_date === null && task.series_id !== null) {
+        throw new BadRequestException(TASK_REPEAT_NEEDS_DUE_DATE);
       }
-      const dueDate = (input.due_date ?? task.due_date).slice(0, 10);
-      checkedDueDate(dueDate);
+      const dueDate = checkedDueDate(
+        (input.due_date === undefined ? task.due_date : input.due_date)?.slice(
+          0,
+          10,
+        ) ?? null,
+      );
+      // A time needs a day, so taking the day off takes the time off too.
       const dueAt = checkedDueAt(
         dueDate,
-        input.due_at === undefined ? task.due_at : input.due_at,
+        input.due_at === undefined
+          ? dueDate === null
+            ? null
+            : task.due_at
+          : input.due_at,
       );
       const storedAt = task.due_at ? new Date(task.due_at).toISOString() : null;
-      if (dueDate !== task.due_date.slice(0, 10)) patch.due_date = dueDate;
+      if (dueDate !== (task.due_date?.slice(0, 10) ?? null)) {
+        patch.due_date = dueDate;
+      }
       if (dueAt !== storedAt) patch.due_at = dueAt;
     }
 
@@ -1668,6 +1922,17 @@ export class TaskService {
       input.proof_kind !== task.proof_kind
     ) {
       patch.proof_kind = input.proof_kind;
+    }
+
+    if (input.attachments !== undefined) {
+      const stored = task.attachments ?? [];
+      const next =
+        checkedLinks ??
+        (await this.checkedAttachments(chapterId, input.attachments, stored)) ??
+        [];
+      if (!sameFrappLinks(next, readFrappLinks(stored))) {
+        patch.attachments = next;
+      }
     }
 
     if (input.followed_by !== undefined) {
@@ -1722,6 +1987,7 @@ export class TaskService {
       patch.assignee_id = input.assignee_id;
       patch.status = TaskStatus.TODO;
       patch.completed_at = null;
+      patch.completed_by = null;
       patch.sent_back_at = null;
       // The old assignee's proof, link, reply and send-back aren't the new
       // one's (#4635).
@@ -1773,6 +2039,12 @@ export class TaskService {
           error,
         });
       }
+    }
+
+    // A completed task handed to someone else starts over at To do: its
+    // "finished" rows in Activity are no longer so (#5732).
+    if (reassigned && task.status === TaskStatus.COMPLETED) {
+      await this.notificationService.retractTaskCompletion(chapterId, id);
     }
 
     // The removed reference photos, and on a hand-over the old proof.
@@ -1841,39 +2113,94 @@ export class TaskService {
     input: CreateTaskInput,
     task: Task,
   ): Promise<void> {
+    await this.sendTaskCard(task, {
+      chapter_id: input.chapter_id,
+      channel_id: input.channel_id!,
+      sender_id: input.created_by,
+      client_message_id: input.client_message_id!,
+      assigner_id: input.created_by,
+      status: 'TODO',
+    });
+  }
+
+  /**
+   * Post an existing task's card into a channel (#5772): the + sheet's Task
+   * row links a task the member can already read. The card is the same one
+   * `/task` posts, so it reads the task's live status the same way; it is
+   * sent as the member who linked it, and names the task's own creator as
+   * the assigner. The caller has checked the member may read the task;
+   * channel access is re-checked by `ChatService.sendMessage`.
+   */
+  async shareToChat(
+    task: TaskView,
+    input: {
+      chapter_id: string;
+      channel_id: string;
+      sender_id: string;
+      client_message_id: string;
+    },
+  ): Promise<void> {
+    await this.sendTaskCard(task, {
+      ...input,
+      assigner_id: task.created_by,
+      status: task.status,
+      linked: true,
+    });
+  }
+
+  private async sendTaskCard(
+    task: Task,
+    card: {
+      chapter_id: string;
+      channel_id: string;
+      sender_id: string;
+      client_message_id: string;
+      assigner_id: string;
+      status: string;
+      /**
+       * A link, not a create: the text the preview, search and a push read
+       * names the task without saying the sender assigned it.
+       */
+      linked?: boolean;
+    },
+  ): Promise<void> {
     const users = await this.userRepo.findByIds([
-      input.created_by,
+      card.assigner_id,
       task.assignee_id,
     ]);
     const nameOf = (id: string): string =>
       users.find((u) => u.id === id)?.display_name ?? 'Unknown member';
-    const assignerName = nameOf(input.created_by);
+    const assignerName = nameOf(card.assigner_id);
     const assigneeName = nameOf(task.assignee_id);
 
     const payload = {
       task_id: task.id,
       title: task.title,
-      assigner_user_id: input.created_by,
+      assigner_user_id: card.assigner_id,
       assigner_name: assignerName,
       assignee_user_id: task.assignee_id,
       assignee_name: assigneeName,
       due_date: task.due_date,
       due_at: task.due_at,
-      status: 'TODO' as const,
+      status: card.status,
       point_reward: task.point_reward,
       created_at: task.created_at,
     };
 
-    const content = `Assigned "${task.title}" to ${assigneeName} (due ${task.due_date})`;
+    // A task with no due date (#5761) names no day.
+    const due = task.due_date === null ? '' : ` (due ${task.due_date})`;
+    const content = card.linked
+      ? `"${task.title}" for ${assigneeName}${due}`
+      : `Assigned "${task.title}" to ${assigneeName}${due}`;
 
     await this.chatService.sendMessage({
-      chapter_id: input.chapter_id,
-      channel_id: input.channel_id!,
-      sender_id: input.created_by,
+      chapter_id: card.chapter_id,
+      channel_id: card.channel_id,
+      sender_id: card.sender_id,
       content,
       kind: 'task',
       payload,
-      client_message_id: input.client_message_id,
+      client_message_id: card.client_message_id,
       system_originated: true,
     });
   }
@@ -1959,10 +2286,12 @@ export class TaskService {
     let proofLink: string | null = null;
     if (completion.proof_link?.trim()) {
       proofLink = normalizeProofLink(completion.proof_link);
-      if (!proofLink) {
-        throw new BadRequestException(
-          'proof_link must be a web link starting with http:// or https://',
-        );
+      // A name that resolves nowhere (`https://test`) opened as "server
+      // can't be found" on the officer's phone (#5882). Mark done's own
+      // sentence, capitalised, so a phone build from before that check shows
+      // it rather than "Try again" (`isMemberSentence` in @repo/hooks).
+      if (!proofLink || !proofLinkOpens(proofLink)) {
+        throw new BadRequestException(TASK_PROOF_LINK_INVALID_MESSAGE);
       }
     }
     const note = completion.completion_note?.trim() || null;
@@ -2019,6 +2348,7 @@ export class TaskService {
         {
           status: TaskStatus.COMPLETED,
           completed_at: now,
+          completed_by: userId,
           proof_link: proofLink,
           completion_note: note,
           // Decision C (#4635): nothing to award and nothing to check, so it
@@ -2078,6 +2408,9 @@ export class TaskService {
     // The reopen cleared the link and reply; the photos it read go too, and
     // the next Mark done sends its own.
     await this.dropPhotos(chapterId, task.id, proof);
+    // What Mark done told the officer and the followers isn't so any more:
+    // Activity drops the "finished" rows (#5732).
+    await this.notificationService.retractTaskCompletion(chapterId, task.id);
     return this.viewWithPhotos(chapterId, updated);
   }
 
@@ -2213,7 +2546,11 @@ export class TaskService {
                   // A group task's copies finish one by one: they stack in
                   // one pile on iOS, as the review pushes do.
                   threadId: `task-follow-${task.group_id ?? task.id}`,
-                  data: { target: { screen: 'tasks', taskId: task.id } },
+                  // Marked, so a take-back can clear it (#5732).
+                  data: {
+                    about: 'task-completed',
+                    target: { screen: 'tasks', taskId: task.id },
+                  },
                 },
             task.id,
             'completion-follower',
@@ -2357,7 +2694,7 @@ export class TaskService {
     id: string,
     chapterId: string,
     comment: string | null | undefined,
-    options: { requirePhoto?: boolean; actorUserId?: string } = {},
+    options: { requirePhoto?: boolean; actorUserId: string },
   ): Promise<TaskView> {
     // A send-back says why (#4635): the reason stays on the task for the
     // assignee, and the push carries it.
@@ -2373,6 +2710,15 @@ export class TaskService {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    // No one sends back their own task (#5917), as no one confirms it
+    // ({@link confirmCompletion}): an officer's own completion is undone with
+    // Mark not done. Before the status guard, as there.
+    if (task.assignee_id === options.actorUserId) {
+      throw new ForbiddenException(
+        'Admins cannot send back their own task completions',
+      );
     }
 
     if (task.status !== TaskStatus.COMPLETED) {
@@ -2404,11 +2750,11 @@ export class TaskService {
       );
     }
     await this.dropPhotos(chapterId, id, proof);
+    // Open again: the "finished" rows in Activity are no longer so (#5732).
+    await this.notificationService.retractTaskCompletion(chapterId, id);
 
     const sender =
-      (options.actorUserId &&
-        (await this.displayNameOf(options.actorUserId))) ||
-      'An officer';
+      (await this.displayNameOf(options.actorUserId)) || 'An officer';
     await this.safeNotifyUser(
       task.assignee_id,
       chapterId,
@@ -2455,4 +2801,21 @@ export class TaskService {
       photos.map((photo) => photo.storage_path),
     );
   }
+}
+
+/**
+ * The copy a group's new copies are made from (#5905): the group as it
+ * stands. The copy asked on while it is open; else any open copy, since
+ * {@link TaskService.updateGroup} edits every one of those; else, with
+ * every copy confirmed, the one confirmed last, which saw the most edits.
+ */
+export function groupTemplate(asked: Task, copies: readonly Task[]): Task {
+  if (!asked.points_awarded) return asked;
+  const open = copies.find((copy) => !copy.points_awarded);
+  if (open) return open;
+  return copies.reduce(
+    (latest, copy) =>
+      (copy.confirmed_at ?? '') > (latest.confirmed_at ?? '') ? copy : latest,
+    asked,
+  );
 }

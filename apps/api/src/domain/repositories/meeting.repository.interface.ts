@@ -1,5 +1,10 @@
 import type { MeetingType } from '@repo/validation';
-import { Meeting, MeetingTemplate } from '../entities/meeting.entity';
+import {
+  Meeting,
+  MeetingLiveRecording,
+  MeetingTemplate,
+  PostedMeetingSummary,
+} from '../entities/meeting.entity';
 
 export const MEETING_REPOSITORY = 'MEETING_REPOSITORY';
 
@@ -22,9 +27,37 @@ export type MeetingWrite = Partial<
 
 export interface IMeetingRepository {
   findById(chapterId: string, id: string): Promise<Meeting | null>;
+  /** The chapter's minutes among `ids`, in no order; missing ids are left out. */
+  findByIds(chapterId: string, ids: readonly string[]): Promise<Meeting[]>;
+  /**
+   * Of `ids`, the posted minutes in `chapterId`, without their transcripts
+   * (#5949): what a Documents list needs of each, read on every open.
+   */
+  findPostedSummaries(
+    chapterId: string,
+    ids: readonly string[],
+  ): Promise<PostedMeetingSummary[]>;
   findByEvent(chapterId: string, eventId: string): Promise<Meeting | null>;
   /** The chapter's minutes, newest meeting first, at most `limit`. */
   findByChapter(chapterId: string, limit: number): Promise<Meeting[]>;
+  /**
+   * Of `eventIds`, the events that have minutes of any status, whoever's:
+   * a narrow read that asks only whether minutes exist (#5949, Activity's
+   * Write minutes rows), never what they say.
+   */
+  findEventIdsWithMinutes(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<Set<string>>;
+  /**
+   * The unposted minutes `userId` started, newest meeting first, at most
+   * `limit` (#5949, Activity's own drafts).
+   */
+  findDraftsBy(
+    chapterId: string,
+    userId: string,
+    limit: number,
+  ): Promise<Meeting[]>;
   /**
    * Posted minutes for meetings held at or after `since`, newest meeting
    * first, at most `limit`: a narrow read for a caller that wants only the
@@ -56,6 +89,38 @@ export interface IMeetingRepository {
     chapterId: string,
     meetingIds: readonly string[],
   ): Promise<Set<string>>;
+  /** Of `meetingIds`, the minutes someone has written notes on. */
+  findWithNotesIds(
+    chapterId: string,
+    meetingIds: readonly string[],
+  ): Promise<Set<string>>;
+  /**
+   * Who is recording each of `meetingIds` right now, by meeting id: rows
+   * seen at or after `seenSince`.
+   */
+  findLiveRecorders(
+    chapterId: string,
+    meetingIds: readonly string[],
+    seenSince: string,
+  ): Promise<Map<string, string>>;
+  /** Every recording in the chapter heard from at or after `seenSince`. */
+  findLiveRecordings(
+    chapterId: string,
+    seenSince: string,
+  ): Promise<MeetingLiveRecording[]>;
+  /** Marks `userId` as recording the minutes now (insert or refresh). */
+  markLiveRecording(
+    chapterId: string,
+    meetingId: string,
+    userId: string,
+    now: string,
+  ): Promise<void>;
+  /** The phone stopped recording: its row goes, if it is still theirs. */
+  clearLiveRecording(
+    chapterId: string,
+    meetingId: string,
+    userId: string,
+  ): Promise<void>;
   /**
    * Resolves to `null` when the event already has minutes (the unique index
    * on `event_id` won), so the caller can answer with the ones that exist.

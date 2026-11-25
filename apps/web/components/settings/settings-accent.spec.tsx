@@ -69,7 +69,8 @@ const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
  * **What this cannot see.** It reads the source rather than rendering
  * `SettingsPage`, so it pins what the card *says*, not that the card is
  * reachable. Since #3827 the Accent section renders inside the Chapter row,
- * under the chapter mark; if a later change drops it from there, every
+ * and since 2026-11-24 on its Accent color page; if a later change drops it
+ * from there, every
  * assertion here stays green while the copy becomes unreachable.
  * Reachability is the page suites' job, not this file's.
  */
@@ -107,7 +108,7 @@ describe("the Accent tab says what the accent actually does", () => {
     // #1157 moved this and the copy did not follow for a year. The positive
     // half, file-scoped because it is asserting the call, not the copy.
     expect(settingsPage).toMatch(
-      /background: signetDarkTokens\.color\.surface\.card/,
+      /background: signetDarkTokens\.color\.surface\.popover/,
     );
   });
 

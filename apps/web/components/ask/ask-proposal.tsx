@@ -1,15 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlignLeft,
+  Award,
   CalendarDays,
+  Camera,
   CircleCheck,
   CircleX,
   Clock,
+  Link2,
   ListChecks,
-  MoreHorizontal,
   Repeat,
   Star,
   User,
@@ -46,6 +55,7 @@ import {
   actEventPointsLine,
   actPointsAction,
   actPointsFromLine,
+  attendanceToWire,
   actRepeatParts,
   actWhenParts,
   actMissingLine,
@@ -58,25 +68,37 @@ import {
   actPointsHeadline,
   actPointsTotalLine,
   actWhenLine,
+  actTaskFactLines,
   meetingDueLabel,
+  sameTaskWho,
+  TASK_PROOF_KIND_LABELS,
+  TASK_FOLLOWER_COPY,
+  TASK_PROOF_KINDS,
+  taskWhoOf,
+  taskWhoSuggestionFields,
   TASK_TITLE_MAX_LENGTH,
+  type TaskProofKind,
+  type TaskWho,
 } from "@repo/validation";
+import { followerName } from "@repo/hooks/task-who-picker";
 import { ReportAiDialog } from "@/components/ai/report-ai";
 import {
   DueDateField,
   dueEntryPassed,
 } from "@/components/tasks/due-date-field";
+import { WhoPicker, useWhoDirectory } from "@/components/tasks/who-picker";
+import {
+  FollowerSelect,
+  useFollowerChoices,
+} from "@/components/tasks/task-follower";
+import { SegmentedChoice } from "@/components/ui/segmented";
 import { deferredPanel } from "@/components/chat/deferred-panel";
 import { isoToLocalInput } from "@/components/events/local-input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/shared/async-states";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ActionMenuButton } from "@/components/shared/row-menu";
 import { FOCUS_RING } from "@/components/ui/focus";
 import {
   Select,
@@ -87,6 +109,8 @@ import {
 } from "@/components/ui/select";
 import { EYEBROW } from "@/components/ui/typography";
 import { eventDeepLink } from "@/lib/events/event-links";
+import { POINTS_SETTINGS_PATH } from "@/components/settings/settings-paths";
+import { POINTS_STANDINGS_HREF } from "@/components/standing/standing-doors";
 import { cn } from "@/lib/utils";
 
 /**
@@ -108,12 +132,13 @@ import { cn } from "@/lib/utils";
  *
  * **Every card has Edit beside Cancel** (Paul, 2026-11-15, #5117: "it got
  * the general idea down, but I'd love to be able to add attendance and change
- * the time"). Google Calendar's "Add to calendar" on an event found in mail
- * opens the full event editor, and Linear's issue-from-text opens its own
- * issue form, so an event's Edit opens the ordinary event form filled in from
- * the card (attendance by role, the end, notes, the repeat), and its Create
- * is the confirm. A points or task card is a few fields, so Edit turns its
- * words into fields on the card itself, as Linear's triage edits in place.
+ * the time"). Every Edit happens on the card itself, as Linear's triage and
+ * Notion AI's suggestions edit in place (Paul, 2026-11-22: the card "expands
+ * in place"). An event's card grows into the ordinary event form's rows,
+ * filled in from the card (attendance by role, the end, notes, the repeat),
+ * with the conversation still above it, and the form's Create is the
+ * confirm. A points or task card is a few fields, so Edit turns its words
+ * into fields.
  *
  * **Every card in the thread stays live.** A card is not replaced by the next
  * thing asked. Once it is confirmed or dismissed it becomes one line saying
@@ -124,10 +149,10 @@ type Member = NonNullable<ReturnType<typeof useMembers>["data"]>[number];
 
 /** Where a confirmed change can be seen, by the page the card named. */
 /**
- * The full event form an event card's Edit opens, loaded on first open: Ask
+ * The event form an event card's Edit grows into, loaded on first open: Ask
  * is drawn on every dashboard route, and the form is a large download. Not the
  * chat shell's own deferred copy, which would import the shell's panels and
- * make a cycle back to Ask.
+ * make a cycle back to Ask. While it loads, the card holds its place.
  */
 const EventEditorDialog = deferredPanel(
   () =>
@@ -135,10 +160,12 @@ const EventEditorDialog = deferredPanel(
       (m) => m.EventEditorDialog,
     ),
   "dialog",
+  function EventFormLoading({ open }: { open: boolean }) {
+    return open ? <Skeleton className="h-48 w-full rounded-md" /> : null;
+  },
 );
 
 const RESULT_LINKS: Record<string, { href: string; label: string }> = {
-  points: { href: "/points", label: ACT_COPY.open_points },
   tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
@@ -151,7 +178,8 @@ const CARD_FRAME = "rounded-[14px] border border-border bg-card p-3";
 /** What an officer changed on a waiting card, by the proposal's id. */
 interface CardEdits {
   targets: string[];
-  assigneeId: string;
+  /** Who the task is for, as the shared picker holds it (2026-11-22). */
+  who: TaskWho | null;
   due: string;
   /** Edit was pressed: the card's words are fields (#5117). */
   editing: boolean;
@@ -159,8 +187,18 @@ interface CardEdits {
   reason: string;
   taskName: string;
   details: string;
+  /** A task card's points and proof, as Edit's fields hold them (2026-11-22). */
+  taskPoints: string;
+  proof: TaskProofKind;
+  /** The tier, role or group a task is from (`followed_by`), or null. */
+  from: string | null;
   /** Points typed into an event card's empty field (#5148). */
   eventPoints: string;
+  /**
+   * An event card's form is open in it (2026-11-22). Kept, so a card drawn
+   * again (a channel's row scrolled back into view) opens on its form.
+   */
+  eventFormOpen: boolean;
 }
 
 /**
@@ -259,8 +297,16 @@ function resolutionLine(resolution: AskProposalResolution): string {
 /** Where a finished change can be opened: the event itself, else its page. */
 function resultLink(
   resolution: AskProposalResolution,
+  canSeeLedger: boolean,
 ): { href: string; label: string } | null {
   if (resolution.kind !== "done") return null;
+  // After points are given: the chapter ledger, where the new rows are, for
+  // a role that reads it; else Directory's standings, which everyone can.
+  if (resolution.page === "points") {
+    return canSeeLedger
+      ? { href: POINTS_SETTINGS_PATH, label: ACT_COPY.open_ledger }
+      : { href: POINTS_STANDINGS_HREF, label: ACT_COPY.open_standings };
+  }
   if (resolution.page === "events" && resolution.id) {
     return {
       href: eventDeepLink(resolution.id),
@@ -285,7 +331,11 @@ function FinishedCard({
   headline: string | null;
   resolution: AskProposalResolution;
 }) {
-  const link = resultLink(resolution);
+  const permissions = useMyPermissions().data?.permissions;
+  const link = resultLink(
+    resolution,
+    !!permissions && can("points:view_all", permissions),
+  );
   const shown = resolution.shown ?? null;
   const Icon: LucideIcon =
     resolution.kind === "done"
@@ -338,12 +388,55 @@ function FinishedCard({
   );
 }
 
+const TASK_FACT_ICONS: Record<
+  ReturnType<typeof actTaskFactLines>[number]["kind"],
+  LucideIcon
+> = {
+  points: Award,
+  proof: Camera,
+  steps: ListChecks,
+  from: Users,
+};
+
+/**
+ * A proposed task's points, proof, steps and the group it is from
+ * (2026-11-22), one fact each and only what was set, in the order the New
+ * task form asks for them. The phone's card says the same words.
+ */
+function TaskFacts({
+  task,
+  fromName,
+}: {
+  task: NonNullable<AiSuggestion["task"]>;
+  fromName: string | null;
+}) {
+  const lines = actTaskFactLines(task, fromName);
+  if (lines.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line) => (
+        <Fact
+          key={line.kind}
+          icon={
+            line.kind === "proof" && task.proof_kind === "link"
+              ? Link2
+              : TASK_FACT_ICONS[line.kind]
+          }
+        >
+          {line.text}
+        </Fact>
+      ))}
+    </div>
+  );
+}
+
 /**
  * What a finished card still shows under its name: the same rows the
  * waiting card had, as words.
  */
 function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
   const { points, task, new_event: event } = suggestion;
+  const { directory } = useWhoDirectory({ enabled: !!task?.followed_by });
   if (event) return <EventFacts event={event} />;
   if (task) {
     return (
@@ -356,6 +449,10 @@ function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
         {task.due_date ? (
           <Fact icon={Clock}>{meetingDueLabel(task.due_date)}</Fact>
         ) : null}
+        <TaskFacts
+          task={task}
+          fromName={followerName(task.followed_by, directory)}
+        />
       </div>
     );
   }
@@ -667,10 +764,14 @@ function EventFacts({
             {repeat.line}
           </Fact>
         ) : null}
-        <Fact icon={Users}>
-          {event.is_mandatory
-            ? ACT_COPY.everyone_required
-            : ACT_COPY.everyone_optional}
+        <Fact
+          icon={Users}
+          under={actPointsFromLine(event.attendance_from) || undefined}
+        >
+          {event.attendance_line ??
+            (event.is_mandatory
+              ? ACT_COPY.everyone_required
+              : ACT_COPY.everyone_optional)}
         </Fact>
         {pointsField ??
           (event.point_value === null ? null : (
@@ -713,33 +814,33 @@ function CardMenu({
   const canReport = !!permissions && can("ai:use", permissions);
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="-mr-1.5 h-8 w-8"
-            aria-label={`${ACT_COPY.more}: ${title}`}
-            disabled={disabled}
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onDismiss}>
-            {ACT_COPY.dismiss}
-          </DropdownMenuItem>
-          {canReport ? (
-            <DropdownMenuItem
-              disabled={reported}
-              onSelect={() => setReporting(true)}
-            >
-              {reported ? AI_REPORT_COPY.reported : AI_REPORT_COPY.action}
-            </DropdownMenuItem>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="-mr-1.5">
+        <ActionMenuButton
+          label={`${ACT_COPY.more} for ${title}`}
+          disabled={disabled}
+          entries={[
+            {
+              type: "item",
+              key: "dismiss",
+              label: ACT_COPY.dismiss,
+              onSelect: onDismiss,
+            },
+            ...(canReport
+              ? [
+                  {
+                    type: "item" as const,
+                    key: "report",
+                    label: reported
+                      ? AI_REPORT_COPY.reported
+                      : AI_REPORT_COPY.action,
+                    disabled: reported,
+                    onSelect: () => setReporting(true),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      </div>
       {reporting ? (
         <ReportAiDialog
           target={{ subject: "ai_suggestion", subjectId: suggestionId }}
@@ -789,8 +890,11 @@ function ActCard({
   const [targets, setTargets] = useState<string[]>(
     kept?.targets ?? points?.target_user_ids ?? [],
   );
-  const [assigneeId, setAssigneeId] = useState(
-    kept?.assigneeId ?? task?.assignee_id ?? "",
+  // The card's own who: one person, several, or everyone or someone in a
+  // role, tier or group (2026-11-22), as the New task form picks it.
+  const suggestedWho = useMemo(() => (task ? taskWhoOf(task) : null), [task]);
+  const [who, setWho] = useState<TaskWho | null>(
+    kept ? kept.who : suggestedWho,
   );
   // The suggestion's own due: kept even once its time has passed (#4512).
   const suggestedDue = task?.due_date
@@ -806,40 +910,84 @@ function ActCard({
   const [details, setDetails] = useState(
     kept?.details ?? task?.description ?? "",
   );
+  // Names the group a task is from (`followed_by`) on its facts line.
+  const { directory: whoDirectory } = useWhoDirectory({ enabled: !!task });
+  const [taskPoints, setTaskPoints] = useState(
+    kept?.taskPoints ?? (task?.point_reward ? String(task.point_reward) : ""),
+  );
+  const [proof, setProof] = useState<TaskProofKind>(
+    kept?.proof ?? task?.proof_kind ?? "none",
+  );
+  const [from, setFrom] = useState<string | null>(
+    kept ? kept.from : (task?.followed_by ?? null),
+  );
+  // Read only once Edit shows From: the card's facts need just the names.
+  const fromChoices = useFollowerChoices({ enabled: !!task && editing });
+  // Up for grabs is from nobody (`spec/behavior/tasks.md`).
+  const fromShown = who?.kind === "someone" ? null : from;
   // An event's points when nobody said them and nothing matched (#5148).
   const [eventPoints, setEventPoints] = useState(kept?.eventPoints ?? "");
+  // The event form: mounted on the first Edit and kept, so a save still out
+  // when it closes is the same form's when it opens again; what was typed is
+  // kept under the card's name (#4593). While it is open it is the card.
+  const [eventForm, setEventForm] = useState<boolean | null>(
+    kept?.eventFormOpen ? true : null,
+  );
+  const formOpen = !!event && eventForm === true;
+  // An event card's Edit opens at once: its code is fetched with the card.
+  useEffect(() => {
+    if (!event) return;
+    void import("@/components/events/event-editor-dialog").then(
+      (m) => EventEditorDialog.adopt(m.EventEditorDialog),
+      () => undefined,
+    );
+  }, [event]);
   useEffect(() => {
     store?.set(suggestion.id, {
       targets,
-      assigneeId,
+      who,
       due,
       editing,
       amount,
       reason,
       taskName,
       details,
+      taskPoints,
+      proof,
+      from,
       eventPoints,
+      eventFormOpen: eventForm === true,
     });
   }, [
     store,
     suggestion.id,
     targets,
-    assigneeId,
+    who,
     due,
     editing,
     amount,
     reason,
     taskName,
     details,
+    taskPoints,
+    proof,
+    from,
     eventPoints,
+    eventForm,
   ]);
   const [fieldProblem, setFieldProblem] = useState<{
-    field: "amount" | "reason" | "taskName" | "eventPoints";
+    field: "amount" | "reason" | "taskName" | "taskPoints" | "eventPoints";
     error: string;
   } | null>(null);
-  // The event form: mounted on the first Edit and kept, so it can animate
-  // closed; what was typed is kept under the card's name (#4593).
-  const [eventForm, setEventForm] = useState<boolean | null>(null);
+  // Closing the form brings the card back: focus returns to its Edit, which
+  // was gone while the form stood in its place.
+  const editButton = useRef<HTMLButtonElement>(null);
+  const refocusEdit = useRef(false);
+  useEffect(() => {
+    if (formOpen || !refocusEdit.current) return;
+    refocusEdit.current = false;
+    editButton.current?.focus({ preventScroll: true });
+  }, [formOpen]);
   // One object for the proposal: the form fills again when it changes.
   // Points typed on the card, and the event type it matched, go with it
   // into the form (#5148), so Edit never makes something Confirm wouldn't.
@@ -855,6 +1003,8 @@ function ActCard({
             location: event.location,
             point_value: templatePoints,
             is_mandatory: event.is_mandatory,
+            // Who the card invites, as the form's Who's coming (#5853).
+            ...(event.attendance ? attendanceToWire(event.attendance) : {}),
             event_type_id: event.event_type_id ?? null,
           }
         : null,
@@ -922,21 +1072,40 @@ function ActCard({
         const said =
           details.trim().slice(0, TASK_SUGGESTION_DETAILS_MAX_LENGTH) || null;
         if (said !== (task.description ?? null)) changes.description = said;
+        // Blank is no points; anything else reads as an event's points do.
+        const read = taskPoints.trim()
+          ? actEventPointsInput(taskPoints)
+          : ({ ok: true, value: 0 } as const);
+        if (!read.ok) {
+          return setFieldProblem({ field: "taskPoints", error: read.error });
+        }
+        const pointsNow = read.value > 0 ? read.value : null;
+        if (pointsNow !== (task.point_reward ?? null)) {
+          changes.point_reward = pointsNow;
+        }
+        if (proof !== (task.proof_kind ?? "none")) changes.proof_kind = proof;
       }
-      if (!assigneeId || !due) return setFlagged(true);
+      if (fromShown !== (task.followed_by ?? null)) {
+        changes.followed_by = fromShown;
+      }
+      // A task can be confirmed with no due date (#5761).
+      if (!who) return setFlagged(true);
       if (dueEntryPassed(due, new Date(), suggestedDue)) {
         return setFlagged(true);
       }
-      if (assigneeId !== (task.assignee_id ?? "")) {
-        changes.assignee_id = assigneeId;
+      // "Who" is one answer: a changed pick sends every who-field.
+      if (!sameTaskWho(who, suggestedWho)) {
+        Object.assign(changes, taskWhoSuggestionFields(who));
       }
-      const fields = dueEntryFields(due);
+      const fields = due ? dueEntryFields(due) : null;
+      const dueDate = fields?.due_date ?? null;
+      const dueAt = fields?.due_at ?? null;
       if (
-        fields.due_date !== task.due_date ||
-        (fields.due_at ?? null) !== (task.due_at ?? null)
+        dueDate !== (task.due_date ?? null) ||
+        dueAt !== (task.due_at ?? null)
       ) {
-        changes.due_date = fields.due_date;
-        changes.due_at = fields.due_at ?? null;
+        changes.due_date = dueDate;
+        changes.due_at = dueAt;
       }
       if (Object.keys(changes).length > 0) edits = { task: changes };
     }
@@ -1100,6 +1269,42 @@ function ActCard({
       </p>
     </div>
   ) : null;
+
+  const eventFormPanel =
+    event && eventForm !== null ? (
+      <EventEditorDialog
+        // The same form whether it stands alone in the card or waits,
+        // closed, after the card's lines.
+        key="event-form"
+        open={eventForm}
+        onOpenChange={setEventForm}
+        // In the card, which grows into the form (Paul, 2026-11-22), on the
+        // Ask page and in a channel alike.
+        docked="inline"
+        backLabel={ACT_COPY.close_event_form}
+        onCloseAutoFocus={(closing) => {
+          closing.preventDefault();
+          refocusEdit.current = true;
+        }}
+        mode="create"
+        event={null}
+        usingPreviewData={false}
+        template={eventTemplate}
+        initialStartAt={isoToLocalInput(event.start_time)}
+        initialEndAt={isoToLocalInput(event.end_time)}
+        initialRepeatRule={event.recurrence_rule}
+        keptDraft={`ask-event:${suggestion.id}`}
+        onCreated={recordMadeEvent}
+        onSaved={() => undefined}
+      />
+    ) : null;
+
+  // The form names itself ("New event"), so the frame around it is no
+  // second region with the same name. The same element as the card, so the
+  // form in it is not mounted afresh.
+  if (formOpen) {
+    return <section className={CARD_FRAME}>{eventFormPanel}</section>;
+  }
 
   return (
     <section aria-label={title} className={cn(CARD_FRAME, "space-y-3")}>
@@ -1265,33 +1470,21 @@ function ActCard({
                 aria-hidden="true"
               />
               <div className="min-w-0 flex-1 space-y-1">
-                <Select
-                  value={assigneeId}
-                  onValueChange={setAssigneeId}
+                <WhoPicker
+                  id={`${suggestion.id}-who`}
+                  label={ACT_COPY.field_for}
+                  placeholder={ACT_COPY.pick_member}
+                  allow="any"
+                  value={who}
+                  onChange={setWho}
                   disabled={busy}
-                >
-                  <SelectTrigger
-                    aria-label={ACT_COPY.field_for}
-                    aria-invalid={(flagged && !assigneeId) || undefined}
-                    className={cn(
-                      !assigneeId &&
-                        "border-[1.5px] border-warning/70 bg-warning-tint",
-                    )}
-                  >
-                    <SelectValue placeholder={ACT_COPY.pick_member} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((member) => (
-                      <SelectItem
-                        key={String(member.user_id)}
-                        value={String(member.user_id)}
-                      >
-                        {memberLabel(member.display_name, member.user_id)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {flagged && !assigneeId ? (
+                  invalid={flagged && !who}
+                  className={cn(
+                    "w-full",
+                    !who && "border-[1.5px] border-warning/70 bg-warning-tint",
+                  )}
+                />
+                {flagged && !who ? (
                   <p
                     role="alert"
                     className="text-caption text-destructive-text"
@@ -1310,7 +1503,6 @@ function ActCard({
                 <DueDateField
                   aria-label={ACT_COPY.field_due}
                   placeholder={ACT_COPY.pick_due}
-                  missing={flagged && !due}
                   passed={
                     flagged && dueEntryPassed(due, new Date(), suggestedDue)
                   }
@@ -1321,6 +1513,70 @@ function ActCard({
               </div>
             </div>
           </div>
+          {editing ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <CardField
+                id={`${suggestion.id}-task-points`}
+                label={ACT_COPY.field_task_points}
+                problem={
+                  fieldProblem?.field === "taskPoints"
+                    ? fieldProblem.error
+                    : null
+                }
+              >
+                <Input
+                  id={`${suggestion.id}-task-points`}
+                  inputMode="numeric"
+                  value={taskPoints}
+                  placeholder="0"
+                  disabled={busy}
+                  aria-invalid={
+                    fieldProblem?.field === "taskPoints" || undefined
+                  }
+                  onChange={(change) => {
+                    setTaskPoints(change.target.value);
+                    if (fieldProblem?.field === "taskPoints") {
+                      setFieldProblem(null);
+                    }
+                  }}
+                />
+              </CardField>
+              <div className="grid content-start gap-1">
+                <SegmentedChoice
+                  label={ACT_COPY.field_task_proof}
+                  options={TASK_PROOF_KINDS.map((kind) => ({
+                    value: kind,
+                    label: TASK_PROOF_KIND_LABELS[kind],
+                  }))}
+                  value={proof}
+                  onChange={(next: TaskProofKind) => setProof(next)}
+                  disabled={busy}
+                  dense
+                />
+              </div>
+              {who?.kind === "someone" ? null : (
+                <CardField
+                  id={`${suggestion.id}-task-from`}
+                  label={TASK_FOLLOWER_COPY.field}
+                  problem={null}
+                >
+                  <FollowerSelect
+                    id={`${suggestion.id}-task-from`}
+                    value={from}
+                    currentName={followerName(from, whoDirectory)}
+                    choices={fromChoices}
+                    onChange={setFrom}
+                    disabled={busy}
+                  />
+                </CardField>
+              )}
+            </div>
+          ) : (
+            <TaskFacts
+              task={task}
+              fromName={followerName(fromShown, whoDirectory)}
+            />
+          )}
         </>
       ) : null}
 
@@ -1351,6 +1607,7 @@ function ActCard({
       <div className="flex items-center justify-end gap-2">
         {editing ? null : (
           <Button
+            ref={editButton}
             type="button"
             variant="secondary"
             size="sm"
@@ -1371,22 +1628,7 @@ function ActCard({
           {action}
         </Button>
       </div>
-      {event && eventForm !== null ? (
-        <EventEditorDialog
-          open={eventForm}
-          onOpenChange={setEventForm}
-          mode="create"
-          event={null}
-          usingPreviewData={false}
-          template={eventTemplate}
-          initialStartAt={isoToLocalInput(event.start_time)}
-          initialEndAt={isoToLocalInput(event.end_time)}
-          initialRepeatRule={event.recurrence_rule}
-          keptDraft={`ask-event:${suggestion.id}`}
-          onCreated={recordMadeEvent}
-          onSaved={() => undefined}
-        />
-      ) : null}
+      {eventFormPanel}
     </section>
   );
 }
@@ -1416,12 +1658,47 @@ function shownAfter(
           reason: changes.reason ?? points.reason,
         }
       : points,
-    task: task ? { ...task, ...changes.task } : task,
+    task: task ? editedTask(task, changes.task) : task,
     new_event:
       event && changes.eventPoints !== undefined
         ? { ...event, point_value: changes.eventPoints, points_from: null }
         : event,
   };
+}
+
+/**
+ * A task with the card's edits laid over it. A field the edit cleared
+ * (null) where the payload has no null leaves the key off, as the server
+ * stores it.
+ */
+function editedTask(
+  task: NonNullable<AiSuggestion["task"]>,
+  edits: TaskSuggestionEdits | undefined,
+): NonNullable<AiSuggestion["task"]> {
+  if (!edits) return task;
+  const {
+    audience_tier_id: tier,
+    point_reward: points,
+    followed_by: from,
+    proof_kind: proof,
+    ...rest
+  } = edits;
+  const next: NonNullable<AiSuggestion["task"]> = { ...task, ...rest };
+  const lay = <
+    K extends
+      "audience_tier_id" | "point_reward" | "followed_by" | "proof_kind",
+  >(
+    key: K,
+    value: NonNullable<AiSuggestion["task"]>[K] | null | undefined,
+  ) => {
+    if (value === null) delete next[key];
+    else if (value !== undefined) next[key] = value;
+  };
+  lay("audience_tier_id", tier);
+  lay("point_reward", points);
+  lay("followed_by", from);
+  lay("proof_kind", proof);
+  return next;
 }
 
 /** A field on the card under its Edit, with its label above. */

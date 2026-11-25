@@ -7,12 +7,12 @@
   "author": "Frapp",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pdcarlson/Frapp.git",
+    "url": "https://github.com/frapplive/Frapp.git",
     "directory": "apps/desktop"
   },
   "main": "dist/main/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/bundle.mjs",
     "start": "npm run build && electron .",
     "dist": "npm run build && npx --yes electron-builder@26.18.1 --publish never",
     "lint": "eslint . --max-warnings 0",
@@ -24,7 +24,9 @@
     "@repo/eslint-config": "*",
     "@repo/theme": "*",
     "@repo/typescript-config": "*",
-    "electron": "45.3.2",
+    "electron": "45.4.1",
+    "electron-updater": "6.8.11",
+    "esbuild": "0.28.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^4.1.10"
   }

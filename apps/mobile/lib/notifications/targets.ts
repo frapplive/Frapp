@@ -12,7 +12,7 @@
  *
  * The keys below are the values `apps/api` actually emits, found by grepping
  * `target: {` across its services: `chat`, `events`, `tasks`, `billing`,
- * `points`, `service`, `members`, `ai_suggestions`, `activity`,
+ * `points`, `service`, `members`, `ai_suggestions`, `activity`, `rush`,
  * `chat_reports`, `discord_import`.
  * `lib/more/notifications.ts` maps a
  * deliberately *wider* set to display labels, because a label that is merely
@@ -68,8 +68,9 @@ const ROUTES: Record<
   chat: { pathname: "/chat-thread", param: "channelId" },
   events: { pathname: "/event-details", param: "eventId", as: "id" },
   tasks: { pathname: "/tasks" },
-  // Points were absorbed into the task board in C3 — there is no points route.
-  points: { pathname: "/tasks" },
+  // "Points awarded" and "deducted" open the member's own points (#5950;
+  // the task board until then, when the phone had no points screen).
+  points: { pathname: "/points" },
   billing: { pathname: "/dues" },
   service: { pathname: "/service-hours" },
   members: { pathname: "/directory" },
@@ -77,6 +78,9 @@ const ROUTES: Record<
   ai_suggestions: { pathname: "/suggested-tasks" },
   // The weekly recap push (#4985): Activity, where the "Last week" card is.
   activity: { pathname: "/activity" },
+  // A recruitment follow-up or stale alert (#5934): the prospect's screen.
+  // A new interest-form submission (#5977): that prospect's screen.
+  rush: { pathname: "/rush-prospect", param: "candidateId" },
 };
 
 /**

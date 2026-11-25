@@ -41,7 +41,7 @@ export const FLOATING_TAB_BAR = {
 } as const;
 
 /**
- * The Ask Frapp bar: a glass capsule the width of the tab bar and its +,
+ * The Frapp Intelligence bar: a glass capsule the width of the tab bar and its +,
  * sitting just above them on the four tab screens, and in their row while
  * the bar is folded ({@link useBarFolded}, #4904) (#4702, Paul 2026-11-13:
  * "in a bar above the normal liquid glass bottom, not only when you open the
@@ -114,7 +114,7 @@ function createFlagStore() {
   };
 }
 
-/** Whether the Ask Frapp bar is on screen: the tab bar writes it. */
+/** Whether the Frapp Intelligence bar is on screen: the tab bar writes it. */
 const askBar = createFlagStore();
 
 /** Called by the tab bar when the bar appears or goes. */
@@ -123,21 +123,19 @@ export function setAskBarShown(shown: boolean): void {
 }
 
 /**
- * How far the Ask Frapp bar raises whatever floats above the tab bar on this
+ * How far the Frapp Intelligence bar raises whatever floats above the tab bar on this
  * screen: the bar and its gap for a member who has Ask, on a tab screen, and
  * 0 anywhere else.
  */
 export function useAskBarLift(): number {
   const { tabBar } = useFloatingChrome();
   const shown = askBar.use();
-  return tabBar && shown
-    ? FLOATING_ASK_BAR.height + FLOATING_ASK_BAR.gap
-    : 0;
+  return tabBar && shown ? FLOATING_ASK_BAR.height + FLOATING_ASK_BAR.gap : 0;
 }
 
 /**
  * Bottom padding a scrolling screen adds inside its safe area so its last row
- * clears the floating bar, and the Ask Frapp bar above it where there is
+ * clears the floating bar, and the Frapp Intelligence bar above it where there is
  * one. 0 where no bar floats: any screen pushed over the tabs, or anything
  * outside them.
  */
@@ -237,6 +235,21 @@ export function barFoldAfterScroll(
   return { state: { y, travel, viewport }, folded: null };
 }
 
+/** Where the body of a screen is scrolled: its offset, viewport and content height. */
+export type ScreenScroll = { y: number; viewport: number; content: number };
+
+/**
+ * A screen that reads where its own body is scrolled (Chat home's New unreads
+ * pills, #6045) wraps its `ScreenShell` in this, and the shell's scroll
+ * handlers report every move to it. `ScreenShell` is frozen, and it already
+ * spreads {@link useBarScroll} onto its scroll view, so the report rides
+ * that one handler rather than a second prop.
+ */
+const ScreenScrollWatch = createContext<
+  ((scroll: ScreenScroll) => void) | null
+>(null);
+export const ScreenScrollWatchProvider = ScreenScrollWatch.Provider;
+
 type BarScrollProps = Pick<
   ScrollViewProps,
   "onScroll" | "scrollEventThrottle" | "onContentSizeChange" | "onLayout"
@@ -247,13 +260,17 @@ type BarScrollProps = Pick<
  * member reads down it: the scroll handler (throttled to 16ms), and its
  * content size and layout, so a list that turns too short to scroll (a
  * shorter view, rows filtered away) unfolds the bar with no scroll event.
- * Empty off the tab bar: a pushed screen has no bar to fold. `ScreenShell`
- * spreads it for every screen it hosts; a screen with its own list opts in
- * the same way.
+ * Empty off the tab bar, where there is no bar to fold, unless the screen
+ * watches its own scroll (`ScreenScrollWatchProvider`): then the handlers
+ * come back on any screen, report every move to the watch, and fold nothing
+ * off the tab bar. `ScreenShell` spreads it for every screen it hosts; a
+ * screen with its own list opts in the same way.
  */
 export function useBarScroll(): BarScrollProps {
   const { tabBar } = useFloatingChrome();
+  const watch = useContext(ScreenScrollWatch);
   const state = useRef<BarScrollState>({ y: 0, travel: 0, viewport: 0 });
+  const content = useRef(0);
   // Gaining or losing focus starts the screen unfolded, with no travel kept.
   useFocusEffect(
     useCallback(() => {
@@ -267,6 +284,20 @@ export function useBarScroll(): BarScrollProps {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } =
         event.nativeEvent;
+      content.current = contentSize.height;
+      watch?.({
+        y: contentOffset.y,
+        viewport: layoutMeasurement.height,
+        content: contentSize.height,
+      });
+      if (!tabBar) {
+        state.current = {
+          ...state.current,
+          y: contentOffset.y,
+          viewport: layoutMeasurement.height,
+        };
+        return;
+      }
       const next = barFoldAfterScroll(
         state.current,
         contentOffset.y,
@@ -276,22 +307,36 @@ export function useBarScroll(): BarScrollProps {
       state.current = next.state;
       if (next.folded !== null) setBarFolded(next.folded);
     },
-    [],
+    [tabBar, watch],
   );
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    state.current = {
-      ...state.current,
-      viewport: event.nativeEvent.layout.height,
-    };
-  }, []);
-  const onContentSizeChange = useCallback((_width: number, height: number) => {
-    const { viewport } = state.current;
-    if (viewport > 0 && height <= viewport) {
-      state.current = { ...state.current, travel: 0 };
-      setBarFolded(false);
-    }
-  }, []);
-  return tabBar
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      state.current = {
+        ...state.current,
+        viewport: event.nativeEvent.layout.height,
+      };
+      watch?.({
+        y: state.current.y,
+        viewport: event.nativeEvent.layout.height,
+        content: content.current,
+      });
+    },
+    [watch],
+  );
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      content.current = height;
+      const { viewport } = state.current;
+      watch?.({ y: state.current.y, viewport, content: height });
+      if (!tabBar) return;
+      if (viewport > 0 && height <= viewport) {
+        state.current = { ...state.current, travel: 0 };
+        setBarFolded(false);
+      }
+    },
+    [tabBar, watch],
+  );
+  return tabBar || watch
     ? { onScroll, scrollEventThrottle: 16, onContentSizeChange, onLayout }
     : {};
 }

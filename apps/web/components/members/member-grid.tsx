@@ -1,6 +1,5 @@
 "use client";
 
-import { formatPoints } from "@repo/formatting";
 import type { MemberAvatarTint, MemberProfile } from "@repo/hooks";
 import type { PresenceStatus } from "@repo/hooks/presence-status";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,9 +22,27 @@ export interface MemberFacts {
   roleName: string | null;
   joined: string | null;
   className: string | null;
-  points: number;
+  /**
+   * The member's number as text: all-time points, or under a standings sort
+   * the period's total ("45 points", "2.5 hours"). `null` while Points is off.
+   */
+  figure: string | null;
+  /** The member's place under a standings sort; `null` with nothing in it. */
+  rank: number | null;
+  /** Whether the list is a standing (a points or service hours sort). */
+  standing: boolean;
+  /** The viewer's own tile, marked on a standing. */
+  isViewer: boolean;
   status: PresenceStatus | null;
   customLine: string | null;
+  /**
+   * The Phone app filter's answer ("Web only", "Notifications off") and a
+   * stale phone's "Last opened" note, set only while that filter is.
+   */
+  reachText?: string | null;
+  reachNote?: string | null;
+  /** Whether the answer is "Notifications off", drawn in the warning tone. */
+  reachOff?: boolean;
   /** The tile's accessible name: every fact it shows, in a fixed order. */
   label: string;
 }
@@ -64,7 +81,8 @@ export function MemberGrid({
   factsOf: (member: MemberProfile) => MemberFacts;
   selectedIds: readonly string[];
   onToggle: (id: string, selected: boolean) => void;
-  onOpen: (member: MemberProfile) => void;
+  /** Opens the member's card beside the tile that was pressed. */
+  onOpen: (member: MemberProfile, opener: HTMLElement) => void;
   avatarTintFor: (userId: string) => MemberAvatarTint | null;
 }) {
   return (
@@ -90,7 +108,7 @@ export function MemberGrid({
           >
             <button
               type="button"
-              onClick={() => onOpen(member)}
+              onClick={(event) => onOpen(member, event.currentTarget)}
               aria-label={facts.label}
               className={cn(
                 gridTileButtonClassName,
@@ -134,10 +152,33 @@ export function MemberGrid({
                     {member.email}
                   </span>
                 ) : null}
+                {facts.reachText ? (
+                  <span
+                    className={cn(
+                      "w-full truncate text-caption",
+                      facts.reachOff ? "text-warning" : "text-muted",
+                    )}
+                  >
+                    {facts.reachText}
+                  </span>
+                ) : null}
+                {facts.reachNote ? (
+                  <span className="w-full truncate text-caption text-muted">
+                    {facts.reachNote}
+                  </span>
+                ) : null}
               </span>
               <span className="text-caption tabular-nums text-muted">
-                {formatPoints(facts.points)}
-                {facts.joined ? ` · joined ${facts.joined}` : null}
+                {[
+                  facts.rank === null ? null : `#${facts.rank}`,
+                  facts.figure,
+                  !facts.standing && facts.joined
+                    ? `joined ${facts.joined}`
+                    : null,
+                  facts.isViewer && facts.standing ? "You" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </button>
             <label

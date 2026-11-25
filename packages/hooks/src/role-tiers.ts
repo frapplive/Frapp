@@ -1,4 +1,9 @@
-import { PERMISSION_REGISTRY, permissionLabel } from "@repo/validation";
+import {
+  isEveryoneRole,
+  PERMISSION_REGISTRY,
+  permissionLabel,
+  permissionsNotGivable,
+} from "@repo/validation";
 
 /*
  * Role tiers as web and the phone both read them (#3990, #4072, #4074): the
@@ -100,24 +105,16 @@ export function byDisplayOrder(a: TieredRole, b: TieredRole): number {
 }
 
 /**
- * What "View as a role" (#4072) previews: a member holding only this role,
- * with the chapter's Member role beside it when joining into the role would
- * add it. That mirrors the redeem (`lacksBaseAccess` in the API's
- * `invite.service.ts`): a role the chapter made that grants neither
- * `members:view` nor `*` comes with Member, because on its own it opens no
- * screen at all.
+ * What "View as a role" (#4072) previews: a member holding only this role
+ * and the chapter's Everyone role, which every member holds beside whatever
+ * else they have (the redeem gives both, `InviteService.resolveRedeemRoles`).
  */
 export function previewPermissions(
   role: TieredRole,
   roles: readonly TieredRole[],
 ): string[] {
-  const own = role.permissions;
-  const comesWithMember =
-    !role.is_system && !own.includes("*") && !own.includes("members:view");
-  const member = comesWithMember
-    ? roles.find((candidate) => candidate.system_key === "MEMBER")
-    : undefined;
-  return [...new Set([...own, ...(member?.permissions ?? [])])];
+  const everyone = roles.find((candidate) => isEveryoneRole(candidate));
+  return [...new Set([...role.permissions, ...(everyone?.permissions ?? [])])];
 }
 
 export function isWildcardRole(role: Pick<TieredRole, "permissions">): boolean {
@@ -145,19 +142,32 @@ function roleRank(role: TieredRole, positions: ReadonlyMap<string, number>) {
 export type Reach = {
   /** Holds `*`: reaches everything. */
   wildcard: boolean;
-  /** Whether the caller's own roles have been read, so `rank` is real. */
+  /**
+   * Whether the caller's own roles and permissions have been read, so
+   * `rank` and `held` are real (#5730).
+   */
   known: boolean;
   /** The caller's own rank; they reach only what ranks strictly below it. */
   rank: number;
   /** What the caller holds, for the "never grant what you lack" rule. */
   held: ReadonlySet<string>;
+  /** The caller's `users.id`, so their own profile reads as theirs. */
+  userId?: string | null;
 };
+
+/**
+ * With `roles:manage`, reach your own rank as well as below it when giving
+ * and taking roles (Paul, 2026-11-20, #5725): the API's `canAssignAt`.
+ */
+export const ASSIGN_OWN_LEVEL_PERMISSION = "roles:assign_own_level";
 
 export function callerReach(
   myRoleIds: readonly string[] | null,
-  myPermissions: readonly string[],
+  /** `null` until read: the reach is then unknown, as with `myRoleIds`. */
+  myPermissions: readonly string[] | null,
   roles: readonly TieredRole[],
   tiers: readonly TierRow[],
+  viewerUserId: string | null = null,
 ): Reach {
   const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
   let rank = OUTSIDE_TIERS_RANK;
@@ -166,14 +176,16 @@ export function callerReach(
       rank = Math.min(rank, roleRank(role, positions));
     }
   }
-  const wildcard = myPermissions.includes("*");
+  const wildcard = myPermissions?.includes("*") ?? false;
   return {
     wildcard,
     // Until the caller's own roles are read, their rank is unknown, and a
-    // control that looks refused would be a guess.
-    known: wildcard || myRoleIds !== null,
+    // control that looks refused would be a guess; so is what they hold,
+    // which the "hold what you give" rule reads (#5730).
+    known: myPermissions !== null && (wildcard || myRoleIds !== null),
     rank,
-    held: new Set(myPermissions),
+    held: new Set(myPermissions ?? []),
+    userId: viewerUserId,
   };
 }
 
@@ -198,6 +210,71 @@ export function reachesRole(
 }
 
 /**
+ * Whether the caller may give or take away something at `rank` on a
+ * member: below their own, or at it too with `roles:assign_own_level`
+ * (#5725). Never above, and nothing from outside the tiers.
+ */
+function assignsAt(reach: Reach, rank: number): boolean {
+  if (reach.wildcard || rank > reach.rank) return true;
+  return (
+    reach.held.has(ASSIGN_OWN_LEVEL_PERMISSION) &&
+    Number.isFinite(reach.rank) &&
+    rank === reach.rank
+  );
+}
+
+/**
+ * Whether the caller may give or take away this role on a member. On a
+ * member ranked above them (`memberStanding` says `"above"`), only a role
+ * ranked strictly below the caller, never one at their own rank even with
+ * `roles:assign_own_level` (#5903; the API's `canAssignRoleOnMemberAt`).
+ */
+export function assignsRole(
+  reach: Reach,
+  role: TieredRole,
+  tiers: readonly TierRow[],
+  standing: MemberStanding = "reachable",
+): boolean {
+  if (isWildcardRole(role)) return false;
+  if (standing === "out-of-reach") return false;
+  if (standing === "above") return reachesRole(reach, role, tiers);
+  const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
+  return assignsAt(reach, roleRank(role, positions));
+}
+
+/**
+ * Where a member stands for the caller giving or taking their roles:
+ *
+ * - `"reachable"`: their own, or a member ranked below them or at their own
+ *   rank (#5843), where `assignsRole` reaches the caller's own rank too with
+ *   `roles:assign_own_level`;
+ * - `"above"`: a member ranked above them, the President included, where it
+ *   reaches only roles ranked below the caller (#5903);
+ * - `"out-of-reach"`: the caller sits outside the tiers, and so reaches no
+ *   other member.
+ */
+export type MemberStanding = "reachable" | "above" | "out-of-reach";
+
+export function memberStanding(
+  reach: Reach,
+  member: { userId: string; roleIds: readonly string[] },
+  roles: readonly TieredRole[],
+  tiers: readonly TierRow[],
+): MemberStanding {
+  if (reach.wildcard) return "reachable";
+  if (reach.userId && reach.userId === member.userId) return "reachable";
+  if (!Number.isFinite(reach.rank)) return "out-of-reach";
+  const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
+  let rank = OUTSIDE_TIERS_RANK;
+  for (const role of roles) {
+    if (member.roleIds.includes(role.id)) {
+      rank = Math.min(rank, roleRank(role, positions));
+    }
+  }
+  return rank >= reach.rank ? "reachable" : "above";
+}
+
+/**
  * Whether the caller may put a role outside the tiers: that ranks below every
  * tier, so anyone who sits in a tier reaches it.
  */
@@ -208,6 +285,18 @@ export function reachesOutside(reach: Reach): boolean {
 /** Whether the caller may switch this permission on for someone else. */
 export function mayGrant(reach: Reach, permission: string): boolean {
   return reach.wildcard || reach.held.has(permission);
+}
+
+/**
+ * What giving `role` would hand out that the caller doesn't hold: the API's
+ * rule (`permissionsNotGivable` in `@repo/validation`, #5730).
+ */
+export function permissionsNotHeldFor(
+  reach: Reach,
+  role: Pick<TieredRole, "permissions">,
+  roles: readonly TieredRole[],
+): string[] {
+  return permissionsNotGivable(reach, role.permissions, roles);
 }
 
 /**
@@ -235,6 +324,18 @@ export type PermissionRow = {
   label: string;
   description: string | null;
 };
+
+/**
+ * How many switches a holder's page shows as on: its permissions less the
+ * wildcard and the hidden ones (`isPermissionHidden`), so a tier's count in
+ * the list matches its page (#5728).
+ */
+export function shownPermissionCount(
+  permissions: readonly string[],
+  isHidden: (permission: string) => boolean,
+): number {
+  return new Set(permissions.filter((p) => p !== "*" && !isHidden(p))).size;
+}
 
 /**
  * Every permission in the registry, plus any other string the holder carries

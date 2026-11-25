@@ -1,4 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   Alert,
@@ -8,6 +15,7 @@ import {
   View,
 } from "react-native";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   useActiveChapterId,
   useDeleteDocument,
@@ -17,6 +25,7 @@ import {
   useMarkFilterHold,
   useDocuments,
   useDocumentStars,
+  useGoogleDriveStatus,
   useMemberDisplayNames,
   useSetDocumentPin,
   useSetDocumentStar,
@@ -28,8 +37,10 @@ import {
   DELETE_DOCUMENT_LABEL,
   SORT_OPTIONS,
   deleteDocumentTitle,
+  documentFolderHues,
   isActiveDateFilter,
   isDriveCopy,
+  isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
   NO_MARK_FILTER,
@@ -38,6 +49,11 @@ import {
   type DocumentSort,
   type FileKind,
 } from "@repo/hooks/document-library";
+import { nearScrollEnd, useRenderWindow } from "@repo/hooks/use-render-window";
+import {
+  ScreenScrollWatchProvider,
+  type ScreenScroll,
+} from "@/lib/floating-chrome";
 import {
   buildFolderTree,
   folderLevel,
@@ -47,7 +63,7 @@ import {
 } from "@repo/hooks/document-folder-tree";
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { SignetTokens } from "@repo/theme/signet";
-import { can } from "@repo/validation";
+import { can, SECTION_NAMES } from "@repo/validation";
 import { ScreenShell } from "@/components/screen-shell";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import { BACK_TO_YOU } from "@/components/back-row";
@@ -59,6 +75,7 @@ import {
   Chip,
   ChipRow,
   FilterChips,
+  MenuChip,
   SearchField,
   type FilterChip,
 } from "@/components/filter-chips";
@@ -73,6 +90,7 @@ import {
 } from "@/components/documents/limited-mark";
 import { MarkedCards } from "@/components/documents/marked-cards";
 import { DocumentTiles } from "@/components/documents/document-tiles";
+import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
 import {
   BackGlyph,
@@ -91,11 +109,25 @@ import {
 import { InlineNote } from "@/components/inline-note";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import {
+  LEAD_TILE_GLYPH,
+  LeadTile,
+  LeadTileSkeleton,
+} from "@/components/lead-tile";
+import { DocumentsGlyph, MinutesGlyph } from "@/components/more/more-glyphs";
+import {
+  DOCUMENTS_TYPE_PARAM,
+  MINUTES_TYPE_PARAM_VALUE,
+} from "@repo/validation";
+import {
+  MINUTES_SPOKEN_KIND,
   documentMeta,
+  documentOpenHint,
   selectDocumentFolders,
   selectDocuments,
+  type MobileDocument,
 } from "@/lib/more/documents";
 import { shareDocumentFile } from "@/lib/more/document-file";
+import { firstParam } from "@/lib/route-params";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -196,10 +228,33 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * spellings and is the only place either appears *for a document download*.
  * Chat attachments are a different endpoint whose key genuinely is
  * `download_url` — do not converge them.
+ *
+ * ## Minutes, filed here (#5949)
+ *
+ * A meeting's posted minutes are filed in the library as a row with no file
+ * (`spec/behavior/chapter-docs.md`), under "Minutes" or "Minutes / <series>",
+ * so this screen is where a member finds them: the Minutes list it replaced
+ * now forwards here on the Minutes file type (`/documents?type=minutes`,
+ * read once into the Type filter, as web's `/documents?type=minutes`). A
+ * minutes row wears the minutes glyph, reads the day the meeting met, its
+ * folder and what the minutes hold (web's `documentFacts`, same words and
+ * order), and a tap opens the minutes screen, never the share sheet. Its
+ * long press offers Star and Pin; no Delete, since minutes are deleted as
+ * minutes, from their own screen. The screen is titled Resources, as web's
+ * page and the You row are (`SECTION_NAMES.resources`).
  */
 export default function DocumentsScreen() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
+  const router = useRouter();
+  // `type=minutes` opens on the Minutes file type (#5949): where `/minutes`
+  // and a meeting's minutes' way back land. Read once; the filter is the
+  // member's after.
+  const params = useLocalSearchParams<{
+    [DOCUMENTS_TYPE_PARAM]?: string | string[];
+  }>();
+  const openOnMinutes =
+    firstParam(params[DOCUMENTS_TYPE_PARAM]) === MINUTES_TYPE_PARAM_VALUE;
 
   const [folder, setFolder] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -244,7 +299,9 @@ export default function DocumentsScreen() {
   const [sort, setSort] = useState<DocumentSort>("name");
   const [pickedUploader, setPickedUploader] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState<"semester" | "30d" | null>(null);
-  const [kind, setKind] = useState<FileKind | null>(null);
+  const [kind, setKind] = useState<FileKind | null>(() =>
+    openOnMinutes ? "minutes" : null,
+  );
   // Pinned and Starred (#4290), each on or off; both on shows either.
   const [markFilter, setMarkFilter] =
     useState<DocumentMarkFilter>(NO_MARK_FILTER);
@@ -297,7 +354,7 @@ export default function DocumentsScreen() {
   );
 
   const foldersQuery = useDocumentFolders();
-  const documentsQuery = useDocuments();
+  const documentsQuery = useDocuments({ minutes: true });
   const openDocument = useDocumentDownloadUrl();
   const deleteDocument = useDeleteDocument();
   const refresh = useRefetchAll([foldersQuery, documentsQuery, starsQuery]);
@@ -305,6 +362,18 @@ export default function DocumentsScreen() {
   const folders = useMemo(
     () => selectDocumentFolders(foldersQuery.data),
     [foldersQuery.data],
+  );
+  // The Google Drive folder's row (officers), as on web: over a folder sync
+  // made, or at the top of Documents for the connected folder itself when
+  // its list leaves this officer out or the first pass hasn't made it yet,
+  // so Disconnect never depends on seeing the folder.
+  const driveConnection = useGoogleDriveStatus({ enabled: canManage }).data
+    ?.connection;
+  // Each row's tile wears its folder's hue, as web's rows do (#5576,
+  // `documentFolderHues`): a hue names a folder, never a state.
+  const folderHue = useMemo(
+    () => documentFolderHues(folders.map((entry) => entry.name)),
+    [folders],
   );
   // A lock on a file not everyone can see (#5216), by web's rule.
   const isLimited = useMemo(
@@ -357,6 +426,35 @@ export default function DocumentsScreen() {
   const rows = useMemo(
     () => (showCards ? visible : tierRows(visible, starredDocuments)),
     [visible, showCards, starredDocuments],
+  );
+  // A page of rows at a time (#6088): mounting one per file before the
+  // screen painted is what kept a chapter with a few hundred on a blank
+  // list. The next page is drawn as the reader nears the end of the shell's
+  // scroll, and a new folder, search, filter, order or layout starts over.
+  const listKey = JSON.stringify([
+    folder,
+    deferredSearch,
+    sort,
+    filters,
+    layout,
+  ]);
+  const rowWindow = useRenderWindow(rows, listKey);
+  const { showMore } = rowWindow;
+  // One page per growth of the content: the scroll reports every 16 ms, and
+  // several reports before the new rows lay out would add several pages.
+  // Forgotten with each new list, whose first page may lay out at the very
+  // height the last growth was asked at, and would then never grow.
+  const grownAt = useRef(-1);
+  useEffect(() => {
+    grownAt.current = -1;
+  }, [listKey]);
+  const watchScroll = useCallback(
+    (scroll: ScreenScroll) => {
+      if (scroll.content === grownAt.current || !nearScrollEnd(scroll)) return;
+      grownAt.current = scroll.content;
+      showMore();
+    },
+    [showMore],
   );
   const cards = useMemo(
     () =>
@@ -518,12 +616,7 @@ export default function DocumentsScreen() {
     };
   }
 
-  function documentTarget(doc: {
-    id: string;
-    title: string;
-    pinned_at: string | null;
-    drive_file_id?: string | null;
-  }) {
+  function documentTarget(doc: MobileDocument) {
     return {
       kind: "document" as const,
       id: doc.id,
@@ -531,6 +624,7 @@ export default function DocumentsScreen() {
       pinned: !!doc.pinned_at,
       starred: starredDocuments.has(doc.id),
       fromDrive: isDriveCopy(doc),
+      minutes: isMinutesDocument(doc),
     };
   }
 
@@ -624,7 +718,21 @@ export default function DocumentsScreen() {
     [],
   );
 
-  async function open(id: string) {
+  async function open(doc: MobileDocument) {
+    // A meeting's minutes have no file (#5949): the row opens the minutes,
+    // and never reaches the download or the share sheet.
+    if (isMinutesDocument(doc)) {
+      // It supersedes a file still downloading, whose sheet would otherwise
+      // come up over the minutes.
+      latestOpen.current += 1;
+      setOpeningId(null);
+      router.push({
+        pathname: "/minutes-details",
+        params: { id: doc.meeting_id },
+      });
+      return;
+    }
+    const id = doc.id;
     // One sheet at a time: iOS rejects a second presentation while one is
     // showing, which is a rejection worth not provoking rather than reporting.
     if (presenting.current) return;
@@ -717,6 +825,15 @@ export default function DocumentsScreen() {
   const pendingRow = pendingUpload ? (
     <ListRow
       key="pending-upload"
+      // The file's tile, neutral until it is filed into its folder.
+      leading={
+        <LeadTile on="card">
+          <DocumentsGlyph
+            color={tokens.color.text.mutedForeground}
+            size={LEAD_TILE_GLYPH}
+          />
+        </LeadTile>
+      }
       label={pendingUpload.title}
       description={
         pendingUpload.failed ? "Didn't upload. Tap to try again." : "Uploading…"
@@ -733,12 +850,18 @@ export default function DocumentsScreen() {
 
   function renderList() {
     if (documentsQuery.isPending) {
-      // Document rows in the list's own section: a title and its meta line.
+      // Document rows in the list's own section: a tile, a title and its
+      // meta line.
       return (
         <SkeletonRegion label="Loading chapter documents">
           <ListSection>
             {Array.from({ length: 4 }, (_, index) => (
-              <ListRowSkeleton key={index} index={index} description />
+              <ListRowSkeleton
+                key={index}
+                index={index}
+                description
+                leading={<LeadTileSkeleton size="row" />}
+              />
             ))}
           </ListSection>
         </SkeletonRegion>
@@ -760,6 +883,25 @@ export default function DocumentsScreen() {
       // a folder chip, widening to every folder (the search and filters
       // stay); otherwise clearing them, as web's Clear filters does.
       // Uploading lives on the screen's + (writing.md § Chapter Documents).
+      // The Minutes filter alone, where the Minutes screen and a minutes
+      // page's back land (#5949): a chapter with none filed has nothing
+      // filtered out, so say what goes here. Minutes start from the + menu
+      // or the event, as before.
+      if (
+        kind === "minutes" &&
+        !folder &&
+        !deferredSearch &&
+        uploader === null &&
+        !dateActive &&
+        !markFilter.pinned &&
+        !markFilter.starred
+      ) {
+        return (
+          <InlineNote>
+            No minutes yet. Posted minutes are filed here.
+          </InlineNote>
+        );
+      }
       if (filtering) {
         const what = deferredSearch ? `“${deferredSearch}”` : "these filters";
         return folder ? (
@@ -803,7 +945,7 @@ export default function DocumentsScreen() {
           {/* The upload in flight stays a row, heading the tiles. */}
           {pendingRow ? <ListSection>{pendingRow}</ListSection> : null}
           <DocumentTiles
-            rows={rows}
+            rows={rowWindow.shown}
             isStarred={(id) => starredDocuments.has(id)}
             isLimited={isLimited}
             busyIds={
@@ -815,7 +957,7 @@ export default function DocumentsScreen() {
             }
             deletingIds={deletingIds}
             actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
-            onOpen={(doc) => void open(doc.id)}
+            onOpen={(doc) => void open(doc)}
             onActions={(doc) => openActions(documentTarget(doc))}
           />
         </>
@@ -824,17 +966,20 @@ export default function DocumentsScreen() {
     return (
       <ListSection>
         {pendingRow}
-        {rows.map((row) => (
+        {rowWindow.shown.map((row) => (
           <ListRow
             key={row.doc.id}
+            leading={
+              <DocumentTile doc={row.doc} hue={folderHue(row.doc.folder)} />
+            }
             label={row.doc.title}
             description={documentMeta(row)}
-            accessibilityHint="Opens the share sheet to save it or open it in another app."
+            accessibilityHint={documentOpenHint(row.doc)}
             // Only the row being opened, or deleted, shows it. The others
             // stay as they are and take a tap, which moves the spinner to
             // them (`open`).
             busy={row.doc.id === openingId || deletingIds.has(row.doc.id)}
-            onPress={() => void open(row.doc.id)}
+            onPress={() => void open(row.doc)}
             // Star for everyone; Pin and Delete for `chapter_docs:manage`
             // (#3934). The row's pin or star shows in its label's tail.
             onLongPress={() => openActions(documentTarget(row.doc))}
@@ -860,6 +1005,7 @@ export default function DocumentsScreen() {
             }
             accessibilityValue={
               [
+                isMinutesDocument(row.doc) ? MINUTES_SPOKEN_KIND : null,
                 isLimited(row.doc) ? LIMITED_LABEL : null,
                 row.doc.pinned_at ? "Pinned for the chapter" : null,
                 starredDocuments.has(row.doc.id) ? "Starred" : null,
@@ -961,219 +1107,219 @@ export default function DocumentsScreen() {
   );
 
   return (
-    <ScreenShell
-      back={BACK_TO_YOU}
-      refresh={refresh}
-      createAction={
-        canUpload
-          ? {
-              label: "Upload document",
-              hint: "Opens a sheet to upload a file or a photo to the library.",
-              onPress: () => uploadSheetRef.current?.present(),
-            }
-          : undefined
-      }
-      title="Documents"
-      headerAction={<ListLayoutToggle screen="documents" />}
-    >
-      <SearchField
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search documents"
-        accessibilityLabel="Search documents"
-        searchGlyph
-      />
-
-      {folders.length > 0 ? (
-        <FilterChips
-          // A new row for each level, so it starts at its back chip rather
-          // than keeping the scroll the last level was at (#5337).
-          key={chipLevel.level?.folder.name ?? "top"}
-          accessibilityLabel="Filter by folder"
-          scroll
-          selected={folder}
-          onSelect={setFolder}
-          chips={folderChips}
+    <ScreenScrollWatchProvider value={watchScroll}>
+      <ScreenShell
+        back={BACK_TO_YOU}
+        refresh={refresh}
+        createAction={
+          canUpload
+            ? {
+                label: "Upload document",
+                hint: "Opens a sheet to upload a file or a photo to the library.",
+                onPress: () => uploadSheetRef.current?.present(),
+              }
+            : undefined
+        }
+        title={SECTION_NAMES.resources}
+        headerAction={<ListLayoutToggle screen="documents" />}
+      >
+        <SearchField
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search documents"
+          accessibilityLabel="Search documents"
+          searchGlyph
         />
-      ) : null}
-      {filterRow}
 
-      {openFailed ? (
-        <Text style={styles.errorNote}>
-          That document couldn&apos;t be opened. Try again in a moment.
-        </Text>
-      ) : null}
-      {starsQuery.isError ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          Couldn&apos;t load your stars. Pull down to try again.
-        </Text>
-      ) : null}
-      {markFailed ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          {markFailed}
-        </Text>
-      ) : null}
-      {deleteFailed ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          {deleteFailed}
-        </Text>
-      ) : null}
-
-      {showCards &&
-      !documentsQuery.isPending &&
-      !(documentsQuery.isError && documentsQuery.data === undefined) ? (
-        <MarkedCards
-          pinned={cards.pinned}
-          starred={cards.starred}
-          folderNames={folderNames}
-          isStarred={(item) =>
-            item.kind === "folder"
-              ? starredFolders.has(item.folder.id)
-              : starredDocuments.has(item.doc.id)
-          }
-          isLimited={(item) =>
-            item.kind === "folder"
-              ? !!item.folder.who_can_see
-              : isLimited(item.doc)
-          }
-          openingId={openingId}
-          deletingIds={deletingIds}
-          actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
-          onOpenFolder={setFolder}
-          onOpenDocument={(id) => void open(id)}
-          onActions={(item) =>
-            openActions(
-              item.kind === "folder"
-                ? folderTarget(item.folder)
-                : documentTarget(item.doc),
-            )
-          }
-        />
-      ) : null}
-
-      {/* The count and, across from it, the order (#5278), as Files, Drive
-          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
-      <View style={styles.listHeader}>
-        <SectionHeader>
-          {documentsQuery.isSuccess
-            ? `${visible.length} ${visible.length === 1 ? "document" : "documents"}`
-            : "Documents"}
-        </SectionHeader>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sort: ${sortLabel}`}
-          accessibilityHint="Opens the sort orders."
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-          onPress={() => sortSheetRef.current?.present()}
-          style={({ pressed }) => [
-            styles.sortControl,
-            pressed ? styles.pressed : null,
-          ]}
-        >
-          <Text style={styles.sortLabel}>{sortLabel}</Text>
-          <DisclosureGlyph
-            color={tokens.color.text.mutedForeground}
-            size={14}
-            direction="down"
+        {folders.length > 0 ? (
+          <FilterChips
+            // A new row for each level, so it starts at its back chip rather
+            // than keeping the scroll the last level was at (#5337).
+            key={chipLevel.level?.folder.name ?? "top"}
+            accessibilityLabel="Filter by folder"
+            scroll
+            selected={folder}
+            onSelect={setFolder}
+            chips={folderChips}
           />
-        </Pressable>
-      </View>
-      {renderList()}
+        ) : null}
+        {filterRow}
 
-      <OptionSheet
-        ref={sortSheetRef}
-        title="Sort by"
-        options={SORT_OPTIONS}
-        selected={sort}
-        onSelect={(value) => setSort((value as DocumentSort | null) ?? "name")}
-      />
-      <OptionSheet
-        ref={typeSheetRef}
-        title="File type"
-        options={[{ value: null, label: "Any type" }, ...kinds]}
-        selected={kind}
-        onSelect={(value) => setKind(value as FileKind | null)}
-      />
-      <OptionSheet
-        ref={uploaderSheetRef}
-        title="Uploaded by"
-        options={[{ value: null, label: "Anyone" }, ...uploaders]}
-        selected={uploader}
-        onSelect={setPickedUploader}
-      />
-      <OptionSheet
-        ref={dateSheetRef}
-        title="Date added"
-        options={dateOptions}
-        selected={dateActive ? datePreset : null}
-        onSelect={(value) => setDatePreset(value as "semester" | "30d" | null)}
-      />
+        {openFailed ? (
+          <Text style={styles.errorNote}>
+            That document couldn&apos;t be opened. Try again in a moment.
+          </Text>
+        ) : null}
+        {starsQuery.isError ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            Couldn&apos;t load your stars. Pull down to try again.
+          </Text>
+        ) : null}
+        {markFailed ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            {markFailed}
+          </Text>
+        ) : null}
+        {deleteFailed ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            {deleteFailed}
+          </Text>
+        ) : null}
 
-      <DocumentActionsSheet
-        ref={actionsSheetRef}
-        target={actionsTarget}
-        canManage={canManage}
-        onToggleStar={(target) => void toggleStar(target)}
-        onTogglePin={(target) => void togglePin(target)}
-        onDelete={(target) => confirmDelete(target.id, target.name)}
-      />
+        {showCards &&
+        !documentsQuery.isPending &&
+        !(documentsQuery.isError && documentsQuery.data === undefined) ? (
+          <MarkedCards
+            pinned={cards.pinned}
+            starred={cards.starred}
+            folderNames={folderNames}
+            isStarred={(item) =>
+              item.kind === "folder"
+                ? starredFolders.has(item.folder.id)
+                : starredDocuments.has(item.doc.id)
+            }
+            isLimited={(item) =>
+              item.kind === "folder"
+                ? !!item.folder.who_can_see
+                : isLimited(item.doc)
+            }
+            openingId={openingId}
+            deletingIds={deletingIds}
+            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            onOpenFolder={setFolder}
+            onOpenDocument={(doc) => void open(doc)}
+            onActions={(item) =>
+              openActions(
+                item.kind === "folder"
+                  ? folderTarget(item.folder)
+                  : documentTarget(item.doc),
+              )
+            }
+          />
+        ) : null}
 
-      {canUpload ? (
-        <UploadDocumentSheet
-          // A new sheet per chapter: a kept draft belongs to the chapter it
-          // was started in, and a retry the sheet holds after a failed
-          // confirm names a path minted under the chapter it was sent from.
-          key={chapterId ?? "no-chapter"}
-          ref={uploadSheetRef}
-          folders={folders}
-          initialFolder={folder}
-          onUploaded={uploaded}
-          onPending={setPendingUpload}
-          // Kept past this screen (#4593): going back and coming here again
-          // opens Upload on the draft left in it.
-          keptDraft="documents-upload"
+        {canManage ? (
+          <DriveFolderRow
+            folder={
+              folder
+                ? folders.find((entry) => entry.name === folder)
+                : driveConnection &&
+                    !folders.some(
+                      (entry) =>
+                        entry.drive_folder_id === driveConnection.folder_id,
+                    )
+                  ? {
+                      name: driveConnection.folder_name,
+                      drive_folder_id: driveConnection.folder_id,
+                    }
+                  : undefined
+            }
+          />
+        ) : null}
+        {/* The count and, across from it, the order (#5278), as Files, Drive
+          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
+        <View style={styles.listHeader}>
+          <SectionHeader>
+            {documentsQuery.isSuccess
+              ? `${visible.length} ${visible.length === 1 ? "document" : "documents"}`
+              : "Documents"}
+          </SectionHeader>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sortLabel}`}
+            accessibilityHint="Opens the sort orders."
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            onPress={() => sortSheetRef.current?.present()}
+            style={({ pressed }) => [
+              styles.sortControl,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={styles.sortLabel}>{sortLabel}</Text>
+            <DisclosureGlyph
+              color={tokens.color.text.mutedForeground}
+              size={14}
+              direction="down"
+            />
+          </Pressable>
+        </View>
+        {renderList()}
+
+        <OptionSheet
+          ref={sortSheetRef}
+          title="Sort by"
+          options={SORT_OPTIONS}
+          selected={sort}
+          onSelect={(value) =>
+            setSort((value as DocumentSort | null) ?? "name")
+          }
         />
-      ) : null}
-    </ScreenShell>
+        <OptionSheet
+          ref={typeSheetRef}
+          title="File type"
+          options={[{ value: null, label: "Any type" }, ...kinds]}
+          selected={kind}
+          onSelect={(value) => setKind(value as FileKind | null)}
+        />
+        <OptionSheet
+          ref={uploaderSheetRef}
+          title="Uploaded by"
+          options={[{ value: null, label: "Anyone" }, ...uploaders]}
+          selected={uploader}
+          onSelect={setPickedUploader}
+        />
+        <OptionSheet
+          ref={dateSheetRef}
+          title="Date added"
+          options={dateOptions}
+          selected={dateActive ? datePreset : null}
+          onSelect={(value) =>
+            setDatePreset(value as "semester" | "30d" | null)
+          }
+        />
+
+        <DocumentActionsSheet
+          ref={actionsSheetRef}
+          target={actionsTarget}
+          canManage={canManage}
+          onToggleStar={(target) => void toggleStar(target)}
+          onTogglePin={(target) => void togglePin(target)}
+          onDelete={(target) => confirmDelete(target.id, target.name)}
+        />
+
+        {canUpload ? (
+          <UploadDocumentSheet
+            // A new sheet per chapter: a kept draft belongs to the chapter it
+            // was started in, and a retry the sheet holds after a failed
+            // confirm names a path minted under the chapter it was sent from.
+            key={chapterId ?? "no-chapter"}
+            ref={uploadSheetRef}
+            folders={folders}
+            initialFolder={folder}
+            onUploaded={uploaded}
+            onPending={setPendingUpload}
+            // Kept past this screen (#4593): going back and coming here again
+            // opens Upload on the draft left in it.
+            keptDraft="documents-upload"
+          />
+        ) : null}
+      </ScreenShell>
+    </ScreenScrollWatchProvider>
   );
 }
 
 /**
- * A filter chip that opens its choices in a sheet (#5278): its name at rest,
- * the pick once set, lit while set, with a down chevron, as Google Drive's
- * Type, People and Modified chips read on a phone.
+ * A row's tile in its folder's hue, as web's rows lead (#5576): the file
+ * glyph on a file, the minutes glyph on a meeting's minutes (#5949), so a row
+ * that opens a record reads apart from one that opens a file before its line
+ * is read. Decoration to a screen reader, which hears the row's value.
  */
-function MenuChip({
-  name,
-  value,
-  hint,
-  onPress,
-}: {
-  name: string;
-  value: string | undefined;
-  hint: string;
-  onPress: () => void;
-}) {
-  const { tokens } = useFrappTheme();
-  const { accentOnPrimary } = useChapterBranding();
-  const set = value !== undefined;
+function DocumentTile({ doc, hue }: { doc: MobileDocument; hue: string }) {
+  const Glyph = isMinutesDocument(doc) ? MinutesGlyph : DocumentsGlyph;
   return (
-    <Chip
-      accessibilityRole="button"
-      accessibilityState={{ selected: set }}
-      accessibilityLabel={set ? `${name}: ${value}` : name}
-      accessibilityHint={hint}
-      label={value ?? name}
-      on={set}
-      trailing={
-        <DisclosureGlyph
-          color={set ? accentOnPrimary : tokens.color.text.muted}
-          size={14}
-          direction="down"
-        />
-      }
-      onPress={onPress}
-    />
+    <LeadTile on="card" hue={hue}>
+      <Glyph color={hue} size={LEAD_TILE_GLYPH} />
+    </LeadTile>
   );
 }
 

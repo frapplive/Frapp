@@ -10,6 +10,7 @@ import {
   notificationTitle,
   notificationWhen,
   titleAroundName,
+  unreadNonChatNotificationCount,
 } from "./notification-rows";
 
 const MEMBERS = [
@@ -180,13 +181,13 @@ describe("notificationWhen", () => {
     expect(week).toEqual({
       isToday: false,
       time: new Date(2026, 7, 15).toLocaleDateString(undefined, {
-        weekday: "short",
+        weekday: "long",
       }),
     });
     const older = notificationWhen(new Date(2026, 6, 1, 9).toISOString(), NOW);
     expect(older?.time).toBe(
       new Date(2026, 6, 1).toLocaleDateString(undefined, {
-        month: "short",
+        month: "long",
         day: "numeric",
       }),
     );
@@ -326,6 +327,24 @@ describe("notificationConversation (#3948)", () => {
       notificationConversation({ target: { screen: "events" } }),
     ).toBeNull();
     expect(notificationConversation(null)).toBeNull();
+  });
+});
+
+describe("unreadNonChatNotificationCount", () => {
+  it("counts unread rows that point anywhere but chat, which the channel counts already hold", () => {
+    expect(
+      unreadNonChatNotificationCount([
+        { id: "a", read_at: null, data: { target: { screen: "events" } } },
+        { id: "b", read_at: null, data: { target: { screen: "chat" } } },
+        { id: "c", read_at: "2026-11-24T10:00:00Z", data: { target: { screen: "tasks" } } },
+        { id: "d", read_at: null, data: null },
+        "not a row",
+      ]),
+    ).toBe(2);
+  });
+
+  it("is 0 for anything that isn't a list", () => {
+    expect(unreadNonChatNotificationCount(undefined)).toBe(0);
   });
 });
 

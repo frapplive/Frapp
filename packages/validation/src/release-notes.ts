@@ -120,6 +120,181 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-25",
+    title: "New in this update",
+    changes: [
+      "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+      "Recruitment has an interest form: open it from the Recruitment settings page, share its link or a QR code, and each person who fills it in lands in your pipeline's first stage.",
+      "When an unread channel is scrolled out of sight in your channel list, a New unreads pill at the top or bottom takes you to it, in red when someone mentioned you.",
+      "Frapp Intelligence gives shorter answers, says plainly when something isn't yours to see, and can tell whoever approves service hours which entries are waiting on them.",
+      "Folding a channel category no longer hides what's new: channels with unread messages stay in view under it until you read them, and a category's menu folds or unfolds them all at once.",
+      "A connected Google Drive folder now says how it's syncing right in Documents, with how many files and folders it left out and why, and officers can sync or disconnect it from there.",
+      "Officers can time out a member who's spamming, so they can't post or react in chapter channels for a few minutes up to a week, and they're told until when.",
+      "Officers can make a task straight from an action item in posted minutes and pick who it's for right there, without paging through the suggestions.",
+      "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
+      "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
+    ],
+    web: [
+      "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+      "Rush fits beside chat: stages with nobody in them fold to their names so the full ones keep their room, and the views, search and New fold into icons when the page is narrow.",
+      "School and council shows your school by its name, without the made-up initials badge beside it.",
+    ],
+    phone: [
+      "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
+      "Officers can now change the chapter's name, logo, short name, identity, organization type, words and birthday posts from Chapter settings, as on the web.",
+    ],
+  },
+  {
+    date: "2026-11-24",
+    title: "New in this update",
+    changes: [
+      "After you join a chapter, a new About you step asks for your phone, major, graduation year and birthday when any are missing, and you can skip it.",
+      "Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.",
+      "Officers can attach files, minutes, events, chat messages and web links to a task or an event, each shows by its current name, and anything you can't open says so instead of showing its name.",
+      "An officer can now give the president, or anyone ranked above them, roles ranked below their own and take those away, and set their pledge class and order number.",
+      "The assistant is now called Frapp Intelligence, on the web and on your phone.",
+      "Officers no longer see Send back on a task they completed themselves, and Mark not done takes it back instead.",
+      "Recruitment cards now offer Vote and Extend bid only to roles your chapter lets do them, and show a candidate's vote count only to roles allowed to see results.",
+      "Officers can now add more people to a task they already sent to a group, and each new person gets their own copy.",
+      "Your phone now gets chat notifications when Frapp is open in a browser tab you aren't looking at.",
+      "Add your T-shirt size, allergies, an emergency contact and your chapter's other details under More details on your profile, and see who can read each one.",
+      "Recruitment has its own page, with your prospects on a board or in a list, stages your chapter can rename and reorder, tags, star ratings and notes only the chapter sees.",
+      "Mine and All above a meeting's action items are now plain words instead of a boxed switch, and the small pickers inside forms, like Repeat and Proof, are a quiet gray instead of your chapter's color.",
+      "After you join a chapter, you can add your school and verify your school email with a code, or skip it for now.",
+      "A link attached to an event or a task that won't open on a phone, like an address with no real website behind it, is now refused when you add it, and one already attached shows as text instead of opening a page that can't be found.",
+      "Recruitment now tracks who's talked to each prospect: log a text or call in two taps, give a prospect an owner, set a follow-up that reminds its owner the morning it's due, and see who has gone quiet too long.",
+      "If you've verified your school email, you can start your school's council (IFC, Panhellenic, NPHC, MGC or another), pick your own title, and rename every role.",
+      "Channels always appear in your chapter's order now, so the channel filter no longer offers Recent or A to Z, and the views in form responses, the GIF picker, Catch me up and the picker for who gets a task are plain words instead of a boxed switch.",
+      "Recruitment now tracks bids: extend one, record an acceptance or a decline, and see a recorded acceptance wait until the prospect confirms it from an email or an officer does. A new Summary view beside the list shows the whole pipeline at a glance.",
+      "Role and group colors have a much bigger picker: thirty readable colors, the colors your chapter already uses, and any custom color by hex, now on your phone too.",
+      "A council can invite its school's chapters and answer their requests to join, and sees its member chapters in its own Chapters list.",
+      "Your points, service hours and study hours now open from your own profile, and the Directory sorts the chapter by points or service hours for this semester, this month or all time.",
+    ],
+    web: [
+      "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
+      "Tasks, the notifications list, the service leaderboard, event attendance and chat reports show their views as plain words beside the title instead of a switch or tabs.",
+      "Your channels now stay in the sidebar on every page, with New, Search, Activity, Messages, Calendar, Resources and Directory above them, and your own menu at the bottom.",
+      "A chapter's officers can confirm their school and ask to join its council, or answer the council's invitation, from School and council in the chapter menu.",
+      "When chat is narrow, such as beside a page, the channel's name keeps its room in the header and Threads moves into the channel menu.",
+      "Officers adjust a member's points from that member's card, and the chapter's points ledger and reviewed service hours now live in Chapter settings.",
+    ],
+    phone: [
+      "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
+      "Notifications shows All and Unread as plain words beside the title instead of a bar across the top of the list.",
+      "Continue with Google now opens Google's own sign-in sheet instead of a web page.",
+    ],
+  },
+  {
+    date: "2026-11-23",
+    title: "New in this update",
+    changes: [
+      "Event cards from Ask now invite the right people, such as only your cabinet for a leaders reception, and follow who an earlier event of the same name invited.",
+      "An event's page now follows its clock on web and phone: before check-in opens it shows the details and who's coming, while check-in is open it leads with check-in and gives officers the attendance list, and afterwards officers see who came.",
+      "Picking a type for an event or a document now happens in one menu you can search, where you can also make a new type and rename or delete one without leaving it.",
+      "Ask Frapp can make a task for several people, a role, a tier or a group, and set its points, proof, steps and who it is from.",
+      "Who's coming on an event can now be set for a whole tier, such as Cabinet, and roles added to that tier later are included.",
+      "An officer can now give or take away roles ranked below them on a fellow officer of the same tier, such as making a fellow cabinet member a committee chair, without the president.",
+      "A task's proof link has to be a full web address now, and an older one that goes nowhere shows as text instead of opening a \"server can't be found\" page.",
+      "An officer can now set the pledge class and order number of a fellow officer of the same tier, and fix their name and graduation year, without the president.",
+    ],
+    web: [
+      "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
+    ],
+  },
+  {
+    date: "2026-11-22",
+    title: "New in this update",
+    changes: [
+      "Phone numbers on profiles format themselves as you type and read the same tidy way everywhere they show up.",
+      "When a role can't be given, the list of roles says why, naming the permission your role is missing, instead of a vague \"ask an officer\".",
+      "A task can now have no due date: leave Due empty, or pick No due date, and it waits under its own No due date heading in My tasks without ever going overdue.",
+      "Ask Frapp's answers now flow in smoothly, and a long question you paste folds behind Show more.",
+    ],
+    web: [
+      "Reopening Ask Frapp lands on your newest messages, and a new question moves to the top while Frapp answers under it.",
+    ],
+    phone: [
+      "Officers can add a channel or a role from Chapter settings: a role takes a name, a tier and a color.",
+    ],
+  },
+  {
+    date: "2026-11-21",
+    title: "New in this update",
+    changes: [
+      "The + in a conversation is down to the things people post most, and its Task option now lets you find any task you can see and post it into the conversation.",
+      "You can @ a major now, like @Mechanical Engineering, to ping everyone in your chapter with it, and the Major field on your profile suggests the majors your chapter already has.",
+      "Start minutes with No meeting when there isn't one on the calendar yet, and link the meeting before you post them. Minutes now read Not started, Drafting, or the name of whoever is recording.",
+      "A suggested task from minutes can go straight onto the next meeting's agenda instead, or wait for that meeting to be scheduled.",
+      "An event that's happening right now shows at the top of Chat and Activity, with when it ends and whether you've checked in.",
+      "Officers can make a new event type right from the Type menu while creating an event, and on your phone that menu no longer covers the whole form.",
+      "A meeting's agenda is set once the meeting starts: items can still be checked off, but not added, moved or removed. On the phone, an event's details, agenda, attachments and notes now sit on raised panels.",
+      "You can @Freshmen, @Sophomores, @Juniors or @Seniors to ping a whole class, worked out from graduation year and moving up each June, so your chapter no longer needs a role per class.",
+      "The GIF picker has a Favorites tab: star a GIF to keep it there, in every chapter you're in.",
+      "Officers can now stop members from changing their own name in Chapter settings, and every name change shows in the chapter's audit log with the old and new name.",
+      "A member's profile now leads with their three highest roles, and +N more opens the rest right where they are.",
+      "The chapter's record of officer changes moved out of chat into Logs in Chapter settings, where officers can filter it by kind, person and time.",
+      "Someone who joins now holds only Everyone, which opens the channels the whole chapter can see, until an officer gives them New Member, Actives or Alumni, and a member holds just one of those three at a time.",
+      "Activity now shows just what you have to do and what you have running, with your week as a small ring beside the title, This semester on your profile, and each channel's sign-up links in its own menu.",
+      "Officers can filter Members to the people with no base role yet, and the join notice says when someone arrives without one.",
+      "When a photo chat background can't be set, you now see why, such as a file that's too large or the wrong type, instead of \"Try again in a moment\".",
+    ],
+    web: [
+      "Right-click a document for its actions.",
+      "Role and group colors can be any hue now: pick a swatch or slide to your own, and each color is adjusted so names stay easy to read, with red and gold kept for alerts and Frapp itself.",
+      "An invite link opened on your phone now takes you straight into the app, so you sign in once instead of twice.",
+    ],
+    phone: [
+      "The app opens straight to your last chat instead of waiting on the logo, then catches up in the background.",
+      "Menus are smaller and open right where you tap, instead of the system sheet that covered the screen.",
+      "Every chat box has a mic: talk, tap the check, and your words land in the box for you to read and send, tidied up in channels.",
+    ],
+  },
+  {
+    date: "2026-11-20",
+    title: "New in this update",
+    changes: [
+      "Event rows now say when an event starts and ends, not just when it starts.",
+      "Tapping Get Frapp on an invite link copies the invite, so after installing, one tap on Paste opens your chapter's invite.",
+      "The app's dark surfaces are a softer near-black now, with gentler steps between the page, cards and menus.",
+      "Each Coming up date in minutes now says when it's on the calendar or has a task, and its ⋯ menu adds it to the calendar, makes it a task or copies it.",
+      "Officers can give someone a role or put them in a group right from their profile, Chapter settings keeps roles and groups on one Roles and groups page, and the Directory can filter by group.",
+      "You can join a chapter at 17, and Frapp AI asks you to confirm you're 18 the first time you use it.",
+      "Each Coming up date in minutes now has Remind me in its ⋯ menu, which sends you a notification the evening before, or that morning.",
+      "When someone joins, you hear about it once they've added their name, so the notice says who joined.",
+      "Right after you join a chapter you add your name and photo on one screen, and Frapp AI waits to introduce itself until you first use it.",
+      "A member's profile shows Message as a small button under their name instead of a wide bar.",
+      "Your first chapter channel now greets you with a welcome card showing the next two events and a quick way to finish your profile, in place of the old tour.",
+      "Officers can now have a chapter link out for each role at once, such as one for the pledge class and one for brothers, and pick the role when they make one.",
+      "Officers who post minutes now get a quick review that turns each upcoming Coming up date into a task, with the person the minutes name filled in.",
+      "A chapter can now let its top officers give and take away roles at their own level, such as one officer making another Stewardship Chair, by turning on Give roles at your own level in Roles and groups.",
+      "Invite emails now lead with your chapter's name and open the invite from one button, with no long link to copy.",
+      "Role and tier settings no longer show two switches that did nothing, Post announcements and Post in the alumni channel.",
+      "The members list beside a channel now runs tier by tier, President first, with each officer's title under their name.",
+      "A finished task now says who marked it done and when at the top, with their proof under it, and its history shows it too.",
+      "Meetings now read in date order with the next meeting on top, and an officer can mark a past meeting as having no minutes.",
+      "A channel deleted while you have it open now says it's no longer available, instead of trying to reconnect forever.",
+      "Chapter settings → Roles and groups has an Add role button under Non-chapter business, so an officer can make a role members pick themselves, like an intramurals team, in one step.",
+      "A task given to everyone, or to a role or group, still says who it went to and how many have finished it when it shows in your own tasks, and marking it done still finishes only your part.",
+    ],
+    web: [
+      "Rows show more at a glance: an event says when check-in is open, a task says how it repeats and how far along its checklist and photos are, and a study session says which zone it was in.",
+      "Clicking someone in the Directory opens a small card beside them instead of taking over the page.",
+      "Long dropdowns, like the channel picker in chat settings, now stay inside the window and scroll, so every choice can be reached.",
+      "In Settings → Chat, click a category to see its channels, and click a channel to open its settings.",
+      "Event forms now group their settings in three framed boxes, and the day, times, points and every menu look like fields you can click.",
+      "Setting up a pledge class is quicker: the member search lists everyone as soon as you click it, and you set the order by dragging names instead of typing numbers.",
+      "A member's card in the Directory now opens under their row, fully on screen, and the roles and groups list stays open so you can give several in one go.",
+      "Events filters open from one Filter menu, and the filters you've turned on show as chips under the header so you can remove one with a click.",
+      "Tasks now opens on your own tasks, with a My tasks / Everyone's switch and one Filter button beside New task, and the add row shows only once you press New task.",
+    ],
+    phone: [
+      "Documents now say when they take effect, and study sessions show the date and time the same way the web does.",
+      "Opening an invite to another chapter now lets you join it right in the app, without signing in again.",
+    ],
+  },
+  {
     date: "2026-11-19",
     title: "New in this update",
     changes: [
@@ -130,6 +305,25 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "A task made from minutes now names its meeting as it's called today, with a link to the minutes, and a long task title wraps so you can read all of it.",
       "Minutes for a meeting whose name doesn't suggest a type are filed as Other, and no longer pull in the last chapter meeting's action items.",
       "A suggested task that looks like one you already have now shows the two side by side, so you can mark it as that task, and its action item follows it, or create it anyway.",
+      "Catch me up now opens right at the top of the channel or thread you are reading, so it no longer covers part of the screen.",
+      "Officers can make one chapter link from Invite members that anyone can join with for 7 days, to post in your group chat or Discord, and turn it off anytime.",
+      "Drafting minutes starts from one box now: paste your notes or a transcript, watch each step with a clock while it writes, and get a notification when the draft is ready, with only the sections it filled in to read over.",
+      "When a meeting's minutes haven't been posted, you can tap Request minutes on the event to remind whoever is writing them.",
+      "Search settings from the top of Chapter settings and Settings, or from search, and it takes you straight to the setting you meant, even if you call it something else.",
+      "Each suggested task is now one tidy card with who and when as chips, Create task, and a ⋯ menu for changing, dismissing or reporting it, shown one at a time with \"1 of 8\" on the web and your phone.",
+      "A role an officer gives you now stays until an officer takes it off; you can still leave the roles you picked while they're offered.",
+      "Officers who invite members or manage roles can filter the Directory to see who has the phone app with notifications on, who turned them off, and who only uses the web.",
+      "An event's Minutes now says when they were posted, how many decisions and action items they hold, and the first line of the TL;DR, so you can see what happened before opening them.",
+      "For officers who take minutes, Meetings on the web and Minutes on the phone now start with the meetings that ended without minutes, each with Start minutes, and end with the next meeting coming up, so none get forgotten.",
+      "The calendar now shows the time a task is due, and a task due at a time sits at that hour in the day view.",
+      "Chapter settings and switching chapters now live in one place: tap your chapter's name at the top left.",
+      "Add an event's agenda while you create it, and set its time as a day with a start and end, plus one tap for how long it runs.",
+      "An event's page now shows its details first, then its agenda, then attendance, and agenda items are dragged into order and checked off once the meeting starts.",
+      "An invite link now opens a card showing the chapter and who sent it, and one tap on Apple, Google or your email signs you in and joins.",
+      "When someone joins with your invite, you now get a notification instead of a message in your DMs.",
+      "Personal invites now last 7 days, and a link that has run out lets you ask the sender for a new one in one tap.",
+      "Each minutes on Meetings now says what happened, its first TL;DR line, under how many decisions and action items it holds.",
+      "Dates are written out, such as \"Friday, November 6\" and \"Due November 14\", instead of \"Fri, Nov 6\".",
     ],
     web: [
       "On a wide window, Ask Frapp now stays at the bottom of the sidebar, so it no longer moves as you open chat or a page, or covers what you're reading.",
@@ -137,12 +331,21 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "With a page open on a wide window, the page now gets the main space and chat sits in a narrower panel on the right that you can drag wider, so lists and names no longer get cut off.",
       "Events is now one list of events, tasks and birthdays by day, each in its own colour, with a small month beside it to jump to any day.",
       "Documents shows your files sooner: search and one Filters menu sit above the list, each file is tinted by its folder, and a file's actions appear when you point at it.",
+      "An invite link opened on a phone now walks you through getting the app first, then opens your invite in it, so you sign in once.",
+      "New members whose chapter has no default channel or #general now open on a channel they can post in, not the audit log.",
+      "A profile, a new channel or an event form opened from chat now opens in the chat itself, so the page beside it stays in view.",
+      "You can give a task to a whole tier like Exec board, and mark a task as from a tier, role or group so everyone in it can follow how it's going.",
+      "Taking attendance gives each member one row with Present, Late, Excused and Absent, with filters to see who is still unmarked.",
+      "Every page's main buttons, like New event, New minutes, Upload and Log service, now sit in the page's own header next to its title instead of on a row of their own, and every New button looks the same.",
     ],
     phone: [
       "Officers can change a task's title, notes, due date, points and more right on the task's page, and each change saves as they make it.",
       "Tapping someone in the Directory or in a chat now opens their profile as its own page, and the Directory keeps one simple list with calmer filter chips.",
       "Tasks puts your tasks first: your points sit in one quiet line, a task up for grabs opens on its own page, and New event on the Calendar now sits at the bottom like New task.",
       "While minutes are drafted from your notes, Drafting and Stop stay at the bottom of the screen.",
+      "Tasks can repeat every day, week or month: pick Repeat when you make one, and a new one appears each time the last one comes due.",
+      "You can now give a task to a whole tier like Exec board, and mark a task as from a tier, role or group so everyone in it can follow how it's going.",
+      "Edit minutes is now in the minutes menu, so you can fix any section, add decisions with their vote count, and give action items an owner and a due date.",
     ],
   },
   {
@@ -747,7 +950,7 @@ export interface WhatsNewDecision {
  * Whether What's new opens by itself, and with which entries: the one rule
  * behind the phone's sheet (`apps/mobile/lib/whats-new.ts`) and the web
  * dashboard's dialog (`apps/web/lib/whats-new.ts`). Each surface keeps its own
- * marker and says what `tourDue` and `existingInstall` mean there.
+ * marker and says what `welcomeDue` and `existingInstall` mean there.
  *
  * `notes` is {@link RELEASE_NOTES} (newest first); dates are `YYYY-MM-DD`, so
  * they compare as strings. `seen` is a stored {@link releaseNoteVersion}, or
@@ -756,9 +959,10 @@ export interface WhatsNewDecision {
  * - A marker at or past the newest entry shows nothing and records nothing.
  *   That covers a rollback too, to an earlier day or to a shorter version of
  *   the same day's entry.
- * - `tourDue` (a first-run tour owns this visit), or no marker on a device or
- *   account that wasn't here before the newest entry (`existingInstall`
- *   false), records the newest entry without showing it: old news to them.
+ * - `welcomeDue` (a new member's welcome card owns this visit), or no marker
+ *   on a device or account that wasn't here before the newest entry
+ *   (`existingInstall` false), records the newest entry without showing it:
+ *   old news to them.
  * - No marker but `existingInstall` shows the newest entry only; what they
  *   saw before is unknown.
  * - Otherwise it shows every entry newer than the marker, and that day's
@@ -767,10 +971,10 @@ export interface WhatsNewDecision {
 export function decideWhatsNew(input: {
   notes: readonly ReleaseNote[];
   seen: string | null;
-  tourDue: boolean;
+  welcomeDue: boolean;
   existingInstall: boolean;
 }): WhatsNewDecision {
-  const { notes, seen, tourDue, existingInstall } = input;
+  const { notes, seen, welcomeDue, existingInstall } = input;
   const newest = notes[0];
   if (!newest) return { show: [], record: null };
   const newestVersion = releaseNoteVersion(newest);
@@ -782,7 +986,7 @@ export function decideWhatsNew(input: {
   if (marker !== null && !isNewerReleaseNoteVersion(versionOf(newest), marker)) {
     return { show: [], record: null };
   }
-  if (tourDue || (marker === null && !existingInstall)) {
+  if (welcomeDue || (marker === null && !existingInstall)) {
     return { show: [], record: newestVersion };
   }
   const show =
@@ -918,6 +1122,29 @@ const MONTHS = [
   "November",
   "December",
 ] as const;
+
+/**
+ * The zone an update's `date` is a day in: the team's, where members are. The
+ * fold bot runs on CI's UTC clock, which dated a US evening's update tomorrow
+ * (#6054), so it reads the day here instead, as does anything comparing a
+ * moment with an entry's date.
+ */
+export const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `at`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteDay(at: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(at)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 /**
  * `"2026-11-07"` → `"November 7, 2026"`. Written out per the product's date

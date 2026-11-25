@@ -4,6 +4,7 @@ import {
   NavigationRouteContext,
 } from "expo-router/react-navigation";
 import type { Href } from "expo-router";
+import { SECTION_NAMES } from "@repo/validation";
 import { goBackTo } from "@/lib/href";
 
 /**
@@ -25,16 +26,16 @@ import { goBackTo } from "@/lib/href";
  */
 export const SCREEN_TITLES = {
   index: "Chat",
-  activity: "Activity",
+  activity: SECTION_NAMES.activity,
   // Tab 3 since #5310, where Calendar was; a pushed screen behind Chat
   // home's door until then.
-  messages: "Messages",
+  messages: SECTION_NAMES.messages,
   // Tab 4 since #3839: the member's profile and the hub that was More.
   you: "You",
   // A pushed screen since #5310, opened from Activity's Calendar row. The
   // route stays `events` so links and notification targets keep working; it
   // holds tasks too, so it is named for the calendar (#4610).
-  events: "Calendar",
+  events: SECTION_NAMES.calendar,
   // One day's hour grid, pushed from the month's day heading (#5310).
   "calendar-day": "Day",
   // A pushed screen since #4610, opened from Activity, Calendar and Up next.
@@ -47,19 +48,26 @@ export const SCREEN_TITLES = {
   "event-details": "Event",
   notifications: "Notifications",
   // Pushed from Chat home (#5139).
-  search: "Search",
+  search: SECTION_NAMES.search,
   preferences: "Settings",
   "service-hours": "Service hours",
   study: "Study hours",
+  // A member's own points and their history, pushed from You (#5950).
+  points: "Points",
   dues: "Dues",
-  documents: "Documents",
-  directory: "Directory",
+  // Titled Resources, as web's page and the You row are: a meeting's
+  // minutes are filed here (#5949).
+  documents: SECTION_NAMES.resources,
+  directory: SECTION_NAMES.directory,
   // A member's profile, pushed from the Directory or chat (#5568).
   member: "Profile",
   invite: "Invite members",
   "check-in": "Check in",
   "host-check-in": "Host check-in",
   "whats-new": "What's new",
+  "finish-profile": "Finish your profile",
+  // Forwards to Documents on the Minutes file type since #5949 and draws
+  // nothing; the stack layout still registers it, so it keeps a title.
   minutes: "Minutes",
   // One meeting's minutes: the capsule over it says where back goes.
   "minutes-details": "Minutes",
@@ -69,13 +77,36 @@ export const SCREEN_TITLES = {
   // Tasks and, since #3930, events: `AI_SUGGESTION_COPY.listHeading`.
   "suggested-tasks": "Suggested",
   "arrange-channels": "Arrange channels",
+  // One channel's settings (#6031), titled by the channel's name, which a
+  // capsule has no room for.
+  "channel-settings": "Channel settings",
   "chapter-settings": "Chapter settings",
-  "chapter-roles": "Roles",
+  "chapter-roles": "Roles and groups",
+  // Pushed from Chapter settings (Paul, 2026-11-21).
+  "chapter-logs": "Logs",
+  // The Chapter rows' pages (#6027), titled as web's.
+  "chapter-mark": "Chapter mark",
+  "chapter-identity": "Identity & founding",
+  "chapter-type": "Organization type",
+  "chapter-vocabulary": "Vocabulary",
   // A tier's and a role's pages are titled by their own name, which a
   // capsule has no room for, so both read as the list they belong to.
   "role-tier": "Roles",
   role: "Roles",
+  // The recruitment list (#5924) is titled with the chapter's own word
+  // ("Rush", "Intake"), which this map can't know: a back control over it
+  // shows the label its screen passes instead (`CHAPTER_WORD_TITLES`). This
+  // entry is the stack's own title, for the platform's back menu.
+  rush: "Recruitment",
+  // One prospect, pushed from the recruitment list (#5924).
+  "rush-prospect": "Prospect",
 } as const satisfies Record<string, string>;
+
+/**
+ * Screens titled with the chapter's own word, which a back control over them
+ * reads from the label its screen passes rather than from `SCREEN_TITLES`.
+ */
+const CHAPTER_WORD_TITLES: ReadonlySet<string> = new Set(["rush"]);
 
 /** The group in `app/(app)/` that holds the tab navigator. */
 const TABS_ROUTE = "(tabs)";
@@ -114,8 +145,11 @@ export function screenBelowName(
 export type ScreenBelow = {
   /** The route under this screen, a tab's own name when it is a tab. */
   name: string;
-  /** What the member calls it: `SCREEN_TITLES`, else "Back". */
-  title: string;
+  /**
+   * What the member calls it: `SCREEN_TITLES`, else "Back"; `null` for a
+   * screen titled with the chapter's own word, which the caller names.
+   */
+  title: string | null;
   /** Pops this screen, as the swipe does. */
   goBack: () => void;
 };
@@ -138,8 +172,9 @@ export function useScreenBelow(): ScreenBelow | null {
   if (!state || state.type !== "stack") return null;
   const name = screenBelowName(state.routes, route.key);
   if (!name) return null;
-  const title =
-    (SCREEN_TITLES as Record<string, string | undefined>)[name] ?? "Back";
+  const title = CHAPTER_WORD_TITLES.has(name)
+    ? null
+    : ((SCREEN_TITLES as Record<string, string | undefined>)[name] ?? "Back");
   return { name, title, goBack };
 }
 

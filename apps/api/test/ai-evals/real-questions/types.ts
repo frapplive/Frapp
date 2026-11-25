@@ -86,6 +86,20 @@ export interface QuestionExpectation {
   cards?: { min: number; max: number };
   /** Facts the proposed cards must hold between them (title or owner), as `facts`. */
   cardFacts?: string[][];
+  /**
+   * The event card's invite list and type (#5853), graded on what members
+   * it reaches: tiers are spelled out as their roles, so "Exec board" and
+   * its five roles grade the same.
+   */
+  invite?: {
+    everyone: 'required' | 'optional' | 'not_invited';
+    /** Role names that must come; empty when none are set apart. */
+    required: string[];
+    optional?: string[];
+    /** The event type's name, or null for none. Left out: not graded. */
+    type?: string | null;
+    points?: number;
+  };
 }
 
 export interface RealQuestion {
@@ -99,6 +113,8 @@ export interface RealQuestion {
   origin: 'plan' | 'paul' | 'miss';
   /** A member of the synthetic chapter, by id. */
   askerId: string;
+  /** The chapter asked of. Left out: the term chapter. */
+  chapter?: import('../synthetic-chapter/term').TermChapter;
   /** The channel, event or task that was open when they asked. */
   from?: { channelId?: string; eventId?: string; taskId?: string };
   question: string;

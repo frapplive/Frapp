@@ -8,7 +8,12 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { askPlainWords } from "@repo/chat-core/ask-markdown";
-import { useAskThumbs, useChannels, type AskExchange } from "@repo/hooks";
+import {
+  useAskThumbs,
+  useChannels,
+  useSmoothText,
+  type AskExchange,
+} from "@repo/hooks";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_REPORT_COPY,
@@ -30,6 +35,7 @@ import {
   type AskEntity,
   type AskPostedAnswer,
   type AskSource,
+  askQuestionShown,
 } from "@repo/validation";
 import {
   CheckGlyph,
@@ -46,13 +52,14 @@ import { AskSteps } from "@/components/ask/ask-steps";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { selectChannels } from "@/lib/chat/channel-list";
 import { selectionHaptic } from "@/lib/haptics";
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 import { fontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
  * One turn of the Ask conversation on the phone: what the member typed, then
  * what Frapp came back with. That is an answer with a numbered marker at
  * each cited sentence and the sources those markers open
- * (`spec/ui/design-system/components.md` §11; `spec/behavior/ai.md` § Ask;
+ * (`spec/ui/design-system/components.md` §11; `spec/behavior/ai.md` § Frapp Intelligence;
  * #450, #451), or the card for something the member asked to have done
  * (`ask-proposal.tsx`, passed in as `proposal`). Web's twin is
  * `apps/web/components/ask/ask-answer.tsx`, and both read the same words
@@ -115,14 +122,31 @@ export function AskQuestionBubble({ text }: { text: string }) {
   const { tokens } = useFrappTheme();
   const { accentPrimary, accentOnPrimary } = useChapterBranding();
   const styles = createStyles(tokens);
+  const shown = askQuestionShown(text);
+  const [open, setOpen] = useState(false);
   return (
-    <View style={[styles.bubble, { backgroundColor: accentPrimary }]}>
-      <Text
-        accessibilityRole="header"
-        style={[styles.answer, { color: accentOnPrimary }]}
-      >
-        {text}
-      </Text>
+    <View style={styles.question}>
+      <View style={[styles.bubble, { backgroundColor: accentPrimary }]}>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={shown.long && !open ? 6 : undefined}
+          style={[styles.answer, { color: accentOnPrimary }]}
+        >
+          {shown.text}
+        </Text>
+      </View>
+      {shown.long ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          hitSlop={8}
+          onPress={() => setOpen((was) => !was)}
+        >
+          <Text style={styles.more}>
+            {open ? ASK_COPY.question_less : ASK_COPY.question_more}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -243,7 +267,7 @@ export function AskReply({
         }
       />
       {exchange.phase === "working" && exchange.preview ? (
-        <AskPreviewMarkdown text={exchange.preview} style={styles.answer} />
+        <AskStreamingText text={exchange.preview} style={styles.answer} />
       ) : null}
 
       {exchange.phase === "failed" && exchange.failure ? (
@@ -946,9 +970,18 @@ function createStyles(tokens: SignetTokens) {
     turn: {
       gap: tokens.spacing.md,
     },
+    question: {
+      alignSelf: "flex-end",
+      alignItems: "flex-end",
+      maxWidth: "85%",
+      gap: tokens.spacing.xs,
+    },
+    more: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+    },
     bubble: {
       alignSelf: "flex-end",
-      maxWidth: "85%",
       borderRadius: 18,
       borderBottomRightRadius: 6,
       paddingHorizontal: 14,
@@ -1064,4 +1097,25 @@ function createStyles(tokens: SignetTokens) {
       opacity: 0.5,
     },
   });
+}
+
+/**
+ * The streamed preview, paced so it flows rather than lands in bursts
+ * (`useSmoothText`; Paul, 2026-11-22), as web paces it. With Reduce Motion
+ * on it is drawn as it arrives.
+ */
+function AskStreamingText({
+  text,
+  style,
+}: {
+  text: string;
+  style: Parameters<typeof AskPreviewMarkdown>[0]["style"];
+}) {
+  const reduceMotion = useReduceMotion();
+  return (
+    <AskPreviewMarkdown
+      text={useSmoothText(text, !reduceMotion)}
+      style={style}
+    />
+  );
 }

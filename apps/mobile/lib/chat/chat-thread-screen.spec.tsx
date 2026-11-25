@@ -25,6 +25,10 @@ import {
 vi.mock("@/components/chat/chat-background", () => ({
   ChatBackground: () => null,
 }));
+// The welcome card (#5627) reads events and its own mark; it has its own spec.
+vi.mock("@/components/onboarding/welcome-card", () => ({
+  WelcomeCard: () => null,
+}));
 
 vi.mock("@/lib/chapter-branding", async () => {
   const { chapterBrandingMock, PURPLE_BRANDING } =
@@ -42,6 +46,9 @@ import {
   NotificationLevelMenu,
 } from "@/components/chat/notification-level-control";
 import { ChannelStart } from "@/components/chat/channel-start";
+import { ActivityListRow } from "@/components/activity/activity-row";
+import { LINKS_EMPTY } from "@/components/chat/message-list-sheet";
+import { UndoBar } from "@/components/tasks/undo-bar";
 import {
   HISTORY_START_COPY,
   ThreadHistoryEdge,
@@ -169,38 +176,20 @@ vi.mock("@/components/chat/new-poll-sheet", async () => {
   };
 });
 
-const presentSignupSheet = vi.fn();
-vi.mock("@/components/chat/new-signup-sheet", async () => {
+const presentTaskLinkSheet = vi.fn();
+vi.mock("@/components/chat/task-link-sheet", async () => {
   const { createElement, forwardRef, useImperativeHandle } =
     await import("react");
   return {
-    NewSignupSheet: forwardRef(function NewSignupSheet(
+    TaskLinkSheet: forwardRef(function TaskLinkSheet(
       props: Record<string, unknown>,
       ref,
     ) {
       useImperativeHandle(ref, () => ({
-        present: presentSignupSheet,
+        present: presentTaskLinkSheet,
         dismiss: vi.fn(),
       }));
-      return createElement("NewSignupSheet", props);
-    }),
-  };
-});
-
-const presentFormSheet = vi.fn();
-vi.mock("@/components/chat/new-form-sheet", async () => {
-  const { createElement, forwardRef, useImperativeHandle } =
-    await import("react");
-  return {
-    NewFormSheet: forwardRef(function NewFormSheet(
-      props: Record<string, unknown>,
-      ref,
-    ) {
-      useImperativeHandle(ref, () => ({
-        present: presentFormSheet,
-        dismiss: vi.fn(),
-      }));
-      return createElement("NewFormSheet", props);
+      return createElement("TaskLinkSheet", props);
     }),
   };
 });
@@ -224,23 +213,6 @@ vi.mock("@/components/chat/composer-plus-sheet", async () => {
 });
 
 const presentTaskSheet = vi.fn();
-const presentRolePickerSheet = vi.fn();
-vi.mock("@/components/chat/new-role-picker-sheet", async () => {
-  const { createElement, forwardRef, useImperativeHandle } =
-    await import("react");
-  return {
-    NewRolePickerSheet: forwardRef(function NewRolePickerSheet(
-      props: Record<string, unknown>,
-      ref,
-    ) {
-      useImperativeHandle(ref, () => ({
-        present: presentRolePickerSheet,
-        dismiss: vi.fn(),
-      }));
-      return createElement("NewRolePickerSheet", props);
-    }),
-  };
-});
 vi.mock("@/components/tasks/new-task-sheet", async () => {
   const { createElement, forwardRef, useImperativeHandle } =
     await import("react");
@@ -267,17 +239,6 @@ vi.mock("@/components/events/new-event-sheet", async () => {
     }),
   };
 });
-vi.mock("@/components/service-hours/log-hours-sheet", async () => {
-  const { createElement, forwardRef } = await import("react");
-  return {
-    LogHoursSheet: forwardRef(function LogHoursSheet(
-      props: Record<string, unknown>,
-    ) {
-      return createElement("LogHoursSheet", props);
-    }),
-  };
-});
-
 const presentMemberSheet = vi.fn();
 const dismissMemberSheet = vi.fn();
 vi.mock("@/components/chat/channel-member-sheet", async () => {
@@ -364,11 +325,8 @@ function channelState(
     sendInFlight: () => false,
     sendPoll: vi.fn(async () => ({ ok: true as const })),
     sendGif: vi.fn(async () => ({ ok: true as const })),
-    sendSignup: vi.fn(async () => ({ ok: true as const })),
-    sendRolePicker: vi.fn(async () => ({ ok: true as const })),
-    sendForm: vi.fn(async () => ({ ok: true as const })),
     postTask: vi.fn(async () => ({ ok: true })),
-    postHours: vi.fn(async () => ({ ok: true })),
+    linkTask: vi.fn(async () => ({ ok: true })),
     trackEventCard: vi.fn(() => ({
       clientMessageId: "c1",
       failed: vi.fn(),
@@ -398,6 +356,7 @@ function channelState(
     typingUsers: [],
     emitTyping: vi.fn(),
     connection: "live",
+    unavailable: false,
     retry: vi.fn(async () => {}),
     discard: vi.fn(async () => {}),
     ...overrides,
@@ -499,14 +458,63 @@ const reminderWrites = vi.hoisted(() => ({
   set: { mutateAsync: vi.fn(async (input: unknown) => void input) },
 }));
 
+/**
+ * A channel's Links (#5779): Activity's read, which holds them, the dot the
+ * row clears, and the link writes, which land unless a test says otherwise.
+ */
+const channelLinks = vi.hoisted(() => ({
+  activity: {
+    data: undefined as unknown,
+    isPending: false,
+    isError: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  },
+  markRead: vi.fn(),
+  done: vi.fn(async (id: string) => void id),
+  hidden: vi.fn(async (id: string) => void id),
+  clear: vi.fn(async (id: string) => void id),
+  remove: vi.fn(async (id: string) => void id),
+  restore: vi.fn(async (id: string) => void id),
+}));
+
+/** The props the thread last handed a Links row's sheet (#5779). */
+const linkSheet = vi.hoisted(() => ({
+  props: null as null | {
+    row: { key: string } | null;
+    onClosed: () => void;
+    linkActions?: import("@/components/activity/activity-sheet").LinkSheetActions;
+  },
+}));
+vi.mock("@/components/activity/activity-sheet", () => ({
+  ActivitySheet: (props: NonNullable<typeof linkSheet.props>) => {
+    linkSheet.props = props;
+    return null;
+  },
+}));
+
 /** The unread counts' fetch, stood in for `GET /v1/channels/unread`. */
 const unreadCountsFetch = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeout: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
 
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   const { useQuery } = await import("@tanstack/react-query");
   return {
     ...actual,
+  // Chat timeouts (#6006): the viewer's own, read through
+  // `chatTimeout`, and the sheet's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeout.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
+    // Dictation's cleanup needs the API client; nothing here dictates.
+    useCleanDictation: () => async () => null,
     // The real hook's shape, minus the API client this spec doesn't provide:
     // one query under the shared key, always with its fetch (#4885).
     useChannelUnreadCounts: (options?: { enabled?: boolean }) =>
@@ -528,6 +536,16 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useSetMessageReminder: () => reminderWrites.set,
     useBookmarks: () => ({ data: [], isPending: false, isError: false }),
     usePinnedMessages: () => ({ data: [], isPending: false, isError: false }),
+    // Links (#5779): Activity's read, its dots and the link writes.
+    useActivity: () => channelLinks.activity,
+    useActivityUnread: () => ({ markRead: channelLinks.markRead }),
+    useActivityFaces: () => () => null,
+    useSetActivityLinkState: (state: "done" | "hidden") => ({
+      mutateAsync: state === "done" ? channelLinks.done : channelLinks.hidden,
+    }),
+    useClearActivityLinkState: () => ({ mutateAsync: channelLinks.clear }),
+    useRemoveActivityLink: () => ({ mutateAsync: channelLinks.remove }),
+    useRestoreActivityLink: () => ({ mutateAsync: channelLinks.restore }),
     // Scheduled messages (#4956): none, and a schedule that never lands.
     useScheduledMessages: (channelId: string | null) => ({
       ...(scheduledListFor(channelId) as object),
@@ -583,7 +601,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
   };
 });
 
-/** Catch me up (#3946): the gate, and the sheet's hook, both stood in. */
+/** Catch me up (#3946): the gate, and the summary's hook, both stood in. */
 const catchUp = vi.hoisted(() => ({
   surface: false,
   waiting: false,
@@ -604,10 +622,8 @@ vi.mock("@/lib/ai/availability", () => ({
     askAccess: askAccess.value,
   }),
 }));
-vi.mock("@/components/chat/catch-up-sheet", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/chat/catch-up-sheet")
-  >()),
+vi.mock("@/components/chat/catch-up", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/catch-up")>()),
   useCatchUp: (options: {
     onOpenPoint: (point: Record<string, unknown>) => void;
   }) => {
@@ -618,6 +634,11 @@ vi.mock("@/components/chat/catch-up-sheet", async (importOriginal) => ({
       active: catchUp.active,
       resume: catchUp.resume,
       drop: catchUp.drop,
+      // The open summary, drawn by the screen under its header.
+      block:
+        catchUp.active && !catchUp.waiting
+          ? React.createElement("Text", null, "Open summary block")
+          : null,
       sheets: null,
     };
   },
@@ -858,6 +879,26 @@ describe("chat thread in the audit log", () => {
     act(() => tree.unmount());
   });
 
+  it("holds the composer, saying until when, while the viewer is timed out (#6006)", () => {
+    chatTimeout.current = {
+      until: new Date(Date.now() + 60 * 60_000).toISOString(),
+      reason: "spamming",
+    };
+    try {
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(false);
+      expect(composer.props.plusDisabled).toBe(true);
+      expect(composer.props.onSchedule).toBeUndefined();
+      expect(composer.props.disabledHint).toMatch(
+        /^You're timed out until .+ · Reason: spamming$/,
+      );
+      act(() => tree.unmount());
+    } finally {
+      chatTimeout.current = { until: null, reason: null };
+    }
+  });
+
   it("offers Schedule message from the composer, with its sheets mounted (#4956)", () => {
     const tree = render();
     const composer = tree.root.findByType(ChatComposer);
@@ -990,6 +1031,27 @@ describe("chat thread identity gate (#2250)", () => {
     expect(skeletons(tree)).toHaveLength(0);
     act(() => byLabel(tree, "Try again").props.onPress());
     expect(channel.reload).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+});
+
+describe("chat thread whose channel can't be read any more (#5765)", () => {
+  it("says the channel is gone in place of the timeline and the composer", () => {
+    // Its reads are refused too once the list is read again, so the load
+    // error underneath must not be what the member sees.
+    channel = channelState({
+      unavailable: true,
+      loadError: new Error("Forbidden"),
+    });
+    const tree = render();
+
+    const text = screenText(tree);
+    expect(text).toContain("This channel is no longer available");
+    expect(text).toContain("It was deleted, or you can no longer see it.");
+    expect(text).not.toContain("Couldn't load messages");
+    expect(rows(tree)).toHaveLength(0);
+    expect(skeletons(tree)).toHaveLength(0);
+    expect(tree.root.findAllByType(ChatComposer)).toHaveLength(0);
     act(() => tree.unmount());
   });
 });
@@ -2582,26 +2644,20 @@ describe("chat thread + sheet (#3865)", () => {
     const open = composer(tree).props.onOpenPlus as () => void;
     act(() => open());
     expect(presentPlusSheet).toHaveBeenCalledTimes(1);
-    // A sign-up sheet and a form need no grant (#3926), so they are always
-    // offered.
-    expect(rowsOf(tree).map((row) => row.command)).toEqual(["signup", "form"]);
+    expect(rowsOf(tree)).toEqual([]);
     expect(footerOf(tree)).toEqual([
-      "Your role can't create polls, events, tasks, service hours or role pickers.",
+      "Your role can't create polls, events or tasks.",
     ]);
     act(() => tree.unmount());
   });
 
-  it("offers each form the role allows, in web's order, and never Points", () => {
+  it("offers Poll, Event and Task, in web's order (#5772)", () => {
     permissionList = ["*"];
     const tree = render();
     expect(rowsOf(tree).map((row) => row.command)).toEqual([
       "poll",
-      "signup",
-      "form",
       "event",
       "task",
-      "hours",
-      "roles",
     ]);
     act(() => tree.unmount());
   });
@@ -2623,9 +2679,6 @@ describe("chat thread + sheet (#3865)", () => {
     const tree = render();
     expect(rowsOf(tree)).toEqual([
       { command: "poll", label: "Poll", disabledReason: "Still loading" },
-      // It needs no module, so it waits on nothing (#3926).
-      { command: "signup", label: "Sign-up sheet", disabledReason: null },
-      { command: "form", label: "Form", disabledReason: null },
     ]);
     act(() => tree.unmount());
   });
@@ -2677,86 +2730,52 @@ describe("chat thread + sheet (#3865)", () => {
     act(() => tree.unmount());
   });
 
-  it("opens the New sign-up sheet from its row and posts through sendSignup (#3926)", async () => {
-    presentSignupSheet.mockClear();
+  it("opens the Task picker from its row, linking into this channel (#5772)", async () => {
+    permissionList = ["members:view"];
+    presentTaskLinkSheet.mockClear();
     const tree = render();
     const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
-    act(() => openForm("signup"));
-    expect(presentSignupSheet).toHaveBeenCalledTimes(1);
-    const onPost = tree.root.findByType("NewSignupSheet" as never).props
-      .onPost as (signup: unknown) => Promise<unknown>;
-    const signup = { content: "Sober drivers", payload: {} };
+    act(() => openForm("task"));
+    expect(presentTaskLinkSheet).toHaveBeenCalledTimes(1);
+    const picker = tree.root.findByType("TaskLinkSheet" as never);
+    // A member who can only read tasks links one; making one is an officer's.
+    expect(picker.props.canCreate).toBe(false);
     await act(async () => {
-      await onPost(signup);
+      await (picker.props.onLink as (t: unknown) => Promise<unknown>)({
+        id: "t1",
+        title: "Fix the door",
+      });
     });
-    expect(channel.sendSignup).toHaveBeenCalledWith(signup);
+    expect(channel.linkTask).toHaveBeenCalledWith({
+      id: "t1",
+      title: "Fix the door",
+    });
     act(() => tree.unmount());
   });
 
-  it("opens the New form sheet from its row and posts through sendForm (#3926 step 3)", async () => {
-    presentFormSheet.mockClear();
-    const tree = render();
-    const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
-    act(() => openForm("form"));
-    expect(presentFormSheet).toHaveBeenCalledTimes(1);
-    const onPost = tree.root.findByType("NewFormSheet" as never).props
-      .onPost as (form: unknown) => Promise<unknown>;
-    const form = { content: "Formal housing", payload: {} };
-    await act(async () => {
-      await onPost(form);
-    });
-    expect(channel.sendForm).toHaveBeenCalledWith(form);
-    act(() => tree.unmount());
-  });
-
-  it("opens the Task form on first use, posting into this channel", () => {
+  it("opens the Task form from the picker's New task, posting into this channel", () => {
     permissionList = ["*"];
     const tree = render();
     expect(tree.root.findAllByType("NewTaskSheet" as never)).toHaveLength(0);
-    const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
-    act(() => openForm("task"));
+    const picker = tree.root.findByType("TaskLinkSheet" as never);
+    expect(picker.props.canCreate).toBe(true);
+    act(() => (picker.props.onNew as () => void)());
     const task = tree.root.findByType("NewTaskSheet" as never);
     expect(task.props.postToChannel).toBe(channel.postTask);
     expect(presentTaskSheet).toHaveBeenCalledTimes(1);
     act(() => tree.unmount());
   });
 
-  it("mounts the New role picker on first use and posts through sendRolePicker (#4958)", async () => {
-    permissionList = ["*"];
-    presentRolePickerSheet.mockClear();
-    const tree = render();
-    expect(tree.root.findAllByType("NewRolePickerSheet" as never)).toHaveLength(
-      0,
-    );
-    const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
-    act(() => openForm("roles"));
-    expect(presentRolePickerSheet).toHaveBeenCalledTimes(1);
-    const onPost = tree.root.findByType("NewRolePickerSheet" as never).props
-      .onPost as (picker: unknown) => Promise<unknown>;
-    const picker = {
-      content: "Pick your roles",
-      payload: { title: "Pick your roles", role_ids: ["r1"] },
-    };
-    await act(async () => {
-      await onPost(picker);
-    });
-    expect(channel.sendRolePicker).toHaveBeenCalledWith(picker);
-    act(() => tree.unmount());
-  });
-
-  it("opens Event and Service hours posting into this channel", () => {
+  it("opens Event posting into this channel", () => {
     permissionList = ["*"];
     const tree = render();
     const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
     act(() => openForm("event"));
-    act(() => openForm("hours"));
     const event = tree.root.findByType("NewEventSheet" as never);
     expect(event.props.chat).toEqual({
       channelId: CHANNEL,
       trackCard: channel.trackEventCard,
     });
-    const hours = tree.root.findByType("LogHoursSheet" as never);
-    expect(hours.props.postToChannel).toBe(channel.postHours);
     act(() => tree.unmount());
   });
 
@@ -2771,7 +2790,11 @@ describe("chat thread + sheet (#3865)", () => {
     });
     const tree = render();
     const openForm = plusSheet(tree).props.onOpenForm as (c: string) => void;
-    act(() => openForm("task"));
+    act(() =>
+      (
+        tree.root.findByType("TaskLinkSheet" as never).props.onNew as () => void
+      )(),
+    );
     act(() => openForm("event"));
     const task = tree.root.findByType("NewTaskSheet" as never);
     act(() =>
@@ -2784,19 +2807,6 @@ describe("chat thread + sheet (#3865)", () => {
     expect(alert).toHaveBeenLastCalledWith(
       "Couldn't confirm the task",
       "Check the task board.",
-    );
-    act(() => openForm("hours"));
-    const hours = tree.root.findByType("LogHoursSheet" as never);
-    act(() =>
-      (hours.props.onPosted as (r: unknown) => void)({
-        ok: true,
-        unconfirmed: true,
-        warning: "Check the Service page.",
-      }),
-    );
-    expect(alert).toHaveBeenLastCalledWith(
-      "Couldn't confirm the hours",
-      "Check the Service page.",
     );
     const onPost = tree.root.findByType("NewPollSheet" as never).props
       .onPost as (poll: unknown) => Promise<unknown>;
@@ -3122,6 +3132,154 @@ describe("chat thread Pin and Save from the actions sheet", () => {
   });
 });
 
+// A channel's sign-up links (#5779), which Activity listed until then: Links
+// in the header's menu, each row opening the link's sheet with every action
+// it had on Activity, and an Undo bar that outlives the sheet.
+describe("a channel's Links (#5779)", () => {
+  const link = (overrides: Record<string, unknown> = {}) => ({
+    id: "l1",
+    url: "https://forms.gle/abc",
+    host: "forms.gle",
+    title: null,
+    message_id: "m1",
+    thread_root_id: null,
+    channel_id: CHANNEL,
+    channel_name: "general",
+    channel_type: "PUBLIC",
+    posted_by: null,
+    posted_by_name: "Olive",
+    posted_at: "2026-11-10T15:00:00.000Z",
+    unread: false,
+    ...overrides,
+  });
+  type LinkRow = Parameters<
+    NonNullable<NonNullable<typeof linkSheet.props>["linkActions"]>["done"]
+  >[0];
+  const openLinks = (tree: ReactTestRenderer) => {
+    openMuteMenu(tree);
+    const actions = tree.root.findByType(NotificationLevelMenu).props
+      .actions as { label: string; onPress: () => void }[];
+    act(() => actions.find((action) => action.label === "Links")!.onPress());
+  };
+  const linkRows = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(ActivityListRow);
+
+  beforeEach(() => {
+    linkSheet.props = null;
+    channelLinks.markRead.mockClear();
+    for (const write of [
+      channelLinks.done,
+      channelLinks.hidden,
+      channelLinks.clear,
+      channelLinks.remove,
+      channelLinks.restore,
+    ]) {
+      write.mockClear();
+    }
+    channelLinks.activity = {
+      ...channelLinks.activity,
+      isPending: false,
+      isError: false,
+      data: {
+        links: [
+          link({ unread: true }),
+          link({ id: "l2", channel_id: "elsewhere", channel_name: "rush" }),
+        ],
+      },
+    };
+    channel = channelState({ messages: [message("m1")] });
+  });
+
+  it("lists this channel's links only, and opens one in its sheet, clearing its dot", () => {
+    const tree = render();
+    openLinks(tree);
+    const rows = linkRows(tree);
+    expect(rows.map((row) => row.props.row.key)).toEqual(["link:l1"]);
+    act(() => rows[0]!.props.onPress());
+    expect(channelLinks.markRead).toHaveBeenCalledWith([
+      { kind: "link", item_id: "l1" },
+    ]);
+    expect(linkSheet.props?.row?.key).toBe("link:l1");
+    // Remove is `channels:manage`'s, as it was on Activity.
+    expect(linkSheet.props?.linkActions?.canRemove).toBe(false);
+    act(() => tree.unmount());
+  });
+
+  it("says when the channel has none", () => {
+    channelLinks.activity = {
+      ...channelLinks.activity,
+      data: { links: [link({ channel_id: "elsewhere" })] },
+    };
+    const tree = render();
+    openLinks(tree);
+    expect(linkRows(tree)).toHaveLength(0);
+    expect(screenText(tree)).toContain(LINKS_EMPTY);
+    act(() => tree.unmount());
+  });
+
+  it.each([
+    ["done", "Marked done", "clear"],
+    ["hide", "Hidden", "clear"],
+    ["remove", "Removed for everyone", "restore"],
+  ] as const)(
+    "offers Undo once %s lands, over the thread and after the sheet",
+    async (action, message, takeBack) => {
+      permissionList = ["channels:manage"];
+      const tree = render();
+      openLinks(tree);
+      act(() => linkRows(tree)[0]!.props.onPress());
+      expect(linkSheet.props?.linkActions?.canRemove).toBe(true);
+      const actions = linkSheet.props!.linkActions!;
+      const row = linkRows(tree)[0]!.props.row as LinkRow;
+      // The sheet closes as the write starts.
+      act(() => linkSheet.props!.onClosed());
+      await act(async () => {
+        actions[action](row);
+      });
+      const write = {
+        done: channelLinks.done,
+        hide: channelLinks.hidden,
+        remove: channelLinks.remove,
+      }[action];
+      expect(write).toHaveBeenCalledWith("l1");
+      const bar = tree.root.findByType(UndoBar);
+      expect(bar.props.message).toBe(message);
+      await act(async () => {
+        bar.props.onUndo();
+      });
+      expect(channelLinks[takeBack]).toHaveBeenCalledWith("l1");
+      expect(tree.root.findAllByType(UndoBar)).toHaveLength(0);
+      act(() => tree.unmount());
+    },
+  );
+
+  it("opens a link posted in a thread at its message there", () => {
+    channelLinks.activity = {
+      ...channelLinks.activity,
+      data: { links: [link({ thread_root_id: "root-1", message_id: "r1" })] },
+    };
+    const tree = render();
+    openLinks(tree);
+    act(() => linkRows(tree)[0]!.props.onPress());
+    const push = vi.mocked(vi.mocked(expoRouter.useRouter)().push);
+    push.mockClear();
+    act(() =>
+      linkSheet.props!.linkActions!.openInChat(
+        linkRows(tree)[0]!.props.row as LinkRow,
+      ),
+    );
+    expect(push).toHaveBeenLastCalledWith({
+      pathname: "/chat-thread",
+      params: {
+        channelId: CHANNEL,
+        threadRootId: "root-1",
+        focusMessageId: "r1",
+      },
+    });
+    act(() => tree.unmount());
+  });
+});
+
 // The sheet's Flag row (#3921): offered where the viewer may change the
 // flag, reading the current flag live, and a refusal said aloud.
 describe("chat thread flags from the actions sheet", () => {
@@ -3291,6 +3449,7 @@ describe("Catch me up in a channel (#3946)", () => {
     expect(menuActions(tree)?.map((action) => action.label)).toEqual([
       "Pinned messages",
       "Saved messages",
+      "Links",
     ]);
     act(() => tree.unmount());
   });
@@ -3326,7 +3485,6 @@ describe("Catch me up in a channel (#3946)", () => {
     expect(catchUp.start).toHaveBeenCalledWith({
       kind: "channel",
       channelId: CHANNEL,
-      channelName: "general",
       unread: { count: 60, as_of: expect.any(String) },
     });
     // Asked once: the strip does not come back over the summary.
@@ -3356,6 +3514,7 @@ describe("Catch me up in a channel (#3946)", () => {
       CHAT_CATCH_UP_COPY.name,
       "Pinned messages",
       "Saved messages",
+      "Links",
     ]);
     act(() => actions[0]!.onPress());
     expect(catchUp.start).toHaveBeenCalledTimes(1);
@@ -3433,6 +3592,19 @@ describe("Catch me up in a channel (#3946)", () => {
     expect(scrollToIndex).toHaveBeenCalledTimes(1);
     rerender(tree);
     expect(scrollToIndex).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+
+  it("draws the open summary in the channel, under the header", () => {
+    catchUp.surface = true;
+    catchUp.active = true;
+    arriveWith(60);
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("Open summary block");
+    // The summary stands in for the offer while it is open.
+    expect(text).not.toContain(chatCatchUpOfferLine(60));
+    catchUp.active = false;
     act(() => tree.unmount());
   });
 
@@ -3649,7 +3821,7 @@ describe("chat thread asks Frapp instead of posting (#4713)", () => {
     expect(channel.send).not.toHaveBeenCalled();
     expect(channel.setDraft).not.toHaveBeenCalled();
     expect(composer(tree).props.disabledHint).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     );
     expect(composer(tree).props.hintTone).toBe("error");
     // The answer arrives: this member has no Ask. The line is no longer

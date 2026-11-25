@@ -12,8 +12,8 @@ import { semesterSince } from "./document-library";
  * resolves `userId: isAdmin ? query.userId : userId`, so omitting it pins a
  * non-admin to themselves but hands a `service:approve` holder every entry in
  * the chapter. A screen that presents the result as the viewer's own must pass
- * the viewer's id; only a deliberate officer surface (the web approval queue)
- * may omit it.
+ * the viewer's id; only a deliberate officer surface (web's reviewed entries in
+ * Chapter settings, `service-history.tsx`) may omit it.
  *
  * `options.enabled` exists so such a screen can hold the request until the
  * viewer id is known, rather than firing once unscoped and then again scoped.
@@ -200,8 +200,9 @@ export function useServicePointsRate(options?: { enabled?: boolean }) {
  * viewer lost a permission or the module was turned off), and a thrown refetch
  * would keep the badge read before it, so a deleted entry would go on saying
  * "Approved". Resolving also keeps an expected miss out of the query's retries
- * and out of Sentry. `ChapterGuard`'s `chapter.context.mismatch` still throws:
- * it clears once the token catches up with a chapter switch. No chapter, no
+ * and out of Sentry. `chapter.context.mismatch` still throws:
+ * it clears once the client catches up with a chapter switch (`ChapterGuard`
+ * no longer sends it since ADR-27, #5918). No chapter, no
  * read, as for every chapter-scoped query.
  */
 export function useServiceEntry(id: string) {

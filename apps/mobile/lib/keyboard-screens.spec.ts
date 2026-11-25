@@ -73,10 +73,12 @@ describe("screens with a low text field avoid the keyboard (#3346)", () => {
 
   // The field half of #5463: each field's view and its focus, typing and
   // blur reach the hook, or the screen's reveal has nothing to show. The
-  // agenda section holds the agenda field, the Add a link form (two fields
-  // sharing one view) and the Chapter Files search; the excuse line is one.
+  // agenda section holds the agenda field; the Frapp link picker (its
+  // search, and a web link's title, sharing one view) serves an event's
+  // attachments and a task's Attached; the excuse line is one.
   it.each([
-    ["components/events/event-agenda.tsx", { views: 3, fields: 4 }],
+    ["components/events/event-agenda.tsx", { views: 1, fields: 1 }],
+    ["components/frapp-links.tsx", { views: 1, fields: 2 }],
     ["components/events/event-excuses.tsx", { views: 1, fields: 1 }],
   ])("%s keeps each field above the keyboard", (file, { views, fields }) => {
     const source = readFileSync(join(APP_DIR, "..", file), "utf8");
@@ -132,7 +134,7 @@ describe("every route with an on-screen text field avoids the keyboard (#3354)",
   it("finds the routes it guards", () => {
     // A regex that silently stopped matching would pass every case below.
     expect(ROUTES_WITH_FIELDS).toEqual(
-      expect.arrayContaining(["(auth)/sign-in.tsx", "(auth)/join.tsx"]),
+      expect.arrayContaining(["(auth)/sign-in.tsx", "(auth)/welcome.tsx"]),
     );
   });
 

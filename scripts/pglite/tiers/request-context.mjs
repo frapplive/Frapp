@@ -8,7 +8,8 @@ import { db, miss } from "../harness.mjs";
 // So each part must be exactly that read's answer:
 //
 //   - `member` is the whole `members` row (`select *`), `user` is `{id}`,
-//     `chapter` is the three columns `ChapterGuard` selects;
+//     `chapter` is the four columns `ChapterGuard` selects (`kind` from
+//     20261123194106, ADR-27);
 //   - `roles` holds only roles named in `role_ids` AND in the requested
 //     chapter: an id from another chapter left on the row drops out, as the
 //     guard's `.eq('chapter_id', …)` drops it;
@@ -78,7 +79,8 @@ try {
     await db.query(
       `select jsonb_build_object('subscription_status', subscription_status,
                                  'past_due_since', past_due_since,
-                                 'enabled_modules', enabled_modules) as row
+                                 'enabled_modules', enabled_modules,
+                                 'kind', kind) as row
          from chapters where id = $1`,
       [CH],
     )
@@ -104,7 +106,7 @@ try {
 
   const SCENARIOS = [
     {
-      name: "a member gets their user id, the chapter's three columns and their whole membership row",
+      name: "a member gets their user id, the chapter's four columns and their whole membership row",
       got: JSON.stringify([member?.user, member?.chapter, member?.member]),
       want: JSON.stringify([{ id: U.member }, chapterRow, memberRow]),
     },

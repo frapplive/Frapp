@@ -35,6 +35,7 @@ function group(
     mentionable: true,
     pledge_class_id: null,
     class_year: null,
+    major_key: null,
     created_at: '2026-11-01T00:00:00Z',
     updated_at: '2026-11-01T00:00:00Z',
     ...extra,
@@ -158,6 +159,17 @@ describe('ChapterGroupService (#4076)', () => {
       },
     );
 
+    it("takes a name a major's group has: the major gives way in mentions (#5778)", async () => {
+      repo.findByChapter.mockResolvedValue([
+        group('m', 'Rush Chairs', { kind: 'major', major_key: 'rush chairs' }),
+      ]);
+      repo.create.mockResolvedValue(group('new', 'Rush Chairs'));
+
+      await expect(
+        service.create(CHAPTER, ACTOR, { name: 'Rush Chairs' }),
+      ).resolves.toMatchObject({ id: 'new' });
+    });
+
     it.each(['everyone', '@Here', '---'])(
       'refuses %s, which is no name a mention can reach on its own',
       async (name) => {
@@ -233,6 +245,101 @@ describe('ChapterGroupService (#4076)', () => {
       await expect(
         service.update('m', CHAPTER, ACTOR, { mentionable: false }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('addMember and removeMember (from a profile)', () => {
+    it('adds one member and audits the list before and after', async () => {
+      repo.findById.mockResolvedValue(group('m', 'In house'));
+      repo.findMemberIds.mockResolvedValue(['u1']);
+      repo.addMember.mockResolvedValue('added');
+
+      const view = await service.addMember('m', CHAPTER, ACTOR, 'u2');
+
+      expect(repo.addMember).toHaveBeenCalledWith('m', CHAPTER, 'u2');
+      expect(view.member_ids).toEqual(['u1', 'u2']);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'chapter_group_members_set',
+          diff: { members: { from: ['u1'], to: ['u1', 'u2'] } },
+        }),
+      );
+    });
+
+    it('writes no audit row when the member was already in it', async () => {
+      repo.findById.mockResolvedValue(group('m', 'In house'));
+      repo.findMemberIds.mockResolvedValue(['u2']);
+      repo.addMember.mockResolvedValue('already');
+
+      await service.addMember('m', CHAPTER, ACTOR, 'u2');
+
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('refuses someone who is not in the chapter', async () => {
+      repo.findById.mockResolvedValue(group('m', 'In house'));
+      repo.findMemberIds.mockResolvedValue([]);
+      repo.addMember.mockResolvedValue('member_not_found');
+
+      await expect(
+        service.addMember('m', CHAPTER, ACTOR, 'stranger'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('refuses an automatic group', async () => {
+      repo.findById.mockResolvedValue(
+        group('p', 'Alpha', { kind: 'pledge_class', pledge_class_id: 'pc' }),
+      );
+
+      await expect(
+        service.addMember('p', CHAPTER, ACTOR, 'u2'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.removeMember('p', CHAPTER, ACTOR, 'u2'),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.addMember).not.toHaveBeenCalled();
+      expect(repo.removeMember).not.toHaveBeenCalled();
+    });
+
+    it('refuses a full group', async () => {
+      repo.findById.mockResolvedValue(group('m', 'In house'));
+      repo.findMemberIds.mockResolvedValue(
+        Array.from({ length: 2000 }, (_, i) => `u${i}`),
+      );
+
+      await expect(
+        service.addMember('m', CHAPTER, ACTOR, 'new'),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.addMember).not.toHaveBeenCalled();
+    });
+
+    it('needs channels:manage once a channel list names the group', async () => {
+      repo.findById.mockResolvedValue(group('m', 'Exec'));
+      repo.isNamedOnChannelList.mockResolvedValue(true);
+
+      await expect(
+        service.addMember('m', CHAPTER, ACTOR, ACTOR),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.removeMember('m', CHAPTER, ACTOR, 'u1'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.addMember).not.toHaveBeenCalled();
+      expect(repo.removeMember).not.toHaveBeenCalled();
+    });
+
+    it('removes one member and audits only when they were in it', async () => {
+      repo.findById.mockResolvedValue(group('m', 'In house'));
+      repo.findMemberIds.mockResolvedValue(['u1', 'u2']);
+      repo.removeMember.mockResolvedValueOnce(true);
+
+      const view = await service.removeMember('m', CHAPTER, ACTOR, 'u2');
+      expect(view.member_ids).toEqual(['u1']);
+      expect(audit.record).toHaveBeenCalledTimes(1);
+
+      repo.findMemberIds.mockResolvedValue(['u1']);
+      repo.removeMember.mockResolvedValueOnce(false);
+      await service.removeMember('m', CHAPTER, ACTOR, 'u2');
+      expect(audit.record).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -348,5 +455,20 @@ describe('withMembers', () => {
       [],
     );
     expect(views.map((v) => v.id)).toEqual(['a', 'b']);
+  });
+
+  it('puts majors after class years, alphabetically (#5778)', () => {
+    const views = withMembers(
+      [
+        group('m2', 'Music', { kind: 'major', major_key: 'music' }),
+        group('m1', 'Computer Science', {
+          kind: 'major',
+          major_key: 'computer science',
+        }),
+        group('y', 'Class of 2027', { kind: 'class_year', class_year: 2027 }),
+      ],
+      [],
+    );
+    expect(views.map((v) => v.id)).toEqual(['y', 'm1', 'm2']);
   });
 });

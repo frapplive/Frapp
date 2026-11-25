@@ -195,10 +195,10 @@ export interface MemberDisplayNames {
    */
   avatarFor: (userId: string) => string | null;
   /**
-   * The palette color of the member's highest-ranked colored role, or `null`
-   * for the plain foreground (#3485). Chat paints a sender's name in it. Same
-   * roster read again, and re-checked against the palette here so a client
-   * never paints a value the contrast guard did not cover.
+   * The color of the member's highest-ranked colored role, or `null` for the
+   * plain foreground (#3485, #5784). Chat paints a sender's name in it. Same
+   * roster read again, and re-checked with `roleColorOrNull` here so a client
+   * never paints a value the contrast rule did not pass.
    */
   roleColorFor: (userId: string) => string | null;
   /**
@@ -366,11 +366,14 @@ export function useMemberSearch(query: string) {
   });
 }
 
-export function useAlumni(filters?: {
-  graduation_year?: string;
-  city?: string;
-  company?: string;
-}) {
+export function useAlumni(
+  filters?: {
+    graduation_year?: string;
+    city?: string;
+    company?: string;
+  },
+  options?: { enabled?: boolean },
+) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
@@ -384,7 +387,8 @@ export function useAlumni(filters?: {
       return data;
     },
     staleTime: 60_000,
-    enabled: !!chapterId,
+    // A council has no alumni (#5933); its Directory passes `false`.
+    enabled: (options?.enabled ?? true) && !!chapterId,
     // Filters change the query key on every keystroke; keeping the previous
     // page's rows on screen until the new ones land avoids a full-list flash
     // to the loading skeleton for what's really a live-narrowing search.
@@ -443,10 +447,11 @@ export function useUpdateMemberRoles() {
  * An officer fixes another member's name or graduation year (#4367,
  * `PATCH /v1/members/{id}/profile`). Offer it only where the profile read says
  * `viewer_can_edit_profile`: the API also refuses your own profile, anyone
- * ranked at or above you, and a member who is in another chapter too.
+ * ranked above you (a peer at your rank is in reach since #5900), and a
+ * member who is in another chapter too.
  *
  * The name shows wherever the member does (the directory, chat's author
- * labels through the roster, the alumni list, the activity feed), so this
+ * labels through the roster, the alumni list), so this
  * refetches the same reads a member's own profile edit does.
  */
 export function useCorrectMemberProfile() {
@@ -515,13 +520,22 @@ export function useUpdateOnboarding() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["members", chapterId] });
-      // The mobile first-run gate (and the web first-run tour) read this flag off
-      // `GET /v1/chapters`. Leaving that cache standing would re-send a member
-      // who just finished s03 back to s03.
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
-    },
+    // Returned, so `mutateAsync` resolves once both are fresh: the phone's
+    // s03 gate and web's welcome gate (#5627) read this flag off
+    // `GET /v1/chapters`, and a standing cache would send a member who just
+    // finished straight back.
+    // The member's own row too: finishing can lock their name (#5801,
+    // `display_name_locked`), so Profile must not keep offering an edit the
+    // API now refuses.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["members", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: ["chapters"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["user", "me"],
+          exact: true,
+        }),
+      ]),
   });
 }
 

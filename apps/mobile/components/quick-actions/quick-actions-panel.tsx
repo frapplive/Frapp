@@ -46,7 +46,7 @@ const GLYPHS: Record<QuickActionKey, DuotoneGlyphPaths> = {
 
 /**
  * The remove badge's neutral fill. No ladder token fits: it sits on a disc over
- * glass, and the ladder's lightest step (`popover`, `#313131`) would barely
+ * glass, and the ladder's lightest step (`popover`, `#2A2830`) would barely
  * part from the disc, while `text.disabled` would say "unavailable". It is a
  * measured literal instead: the foreground minus on it reads 6.33:1, and the
  * badge's 2px `surface1` ring separates it from whatever is under the disc.
@@ -93,7 +93,7 @@ export type QuickActionsPanelProps = {
  * can use but hasn't placed. Every change is kept as it is made, so Done and
  * closing the panel both leave it as the member left it.
  *
- * Ask Frapp is not in here. It was a bar across the top of this panel until
+ * Frapp Intelligence is not in here. It was a bar across the top of this panel until
  * 2026-11-13, when it moved above the tab bar itself (`ask/ask-bar.tsx`,
  * #4702), where a member sees it without opening anything.
  */

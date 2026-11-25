@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import {
   useEvent,
+  useRoleTiers,
   useRoles,
   useUpdateEvent,
   type MeetingMinutes,
@@ -107,6 +108,7 @@ function DetailsForm({
   const updateEvent = useUpdateEvent();
   const event = useEvent(meeting.event_id ?? "");
   const roles = useRoles();
+  const tiers = useRoleTiers();
   const startAt = isoToLocalInput(meeting.event_start_time);
   const endAt = isoToLocalInput(meeting.event_end_time);
   const [name, setName] = useState(meeting.event_name);
@@ -132,7 +134,11 @@ function DetailsForm({
       nextType.other_label.trim() !== type.other_label.trim());
 
   const roleNames = event.data
-    ? eventInvitedRoleNames(event.data, toRoleOptions(roles.data))
+    ? eventInvitedRoleNames(
+        event.data,
+        toRoleOptions(roles.data),
+        tiers.data ?? [],
+      )
     : null;
 
   async function save() {

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  CHAT_TIMEOUT_COPY,
+  canTimeOutSender,
+} from "@repo/chat-core/chat-timeout";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Ban,
@@ -10,6 +15,7 @@ import {
   MoreHorizontal,
   Pencil,
   Tag,
+  Timer,
   Trash2,
 } from "lucide-react";
 import {
@@ -125,7 +131,7 @@ export interface MessageItemProps {
    */
   avatarUrl?: string;
   /**
-   * The palette color of the author's highest-ranked colored role (#3485),
+   * The paintable color of the author's highest-ranked colored role (#3485),
    * from `useMemberDisplayNames().roleColorFor`. Paints the author's name on every
    * row, the viewer's own included: a name is never drawn in the chapter
    * accent (`foundations.md` §6). `undefined` or `null` keeps the plain
@@ -325,6 +331,12 @@ export interface MessageItemProps {
    */
   onBlock?: (message: ChatMessage) => void;
   /**
+   * Opens Time out on this message's sender (#6006). Passed only where the
+   * viewer holds `members:timeout` and the conversation is a channel
+   * (`timeOutOfferedIn`); the row adds `canTimeOutSender`.
+   */
+  onTimeOut?: (message: ChatMessage) => void;
+  /**
    * Whether a sender is a chapter member (`rosterMembership`). Only a sender
    * positively known to have left loses Block; one the roster does not list yet
    * keeps it.
@@ -463,6 +475,7 @@ export function MessageItem({
   onReport,
   onForward,
   onBlock,
+  onTimeOut,
   isMember,
   isTapRevealed,
   onToggleTapReveal,
@@ -587,6 +600,9 @@ export function MessageItem({
   // Forward is the phone's rule (#4864, #4907), on the viewer's own messages
   // too, so the More button now shows on every forwardable row.
   const canForward = canForwardMessage(message) && !!onForward;
+  // Time out (#6006): moderation, so after Report and before Block.
+  const canTimeOut =
+    !!onTimeOut && canTimeOutSender(message, viewerId, true);
 
   const [isEditing, setIsEditing] = useState(false);
   // The tokens the row paints as chips, which the editor opens as chips.
@@ -1203,7 +1219,7 @@ export function MessageItem({
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : null}
-        {canForward || canReport || canBlock ? (
+        {canForward || canReport || canTimeOut || canBlock ? (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <button
@@ -1222,13 +1238,19 @@ export function MessageItem({
                   Forward
                 </DropdownMenuItem>
               ) : null}
-              {canForward && (canReport || canBlock) ? (
+              {canForward && (canReport || canTimeOut || canBlock) ? (
                 <DropdownMenuSeparator />
               ) : null}
               {canReport ? (
                 <DropdownMenuItem onSelect={() => onReport?.(message)}>
                   <Flag aria-hidden="true" />
                   Report message
+                </DropdownMenuItem>
+              ) : null}
+              {canTimeOut ? (
+                <DropdownMenuItem onSelect={() => onTimeOut?.(message)}>
+                  <Timer aria-hidden="true" />
+                  {CHAT_TIMEOUT_COPY.action}
                 </DropdownMenuItem>
               ) : null}
               {canBlock ? (
@@ -1822,7 +1844,7 @@ export function MessageItem({
                   <AuthorName
                     openProfile={openAuthor}
                     className="min-w-0 truncate text-label leading-5 text-foreground"
-                    // A literal from the role palette, which is contrast-checked
+                    // A role color `roleColorOrNull` passed, contrast-checked
                     // against these surfaces (`@repo/validation` role-colors).
                     style={authorColor ? { color: authorColor } : undefined}
                   >

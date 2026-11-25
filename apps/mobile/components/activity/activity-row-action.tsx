@@ -28,6 +28,7 @@ import {
   ActivityRowMenuContext,
   type ActivityRowActionControl,
 } from "./activity-row";
+import { ActivityMinutesContext } from "./activity-minutes";
 
 const LABELS: Record<ActivityRowAction, string> = {
   confirm: TASK_ACTION_LABELS.confirm,
@@ -266,24 +267,33 @@ export function ActivityRowItem({
   isFirst,
   actions,
   onCard = false,
-  solo = false,
   onPress,
 }: {
   row: ActivityRow;
   isFirst: boolean;
   actions: ActivityRowActions | null;
-  /** The row sits in a card (the To review card): `ActivityListRow`'s. */
+  /** The row sits in a card (the "N to approve" card): `ActivityListRow`'s. */
   onCard?: boolean;
-  /** The week card's Next row: `ActivityListRow`'s. */
-  solo?: boolean;
   onPress: () => void;
 }) {
   // The phone can supply a location, so a zoned event checks in here too.
   const action = actions
     ? activityRowAction(row, { canSupplyLocation: true, canScan: true })
     : null;
+  const minutes = useContext(ActivityMinutesContext);
   const control: ActivityRowActionControl | null =
-    action && actions ? rowActionControl(row, action, actions) : null;
+    action && actions
+      ? rowActionControl(row, action, actions)
+      : row.kind === "minutes-to-write" && minutes && row.badge
+        ? // Write minutes (#5949): starts them and opens them, one at a
+          // time, as the Minutes list's row did.
+          {
+            label: row.badge.label,
+            disabled: minutes.startingId !== null,
+            hint: undefined,
+            run: () => minutes.write(row),
+          }
+        : null;
   const menuFor = useContext(ActivityRowMenuContext);
   return (
     <ActivityListRow
@@ -291,7 +301,6 @@ export function ActivityRowItem({
       isFirst={isFirst}
       action={control}
       onCard={onCard}
-      solo={solo}
       onPress={onPress}
       menu={menuFor(row)}
     />

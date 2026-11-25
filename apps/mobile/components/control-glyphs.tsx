@@ -122,6 +122,23 @@ export function PencilGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
   );
 }
 
+/**
+ * Edit details, a thing's facts rather than its words: web draws Lucide's
+ * `SlidersHorizontal` beside Edit minutes' `Pencil` in the minutes' ⋯ menu.
+ */
+export function SlidersGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: ControlGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3" {...detail} />
+      <Path d="M14 2v4M8 10v4M16 18v4" {...detail} />
+    </Frame>
+  );
+}
+
 /** Copy: web draws Lucide's `Copy` for the same intent. */
 export function CopyGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
   const { detail } = paint({ color });
@@ -132,6 +149,28 @@ export function CopyGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
         {...detail}
       />
       <Path d="M4 16a2 2 0 01-2-2V4a2 2 0 012-2h10a2 2 0 012 2" {...detail} />
+    </Frame>
+  );
+}
+
+/**
+ * Paste: Lucide's `ClipboardPaste`, for the Paste that stands in where the
+ * system's own button isn't available (Android, iOS before 16, #5626).
+ */
+export function PasteGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M9 2h6a1 1 0 011 1v2a1 1 0 01-1 1H9a1 1 0 01-1-1V3a1 1 0 011-1z"
+        {...detail}
+      />
+      <Path
+        d="M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 001.8-1.1"
+        {...detail}
+      />
+      <Path d="M16 4h2a2 2 0 012 2v1.3" {...detail} />
+      <Path d="M11 14h10M17 18l4-4-4-4" {...detail} />
     </Frame>
   );
 }
@@ -196,7 +235,7 @@ export function TrashGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
 }
 
 /**
- * More: a screen's other actions in the system menu (the task screen, #5492).
+ * More: a screen's other actions in the glass menu (the task screen, #5492).
  * Web draws Lucide's `Ellipsis` for the same intent; three dots, filled, as
  * iOS's own More draws them.
  */

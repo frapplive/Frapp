@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as WebBrowser from "expo-web-browser";
 import { signetDarkTokens } from "@repo/theme/signet";
+import { AGENDA_CHECK_OFF_LOCKED_COPY } from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
@@ -109,12 +110,54 @@ const { eventAttendanceFor } = await vi.hoisted(
 
 const checkIn = vi.fn();
 
+const roster = vi.hoisted(() => ({
+  value: [] as { user_id: string; status: string; check_in_time?: string }[],
+}));
+const markRow = vi.hoisted(() => vi.fn(async () => undefined));
+const autoAbsent = vi.hoisted(() => vi.fn(async () => undefined));
+// The glass menu a roster row opens, caught so a test can pick an answer.
+const menus = vi.hoisted(() => ({
+  last: null as null | {
+    title: string;
+    actions: { key: string; label: string; run: () => void }[];
+  },
+}));
+const invitees = vi.hoisted(() => ({
+  value: [
+    { user_id: "u-1", display_name: "Ava Brooks", avatar_url: null },
+    { user_id: "u-2", display_name: "Marcus Lee", avatar_url: null },
+  ] as { user_id: string; display_name: string; avatar_url: null }[] | null,
+}));
+
+const frappLinkNames = vi.hoisted(() => ({
+  value: new Map<string, unknown>(),
+  candidateCalls: [] as unknown[][],
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Frapp links: names read live, and what the attach picker offers.
+  useFrappLinks: () => ({ resolved: frappLinkNames.value, isLoading: false }),
+  useFrappLinkCandidates: (...args: unknown[]) => {
+    frappLinkNames.candidateCalls.push(args);
+    return { candidates: [], isLoading: false };
+  },
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   useActiveChapterId: () => chapterId,
+  // Who's coming (Paul 2026-11-22): the invite list, read from the chapter's
+  // members by the event's role rule.
+  useEventInvitees: () => invitees.value,
+  // The officer's roster, once check-in opens.
+  useAttendance: () => ({
+    data: roster.value,
+    refetch: vi.fn(async () => ({})),
+  }),
+  useMarkEventRosterRow: () => markRow,
+  useAutoAbsent: () => ({ mutateAsync: autoAbsent, isPending: false }),
   usePermissionList: () => permissions,
   useRoles: () => ({ data: [], isPending: false, isError: false }),
   useEventTypes: () => ({ data: [] }),
+  useCreateEventType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEvent: () => ({ mutate: vi.fn(), isPending: false }),
@@ -193,6 +236,13 @@ vi.mock("@/lib/connection/use-connection", () => ({
 }));
 
 // The minutes row has its own spec (`components/minutes/event-minutes-row.spec.tsx`).
+vi.mock("@/components/item-actions-menu", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/item-actions-menu")>()),
+  openItemMenu: (menu: NonNullable<typeof menus.last>) => {
+    menus.last = menu;
+  },
+}));
+
 vi.mock("@/components/minutes/event-minutes-row", () => ({
   EventMinutesRow: () => null,
 }));
@@ -377,6 +427,133 @@ describe("Event details layout", () => {
     myAttendancePaused = false;
   });
 
+  it("leads with check-in while it's open, as web's sheet lifts its row (Paul 2026-11-22)", () => {
+    const text = screenText(render());
+    const details = text.indexOf("DETAILS");
+    const checkIn = text.indexOf("Scan code");
+    expect(details).toBeGreaterThan(-1);
+    expect(checkIn).toBeGreaterThan(-1);
+    expect(checkIn).toBeLessThan(details);
+  });
+
+  it("reads the details before check-in until it opens (Paul 2026-11-19)", () => {
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() + 30 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() + 30 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    const text = screenText(render());
+    expect(text.indexOf("Check-in opens")).toBeGreaterThan(
+      text.indexOf("DETAILS"),
+    );
+  });
+
+  it("lists who's coming, and keeps a member off the roster (Paul 2026-11-22)", () => {
+    const text = screenText(render());
+    expect(text).toContain("2 people");
+    expect(text).toContain("WHO'S COMING · 2 PEOPLE");
+    expect(text).toContain("Ava Brooks");
+    expect(text).not.toContain("ATTENDANCE ·");
+  });
+
+  it("gives an officer the roster once check-in opens, one status a person", () => {
+    permissions = ["members:view", "events:update"];
+    roster.value = [
+      { user_id: "u-1", status: "PRESENT", check_in_time: START.toISOString() },
+    ];
+    const text = screenText(render());
+    expect(text).toContain("ATTENDANCE · 1 OF 2 CHECKED IN");
+    expect(text).toContain("1 present · 1 not here yet");
+    expect(text).toContain("Not here");
+    expect(text).not.toContain("WHO'S COMING");
+    roster.value = [];
+  });
+
+  it("marks someone who hasn't checked in from their row's menu", async () => {
+    permissions = ["members:view", "events:update"];
+    roster.value = [];
+    markRow.mockClear();
+    const tree = render();
+    const [row] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityLabel === "Marcus Lee, Not here" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row!.props.onPress({ nativeEvent: {} }));
+    // No row yet, so no Absent: the by-hand route records who was there.
+    expect(menus.last?.actions.map((action) => action.label)).toEqual([
+      "Present",
+      "Late",
+      "Excused",
+    ]);
+    await act(async () => {
+      menus.last!.actions[0]!.run();
+    });
+    expect(markRow).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "u-2", attendanceId: null }),
+      "PRESENT",
+    );
+  });
+
+  it("reads who came after the event, and offers to mark the no-shows", async () => {
+    permissions = ["members:view", "events:update"];
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() - 2 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() - 2 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    roster.value = [
+      { user_id: "u-1", status: "PRESENT", check_in_time: START.toISOString() },
+    ];
+    autoAbsent.mockClear();
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("ATTENDANCE · 1 OF 2 CAME");
+    // Who didn't come reads first.
+    expect(text.indexOf("Marcus Lee")).toBeLessThan(text.indexOf("Ava Brooks"));
+    const [button] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === "button" &&
+        typeof node.props.onPress === "function" &&
+        node.findAll((t) => t.props.children === "Mark no-shows absent")
+          .length > 0,
+    );
+    await act(async () => {
+      button!.props.onPress();
+    });
+    expect(autoAbsent).toHaveBeenCalledWith(EVENT.id);
+    roster.value = [];
+  });
+
+  it("keeps the roster back for an officer until check-in opens", () => {
+    permissions = ["members:view", "events:update"];
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() + 30 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() + 30 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    const text = screenText(render());
+    expect(text).not.toContain("ATTENDANCE ·");
+    expect(text).toContain("WHO'S COMING · 2 PEOPLE");
+  });
+
+  it("carries the Now pill while the event is on, then Ended for the rest of the day (#5777)", () => {
+    const tree = render();
+    expect(screenText(tree)).toMatch(/Now · until/);
+    act(() => {
+      // Ten minutes past the end.
+      vi.advanceTimersByTime(60 * 60_000);
+    });
+    expect(screenText(tree)).toMatch(/Ended /);
+    expect(screenText(tree)).not.toContain("Tonight");
+  });
+
   it("offers no calendar export until calendar sync ships (#3708)", () => {
     expect(screenText(render())).not.toMatch(/add to calendar/i);
   });
@@ -393,7 +570,7 @@ describe("Event details layout", () => {
     expect(screenText(tree)).toMatch(/· .+ · Chapter House — Great Room\n/);
     expect(textNode(tree, "Chapter House — Great Room")).toBeUndefined();
     // The hairline kind, as the list draws it (#4132).
-    expect(flat(textNode(tree, "Mandatory")!).color).toBe(
+    expect(flat(textNode(tree, "Required")!).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
     );
     expect(flat(textNode(tree, "+10 pts")!).color).toBe(ACCENT);
@@ -781,8 +958,9 @@ describe("Event details editing", () => {
 });
 
 /**
- * #3707: the occurrence's page lists the series' other upcoming dates under
- * its cadence.
+ * A series on the occurrence's page: its cadence in the Repeat row and a
+ * link to the next meeting, not the list of every date #3707 drew (Paul
+ * 2026-11-19).
  */
 describe("Event details series (#3823)", () => {
   const weekly = (index: number) => {
@@ -811,27 +989,43 @@ describe("Event details series (#3823)", () => {
     chapterEvents = [];
   });
 
-  it("lists the series' other dates under its cadence, each opening its occurrence", () => {
+  const nextLinks = (tree: ReactTestRenderer) =>
+    tree.root.findAll(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        String(node.props.accessibilityLabel).startsWith("Next meeting, "),
+    );
+
+  it("says the cadence and links the next meeting, not every date (Paul 2026-11-19)", () => {
     chapterEvents = [0, 1, 2, 3].map(weekly);
     event = chapterEvents[0] as Record<string, unknown>;
     const tree = render();
     const weekday = START.toLocaleDateString(undefined, { weekday: "long" });
     expect(screenText(tree)).toContain(`Every ${weekday}`);
 
-    const dates = tree.root.findAll(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        String(node.props.accessibilityLabel).startsWith(
-          "Open Chapter meeting, ",
-        ),
-    );
-    expect(dates).toHaveLength(3);
+    const links = nextLinks(tree);
+    expect(links).toHaveLength(1);
     vi.mocked(expoRouter.useRouter().push).mockClear();
-    act(() => dates[0]!.props.onPress());
+    act(() => links[0]!.props.onPress());
     expect(expoRouter.useRouter().push).toHaveBeenCalledWith({
       pathname: "/event-details",
       params: { id: "evt-2" },
     });
+  });
+
+  it("links the meeting after the one open, and none after the last", () => {
+    chapterEvents = [0, 1, 2].map(weekly);
+    event = chapterEvents[1] as Record<string, unknown>;
+    const middle = render();
+    vi.mocked(expoRouter.useRouter().push).mockClear();
+    act(() => nextLinks(middle)[0]!.props.onPress());
+    expect(expoRouter.useRouter().push).toHaveBeenCalledWith({
+      pathname: "/event-details",
+      params: { id: "evt-3" },
+    });
+
+    event = chapterEvents[2] as Record<string, unknown>;
+    expect(nextLinks(render())).toHaveLength(0);
   });
 
   it("reads a generated occurrence's cadence off its series head", () => {
@@ -849,39 +1043,6 @@ describe("Event details series (#3823)", () => {
     const weekday = START.toLocaleDateString(undefined, { weekday: "long" });
     expect(screenText(tree)).toContain(`Every ${weekday}`);
     expect(screenText(tree)).not.toContain("Also in this series");
-  });
-
-  it("names an occurrence renamed on its own, on screen and to a screen reader", () => {
-    chapterEvents = [0, 1, 2].map(weekly);
-    (chapterEvents[2] as Record<string, unknown>).name = "Chapter: Elections";
-    event = chapterEvents[0] as Record<string, unknown>;
-    const tree = render();
-    expect(screenText(tree)).toMatch(/^Chapter: Elections · /m);
-    const renamed = tree.root.findAll(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        String(node.props.accessibilityLabel).startsWith(
-          "Open Chapter: Elections, ",
-        ),
-    );
-    expect(renamed).toHaveLength(1);
-  });
-
-  it("doesn't name the ordinary dates when the renamed occurrence is open", () => {
-    chapterEvents = [0, 1, 2].map(weekly);
-    (chapterEvents[2] as Record<string, unknown>).name = "Chapter: Elections";
-    event = chapterEvents[2] as Record<string, unknown>;
-    const tree = render();
-    const rows = tree.root.findAll(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        String(node.props.accessibilityLabel).startsWith(
-          "Open Chapter meeting, ",
-        ),
-    );
-    // The two other dates carry the series' name, so neither says it.
-    expect(rows).toHaveLength(2);
-    expect(screenText(tree)).not.toMatch(/^Chapter meeting · /m);
   });
 
   it("draws no series section for a one-time event", () => {
@@ -1037,6 +1198,23 @@ describe("Event details excuses (#3735)", () => {
 });
 
 describe("Event details agenda and attachments (#4934)", () => {
+  beforeEach(() => {
+    // The document reads by its live name, as the resolve answers it.
+    frappLinkNames.value = new Map([
+      [
+        "document:doc-1",
+        {
+          key: "document:doc-1",
+          state: "ok",
+          title: "Bylaws",
+          date: null,
+          author: null,
+        },
+      ],
+    ]);
+    frappLinkNames.candidateCalls = [];
+  });
+
   afterEach(() => {
     act(() => {
       for (const tree of mounted.splice(0)) tree.unmount();
@@ -1068,6 +1246,13 @@ describe("Event details agenda and attachments (#4934)", () => {
     notes: "Bring dues",
   };
 
+  // A meeting that hasn't started: its agenda is still edited (Paul
+  // 2026-11-20 locks it to check-offs at the start).
+  const NOT_STARTED = {
+    start_time: "2099-01-01T18:00:00.000Z",
+    end_time: "2099-01-01T19:00:00.000Z",
+  };
+
   function labelled(tree: ReactTestRenderer, label: string) {
     return tree.root.findAll(
       (node) =>
@@ -1089,7 +1274,8 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(text).toContain("Bylaws");
     expect(text).toContain("Chapter Files");
     // No editor controls for a member.
-    expect(text).not.toContain("Add a link");
+    expect(text).not.toMatch(/\bAttach\b/);
+    expect(labelled(tree, 'Remove "Budget"')).toHaveLength(0);
     expect(labelled(tree, "Add an agenda item")).toHaveLength(0);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
     // A checked-off item says so to a screen reader.
@@ -1168,6 +1354,29 @@ describe("Event details agenda and attachments (#4934)", () => {
     agendaSuggestions = [];
   });
 
+  it("drops Suggested once the meeting has started, before it ends (Paul 2026-11-20)", () => {
+    const now = Date.now();
+    event = {
+      ...WITH_LISTS,
+      start_time: new Date(now - 10 * 60_000).toISOString(),
+      end_time: new Date(now + 60 * 60_000).toISOString(),
+    };
+    permissions = ["members:view", "events:update"];
+    agendaSuggestions = [
+      {
+        id: "s1",
+        kind: "ai",
+        text: "Venue check-in",
+        tabled_from: null,
+        source_meeting_id: "m-last",
+        reason: null,
+      },
+    ];
+    const tree = render();
+    expect(screenText(tree)).not.toContain("SUGGESTED");
+    agendaSuggestions = [];
+  });
+
   it("offers Suggested items to an editor of an upcoming meeting, with Add and Dismiss (#5534)", async () => {
     event = {
       ...WITH_LISTS,
@@ -1228,10 +1437,11 @@ describe("Event details agenda and attachments (#4934)", () => {
       WITH_LISTS.agenda[0],
       { id: "a2", text: "Formal date", done: true },
     ]);
-    expect(screenText(tree)).toContain("Attach from Chapter Files");
+    expect(screenText(tree)).toMatch(/\bAttach\b/);
   });
 
   it("adds an item from the field under the list", () => {
+    event = { ...EVENT, ...NOT_STARTED };
     permissions = ["members:view", "events:update"];
     const tree = render();
     // An editor sees the empty agenda, to start it.
@@ -1261,12 +1471,42 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(next[0]).toMatchObject({ text: "Rush plans", done: false });
   });
 
-  it("offers no Chapter Files picker while that module is off", () => {
+  it("locks a started meeting's agenda to check-offs (Paul 2026-11-20)", () => {
+    event = WITH_LISTS;
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    expect(labelled(tree, "Add an agenda item")).toHaveLength(0);
+    expect(labelled(tree, 'Remove "Formal date"')).toHaveLength(0);
+    expect(
+      tree.root.findAll((node) => (node.type as unknown) === "GestureDetector"),
+    ).toHaveLength(0);
+    // Checked off, and attachments still change.
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === "checkbox" &&
+          node.props.accessibilityLabel === "Formal date" &&
+          node.props.disabled === false,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(labelled(tree, 'Remove "Budget"').length).toBeGreaterThan(0);
+  });
+
+  it("offers no Chapter Files files in the picker while that module is off", () => {
     permissions = ["members:view", "events:update"];
     enabledModules = { documents: false };
-    const text = screenText(render());
-    expect(text).toContain("Add a link");
-    expect(text).not.toContain("Attach from Chapter Files");
+    const tree = render();
+    let attach = tree.root.find(
+      (node) =>
+        typeof node.type === "string" && node.props.children === "Attach",
+    );
+    while (typeof attach.props.onPress !== "function" && attach.parent) {
+      attach = attach.parent;
+    }
+    act(() => attach.props.onPress());
+    expect(frappLinkNames.candidateCalls.at(-1)?.[1]).toMatchObject({
+      documents: false,
+    });
   });
 
   it("offers no controls while writes are blocked, and still reads the lists", () => {
@@ -1275,7 +1515,7 @@ describe("Event details agenda and attachments (#4934)", () => {
     writeBlockedReason = "You're offline.";
     const tree = render();
     expect(screenText(tree)).toContain("Formal date");
-    expect(screenText(tree)).not.toContain("Add a link");
+    expect(screenText(tree)).not.toMatch(/\bAttach\b/);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
   });
 
@@ -1287,7 +1527,7 @@ describe("Event details agenda and attachments (#4934)", () => {
     eventDataKept = true;
     const tree = render();
     expect(screenText(tree)).toContain("Formal date");
-    expect(screenText(tree)).not.toContain("Add a link");
+    expect(screenText(tree)).not.toMatch(/\bAttach\b/);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
     eventError = null;
     eventDataKept = false;
@@ -1302,33 +1542,125 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(text).toContain("2.");
   });
 
-  it("moves an item up from its control", () => {
-    event = WITH_LISTS;
-    permissions = ["members:view", "events:update"];
-    const tree = render();
-    const up = tree.root.find(
+  /** The agenda's rows, each measured as a phone would lay them out. */
+  function agendaRows(tree: ReactTestRenderer) {
+    const rows = tree.root.findAll(
       (node) =>
-        node.props.accessibilityLabel === `Move "Formal date" up` &&
-        typeof node.props.onPress === "function",
+        (node.type as unknown) === "Animated.View" &&
+        Array.isArray(node.props.accessibilityActions),
     );
-    act(() => up.props.onPress());
-    const [, update] = listsChange.mock.calls[0] as [
+    act(() =>
+      rows.forEach((row, index) =>
+        row.props.onLayout({
+          nativeEvent: {
+            layout: { x: 0, y: index * 48, width: 300, height: 44 },
+          },
+        }),
+      ),
+    );
+    return rows;
+  }
+
+  function lastAgendaOrder() {
+    const [, update] = listsChange.mock.calls.at(-1) as [
       string,
       (current: unknown) => { id: string }[],
     ];
-    expect(update(WITH_LISTS.agenda).map((item) => item.id)).toEqual([
-      "a2",
-      "a1",
-    ]);
+    return update(WITH_LISTS.agenda).map((item) => item.id);
+  }
+
+  it("moves an item up by dragging its grip (Paul 2026-11-19)", () => {
+    event = { ...WITH_LISTS, ...NOT_STARTED };
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    agendaRows(tree);
+    // No arrows any more: the grip is the way.
+    expect(labelled(tree, `Move "Formal date" up`)).toHaveLength(0);
+    const grips = tree.root.findAll(
+      (node) => (node.type as unknown) === "GestureDetector",
+    );
+    const pan = grips[1]!.props.gesture as {
+      handlers: Record<string, (event?: unknown) => void>;
+    };
+    act(() => {
+      pan.handlers.onBegin!();
+      pan.handlers.onUpdate!({ translationY: -60 });
+      pan.handlers.onFinalize!();
+    });
+    expect(lastAgendaOrder()).toEqual(["a2", "a1"]);
   });
 
-  it("offers no Chapter Files picker until the chapter says the module is on, and calls the notes Notes meanwhile", () => {
+  it("leaves the order alone for a drag that doesn't pass a neighbour", () => {
+    event = { ...WITH_LISTS, ...NOT_STARTED };
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    agendaRows(tree);
+    const pan = tree.root.findAll(
+      (node) => (node.type as unknown) === "GestureDetector",
+    )[0]!.props.gesture as {
+      handlers: Record<string, (event?: unknown) => void>;
+    };
+    act(() => {
+      pan.handlers.onBegin!();
+      pan.handlers.onUpdate!({ translationY: 10 });
+      pan.handlers.onFinalize!();
+    });
+    expect(listsChange).not.toHaveBeenCalled();
+  });
+
+  it("moves an item with a screen reader's Move up", () => {
+    event = { ...WITH_LISTS, ...NOT_STARTED };
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    const [first, second] = agendaRows(tree);
+    // The first item can't go up, the last can't go down.
+    expect(first!.props.accessibilityActions).toEqual([
+      { name: "moveDown", label: "Move down" },
+    ]);
+    act(() =>
+      second!.props.onAccessibilityAction({
+        nativeEvent: { actionName: "moveUp" },
+      }),
+    );
+    expect(lastAgendaOrder()).toEqual(["a2", "a1"]);
+  });
+
+  it("holds the checkboxes until the meeting starts, and says why once", () => {
+    const start = Date.now() + 2 * 86_400_000;
+    event = {
+      ...WITH_LISTS,
+      start_time: new Date(start).toISOString(),
+      end_time: new Date(start + 3_600_000).toISOString(),
+    };
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    const boxes = tree.root.findAll(
+      (node) =>
+        typeof node.type === "string" &&
+        node.props.accessibilityRole === "checkbox",
+    );
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) expect(box.props.disabled).toBe(true);
+    const text = screenText(tree);
+    expect(text.split(AGENDA_CHECK_OFF_LOCKED_COPY).length - 1).toBe(1);
+    // No "done" count before there is anything to count.
+    expect(text).not.toContain("of 2 done");
+  });
+
+  it("counts what's done once the meeting has started", () => {
+    event = WITH_LISTS;
+    permissions = ["members:view", "events:update"];
+    const text = screenText(render());
+    expect(text).toContain("1 of 2 done");
+    expect(text).not.toContain(AGENDA_CHECK_OFF_LOCKED_COPY);
+  });
+
+  it("offers Attach while the chapter can't say whether Chapter Files is on, and calls the notes Notes meanwhile", () => {
     permissions = ["members:view", "events:update"];
     event = WITH_LISTS;
     enabledModules = null;
     const text = screenText(render());
-    expect(text).toContain("Add a link");
-    expect(text).not.toContain("Attach from Chapter Files");
+    expect(text).toMatch(/\bAttach\b/);
     expect(text).toContain("NOTES");
     expect(text).not.toContain("MEETING MINUTES");
   });
@@ -1349,6 +1681,22 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
       "https://example.com/budget",
     );
+  });
+
+  it("draws a stored link no phone can open as text that never opens (#5883)", () => {
+    event = {
+      ...EVENT,
+      attachments: [
+        { id: "t9", kind: "link", url: "https://test", title: "Old notes" },
+      ],
+    };
+    const tree = render();
+    const row = attachmentRow(tree, "Old notes,");
+    expect(row.props.accessibilityLabel).toBe(
+      "Old notes, test · not a working link",
+    );
+    expect(row.props.accessibilityRole).toBe("text");
+    expect(row.props.disabled).toBe(true);
   });
 
   it("says when a link won't open", async () => {

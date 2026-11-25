@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Alert,
+  type GestureResponderEvent,
   Keyboard,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   TASK_ACTION_LABELS,
+  taskHandedInLine,
   taskStatusLabel,
   useDeleteTask,
   useMemberDisplayNames,
@@ -22,7 +24,12 @@ import {
   useTasks,
   useViewerUserId,
 } from "@repo/hooks";
-import { can, TASK_AUDIENCE_COPY } from "@repo/validation";
+import {
+  can,
+  FRAPP_LINK_COPY,
+  TASK_AUDIENCE_COPY,
+  TASK_FOLLOWER_COPY,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_TASKS } from "@/components/back-row";
@@ -50,6 +57,7 @@ import {
   TaskBarPill,
 } from "@/components/tasks/task-action-bar";
 import { WhoHasIt } from "@/components/tasks/who-has-it";
+import { AddPeopleSheet } from "@/components/tasks/add-people-sheet";
 import { GroupProgress } from "@/components/tasks/group-progress";
 import { OpenTaskScreen } from "@/components/tasks/open-task-screen";
 import {
@@ -62,7 +70,7 @@ import {
 } from "@/components/tasks/task-facts";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { useDropKeptSheetDraft } from "@/lib/kept-sheet-draft";
-import { showActionMenu } from "@/lib/action-menu";
+import { openItemMenu, pressAt } from "@/components/item-actions-menu";
 import { goBackTo } from "@/lib/href";
 import { leaveScreen } from "@/lib/back-target";
 import { rowIsSentBack, toTaskRow, type TaskRowModel } from "@/lib/tasks/board";
@@ -102,6 +110,13 @@ import {
   RELEASED_PARAM,
 } from "@/lib/tasks/open-tasks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { FrappLinksEditor } from "@/components/frapp-links";
+import { ListPanel } from "@/components/list-section";
+
+/** A following tier, role or group since deleted, as a fact's value. */
+const FOLLOWER_DELETED =
+  TASK_FOLLOWER_COPY.deleted.charAt(0).toUpperCase() +
+  TASK_FOLLOWER_COPY.deleted.slice(1);
 
 /**
  * One task as its own pushed screen (#5492), where the task detail sheet used
@@ -131,7 +146,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * A floating glass bar under the thumb, as Things 3 keeps a to-do's controls
  * (`TaskActionBar`). Mark done is the one thing to do and the only control in
  * the chapter accent, a pill with its verb; Edit, Remove people and More are
- * 44pt rounds. More opens the system menu: Mark not done, Give it back, Delete
+ * 44pt rounds. More opens the glass menu: Mark not done, Give it back, Delete
  * and, on a group task, Delete for everyone. Each shows only to a viewer the
  * API lets use it (`taskScreenControls`).
  *
@@ -173,6 +188,13 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * brought back, then `POST /v1/tasks/:id/group/remove`. A row's long-press
  * Remove people (#5492) pushes this screen with `select=1`, and it opens in
  * select mode.
+ *
+ * ## Add people
+ *
+ * The plus beside Who has it (#5905) opens the Who picker for people only,
+ * with everyone who has a copy ticked and fixed; Add gives each one picked a
+ * To do copy, `POST /v1/tasks/:id/group/add`, and Who has it says how many.
+ * It sits on the list, not the bar, which already holds its three rounds.
  */
 export default function TaskDetailsRoute() {
   // `posting=<id>`: a task up for grabs (#5570), which is a posting and not
@@ -322,6 +344,20 @@ function TaskScreen({
   const [peopleNote, setPeopleNote] = useState<string | null>(null);
   const removal = removalAllowed(picked, copies);
   const removeFromGroup = useRemoveFromTaskGroup();
+  // Add people (#5905): the plus on Who has it mounts the picker, which
+  // opens itself, and it unmounts once closed; the plus waits while an add
+  // is out.
+  const [addingPeople, setAddingPeople] = useState(false);
+  const [addPending, setAddPending] = useState(false);
+  const holders = useMemo(
+    () => copies.flatMap((copy) => (copy.assigneeId ? [copy.assigneeId] : [])),
+    [copies],
+  );
+  const showAdded = (line: string) => {
+    setAddPending(false);
+    setPeopleNote(line);
+    AccessibilityInfo.announceForAccessibility(line);
+  };
 
   // Back where the member came from (the board, the Calendar), or to the
   // board on a cold link with nothing under this screen.
@@ -564,8 +600,8 @@ function TaskScreen({
     otherMoreRows: restOfMore.length,
   });
   const moreRows = [
-    // Held as the round is (offline, mid-write, refused): the system menu
-    // has no disabled row, so it is left out until it can send.
+    // Held as the round is (offline, mid-write, refused): the menu has no
+    // disabled row, so it is left out until it can send.
     ...(sendBackInMore && !review.disabled
       ? [
           {
@@ -577,28 +613,35 @@ function TaskScreen({
     ...(editInMore ? [{ label: "Edit", onPress: startEdit }] : []),
     ...restOfMore,
   ];
-  // At most three, which Android's dialog can draw: Mark not done needs the
-  // task done and Give it back needs it not done, so only one of them shows
-  // beside Delete and Delete for everyone. Start needs it To do, so it never
-  // shows beside Mark not done, and with Give it back (a task taken from Up
-  // for grabs, never a group's copy) there is no Delete for everyone. Send
-  // back and Edit are an officer's on someone else's task, so none of those
-  // three is beside them, only the two deletes (`taskBarLayout`).
-  const openMore = () =>
-    showActionMenu({
-      title: row.title,
-      rows: moreRows,
-      userInterfaceStyle: "dark",
-    });
+  // The glass menu, opened above the bar's More (owner, 2026-11-20: one
+  // menu system, never the system's sheet).
+  const openMore = (event?: GestureResponderEvent) =>
+    openItemMenu(
+      {
+        title: row.title,
+        actions: moreRows.map((moreRow) => ({
+          key: moreRow.label,
+          label: moreRow.label,
+          destructive: "style" in moreRow && moreRow.style === "destructive",
+          run: moreRow.onPress,
+        })),
+      },
+      pressAt(event),
+    );
 
   const status = rowStatus(row);
   const due = formatDueDate(row.dueDate);
   const points = formatPointsChip(row.pointReward, row.pointsAwarded);
-  const from = row.createdBy
-    ? row.createdBy === viewerId
-      ? "You"
-      : nameOf(row.createdBy)
-    : null;
+  // From: the tier, role or group it is from when one follows it (#5473),
+  // which "From Exec board" names on the row too; else whoever gave it. The
+  // giver stays in History ("Assigned by Sam").
+  const from = row.followedBy
+    ? row.followedByName?.trim() || FOLLOWER_DELETED
+    : row.createdBy
+      ? row.createdBy === viewerId
+        ? "You"
+        : nameOf(row.createdBy)
+      : null;
   const groupLabel = rowGroupLabel(row);
   const progress = row.group ?? { done: 0, total: copies.length };
   // Who a group task went to, for anyone Who has it doesn't show to.
@@ -606,6 +649,39 @@ function TaskScreen({
   const history = useMemo(
     () => taskHistory(row, nameInLine, new Date()),
     [row, nameInLine],
+  );
+  // Handed in (#5732): who marked it done and when, under the title, with
+  // the proof under it, so a done task reads as one before its facts do.
+  const handedIn = taskHandedInLine(
+    {
+      status: row.displayStatus,
+      stored_status: row.storedStatus,
+      completed_at: row.completedAt,
+      completed_by: row.completedBy,
+      assignee_id: row.assigneeId,
+      sent_back_at: row.sentBackAt,
+    },
+    nameInLine,
+  );
+  const proofFirst = !editing && handedIn !== null;
+  // Photos, the reason it was sent back, and the proof sent with Mark done
+  // (#4635). Only the assignee and officers can read a task, so the proof is
+  // the viewer's to see.
+  const proof = (
+    <TaskProof
+      task={{
+        id: row.id,
+        // In edit mode the reference photos are the picker's, above.
+        photos: editing
+          ? row.photos.filter((photo) => photo.kind !== "reference")
+          : row.photos,
+        proofLink: row.proofLink,
+        sentBackReason: row.sentBackReason,
+        completionNote: row.completionNote,
+      }}
+      showProof
+      sentBack={rowIsSentBack(row)}
+    />
   );
   const notice = editing
     ? edit.failure
@@ -647,6 +723,13 @@ function TaskScreen({
             hue={taskStatusHue(status, tokens)}
           />
         </View>
+
+        {proofFirst ? (
+          <>
+            <Text style={styles.handedIn}>{handedIn}</Text>
+            {proof}
+          </>
+        ) : null}
 
         {editing ? (
           <TaskEditForm
@@ -718,6 +801,23 @@ function TaskScreen({
 
         {row.meetingId ? <TaskMinutesFact meetingId={row.meetingId} /> : null}
 
+        {/* Attached (`spec/behavior/frapp-links.md`): web's task panel row.
+            An officer attaches and removes in place, as with the steps. */}
+        {edit.attachments.length > 0 || controls.edit ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel} accessibilityRole="header">
+              {FRAPP_LINK_COPY.field.toUpperCase()}
+            </Text>
+            <ListPanel>
+              <FrappLinksEditor
+                links={edit.attachments}
+                canEdit={controls.edit}
+                onChange={edit.changeAttachments}
+              />
+            </ListPanel>
+          </View>
+        ) : null}
+
         {row.subtasks.length > 0 || (controls.edit && !row.pointsAwarded) ? (
           <SubtaskChecklist
             taskId={row.id}
@@ -727,23 +827,7 @@ function TaskScreen({
           />
         ) : null}
 
-        {/* Photos, the reason it was sent back, and the proof sent with Mark
-            done (#4635). Only the assignee and officers can read a task, so
-            the proof is the viewer's to see. */}
-        <TaskProof
-          task={{
-            id: row.id,
-            // In edit mode the reference photos are the picker's, above.
-            photos: editing
-              ? row.photos.filter((photo) => photo.kind !== "reference")
-              : row.photos,
-            proofLink: row.proofLink,
-            sentBackReason: row.sentBackReason,
-            completionNote: row.completionNote,
-          }}
-          showProof
-          sentBack={rowIsSentBack(row)}
-        />
+        {proofFirst ? null : proof}
 
         {showPeople ? (
           <WhoHasIt
@@ -758,6 +842,15 @@ function TaskScreen({
             note={
               selecting && removal.everyone ? REMOVE_EVERYONE_NOTE : peopleNote
             }
+            onAdd={
+              controls.removePeople
+                ? () => {
+                    setPeopleNote(null);
+                    setAddingPeople(true);
+                  }
+                : undefined
+            }
+            addDisabled={addPending || addingPeople}
           />
         ) : null}
 
@@ -885,6 +978,16 @@ function TaskScreen({
         />
       ) : null}
 
+      {addingPeople && showPeople && controls.removePeople ? (
+        <AddPeopleSheet
+          taskId={row.id}
+          holders={holders}
+          onSending={() => setAddPending(true)}
+          onResult={showAdded}
+          onClose={() => setAddingPeople(false)}
+        />
+      ) : null}
+
       <MarkDoneHost toggle={toggles} />
       {review.host}
     </View>
@@ -904,6 +1007,11 @@ function createStyles(tokens: SignetTokens) {
       gap: tokens.spacing.xs,
     },
     description: {
+      ...typeRole(tokens.typography.role.body),
+      color: tokens.color.text.foreground,
+    },
+    // Who handed it in and when, the first line under the status (#5732).
+    handedIn: {
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.foreground,
     },

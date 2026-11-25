@@ -43,13 +43,13 @@
 
 ### Internal Ledger (House Points)
 
-- Every point change is recorded as a transaction in `point_transactions`. The web dashboard **Audit** tab loads a chapter-wide, cursor-paginated slice of those rows for officers with `points:view_all` (API: `GET /v1/points/transactions`; full rules in [`spec/behavior/points.md`](../behavior/points.md)).
+- Every point change is recorded as a transaction in `point_transactions`. The chapter points ledger in web's Chapter settings loads a chapter-wide, cursor-paginated slice of those rows for officers with `points:view_all` (API: `GET /v1/points/transactions`; full rules in [`spec/behavior/points.md`](../behavior/points.md)).
 - Positive amount = reward; negative amount = fine/correction.
 - Every transaction carries a category; the allowed set is the `category` column in [`spec/architecture/README.md` § Points & Events](../architecture/README.md#points--events).
 - A member's balance is the sum of their transactions.
 - Admins can manually adjust points with a required reason. Audit trail tracks which admin made the adjustment.
 - Anti-fraud: rate limiting on adjustments, anomaly flagging for large transactions, no self-award (enforced on `points:adjust`, task confirmation and service-hour approval — see [`points.md`](../behavior/points.md) § Anti-Fraud).
-- Leaderboard with configurable time windows (all-time, semester, month).
+- Leaderboard with configurable time windows (all-time, semester, month), read as a sort of the Directory, and each member's own points on their profile ([`points.md` § Where points are read](../behavior/points.md#where-points-are-read)).
 
 ### Member Invoices (Dues)
 
@@ -111,7 +111,7 @@
 - **Excuses:** A member an event requires sends a one-line excuse before it or up to 48 hours after; the event's creator (or an officer who can edit events) approves or declines it, and approval marks them EXCUSED. Admins can also mark members EXCUSED with an optional reason. Excused members are not penalized ([`events.md` § Excuses](../behavior/events.md#excuses)).
 - Admins can view full attendance for any event and mark EXCUSED/ABSENT/LATE after the fact.
 - **Auto-absent:** For mandatory or role-targeted events, required members who did not check in, were not excused and have no pending or approved excuse are auto-marked ABSENT.
-- **Meeting minutes:** Events have an optional notes field (markdown) editable by admins after the event. Visible to all members with access to the event.
+- **Meeting minutes:** their own record, at most one per event, read by the members the event invites ([`meetings.md`](../behavior/meetings.md)); posted minutes are also filed in Documents ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)). An event's notes field is the event's own. *(Corrected 2026-11-24, #5949: this line said minutes were the event's notes field, which stopped being true with #4312.)*
 - Unique constraint: one attendance record per (event, user).
 - **Calendar integration:** a private subscription link per member that Apple Calendar, Google Calendar and Outlook subscribe to (2026-11-12, #3322), replacing the per-event `.ics` download withdrawn on 2026-11-08 (#3708); [`events.md` § Calendar subscription](../behavior/events.md#calendar-subscription). Where the server is set up for it, Google Calendar connects instead: Frapp keeps a calendar of its own in the member's Google account, updated within minutes ([`events.md` § Google Calendar](../behavior/events.md#google-calendar)).
 
@@ -129,11 +129,6 @@
 - Members edit their own profile. Admins can view all profiles.
 - Tap a member to view profile or start a DM.
 
-## Activity Feed
-
-- Unified feed showing recent chapter activity — the item set is owned by [`../behavior/activity-feed.md`](../behavior/activity-feed.md) and not restated here. **Specified, not built on any surface today** — the web home screen was removed in the chat-first redesign, and mobile's `(app)/(tabs)/index.tsx` is no longer a Home tab at all: the Signet rebuild ([#937](https://github.com/pdcarlson/Frapp/issues/937)) made it `ChatHomeScreen`, chat's own home route. Web's chat catch-up surfaces a separate, action-oriented pulse card instead ([`spec/behavior/chat/catch-up.md`](../behavior/chat/catch-up.md)).
-- Read-only aggregation from existing data sources.
-
 ## Global Search
 
 - Single search bar accessible from the top of mobile and web.
@@ -146,7 +141,7 @@
 - Members log entries: date, duration, description, optional proof file upload.
 - Admin approval workflow: PENDING → APPROVED / REJECTED with optional comment.
 - Approved hours auto-generate point transactions (category: SERVICE) at a chapter-configurable rate.
-- Service leaderboard and per-member history.
+- Service leaderboard (a sort of the Directory) and per-member history (on the member's profile) ([`service-hours.md` § Visibility](../behavior/service-hours.md#visibility)).
 
 ## Tasks
 
@@ -168,7 +163,7 @@
 
 - Admins archive the current leaderboard period with a label (e.g. "Fall 2025") and start a new one.
 - Points continue to accumulate (no data deleted). Leaderboard defaults to the new period; historical periods remain selectable.
-- Optional bulk role promotion (e.g. "New Member" → Everyone, the role once called Member).
+- Optional bulk role promotion (e.g. "New Member" → Actives, the role once called Member).
 - Study session configs carry forward.
 
 ## Reports & Export
@@ -233,12 +228,11 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Polls | `polls` | Chapter votes, anonymous or named — anonymity **not built**, and not a small addition ([`spec/behavior/polls.md` § Anonymous polls](../behavior/polls.md#anonymous-polls)) |
 | Recruitment | `rush` | Candidate funnel, voting, bid management |
 | Backwork | `backwork` | Document library + academic archive |
-| Documents | `documents` | Chapter-level docs (bylaws, minutes, policies) |
+| Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
-| Geofences | `geofences` | Geo-fenced check-in zones |
+| Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
 | Meetings | `meetings` | Minutes written by hand, or drafted from notes or a recording, with suggested tasks and one template per chapter ([`spec/behavior/meetings.md`](../behavior/meetings.md)) |
-| Vault | `vault` | Encrypted private storage for risk / standards content ([`spec/behavior/vault.md`](../behavior/vault.md)) |
 | AI Q&A | `ai` | Ask-anything over meeting minutes, documents, structured data, announcements, and channel messages from members who agreed ([`spec/behavior/ai.md`](../behavior/ai.md)) |
 
 ## Archetype-specific extras (prototype extras carried forward)
@@ -265,9 +259,9 @@ A line shows only to an officer who can do it, and only while the module the ser
 
 ## Not-set-up features
 
-Nobody is sent to a feature that is on but that nobody has set up yet, when its screen could only say so. Two features qualify, and the web nav, the mobile You tab and the web Ask popover leave them out until the first item exists:
+Nobody is sent to a feature that is on but that nobody has set up yet, when its screen could only say so. Two features qualify, and the web nav and the mobile You tab leave them out until the first item exists:
 
-- **Study hours** with no active study zone hides from everyone. Zones are made on the web app's Chapter settings Study zones page (`/settings?tab=geofences`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
+- **Study hours** with no active study zone hides from everyone. _(Since #5950, 2026-11-24, neither list has a Study hours row to hide: web reads a member's sessions on their Profile, whose Study hours door is drawn only once they have a session, and the phone opens Study from the This semester gauge and New. The rule below stands for any entry point that comes back.)_ Zones are made on the web app's Chapter settings Study zones page (`/settings?tab=geofences`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
 - **Documents** with nothing in it hides from a viewer without `chapter_docs:upload`. Whoever can upload keeps it, because the upload is on that screen.
 
 The rule is shared by both clients (`useHiddenUnsetFeatures` in `@repo/hooks`), and it reads a feature's list only for a viewer it could hide the feature from, and only while the list's module is on. Nothing hides while the viewer's permissions, the chapter's modules or the list are still loading, or after the list's read fails: a row hides on a read that answers "none", or on its list's module being off. Only the entry points hide: the routes stay open, so a link into one still lands.
@@ -300,7 +294,7 @@ A module in `BETA_OFF_MODULES` (`@repo/validation`) is off for **every** chapter
 
 Nothing is deleted. Removing the key turns the module back on with each chapter's own setting, configuration and invoices as they were. Reminders are skipped, not queued: once dues returns, the sweep reminds only about invoices still inside its windows ([`billing.md`](../behavior/billing.md)), so one that came due during the beta gets none.
 
-> The toggle UI lists the modules present in `MODULE_CATALOG` today. `vault` and `ai` are catalogued above for roadmap/scoping but are not yet in the toggle set; they join Settings → Modules when those features ship. `meetings` is in the catalog (2026-11-12, #4312) and has its Settings page since it left the beta-off list (2026-11-12).
+> The toggle UI lists the modules present in `MODULE_CATALOG` today. `ai` is catalogued above for roadmap/scoping but is not yet in the toggle set; it joins Settings → Modules when it ships. Vault is not a module: it is a parked design with no code ([`spec/behavior/vault.md`](../behavior/vault.md)), and its row left the table above on 2026-11-24 (#5951). `meetings` is in the catalog (2026-11-12, #4312) and has its Settings page since it left the beta-off list (2026-11-12).
 
 ## AI feature pricing
 

@@ -10,12 +10,17 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { RushService } from '../../application/services/rush.service';
+import {
+  RushService,
+  type RushViewer,
+} from '../../application/services/rush.service';
+import { RbacService } from '../../application/services/rbac.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
@@ -33,7 +38,9 @@ import {
   CreateRushCandidateDto,
   CreateRushCandidateResponseDto,
   LookupRushCandidateQueryDto,
+  LookupRushNameMatchesQueryDto,
   RushCandidateViewDto,
+  RushNameMatchDto,
 } from '../dtos/rush-candidate.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -42,6 +49,9 @@ import { SystemPermissions } from '#domain/constants/permissions';
  * its own `rush:*` permission (#4070); `PermissionsGuard` requires the class
  * and handler lists together. The slash commands and the chat card call these
  * routes, so they carry the same gates.
+ *
+ * `rush:view_results` gates no route: it decides whether a candidate read,
+ * vote or bid answers with `vote_count` (#4084), so it is resolved here.
  */
 @ApiTags('Rush')
 @ApiBearerAuth()
@@ -50,18 +60,59 @@ import { SystemPermissions } from '#domain/constants/permissions';
 @RequireModule('rush')
 @Controller('rush/candidates')
 export class RushController {
-  constructor(private readonly rushService: RushService) {}
+  constructor(
+    private readonly rushService: RushService,
+    private readonly rbacService: RbacService,
+  ) {}
+
+  /**
+   * The caller, with their `rush:view_results` read started but not awaited,
+   * so it overlaps the service's candidate read. The empty `catch` only marks
+   * the rejection handled for a request that fails before the service awaits
+   * it; the service's own await still sees the rejection.
+   */
+  private viewer(chapterId: string, userId: string): RushViewer {
+    const canViewResults = this.rbacService.memberHasAnyPermission(
+      chapterId,
+      userId,
+      [SystemPermissions.RUSH_VIEW_RESULTS],
+    );
+    canViewResults.catch(() => undefined);
+    return { id: userId, canViewResults };
+  }
 
   @Get()
   @RequirePermissions(SystemPermissions.RUSH_VIEW)
   @ApiOperation({ summary: 'Look up a candidate by display name' })
   @ApiOkResponse({ type: RushCandidateViewDto })
+  @ApiConflictResponse({
+    description:
+      '`code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id.',
+  })
   async lookup(
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
     @Query() query: LookupRushCandidateQueryDto,
   ) {
-    return this.rushService.findViewByName(chapterId, userId, query.name);
+    return this.rushService.findViewByName(
+      chapterId,
+      this.viewer(chapterId, userId),
+      query.name,
+    );
+  }
+
+  @Get('matches')
+  @RequirePermissions(SystemPermissions.RUSH_VIEW)
+  @ApiOperation({
+    summary:
+      'Every candidate a display name matches, with stage and day added, for a picker',
+  })
+  @ApiOkResponse({ type: [RushNameMatchDto] })
+  async matches(
+    @CurrentChapterId() chapterId: string,
+    @Query() query: LookupRushNameMatchesQueryDto,
+  ) {
+    return this.rushService.findNameMatches(chapterId, query.name);
   }
 
   @Get(':id')
@@ -73,7 +124,11 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.findView(id, chapterId, userId);
+    return this.rushService.findView(
+      id,
+      chapterId,
+      this.viewer(chapterId, userId),
+    );
   }
 
   @Post()
@@ -122,7 +177,7 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.vote(id, chapterId, userId);
+    return this.rushService.vote(id, chapterId, this.viewer(chapterId, userId));
   }
 
   @Post(':id/bid')
@@ -138,6 +193,6 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.bid(id, chapterId, userId);
+    return this.rushService.bid(id, chapterId, this.viewer(chapterId, userId));
   }
 }

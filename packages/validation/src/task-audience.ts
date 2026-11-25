@@ -121,6 +121,30 @@ export const TASK_AUDIENCE_COPY = {
       : `One of ${count} members takes it. It goes on Up for grabs.`,
   /** A group tile's progress line: "14 of 20 done". */
   progress: (done: number, total: number) => `${done} of ${total} done`,
+  /**
+   * Who a group task went to and how far its copies are, on one line:
+   * "Everyone · 14 of 20 done" (#5699). A copy's row and panel on web and the
+   * phone's row and task screen all say it this way; `who` null gives the
+   * count alone.
+   */
+  groupLine: (who: string | null, done: number, total: number) =>
+    [who, `${done} of ${total} done`].filter(Boolean).join(" · "),
+  /**
+   * Add people to a group task after it's made (#5905): the control, the
+   * picker's note on someone who already has a copy, its button, and what
+   * is said once it lands. Web's panel and the phone's task screen share
+   * them.
+   */
+  addPeople: "Add people",
+  alreadyHasIt: "has it",
+  addButton: (count: number) => (count === 0 ? "Add" : `Add ${count}`),
+  addedLine: (count: number) =>
+    count === 0
+      ? "They already had this task."
+      : count === 1
+        ? "Added 1 person to this task."
+        : `Added ${count} people to this task.`,
+  addFailed: "Couldn't add them. Try again.",
   /** Why a group task can't repeat or carry photos yet. */
   noRepeat: "A task for everyone can't repeat yet.",
   noPhotos: "A task for everyone can't carry photos yet.",
@@ -299,6 +323,8 @@ export interface TaskWhoSuggestionFields {
   audience: TaskSuggestionAudience | null;
   audience_role_id: string | null;
   audience_group_id: string | null;
+  /** With `audience`: the members holding a role in this tier (2026-11-22). */
+  audience_tier_id: string | null;
 }
 
 const NO_SUGGESTION_WHO: TaskWhoSuggestionFields = {
@@ -307,6 +333,7 @@ const NO_SUGGESTION_WHO: TaskWhoSuggestionFields = {
   audience: null,
   audience_role_id: null,
   audience_group_id: null,
+  audience_tier_id: null,
 };
 
 /**
@@ -322,10 +349,6 @@ export function taskWhoSuggestionFields(
     return { ...NO_SUGGESTION_WHO, assignee_id: picked.userId };
   }
   const { target } = picked;
-  // A suggestion's payload has no tier field yet (#5473), so the suggested
-  // tasks' pickers offer no tiers; one that slipped through picks nobody
-  // rather than widening to the chapter.
-  if (target.kind === "tier") return { ...NO_SUGGESTION_WHO };
   if (picked.kind === "each" && target.kind === "people") {
     return { ...NO_SUGGESTION_WHO, assignee_ids: target.userIds };
   }
@@ -336,6 +359,7 @@ export function taskWhoSuggestionFields(
     audience,
     audience_role_id: target.kind === "role" ? target.id : null,
     audience_group_id: target.kind === "group" ? target.id : null,
+    audience_tier_id: target.kind === "tier" ? target.id : null,
     assignee_ids: target.kind === "people" ? target.userIds : null,
   };
 }
@@ -382,6 +406,7 @@ export interface TaskWhoSuggestionSource {
   audience?: string | null;
   audience_role_id?: string | null;
   audience_group_id?: string | null;
+  audience_tier_id?: string | null;
 }
 
 function targetOf(fields: {
@@ -451,6 +476,7 @@ export function taskWhoOf(
       target: targetOf({
         roleId: fields.audience_role_id,
         groupId: fields.audience_group_id,
+        tierId: fields.audience_tier_id,
         userIds: fields.assignee_ids,
       }),
     });

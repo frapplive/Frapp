@@ -46,6 +46,7 @@ function row(overrides: Partial<TaskRowModel> = {}): TaskRowModel {
     dueAt: null,
     assigneeId: "me",
     completedAt: null,
+    completedBy: null,
     confirmedAt: null,
     pointReward: 5,
     pointsAwarded: false,
@@ -61,6 +62,9 @@ function row(overrides: Partial<TaskRowModel> = {}): TaskRowModel {
     createdAt: null,
     groupId: null,
     meetingId: null,
+    followedBy: null,
+    followedByName: null,
+    attachments: [],
     group: null,
     openTaskId: null,
     series: null,
@@ -140,9 +144,105 @@ describe("TaskRow — the overdue colour", () => {
       />,
     );
 
-    expect(styleOfText(tree, "Due Sep 30").color).toBe(
+    expect(styleOfText(tree, "Due September 30").color).toBe(
       signetDarkTokens.color.text.mutedForeground,
     );
+  });
+});
+
+describe("TaskRow — a task a group follows (#5473)", () => {
+  it("says who it is from at the end of its line, and to a screen reader", () => {
+    const tree = render(
+      <TaskRow
+        row={row({
+          dueDate: "2026-09-30",
+          followedBy: "tier:t-exec",
+          followedByName: "Exec board",
+        })}
+        now={NOW}
+        onToggle={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    expect(texts(tree)).toContain("Due September 30 · From Exec board");
+    const labelled = tree.root.findAll(
+      (node) =>
+        typeof node.props?.accessibilityLabel === "string" &&
+        node.props.accessibilityLabel.includes("From Exec board"),
+    );
+    expect(labelled.length).toBeGreaterThan(0);
+  });
+
+  it("says nothing of it on a task from its creator alone", () => {
+    const tree = render(
+      <TaskRow
+        row={row({ dueDate: "2026-09-30" })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+    expect(texts(tree).join(" ")).not.toContain("From");
+  });
+});
+
+describe("TaskRow — a copy of a group task (#5699)", () => {
+  it("names who it went to and how far they are, not the member alone", () => {
+    const tree = render(
+      <TaskRow
+        row={row({
+          dueDate: "2026-09-30",
+          groupId: "group-1",
+          group: {
+            audience: "everyone",
+            targetId: null,
+            targetName: null,
+            total: 20,
+            done: 14,
+            confirmed: 9,
+          },
+        })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+    expect(texts(tree)).toContain(
+      "Due September 30 · Everyone · 14 of 20 done",
+    );
+  });
+
+  it("names the role, tier or group a copy went to", () => {
+    const tree = render(
+      <TaskRow
+        row={row({
+          dueDate: "2026-09-30",
+          groupId: "group-2",
+          group: {
+            audience: "tier",
+            targetId: "t-exec",
+            targetName: "Exec board",
+            total: 4,
+            done: 1,
+            confirmed: 0,
+          },
+        })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+    expect(texts(tree)).toContain(
+      "Due September 30 · Everyone in Exec board · 1 of 4 done",
+    );
+  });
+
+  it("says nothing of it on a task for one person", () => {
+    const tree = render(
+      <TaskRow
+        row={row({ dueDate: "2026-09-30" })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+    expect(texts(tree).join(" ")).not.toContain("Everyone");
   });
 });
 

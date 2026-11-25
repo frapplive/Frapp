@@ -42,6 +42,8 @@ import {
   isModuleEnabled as isStoredModuleEnabled,
 } from "@repo/validation";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
+import { CouncilSettingsPage } from "@/components/councils/council-settings-page";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { asArray, getErrorMessage } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale-image";
@@ -59,16 +61,24 @@ import {
   isModuleSettingsTab,
   shownModuleSettings,
 } from "@/components/settings/settings-modules";
-import { chapterProfileSaveBody } from "@/components/settings/chapter-profile-save-body";
+import {
+  chapterProfileSaveBody,
+  readChapterBranding,
+} from "@repo/hooks/chapter-tab";
 import { ModuleSettingsPage } from "@/components/settings/module-settings-page";
+import { RushModuleSettings } from "@/components/settings/rush-module-settings";
 import {
   SettingsToolBody,
   SettingsToolSubpage,
 } from "@/components/settings/settings-tool-views";
 import {
   SETTINGS_SUBPAGE_PARAMS,
+  chapterSettingsHref,
+  isChapterSettingsPage,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
+import { useSettingJump } from "@/lib/settings/use-setting-jump";
+import { settingEntryById } from "@repo/hooks/settings-search";
 import { MeetingSectionsRules } from "@/components/meetings/meeting-sections-rules";
 import {
   DuesGraceRule,
@@ -89,24 +99,16 @@ import { SettingsOrgTab } from "@/components/settings/settings-org-tab";
 import { SettingsDuesTab } from "@/components/settings/settings-dues-tab";
 import { SettingsRolesTab } from "@/components/settings/settings-roles-tab";
 import { SettingsBirthdayPosts } from "@/components/settings/settings-birthday-posts";
+import { SettingsMemberNames } from "@/components/settings/settings-member-names";
+import { SettingsLogsTab } from "@/components/settings/settings-logs-tab";
 import { SettingsPrivacyTab } from "@/components/settings/settings-privacy-tab";
 import { SettingsAiTab } from "@/components/settings/settings-ai-tab";
 import { SettingsFieldsTab } from "@/components/settings/settings-fields-tab";
 import { SettingsClassesTab } from "@/components/settings/settings-classes-tab";
-import { SettingsGroupsTab } from "@/components/settings/settings-groups-tab";
 import {
   SettingsBodySkeleton,
   SettingsTabSkeleton,
 } from "@/components/settings/settings-skeleton";
-
-type Branding = {
-  greek_letters?: string;
-  short_name?: string;
-  show_greek_letters?: boolean;
-  designation?: string;
-  school_short?: string;
-  founded_at?: number;
-};
 
 // Fallback shown before the config query resolves. Mirrors the API's
 // chapter_dues_config defaults for an unconfigured chapter.
@@ -121,6 +123,12 @@ const DEFAULT_DUES: OrgDues = {
   grace_days: 7,
   scholarship_pool_cents: 0,
 };
+
+/** The Chapter tab page a settings-search result lives on, if any. */
+function chapterPageOfSetting(settingId: string | null): string | undefined {
+  const web = settingEntryById(settingId)?.web;
+  return web?.page === "org" ? web.params?.page : undefined;
+}
 
 function SettingsPageContent() {
   const { toast } = useToast();
@@ -197,6 +205,24 @@ function SettingsPageContent() {
   */
   const channelParam = searchParams.get("channel");
   const toolParam = searchParams.get("tool");
+  // A search result (`?setting=`) on one of the Chapter tab's pages opens that
+  // page even from a link made before the pages existed, and the old Accent
+  // tab (`?tab=theme`) opens Accent color.
+  const pageParam =
+    searchParams.get("page") ??
+    chapterPageOfSetting(searchParams.get("setting")) ??
+    (rawTabParam === "theme" ? "accent" : null);
+  const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
+  // Write a page the address only implied into it, so it stays open once the
+  // setting jump drops `?setting=`, and a refresh lands on it.
+  useEffect(() => {
+    if (!chapterPage) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("page") === chapterPage) return;
+    url.searchParams.set("tab", "org");
+    url.searchParams.set("page", chapterPage);
+    window.history.replaceState(null, "", url.toString());
+  }, [chapterPage]);
   // Switching rows starts the panel at its top, not wherever the last one
   // was scrolled to: the panel scrolls inside the shell's tool pane. The
   // address follows the row, without the params that opened a page inside
@@ -250,6 +276,9 @@ function SettingsPageContent() {
     (key: string) => setConsumedModuleKey(key),
     [],
   );
+
+  // `?setting=` from settings search: scroll to the setting and light it.
+  useSettingJump();
 
   const accentDraft = useAccentDraft(chapterQuery.data);
   const rolloverForm = useRolloverForm();
@@ -399,33 +428,8 @@ function SettingsPageContent() {
   // name the pledge class tab and everything in it (#3939).
   const classTerm = vocab("class", chapterWords);
   const orderTerm = vocab("order", chapterWords);
-  const brandingRaw = config?.branding ?? {};
-  const branding: Branding = {
-    greek_letters:
-      typeof brandingRaw.greek_letters === "string"
-        ? brandingRaw.greek_letters
-        : undefined,
-    short_name:
-      typeof brandingRaw.short_name === "string"
-        ? brandingRaw.short_name
-        : undefined,
-    show_greek_letters:
-      typeof brandingRaw.show_greek_letters === "boolean"
-        ? brandingRaw.show_greek_letters
-        : undefined,
-    designation:
-      typeof brandingRaw.designation === "string"
-        ? brandingRaw.designation
-        : undefined,
-    school_short:
-      typeof brandingRaw.school_short === "string"
-        ? brandingRaw.school_short
-        : undefined,
-    founded_at:
-      typeof brandingRaw.founded_at === "number"
-        ? brandingRaw.founded_at
-        : undefined,
-  };
+  // Key by key, so one malformed key doesn't empty the rest (#2844).
+  const branding = readChapterBranding(config?.branding);
   const enabledModules = config?.enabled_modules;
   const workflows = config?.workflows ?? [];
   const dues = config?.dues ?? DEFAULT_DUES;
@@ -585,8 +589,8 @@ function SettingsPageContent() {
   }
 
   /*
-    Settings shows each viewer only what they can use (#2946). The nav's
-    Settings row admits anyone Settings holds a tab or an officer tool for
+    Settings shows each viewer only what they can use (#2946). The chapter
+    menu's Chapter settings link admits anyone Settings holds a tab or an officer tool for
     (`hasSettingsDestination`), so a treasurer who holds only reports:export
     arrives here too. Before, every setup tab rendered for everyone and the
     config-gated ones answered a non-holder with "Couldn't load chapter
@@ -677,7 +681,10 @@ function SettingsPageContent() {
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
             // settings, Discord import) and goes back to the row's own page.
-            if (value === shownTab && (channelParam || toolParam)) {
+            if (
+              value === shownTab &&
+              (channelParam || toolParam || chapterPage)
+            ) {
               changeTab(value);
             }
           }}
@@ -699,6 +706,8 @@ function SettingsPageContent() {
                 }}
                 canManage={canManage}
                 canEditProfile={canEditProfile}
+                page={chapterPage}
+                pageHref={chapterSettingsHref}
                 onSaveProfile={saveProfile}
                 onPatchConfig={(diff) =>
                   patchConfig(diff, "Organization settings saved")
@@ -719,7 +728,7 @@ function SettingsPageContent() {
                 }
               />,
             )}
-            {config ? (
+            {config && !chapterPage ? (
               <div className="mt-10">
                 <SettingsBirthdayPosts
                   channelId={
@@ -735,6 +744,23 @@ function SettingsPageContent() {
                       birthdayChannelId
                         ? "Birthday posts on"
                         : "Birthday posts off",
+                    )
+                  }
+                />
+              </div>
+            ) : null}
+            {config && !chapterPage ? (
+              <div className="mt-10">
+                <SettingsMemberNames
+                  enabled={config.members_can_change_name === true}
+                  canManage={canManage}
+                  isSaving={pendingConfigKeys.has("members_can_change_name")}
+                  onChange={(enabled) =>
+                    patchConfig(
+                      { members_can_change_name: enabled },
+                      enabled
+                        ? "Members can change their own name"
+                        : "Member names locked",
                     )
                   }
                 />
@@ -770,8 +796,8 @@ function SettingsPageContent() {
 
           {/*
             **Deliberately not `renderConfigGated`.** A `roles:manage` holder
-            without `chapter-config:view` reaches this tab: the nav's Settings
-            row admits `roles:manage` on its own (`settings-access.ts`), and
+            without `chapter-config:view` reaches this tab: the chapter menu's
+            Chapter settings item admits `roles:manage` on its own (`settings-access.ts`), and
             `/roles` redirects here. This page's config read is gated on
             `chapter-config:view`, so gating the tab on it would land that
             member on "Couldn't load chapter configuration", which is what
@@ -812,11 +838,6 @@ function SettingsPageContent() {
             roster, neither of which is chapter config, and its words fall
             back to the member view's vocabulary.
           */}
-          {/* No config gate: groups are no chapter config (#4076). */}
-          <TabsContent value="groups" className="mt-0">
-            <SettingsGroupsTab canManage={can("groups:manage", permissions)} />
-          </TabsContent>
-
           <TabsContent value="classes" className="mt-0">
             <SettingsClassesTab
               canManage={can("roles:manage", permissions)}
@@ -868,13 +889,31 @@ function SettingsPageContent() {
                     focusSwitch={focusModuleKey === module.key}
                     onSwitchFocused={handleModuleFocused}
                     rules={
-                      canViewConfig ? renderModuleRules(module.key) : undefined
+                      // Recruitment's stages, tags and notes access read
+                      // through the pipeline's own routes, not the config.
+                      module.key === "rush" ? (
+                        <RushModuleSettings
+                          moduleOn={moduleOn(module.key)}
+                          canEditRoles={can("roles:manage", permissions)}
+                          canSeeWhoCan={canSeeWhoCan}
+                        />
+                      ) : canViewConfig ? (
+                        renderModuleRules(module.key)
+                      ) : undefined
                     }
                   />
                 )}
               </TabsContent>
             );
           })}
+          {/*
+            Logs (Paul, 2026-11-21): no config gate, since it reads the audit
+            log, not chapter config; the rail shows it only to a viewer the
+            route admits (`isSettingsTabVisible`).
+          */}
+          <TabsContent value="logs" className="mt-0">
+            <SettingsLogsTab />
+          </TabsContent>
           <TabsContent value="ai" className="mt-0">
             <SettingsAiTab />
           </TabsContent>
@@ -902,10 +941,33 @@ function SettingsPageContent() {
 // `SettingsPageContent` reads `?tab=` via `useSearchParams`, which Next requires
 // to sit under a Suspense boundary (matches the sign-in/sign-up/join pattern).
 export function SettingsPage() {
+  const activeChapterId = useChapterStore((s) => s.activeChapterId);
+  const tenantKind = useTenantKind();
+  const chapterRead = useCurrentChapter({
+    chapterId: activeChapterId,
+    enabled: !!activeChapterId,
+  });
+  // Held only while the read is actually running: a paused or failed one
+  // falls through to the chapter page, which says it is offline or failed.
+  const kindLoading =
+    !!activeChapterId &&
+    tenantKind === undefined &&
+    chapterRead.fetchStatus === "fetching";
   return (
     <>
       <Suspense fallback={<SettingsBodySkeleton />}>
-        <SettingsPageContent />
+        {
+          // A council's settings are its own few rows (#5933). Its kind is
+          // read before either page mounts, so the chapter page's config,
+          // semester and AI reads never go to a council's routes.
+          kindLoading ? (
+            <SettingsBodySkeleton />
+          ) : tenantKind === "council" ? (
+            <CouncilSettingsPage />
+          ) : (
+            <SettingsPageContent />
+          )
+        }
       </Suspense>
     </>
   );

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { TaskWho } from "@repo/validation";
 import {
   createRequestOf,
+  DEFAULT_DUE_CHOICE,
+  NO_DUE_CHOICE,
   duePresets,
+  resolveDue,
   formatDueFieldLabel,
   parsePointReward,
   taskCreatedLine,
@@ -60,13 +63,13 @@ describe("duePresets", () => {
 describe("formatDueFieldLabel", () => {
   it("renders the drawn weekday-and-date label", () => {
     expect(formatDueFieldLabel("2026-08-21", at(2026, 8, 1))).toBe(
-      "Fri, Aug 21",
+      "Friday, August 21",
     );
   });
 
   it("shows the year on a date outside the current one (#3928)", () => {
     expect(formatDueFieldLabel("2027-03-14", at(2026, 11, 9))).toBe(
-      "Sun, Mar 14, 2027",
+      "Sunday, March 14, 2027",
     );
   });
 
@@ -146,6 +149,45 @@ describe("validateNewTask", () => {
     expect(open.body).not.toHaveProperty("recurrence_rule");
   });
 
+  it("sends From with a task or a copy each, never to Up for grabs or with a repeat (#5473)", () => {
+    const body = { ...validateNewTask(draft)!, followed_by: "tier:t-exec" };
+    expect(createRequestOf(body).body).toMatchObject({
+      assignee_id: "member-1",
+      followed_by: "tier:t-exec",
+    });
+    const group = createRequestOf({
+      ...body,
+      who: { kind: "each", target: { kind: "role", id: "r1" } },
+    });
+    expect(group.body).toMatchObject({
+      audience: "everyone",
+      audience_role_id: "r1",
+      followed_by: "tier:t-exec",
+    });
+    const open = createRequestOf({
+      ...body,
+      who: { kind: "someone", target: { kind: "chapter" } },
+    });
+    expect(open.route).toBe("open");
+    expect(open.body).not.toHaveProperty("followed_by");
+    const repeating = createRequestOf({
+      ...body,
+      recurrence_rule: "FREQ=WEEKLY;BYDAY=FR;TZID=America/New_York",
+    });
+    expect(repeating.body).not.toHaveProperty("followed_by");
+  });
+
+  it("sends a copy each for everyone in a tier (#5473)", () => {
+    const tier = validateNewTask({
+      ...draft,
+      who: { kind: "each", target: { kind: "tier", id: "t-exec" } },
+    });
+    expect(createRequestOf(tier!).body).toMatchObject({
+      audience: "everyone",
+      audience_tier_id: "t-exec",
+    });
+  });
+
   it("sends a task for everyone as an audience, with no member (#4295 step 3)", () => {
     const body = validateNewTask({
       ...draft,
@@ -206,6 +248,43 @@ describe("validateNewTask", () => {
       whoTakesPhotos({ kind: "someone", target: { kind: "chapter" } }),
     ).toBe(false);
     expect(whoTakesPhotos({ kind: "person", userId: "a" })).toBe(true);
+  });
+
+  it("sends no due_date or due_at for No due date (#5761)", () => {
+    const body = validateNewTask(
+      { ...draft, dueDate: null, dueTime: "17:00" },
+      at(2026, 8, 17),
+    );
+    expect(body).toEqual({
+      title: "Collect ride-share forms",
+      who: { kind: "person", userId: "member-1" },
+      point_reward: 5,
+    });
+    const request = createRequestOf(body!);
+    expect(request.route).toBe("task");
+    expect(request.body).not.toHaveProperty("due_date");
+    expect(request.body).not.toHaveProperty("due_at");
+    // A task for everyone can be undated too.
+    const group = validateNewTask({
+      ...draft,
+      dueDate: null,
+      who: { kind: "each", target: { kind: "chapter" } },
+    });
+    expect(createRequestOf(group!).body).toEqual({
+      title: "Collect ride-share forms",
+      audience: "everyone",
+      point_reward: 5,
+    });
+  });
+
+  it("never posts a task up for grabs with no due date (#5761)", () => {
+    expect(
+      validateNewTask({
+        ...draft,
+        dueDate: null,
+        who: { kind: "someone", target: { kind: "chapter" } },
+      }),
+    ).toBeNull();
   });
 
   it("omits point_reward when no points are offered", () => {
@@ -273,5 +352,19 @@ describe("validateNewTask proof kind (#4635)", () => {
         proof_kind: "photo",
       },
     );
+  });
+});
+
+describe("resolveDue — No due date (#5761)", () => {
+  it("stays none, with no chip, and a new draft still opens on Today", () => {
+    const now = at(2026, 8, 17);
+    expect(resolveDue(NO_DUE_CHOICE, now)).toEqual({
+      date: null,
+      chipId: null,
+    });
+    expect(resolveDue(DEFAULT_DUE_CHOICE, now)).toEqual({
+      date: "2026-08-17",
+      chipId: "today",
+    });
   });
 });

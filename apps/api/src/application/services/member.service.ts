@@ -11,19 +11,28 @@ import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interf
 import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.interface';
 import type { IChatChannelRepository } from '#domain/repositories/chat.repository.interface';
 import { ChannelCacheService } from './channel-cache.service';
-import { rolesAfterSave, topRoleColor } from '@repo/validation';
+import {
+  baseRoleIds,
+  permissionsNotGivable,
+  ROLE_ASSIGN_OUT_OF_REACH_CODE,
+  ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
+  rolesAfterSave,
+  tierPositionsOf,
+  topRoleColor,
+} from '@repo/validation';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface';
+import { ROLE_TIER_REPOSITORY } from '#domain/repositories/role-tier.repository.interface';
+import type { IRoleTierRepository } from '#domain/repositories/role-tier.repository.interface';
 import type { IRoleRepository } from '#domain/repositories/role.repository.interface';
 import { Member } from '#domain/entities/member.entity';
 import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
-  canReach,
+  canAssignRoleOnMemberAt,
   holderRank,
-  permissionsNotHeld,
   roleRank,
 } from '#domain/utils/role-rank';
 import type { User, UserSharedBirthday } from '#domain/entities/user.entity';
@@ -33,7 +42,16 @@ import {
 } from '#domain/constants/permissions';
 import { CustomFieldService } from './custom-field.service';
 import { RbacService, type RankContext } from './rbac.service';
-import { memberRankIn } from '#domain/utils/rank-context';
+import {
+  chatTimeoutBlock,
+  memberHoldsWildcard,
+  rankBlock,
+  rankContextOrSkip,
+} from './member-rank';
+import {
+  stateOf as chatTimeoutStateOf,
+  withoutChatTimeout,
+} from './chat-timeout.service';
 import { ChapterAuditLogService } from './chapter-audit-log.service';
 import { ProfilePhotoUrlService } from './profile-photo-url.service';
 import { allowedVisibilities } from './custom-field-visibility';
@@ -70,7 +88,7 @@ export interface MemberProfile {
   current_company: string | null;
   email: string;
   /**
-   * `users.phone` (#3711): the member's own number, as they typed it, or null.
+   * `users.phone` (#3711): the member's own number, stored E.164 when it is a valid number (#5798), or null.
    * Only they set it (`PATCH /v1/users/me`).
    */
   phone: string | null;
@@ -115,6 +133,20 @@ export interface MemberProfile {
    * reads, so a client offers the editor only where the API would allow it.
    */
   viewer_can_edit_profile?: boolean;
+  /**
+   * Whether the requesting viewer may time this member out of chat or lift
+   * their timeout (#6006): `members:timeout` (or `*`), not their own
+   * profile, not the President, and ranked below them
+   * (`chatTimeoutBlock`). Present only on single-member reads.
+   */
+  viewer_can_timeout?: boolean;
+  /**
+   * The member's running chat timeout (#6006), on a single-member read for
+   * the member themselves and for a viewer who can time out; null for
+   * anyone else, and when there is none.
+   */
+  chat_timeout_until?: string | null;
+  chat_timeout_reason?: string | null;
 }
 
 /**
@@ -149,19 +181,11 @@ export interface MemberRosterEntry {
   display_name: string;
   avatar_url: string | null;
   /**
-   * The palette color of the member's highest-ranked colored role, or `null`
+   * The paintable color of the member's highest-ranked colored role, or `null`
    * (#3485). Chat paints the author's name in it. Computed here so a chat
    * surface needs no second roles read and never sees `role_ids`.
    */
   role_color: string | null;
-}
-
-/** A member's name and photo plus the membership's join timestamp. */
-export interface RecentMemberJoin extends Omit<
-  MemberRosterEntry,
-  'role_color'
-> {
-  joined_at: string;
 }
 
 @Injectable()
@@ -172,6 +196,8 @@ export class MemberService {
     @Inject(MEMBER_REPOSITORY) private readonly memberRepo: IMemberRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     @Inject(ROLE_REPOSITORY) private readonly roleRepo: IRoleRepository,
+    @Inject(ROLE_TIER_REPOSITORY)
+    private readonly tierRepo: IRoleTierRepository,
     private readonly customFieldService: CustomFieldService,
     private readonly rbacService: RbacService,
     private readonly auditLogService: ChapterAuditLogService,
@@ -236,7 +262,7 @@ export class MemberService {
     if (!members.length) return [];
 
     const userIds = [...new Set(members.map((member) => member.user_id))];
-    const [identities, roles] = await Promise.all([
+    const [identities, roles, tiers] = await Promise.all([
       this.userRepo.findDisplayIdentitiesByIds(userIds),
       // Role colors only decorate names, so a failed roles read paints every
       // name plain rather than taking the whole roster (and with it every
@@ -250,7 +276,20 @@ export class MemberService {
         );
         return [];
       }),
+      // The tiers rank the roles (a role's tier before its own order), so the
+      // color is the highest-ranked role's; without them the colors fall back
+      // to `display_order` rather than failing the roster.
+      this.tierRepo.findByChapter(chapterId).catch((error: unknown) => {
+        logThrowable(
+          this.logger,
+          'warn',
+          `Roster role tiers unavailable for chapter ${chapterId}`,
+          error,
+        );
+        return [];
+      }),
     ]);
+    const positions = tierPositionsOf(tiers);
     const byId = new Map(identities.map((user) => [user.id, user]));
     // A user holds one membership per chapter, but the read is not keyed that
     // way, so a duplicate row unions its roles rather than replacing them.
@@ -269,7 +308,11 @@ export class MemberService {
         user_id: user.id,
         display_name: user.display_name,
         avatar_url: user.avatar_url,
-        role_color: topRoleColor(roles, roleIdsByUser.get(userId) ?? []),
+        role_color: topRoleColor(
+          roles,
+          roleIdsByUser.get(userId) ?? [],
+          positions,
+        ),
       });
     }
     return this.photoUrls.signRows(roster, (entry) => entry.user_id);
@@ -294,44 +337,6 @@ export class MemberService {
         a.display_name.localeCompare(b.display_name),
     );
     return this.photoUrls.signRows(birthdays, (entry) => entry.id);
-  }
-
-  /**
-   * The full roster, each entry also carrying its membership join timestamp —
-   * for the Activity Feed (`spec/behavior/activity-feed.md`), which needs
-   * both a `user_id → {display_name, avatar_url}` lookup (to name the actor
-   * behind a backwork upload or announcement) *and* the most recently joined
-   * members, from one caller. Built as one combined method rather than two —
-   * {@link findRosterByChapter} plus a separate recent-joins query — so that
-   * caller does one membership read and one identity batch, not two of each.
-   *
-   * `Member.created_at` is the membership row's timestamp, i.e. when this
-   * person joined *this chapter* — not `users.created_at`, which is account
-   * creation and could predate the membership by any amount (a re-join, an
-   * alumni account reactivated years later).
-   */
-  async findRosterWithJoinDates(
-    chapterId: string,
-  ): Promise<RecentMemberJoin[]> {
-    const members = await this.memberRepo.findByChapter(chapterId);
-    if (!members.length) return [];
-
-    const userIds = [...new Set(members.map((member) => member.user_id))];
-    const identities = await this.userRepo.findDisplayIdentitiesByIds(userIds);
-    const byId = new Map(identities.map((user) => [user.id, user]));
-
-    const roster: RecentMemberJoin[] = [];
-    for (const member of members) {
-      const user = byId.get(member.user_id);
-      if (!user) continue;
-      roster.push({
-        user_id: user.id,
-        display_name: user.display_name,
-        avatar_url: user.avatar_url,
-        joined_at: member.created_at,
-      });
-    }
-    return this.photoUrls.signRows(roster, (entry) => entry.user_id);
   }
 
   async findByUserAndChapter(
@@ -362,9 +367,16 @@ export class MemberService {
    * Set a member's roles, behind the rank rules (#4071) for `actorUserId`
    * unless they hold `*`:
    *
-   * - every role added or taken away must rank below the caller's own;
-   * - the member must rank below the caller too, unless it is the caller
-   *   themselves, so a chair cannot strip an officer's roles;
+   * - every role added or taken away must rank below the caller's own
+   *   (`canAssignRoleOnMemberAt`), whoever the member is: one below the
+   *   caller, a peer at their own rank (#5843), or one ranked above them,
+   *   the President included (#5903), so a cabinet officer can put the
+   *   President on a committee but a chair cannot strip an officer's
+   *   officer role;
+   * - a caller holding `roles:assign_own_level` also reaches their own rank
+   *   for the roles (`canAssignAt`, #5725) on a member at or below that
+   *   rank, so a cabinet officer can make another cabinet officer
+   *   Stewardship Chair, but never on a member ranked above them;
    * - on their own row, the caller may not end up holding a permission they
    *   did not already hold, so nobody hands themselves a lower role that
    *   carries more than they have.
@@ -373,8 +385,10 @@ export class MemberService {
    * chairs' tier, and cannot give anyone, least of all themselves, a chair's
    * or officer's role.
    *
-   * Nobody ticks the Everyone role (#4191): `rolesAfterSave` decides it from
-   * what the save means, before any check below sees the list.
+   * Nobody ticks the Everyone role: `rolesAfterSave` keeps it on every member,
+   * and gives at most one base role (New Member, Actives, Alumni), the one
+   * the save adds winning, before any check below sees the list. A save that
+   * still names two base roles is refused (`400`, `role.base_conflict`).
    */
   async updateRoles(
     memberId: string,
@@ -390,6 +404,13 @@ export class MemberService {
 
     const roles = await this.roleRepo.findByChapter(chapterId);
     const roleIds = rolesAfterSave(requestedRoleIds, member.role_ids, roles);
+    if (baseRoleIds(roleIds, roles).length > 1) {
+      throw new BadRequestException({
+        code: 'role.base_conflict',
+        message:
+          'A member holds one of New Member, Actives and Alumni at a time.',
+      });
+    }
 
     // Ids the member ALREADY holds are exempt from validation: a row may
     // still carry an id that resolves to no role (fail-safe: it grants
@@ -459,7 +480,7 @@ export class MemberService {
         "This member's roles changed while you were saving. Reload and try again.",
       );
     }
-    return written;
+    return withoutChatTimeout(written);
   }
 
   /** The rank rules of {@link updateRoles}; see there. */
@@ -486,54 +507,77 @@ export class MemberService {
     const beforeIds = new Set(before.map((role) => role.id));
     const afterIds = new Set(after.map((role) => role.id));
     // The Everyone role moves only as `rolesAfterSave` settles it, never at
-    // the caller's request (#4191), so it is not one the caller gives or
-    // takes: a chair who may make a member a pledge isn't refused because
-    // making them one takes Everyone away.
+    // the caller's request, so it is not one the caller gives or takes.
     const changed = [
       ...after.filter((role) => !beforeIds.has(role.id)),
       ...before.filter((role) => !afterIds.has(role.id)),
-    ].filter((role) => role.system_key !== SystemRoleKeys.MEMBER);
+    ].filter((role) => role.system_key !== SystemRoleKeys.EVERYONE);
     if (changed.length === 0) return;
 
-    const isSelf = reach.memberId === member.id;
+    // A base-role swap `rolesAfterSave` made is in `changed` too, so giving
+    // the President a lower base role can't take away one at or above the
+    // caller. The caller's own row ranks at their own rank, so it takes the
+    // same rule as a peer's.
+    const memberRank = holderRank(before, positions);
     if (
-      changed.some((role) => !canReach(reach, roleRank(role, positions))) ||
-      (!isSelf && !canReach(reach, holderRank(before, positions)))
+      changed.some(
+        (role) =>
+          !canAssignRoleOnMemberAt(
+            reach,
+            roleRank(role, positions),
+            memberRank,
+          ),
+      )
     ) {
-      throw new ForbiddenException(
-        'You can only give or take away roles ranked below your own, and only from members ranked below you.',
-      );
+      throw new ForbiddenException({
+        code: ROLE_ASSIGN_OUT_OF_REACH_CODE,
+        message:
+          'That role, or this member, ranks too high for your role to change.',
+      });
     }
     // Nobody hands out a permission they don't hold, to anyone: a lower role
     // can still carry one (a role outside the tiers, an override), and a
     // second account would otherwise collect it. What the Everyone role
-    // carries is exempt, since every member gets it.
-    const base = new Set(
-      roles.find((role) => role.system_key === SystemRoleKeys.MEMBER)
-        ?.permissions ?? [],
-    );
-    const missing = permissionsNotHeld(
-      reach,
+    // carries is exempt, since every member gets it (`permissionsNotGivable`,
+    // shared with the clients' "+ Add" list).
+    const missing = permissionsNotGivable(
+      { wildcard: reach.wildcard, held: reach.permissions },
       flattenPermissionSets(
         after
           .filter((role) => !beforeIds.has(role.id))
           .map((role) => role.permissions),
       ),
-    ).filter((permission) => !base.has(permission));
+      roles,
+    );
     if (missing.length > 0) {
-      throw new ForbiddenException(
-        `You can only give roles whose permissions you hold: ${missing.join(', ')}.`,
-      );
+      throw new ForbiddenException({
+        code: ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
+        message: `You can only give roles whose permissions you hold: ${missing.join(', ')}.`,
+      });
     }
   }
 
+  /**
+   * `firstFinish` is true for the one request that turned the flag on (#5627),
+   * which is when the chapter is told who joined (`InviteService.announceJoin`).
+   *
+   * Finishing is one-way since #5627. `false` used to restart the first-run
+   * tour (web's Replay tour, its only caller, went with the tours); now it
+   * changes nothing, because a reset would let the next `true` announce the
+   * join again to the inviter and every officer.
+   */
   async updateOnboarding(
     memberId: string,
     completed: boolean,
-  ): Promise<Member> {
-    return this.memberRepo.update(memberId, {
-      has_completed_onboarding: completed,
-    });
+  ): Promise<{ member: Member; firstFinish: boolean }> {
+    if (completed) {
+      const { member, changed } =
+        await this.memberRepo.completeOnboarding(memberId);
+      return { member, firstFinish: changed };
+    }
+    const member = await this.memberRepo.findById(memberId);
+    if (!member) throw new NotFoundException('Member not found');
+    return { member, firstFinish: false };
   }
 
   /**
@@ -711,11 +755,12 @@ export class MemberService {
         member,
         actorUserId,
         await rankContextOrSkip(member, actorUserId, rankContext),
+        'below',
       )
     ) {
       case 'self':
         return "You can't remove yourself from the chapter.";
-      case 'not-below':
+      case 'out-of-reach':
         return 'You can only remove members ranked below you.';
       default:
         return null;
@@ -755,8 +800,10 @@ export class MemberService {
    *
    * - not your own profile: you change yours from your profile, where the
    *   rest of it lives;
-   * - only members ranked below you (#4071, `spec/behavior/rbac.md` § Rank),
-   *   so a chair can't rename the President;
+   * - only members ranked below you or at your own rank (#4071,
+   *   `spec/behavior/rbac.md` § Rank; a peer since #5900), so a chair can't
+   *   rename the President but a cabinet officer can fix a fellow cabinet
+   *   officer's year;
    * - only a member of this chapter alone. The name and year live on `users`,
    *   shared by every chapter a person is in, and one chapter's officers must
    *   not change what another chapter shows. A member in two chapters keeps
@@ -774,11 +821,11 @@ export class MemberService {
       rankContextOrSkip(member, actorUserId, rankContext),
       this.isInAnotherChapter(member),
     ]);
-    switch (rankBlock(member, actorUserId, context)) {
+    switch (rankBlock(member, actorUserId, context, 'peer')) {
       case 'self':
         return 'Change your own name and graduation year from your profile.';
-      case 'not-below':
-        return 'You can only edit the profiles of members ranked below you.';
+      case 'out-of-reach':
+        return 'You can only edit the profiles of members ranked below you or at your own rank.';
     }
     if (inAnotherChapter) return IN_ANOTHER_CHAPTER_REFUSAL;
     return null;
@@ -854,7 +901,8 @@ export class MemberService {
 
     // One `{ from, to }` pair per changed field, the audit line's convention
     // (`SystemAuditPayload.diff`), so `#chapter-audit` reads "Paul edited a
-    // member's profile · display name".
+    // member's profile · Ethan Smith to Paul" (a name diff reads as the
+    // names, `auditLineText`, #5801).
     const patch: MemberProfileCorrection = {};
     const diff: Record<string, { from: unknown; to: unknown }> = {};
     if (
@@ -935,6 +983,59 @@ export class MemberService {
     }
   }
 
+  /**
+   * `viewer_can_timeout` for a profile read (#6006): `chatTimeoutBlock`'s
+   * answer, without its reads where the permissions already settle it. The
+   * member's own permissions are read only for a viewer who could otherwise
+   * time them out. A failed read answers `false`: the write re-checks.
+   */
+  private async viewerCanTimeout(
+    member: Member,
+    viewerUserId: string,
+    permissions: readonly string[],
+    rankContext: () => Promise<RankContext>,
+  ): Promise<boolean> {
+    if (member.user_id === viewerUserId) return false;
+    const wildcard = permissions.includes(SystemPermissions.WILDCARD);
+    if (!wildcard && !permissions.includes(SystemPermissions.MEMBERS_TIMEOUT)) {
+      return false;
+    }
+    try {
+      // A `*` viewer reads no rank context (it outranks everyone), so one
+      // permissions read says whether the member is the President. Anyone
+      // else reads the context, which holds every role and answers that too.
+      if (wildcard) {
+        const memberPermissions =
+          await this.rbacService.getEffectivePermissions(
+            member.chapter_id,
+            member.user_id,
+          );
+        return !memberPermissions.includes(SystemPermissions.WILDCARD);
+      }
+      const context = await rankContextOrSkip(
+        member,
+        viewerUserId,
+        rankContext,
+      );
+      return (
+        chatTimeoutBlock(
+          member,
+          viewerUserId,
+          context ? memberHoldsWildcard(context, member) : false,
+          context,
+        ) === null
+      );
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Read for viewer_can_timeout failed (chapter ${member.chapter_id}, member ${member.id})`,
+        error,
+      );
+      return false;
+    }
+  }
+
   /** The profile of a membership row already known to be in `chapterId`. */
   private async buildProfile(
     member: Member,
@@ -959,21 +1060,27 @@ export class MemberService {
       member.user_id === viewerUserId,
     );
     const rankContext = this.rankContextFor(member, viewerUserId);
-    const [customFields, viewerCanRemove, viewerCanEditProfile] =
-      await Promise.all([
-        this.customFieldService.findVisibleValuesForMember(
-          chapterId,
-          member.id,
-          allowed,
-        ),
-        this.viewerCanRemove(member, viewerUserId, permissions, rankContext),
-        this.viewerCanEditProfile(
-          member,
-          viewerUserId,
-          permissions,
-          rankContext,
-        ),
-      ]);
+    const [
+      customFields,
+      viewerCanRemove,
+      viewerCanEditProfile,
+      viewerCanTimeout,
+    ] = await Promise.all([
+      this.customFieldService.findVisibleValuesForMember(
+        chapterId,
+        member.id,
+        allowed,
+      ),
+      this.viewerCanRemove(member, viewerUserId, permissions, rankContext),
+      this.viewerCanEditProfile(member, viewerUserId, permissions, rankContext),
+      this.viewerCanTimeout(member, viewerUserId, permissions, rankContext),
+    ]);
+    // The timeout is the member's and the moderators' business (#6006).
+    const seesTimeout =
+      member.user_id === viewerUserId ||
+      permissions.includes(SystemPermissions.WILDCARD) ||
+      permissions.includes(SystemPermissions.MEMBERS_TIMEOUT);
+    const timeout = seesTimeout ? chatTimeoutStateOf(member) : null;
 
     return this.photoUrls.signRow(
       {
@@ -981,6 +1088,9 @@ export class MemberService {
         custom_fields: customFields,
         viewer_can_remove: viewerCanRemove,
         viewer_can_edit_profile: viewerCanEditProfile,
+        viewer_can_timeout: viewerCanTimeout,
+        chat_timeout_until: timeout?.until ?? null,
+        chat_timeout_reason: timeout?.reason ?? null,
       },
       member.user_id,
     );
@@ -1166,7 +1276,7 @@ export class MemberService {
     alumniRoleId: string | null,
   ): MemberProfile {
     return {
-      ...member,
+      ...withoutChatTimeout(member),
       is_alumni:
         alumniRoleId !== null && member.role_ids.includes(alumniRoleId),
       display_name: user.display_name,
@@ -1195,32 +1305,4 @@ function sharedBirthday(
     birthday_month: shared ? (user.birthday_month ?? null) : null,
     birthday_day: shared ? (user.birthday_day ?? null) : null,
   };
-}
-
-/**
- * Whether the rank rules (#4071, `spec/behavior/rbac.md` § Rank) let
- * `actorUserId` act on `member`: `'self'` for their own membership,
- * `'not-below'` when `member` doesn't rank below them, `null` when they may.
- * Removal and correction share it, so they never disagree on who ranks below
- * whom. A `null` context means the self check already answered.
- */
-function rankBlock(
-  member: Member,
-  actorUserId: string,
-  context: RankContext | null,
-): 'self' | 'not-below' | null {
-  if (!context || member.user_id === actorUserId) return 'self';
-  if (context.reach.memberId === member.id) return 'self';
-  return canReach(context.reach, memberRankIn(context, member))
-    ? null
-    : 'not-below';
-}
-
-/** The rank context, or `null` without a read when `member` is the actor. */
-function rankContextOrSkip(
-  member: Member,
-  actorUserId: string,
-  rankContext: () => Promise<RankContext>,
-): Promise<RankContext | null> {
-  return member.user_id === actorUserId ? Promise.resolve(null) : rankContext();
 }

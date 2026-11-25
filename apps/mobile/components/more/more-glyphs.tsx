@@ -93,7 +93,7 @@ export function SettingsGlyph(props: HubGlyphProps) {
   return <HubGlyph name="settings" {...props} />;
 }
 
-/** Switch chapter and Create a chapter: the columned chapter house. */
+/** Create a chapter: the columned chapter house. */
 export function ChapterGlyph(props: HubGlyphProps) {
   return <HubGlyph name="chapter" {...props} />;
 }
@@ -105,4 +105,9 @@ export function HostCheckInGlyph(props: HubGlyphProps) {
 /** Invite members: the nav set's user-plus, web's Invite beside Directory. */
 export function InviteGlyph(props: HubGlyphProps) {
   return <HubGlyph name="invite" {...props} />;
+}
+
+/** Recruitment (#5924): the nav set's funnel, as web's sidebar draws it (#5931). */
+export function RecruitmentGlyph(props: HubGlyphProps) {
+  return <HubGlyph name="recruitment" {...props} />;
 }

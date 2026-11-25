@@ -10,6 +10,7 @@ import {
   floatingScreenLayout,
   floatingTabBarBottom,
   floatingTabBarTop,
+  ScreenScrollWatchProvider,
   setAskBarShown,
   setBarFolded,
   useAskBarLift,
@@ -79,11 +80,11 @@ describe("useTabBarClearance", () => {
 });
 
 /**
- * The Ask Frapp bar sits above the tab bar for a member who has Ask (#4702).
+ * The Frapp Intelligence bar sits above the tab bar for a member who has Ask (#4702).
  * The tab bar says when it is there; a tab screen's last row, the create
  * button and the undo bar all move up by it, and a pushed screen never does.
  */
-describe("the Ask Frapp bar's room", () => {
+describe("the Frapp Intelligence bar's room", () => {
   type Seen = { lift: number; clearance: number };
   function Probe({ seen }: { seen: Seen }) {
     seen.lift = useAskBarLift();
@@ -228,6 +229,36 @@ describe("the bar's fold on scroll", () => {
         create(<Pushed />);
       });
       expect(pushed).toEqual({});
+    });
+
+    it("reports every move to a screen that watches its own scroll (#6045), on a tab or not", () => {
+      const seen: unknown[] = [];
+      let watched: ReturnType<typeof useBarScroll> = {};
+      function Watched() {
+        watched = useBarScroll();
+        return null;
+      }
+      act(() => {
+        create(
+          <ScreenScrollWatchProvider value={(s) => seen.push(s)}>
+            <Watched />
+          </ScreenScrollWatchProvider>,
+        );
+      });
+      act(() =>
+        watched.onScroll?.({
+          nativeEvent: {
+            contentOffset: { y: 120 },
+            layoutMeasurement: { height: VIEW },
+            contentSize: { height: CONTENT },
+          },
+        } as never),
+      );
+      act(() => watched.onContentSizeChange?.(0, CONTENT + 40));
+      expect(seen).toEqual([
+        { y: 120, viewport: VIEW, content: CONTENT },
+        { y: 120, viewport: VIEW, content: CONTENT + 40 },
+      ]);
     });
 
     it("folds and opens as the member reads down and back up", () => {

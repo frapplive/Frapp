@@ -1,9 +1,16 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
+  COUNCIL_TYPES,
+  RECRUITMENT_MODELS,
   SUBSCRIPTION_STATUSES,
+  TENANT_KINDS,
+  type CouncilType,
+  type RecruitmentModel,
   type SubscriptionStatus,
+  type TenantKind,
 } from '@repo/validation';
 import type { ChapterMemberViewField } from '../../application/services/chapter-member-view';
+import type { ChapterMembershipSummary } from '../../application/services/chapter.service';
 import type { AssertNever } from './drift-guard';
 
 /**
@@ -64,6 +71,28 @@ export class CurrentChapterResponseDto {
   org_archetype?: string;
 
   @ApiPropertyOptional({
+    enum: TENANT_KINDS,
+    description:
+      'The tenant kind (ADR-27): `council` draws the council shell (#5933).',
+  })
+  kind?: TenantKind;
+
+  @ApiPropertyOptional({
+    enum: COUNCIL_TYPES,
+    nullable: true,
+    description: "A council's type; null on a chapter (#5933).",
+  })
+  council_type?: CouncilType | null;
+
+  @ApiPropertyOptional({
+    enum: RECRUITMENT_MODELS,
+    nullable: true,
+    description:
+      "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.",
+  })
+  recruitment_model?: RecruitmentModel | null;
+
+  @ApiPropertyOptional({
     type: 'object',
     additionalProperties: { type: 'boolean' },
   })
@@ -97,6 +126,65 @@ export class CurrentChapterResponseDto {
       'Signed URL for the chapter logo, or null when none is set or signing failed. Computed, not a column.',
   })
   logo_url: string | null;
+}
+
+/**
+ * The member-safe chapter projection without the signed `logo_url`, as each
+ * `GET /v1/chapters` entry embeds it.
+ */
+export class ChapterMemberViewDto extends OmitType(CurrentChapterResponseDto, [
+  'logo_url',
+] as const) {}
+
+/**
+ * One entry of `GET /v1/chapters`: a membership of the caller's and its
+ * tenant (#5918). Declared so the tenant fields ADR-27 step 2's clients read
+ * (`slug`, `kind`, `school`) are in the contract, where `check:api-breaking`
+ * can see a later change to them. Before it the route answered an untyped
+ * body.
+ */
+export class ChapterMembershipSummaryDto {
+  @ApiProperty({ format: 'uuid' })
+  member_id: string;
+
+  @ApiProperty({ format: 'uuid' })
+  chapter_id: string;
+
+  @ApiProperty({ type: [String] })
+  role_ids: string[];
+
+  @ApiProperty()
+  has_completed_onboarding: boolean;
+
+  @ApiProperty({
+    type: [String],
+    description:
+      'Module keys whose ops-setup nudge this member has dismissed in this chapter.',
+  })
+  dismissed_ops_nudges: string[];
+
+  @ApiProperty({ type: ChapterMemberViewDto })
+  chapter: ChapterMemberViewDto;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "The tenant's current URL slug (ADR-27), what its pages live under as `/c/<slug>/…`.",
+    example: 'fiji-rpi',
+  })
+  slug: string | null;
+
+  @ApiProperty({ enum: TENANT_KINDS })
+  kind: TenantKind;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "The tenant's school. Always null until the school layer lands (#5835); declared now so clients are written against the final shape.",
+  })
+  school: null;
 }
 
 /** One Signet §8 text-contrast check that came back below the 4.5:1 AA floor. */
@@ -170,6 +258,28 @@ export class UpdateChapterResponseDto {
 
   @ApiPropertyOptional()
   org_archetype?: string;
+
+  @ApiPropertyOptional({
+    enum: TENANT_KINDS,
+    description:
+      'The tenant kind (ADR-27): `council` draws the council shell (#5933).',
+  })
+  kind?: TenantKind;
+
+  @ApiPropertyOptional({
+    enum: COUNCIL_TYPES,
+    nullable: true,
+    description: "A council's type; null on a chapter (#5933).",
+  })
+  council_type?: CouncilType | null;
+
+  @ApiPropertyOptional({
+    enum: RECRUITMENT_MODELS,
+    nullable: true,
+    description:
+      "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.",
+  })
+  recruitment_model?: RecruitmentModel | null;
 
   @ApiPropertyOptional({
     type: 'object',
@@ -247,4 +357,20 @@ export type UpdateChapterResponseDtoExtraFields = AssertNever<
     keyof UpdateChapterResponseDto,
     ChapterMemberViewField | 'failedContrastChecks'
   >
+>;
+
+/**
+ * Summary fields {@link ChapterMembershipSummaryDto} forgot to declare. Must be `never`.
+ * @driftguard
+ */
+export type ChapterMembershipSummaryDtoMissingFields = AssertNever<
+  Exclude<keyof ChapterMembershipSummary, keyof ChapterMembershipSummaryDto>
+>;
+
+/**
+ * Fields {@link ChapterMembershipSummaryDto} declares that the service does not emit. Must be `never`.
+ * @driftguard
+ */
+export type ChapterMembershipSummaryDtoExtraFields = AssertNever<
+  Exclude<keyof ChapterMembershipSummaryDto, keyof ChapterMembershipSummary>
 >;

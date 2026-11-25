@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskInput } from "@repo/chat-core/dispatch";
-import { taskEditFrom, type EditableTask } from "./task-edit-form";
+import { movesDayTo, taskEditFrom, type EditableTask } from "./task-edit-form";
 
 // 5 PM on the task's day, in this machine's zone, as the form would send it.
 const FIVE_PM = new Date(2026, 10, 14, 17, 0).toISOString();
@@ -100,7 +100,11 @@ describe("taskEditFrom's repeat (#5119)", () => {
   const RULE = "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York";
   const copy: EditableTask = {
     ...task,
-    series: { recurrence_rule: RULE, next_due_date: "2026-11-21", ended: false },
+    series: {
+      recurrence_rule: RULE,
+      next_due_date: "2026-11-21",
+      ended: false,
+    },
   };
 
   it("sends nothing when the rule stands", () => {
@@ -119,5 +123,39 @@ describe("taskEditFrom's repeat (#5119)", () => {
 
   it("never sends a rule for a task that doesn't repeat", () => {
     expect(taskEditFrom(task, input({ recurrence_rule: RULE }))).toEqual({});
+  });
+});
+
+describe("a task with no due date (#5761)", () => {
+  it("takes the date and its time off with due_date null", () => {
+    expect(
+      taskEditFrom(task, input({ due_date: null, due_at: undefined })),
+    ).toEqual({ due_date: null, due_at: null });
+  });
+
+  it("gives an undated task a day", () => {
+    expect(
+      taskEditFrom(
+        { ...task, due_date: null, due_at: null },
+        input({ due_at: undefined }),
+      ),
+    ).toEqual({ due_date: "2026-11-14", due_at: null });
+  });
+
+  it("sends nothing for an undated task left undated", () => {
+    expect(
+      taskEditFrom(
+        { ...task, due_date: null, due_at: null },
+        input({ due_date: null, due_at: undefined }),
+      ),
+    ).toEqual({});
+  });
+
+  it("counts adding or taking off a date as moving the task's day", () => {
+    expect(movesDayTo(task, null)).toBe(true);
+    expect(movesDayTo({ due_date: null, due_at: null }, "2026-11-14")).toBe(
+      true,
+    );
+    expect(movesDayTo({ due_date: null, due_at: null }, null)).toBe(false);
   });
 });

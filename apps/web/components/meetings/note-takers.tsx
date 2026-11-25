@@ -3,6 +3,7 @@
 import { NoteTakerPageSkeleton } from "@/components/meetings/meetings-skeleton";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import { codeOf } from "@repo/api-sdk";
 import {
   useAddMeetingNoteTaker,
@@ -432,8 +433,11 @@ export function NoteTakerPage({ id }: { id: string }) {
           onRetry={query.error ? () => void query.refetch() : undefined}
         />
         <p className="text-center text-sm">
-          <Link href="/meetings" className={inlineNoteActionClassName}>
-            Back to Meetings
+          <Link
+            href={MINUTES_DOCUMENTS_HREF}
+            className={inlineNoteActionClassName}
+          >
+            Back to minutes
           </Link>
         </p>
       </div>

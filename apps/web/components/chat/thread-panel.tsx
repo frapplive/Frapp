@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatTimeoutNotice } from "./chat-timeout-notice";
 import {
   useCallback,
   useEffect,
@@ -8,6 +9,7 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -119,6 +121,7 @@ export interface ThreadPanelProps extends Pick<
   | "canManageChannel"
   | "onReport"
   | "onBlock"
+  | "onTimeOut"
   | "onForward"
   | "onOpenProfile"
   | "isMember"
@@ -145,6 +148,11 @@ export interface ThreadPanelProps extends Pick<
    * follows `canReply` (`ChatService.editMessage`).
    */
   canPost: boolean;
+  /**
+   * The member's chat timeout here (#6006, `chatTimeoutNotice`): while set,
+   * the banner stands where the reply box would.
+   */
+  timeoutNotice?: { title: string; detail: string | null } | null;
   onClose: () => void;
   /**
    * Closes the whole chat panel (#4223): the channel header's X, which the
@@ -157,6 +165,8 @@ export interface ThreadPanelProps extends Pick<
    * to be worth shortening.
    */
   onCatchUp?: () => void;
+  /** The thread's open summary (`catch-up-panel.tsx`), shown above it. */
+  catchUpBlock?: ReactNode;
   /**
    * A reply to bring on screen, from a summary line. A new `nonce` asks
    * again for the same reply. A reply not loaded yet is left where it is.
@@ -247,14 +257,17 @@ export function ThreadPanel({
   canManageChannel,
   onReport,
   onBlock,
+  onTimeOut,
   onForward,
   onOpenProfile,
   isMember,
   canReply,
+  timeoutNotice = null,
   canPost,
   onClose,
   onClosePanel,
   onCatchUp,
+  catchUpBlock,
   jumpTo,
   askRefusal,
   onSchedule,
@@ -578,6 +591,7 @@ export function ThreadPanel({
                 canManageChannel={canManageChannel}
                 onReport={onReport}
                 onBlock={onBlock}
+                onTimeOut={onTimeOut}
                 onForward={onForward}
                 onOpenProfile={onOpenProfile}
                 isMember={isMember}
@@ -684,6 +698,7 @@ export function ThreadPanel({
         ) : null}
       </header>
 
+      {catchUpBlock}
       <div className="min-h-0 flex-1 pb-2">
         <MessageTimeline
           ref={timeline}
@@ -723,6 +738,7 @@ export function ThreadPanel({
           canManageChannel={canManageChannel}
           onReport={onReport}
           onBlock={onBlock}
+          onTimeOut={onTimeOut}
           onForward={onForward}
           onOpenProfile={onOpenProfile}
           isMember={isMember}
@@ -735,7 +751,9 @@ export function ThreadPanel({
           read: one that failed for lost posting is the one to delete. */}
       <ScheduledMessagesBar channelId={channelId} threadRootId={rootId} />
       <div className="shrink-0 border-t border-border p-3">
-        {canReply ? (
+        {timeoutNotice ? (
+          <ChatTimeoutNotice notice={timeoutNotice} className="" />
+        ) : canReply ? (
           <>
             <Textarea
               aria-label="Reply in thread"

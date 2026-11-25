@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   activityStandingGauges,
   type ActivityStanding,
+  type ActivityStandingSection,
   type StandingRow,
 } from "@repo/hooks";
 import type { SignetTokens } from "@repo/theme/signet";
@@ -13,21 +14,22 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 import { ProgressRing } from "./progress-ring";
 
 /**
- * Where each gauge goes: the screen that owns the number. Points and rank
- * live at the top of Tasks (s08); attendance is on Events.
+ * Where each gauge goes: the screen behind the number. Points, Service hours
+ * and Study are the member's own screens (#5950; the gauges are their one
+ * door on You besides New); attendance is on Events.
  */
 export type StandingDestination =
-  "/tasks" | "/events" | "/service-hours" | "/study";
+  "/points" | "/events" | "/service-hours" | "/study";
 
 const DESTINATION: Record<StandingRow["id"], StandingDestination> = {
-  points: "/tasks",
+  points: "/points",
   required_events: "/events",
   service: "/service-hours",
   study: "/study",
 };
 
 const HINT: Record<StandingRow["id"], string> = {
-  points: "Tasks, where your points and rank are",
+  points: "your points",
   required_events: "Events",
   service: "Service hours",
   study: "Study hours",
@@ -38,10 +40,11 @@ const GAUGE_SIZE = 36;
 const GAUGE_STROKE = 5;
 
 /**
- * "This semester" under the week card (#4766): the member's points, required
- * events, service hours and study time as up to four gauges in one card, two
- * across, from `GET /v1/activity/standing`, where a four-row card of bars
- * was. The ring says the week; this says the long run.
+ * "This semester" on the You tab (#4766; under Activity's week card until
+ * #5779 moved it beside the member's points, `StandingCards`): the member's
+ * points, required events, service hours and study time as up to four gauges
+ * in one card, two across, from `GET /v1/activity/standing`, where a four-row
+ * card of bars was. Activity's ring says the week; this says the long run.
  *
  * Two across, not four: at a phone's width four across cut "3h 57m of 4h"
  * short, and the app writes hours that way everywhere else. An odd gauge out
@@ -51,21 +54,28 @@ const GAUGE_STROKE = 5;
  * always; points and hours when the chapter sets the member a goal, #1062):
  * a ring with an invented end would read as a rule. Without one the number
  * stands alone. A number that is zero with nothing to aim at is left out
- * (`activityStandingGauges`), which is the zero tile's fix (#4679), and with
- * none left the strip isn't drawn. Each gauge opens the screen that owns its
+ * (`activityStandingGauges`), which is the zero tile's fix (#4679), unless
+ * the screen keeps it as a door (`keep`), and with none left the strip isn't
+ * drawn. Each gauge opens the screen that owns its
  * number.
  */
 export function SemesterStrip({
   standing,
   onOpen,
+  omit,
+  keep,
 }: {
   standing: ActivityStanding;
   onOpen: (destination: StandingDestination) => void;
+  /** Numbers the screen already shows elsewhere (#5779). */
+  omit?: readonly ActivityStandingSection[];
+  /** Gauges drawn even at zero, being a screen's only door (#5950). */
+  keep?: readonly ActivityStandingSection[];
 }) {
   const { tokens } = useFrappTheme();
   const { accentPrimary } = useChapterBranding();
   const styles = createStyles(tokens);
-  const gauges = activityStandingGauges(standing);
+  const gauges = activityStandingGauges(standing, omit, keep);
   if (gauges.length === 0) return null;
   return (
     <View style={styles.block}>
@@ -93,6 +103,7 @@ export function SemesterStrip({
                 <ProgressRing
                   size={GAUGE_SIZE}
                   stroke={GAUGE_STROKE}
+                  on={pageSurfaces(tokens).card}
                   progress={gauge.progress}
                   color={
                     gauge.progress >= 1

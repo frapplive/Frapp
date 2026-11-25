@@ -1,4 +1,5 @@
-import type { FindTarget } from "@repo/hooks";
+import { settingEntryById, type FindTarget } from "@repo/hooks";
+import { settingPhoneRoute } from "@/lib/settings/settings-search";
 import type { NotificationTarget } from "@/lib/notifications/targets";
 
 /**
@@ -13,11 +14,17 @@ import type { NotificationTarget } from "@/lib/notifications/targets";
  *   door to a member opens; one with no user id opens the Directory.
  * - An event opens its details.
  * - Backwork has no screen on the phone.
+ * - A setting opens its settings screen with the row lit; one only web
+ *   changes has no route here, and the Search screen opens it on the web
+ *   dashboard instead (`openSetting`).
  *
  * The routes are spelled `pathname: "…"` so `lib/routes.spec.ts` checks them
  * against the file tree (see `lib/notifications/targets.ts`).
  */
-export function findTargetRoute(target: FindTarget): NotificationTarget | null {
+export function findTargetRoute(
+  target: FindTarget,
+  options: { chapterFeatures?: boolean } = {},
+): NotificationTarget | null {
   switch (target.type) {
     case "channel":
       return target.channelId
@@ -41,5 +48,9 @@ export function findTargetRoute(target: FindTarget): NotificationTarget | null {
         : null;
     case "backwork":
       return null;
+    case "setting": {
+      const entry = settingEntryById(target.settingId);
+      return entry ? settingPhoneRoute(entry, options) : null;
+    }
   }
 }

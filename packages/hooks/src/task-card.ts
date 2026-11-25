@@ -93,6 +93,30 @@ export function taskStatusLabel(task: {
 }
 
 /**
+ * A task's display status by the member's own day (#5774). The API calls a
+ * task with only a date `OVERDUE` once that date ends in UTC, which is the
+ * evening in the Americas, while every due line counts days on the device, so
+ * a row read "Due today" under Overdue. This reads a date-only task's overdue
+ * by the device's day instead, so the heading, the badge and the row agree. A
+ * task due at a time keeps the server's status: both sides read one instant.
+ */
+export function localTaskStatus(
+  task: {
+    status: TaskStatus;
+    stored_status?: TaskStatus;
+    due_date?: string | null;
+    due_at?: string | null;
+  },
+  now: Date = new Date(),
+): TaskStatus {
+  if (task.due_at || !task.due_date) return task.status;
+  const stored =
+    task.stored_status ?? (task.status === "OVERDUE" ? "TODO" : task.status);
+  if (stored !== "TODO" && stored !== "IN_PROGRESS") return task.status;
+  return isDueOverdue(task.due_date, now) ? "OVERDUE" : stored;
+}
+
+/**
  * Whether an officer sent the task back and it waits on its assignee again
  * (#4635): stored `IN_PROGRESS` with `sent_back_at` set. An overdue one still
  * counts, since the reason is what the assignee needs to see.
@@ -155,9 +179,10 @@ export interface LiveTask {
   /**
    * When the task is due now: its `due_at` when it has a time of day, else
    * its `due_date`. An edit can move it after a card was posted, so a card's
-   * countdown reads this rather than the snapshot's date (#4135).
+   * countdown reads this rather than the snapshot's date (#4135). `null` when
+   * the task has no due date (#5761); `undefined` when the read didn't say.
    */
-  due: string | undefined;
+  due: string | null | undefined;
   point_reward: number | null;
   /** What Mark done needs (#4635). */
   proof_kind: TaskProofKind;
@@ -183,6 +208,18 @@ export interface LiveTaskPhoto {
   id: string;
   kind: "reference" | "proof";
   storage_path: string;
+}
+
+/**
+ * What a task card's due line reads (#5761): the live task's due once it is
+ * read, which may be none, else the due the card was posted with.
+ */
+export function cardTaskDue(
+  live: Pick<LiveTask, "due"> | null | undefined,
+  payload: { due_date: string | null; due_at?: string | null },
+): string | null {
+  if (live && live.due !== undefined) return live.due;
+  return payload.due_at ?? payload.due_date;
 }
 
 /**
@@ -259,7 +296,9 @@ export function readLiveTask(data: unknown): LiveTask | null {
         ? r.due_at
         : typeof r.due_date === "string" && r.due_date !== ""
           ? r.due_date
-          : undefined,
+          : r.due_date === null
+            ? null
+            : undefined,
     point_reward: typeof r.point_reward === "number" ? r.point_reward : null,
     proof_kind:
       r.proof_kind === "photo" || r.proof_kind === "link"
@@ -356,9 +395,10 @@ export function canReadCardTask(input: {
  *   task that is already in progress or done, and the server would refuse it.
  * - **The assignee** walks `TODO → IN_PROGRESS → COMPLETED`, keyed off the
  *   stored status (`actionStatus`).
- * - **A `tasks:manage` holder** confirms or sends back a completion. Not on
- *   their own task: the server refuses self-confirm (#1056), so the assignee
- *   gets Send back only. Once points are awarded, the only control left is
+ * - **A `tasks:manage` holder** confirms or sends back someone else's
+ *   completion. Never their own: the server refuses a self-confirm (#1056)
+ *   and a self-send-back (#5917), and the assignee's own way back is Mark
+ *   not done. Once points are awarded, the only control left is
  *   the Confirmed indicator, except on a task that needed no sign-off
  *   (#4635): it is Done with nothing to confirm, and Send back stays.
  */
@@ -376,8 +416,9 @@ export function taskCardControls(input: {
   if (!taskSendBackOpen({ ...live, stored_status: stored })) {
     return ["confirmed"];
   }
+  if (isAssignee) return [];
   if (live.points_awarded || !taskNeedsSignOff(live)) return ["reject"];
-  return isAssignee ? ["reject"] : ["confirm", "reject"];
+  return ["confirm", "reject"];
 }
 
 /**
@@ -435,7 +476,8 @@ export interface EditableCardTask {
   title: string;
   description: string | null;
   assignee_id: string;
-  due_date: string;
+  /** Null for a task with no due date (#5761). */
+  due_date: string | null;
   due_at: string | null;
   point_reward: number | null;
   status: TaskStatus;
@@ -485,8 +527,9 @@ export function readEditableCardTask(data: unknown): EditableCardTask | null {
     typeof r.title !== "string" ||
     typeof r.assignee_id !== "string" ||
     r.assignee_id === "" ||
-    typeof r.due_date !== "string" ||
-    r.due_date === ""
+    // Null is a task with no due date (#5761); anything else is unreadable.
+    (r.due_date !== null &&
+      (typeof r.due_date !== "string" || r.due_date === ""))
   ) {
     return null;
   }
@@ -495,7 +538,7 @@ export function readEditableCardTask(data: unknown): EditableCardTask | null {
     title: r.title,
     description: typeof r.description === "string" ? r.description : null,
     assignee_id: r.assignee_id,
-    due_date: r.due_date,
+    due_date: typeof r.due_date === "string" ? r.due_date : null,
     due_at: typeof r.due_at === "string" && r.due_at !== "" ? r.due_at : null,
     point_reward: typeof r.point_reward === "number" ? r.point_reward : null,
     status: live.status,

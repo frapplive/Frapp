@@ -76,7 +76,8 @@ export interface AttemptResult {
   group: QuestionGroup;
   violations: EvalViolation[];
   /** Null when no judge ran, or the answer never arrived. */
-  judge: { pass: boolean; failed: JudgeCriterion[] } | null;
+  /** `reason` is the judge's one sentence on what was wrong, kept so a miss can be read. */
+  judge: { pass: boolean; failed: JudgeCriterion[]; reason: string } | null;
   /** The answer never arrived (a provider error). Counted wrong, and left out of cost and time. */
   errored: boolean;
   modelCalls: number;
@@ -265,6 +266,7 @@ export async function runRealQuestions(
               failed: (
                 Object.keys(verdict.criteria) as JudgeCriterion[]
               ).filter((criterion) => !verdict.criteria[criterion]),
+              reason: verdict.reason,
             };
           } catch (error) {
             // A judge that fails on one answer (a rate limit, a reply off

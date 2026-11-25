@@ -51,6 +51,7 @@ import {
   TASK_AUDIENCE_COPY,
   isEveryoneRole,
   normalizeTaskWho,
+  parseTaskFollower,
   type TaskWho,
   type TaskWhoTarget,
 } from "@repo/validation";
@@ -89,6 +90,11 @@ export interface WhoTier {
    * it. `null` for the roles outside every tier.
    */
   set: WhoSet | null;
+  /**
+   * The tier holds the chapter's Everyone role, so it reaches the chapter:
+   * the API refuses it as what a task is from (#5473), as it does the role.
+   */
+  holdsEveryone: boolean;
 }
 
 /** The chapter as the picker draws it. */
@@ -186,7 +192,8 @@ export function buildWhoDirectory(input: {
     people.push({
       userId,
       name,
-      named: typeof row.display_name === "string" && row.display_name.trim() !== "",
+      named:
+        typeof row.display_name === "string" && row.display_name.trim() !== "",
       avatarUrl: row.avatar_url ?? null,
       isViewer: userId === input.viewerUserId,
     });
@@ -246,7 +253,11 @@ export function buildWhoDirectory(input: {
         id: tier.id,
         name: tier.name,
         roles: tierRoles,
-        set: tierRoles.length > 0 ? tierSet(tier.id, tier.name, tierRoles) : null,
+        set:
+          tierRoles.length > 0 ? tierSet(tier.id, tier.name, tierRoles) : null,
+        holdsEveryone: everyRole.some(
+          (role) => role.tier_id === tier.id && isEveryoneRole(role),
+        ),
       };
     })
     .filter((tier) => tier.roles.length > 0);
@@ -259,6 +270,7 @@ export function buildWhoDirectory(input: {
       name: tiers.length > 0 ? OTHER_ROLES_HEADING : ROLES_HEADING,
       roles: loose.map(asSet),
       set: null,
+      holdsEveryone: false,
     });
   }
 
@@ -269,7 +281,12 @@ export function buildWhoDirectory(input: {
     if (memberIds.length === 0 && group.kind && group.kind !== "manual") {
       return [];
     }
-    const set: WhoSet = { kind: "group", id: group.id, name: group.name, memberIds };
+    const set: WhoSet = {
+      kind: "group",
+      id: group.id,
+      name: group.name,
+      memberIds,
+    };
     sets.set(set.id, set);
     return [set];
   });
@@ -319,6 +336,20 @@ export function tickedIds(
   if (!who) return [];
   if (who.kind === "person") return [who.userId];
   return targetMemberIds(who.target, directory);
+}
+
+/**
+ * Who Add people would give a copy to (#5905): everyone ticked, minus
+ * those who already have one. Web's panel and the phone's sheet both send
+ * this, and their Add button counts it, so a pick who got a copy meanwhile
+ * neither counts nor goes.
+ */
+export function peopleToAdd(
+  who: TaskWho | null,
+  directory: WhoDirectory,
+  holders: ReadonlySet<string>,
+): string[] {
+  return tickedIds(who, directory).filter((userId) => !holders.has(userId));
 }
 
 /** How many people a value reaches. */
@@ -499,6 +530,18 @@ function firstNames(ids: readonly string[], directory: WhoDirectory): string[] {
     const name = personName(id, directory);
     return name.split(/\s+/)[0] || name;
   });
+}
+
+/**
+ * The name of the tier, role or group a task is from (`followed_by`, #5473),
+ * as the directory reads it, or null for none or an entry it can't parse.
+ */
+export function followerName(
+  entry: string | null | undefined,
+  directory: WhoDirectory,
+): string | null {
+  const parsed = parseTaskFollower(entry);
+  return parsed ? setName(parsed.kind, parsed.id, directory) : null;
 }
 
 /** A set's name, or the words for one the picker hasn't read. */

@@ -1,28 +1,27 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { useFocusEffect } from "expo-router";
 import {
   FILTER_CHANNELS_LABEL,
   FILTER_CHANNELS_ON_LABEL,
   HIDE_MUTED_LABEL,
-  SIDEBAR_SORT_OPTIONS,
-  SORT_CHANNELS_LABEL,
   UNREAD_ONLY_LABEL,
   type SidebarFilterChange,
 } from "@repo/hooks";
-import type { SidebarSort } from "@repo/validation";
-import { Segmented } from "@/components/segmented";
 import { SignetTokens } from "@repo/theme/signet";
 import { Toggle } from "@/components/toggle";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { useBackToClose, useFocusOnOpen } from "@/lib/overlay";
+import { useFocusOnOpen } from "@/lib/overlay";
+import {
+  type AnchoredMenuState,
+  AnchoredMenuShell,
+  useAnchoredMenu,
+} from "@/components/anchored-menu";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * Chat home's sort and filters behind one control (owner, 2026-11-06; the
- * sort joined in #2877, a segmented control on top, as web's popover has
- * it), the way web's
+ * Chat home's two filters behind one control (owner, 2026-11-06), the way
+ * web's
  * rail keeps them behind its Channels header (`ChannelFilters`,
  * `apps/web/components/chat/channel-list.tsx`). They used to be two chips
  * above the list, the first thing on the screen for something rarely used.
@@ -66,31 +65,10 @@ export function channelFilterMenuAnchor(
   };
 }
 
-export type ChannelFilterMenuState = {
-  visible: boolean;
-  anchor: { top: number; left: number };
-  open: (anchor: { top: number; left: number }) => void;
-  close: () => void;
-};
+export type ChannelFilterMenuState = AnchoredMenuState;
 
-export function useChannelFilterMenu(): ChannelFilterMenuState {
-  const [visible, setVisible] = useState(false);
-  const [anchor, setAnchor] = useState({ top: 0, left: 0 });
-  const close = useCallback(() => setVisible(false), []);
-  const open = useCallback((at: { top: number; left: number }) => {
-    setAnchor(at);
-    setVisible(true);
-  }, []);
-  // The overlay takes every tap while it is up, so Android back closes it
-  // instead of leaving the tab.
-  useBackToClose(visible, close);
-  // The tab bar sits outside the overlay and still takes taps, and a push can
-  // open a thread over the tab. Chat home stays mounted under either, so
-  // close on blur: an open menu would otherwise hold Android back on the
-  // next screen and still be open on return.
-  useFocusEffect(useCallback(() => close, [close]));
-  return { visible, anchor, open, close };
-}
+/** The filter menu's open state (`useAnchoredMenu`). */
+export const useChannelFilterMenu = useAnchoredMenu;
 
 /** Lucide's `ListFilter`, the web trigger's glyph, on the 24pt grid. */
 function FilterGlyph({
@@ -183,14 +161,11 @@ export function ChannelFilterMenu({
   menu,
   unreadOnly,
   hideMuted,
-  sort,
   onChange,
 }: {
   menu: ChannelFilterMenuState;
   unreadOnly: boolean;
   hideMuted: boolean;
-  /** The member's sort (#2877). Absent, the menu offers none. */
-  sort?: SidebarSort;
   /** Passes straight to `useSetSidebarFilter`, as web's filters do. */
   onChange: (change: SidebarFilterChange) => void;
 }) {
@@ -212,63 +187,36 @@ export function ChannelFilterMenu({
   ];
 
   return (
-    // No title and no Cancel row (components.md § Chrome weight): a tap
-    // outside, Android back and VoiceOver's escape gesture close it.
-    <View
-      accessibilityViewIsModal
-      onAccessibilityEscape={menu.close}
-      style={styles.fill}
+    <AnchoredMenuShell
+      menu={menu}
+      width={MENU_WIDTH}
+      backdropTestID="channel-filter-backdrop"
     >
-      <Pressable
-        testID="channel-filter-backdrop"
-        accessible={false}
-        importantForAccessibility="no"
-        onPress={menu.close}
-        style={styles.fill}
-      />
-      <View
-        style={[styles.menu, { top: menu.anchor.top, left: menu.anchor.left }]}
-      >
-        {sort ? (
-          <View style={styles.sort}>
-            <Text ref={firstRef} style={styles.caption}>
-              {SORT_CHANNELS_LABEL}
-            </Text>
-            <Segmented
-              options={SIDEBAR_SORT_OPTIONS}
-              value={sort}
-              onChange={(next) => onChange({ sort: next })}
-              accessibilityLabel={SORT_CHANNELS_LABEL}
-              dense
-            />
-          </View>
-        ) : null}
-        {rows.map((row, index) => (
-          <View
-            key={row.key}
-            style={[styles.row, index > 0 || sort ? styles.rowDivided : null]}
+      {rows.map((row, index) => (
+        <View
+          key={row.key}
+          style={[styles.row, index > 0 ? styles.rowDivided : null]}
+        >
+          <Text
+            ref={index === 0 ? firstRef : undefined}
+            style={styles.label}
           >
-            <Text
-              ref={index === 0 && !sort ? firstRef : undefined}
-              style={styles.label}
-            >
-              {row.label}
-            </Text>
-            <Toggle
-              value={row.value}
-              accessibilityLabel={row.label}
-              onValueChange={(value) =>
-                onChange(
-                  row.key === "unreadOnly"
-                    ? { unread_only: value }
-                    : { hide_muted: value },
-                )
-              }
-            />
-          </View>
-        ))}
-      </View>
-    </View>
+            {row.label}
+          </Text>
+          <Toggle
+            value={row.value}
+            accessibilityLabel={row.label}
+            onValueChange={(value) =>
+              onChange(
+                row.key === "unreadOnly"
+                  ? { unread_only: value }
+                  : { hide_muted: value },
+              )
+            }
+          />
+        </View>
+      ))}
+    </AnchoredMenuShell>
   );
 }
 
@@ -294,22 +242,6 @@ function createStyles(tokens: SignetTokens) {
       height: 7,
       borderRadius: 4,
     },
-    fill: {
-      position: "absolute",
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    },
-    menu: {
-      position: "absolute",
-      width: MENU_WIDTH,
-      paddingHorizontal: tokens.spacing.md,
-      backgroundColor: tokens.color.surface.popover,
-      borderWidth: 1,
-      borderColor: tokens.color.border.hairline,
-      borderRadius: tokens.radius.control,
-    },
     row: {
       flexDirection: "row",
       alignItems: "center",
@@ -324,14 +256,6 @@ function createStyles(tokens: SignetTokens) {
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.foreground,
       flex: 1,
-    },
-    sort: {
-      gap: tokens.spacing.xs,
-      paddingVertical: tokens.spacing.sm,
-    },
-    caption: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.muted,
     },
   });
 }

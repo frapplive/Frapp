@@ -15,7 +15,13 @@ import {
   type TaskSeries,
   type TaskView,
 } from '#domain/entities/task.entity';
-import { nextTaskRepeatDate, type TaskRepeatRule } from '@repo/validation';
+import {
+  TASK_REPEAT_NEEDS_DUE_DATE,
+  nextTaskRepeatDate,
+  type TaskRepeatRule,
+  readFrappLinks,
+  sameFrappLinks,
+} from '@repo/validation';
 import { taskDueInstant } from '#domain/utils/member-nudge';
 import { TaskService, type UpdateTaskInput } from './task.service';
 import {
@@ -85,9 +91,13 @@ export class TaskSeriesService {
       series.id,
     );
     const open = latest && this.isOpenForEdit(latest) ? latest : null;
+    if (input.due_date === null) {
+      // A repeating task counts from its day (#5761).
+      throw new BadRequestException(TASK_REPEAT_NEEDS_DUE_DATE);
+    }
     if (
       input.due_date !== undefined &&
-      input.due_date?.slice(0, 10) !== (open ?? task).due_date.slice(0, 10)
+      input.due_date.slice(0, 10) !== copyDay(open ?? task)
     ) {
       throw new BadRequestException(
         'To move one task to another day, choose This task only',
@@ -113,6 +123,19 @@ export class TaskSeriesService {
       input.proof_kind !== series.proof_kind
     ) {
       patch.proof_kind = input.proof_kind;
+    }
+    // Checked against the template's own list; the open copy then takes the
+    // same list as a task edit.
+    const attachments = await this.taskService.checkedAttachments(
+      chapterId,
+      input.attachments,
+      series.attachments ?? [],
+    );
+    if (
+      attachments !== undefined &&
+      !sameFrappLinks(attachments, readFrappLinks(series.attachments ?? []))
+    ) {
+      patch.attachments = attachments;
     }
     if (
       input.assignee_id !== undefined &&
@@ -208,28 +231,28 @@ export class TaskSeriesService {
         assignee_id: input.assignee_id,
         point_reward: input.point_reward,
         proof_kind: input.proof_kind,
+        attachments: input.attachments,
       };
       if ('due_time' in patch) {
         // On the copy's own day, in the series' zone: built here, so it
         // always falls on that day and the copy edit can't refuse it.
-        copyInput.due_date = open.due_date;
+        copyInput.due_date = copyDay(open);
         copyInput.due_at = dueTime
-          ? copyDueInstant(
-              open.due_date.slice(0, 10),
-              dueTime,
-              rule,
-            ).toISOString()
+          ? copyDueInstant(copyDay(open), dueTime, rule).toISOString()
           : null;
       }
       if (editedIsOpen && input.reference_photo_paths !== undefined) {
         copyInput.reference_photo_paths = input.reference_photo_paths;
       }
       try {
+        // The list checked once above, so the copy neither reads it again
+        // nor refuses what the series just took.
         const updated = await this.taskService.update(
           open.id,
           chapterId,
           actorId,
           copyInput,
+          attachments,
         );
         if (editedIsOpen) return updated;
       } catch (error) {
@@ -353,4 +376,16 @@ export class TaskSeriesService {
     ]);
     return !checked && !photos.some((photo) => photo.kind === 'proof');
   }
+}
+
+/**
+ * A copy's day (`YYYY-MM-DD`). Every copy is made on its occurrence, so its
+ * due date is never null; the occurrence is the fallback if it ever were.
+ */
+function copyDay(copy: Pick<Task, 'due_date' | 'occurrence_date'>): string {
+  const day = copy.due_date ?? copy.occurrence_date;
+  if (day === null) {
+    throw new BadRequestException(TASK_REPEAT_NEEDS_DUE_DATE);
+  }
+  return day.slice(0, 10);
 }

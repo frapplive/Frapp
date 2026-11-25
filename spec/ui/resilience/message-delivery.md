@@ -174,7 +174,7 @@ gap. Web binds the manager before `GET /v1/users/me` answers, so the first
 viewer to resolve is the session the inbox already joined with, and keeps that join; a viewer who
 changes after one was bound (a sign-out, then a sign-in) rejoins it. Mobile binds the manager app-wide from `components/app-runtime.tsx`
 so the inbox runs from launch. Web binds it for the whole dashboard from `DashboardShell`
-(`useChatRealtimeBinding`, #3745), so the nav's Chat row lights, or its Direct messages row counts (#3774), within seconds of a
+(`useChatRealtimeBinding`, #3745), so the sidebar's channel list lights, or its Messages row counts (#3774, #5946), within seconds of a
 message on any page, not only on `/chat`; `ChatProvider` never configures or tears the manager down.
 
 **Back in the foreground** (#3698). A socket can die while the app is in the background (mobile)
@@ -216,6 +216,11 @@ Supabase Realtime (preferred)
                                   When Realtime reconnects → switch back
                                   Fetch any messages missed during the gap
 ```
+
+A channel whose join Realtime keeps refusing because the member may not read it (deleted, or their
+access went) is not a disconnect: it is neither polled nor counted toward the switch, and the thread
+says the channel is no longer available instead
+([`realtime-connection.md` § A refused join is not a drop](realtime-connection.md#a-refused-join-is-not-a-drop), #5765).
 
 **A join means streaming** (#5022). Both the gap-recovery read below and the inbox's `joined` take a
 channel's join as the point from which every new row arrives live. Realtime can report a channel

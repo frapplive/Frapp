@@ -5,6 +5,7 @@
  */
 import {
   type BirthdayVisibility,
+  isDisplayNameLocked,
   parseBirthdayVisibility,
 } from "@repo/validation";
 import { initialsFor, isRecord, num, str } from "./narrow";
@@ -13,7 +14,7 @@ export interface ViewerProfile {
   displayName: string | null;
   initials: string;
   email: string | null;
-  /** The member's own phone (#3711), as they typed it, or `null`. */
+  /** The member's own phone (#3711), as stored (E.164 since #5798, older ones as typed), or `null`; shown through `formatPhone`. */
   phone: string | null;
   graduationYear: number | null;
   major: string | null;
@@ -29,6 +30,11 @@ export interface ViewerProfile {
   birthdayYear: number | null;
   /** Who may see it; `nobody` unless the member chose their chapter. */
   birthdayVisibility: BirthdayVisibility;
+  /**
+   * The chapter locks the member's own name (#5801): Edit profile shows it
+   * read-only. Absent reads as unlocked.
+   */
+  nameLocked?: boolean;
 }
 
 /** `GET /v1/users/me`, narrowed. Returns `null` before the first payload. */
@@ -52,5 +58,6 @@ export function selectViewerProfile(data: unknown): ViewerProfile | null {
     birthdayVisibility: parseBirthdayVisibility(
       str(data, "birthday_visibility"),
     ),
+    nameLocked: isDisplayNameLocked(data),
   };
 }

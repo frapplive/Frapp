@@ -52,6 +52,82 @@ describe("filterActives (#3971)", () => {
     expect(by({ status: "pending" })).toEqual(["u-2", "u-3"]);
     expect(by({ roleId: "r-1", status: "pending" })).toEqual(["u-2"]);
   });
+
+  it("narrows to members holding no base role (#5802)", () => {
+    const roles = [
+      { id: "r-1", system_key: "MEMBER" },
+      { id: "r-2", system_key: null },
+    ];
+    const rows = [
+      { user_id: "a", role_ids: ["r-1", "r-e"] },
+      { user_id: "b", role_ids: ["r-2", "r-e"] },
+      { user_id: "c", role_ids: ["r-e"] },
+    ];
+    expect(
+      ids(
+        filterActives(
+          rows,
+          { ...NO_ACTIVES_FILTER, roleId: "no-base-role" },
+          undefined,
+          undefined,
+          roles,
+        ),
+      ),
+    ).toEqual(["b", "c"]);
+  });
+});
+
+describe("the Phone app filter", () => {
+  const reach = new Map([
+    [
+      "u-1",
+      {
+        user_id: "u-1",
+        state: "on" as const,
+        platform: null,
+        last_opened_at: null,
+      },
+    ],
+    [
+      "u-2",
+      {
+        user_id: "u-2",
+        state: "off" as const,
+        platform: null,
+        last_opened_at: null,
+      },
+    ],
+    [
+      "u-3",
+      {
+        user_id: "u-3",
+        state: "web_only" as const,
+        platform: null,
+        last_opened_at: null,
+      },
+    ],
+  ]);
+  const by = (phoneReach: "on" | "unreachable" | "web_only") =>
+    ids(filterActives(ROWS, { ...NO_ACTIVES_FILTER, phoneReach }, reach));
+
+  it("matches web's choices: Not reachable is off plus web only", () => {
+    expect(by("on")).toEqual(["u-1"]);
+    expect(by("unreachable")).toEqual(["u-2", "u-3"]);
+    expect(by("web_only")).toEqual(["u-3"]);
+  });
+
+  it("is dropped for a viewer it isn't offered to", () => {
+    const known = {
+      roleIds: new Set<string>(),
+      years: [],
+      classIds: new Set<string>(),
+    };
+    const filter = { ...NO_ACTIVES_FILTER, phoneReach: "on" as const };
+    expect(effectiveActivesFilter(filter, known).phoneReach).toBe(null);
+    expect(
+      effectiveActivesFilter(filter, { ...known, phoneReach: true }).phoneReach,
+    ).toBe("on");
+  });
 });
 
 describe("the filter's options", () => {
@@ -104,6 +180,7 @@ describe("the filter's options", () => {
 describe("effectiveActivesFilter", () => {
   const known = {
     roleIds: new Set(["r-1"]),
+    groupIds: new Set(["g-house"]),
     years: [2027],
     classIds: new Set(["pc-a"]),
   };
@@ -111,23 +188,41 @@ describe("effectiveActivesFilter", () => {
   it("keeps picks that still exist", () => {
     const filter = {
       roleId: "r-1",
+      groupId: "g-house",
       graduationYear: 2027,
       pledgeClassId: "pc-a",
       status: "active" as const,
+      phoneReach: null,
     };
     expect(effectiveActivesFilter(filter, known)).toEqual(filter);
-    expect(countActivesFilters(filter)).toBe(4);
+    expect(countActivesFilters(filter)).toBe(5);
   });
 
   it("drops a deleted role, a vanished year and an unread class", () => {
     const filter = {
       roleId: "r-gone",
+      groupId: "g-gone",
       graduationYear: 2030,
       pledgeClassId: "pc-gone",
       status: null,
+      phoneReach: "web_only" as const,
     };
     expect(effectiveActivesFilter(filter, known)).toEqual(NO_ACTIVES_FILTER);
     expect(countActivesFilters(NO_ACTIVES_FILTER)).toBe(0);
+  });
+});
+
+describe("the Group filter (Paul, 2026-11-19)", () => {
+  it("keeps only the members in the picked group", () => {
+    const rows = [{ user_id: "u1" }, { user_id: "u2" }, {}];
+    expect(
+      filterActives(
+        rows,
+        { ...NO_ACTIVES_FILTER, groupId: "g-house" },
+        undefined,
+        new Set(["u2"]),
+      ),
+    ).toEqual([{ user_id: "u2" }]);
   });
 });
 
@@ -136,7 +231,7 @@ describe("activesFilterRoles and the Everyone role (#4191)", () => {
     expect(
       activesFilterRoles(
         parseChapterRoles([
-          { id: "r-everyone", name: "Everyone", system_key: "MEMBER" },
+          { id: "r-everyone", name: "Everyone", system_key: "EVERYONE" },
           { id: "r-chair", name: "Rush Chair", system_key: null },
         ]),
       ).map((role) => role.id),

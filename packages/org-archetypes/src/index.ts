@@ -509,9 +509,13 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = Object.freeze([
 // CUSTOM_FIELDS_SEED
 // ─────────────────────────────────────────────────────────────────────────────
 
+// No Major or Graduation year (#581): both are the member's own profile
+// fields (`users.major`, `users.graduation_year`), so a seeded custom field
+// would ask for them twice. Chapters seeded before carry `major` and
+// `graduation_year` rows that the member's form leaves out
+// (`PROFILE_OWNED_CUSTOM_FIELD_KEYS` in `@repo/validation`). The ids keep
+// their numbers, since nothing reads them past the key fallback.
 export const CUSTOM_FIELDS_SEED: readonly CustomFieldEntry[] = Object.freeze([
-  { id: "cf_1", label: "Major",                       type: "text",    required: true,  visibleTo: "chapter" },
-  { id: "cf_2", label: "Graduation year",             type: "number",  required: true,  visibleTo: "chapter" },
   { id: "cf_3", label: "Allergies",                   type: "text",    required: false, visibleTo: "exec",      sensitive: true },
   { id: "cf_4", label: "T-shirt size",                type: "select",  required: false, visibleTo: "chapter",   options: Object.freeze(["XS","S","M","L","XL","XXL"]) },
   { id: "cf_5", label: "Dietary",                     type: "select",  required: false, visibleTo: "exec",      options: Object.freeze(["None","Vegetarian","Vegan","Kosher","Halal","GF"]) },

@@ -117,6 +117,8 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["service-hours"] }}
       />
       <Stack.Screen name="study" options={{ title: SCREEN_TITLES.study }} />
+      {/* A member's own points, pushed from You (#5950). */}
+      <Stack.Screen name="points" options={{ title: SCREEN_TITLES.points }} />
       <Stack.Screen name="dues" options={{ title: SCREEN_TITLES.dues }} />
       <Stack.Screen
         name="documents"
@@ -134,7 +136,7 @@ export default function AppLayout() {
       <Stack.Screen name="invite" options={{ title: SCREEN_TITLES.invite }} />
       {/* Presents the Ask sheet for a `frapp://ask` link, or pops to Chat
           home for a member without Ask. */}
-      <Stack.Screen name="ask" options={{ title: "Ask" }} />
+      <Stack.Screen name="ask" options={{ title: "Frapp Intelligence" }} />
       {/* A message's link, `app.frapp.live/chat?channel=…&message=…`
           (#3723): hands off to the thread and draws nothing itself. */}
       <Stack.Screen name="chat" options={{ title: "Chat" }} />
@@ -167,14 +169,47 @@ export default function AppLayout() {
         name="whats-new"
         options={{ title: SCREEN_TITLES["whats-new"] }}
       />
+      {/* From the welcome card in a new member's first channel (#5627). */}
+      <Stack.Screen
+        name="finish-profile"
+        options={{ title: SCREEN_TITLES["finish-profile"] }}
+      />
       <Stack.Screen
         name="arrange-channels"
         options={{ title: SCREEN_TITLES["arrange-channels"] }}
       />
-      {/* Chapter settings and its Roles screens (#4074), from You → Admin. */}
+      {/* One channel's settings (#6031), from a channel row's Edit channel. */}
+      <Stack.Screen
+        name="channel-settings"
+        options={{ title: SCREEN_TITLES["channel-settings"] }}
+      />
+      {/* Chapter settings and its Roles screens (#4074), from Chat home's chapter menu. */}
       <Stack.Screen
         name="chapter-settings"
         options={{ title: SCREEN_TITLES["chapter-settings"] }}
+      />
+      {/* The pages Chapter settings' Chapter rows push (#6027), as web's
+          Chapter tab opens them behind `?page=`. */}
+      <Stack.Screen
+        name="chapter-mark"
+        options={{ title: SCREEN_TITLES["chapter-mark"] }}
+      />
+      <Stack.Screen
+        name="chapter-identity"
+        options={{ title: SCREEN_TITLES["chapter-identity"] }}
+      />
+      <Stack.Screen
+        name="chapter-type"
+        options={{ title: SCREEN_TITLES["chapter-type"] }}
+      />
+      <Stack.Screen
+        name="chapter-vocabulary"
+        options={{ title: SCREEN_TITLES["chapter-vocabulary"] }}
+      />
+      {/* The record of officer changes (Paul, 2026-11-21), from Chapter settings. */}
+      <Stack.Screen
+        name="chapter-logs"
+        options={{ title: SCREEN_TITLES["chapter-logs"] }}
       />
       <Stack.Screen
         name="chapter-roles"
@@ -185,6 +220,13 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["role-tier"] }}
       />
       <Stack.Screen name="role" options={{ title: SCREEN_TITLES.role }} />
+      {/* The recruitment pipeline (#5924), from its row on You, and one
+          prospect from a row of it. */}
+      <Stack.Screen name="rush" options={{ title: SCREEN_TITLES.rush }} />
+      <Stack.Screen
+        name="rush-prospect"
+        options={{ title: SCREEN_TITLES["rush-prospect"] }}
+      />
     </Stack>
   );
 }

@@ -6,8 +6,8 @@
 # comment line above the entry. Format, and when an entry may go:
 # apps/mobile/store/README.md, section "Shipped builds and the API contract".
 
-# #3485 limits role `color` to the palette. Only the web Roles page writes roles: at both shipped
-# SHAs (android 0.9.0+2 at ea9bc12c; ios 0.9.1+8 and android 0.9.1+3 at cca52dec),
+# #3485 limits role `color` to the palette. The builds shipped before it never wrote roles: at both
+# shipped SHAs (android 0.9.0+2 at ea9bc12c; ios 0.9.1+8 and android 0.9.1+3 at cca52dec),
 # `git grep 'useCreateRole\|useUpdateRole' <sha> -- apps/mobile` finds no caller,
 # so the binaries never send POST /v1/roles or PATCH /v1/roles/{id} (the hooks they bundle from
 # packages/hooks define them, unused).
@@ -53,3 +53,149 @@ GET /v1/tasks/{id}/photo-url api path removed without deprecation
 # `git grep 'useConfirmBackworkUpload\|backwork/upload-url\|/v1/backwork' <sha> -- apps/mobile`
 # finds nothing. So no binary sends this POST (the hook it bundles defines it, unused).
 POST /v1/backwork added the pattern '^[0-9a-f]{64}$' to the request property 'file_hash'
+
+# #5784 lets a role or group color be any readable hue, so the request `color` drops its enum of the
+# ten palette values. oasdiff reads a dropped enum value as a narrowing, but this is a widening: every
+# value the enum listed is still accepted and stored as before (`isPaintableRoleColor` passes the whole
+# palette; `apps/api/src/interface/dtos/rbac.dto.spec.ts` pins every palette value on all four
+# writes), so no request a shipped binary can
+# send is refused that wasn't refused before.
+POST /v1/roles removed the enum value '#3DD6C4' of the request property 'color'
+POST /v1/roles removed the enum value '#5CC8F0' of the request property 'color'
+POST /v1/roles removed the enum value '#6FD08C' of the request property 'color'
+POST /v1/roles removed the enum value '#8FA8FF' of the request property 'color'
+POST /v1/roles removed the enum value '#A9B4C2' of the request property 'color'
+POST /v1/roles removed the enum value '#B392F0' of the request property 'color'
+POST /v1/roles removed the enum value '#C5E06A' of the request property 'color'
+POST /v1/roles removed the enum value '#D9B99B' of the request property 'color'
+POST /v1/roles removed the enum value '#F2994A' of the request property 'color'
+POST /v1/roles removed the enum value '#F47FA4' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#3DD6C4' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#5CC8F0' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#6FD08C' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#8FA8FF' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#A9B4C2' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#B392F0' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#C5E06A' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#D9B99B' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#F2994A' of the request property 'color'
+PATCH /v1/roles/{id} removed the enum value '#F47FA4' of the request property 'color'
+POST /v1/groups removed the enum value '#3DD6C4' of the request property 'color'
+POST /v1/groups removed the enum value '#5CC8F0' of the request property 'color'
+POST /v1/groups removed the enum value '#6FD08C' of the request property 'color'
+POST /v1/groups removed the enum value '#8FA8FF' of the request property 'color'
+POST /v1/groups removed the enum value '#A9B4C2' of the request property 'color'
+POST /v1/groups removed the enum value '#B392F0' of the request property 'color'
+POST /v1/groups removed the enum value '#C5E06A' of the request property 'color'
+POST /v1/groups removed the enum value '#D9B99B' of the request property 'color'
+POST /v1/groups removed the enum value '#F2994A' of the request property 'color'
+POST /v1/groups removed the enum value '#F47FA4' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#3DD6C4' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#5CC8F0' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#6FD08C' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#8FA8FF' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#A9B4C2' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#B392F0' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#C5E06A' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#D9B99B' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#F2994A' of the request property 'color'
+PATCH /v1/groups/{id} removed the enum value '#F47FA4' of the request property 'color'
+
+# #5761 lets a task have no due date, so a task's `due_date` can be null. The shipped binaries do
+# read it, but none breaks on null. At the newest (0426149e, ios 0.13.0+28 / android 0.13.0+19),
+# the oldest (ea9bc12c) and a middle one (6928a014), every read of a task's due goes through a
+# narrowing first: `str()` in apps/mobile/lib/more/narrow.ts and packages/hooks/src/calendar-tasks.ts
+# returns null for a non-string; `parseInstant`, `formatDueLabel` and `formatDueOn` start with
+# `typeof value !== "string"`; `deriveDisplayStatus` checks `typeof dueDate === "string"`; the
+# chat card's `readTaskPayload` and `readEditableCardTask` refuse a non-string `due_date`. The one
+# unguarded comparator, `compareTasksByDue` (task-views.ts), has no mobile caller. So an undated
+# task shows on those builds under Later with no due line, with no Edit, and off the calendar.
+# Every listed SHA was swept the same way: `git grep -nE
+# "(dueDay|dueDate|due_date|due_at|dueAt)!?\.(slice|split|localeCompare|substring|startsWith|replace|match|trim|includes)\b"
+# <sha> -- apps/mobile packages/hooks/src packages/formatting/src packages/chat-core/src`, specs and
+# invoices aside, finds no unguarded task read at any of the 18 SHAs in shipped-builds.json other
+# than that comparator. This waives fields the binaries read, which the header's rule (only what no
+# binary depends on) doesn't cover; it rests on that evidence and is flagged for review in #5761's PR.
+GET /v1/activity the response property 'made_by_you/tasks/items/due_date' became nullable for the status '200'
+GET /v1/activity the response property 'needs_you/task_confirmations/items/due_date' became nullable for the status '200'
+GET /v1/activity the response property 'needs_you/tasks/items/due_date' became nullable for the status '200'
+GET /v1/activity/archive the response property 'tasks/items/due_date' became nullable for the status '200'
+POST /v1/tasks the response property 'due_date' became nullable for the status '201'
+
+# #4084 leaves `vote_count` out of the rush candidate view for a caller without `rush:view_results`.
+# Unlike the waivers above, shipped binaries do call these routes; waived because they tolerate the
+# missing field (Winston chose this, 2026-11-23; Paul reviews it in the PR). At every shipped SHA from
+# cca52dec through 0426149e, `git show <sha>:packages/hooks/src/rush-card.ts` has
+# `readLiveRushCandidate` returning null when `typeof r.vote_count !== "number"`, the only mobile reader
+# of the field: the card then shows the prospect with no tally, badge, Vote or Extend bid, as it does
+# before its read lands. At ea9bc12c, `git grep 'useRushCandidate\|rush/candidates' ea9bc12c -- apps/mobile`
+# finds no caller. The field is absent for any role that holds `rush:view` without `rush:view_results`:
+# one a chapter took the key off, or one an officer granted `rush:view` alone (New Member, Alumni or a
+# custom role in a new chapter, or any role in a chapter that turned Recruitment on after the
+# 20261111010000 backfill). The seeded Member role and every role the backfill reached hold both.
+GET /v1/rush/candidates the response property 'vote_count' became optional for the status '200'
+GET /v1/rush/candidates/{id} the response property 'vote_count' became optional for the status '200'
+POST /v1/rush/candidates/{id}/vote the response property 'vote_count' became optional for the status '201'
+POST /v1/rush/candidates/{id}/bid the response property 'vote_count' became optional for the status '201'
+
+# #5951 deletes the chapter activity feed, which no screen ever rendered (the web home it was written
+# for went in the chat-first redesign; the phone never had one). Checked 2026-11-24 at every SHA in
+# shipped-builds.json (ea9bc12c, cca52dec, 5e43a27b, 55922eab, 108b7ac7, 728fb69e, b61c20c3, c91ec8d8,
+# 547c1364, 68a47019, e83a0109, dcdfde42, 218b178c, 5615e8b2, c85e2c3a, 5f0bd6c9, 6928a014, 0426149e):
+# `git grep 'useActivityFeed\|activity-feed' <sha> -- apps/mobile` finds only a spec link in
+# apps/mobile/store/README.md, so no binary
+# requests the route (the hook they bundle from packages/hooks defines it, unused).
+GET /v1/activity-feed api path removed without deprecation
+
+# #5951 removes `made_by_you.files` from the Activity read: always empty and deprecated since #4291.
+# At the same 18 SHAs, `git grep -w files <sha> -- apps/mobile packages/hooks/src packages/chat-core/src
+# packages/formatting/src | grep -i 'activ\|made'` finds one line, a comment in
+# apps/mobile/lib/auth-gate.ts, and `git grep '\.files\b' <sha> -- apps/mobile` finds nothing at 13 SHAs and,
+# at 5615e8b2, c85e2c3a, 5f0bd6c9, 6928a014 and 0426149e, only `h.files` in
+# apps/mobile/lib/minutes/recorder/controller.spec.ts (a test harness Map). So a binary whose
+# contract lists the field never reads it.
+GET /v1/activity removed the required property 'made_by_you/files' from the response with the '200' status
+
+# #5949 files a meeting's posted minutes as a `chapter_documents` row with no file and no uploader,
+# so the document DTO's `storage_path` and `uploaded_by` became nullable. No shipped binary is ever
+# served such a row: GET /v1/documents returns minutes rows only with `?minutes=true`, which no
+# shipped build sends (at every shipped SHA, 0426149e through 2d929f32, `git grep 'minutes: "true"'
+# <sha> -- apps/mobile packages/hooks/src/use-documents.ts` finds nothing), and those builds pin only
+# rows from that list (`useSetDocumentPin`, called only in apps/mobile/app/(app)/documents.tsx at
+# 2d929f32), so PUT and DELETE /v1/documents/{id}/pin answer them for files alone. The rest answer
+# files alone too: GET /v1/bootstrap's documents section is read without `minutes` (files only);
+# POST /v1/documents/batch confirms uploads, POST /v1/google-drive-links makes a linked file and
+# POST /v1/google-drive/copies/{id}/open-up opens a Drive copy, all files; PATCH /v1/documents/{id}
+# and POST /v1/documents/move answer the rows a build sends, which come from its files-only list;
+# and PUT /v1/documents/{id}/access refuses a minutes row (409).
+GET /v1/bootstrap the response property 'documents/items/storage_path' became nullable for the status '200'
+GET /v1/bootstrap the response property 'documents/items/uploaded_by' became nullable for the status '200'
+PATCH /v1/documents/{id} the response property 'storage_path' became nullable for the status '200'
+PATCH /v1/documents/{id} the response property 'uploaded_by' became nullable for the status '200'
+POST /v1/documents/batch the response property 'results/items/document/allOf[#/components/schemas/ChapterDocumentDto]/storage_path' became nullable for the status '201'
+POST /v1/documents/batch the response property 'results/items/document/allOf[#/components/schemas/ChapterDocumentDto]/uploaded_by' became nullable for the status '201'
+POST /v1/documents/move the response property '/items/storage_path' became nullable for the status '200'
+POST /v1/documents/move the response property '/items/uploaded_by' became nullable for the status '200'
+POST /v1/google-drive-links the response property 'storage_path' became nullable for the status '201'
+POST /v1/google-drive-links the response property 'uploaded_by' became nullable for the status '201'
+POST /v1/google-drive/copies/{id}/open-up the response property 'storage_path' became nullable for the status '200'
+POST /v1/google-drive/copies/{id}/open-up the response property 'uploaded_by' became nullable for the status '200'
+PUT /v1/documents/{id}/access the response property 'storage_path' became nullable for the status '200'
+PUT /v1/documents/{id}/access the response property 'uploaded_by' became nullable for the status '200'
+GET /v1/documents the response property '/items/storage_path' became nullable for the status '200'
+GET /v1/documents the response property '/items/uploaded_by' became nullable for the status '200'
+PUT /v1/documents/{id}/pin the response property 'storage_path' became nullable for the status '200'
+PUT /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'
+DELETE /v1/documents/{id}/pin the response property 'storage_path' became nullable for the status '200'
+DELETE /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'
+
+# #5977 makes `created_by` nullable on the rush candidate responses: a prospect the PNM's own
+# interest form created has no member who added them. The shipped builds have no Recruitment
+# screen (at the newest shipped SHA, 0426149e, there is no apps/mobile/components/rush/ and no
+# rush route under apps/mobile/app/(app)); their only caller is chat-core's `/rush` dispatcher,
+# which reads `id` and `card_posted` from these responses and never `created_by`.
+GET /v1/rush/candidates the response property 'created_by' became nullable for the status '200'
+POST /v1/rush/candidates the response property 'created_by' became nullable for the status '201'
+GET /v1/rush/candidates/{id} the response property 'created_by' became nullable for the status '200'
+POST /v1/rush/candidates/{id}/bid the response property 'created_by' became nullable for the status '201'
+POST /v1/rush/candidates/{id}/vote the response property 'created_by' became nullable for the status '201'

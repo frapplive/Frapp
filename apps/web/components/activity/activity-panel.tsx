@@ -30,10 +30,16 @@ import {
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
 import { useServiceReview } from "@/components/service/use-service-review";
+import { useViewServiceProof } from "@/components/service/use-view-service-proof";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { chatDeepLink } from "@/lib/chat/chat-links";
 import { eventDeepLink } from "@/lib/events/event-links";
-import type { ActivityRow } from "@repo/hooks";
+import {
+  approvePointsPreview,
+  useServiceEntry,
+  useServicePointsRate,
+  type ActivityRow,
+} from "@repo/hooks";
 import { ActivityFaces } from "./activity-row-lead";
 import { useActivityPoll } from "./use-activity-poll";
 
@@ -46,6 +52,10 @@ const PANEL_TITLES: Record<ActivityRow["kind"], string> = {
   link: "Link",
   card: "Sign-up",
   reminder: "Reminder",
+  // Minutes rows open their own page (#5949), never this panel.
+  "minutes-to-write": "Minutes",
+  "minutes-draft": "Minutes",
+  "minutes-notes": "Minutes",
 };
 
 /**
@@ -58,9 +68,10 @@ const PANEL_TITLES: Record<ActivityRow["kind"], string> = {
  * card's own buttons call the same routes they call in chat. Two things are
  * added around them, because the cards do not carry them:
  * - a poll gets "Open in chat", a link to the message where the poll lives;
- * - a pending service entry gets Approve and Reject. Chat's hours card is a
- *   read-only record (review has always been the Service hours page's), so
- *   the review here is that page's own flow (`useServiceReview`).
+ * - a pending service entry gets Approve and Reject, with what Approve will
+ *   award and the member's proof over them. Chat's hours card is a read-only
+ *   record, and Activity is the one place hours are reviewed (#5950), through
+ *   the shared flow (`useServiceReview`).
  *
  * `onActed` runs after an action that changes what the page lists, so the row
  * can leave the list.
@@ -307,9 +318,22 @@ function HoursPanel({
 }) {
   const message = useMemo(() => activityHoursMessage(row.entry), [row.entry]);
   const review = useServiceReview();
-  // Reviewing is a paid-ops write (`ServiceEntryController`), as on the
-  // Service hours page.
+  // Reviewing is a paid-ops write (`ServiceEntryController`).
   const gate = useSubscriptionGate();
+  // What an approver decides by, which the Service hours page's queue drew
+  // until Activity became the one place hours are reviewed (#5950): what
+  // Approve will award at the chapter's rate, and the proof the member
+  // attached. The rate has its own `service:approve` route; unknown (loading,
+  // failed) leaves the line off rather than guessing. The proof's path is on
+  // the entry itself, which the row doesn't carry.
+  const pointsRate = useServicePointsRate();
+  const pointsPreview = approvePointsPreview(
+    row.entry.duration_minutes,
+    pointsRate.data?.minutes_per_point,
+  );
+  const liveEntry = useServiceEntry(row.entry.id).data as
+    { proof_path?: string | null } | undefined;
+  const proof = useViewServiceProof();
   // Closing re-reads the page, so the row leaves the list; it closes only this
   // row's panel. If the member has already moved on, the close is a no-op and
   // `onActed` does the re-read instead.
@@ -321,6 +345,29 @@ function HoursPanel({
   return (
     <>
       <HoursCard message={message} viewerId={viewerId} />
+      {pointsPreview || liveEntry?.proof_path ? (
+        <div className="space-y-1">
+          {pointsPreview ? (
+            <p className="text-caption text-muted-foreground">
+              {pointsPreview}
+            </p>
+          ) : null}
+          {/* Ungated: the signed link is a read, so a chapter whose plan
+              blocks writes can still open its own proof. */}
+          {liveEntry?.proof_path ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="link"
+              className="h-auto px-0 text-caption pointer-coarse:h-11"
+              onClick={() => void proof.viewProof(row.entry.id)}
+              disabled={proof.isPending}
+            >
+              View proof
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"

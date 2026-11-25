@@ -51,9 +51,11 @@ const EXEC_BOARD = [
   'events:update',
   'groups:manage',
   'meetings:record',
+  'members:timeout',
   'polls:view_all',
   'predictions:manage',
   'roles:manage',
+  'rush:read_notes',
   'service:approve',
   'tasks:manage',
 ].sort();
@@ -82,6 +84,9 @@ describe('DEFAULT_SYSTEM_ROLES permissions', () => {
       MEMBER,
       NEW_MEMBER: ['ai:use', 'backwork:upload', 'members:view'],
       ALUMNI: ['alumni:post', 'members:view'],
+      // The floor every member holds (2026-11-21): the directory and the
+      // channels open to the whole chapter, nothing else.
+      EVERYONE: ['members:view'],
     });
   });
 
@@ -94,6 +99,10 @@ describe('DEFAULT_SYSTEM_ROLES permissions', () => {
       'channels:create',
       'channels:manage',
       'groups:manage',
+      // Chat timeouts (#6006): whoever manages channels.
+      'members:timeout',
+      // Reading recruitment notes (#5924).
+      'rush:read_notes',
       'service:approve',
       'tasks:manage',
     ];
@@ -163,7 +172,7 @@ describe('DEFAULT_SYSTEM_ROLES permissions', () => {
 // migration 20261105200000_role_color_palette_defaults.sql carries the same
 // values for existing chapters.
 describe('DEFAULT_SYSTEM_ROLES colors', () => {
-  it('seeds the palette defaults, and none for Member and New Member', () => {
+  it('seeds the palette defaults, and none for Actives, New Member and Everyone', () => {
     const colors = Object.fromEntries(
       DEFAULT_SYSTEM_ROLES.map((role) => [role.system_key, role.color]),
     );
@@ -175,6 +184,7 @@ describe('DEFAULT_SYSTEM_ROLES colors', () => {
       MEMBER: null,
       NEW_MEMBER: null,
       ALUMNI: '#A9B4C2',
+      EVERYONE: null,
     });
   });
 });
@@ -189,11 +199,19 @@ describe('SystemPermissions and PERMISSION_REGISTRY', () => {
     );
   });
 
-  it('files every permission under a module catalog key, or chapter', () => {
+  it('files every permission under a module catalog key, chapter, or a council group', () => {
     const moduleKeys = new Set(MODULE_CATALOG.map((module) => module.key));
+    // A council's groups (#5933) are no chapter module: only council keys
+    // sit in them, and only council keys are council-scoped.
+    const councilGroups = new Set(['council', 'council-recruitment']);
     for (const module of PERMISSION_MODULES) {
-      if (module.key === 'chapter') continue;
+      if (module.key === 'chapter' || councilGroups.has(module.key)) continue;
       expect(moduleKeys).toContain(module.key);
+    }
+    for (const entry of PERMISSION_REGISTRY) {
+      const isCouncilKey = entry.permission.startsWith('council:');
+      expect(entry.scope === 'council').toBe(isCouncilKey);
+      expect(councilGroups.has(entry.module)).toBe(isCouncilKey);
     }
   });
 });

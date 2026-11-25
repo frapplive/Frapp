@@ -9,6 +9,7 @@ import {
   type TaskProofKind,
 } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { useViewerUserId } from "./use-user";
 import { useChapterScope } from "./chapter-scope";
 import { invalidatePointReads } from "./use-points";
 import { activityKeys } from "./use-activity";
@@ -50,9 +51,11 @@ interface CachedTask {
   id?: string;
   status?: string;
   stored_status?: string;
-  due_date?: string;
+  due_date?: string | null;
   due_at?: string | null;
   completed_at?: string | null;
+  /** Who marked it done (#5732). */
+  completed_by?: string | null;
   confirmed_at?: string | null;
   points_awarded?: boolean;
   point_reward?: number | null;
@@ -77,6 +80,7 @@ type TaskPatch = Partial<
     | "status"
     | "stored_status"
     | "completed_at"
+    | "completed_by"
     | "confirmed_at"
     | "points_awarded"
     | "sent_back_at"
@@ -478,7 +482,8 @@ export function useCreateTask() {
       audience_role_id?: string;
       /** With `audience`: only this chapter group's active members. */
       audience_group_id?: string;
-      due_date: string;
+      /** Omitted, or null, for a task with no due date (#5761). */
+      due_date?: string | null;
       /** The moment it is due, when it has a time of day (#4003). */
       due_at?: string;
       /** Subtask titles, in order (#4003). */
@@ -582,6 +587,8 @@ export function useUpdateTaskStatus() {
   const client = useFrappClient();
   const queryClient = useQueryClient();
   const chapterId = useActiveChapterId();
+  // Who is marking it done, for the cache's `completed_by` (#5732).
+  const viewerId = useViewerUserId();
   return useMutation({
     mutationKey: ["tasks", "update-task-status"],
     // No retry. The web client retries a failed mutation twice when the
@@ -626,7 +633,7 @@ export function useUpdateTaskStatus() {
       const patch: TaskPatch = {
         status: deriveDisplayStatus(
           body.status,
-          row?.due_date,
+          row?.due_date ?? undefined,
           todayUtc(),
           row?.due_at,
         ),
@@ -636,6 +643,9 @@ export function useUpdateTaskStatus() {
       // alone otherwise, so a "Done <weekday>" subtitle does not blank for a beat.
       if (body.status === "COMPLETED") {
         patch.completed_at = new Date().toISOString();
+        // The server stamps the caller: an officer marking it done for them
+        // reads as the officer's, not the assignee's, before the refetch.
+        patch.completed_by = viewerId;
         // A task with no points and no proof is Done as it is marked (#4635):
         // the server confirms it in the same write.
         if (row && row.proof_kind !== undefined && !taskNeedsSignOff(row)) {
@@ -651,6 +661,7 @@ export function useUpdateTaskStatus() {
         (row?.stored_status ?? row?.status) === "COMPLETED"
       ) {
         patch.completed_at = null;
+        patch.completed_by = null;
         // Taking back a Done that needed no sign-off unconfirms it too.
         if (row?.points_awarded) {
           patch.confirmed_at = null;
@@ -832,7 +843,7 @@ export function useRejectTask() {
           : {}),
         status: deriveDisplayStatus(
           "IN_PROGRESS",
-          row?.due_date,
+          row?.due_date ?? undefined,
           todayUtc(),
           row?.due_at,
         ),
@@ -907,6 +918,52 @@ export function useRemoveFromTaskGroup() {
       assigneeIds: string[];
     }): Promise<RemoveFromTaskGroupResult> => {
       const { data, error } = await client.POST("/v1/tasks/{id}/group/remove", {
+        params: { path: { id } },
+        body: { assignee_ids: assigneeIds },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: taskKeys.all }),
+        chapterId
+          ? queryClient.invalidateQueries({
+              queryKey: activityKeys.chapter(chapterId),
+            })
+          : undefined,
+      ]),
+  });
+}
+
+/** What `POST /v1/tasks/{id}/group/add` answers (#5905). */
+export type AddToTaskGroupResult =
+  components["schemas"]["AddToTaskGroupResponseDto"];
+
+/**
+ * Add members to a group task after it's made (#5905), the mirror of
+ * {@link useRemoveFromTaskGroup}: each gets a To do copy of it. `id` is any
+ * copy of the group. **Not optimistic**: the new copies are rows the server
+ * makes, and an alum or a stranger is a 400 the caller says. A member who
+ * already has a copy is skipped, so a lost answer is safe to try again.
+ * Every task read and Activity are read again, since each copy carries the
+ * group's counts.
+ */
+export function useAddToTaskGroup() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  return useMutation({
+    mutationKey: ["tasks", "add-to-task-group"],
+    retry: false,
+    mutationFn: async ({
+      id,
+      assigneeIds,
+    }: {
+      id: string;
+      assigneeIds: string[];
+    }): Promise<AddToTaskGroupResult> => {
+      const { data, error } = await client.POST("/v1/tasks/{id}/group/add", {
         params: { path: { id } },
         body: { assignee_ids: assigneeIds },
       });

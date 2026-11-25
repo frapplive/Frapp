@@ -33,6 +33,7 @@ function live(overrides: Partial<LiveRushCandidate> = {}): LiveRushCandidate {
     vote_count: 3,
     viewer_has_voted: false,
     bid_extended: false,
+    bid_state: "none",
     ...overrides,
   };
 }
@@ -46,7 +47,22 @@ describe("readLiveRushCandidate", () => {
         bid_status: "extended",
         viewer_has_voted: true,
       }),
-    ).toEqual(live({ bid_extended: true, viewer_has_voted: true }));
+    ).toEqual(
+      live({
+        bid_extended: true,
+        bid_state: "extended",
+        viewer_has_voted: true,
+      }),
+    );
+    // The full state when the API sends it (#5973): an acceptance reads as
+    // extended in `bid_status`, for shipped cards.
+    expect(
+      readLiveRushCandidate({
+        ...VIEW,
+        bid_status: "extended",
+        bid_state: "accepted",
+      }),
+    ).toMatchObject({ bid_extended: true, bid_state: "accepted" });
   });
 
   it("is null before the read lands, after a 403 or 404, or for a shape it can't draw", () => {
@@ -57,6 +73,14 @@ describe("readLiveRushCandidate", () => {
     expect(readLiveRushCandidate({ ...VIEW, vote_count: "3" })).toBe(null);
     expect(readLiveRushCandidate({ ...VIEW, vote_count: Number.NaN })).toBe(
       null,
+    );
+  });
+
+  it("reads an absent count as hidden (rush:view_results), not as a miss", () => {
+    const withoutCount: Record<string, unknown> = { ...VIEW };
+    delete withoutCount.vote_count;
+    expect(readLiveRushCandidate(withoutCount)).toEqual(
+      live({ vote_count: null }),
     );
   });
 
@@ -71,74 +95,108 @@ describe("readLiveRushCandidate", () => {
   });
 });
 
+const MEMBER_KEYS = [
+  "members:view",
+  "rush:view",
+  "rush:add",
+  "rush:vote",
+  "rush:bid",
+] as const;
+const without = (key: string) => MEMBER_KEYS.filter((held) => held !== key);
+
 describe("canReadCardRushCandidate", () => {
-  it("asks only for a members:view holder, the one viewer the route answers", () => {
-    expect(
-      canReadCardRushCandidate({
-        canViewMembers: true,
-        permissionsKnown: true,
-      }),
-    ).toBe(true);
-    expect(
-      canReadCardRushCandidate({
-        canViewMembers: false,
-        permissionsKnown: true,
-      }),
-    ).toBe(false);
+  it("asks only for a holder of members:view and rush:view, the viewer the route answers", () => {
+    expect(canReadCardRushCandidate(MEMBER_KEYS)).toBe(true);
+    expect(canReadCardRushCandidate(["*"])).toBe(true);
+    expect(canReadCardRushCandidate(without("members:view"))).toBe(false);
+    expect(canReadCardRushCandidate(without("rush:view"))).toBe(false);
   });
 
   it("asks while permissions are unknown, so a failed permissions read doesn't empty the card", () => {
-    expect(
-      canReadCardRushCandidate({
-        canViewMembers: false,
-        permissionsKnown: false,
-      }),
-    ).toBe(true);
+    expect(canReadCardRushCandidate(undefined)).toBe(true);
   });
 });
 
 describe("rushCardControls", () => {
+  const controls = (
+    overrides: Partial<Parameters<typeof rushCardControls>[0]> = {},
+  ) =>
+    rushCardControls({
+      live: live(),
+      recruitmentOff: false,
+      permissions: MEMBER_KEYS,
+      ...overrides,
+    });
+
   it("offers nothing until the live candidate is read", () => {
-    expect(rushCardControls({ live: null, recruitmentOff: false })).toEqual([]);
+    expect(controls({ live: null })).toEqual([]);
   });
 
   it("offers nothing while Recruitment is off", () => {
-    expect(rushCardControls({ live: live(), recruitmentOff: true })).toEqual(
-      [],
-    );
+    expect(controls({ recruitmentOff: true })).toEqual([]);
   });
 
   it("offers Vote and Extend bid to a member who hasn't voted, on an open candidate", () => {
-    expect(rushCardControls({ live: live(), recruitmentOff: false })).toEqual([
+    expect(controls()).toEqual(["vote", "bid"]);
+    expect(controls({ permissions: ["*"] })).toEqual(["vote", "bid"]);
+  });
+
+  it("swaps Vote for the Voted indicator once the viewer has voted", () => {
+    expect(controls({ live: live({ viewer_has_voted: true }) })).toEqual([
+      "voted",
+      "bid",
+    ]);
+  });
+
+  it("drops Extend bid once a bid is out, answered or rescinded, not once it expired (#5973)", () => {
+    for (const state of [
+      "extended",
+      "accepted",
+      "declined",
+      "rescinded",
+    ] as const) {
+      expect(controls({ live: live({ bid_state: state }) })).toEqual(["vote"]);
+    }
+    expect(controls({ live: live({ bid_state: "expired" }) })).toEqual([
       "vote",
       "bid",
     ]);
   });
 
-  it("swaps Vote for the Voted indicator once the viewer has voted", () => {
+  // #4084: a role without the key isn't offered what the server refuses.
+  it("leaves Vote out for a role without rush:vote", () => {
+    expect(controls({ permissions: without("rush:vote") })).toEqual(["bid"]);
+  });
+
+  it("leaves Extend bid out for a role without rush:bid", () => {
+    expect(controls({ permissions: without("rush:bid") })).toEqual(["vote"]);
+  });
+
+  it("still shows Voted to a viewer who voted and has since lost rush:vote", () => {
     expect(
-      rushCardControls({
+      controls({
         live: live({ viewer_has_voted: true }),
-        recruitmentOff: false,
+        permissions: without("rush:vote"),
       }),
     ).toEqual(["voted", "bid"]);
   });
 
-  it("drops Extend bid once a bid is out", () => {
-    expect(
-      rushCardControls({
-        live: live({ bid_extended: true }),
-        recruitmentOff: false,
-      }),
-    ).toEqual(["vote"]);
+  it("offers both while permissions are unknown; the server is the gate", () => {
+    expect(controls({ permissions: undefined })).toEqual(["vote", "bid"]);
   });
 });
 
 describe("rushCardBadgeLabel", () => {
-  it("says whether a bid is out", () => {
+  it("says where the bid stands", () => {
     expect(rushCardBadgeLabel(live())).toBe("Open");
-    expect(rushCardBadgeLabel(live({ bid_extended: true }))).toBe(
-      "Bid extended",
+    expect(
+      rushCardBadgeLabel(live({ bid_extended: true, bid_state: "extended" })),
+    ).toBe("Bid extended");
+    expect(rushCardBadgeLabel(live({ bid_state: "accepted" }))).toBe(
+      "Accepted",
+    );
+    expect(rushCardBadgeLabel(live({ bid_state: "declined" }))).toBe(
+      "Declined",
     );
   });
 });
@@ -154,6 +212,14 @@ describe("rushCardTally", () => {
     expect(rushCardTally(live({ vote_count: 1, viewer_has_voted: true }))).toBe(
       "1 vote · you voted",
     );
+  });
+
+  // #4084: a hidden count is never drawn as 0.
+  it("says only the viewer's own vote when the count is hidden", () => {
+    expect(rushCardTally(live({ vote_count: null }))).toBe(null);
+    expect(
+      rushCardTally(live({ vote_count: null, viewer_has_voted: true })),
+    ).toBe("You voted");
   });
 });
 

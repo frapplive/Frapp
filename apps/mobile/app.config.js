@@ -414,7 +414,8 @@ function assertProductionAppUrl({ easBuildProfile, appUrl } = {}) {
 // Native Google Sign-In (#2126, `lib/google-auth.ts`). The iOS SDK returns
 // to the app through a URL scheme that is the iOS OAuth client's ID reversed
 // (`com.googleusercontent.apps.<id>`); the package's config plugin writes it
-// into Info.plist. The client IDs live in app.json → `extra.googleSignIn`
+// into Info.plist. The store app's client IDs live in app.json →
+// `extra.googleSignIn`, Frapp Staging's in `STAGING_GOOGLE_SIGN_IN` below
 // (they are not secrets). With no iOS client ID the plugin is left out, and
 // `lib/google-auth.ts` keeps iOS on the browser flow. Setting the ID takes a
 // native build: an update that sets it still reaches same-version binaries
@@ -431,7 +432,7 @@ function googleIosUrlScheme(iosClientId) {
   if (!id) return undefined;
   if (!id.endsWith(GOOGLE_CLIENT_ID_SUFFIX)) {
     throw new Error(
-      `apps/mobile/app.json extra.googleSignIn.iosClientId must be a Google OAuth iOS client ID ending in ${GOOGLE_CLIENT_ID_SUFFIX}.`,
+      `extra.googleSignIn.iosClientId (apps/mobile/app.json, or STAGING_GOOGLE_SIGN_IN in app.config.js for Frapp Staging) must be a Google OAuth iOS client ID ending in ${GOOGLE_CLIENT_ID_SUFFIX}.`,
     );
   }
   return `com.googleusercontent.apps.${id.slice(0, -GOOGLE_CLIENT_ID_SUFFIX.length)}`;
@@ -470,6 +471,35 @@ const STAGING_IDENTITY = Object.freeze({
   name: "Frapp Staging",
   scheme: "frapp-staging",
   applicationId: "live.frapp.mobile.staging",
+});
+
+/**
+ * Frapp Staging's own Google sign-in clients (Paul, 2026-11-21). Google ties
+ * an iOS client to one bundle ID and an Android client to one package and
+ * signing key, so the staging app (`live.frapp.mobile.staging`) can't use the
+ * store app's clients in app.json's `extra.googleSignIn`: until these are set,
+ * every Google sign-in in Frapp Staging opens Supabase's web sheet ("wants to
+ * use …supabase.co to Sign In"), as a new member's did on 2026-11-20 (#4148).
+ * The Web client is the one staging Supabase's Google provider lists
+ * ("Frapp Web (staging)", in Google Cloud project "Frapp sign-in"). The iOS
+ * client is "iOS Client (staging)" there, for bundle ID
+ * `live.frapp.mobile.staging` (Paul, 2026-11-24), and "Android Client
+ * (staging)" is its Android client, for that package and the SHA-1 of Play's
+ * app signing key (Paul, 2026-11-24). Android signs in against the Web client,
+ * so Supabase needs nothing for it. Staging Supabase has to list
+ * it after the Web client, with Skip nonce check on, or the app falls back to
+ * the browser flow (docs/ops/deployment/supabase.md, Native Google Sign-In,
+ * steps 3 and 4). An empty ID keeps that
+ * platform on the browser flow, as in app.json; recording one is a native
+ * change (see `withGoogleSignIn`).
+ */
+const STAGING_GOOGLE_SIGN_IN = Object.freeze({
+  webClientId:
+    "661618060468-nefnjm72f4at1hfrl48bf4fjb2l18uel.apps.googleusercontent.com",
+  iosClientId:
+    "661618060468-60r0l5n3vck4g04u5n2p7ep3t4h1q67n.apps.googleusercontent.com",
+  androidClientId:
+    "661618060468-mgt5cpb7s6m796u998tf821s8k8v3mbo.apps.googleusercontent.com",
 });
 
 const APP_VARIANT_VALUE_ERROR = [
@@ -584,10 +614,13 @@ function withStagingVariant(config, runtimeVersion, appUrl) {
     delete ios.associatedDomains;
     delete android.intentFilters;
   }
+  const extra =
+    config.extra && typeof config.extra === "object" ? config.extra : {};
   return {
     ...config,
     name: STAGING_IDENTITY.name,
     scheme: STAGING_IDENTITY.scheme,
+    extra: { ...extra, googleSignIn: { ...STAGING_GOOGLE_SIGN_IN } },
     ...(runtimeVersion ? { runtimeVersion } : {}),
     ios: { ...ios, bundleIdentifier: STAGING_IDENTITY.applicationId },
     android: { ...android, package: STAGING_IDENTITY.applicationId },
@@ -724,6 +757,7 @@ applyExpoConfig.STAGING_RUNTIME_ENV = STAGING_RUNTIME_ENV;
 applyExpoConfig.STAGING_RUNTIME_ERROR = STAGING_RUNTIME_ERROR;
 applyExpoConfig.STAGING_PROFILE = STAGING_PROFILE;
 applyExpoConfig.STAGING_IDENTITY = STAGING_IDENTITY;
+applyExpoConfig.STAGING_GOOGLE_SIGN_IN = STAGING_GOOGLE_SIGN_IN;
 applyExpoConfig.APP_VARIANT_VALUE_ERROR = APP_VARIANT_VALUE_ERROR;
 applyExpoConfig.APP_VARIANT_PROFILE_ERROR = APP_VARIANT_PROFILE_ERROR;
 applyExpoConfig.STAGING_VARIANT_PRODUCTION_ORIGIN_ERROR =

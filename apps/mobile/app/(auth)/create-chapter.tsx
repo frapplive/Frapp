@@ -1,6 +1,6 @@
 import { errorCopy } from "@repo/hooks/error-copy";
 import { useState, type ComponentProps, type ReactNode, type Ref } from "react";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -41,6 +41,7 @@ import {
 import { useAuthSession } from "@/lib/auth-session";
 import { TermsAcceptance } from "@/components/auth/terms-acceptance";
 import { ChoiceRow } from "@/components/auth/choice-row";
+import { CreateCouncil } from "@/components/onboarding/create-council";
 import { AccentPicker } from "@/components/chapter/accent-picker";
 import {
   MeetFrappAiActions,
@@ -68,6 +69,7 @@ import {
 } from "@/components/onboarding/onboarding-primary-button";
 import { OnboardingSecondaryButton } from "@/components/onboarding/onboarding-secondary-button";
 import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import { JoinedChannelsCard } from "@/components/onboarding/joined-channels-card";
 import { InviteLinksCard } from "@/components/onboarding/invite-links-card";
 import { ShareGlyph } from "@/components/control-glyphs";
@@ -109,8 +111,8 @@ import { pageSurfaces } from "@/lib/surfaces";
  * Three steps make the chapter: **Find** it in the directory, **Confirm** the
  * match (or describe it by hand), and pick its **Color**. Creating it opens
  * four more: the **live** moment with its channels and an optional logo, the
- * founder's own **display** pick (the same three cards as s03's display beat,
- * #4056: founders skip s03), **Meet Frapp AI** when the server has AI and
+ * founder's own **display** pick (the same three cards as Settings and the
+ * welcome card's Finish your profile, #4056: founders skip s03), **Meet Frapp Intelligence** when the server has AI and
  * the founder never answered it (#4790; their Continue also turns on the new
  * chapter's AI switches, which nobody has set yet), the notifications step
  * when this build can push and push is off, and the **invite** link. Then
@@ -190,7 +192,20 @@ export function directoryRowTitle(row: ChapterDirectoryResult): string {
     : row.org_name;
 }
 
-export default function CreateChapter() {
+/**
+ * Starting a council is this route with `kind=council` (#5933,
+ * `components/onboarding/create-council.tsx`). It shares the route rather
+ * than taking its own because a new council, like a new chapter, flips the
+ * membership count mid-flow, and every gate already spares `/create-chapter`
+ * by its pathname (`(auth)/_layout.tsx`, `use-onboarding-redirect.ts`); a
+ * sibling route would be bounced into the tabs before its setup finished.
+ */
+export default function CreateTenant() {
+  const { kind } = useLocalSearchParams<{ kind?: string | string[] }>();
+  return kind === "council" ? <CreateCouncil /> : <CreateChapter />;
+}
+
+function CreateChapter() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const router = useRouter();
@@ -421,7 +436,7 @@ export default function CreateChapter() {
     }
   }
 
-  // After Meet Frapp AI, or past it when there is none.
+  // After Meet Frapp Intelligence, or past it when there is none.
   function afterAi() {
     if (primer.showPrimer) {
       setStep("primer");
@@ -745,7 +760,7 @@ export default function CreateChapter() {
                 <View style={styles.stack}>
                   <Text style={styles.body}>
                     Send each person their own link. A link lets one person in
-                    and lasts 24 hours.
+                    and lasts 7 days.
                   </Text>
                   <InviteLinksCard
                     shared={invite.shared}
@@ -892,19 +907,12 @@ function Footer({
           disabled={shareBusy || signingOut}
           busy={shareBusy}
         />
-        <OnboardingPressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: signingOut }}
+        <OnboardingQuietButton
+          label={hasShared ? "Go to chat" : "Skip for now"}
           disabled={signingOut}
+          held={signingOut}
           onPress={onFinish}
-          quiet
-          // A quiet line takes no dim of its own (`OnboardingPressable`).
-          style={[styles.quietButton, signingOut ? styles.held : null]}
-        >
-          <Text style={styles.quietButtonText}>
-            {hasShared ? "Go to chat" : "Skip for now"}
-          </Text>
-        </OnboardingPressable>
+        />
       </View>
     );
   }
@@ -1456,23 +1464,6 @@ function createStyles(tokens: SignetTokens) {
     textButtonText: {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.gold.askText,
-    },
-    // The invite step's way out under its gold button: a 44pt line of muted
-    // text, there when wanted and not competing with the invite.
-    quietButton: {
-      alignSelf: "center",
-      minHeight: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
-      justifyContent: "center",
-      marginTop: tokens.spacing.xs,
-    },
-    // The invite step's way to chat while a sign-out holds it.
-    held: {
-      opacity: 0.5,
-    },
-    quietButtonText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.mutedForeground,
     },
     archetypeRow: {
       borderRadius: tokens.radius.control,

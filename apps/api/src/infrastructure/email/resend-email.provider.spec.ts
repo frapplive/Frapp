@@ -5,7 +5,8 @@ describe('ResendEmailProvider', () => {
   const params = {
     to: 'member@example.com',
     joinUrl: 'https://app.frapp.live/join?token=abc',
-    role: 'Member',
+    role: 'Pledge' as string | null,
+    validDays: 7,
   };
 
   afterEach(() => {
@@ -38,10 +39,83 @@ describe('ResendEmailProvider', () => {
     expect(body.from).toBe('Frapp <invites@mail.frapp.live>');
     expect(body.to).toBe(params.to);
     expect(body.subject).toBe("You're invited to join a chapter on Frapp");
-    expect(body.html).toContain('join a chapter on Frapp');
-    expect(body.text).toContain('join a chapter on Frapp');
+    expect(body.html).toContain('Your chapter');
+    expect(body.text).toContain(
+      "You've been invited to join on Frapp as Pledge.",
+    );
     expect(body.subject).not.toContain('Signet');
-    expect(body.html).toContain(params.joinUrl);
+    expect(body.text).toContain(`Open the invite: ${params.joinUrl}`);
+  });
+
+  it('leads with the chapter, has one button and no raw link in the HTML (#5628)', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const provider = new ResendEmailProvider({
+      apiKey: 're_test',
+      fromAddress: 'Frapp <invites@mail.frapp.live>',
+    });
+
+    await provider.sendInviteEmail({
+      ...params,
+      joinUrl: 'https://app.frapp.live/join?token=abc&x=1',
+      chapterName: 'Phi Gamma Delta Tau Nu',
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    const html: string = body.html;
+    expect(html.indexOf('Phi Gamma Delta Tau Nu')).toBeLessThan(
+      html.indexOf('invited to join'),
+    );
+    expect(html.match(/<a /g)).toHaveLength(1);
+    // The link appears once, as the button's href, never as text to copy.
+    expect(html.split('join?token=abc')).toHaveLength(2);
+    expect(html).toContain(
+      'href="https://app.frapp.live/join?token=abc&amp;x=1"',
+    );
+    expect(html).toContain('>Open the invite</a>');
+    expect(html).toContain('The invite works once, for 7 days.');
+    expect(body.text).toMatch(/^Phi Gamma Delta Tau Nu\n/);
+  });
+
+  it.each([
+    [3, 'for 3 days'],
+    [1, 'for 1 day'],
+  ])('writes out %i day(s) as "%s"', async (validDays, words) => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const provider = new ResendEmailProvider({
+      apiKey: 're_test',
+      fromAddress: 'Frapp <invites@mail.frapp.live>',
+    });
+
+    await provider.sendInviteEmail({ ...params, validDays });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.html).toContain(`The invite works once, ${words}.`);
+    expect(body.text).toContain(`The invite works once, ${words}.`);
+  });
+
+  it('names no role for an invite that grants only Everyone', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const provider = new ResendEmailProvider({
+      apiKey: 're_test',
+      fromAddress: 'Frapp <invites@mail.frapp.live>',
+    });
+
+    await provider.sendInviteEmail({
+      ...params,
+      role: null,
+      inviterName: 'Paul Carlson',
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.text).toContain('Paul Carlson invited you to join on Frapp.');
+    expect(body.text).not.toContain(' as ');
+    expect(body.html).not.toContain(' as ');
   });
 
   it('names the chapter and who sent it when both are known, escaped in the HTML', async () => {
@@ -66,7 +140,9 @@ describe('ResendEmailProvider', () => {
     );
     expect(body.html).toContain('Paul &lt;Carlson&gt; invited you');
     expect(body.html).not.toContain('<Carlson>');
-    expect(body.text).toContain('as Member');
+    expect(body.text).toContain(
+      'Paul <Carlson> invited you to join on Frapp as Pledge.',
+    );
   });
 
   it("clips a name long enough to carry someone else's message", async () => {
@@ -175,5 +251,49 @@ describe('ResendEmailProvider', () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
     expect(body.html).not.toContain('<script>');
     expect(body.html).toContain('&lt;script&gt;');
+  });
+
+  describe('school codes (#5929)', () => {
+    const school = {
+      to: 'student@rpi.edu',
+      code: '042917',
+      schoolName: 'Rensselaer Polytechnic Institute',
+      validMinutes: 10,
+    };
+
+    it('sends the code in the subject and body, and no link', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const provider = new ResendEmailProvider({
+        apiKey: 're_test',
+        fromAddress: 'Frapp <invites@mail.frapp.live>',
+      });
+
+      await expect(provider.sendSchoolCodeEmail(school)).resolves.toBe(true);
+
+      const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+      expect(body.to).toBe('student@rpi.edu');
+      expect(body.subject).toBe(
+        '042917 is your Frapp code for Rensselaer Polytechnic Institute',
+      );
+      expect(body.html).toContain('042917');
+      expect(body.html).not.toContain('<a ');
+      expect(body.text).toContain('042917');
+      expect(body.text).toContain('It works for 10 minutes.');
+    });
+
+    it('reports a refused send as false, never throwing', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 403 }));
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const provider = new ResendEmailProvider({
+        apiKey: 're_test',
+        fromAddress: 'Frapp <invites@mail.frapp.live>',
+      });
+
+      await expect(provider.sendSchoolCodeEmail(school)).resolves.toBe(false);
+    });
   });
 });

@@ -60,6 +60,10 @@ const FAMILY = [
   "components/auth/other-account-line.tsx",
   "components/auth/signet-mark.tsx",
   "components/profile/profile-panel.tsx",
+  // Phone, Major, Grad year and Birthday, moved out of `profile-panel.tsx` so
+  // `/welcome`'s About you shares them (#5284), and that step itself.
+  "components/profile/profile-about-fields.tsx",
+  "components/onboarding/welcome-about.tsx",
   // `/profile`'s settings blocks, moved to the personal Settings page (#3856).
   // Listed so the rules that governed them inside `profile-panel.tsx` still do.
   "app/(dashboard)/preferences/page.tsx",
@@ -76,7 +80,6 @@ const FAMILY = [
   // a governed file moving to a new path is exactly the case that would
   // otherwise drop out of coverage without a single test going red.
   "components/onboarding/chapter-wizard-gate.tsx",
-  "components/onboarding/onboarding-tour.tsx",
   "components/onboarding/step-dots.tsx",
 ] as const;
 

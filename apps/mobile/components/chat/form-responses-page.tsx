@@ -19,10 +19,13 @@ import {
   formNotRespondedLabel,
   formQuestionAnsweredLine,
   formResponsesCountLine,
+  FORM_RESPONSES_VIEWS,
+  FORM_RESPONSES_VIEWS_LABEL,
   formResponsesExportRows,
   formResponsesKey,
   summarizeFormResponses,
   type FormResponses,
+  type FormResponsesView,
   type MemberLabel,
 } from "@repo/chat-core/form-responses";
 import {
@@ -42,7 +45,7 @@ import { shareCsv } from "@/lib/chat/share-csv";
 import { IconButton } from "@/components/icon-button";
 import { CloseGlyph, ShareGlyph } from "@/components/control-glyphs";
 import { SheetPrimaryButton } from "@/components/sheet-scaffold";
-import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { meterStyles } from "@/components/meter";
 import {
   SkeletonBlock,
@@ -70,13 +73,6 @@ import {
  * the answers are read fresh on every open (no `staleTime`): they keep
  * arriving and nothing pushes them.
  */
-type ResponsesTab = "summary" | "individual";
-
-const TABS = [
-  { value: "summary", label: "Summary" },
-  { value: "individual", label: "Individual" },
-] as const;
-
 export function FormResponsesPage({
   messageId,
   payload,
@@ -102,7 +98,7 @@ export function FormResponsesPage({
   const data = query.data;
   const count = data?.responses.length ?? 0;
   const labelOf: MemberLabel = (id) => actorLabel(id, nameFor) ?? "A member";
-  const [tab, setTab] = useState<ResponsesTab>("summary");
+  const [tab, setTab] = useState<FormResponsesView>("summary");
   const [exporting, setExporting] = useState(false);
 
   const heading = useRef<View>(null);
@@ -149,11 +145,12 @@ export function FormResponsesPage({
           </Text>
           {data ? (
             <>
-              <Segmented<ResponsesTab>
-                options={TABS}
+              <ViewLabels<FormResponsesView>
+                flush
+                options={FORM_RESPONSES_VIEWS}
                 value={tab}
                 onChange={setTab}
-                accessibilityLabel="Show responses as"
+                accessibilityLabel={FORM_RESPONSES_VIEWS_LABEL}
               />
               {count === 0 ? (
                 <Text style={styles.notice}>No one has answered yet.</Text>
@@ -400,8 +397,8 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
       gap: tokens.spacing.sm,
     },
     // Each question's summary and each person's answers sit on a card, as
-    // web's are inside its raised panel, so the meter's `--background` groove
-    // (`meterStyles`) recedes against it rather than vanishing into the page.
+    // web's are inside its raised panel, so the meter (`meterStyles`, named as
+    // drawn on `--card`) recedes against it rather than vanishing into the page.
     panel: {
       gap: tokens.spacing.sm,
       padding: tokens.spacing.md,
@@ -435,10 +432,10 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
       fontVariant: ["tabular-nums"],
     },
     meterTrack: {
-      ...meterStyles(tokens).track,
+      ...meterStyles(tokens, tokens.color.surface.card).track,
       marginTop: tokens.spacing.xs,
     },
-    meterFill: meterStyles(tokens).fill,
+    meterFill: meterStyles(tokens, tokens.color.surface.card).fill,
     textAnswer: {
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.foreground,

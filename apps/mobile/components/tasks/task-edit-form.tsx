@@ -23,8 +23,10 @@ import {
   ProofField,
 } from "@/components/tasks/task-form-fields";
 import { WhoPickerSheet } from "@/components/tasks/who-picker-sheet";
+import { FollowerField } from "@/components/tasks/task-follower";
 import type { TaskRowModel } from "@/lib/tasks/board";
 import {
+  dueClearable,
   dueDraftOf,
   referencePhotos,
   repeatDraftOf,
@@ -47,7 +49,8 @@ interface TaskEditPeople {
 /**
  * The task screen's fields in edit mode (#5514), where the facts row and the
  * description were: the title, the due day and time, the points, the notes,
- * what Mark done needs, the photos and who it is for, each saving itself as
+ * what Mark done needs, the photos, who it is from (#5473) and who it is
+ * for, each saving itself as
  * it is left (`useTaskEdit`). The New task sheet's controls, drawn on the
  * screen from the same components (`task-form-fields.tsx`, the platform's
  * date and time pickers, the photo picker). Apple Reminders and Things 3
@@ -90,7 +93,9 @@ export function TaskEditForm({
   const storedRepeat = repeatDraftOf(row);
   const repeat = edit.drafts.repeat ?? storedRepeat;
 
-  const due = edit.drafts.due ?? dueDraftOf(row);
+  // The due as picked, else the task's; `null` is No due date (#5761).
+  const picked = edit.drafts.due;
+  const due = picked === "none" ? null : (picked ?? dueDraftOf(row));
   const shown = {
     title: edit.drafts.title ?? row.title,
     description: edit.drafts.description ?? row.description ?? "",
@@ -136,23 +141,23 @@ export function TaskEditForm({
         />
       </View>
 
-      {due ? (
-        <View style={styles.splitRow}>
-          <View style={[styles.box, styles.split]}>
-            <DueDateField
-              value={due.date}
-              today={localIsoDate(openedAt)}
-              disabled={false}
-              onChange={(date) => edit.pickDue({ ...due, date })}
-            />
-          </View>
-          <PointsField
-            {...textProps("points")}
-            focused={focused === "points"}
-            style={styles.split}
+      <View style={styles.splitRow}>
+        <View style={[styles.box, styles.split]}>
+          <DueDateField
+            value={due?.date ?? null}
+            today={localIsoDate(openedAt)}
+            disabled={false}
+            onChange={(date) => edit.pickDue({ date, time: due?.time ?? null })}
+            // A copy of a repeating task keeps its day: its series needs one.
+            onClear={dueClearable(row) ? () => edit.pickDue("none") : undefined}
           />
         </View>
-      ) : null}
+        <PointsField
+          {...textProps("points")}
+          focused={focused === "points"}
+          style={styles.split}
+        />
+      </View>
 
       {due ? (
         <View style={styles.box}>
@@ -224,6 +229,8 @@ export function TaskEditForm({
           />
         </View>
       )}
+
+      <EditFollowerField row={row} edit={edit} />
 
       {row.assigneeId ? (
         <WhoField
@@ -299,6 +306,31 @@ function RepeatEditField({
         <Text style={noteStyle}>{TASK_SERIES_SCOPE_COPY.repeatFromNext}</Text>
       )}
     </>
+  );
+}
+
+/**
+ * From (#5473): the tier, role or group the task is from, saved as it is
+ * picked; on a group task's copy, for every copy. A repeating task says it
+ * can't have one yet.
+ */
+function EditFollowerField({
+  row,
+  edit,
+}: {
+  row: TaskRowModel;
+  edit: TaskEditing;
+}) {
+  const { followers } = useWhoDirectory();
+  return (
+    <FollowerField
+      value={row.followedBy}
+      currentName={row.followedByName}
+      choices={followers}
+      onChange={edit.setFollower}
+      disabled={edit.saving}
+      repeating={row.series !== null}
+    />
   );
 }
 

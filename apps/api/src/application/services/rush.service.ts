@@ -16,6 +16,8 @@ import type {
   RushCandidateView,
 } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
+import { RushPipelineService } from './rush-pipeline.service';
+import { RushBidService } from './rush-bid.service';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 
 export interface CreateRushCandidateInput {
@@ -25,6 +27,33 @@ export interface CreateRushCandidateInput {
   user_id?: string | null;
   channel_id?: string;
   client_message_id?: string;
+}
+
+/**
+ * Who is reading a candidate, and whether they may see its vote count
+ * (`rush:view_results`, #4084). The count is left out of the view, not
+ * zeroed, so no client can mistake a hidden count for none.
+ *
+ * `canViewResults` is a promise so the caller can start the permission read
+ * before the candidate read and the two overlap; the controller attaches a
+ * handler to it, so a request that 404s first leaves no unhandled rejection.
+ */
+export interface RushViewer {
+  id: string;
+  canViewResults: Promise<boolean>;
+}
+
+/** The 409's `code` when a name lookup matches several prospects. */
+const RUSH_SEVERAL_MATCH_CODE = 'rush.several_match';
+
+/** One prospect a name matched, enough to tell two apart in a picker. */
+export interface RushNameMatch {
+  id: string;
+  display_name: string;
+  stage: string;
+  /** The stage's name in this chapter, for the picker. */
+  stage_label: string;
+  created_at: string;
 }
 
 export type CreateRushCandidateResult = RushCandidate & {
@@ -40,34 +69,72 @@ export class RushService {
     private readonly rushRepo: IRushCandidateRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly chatService: ChatService,
+    private readonly pipelineService: RushPipelineService,
+    private readonly bidService: RushBidService,
   ) {}
 
   async findView(
     id: string,
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const candidate = await this.rushRepo.findById(id, chapterId);
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewerId);
+    return this.toView(candidate, viewer);
   }
 
   async findViewByName(
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
     name: string,
   ): Promise<RushCandidateView> {
     const nameKey = lowerTrim(name ?? '');
     if (!nameKey) {
       throw new BadRequestException('Candidate name is required');
     }
-    const candidate = await this.rushRepo.findByNameKey(chapterId, nameKey);
-    if (!candidate) {
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewerId);
+    // Two prospects can share a name once candidates link to PNMs, so a
+    // lookup never picks one silently: it answers 409 `rush.several_match`,
+    // and the slash command reads `findNameMatches` for its picker
+    // (`ifc-recruitment.md` § Name lookup). The matches aren't on the 409
+    // itself: the API's error body carries a code and a message only.
+    if (matches.length > 1) {
+      throw new ConflictException({
+        code: RUSH_SEVERAL_MATCH_CODE,
+        message: 'Several prospects match',
+      });
+    }
+    return this.toView(matches[0], viewer);
+  }
+
+  /**
+   * Every prospect a name matches, oldest first, each with what tells it
+   * apart: the slash command's picker after a `rush.several_match` 409.
+   */
+  async findNameMatches(
+    chapterId: string,
+    name: string,
+  ): Promise<RushNameMatch[]> {
+    const nameKey = lowerTrim(name ?? '');
+    if (!nameKey) {
+      throw new BadRequestException('Candidate name is required');
+    }
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) return [];
+    const stages = await this.pipelineService.listStages(chapterId);
+    const labelOf = new Map(stages.map((stage) => [stage.key, stage.label]));
+    return matches.map((match) => ({
+      id: match.id,
+      display_name: match.display_name,
+      stage: match.stage,
+      stage_label: labelOf.get(match.stage) ?? match.stage,
+      created_at: match.created_at,
+    }));
   }
 
   async create(
@@ -87,8 +154,14 @@ export class RushService {
         chapter_id: input.chapter_id,
         display_name: displayName,
         user_id: input.user_id ?? null,
-        stage: 'new',
+        // The first visible stage in the New category (#5924): a chapter
+        // that renamed or replaced New still gets its candidates there.
+        stage: await this.pipelineService.stageForNewCandidate(
+          input.chapter_id,
+        ),
+        closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: input.created_by,
       });
     } catch (error) {
@@ -109,47 +182,50 @@ export class RushService {
   async vote(
     id: string,
     chapterId: string,
-    voterId: string,
+    voter: RushViewer,
   ): Promise<RushCandidateView> {
     const candidate = await this.rushRepo.findById(id, chapterId);
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    await this.rushRepo.insertVote(id, chapterId, voterId);
-    return this.toView(candidate, voterId);
+    await this.rushRepo.insertVote(id, chapterId, voter.id);
+    return this.toView(candidate, voter);
   }
 
   async bid(
     id: string,
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
-    const existing = await this.rushRepo.findById(id, chapterId);
-    if (!existing) {
+    // Extend only from `none` or `expired`; anything else is 409, so an old
+    // card's Extend can't undo an answer (`ifc-recruitment.md` § Bids).
+    await this.bidService.extend(id, chapterId, viewer.id);
+    const candidate = await this.rushRepo.findById(id, chapterId);
+    if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    const candidate =
-      existing.bid_status === 'extended'
-        ? existing
-        : await this.rushRepo.setBidExtended(id, chapterId);
-    return this.toView(candidate, viewerId);
+    return this.toView(candidate, viewer);
   }
 
   private async toView(
     candidate: RushCandidate,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const [voteCount, viewerHasVoted] = await Promise.all([
-      this.rushRepo.countVotes(candidate.id, candidate.chapter_id),
+      viewer.canViewResults.then((canViewResults) =>
+        canViewResults
+          ? this.rushRepo.countVotes(candidate.id, candidate.chapter_id)
+          : undefined,
+      ),
       this.rushRepo.viewerHasVoted(
         candidate.id,
         candidate.chapter_id,
-        viewerId,
+        viewer.id,
       ),
     ]);
     return {
       ...candidate,
-      vote_count: voteCount,
+      ...(voteCount === undefined ? {} : { vote_count: voteCount }),
       viewer_has_voted: viewerHasVoted,
     };
   }

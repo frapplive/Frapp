@@ -8,12 +8,23 @@ import {
   EVENT_LOCATION_MAX_LENGTH,
   EVENT_NAME_MAX_LENGTH,
   MAX_REPEAT_RULE_LENGTH,
+  EVENT_ATTENDANCE_STATUSES,
   POINTS_ADJUSTMENT_MAX,
+  eventOthersInvited,
+  attendanceToWire,
   isRepeatRule,
+  type EventAttendanceDraft,
+  type EventAttendanceStatus,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
 import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type { Event } from '#domain/entities/event.entity';
+import type {
+  AiSuggestionChangeLog,
   AiSuggestionCommitResult,
   AiSuggestionKindHandler,
 } from './ai-suggestion-kinds';
@@ -29,9 +40,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * A proposed event, as stored and as listed: one event, or a series when the
- * member asked for one ("every Sunday at 6:48"), open to the whole chapter.
- * Who is invited by role, a check-in zone and anything else the card does not
- * show are set in the event form, which the card's Edit opens (#5117).
+ * member asked for one ("every Sunday at 6:48"), with who it invites by role
+ * and tier (#5853). A check-in zone and anything else the card does not show
+ * are set in the event form, which the card's Edit opens (#5117).
  */
 export interface NewEventSuggestionPayload {
   name: string;
@@ -54,6 +65,20 @@ export interface NewEventSuggestionPayload {
   event_type_id: string | null;
   is_mandatory: boolean;
   /**
+   * Who it invites, as the event form's draft: the default for everyone and
+   * each role (by id) or tier (`tier:<id>`) set apart from it, as
+   * `attendanceByRole` leaves it. Null on a
+   * card saved before #5853, which invites everyone as `is_mandatory` says.
+   */
+  attendance: EventAttendanceDraft | null;
+  /**
+   * The card's one line for it ("Cabinet required, nobody else invited"),
+   * written with the chapter's names when the card was made.
+   */
+  attendance_line: string | null;
+  /** The earlier event the list was copied from, when nobody chose one. */
+  attendance_from: NewEventPointsFrom | null;
+  /**
    * The repeat the series is made with (`packages/validation` recurrence
    * format), or null for one event.
    */
@@ -73,6 +98,39 @@ function pointsFromOrNull(value: unknown): NewEventPointsFrom | null {
   return (from.kind === 'type' || from.kind === 'event') && name
     ? { kind: from.kind, name }
     : null;
+}
+
+/** Roles and tiers one card may set apart. */
+const ATTENDANCE_ENTRIES_MAX = 100;
+/** A role id, or a tier as `tier:<id>` (#5870). */
+const ATTENDANCE_KEY =
+  /^(tier:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ATTENDANCE_LINE_MAX = 300;
+
+function statusOrNull(value: unknown): EventAttendanceStatus | null {
+  return (EVENT_ATTENDANCE_STATUSES as readonly unknown[]).includes(value)
+    ? (value as EventAttendanceStatus)
+    : null;
+}
+
+/** A stored or proposed invite list, keeping only well-formed entries. */
+function attendanceOrNull(value: unknown): EventAttendanceDraft | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const everyone = statusOrNull(raw.everyone);
+  if (!everyone) return null;
+  const roles: Record<string, EventAttendanceStatus> = {};
+  if (raw.roles && typeof raw.roles === 'object' && !Array.isArray(raw.roles)) {
+    for (const [key, status] of Object.entries(
+      raw.roles as Record<string, unknown>,
+    ).slice(0, ATTENDANCE_ENTRIES_MAX)) {
+      const read = statusOrNull(status);
+      if (read && read !== everyone && ATTENDANCE_KEY.test(key)) {
+        roles[key.toLowerCase()] = read;
+      }
+    }
+  }
+  return { everyone, roles };
 }
 
 function idOrNull(value: unknown): string | null {
@@ -136,7 +194,99 @@ export function readNewEventPayload(
     points_from: pointsFromOrNull(payload.points_from),
     event_type_id: idOrNull(payload.event_type_id),
     is_mandatory: payload.is_mandatory === true,
+    attendance: attendanceOrNull(payload.attendance),
+    attendance_line: text(payload.attendance_line, ATTENDANCE_LINE_MAX),
+    attendance_from: pointsFromOrNull(payload.attendance_from),
     recurrence_rule: ruleOrNull(payload.recurrence_rule),
+  };
+}
+
+/** What the change log compares for a proposed event (Paul, 2026-11-22). */
+const NEW_EVENT_CHANGE_FIELDS: ChangeFieldSpec = {
+  name: 'text',
+  description: 'text',
+  location: 'text',
+  start_time: 'instant',
+  end_time: 'instant',
+  length_minutes: 'number',
+  point_value: 'number',
+  event_type_id: 'id',
+  is_mandatory: 'boolean',
+  recurrence_rule: 'text',
+  // Who is invited: null on every side is the whole chapter. A proposal
+  // carries none today (set in the form); a proposal that does is compared.
+  required_role_ids: 'ids',
+  optional_role_ids: 'ids',
+  excluded_role_ids: 'ids',
+  // Whether a member holding none of those roles is invited: "only these
+  // roles" and "everyone, these roles required" list the same ids.
+  others_invited: 'boolean',
+};
+
+function lengthMinutes(start: string, end: string): number | null {
+  const from = Date.parse(start);
+  const to = Date.parse(end);
+  return Number.isNaN(from) || Number.isNaN(to)
+    ? null
+    : Math.round((to - from) / 60_000);
+}
+
+/** A stored proposal as the change log's fields. */
+export function newEventChangeView(payload: AiSuggestionPayload): ChangeView {
+  const event = readNewEventPayload(payload);
+  // A card since #5853 proposes its list as `attendance`, sent as these
+  // fields on commit; read them the same way so kept reads as kept.
+  if (event.attendance) {
+    const wire = attendanceToWire(event.attendance);
+    return {
+      ...event,
+      length_minutes: lengthMinutes(event.start_time, event.end_time),
+      is_mandatory: wire.is_mandatory,
+      required_role_ids: wire.required_role_ids,
+      optional_role_ids: wire.optional_role_ids,
+      excluded_role_ids: wire.excluded_role_ids,
+      others_invited: wire.others_invited,
+    };
+  }
+  return {
+    ...event,
+    length_minutes: lengthMinutes(event.start_time, event.end_time),
+    required_role_ids: payload.required_role_ids ?? null,
+    optional_role_ids: payload.optional_role_ids ?? null,
+    excluded_role_ids: payload.excluded_role_ids ?? null,
+    others_invited: eventOthersInvited({
+      required_role_ids: idsOrNull(payload.required_role_ids),
+      others_invited:
+        typeof payload.others_invited === 'boolean'
+          ? payload.others_invited
+          : null,
+    }),
+  };
+}
+
+function idsOrNull(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : null;
+}
+
+/** An event as saved, as the change log's fields. */
+export function savedEventChangeView(event: Event): ChangeView {
+  return {
+    name: event.name,
+    description: event.description,
+    location: event.location,
+    start_time: event.start_time,
+    end_time: event.end_time,
+    length_minutes: lengthMinutes(event.start_time, event.end_time),
+    point_value: event.point_value,
+    event_type_id: event.event_type_id,
+    is_mandatory: event.is_mandatory,
+    recurrence_rule: event.recurrence_rule,
+    required_role_ids: event.required_role_ids,
+    optional_role_ids: event.optional_role_ids,
+    excluded_role_ids: event.excluded_role_ids,
+    others_invited: eventOthersInvited(event),
   };
 }
 
@@ -160,6 +310,19 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
   readonly module = 'events';
   readonly expiresAfterDays = NEW_EVENT_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'events';
+
+  /**
+   * Every accept is compared with the event as it was saved, read back, so
+   * one confirmed as shown and one made in the form are logged alike (what
+   * the form set, such as who is invited, is in the event).
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: NEW_EVENT_CHANGE_FIELDS,
+    view: newEventChangeView,
+    madeInForm: (payload) => madeEventIdOf(payload) !== null,
+    readSaved: async ({ chapterId, resultId }) =>
+      savedEventChangeView(await this.events.findById(resultId, chapterId)),
+  };
 
   constructor(
     private readonly events: EventService,
@@ -189,6 +352,9 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
       points_from: pointsFromOrNull(input.points_from),
       event_type_id: idOrNull(input.event_type_id),
       is_mandatory: input.is_mandatory === true,
+      attendance: attendanceOrNull(input.attendance),
+      attendance_line: text(input.attendance_line, ATTENDANCE_LINE_MAX),
+      attendance_from: pointsFromOrNull(input.attendance_from),
       recurrence_rule: ruleOrNull(input.recurrence_rule),
     };
     // Never from a proposal: only the member's accept names an event made.
@@ -308,6 +474,9 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
       event.event_type_id,
       input.chapterId,
     );
+    // Who it invites, as the event form would send it. A card from before
+    // #5853 has no list: everyone, as `is_mandatory` says.
+    const wire = event.attendance ? attendanceToWire(event.attendance) : null;
     const created = await this.events.create({
       chapter_id: input.chapterId,
       created_by: input.userId,
@@ -316,7 +485,16 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
       location: event.location,
       start_time: event.start_time,
       end_time: event.end_time,
-      is_mandatory: event.is_mandatory,
+      is_mandatory: wire ? wire.is_mandatory : event.is_mandatory,
+      ...(wire
+        ? {
+            required_role_ids: wire.required_role_ids,
+            optional_role_ids: wire.optional_role_ids,
+            excluded_role_ids: wire.excluded_role_ids,
+            // Always said: the server and its event service ship together.
+            others_invited: wire.others_invited,
+          }
+        : {}),
       ...(event.point_value === null ? {} : { point_value: event.point_value }),
       ...(typeId === null ? {} : { event_type_id: typeId }),
       ...(event.recurrence_rule === null

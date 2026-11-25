@@ -96,6 +96,27 @@ describe('my_tasks', () => {
     });
   });
 
+  it('puts a task with no due date after the dated ones (#5761)', async () => {
+    const list = jest.fn(async () => [
+      task({ id: 'task-4', title: 'Write the history', due_date: null }),
+      task(),
+    ]);
+    const result = await tool(list).run({ status: 'unfinished' }, context);
+
+    expect(linesOf(result)).toEqual(
+      expect.arrayContaining([
+        'The one due first is "Book the hall", due Saturday, November 14, 2026.',
+        '"Write the history": no due date. Not started. Assigned by Avery Lin.',
+      ]),
+    );
+    const lines = linesOf(result);
+    expect(
+      lines.findIndex((line) => line.startsWith('"Book the hall"')),
+    ).toBeLessThan(
+      lines.findIndex((line) => line.startsWith('"Write the history"')),
+    );
+  });
+
   it("never reads the chapter's tasks, even for an officer", async () => {
     const list = jest.fn(async () => [task()]);
     await tool(list).run({ status: 'unfinished' }, manager);

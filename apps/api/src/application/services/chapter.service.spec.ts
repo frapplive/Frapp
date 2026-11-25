@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { deriveSignetPalette } from '@repo/chapter-theme';
 import * as chapterTheme from '@repo/chapter-theme';
-import { ChapterService } from './chapter.service';
+import { CHAPTER_SEED, ChapterService } from './chapter.service';
 
 // Drives `CHAPTER_BILLING_BETA_OFF` per test, so the billing-on branch of
 // `create` runs too and turning billing back on stays a one-line change.
@@ -59,6 +59,10 @@ import {
   memberFixture,
   roleFixture,
 } from '#test/helpers/entity-fixtures';
+import {
+  TENANT_SLUG_REPOSITORY,
+  type ITenantSlugRepository,
+} from '#domain/repositories/tenant-slug.repository.interface';
 
 function mockRoleIdForName(name: string): string {
   return `role-${name.toLowerCase().replace(/\s+/g, '-')}`;
@@ -95,8 +99,13 @@ describe('ChapterService', () => {
   };
   let mockChannelRepo: { createMany: jest.Mock };
   let mockAuditLog: AuditLogServiceMock;
+  let mockTenantSlugRepo: jest.Mocked<ITenantSlugRepository>;
 
   beforeEach(async () => {
+    mockTenantSlugRepo = {
+      findBySlug: jest.fn().mockResolvedValue(null),
+      findCurrentByChapterIds: jest.fn().mockResolvedValue([]),
+    };
     mockStorageProvider = {
       getSignedUploadUrl: jest
         .fn()
@@ -129,6 +138,8 @@ describe('ChapterService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -171,6 +182,9 @@ describe('ChapterService', () => {
     };
 
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUser: jest.fn(),
       findByUserAndChapter: jest.fn(),
@@ -183,6 +197,7 @@ describe('ChapterService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
     };
 
     mockUserRepo = {
@@ -213,6 +228,7 @@ describe('ChapterService', () => {
         { provide: CHAT_CHANNEL_REPOSITORY, useValue: mockChannelRepo },
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: ChapterAuditLogService, useValue: mockAuditLog },
+        { provide: TENANT_SLUG_REPOSITORY, useValue: mockTenantSlugRepo },
       ],
     }).compile();
 
@@ -241,6 +257,9 @@ describe('ChapterService', () => {
         id: 'ch-2',
         name: 'Beta',
         university: 'Tech U',
+        // A council is a tenant in the same table (ADR-27); its kind rides
+        // the summary as stored.
+        kind: 'council',
         accent_color: '#1D4ED8',
         created_at: '2024-01-02',
         updated_at: '2024-01-02',
@@ -257,6 +276,7 @@ describe('ChapterService', () => {
       has_completed_onboarding: true,
       pledge_class_id: null,
       order_number: null,
+      joined_via_invite_id: null,
       created_at: '2024-01-01',
       updated_at: '2024-01-01',
     };
@@ -274,8 +294,22 @@ describe('ChapterService', () => {
     // Returned reversed so the membership-order remap is the thing under
     // test, not PostgREST's result order.
     mockChapterRepo.findByIds.mockResolvedValue([chapters[1], chapters[0]]);
+    // ch-2 has no current slug: the summary says null rather than guessing.
+    mockTenantSlugRepo.findCurrentByChapterIds.mockResolvedValue([
+      {
+        slug: 'alpha-rpi',
+        chapter_id: 'ch-1',
+        retired_at: null,
+        created_at: '2026-11-23',
+      },
+    ]);
 
     const result = await service.listForUser('user-1');
+
+    expect(mockTenantSlugRepo.findCurrentByChapterIds).toHaveBeenCalledWith([
+      'ch-1',
+      'ch-2',
+    ]);
 
     expect(mockMemberRepo.findByUser).toHaveBeenCalledWith('user-1');
     expect(mockChapterRepo.findByIds).toHaveBeenCalledTimes(1);
@@ -297,6 +331,9 @@ describe('ChapterService', () => {
         // would be a silent hole.
         dismissed_ops_nudges: [],
         chapter: toChapterMemberView(chapters[0]),
+        slug: 'alpha-rpi',
+        kind: 'chapter',
+        school: null,
       },
       {
         member_id: 'member-2',
@@ -306,6 +343,9 @@ describe('ChapterService', () => {
         // A stored list passes through untouched.
         dismissed_ops_nudges: ['events'],
         chapter: toChapterMemberView(chapters[1]),
+        slug: null,
+        kind: 'council',
+        school: null,
       },
     ]);
 
@@ -506,15 +546,24 @@ describe('ChapterService', () => {
       is_system: roleDef.is_system,
       display_order: roleDef.display_order,
       color: roleDef.color ?? null,
-      // Every seeded role can be pinged but Everyone, which only officers
-      // may use until the chapter opens it (#4191).
-      mentionable: roleDef.system_key !== SystemRoleKeys.MEMBER,
+      // Every seeded role can be pinged but Everyone and Actives, which only
+      // officers may use until the chapter opens them.
+      mentionable:
+        roleDef.system_key !== SystemRoleKeys.EVERYONE &&
+        roleDef.system_key !== SystemRoleKeys.MEMBER,
     }));
     expect(mockRoleRepo.createMany).toHaveBeenCalledWith(expectedRolesData);
-    expect(
-      expectedRolesData.find((r) => r.system_key === SystemRoleKeys.MEMBER)
-        ?.name,
-    ).toBe('Everyone');
+    const byKey = (key: string) =>
+      expectedRolesData.find((r) => r.system_key === key);
+    // The base role is Actives (Paul, 2026-11-21); Everyone is the floor,
+    // outside the tiers, with the directory and nothing private.
+    expect(byKey(SystemRoleKeys.MEMBER)?.name).toBe('Actives');
+    expect(byKey(SystemRoleKeys.MEMBER)?.tier_id).toBe('tier-3');
+    expect(byKey(SystemRoleKeys.EVERYONE)).toMatchObject({
+      name: 'Everyone',
+      tier_id: null,
+      permissions: ['members:view'],
+    });
     expect(result).toEqual(chapter);
   });
 
@@ -770,11 +819,49 @@ describe('ChapterService', () => {
       config: {},
     });
 
+    // The founder is an active too (#5802); the database appends Everyone.
     expect(mockMemberRepo.create).toHaveBeenCalledWith({
       user_id: 'user-1',
       chapter_id: chapter.id,
-      role_ids: [presidentRole.id],
+      role_ids: [presidentRole.id, 'role-actives'],
       has_completed_onboarding: true,
+    });
+  });
+
+  // #5933: a council's seed deletes its row when seeding fails, so a half-made
+  // council never holds its type at its school; a chapter's keeps the row.
+  describe('a seed that fails after the tenant row exists', () => {
+    const failingSeed = (deleteOnFailure: boolean) => ({
+      ...CHAPTER_SEED,
+      deleteOnFailure,
+    });
+    beforeEach(() => {
+      mockChapterRepo.create.mockResolvedValue(
+        chapterFixture({ id: 'council-1', subscription_status: 'active' }),
+      );
+      mockRoleTierRepo.createMany.mockRejectedValue(new Error('pool down'));
+    });
+
+    it('deletes the row and rethrows when the seed asks', async () => {
+      await expect(
+        service.create(
+          'user-1',
+          { name: 'RPI IFC', university: 'RPI', config: {} },
+          failingSeed(true),
+        ),
+      ).rejects.toThrow('pool down');
+      expect(mockChapterRepo.deleteById).toHaveBeenCalledWith('council-1');
+    });
+
+    it("keeps a chapter's row, as before", async () => {
+      await expect(
+        service.create(
+          'user-1',
+          { name: 'Alpha', university: 'State U', config: {} },
+          failingSeed(false),
+        ),
+      ).rejects.toThrow('pool down');
+      expect(mockChapterRepo.deleteById).not.toHaveBeenCalled();
     });
   });
 
@@ -816,8 +903,8 @@ describe('ChapterService', () => {
 
     expect(mockChannelRepo.createMany).toHaveBeenCalledTimes(1);
     // Spelled out rather than read off `DEFAULT_CHANNELS`, so the test pins
-    // who can see and post in each seeded channel (#3722) and which one the
-    // seeder flags as the audit log (#3909), instead of echoing the constant.
+    // who can see and post in each seeded channel (#3722), instead of echoing
+    // the constant. No `#chapter-audit` since the Logs page (2026-11-21).
     const alumni = `role:${mockRoleIdForName('Alumni').toLowerCase()}`;
     const base = { chapter_id: chapter.id };
     expect(mockChannelRepo.createMany).toHaveBeenCalledWith([
@@ -828,7 +915,6 @@ describe('ChapterService', () => {
         who_can_see: null,
         who_can_post: null,
         is_read_only: false,
-        is_audit_log: false,
       }),
       expect.objectContaining({
         ...base,
@@ -838,16 +924,6 @@ describe('ChapterService', () => {
         // The top two starting tiers: officers announce, everyone reads.
         who_can_post: ['tier:tier-1', 'tier:tier-2'],
         is_read_only: true,
-        is_audit_log: false,
-      }),
-      expect.objectContaining({
-        ...base,
-        name: 'chapter-audit',
-        type: 'PUBLIC',
-        who_can_see: null,
-        who_can_post: [],
-        is_read_only: true,
-        is_audit_log: true,
       }),
       expect.objectContaining({
         ...base,
@@ -864,7 +940,6 @@ describe('ChapterService', () => {
         ].sort(),
         who_can_post: null,
         is_read_only: false,
-        is_audit_log: false,
       }),
     ]);
     for (const row of mockChannelRepo.createMany.mock.calls[0][0]) {

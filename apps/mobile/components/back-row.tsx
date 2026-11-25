@@ -5,10 +5,12 @@ import { SignetTokens } from "@repo/theme/signet";
 import { BackGlyph } from "@/components/control-glyphs";
 import { GlassSurface } from "@/components/glass-surface";
 import { useScreenBelow } from "@/lib/back-target";
+import { MINUTES_DOCUMENTS_HREF } from "@/lib/more/document-links";
 import { goBackTo } from "@/lib/href";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { pageSurfaces } from "@/lib/surfaces";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { SECTION_NAMES } from "@repo/validation";
 
 /** The capsule as drawn: 36pt tall and fully round. */
 export const BACK_CAPSULE_HEIGHT = 36;
@@ -57,20 +59,20 @@ export const BACK_TO_CHAPTER_SETTINGS: BackTarget = {
   label: "Chapter settings",
   href: "/chapter-settings",
 };
-/** A tier's or a role's page, opened from Roles (#4074). */
+/** A tier's or a role's page, opened from Roles and groups (#4074). */
 export const BACK_TO_ROLES: BackTarget = {
-  label: "Roles",
+  label: "Roles and groups",
   href: "/chapter-roles",
 };
 /** s07, opened from a Calendar row (and from Chat home's Up next). */
 export const BACK_TO_EVENTS: BackTarget = {
-  label: "Calendar",
+  label: SECTION_NAMES.calendar,
   href: "/events",
 };
 
 /** The task board's way back when nothing is under it: the Activity tab (#4610). */
 export const BACK_TO_ACTIVITY: BackTarget = {
-  label: "Activity",
+  label: SECTION_NAMES.activity,
   href: "/activity",
 };
 /** A task's screen (#5492) and Suggested, opened from the task board. */
@@ -80,9 +82,19 @@ export const BACK_TO_TASKS: BackTarget = { label: "Tasks", href: "/tasks" };
  * home since #3362, so its way back is Chat.
  */
 export const BACK_TO_CHAT: BackTarget = { label: "Chat", href: "/" };
+/**
+ * A meeting's minutes, and a series' minutes, with nothing under them:
+ * Documents on the Minutes file type, where a meeting's posted minutes are
+ * filed since #5949 (the Minutes list's place until then). Labelled as the
+ * screen is titled, Resources.
+ */
+export const BACK_TO_MINUTES: BackTarget = {
+  label: SECTION_NAMES.resources,
+  href: MINUTES_DOCUMENTS_HREF,
+};
 /** Invite members, opened from the Directory's + rather than a You row. */
 export const BACK_TO_DIRECTORY: BackTarget = {
-  label: "Directory",
+  label: SECTION_NAMES.directory,
   href: "/directory",
 };
 
@@ -179,7 +191,9 @@ function BackRowView({
   // leaves the screen goes back through the stack.
   const below = useScreenBelow();
   const popsTo = onPress ? null : below;
-  const shown = popsTo ? popsTo.title : label;
+  // A screen titled with the chapter's word (the recruitment list) has no
+  // fixed title; the label its screen passed names it.
+  const shown = popsTo ? (popsTo.title ?? label) : label;
   // Held state drives the capsule's lift. The glass, not the target, is what
   // lifts, so the feedback keeps the capsule's shape on every platform rather
   // than an Android ripple filling the 44pt rectangle around it.

@@ -103,7 +103,9 @@ function collectUsages(): Usage[] {
       const source = readFileSync(file, "utf8");
       for (const pattern of LITERAL_PATTERNS) {
         for (const match of source.matchAll(pattern)) {
-          const href = match[1];
+          // The path is what must resolve; a query string is the screen's
+          // params (`/directory?sort=points`, #5950).
+          const href = match[1].split("?")[0]!;
           // Only in-app paths are ours to resolve; external URLs and template
           // placeholders are somebody else's contract.
           if (!href.startsWith("/")) continue;

@@ -1,8 +1,10 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -34,6 +36,7 @@ import {
   SetChapterGroupMembersDto,
   UpdateChapterGroupDto,
 } from '../dtos/chapter-group.dto';
+import { VerifySessionLocally } from '../decorators/session-check.decorator';
 
 /**
  * A chapter's groups (#4076): named sets of members with no permissions,
@@ -50,14 +53,17 @@ import {
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('groups')
 export class ChapterGroupController {
   constructor(private readonly groups: ChapterGroupService) {}
 
   @Get()
+  @VerifySessionLocally()
   @ApiOperation({
     summary:
-      "List the chapter's groups with their members: manual ones, then pledge classes and class years that have members",
+      "List the chapter's groups with their members: manual ones, then pledge classes, class years and majors that have members",
   })
   @ApiOkResponse({ type: ChapterGroupDto, isArray: true })
   async list(@CurrentChapterId() chapterId: string) {
@@ -103,6 +109,33 @@ export class ChapterGroupController {
     @Body() dto: SetChapterGroupMembersDto,
   ) {
     return this.groups.setMembers(id, chapterId, userId, dto.member_ids);
+  }
+
+  @Post(':id/members/:userId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Put one member in a manual group' })
+  @ApiOkResponse({ type: ChapterGroupDto })
+  @RequirePermissions(SystemPermissions.GROUPS_MANAGE)
+  async addMember(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') actorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) memberUserId: string,
+  ) {
+    return this.groups.addMember(id, chapterId, actorId, memberUserId);
+  }
+
+  @Delete(':id/members/:userId')
+  @ApiOperation({ summary: 'Take one member out of a manual group' })
+  @ApiOkResponse({ type: ChapterGroupDto })
+  @RequirePermissions(SystemPermissions.GROUPS_MANAGE)
+  async removeMember(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') actorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) memberUserId: string,
+  ) {
+    return this.groups.removeMember(id, chapterId, actorId, memberUserId);
   }
 
   @Delete(':id')

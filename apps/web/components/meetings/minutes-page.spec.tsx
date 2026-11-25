@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MeetingMinutes } from "@repo/hooks";
 
 const mocks = vi.hoisted(() => ({
+  datesReview: vi.fn(),
   meeting: { current: null as unknown },
   event: { current: undefined as unknown },
   actionItemTasks: { current: [] as unknown[] },
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@repo/hooks", () => ({
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   useMeetingNotes: () => ({ isPending: false, data: mocks.notes.current }),
   useSaveMeetingNotes: () => ({
     mutateAsync: mocks.saveNotes,
@@ -117,6 +119,32 @@ vi.mock("@repo/hooks", () => ({
 }));
 
 // The list has its own spec; here only where the page puts it.
+// Coming up's tracking reads events and tasks of its own (its spec covers
+// it); here the dates draw as plain tiles.
+vi.mock("@/components/meetings/coming-up-dates", async () => {
+  const { DatesView } = await import("./minutes-read");
+  return {
+    ComingUpDates: ({
+      dates,
+    }: {
+      dates: React.ComponentProps<typeof DatesView>["dates"];
+    }) => <DatesView dates={dates} />,
+  };
+});
+
+// The review after Post has its own spec; here only when the page starts it.
+vi.mock("@/components/meetings/coming-up-post-review", () => ({
+  ComingUpPostReview: (props: { meetingId: string }) => {
+    mocks.datesReview(props);
+    return null;
+  },
+}));
+
+// Each action item's Create task has its own spec (#6051).
+vi.mock("@/components/meetings/action-item-task", () => ({
+  useActionItemTaskRow: () => undefined,
+}));
+
 vi.mock("@/components/ai/suggested-tasks", () => ({
   SuggestedTasks: ({ source }: { source: { type: string; id: string } }) => (
     <div data-testid="suggested-tasks">{`${source.type}:${source.id}`}</div>
@@ -240,6 +268,7 @@ function loaded(meeting: MeetingMinutes) {
 }
 
 beforeEach(() => {
+  mocks.datesReview.mockReset();
   mocks.notes.current = null;
   for (const fn of [
     mocks.saveNotes,
@@ -530,7 +559,7 @@ describe("MinutesPage", () => {
     expect(mine.textContent).toContain("Yours");
     // The reader's own come first, alone, until they ask for all of them.
     expect(screen.queryByText("Send the shirt form")).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "All 2" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All 2" }));
     const theirs = screen.getByText("Send the shirt form").parentElement!;
     expect(theirs.textContent).not.toContain("Yours");
     expect(screen.getByText("Nobody named yet")).toBeTruthy();
@@ -811,6 +840,10 @@ describe("MinutesPage", () => {
       id: "m-1",
       expectedUpdatedAt: "2026-11-10T01:00:00.000Z",
     });
+    // Then the Coming up review, once the minutes are posted (#5672).
+    expect(mocks.datesReview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ meetingId: "m-1" }),
+    );
   });
 
   it("saves typing that hasn't saved yet before posting, and posts that version", async () => {
@@ -1280,6 +1313,7 @@ describe("MinutesPage", () => {
           expect.objectContaining({ title: "Couldn't post the minutes" }),
         ),
       );
+      expect(mocks.datesReview).not.toHaveBeenCalled();
       expect(
         (
           screen.getByRole("textbox", {
@@ -1431,7 +1465,7 @@ describe("MinutesPage", () => {
       mocks.requestDraft.mockResolvedValue({ ...NO_DRAFT, status: "drafting" });
       render(<MinutesPage id="m-1" />);
       expect(
-        screen.getByText(/Turn on Frapp AI to draft from your notes/),
+        screen.getByText(/Turn on Frapp Intelligence to draft from your notes/),
       ).toBeTruthy();
       fireEvent.change(screen.getByRole("textbox", { name: "Your notes" }), {
         target: { value: "notes" },
@@ -1787,13 +1821,18 @@ describe("MinutesPage", () => {
       );
     });
 
-    it("offers Link an event on minutes whose event is gone", () => {
+    it("offers Link a meeting on minutes with no meeting, and holds Post until then (Paul, 2026-11-20)", () => {
       mocks.draft.current = null;
       loaded({ ...ownDraft(), event_id: null });
       render(<MinutesPage id="m-1" />);
       expect(
-        screen.getByRole("button", { name: "Link an event" }),
+        screen.getByRole("button", { name: "Link a meeting" }),
       ).toBeTruthy();
+      const post = screen.getByRole("button", {
+        name: "Link a meeting first",
+      }) as HTMLButtonElement;
+      expect(post.disabled).toBe(true);
+      expect(screen.queryByRole("button", { name: "Post" })).toBeNull();
     });
   });
 });

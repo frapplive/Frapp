@@ -26,8 +26,9 @@ const sections = [
   {
     heading: "2. Eligibility",
     paragraphs: [
-      "You must be at least 18 years old to use Frapp. By accepting these terms, you confirm that you are.",
-      "We may close an account that we learn belongs to someone under 18.",
+      "You must be at least 17 years old to use Frapp. By accepting these terms, you confirm that you are.",
+      "Frapp Intelligence, Frapp's AI features (called Frapp AI in earlier versions of the app), is only for users 18 or older. Turning it on confirms that you are.",
+      "We may close an account that we learn belongs to someone under 17, and turn off Frapp Intelligence for someone we learn is under 18.",
     ],
   },
   {

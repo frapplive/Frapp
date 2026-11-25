@@ -18,6 +18,7 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | RBAC, roles, presidency transfer                     | [`rbac.md`](rbac.md)                       |
 | Backwork (academic library)                          | [`backwork.md`](backwork.md)               |
 | Rush / recruitment / intake                          | [`rush.md`](rush.md)                       |
+| IFC recruitment (proposed)                           | [`ifc-recruitment.md`](ifc-recruitment.md) |
 | Points ledger — security, audit, atomicity           | [`points.md`](points.md)                   |
 | Chapter billing (Stripe), grace periods, dues        | [`billing.md`](billing.md)                 |
 | Chat (channels, DMs, messages, slash commands)       | [`chat/`](chat/README.md)                  |
@@ -26,27 +27,29 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Events, attendance, recurring events, calendar       | [`events.md`](events.md)                   |
 | Onboarding wizard + invites + walkthrough            | [`onboarding.md`](onboarding.md)           |
 | Polls and voting                                     | [`polls.md`](polls.md)                     |
-| Predictions (stake points on chapter questions)      | [`predictions.md`](predictions.md)         |
+| Predictions (API only, no screen; parked)            | [`predictions.md`](predictions.md)         |
 | Member directory and profiles                        | [`members.md`](members.md)                 |
-| Activity feed                                        | [`activity-feed.md`](activity-feed.md)     |
 | Activity page (what needs you, what you made)        | [`activity.md`](activity.md)               |
 | Global search                                        | [`search.md`](search.md)                   |
 | Observability                                        | [`observability.md`](observability.md)     |
 | Service hours (philanthropy)                         | [`service-hours.md`](service-hours.md)     |
 | Tasks                                                | [`tasks.md`](tasks.md)                     |
+| Frapp links: what a task or event points at          | [`frapp-links.md`](frapp-links.md)         |
 | Chapter documents                                    | [`chapter-docs.md`](chapter-docs.md)       |
 | Semester rollover                                    | [`semester-rollover.md`](semester-rollover.md) |
 | Reports and export                                   | [`reports.md`](reports.md)                 |
 | Legal (ToS, Privacy, FERPA)                          | [`legal.md`](legal.md)                     |
 | Data retention                                       | [`data-retention.md`](data-retention.md)   |
+| Campus spaces, cross-chapter messages, campus moderation (proposed) | [`campus-spaces.md`](campus-spaces.md) |
 | Alumni features                                      | [`alumni.md`](alumni.md)                   |
 | Chapter branding                                     | [`branding.md`](branding.md)               |
 | Settings shell, customization, audit                 | [`settings/`](settings/README.md)          |
 | Ops integrations                                     | [`integrations.md`](integrations.md)       |
 | Meetings (AI-drafted minutes, suggested tasks)       | [`meetings.md`](meetings.md)               |
-| Vault (encrypted private storage)                    | [`vault.md`](vault.md)                     |
+| Vault (encrypted private storage; parked, not built) | [`vault.md`](vault.md)                     |
 | AI features (corpus scope, citations, non-goals)     | [`ai.md`](ai.md)                           |
 | Chapter config endpoints                             | [`chapter-config.md`](chapter-config.md)   |
+| Council types: IFC, Panhellenic, NPHC, MGC (proposed) | [`council-types.md`](council-types.md)     |
 
 Each topic file is canonical **intended** behavior. Delivery (which is shipped vs. queued) is tracked in **GitHub Issues** (see [`docs/ci-cd/github-pm.md`](../../docs/ci-cd/github-pm.md)), not in this spec.
 
@@ -101,12 +104,16 @@ Routes whose cost or blast radius is not proportional to the request. Everything
 | `POST /v1/events/:id/agenda-suggestions/refresh` | 5/min | One model call per request ([`events.md` § Suggested agenda items](events.md#suggested-agenda-items)). |
 | `POST /v1/events/:id/agenda-suggestions/:suggestionId/add`, `/dismiss` | 10/min | Add writes the event's agenda, as `PATCH /v1/events/:id` does. |
 | `POST /v1/invites/preview` | 10/min | Token-guessing surface, the same as redeem. |
+| `POST /v1/invites/details` | 120/min | Needs no account, so it counts per address. Higher than the default, not lower: a whole pledge class opens the chapter link at once on one campus network, and the token, not the rate, keeps a guess from finding anything ([`onboarding.md`](onboarding.md)). |
+| `POST /v1/invites/funnel` | 120/min | The invite card's funnel steps (#5663). Needs no account, so it counts per address, generously for the same campus-network reason as details; its own counter, so a visitor's steps never use up the card's reads ([`observability.md` § Invite Card Funnel](observability.md#invite-card-funnel)). |
+| `POST /v1/rush/bid-confirmations/preview`, `POST /v1/rush/bid-confirmations/confirm` | 120/min each | The PNM's one-tap bid confirmation (#5973). Needs no account, so it counts per address, generously for the same campus-network reason as invite details; the 256-bit token keeps a guess from finding anything ([`rush.md` § Bids](rush.md#bids)). |
+| `POST /v1/invites/ask-for-new-link` | 3/hour | Each call pushes a notification to the person who sent the invite, who never asked to hear from the caller. A real visitor asks once. |
 | `POST /v1/integrations/dev-log` | 10/min | Token-guessing surface, and each call writes a message into a channel. Counted per caller IP: its bearer token is not a member's ([`chat/integrations.md`](chat/integrations.md#the-teams-dev-log-channel)). |
 | `POST /v1/events`, `PATCH /v1/events/:id` | 10/min | Each one pushes a notification to every member of the chapter. |
 | `POST /v1/chat/reports` | 10/min | Each new report notifies every officer who reviews reports. A member reporting a run of messages files ten a minute. |
 | `POST /v1/channels/group-dm` | 10/min | Each call makes a new conversation in every listed member's list. `POST /v1/channels/dm` keeps the default: it is get-or-create, and how a member reopens a DM. |
 | `POST /v1/ai/ask` | 10/min | Each question is a search and up to three model calls, held open as a stream, plus the request planning call for a member Frapp can act for ([`ai.md` § One conversation](ai.md#one-conversation)). The member's and the chapter's spend caps ([`ai.md`](ai.md#pricing)) bound the cost; this bounds the burst. |
-| `POST /v1/ai/ask/dictation` | 10/min | Each call tidies the words dictated into Ask with one model call ([`ai.md` § Ask Frapp](ai.md#ask-frapp)). The same spend caps bound the cost; this bounds the burst, at the same ceiling as the question it becomes. |
+| `POST /v1/ai/ask/dictation` | 10/min | Each call tidies the words dictated into Ask with one model call ([`ai.md` § Frapp Intelligence](ai.md#frapp-intelligence)). The same spend caps bound the cost; this bounds the burst, at the same ceiling as the question it becomes. |
 | `POST /v1/backwork/drafts/:id/fill` | 10/min | Each fill reads one stored file of up to 25 MB and makes one model call ([`backwork.md` § AI Fill](backwork.md#ai-fill)). The spend caps bound the model cost; this bounds the reads. It matches `POST /v1/backwork/upload-url`, so the review table's fill keeps pace with a bulk upload. |
 | `POST /v1/ai/catch-up` | 10/min | Each summary reads up to 300 messages and makes one model call ([`ai.md` § Catch me up](ai.md#catch-me-up)). The same spend caps bound the cost; this bounds the burst. |
 | `POST /v1/nudges/current` | 10/min | Opening Activity may write the member's nudge card, which is one model call ([`ai.md` § Nudges](ai.md#nudges)). A card already showing is returned without one. |
@@ -130,10 +137,27 @@ Writes that reach people outside the chapter also have a rolling 24-hour ceiling
 | --- | --- | --- |
 | Emailed invites (`POST /v1/invites/email`), per chapter | 300 in any 24 hours | `invite.email_daily_limit` |
 | Emailed invites, per sender across every chapter | 300 in any 24 hours | `invite.email_daily_limit` |
-| Chapters started (`POST /v1/chapters/onboard`), per account | 3 in any 24 hours | `chapter.start_daily_limit` |
+| Chapters and councils started (`POST /v1/chapters/onboard`, `POST /v1/councils` since #5933), per account, counted together | 3 in any 24 hours | `chapter.start_daily_limit` |
 
 - A new president inviting a whole 150-member chapter on day one sends 150 emails, and resends to mistyped or bounced addresses stay inside 300. A chapter at its ceiling can still share a join link, which sends no email, and the refusal says so.
 - Every emailed invite whose email was handed to the provider counts, revoked, replaced, used or not, because the email went out. One whose send failed stops counting once the batch finishes (its join link still works, shared by hand), so re-sending to the addresses that failed costs only what goes out. Share-link invites never count. A batch that would pass a ceiling is refused whole, before any token is made or email sent.
 - Starting a chapter keeps the default write throttle (30 a minute) and no tighter one, so a president who fixes the wizard's errors and resubmits isn't held up by the tries that were refused; only chapters actually made count.
 - There is no tighter ceiling for a chapter of one member: a real chapter is one on its first day too, so any ceiling that lets that president invite everyone is no tighter than these. The per-sender ceiling, which counts across chapters, and the chapters-started ceiling are what bound an account that starts chapters only to send email.
 - The chapter's starter is the account onboarding stamps as `legal_accepted_by`; a deleted chapter no longer counts.
+
+### School-email codes
+
+The one-time code that proves a school address (#5929, [`school-layer.md`](../architecture/school-layer.md) § 2.2) has its own ceilings, per mailbox, per IP and per account, over a rolling hour. The database counts and writes under a lock on each (`start_school_email_verification`), so they hold across API replicas, and the numbers live in `@repo/validation`'s `school-verification.ts`, which the API passes to it. The IP is stored as an unkeyed hash, which keeps the raw address out of the table but isn't anonymous: anyone with the table could work an IPv4 address back out. Code rows older than a day are deleted when the next code is asked for, by anyone; nothing deletes them on a schedule.
+
+| What | Ceiling | Refusal |
+| --- | --- | --- |
+| Codes to one mailbox, from any account (a `+tag` counts as the same mailbox) | 5 an hour | `429 school.code.rate_limited` |
+| Codes from one IP, across accounts and addresses | 20 an hour (a campus network shares one) | `429 school.code.rate_limited` |
+| Codes one account asks for, across addresses and schools | 10 an hour | `429 school.code.rate_limited` |
+| Another code from the same account to the same school | one a minute | `429 school.code.cooldown` |
+| Wrong tries on one code | 5, then the code stops working | `429 school.code.too_many_attempts` |
+
+- A code works for 10 minutes and once. Only the account's newest code at a school is checked; a match closes the rest. A code whose email didn't go out is deleted, so it counts toward no ceiling and the code already sent keeps working.
+- Only a plain `local@domain` address gets a code (`400 school.email.invalid` otherwise), and its domain is read after its last `@`, so a quoted local part can't name one domain to the check and another to the mail server.
+- The three hourly ceilings answer with one sentence and one code, so a refusal doesn't say whose ceiling it was. Each says how long to wait.
+- Only an address on one of the school's verified domains is sent a code, and the domain is checked again when the code is typed. A mailbox another account already verified at the school (however a `+tag` spells it) is refused only after its code matches, so only the address's holder learns it is taken.

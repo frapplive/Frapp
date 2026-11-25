@@ -39,7 +39,8 @@ import {
 } from "./state-block";
 import { HistoryRow, HistoryRowsSkeleton } from "./history-row";
 import { ListRow, ListRowSkeleton, ListSection } from "./list-section";
-import { TaskRow, TaskRowSkeleton } from "./tasks/task-row";
+import { TaskListSkeleton, TaskRow, TaskRowSkeleton } from "./tasks/task-row";
+import { TaskDetailSkeleton } from "./tasks/task-facts";
 import { ChoiceRow, ChoiceRowSkeleton } from "./auth/choice-row";
 import { CardListSkeleton } from "./card-list-skeleton";
 import { BalanceCardSkeleton } from "./dues/balance-card";
@@ -292,6 +293,8 @@ describe("Skeleton bars take the step above their own ground", () => {
     ["EventsCalendarSkeleton", <EventsCalendarSkeleton key="e" />],
     ["NotificationListSkeleton", <NotificationListSkeleton key="n" />],
     ["ProfileSkeleton", <ProfileSkeleton key="p" />],
+    ["TaskListSkeleton", <TaskListSkeleton key="tl" />],
+    ["TaskDetailSkeleton", <TaskDetailSkeleton key="td" />],
   ])("%s: every bar on the page takes surface1", (_, node) => {
     const all = fills(render(node));
     expect(all.length).toBeGreaterThan(0);
@@ -470,6 +473,7 @@ describe("Placeholder rows sit on their real row's frame", () => {
           dueAt: null,
           assigneeId: null,
           completedAt: null,
+          completedBy: null,
           confirmedAt: null,
           pointReward: 5,
           pointsAwarded: false,
@@ -487,6 +491,9 @@ describe("Placeholder rows sit on their real row's frame", () => {
           createdAt: null,
           groupId: null,
           meetingId: null,
+          followedBy: null,
+          followedByName: null,
+          attachments: [],
           group: null,
           openTaskId: null,
           series: null,

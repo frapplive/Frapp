@@ -7,7 +7,11 @@ import {
   TaskStatus,
   TaskSubtask,
 } from '../entities/task.entity';
-import type { TaskGroupAudience, TaskProofKind } from '@repo/validation';
+import type {
+  FrappLink,
+  TaskGroupAudience,
+  TaskProofKind,
+} from '@repo/validation';
 
 export const TASK_REPOSITORY = 'TASK_REPOSITORY';
 
@@ -50,6 +54,12 @@ export interface TaskListFilter {
   confirmed?: boolean;
   /** Only tasks marked done at or after this instant (`completed_at`). */
   completedSince?: string;
+  /**
+   * Only tasks not yet confirmed, or marked done at or after this instant
+   * (`completed_at`), confirmed or not: one read that holds a member's open
+   * tasks and what they finished since, for Activity (#5746). Not with `after`.
+   */
+  unconfirmedOrCompletedSince?: string;
 }
 
 /**
@@ -80,6 +90,18 @@ export interface ITaskRepository {
   findByChapter(chapterId: string, query?: TaskListQuery): Promise<Task[]>;
   /** How many of the chapter's tasks match `query`, counted in SQL. */
   countByChapter(chapterId: string, query?: TaskListFilter): Promise<number>;
+  /**
+   * {@link findByChapter}, and with `withTotal` how many rows match before
+   * `limit` (#5746), counted by the request that reads the first page, so a
+   * capped list and its total cost one round trip. An uncapped read is
+   * counted too, which ends it without an empty page. `total` is null when
+   * the read was not counted.
+   */
+  findByChapterCounted(
+    chapterId: string,
+    query?: TaskListQuery,
+    options?: { withTotal?: boolean },
+  ): Promise<{ tasks: Task[]; total: number | null }>;
   /**
    * The chapter's tasks due on or after `dueFrom` (`YYYY-MM-DD`), or made at
    * or after `createdFrom`, every row of them: read in pages, so a chapter
@@ -163,6 +185,18 @@ export interface ITaskRepository {
    * copy's checklist, in one transaction. Returns the copies.
    */
   createGroup(input: CreateTaskGroupInput): Promise<Task[]>;
+  /**
+   * New members' copies of an existing group (#5905), in one transaction
+   * that locks the group: each at To do, made from `templateId` (one of the
+   * group's copies) with its checklist titles. A member who already has a
+   * copy is skipped. Returns the copies made.
+   */
+  addGroupCopies(
+    chapterId: string,
+    groupId: string,
+    templateId: string,
+    assigneeIds: string[],
+  ): Promise<Task[]>;
   /** These groups of the chapter, any order. */
   findGroups(chapterId: string, ids: string[]): Promise<TaskGroup[]>;
   /** Every copy of these groups, any order. */
@@ -316,6 +350,8 @@ export interface CreateTaskSeriesInput {
   /** When the first copy is due in the rule's zone (end of day if untimed). */
   latest_due_at: string;
   next_due_date: string;
+  /** What every copy is made with (Frapp links), already checked. */
+  attachments: FrappLink[];
 }
 
 /** What {@link ITaskRepository.createGroup} writes (#4295 step 3). */
@@ -331,7 +367,7 @@ export interface CreateTaskGroupInput {
   assignee_ids: string[];
   title: string;
   description: string | null;
-  due_date: string;
+  due_date: string | null;
   due_at: string | null;
   point_reward: number | null;
   proof_kind: TaskProofKind;
@@ -340,4 +376,6 @@ export interface CreateTaskGroupInput {
   meeting_id?: string | null;
   /** The tier, role or group every copy is from (#5473), or null. */
   followed_by?: string | null;
+  /** What every copy holds (Frapp links), already checked. */
+  attachments: FrappLink[];
 }

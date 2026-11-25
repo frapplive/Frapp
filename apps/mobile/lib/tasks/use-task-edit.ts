@@ -15,6 +15,7 @@ import {
 import {
   TASK_SERIES_SCOPE_COPY,
   taskSeriesBody,
+  type FrappLink,
   type RepeatDraft,
   type TaskProofKind,
 } from "@repo/validation";
@@ -23,10 +24,12 @@ import type { PickedImage } from "@/lib/chat/attachment-upload";
 import type { TaskRowModel } from "@/lib/tasks/board";
 import {
   assigneeSave,
+  attachmentsSave,
   descriptionSave,
   dueSave,
   photosSave,
   pointsSave,
+  followerSave,
   proofSave,
   reassignRestarts,
   referencePhotos,
@@ -36,7 +39,7 @@ import {
   seriesScopeOf,
   TASK_EDIT_COPY,
   titleSave,
-  type TaskDueDraft,
+  type TaskDuePick,
   type TaskFieldSave,
 } from "@/lib/tasks/task-edit";
 import {
@@ -51,7 +54,8 @@ interface TaskEditDrafts {
   title: string | null;
   description: string | null;
   points: string | null;
-  due: TaskDueDraft | null;
+  /** A day and time, or "none" once the due is taken off (#5761). */
+  due: TaskDuePick | null;
   /** The Repeat as picked, on a copy of a live series (#5119). */
   repeat: RepeatDraft | null;
 }
@@ -59,7 +63,8 @@ interface TaskEditDrafts {
 type DraftKey = keyof TaskEditDrafts;
 
 /** Every field that saves: the typed ones, and those sent as they change. */
-type FieldKey = DraftKey | "proof" | "photos" | "who";
+type FieldKey =
+  DraftKey | "proof" | "photos" | "who" | "follower" | "attachments";
 
 const NO_DRAFTS: TaskEditDrafts = {
   title: null,
@@ -87,9 +92,17 @@ const FIELD_ORDER: readonly FieldKey[] = [
   "proof",
   "photos",
   "who",
+  "follower",
+  "attachments",
 ];
 
-const SENT_KEYS: readonly FieldKey[] = ["proof", "photos", "who"];
+const SENT_KEYS: readonly FieldKey[] = [
+  "proof",
+  "photos",
+  "who",
+  "follower",
+  "attachments",
+];
 
 /**
  * Commit every draft: the fields together, then the Repeat (#5119). A
@@ -150,8 +163,11 @@ export interface TaskEditing {
   drafts: TaskEditDrafts;
   /** A text field as typed; saved by `commit` (on blur or Return). */
   type: (key: "title" | "description" | "points", text: string) => void;
-  /** A picked day or time, saved a moment later (`DUE_SAVE_DELAY_MS`). */
-  pickDue: (next: TaskDueDraft) => void;
+  /**
+   * A picked day or time, or "none" for No due date (#5761), saved a moment
+   * later (`DUE_SAVE_DELAY_MS`).
+   */
+  pickDue: (next: TaskDuePick) => void;
   /**
    * The Repeat as picked (#5119), saved with Done or as the screen goes:
    * its chips and numbers change a step at a time, and only the last of
@@ -175,6 +191,15 @@ export interface TaskEditing {
   /** Put away what the last saves said, for the screen's next action. */
   dismiss: () => void;
   setProof: (next: TaskProofKind) => void;
+  /** From (#5473): a tier, role or group entry, or `null` for none. */
+  setFollower: (next: string | null) => void;
+  /**
+   * Attached (`spec/behavior/frapp-links.md`), changed through `update`
+   * against the list as the saves on their way leave it; sent at once.
+   */
+  changeAttachments: (update: (current: FrappLink[]) => FrappLink[]) => void;
+  /** Attached as the saves on their way leave it, drawn meanwhile. */
+  attachments: FrappLink[];
   /** Take one reference photo off the task. */
   removePhoto: (photoId: string) => void;
   /** Pick photos from the library and add them to the task. */
@@ -234,6 +259,10 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
   );
   const [uploading, setUploading] = useState<readonly PickedImage[]>([]);
   const [picking, setPicking] = useState(false);
+  const [shownAttachments, setShownAttachments] = useState<FrappLink[] | null>(
+    null,
+  );
+  const attachmentTurn = useRef(0);
 
   // Read by the callbacks, which outlive a render: the task as last read,
   // the drafts as last typed, each field's save on its way, and what each
@@ -462,7 +491,7 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
   );
 
   const pickDue = useCallback(
-    (next: TaskDueDraft) => {
+    (next: TaskDuePick) => {
       setFailure("due", null);
       setDraft("due", next);
       if (dueTimer.current) clearTimeout(dueTimer.current);
@@ -508,6 +537,28 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
   const setProof = useCallback(
     (next: TaskProofKind) =>
       void sendField("proof", proofSave(baseline(), next)),
+    [sendField, baseline],
+  );
+
+  const setFollower = useCallback(
+    (next: string | null) =>
+      void sendField("follower", followerSave(baseline(), next)),
+    [sendField, baseline],
+  );
+
+  const changeAttachments = useCallback(
+    (update: (current: FrappLink[]) => FrappLink[]) => {
+      const before = baseline();
+      const next = update(before.attachments);
+      const turn = ++attachmentTurn.current;
+      setShownAttachments(next);
+      // Only the latest change hands back to the task as read.
+      void sendField("attachments", attachmentsSave(before, next)).finally(
+        () => {
+          if (attachmentTurn.current === turn) setShownAttachments(null);
+        },
+      );
+    },
     [sendField, baseline],
   );
 
@@ -621,6 +672,9 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     discard,
     dismiss,
     setProof,
+    setFollower,
+    changeAttachments,
+    attachments: shownAttachments ?? row.attachments,
     removePhoto,
     addPhotos,
     uploading,

@@ -324,9 +324,11 @@ export class SearchMessagesTool implements AgentReadTool<Args> {
       },
       context.now,
     );
-    // The index being unavailable (the chapter's cap, the provider) costs
-    // this half only: the search by words still answers.
-    if (retrieved.status !== 'ok') {
+    // The index being unavailable (a switch, the member's answer, a cap)
+    // costs this half only: the search by words still answers. So does a
+    // provider failure, when the index could only match words: this tool's
+    // other half already searched by words, in the channels themselves.
+    if (retrieved.status !== 'ok' || retrieved.wordsOnly) {
       return { found: [], withheld: [], chatOff: false };
     }
 

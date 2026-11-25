@@ -10,7 +10,7 @@ Read with `gcloud` from Cloud Shell on 2026-11-17. The folders, the four admin g
 
 | Folder (id) | Project | Id | Used for |
 | --- | --- | --- | --- |
-| Common (`575917033023`) | Frapp sign-in | `signet-frapp` | Google sign-in's OAuth clients and the verified "Frapp" brand, plus Calendar connect's two clients, "Frapp Calendar" for production (made 2026-11-13) and "Frapp Calendar (staging)" (made 2026-11-17) ([§ The sign-in project](#the-sign-in-project)) |
+| Common (`575917033023`) | Frapp sign-in | `signet-frapp` | Google sign-in's OAuth clients and the verified "Frapp" brand, plus Calendar connect's two clients, "Frapp Calendar (production)" (made 2026-11-13; the name as the console showed it 2026-11-19) and "Frapp Calendar (staging)" (made 2026-11-17) ([§ The sign-in project](#the-sign-in-project)) |
 | Common | Frapp | `frapp-67722` | Firebase: Android push, and the Play upload service account ([`mobile.md`](mobile.md)) |
 | Common | central-logging-monitoring | `cs-project-cob1stf1` | Holds the organization's audit log bucket ([§ Audit logs](#audit-logs)) |
 | Production (`1053187101656`) | prod | `cs-project-nyit2x59` | Production API on Cloud Run, production Vertex AI |
@@ -34,7 +34,7 @@ Organization roles are granted only to these Google Groups, plus the domain-wide
 
 The whole `frapp.live` domain can also create projects and billing accounts.
 
-Project roles are granted per project. `pdcarlson@frapp.live` owns `signet-frapp` and `frapp-67722`, and is the only Owner of each. That account is a single point of failure: every admin group above holds only it, so if it is locked out, the way back is Google Workspace's super admin account recovery, not another member. A second, break-glass admin is planned under #5323. The service accounts each project's runbook lists (for example [`cloud-run.md` § Identities](cloud-run.md#identities)) hold the rest.
+Project roles are granted per project. `pdcarlson@frapp.live` owns `signet-frapp` and `frapp-67722`, and is the only Owner of each. That account is a single point of failure: every admin group above holds only it, so if it is locked out, the way back is Google Workspace's super admin account recovery, not another member. That recovery is on ([Admin console](https://admin.google.com) > Security > Authentication > Account recovery, read from the owner's screenshot on 2026-11-19), and the account's recovery email is the owner's personal address, which has 2-step verification on (both 2026-11-19, the owner's report; #5323). Recovery for other users is off, so an admin resets their passwords. A personal account can't hold a Workspace admin role, and the domain rule below keeps it out of Cloud roles, so a true second admin would be another `frapp.live` account, at one more paid seat; none exists as of 2026-11-19. The service accounts each project's runbook lists (for example [`cloud-run.md` § Identities](cloud-run.md#identities)) hold the rest.
 
 ## Organization policies that bite
 

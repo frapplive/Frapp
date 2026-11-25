@@ -11,6 +11,7 @@ import {
   Text,
   View,
   type ViewStyle,
+  type GestureResponderEvent,
 } from "react-native";
 import { SignetTokens } from "@repo/theme/signet";
 import { SkeletonText } from "@/components/state-block";
@@ -134,11 +135,14 @@ export function ListRowSkeleton({
   index = 0,
   description = false,
   variant = "default",
+  leading = null,
 }: {
   /** The row's place in its list, which picks its label width. */
   index?: number;
   /** Draw the caption line a row with a `description` carries. */
   description?: boolean;
+  /** The stand-in for the row's `leading` tile, for a row that leads with one. */
+  leading?: ReactNode;
   /** `detail`: a short label on the left and the value on the right. */
   variant?: "default" | "detail";
 }) {
@@ -160,6 +164,7 @@ export function ListRowSkeleton({
 
   return (
     <View style={styles.row}>
+      {leading}
       <View style={styles.rowText}>
         <SkeletonText role={label} width={width} />
         {description ? <SkeletonText role={caption} width="30%" /> : null}
@@ -168,24 +173,61 @@ export function ListRowSkeleton({
   );
 }
 
-/** A rounded container whose children are separated by inset hairlines. */
-export function ListSection({ children }: { children: ReactNode }) {
+/**
+ * A rounded container whose children are separated by inset hairlines, and
+ * at most one muted line under it (`footnote`) saying what its rows have in
+ * common, as Discord's channel settings and iOS Settings' group footers do.
+ * Web's `SettingsGroup` takes the same `footnote`.
+ */
+export function ListSection({
+  children,
+  footnote,
+}: {
+  children: ReactNode;
+  footnote?: string | null;
+}) {
   const { tokens } = useFrappTheme();
   const surfaces = useRaisedSurfaces();
   const styles = createStyles(tokens);
   const items = Array.isArray(children) ? children.flat() : [children];
   const visible = items.filter(Boolean);
 
-  return (
+  const section = (
     <View style={[styles.section, { backgroundColor: surfaces.card }]}>
       {/* Keyed by position: these rows are a fixed, ordered list declared per
-          screen, never reordered at runtime, and carry no id of their own. */}
+            screen, never reordered at runtime, and carry no id of their own. */}
       {visible.map((child, index) => (
         <View key={index}>
           {index > 0 ? <View style={styles.divider} /> : null}
           {child}
         </View>
       ))}
+    </View>
+  );
+  if (!footnote) return section;
+  return (
+    <View>
+      {section}
+      <Text style={styles.footnote}>{footnote}</Text>
+    </View>
+  );
+}
+
+/**
+ * A record's section body on the same raised surface as {@link ListSection},
+ * for content that isn't a list of rows: an event's details, agenda,
+ * attachments and notes (Paul 2026-11-20: "use a raised surface for content",
+ * not content sitting on the black page). The eyebrow stays above it, outside.
+ */
+export function ListPanel({ children }: { children: ReactNode }) {
+  const { tokens } = useFrappTheme();
+  const surfaces = useRaisedSurfaces();
+  const styles = createStyles(tokens);
+  return (
+    <View
+      style={[styles.section, styles.panel, { backgroundColor: surfaces.card }]}
+    >
+      {children}
     </View>
   );
 }
@@ -403,7 +445,8 @@ export type ListRowProps = {
   descriptionTone?: "default" | "destructive";
   /** Trailing control (a switch, a swatch) instead of, or beside, `value`. */
   trailing?: ReactNode;
-  onPress?: () => void;
+  /** Gets the press, so a menu it opens can sit beside it. */
+  onPress?: (event?: GestureResponderEvent) => void;
   /**
    * A secondary action behind a long press (Documents' Delete, #3938), as
    * chat's channel rows put theirs. A screen reader reaches it as a named
@@ -412,6 +455,13 @@ export type ListRowProps = {
   onLongPress?: () => void;
   /** The spoken name of `onLongPress`'s action, e.g. "Delete document". */
   longPressLabel?: string;
+  /**
+   * Named screen-reader actions that replace the single long-press one, for a
+   * row whose long press opens a menu: each menu entry is offered by name
+   * (`itemMenuAccessibility`), as the other menu rows do.
+   */
+  accessibilityActions?: PressableProps["accessibilityActions"];
+  onAccessibilityAction?: PressableProps["onAccessibilityAction"];
   accessibilityHint?: string;
   /**
    * What a screen reader reads as the row's value when the trailing status is
@@ -471,6 +521,8 @@ export function ListRow({
   onPress,
   onLongPress,
   longPressLabel,
+  accessibilityActions,
+  onAccessibilityAction,
   accessibilityHint,
   accessibilityValue,
   destructive = false,
@@ -555,16 +607,23 @@ export function ListRow({
       // Offered only while the row takes presses: `disabled` doesn't reach a
       // custom action, so a busy row would otherwise take a second one.
       accessibilityActions={
-        onLongPress && !disabled && !busy
-          ? [{ name: "longpress", label: longPressLabel ?? "More actions" }]
-          : undefined
+        disabled || busy
+          ? undefined
+          : (accessibilityActions ??
+            (onLongPress
+              ? [{ name: "longpress", label: longPressLabel ?? "More actions" }]
+              : undefined))
       }
       onAccessibilityAction={
-        onLongPress && !disabled && !busy
-          ? (event) => {
-              if (event.nativeEvent.actionName === "longpress") onLongPress();
-            }
-          : undefined
+        disabled || busy
+          ? undefined
+          : (onAccessibilityAction ??
+            (onLongPress
+              ? (event) => {
+                  if (event.nativeEvent.actionName === "longpress")
+                    onLongPress();
+                }
+              : undefined))
       }
       // `usePressFeedback`: a ripple on Android, bounded by the row because
       // `ListSection` clips its children, and a one-rung lift on iOS.
@@ -623,6 +682,19 @@ function createStyles(tokens: SignetTokens) {
       borderWidth: 1,
       borderColor: tokens.color.border.hairline,
       overflow: "hidden",
+    },
+    panel: {
+      paddingHorizontal: tokens.spacing.lg,
+      paddingVertical: tokens.spacing.md,
+      gap: tokens.spacing.xs,
+    },
+    // A group footer: caption in the muted tone, under the section, inset to
+    // the rows' text, as web's `SettingsGroup` footnote is.
+    footnote: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+      marginTop: tokens.spacing.sm,
+      paddingHorizontal: tokens.spacing.xs,
     },
     divider: {
       height: StyleSheet.hairlineWidth,

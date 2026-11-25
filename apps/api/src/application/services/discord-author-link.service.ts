@@ -77,8 +77,9 @@ export class DiscordAuthorLinkService {
   begin(
     chapterId: string,
     userId: string,
+    appReturnUrl: string | null = null,
   ): Promise<{ authorize_url: string; expires_at: string }> {
-    return this.oauthService.beginAuthorLink(chapterId, userId);
+    return this.oauthService.beginAuthorLink(chapterId, userId, appReturnUrl);
   }
 
   /**

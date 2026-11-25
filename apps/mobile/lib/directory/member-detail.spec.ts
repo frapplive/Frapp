@@ -41,6 +41,27 @@ function profile(overrides: Record<string, unknown> = {}) {
 }
 
 describe("selectMemberDetail", () => {
+  // #5798: a chapter's own phone field reads like the Phone row.
+  it("formats a phone-type custom field", () => {
+    const detail = selectMemberDetail(
+      profile({
+        custom_fields: [
+          {
+            field_id: "f-3",
+            key: "emergency_phone",
+            label: "Emergency contact",
+            type: "phone",
+            visibility: "exec",
+            value: "518.555.0199",
+          },
+        ],
+      }),
+    );
+    expect(detail?.customFields).toEqual([
+      { fieldId: "f-3", label: "Emergency contact", value: "(518) 555-0199" },
+    ]);
+  });
+
   it("maps the full profile", () => {
     const detail = selectMemberDetail(profile());
     expect(detail).toEqual({
@@ -66,6 +87,9 @@ describe("selectMemberDetail", () => {
       orderNumber: null,
       canRemove: false,
       canEditProfile: false,
+      canTimeOut: false,
+      chatTimeoutUntil: null,
+      chatTimeoutReason: null,
     });
   });
 
@@ -90,6 +114,21 @@ describe("selectMemberDetail", () => {
       selectMemberDetail(profile({ viewer_can_edit_profile: "true" }))
         ?.canEditProfile,
     ).toBe(false);
+  });
+
+  it("carries the API's viewer_can_timeout and the running timeout (#6006)", () => {
+    const detail = selectMemberDetail(
+      profile({
+        viewer_can_timeout: true,
+        chat_timeout_until: "2026-11-25T23:40:00.000Z",
+        chat_timeout_reason: "spamming",
+      }),
+    );
+    expect(detail).toMatchObject({
+      canTimeOut: true,
+      chatTimeoutUntil: "2026-11-25T23:40:00.000Z",
+      chatTimeoutReason: "spamming",
+    });
   });
 
   it("carries the API's viewer_can_remove, and only a literal true", () => {

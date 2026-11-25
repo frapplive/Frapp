@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { EventAttendanceDraft } from "@repo/validation";
 
 /**
@@ -9,22 +9,17 @@ import type { EventAttendanceDraft } from "@repo/validation";
  * a list that flows with the panel instead of scrolling inside it.
  */
 
+const CABINET = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const TIERS = [{ id: CABINET, name: "Cabinet", position: 1, permissions: [] }];
 const ROLES = [
-  { id: "role-officers", name: "Officers" },
+  { id: "role-officers", name: "Officers", tier_id: CABINET },
   { id: "role-new", name: "New Members" },
-  { id: "role-alumni", name: "Alumni" },
+  { id: "role-alumni", name: "Alumni", system_key: "ALUMNI" },
   ...Array.from({ length: 100 }, (_, i) => ({
     id: `role-${i}`,
     name: `Zeta committee ${i}`,
   })),
 ];
-
-vi.mock("@repo/hooks", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@repo/hooks")>()),
-  useRoles: () => ({
-    data: [{ id: "role-alumni", name: "Alumni", system_key: "ALUMNI" }],
-  }),
-}));
 
 import { AttendanceEditor } from "./attendance-editor";
 
@@ -46,7 +41,8 @@ function Host({
           latest = next;
           setValue(next);
         }}
-        roles={ROLES}
+        rolesData={ROLES}
+        tiersData={TIERS}
         rolesState="ready"
         allowRequired={allowRequired}
       />
@@ -64,7 +60,7 @@ function Host({
 
 const group = (name: string) => screen.getByRole("radiogroup", { name });
 const rowNames = () =>
-  within(screen.getByRole("list", { name: "Roles" }))
+  within(screen.getByRole("list", { name: "Tiers and roles" }))
     .getAllByRole("radiogroup")
     .map((each) => each.getAttribute("aria-label"));
 
@@ -84,25 +80,28 @@ describe("AttendanceEditor", () => {
     expect(
       screen.getByText("Officers required, everyone else optional"),
     ).toBeTruthy();
-    // Lit (accent) when set apart, neutral while it follows everyone else.
-    expect(
-      within(group("Attendance for Officers")).getByRole("radio", {
-        name: "Required",
-      }).className,
-    ).toContain("bg-accent-subtle");
-    expect(
-      within(group("Attendance for Alumni")).getByRole("radio", {
-        name: "Optional",
-      }).className,
-    ).toContain("bg-card");
+    // Raised (the card fill) when set apart; the edge alone while it follows
+    // everyone else. Never the accent (Paul, 2026-11-24).
+    const setApart = within(group("Attendance for Officers")).getByRole(
+      "radio",
+      { name: "Required" },
+    ).className;
+    expect(setApart).toContain("bg-card");
+    expect(setApart).not.toContain("accent-subtle");
+    const following = within(group("Attendance for Alumni")).getByRole(
+      "radio",
+      { name: "Optional" },
+    ).className;
+    expect(following).toContain("border-border");
+    expect(following).not.toContain("bg-card");
   });
 
   it("flows with the panel: a few rows, then Show all, and search past eight", () => {
     render(<Host initial={{ everyone: "optional", roles: {} }} />);
     expect(rowNames()).toHaveLength(8);
-    fireEvent.click(screen.getByRole("button", { name: "Show all 103 roles" }));
-    expect(rowNames()).toHaveLength(103);
-    fireEvent.change(screen.getByLabelText("Search roles"), {
+    fireEvent.click(screen.getByRole("button", { name: "Show all 104" }));
+    expect(rowNames()).toHaveLength(104);
+    fireEvent.change(screen.getByLabelText("Search tiers and roles"), {
       target: { value: "new mem" },
     });
     expect(rowNames()).toEqual(["Attendance for New Members"]);
@@ -117,16 +116,18 @@ describe("AttendanceEditor", () => {
         }}
       />,
     );
-    expect(rowNames()[0]).toBe("Attendance for Officers");
+    // Tiers lead, then the roles set apart, then the rest.
+    expect(rowNames()[0]).toBe("Attendance for Cabinet");
+    expect(rowNames()[1]).toBe("Attendance for Officers");
     fireEvent.click(
       within(group("Attendance for New Members")).getByRole("radio", {
         name: "Required",
       }),
     );
-    expect(rowNames()[0]).toBe("Attendance for Officers");
-    expect(rowNames()[1]).toBe("Attendance for Alumni");
+    expect(rowNames()[1]).toBe("Attendance for Officers");
+    expect(rowNames()[2]).toBe("Attendance for Alumni");
     fireEvent.click(screen.getByRole("button", { name: "Load another event" }));
-    expect(rowNames()[0]).toBe("Attendance for Zeta committee 50");
+    expect(rowNames()[1]).toBe("Attendance for Zeta committee 50");
   });
 
   it("drops Required when it isn't allowed, but keeps a row already Required readable", () => {
@@ -157,5 +158,35 @@ describe("AttendanceEditor", () => {
   it("says the Alumni role is left out while it follows everyone else", () => {
     render(<Host initial={{ everyone: "required", roles: {} }} />);
     expect(screen.getByText("Left out unless set here")).toBeTruthy();
+  });
+
+  it("finds a tier by name and sets it whole; its roles follow it", () => {
+    render(<Host initial={{ everyone: "not_invited", roles: {} }} />);
+    fireEvent.change(screen.getByLabelText("Search tiers and roles"), {
+      target: { value: "cabinet" },
+    });
+    expect(rowNames()).toEqual(["Attendance for Cabinet"]);
+    expect(screen.getByText("Tier · 1 role")).toBeTruthy();
+    fireEvent.click(
+      within(group("Attendance for Cabinet")).getByRole("radio", {
+        name: "Required",
+      }),
+    );
+    expect(latest).toEqual({
+      everyone: "not_invited",
+      roles: { [`tier:${CABINET}`]: "required" },
+    });
+    expect(
+      screen.getByText("Cabinet required, nobody else invited"),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search tiers and roles"), {
+      target: { value: "officers" },
+    });
+    expect(screen.getByText("Follows Cabinet")).toBeTruthy();
+    expect(
+      within(group("Attendance for Officers"))
+        .getByRole("radio", { name: "Required" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 });

@@ -310,37 +310,14 @@ export class MeetingNotesService {
       this.notes.findByUser(chapterId, userId),
       this.memberRepo.findChapterMemberIdentities(chapterId),
     ]);
-    const ownRows = new Map(mine.map((row) => [row.meeting_id, row]));
-    const names = new Map(identities.map((m) => [m.user_id, m.display_name]));
-    return drafts
-      .filter((meeting) => meeting.created_by !== userId)
-      .filter((meeting) => {
-        if (meeting.meeting_type === (STANDARDS_MEETING_TYPE as MeetingType)) {
-          return false;
-        }
-        const own = ownRows.get(meeting.id);
-        return canRecord || !!own?.added_by;
-      })
-      .map((meeting) => {
-        const own = ownRows.get(meeting.id);
-        return {
-          meeting_id: meeting.id,
-          event_id: meeting.event_id!,
-          event_name: meeting.event_name,
-          event_start_time: meeting.event_start_time,
-          meeting_type: meeting.meeting_type,
-          author_name: nameOf(names, meeting.created_by),
-          joined: !!own,
-          added: !!own?.added_by,
-        };
-      });
+    return noteTakingRows({ userId, canRecord, drafts, mine, identities });
   }
 
   /**
    * What a draft of these minutes is written from, as of now: every
    * note-taker's notes that may still go in, then the recording's
    * transcript. Notes are left out when their writer can no longer take
-   * notes here, or has not said yes to Frapp AI (their own words go to a
+   * notes here, or has not said yes to Frapp Intelligence (their own words go to a
    * provider only with their yes). 400 when there is nothing to draft from,
    * or more than one draft reads.
    */
@@ -424,7 +401,7 @@ export class MeetingNotesService {
 
   /**
    * The sources a queued draft may still send, checked again when its run
-   * runs (#4935): a note-taker who has since said No to Frapp AI, lost the
+   * runs (#4935): a note-taker who has since said No to Frapp Intelligence, lost the
    * meeting's event, or stopped taking notes is left out. The recording
    * stays. Ranks stay as they were asked on.
    */
@@ -578,7 +555,9 @@ export class MeetingNotesService {
       },
       takers,
       others_count: others.length,
-      can_add: canEdit,
+      // Note-takers are the meeting's invitees: minutes with no meeting
+      // have none to add until one is linked.
+      can_add: canEdit && !!meeting.event_id,
       joined: !!own || canEdit,
     };
   }
@@ -607,7 +586,7 @@ export class MeetingNotesService {
 
   /**
    * How a note-taker's notes rank now, or null when they are left out: the
-   * writer can't take notes here any more, or hasn't said yes to Frapp AI.
+   * writer can't take notes here any more, or hasn't said yes to Frapp Intelligence.
    */
   private async standingOf(
     chapterId: string,
@@ -665,6 +644,49 @@ function assertNotesOpen(meeting: Meeting): void {
       message: 'These minutes are already posted.',
     });
   }
+}
+
+/**
+ * Who takes notes on which unposted minutes, from the reads that decide it
+ * (`MeetingNotesService.listForUser`, and Activity's Taking notes rows,
+ * #5949): of `drafts` (the unposted minutes whose events show themselves to
+ * `userId`), another officer's, of a type Frapp drafts, that `userId` may
+ * join (`canRecord`) or was added to. The caller has already left out a
+ * `meetings:edit` holder, who opens every draft as its editor.
+ */
+export function noteTakingRows(input: {
+  userId: string;
+  canRecord: boolean;
+  drafts: readonly Meeting[];
+  /** `userId`'s own notes rows. */
+  mine: readonly MeetingNote[];
+  identities: readonly { user_id: string; display_name: string }[];
+}): MeetingNoteTaking[] {
+  const { userId, canRecord, drafts, mine, identities } = input;
+  const ownRows = new Map(mine.map((row) => [row.meeting_id, row]));
+  const names = new Map(identities.map((m) => [m.user_id, m.display_name]));
+  return drafts
+    .filter((meeting) => meeting.created_by !== userId && !!meeting.event_id)
+    .filter((meeting) => {
+      if (meeting.meeting_type === (STANDARDS_MEETING_TYPE as MeetingType)) {
+        return false;
+      }
+      const own = ownRows.get(meeting.id);
+      return canRecord || !!own?.added_by;
+    })
+    .map((meeting) => {
+      const own = ownRows.get(meeting.id);
+      return {
+        meeting_id: meeting.id,
+        event_id: meeting.event_id!,
+        event_name: meeting.event_name,
+        event_start_time: meeting.event_start_time,
+        meeting_type: meeting.meeting_type,
+        author_name: nameOf(names, meeting.created_by),
+        joined: !!own,
+        added: !!own?.added_by,
+      };
+    });
 }
 
 function nameOf(names: ReadonlyMap<string, string>, userId: string | null) {

@@ -39,6 +39,20 @@ export interface ActMember {
   /** The member's IANA time zone. */
   timeZone: string;
   signal?: AbortSignal;
+  /**
+   * The Ask turn this is part of, when the tool loop proposes the card
+   * (`ai_ask_traces.id`), so what the member changes on it can be read
+   * beside that turn (Paul, 2026-11-22).
+   */
+  askId?: string;
+  /**
+   * The member's question as they asked it, kept only sealed on the card
+   * for the change log, never in a prompt from here. A typed request is
+   * `ActInput.request`.
+   */
+  question?: string;
+  /** The Ask turn read channel messages before this card (see `proposeBatch`). */
+  drewOnChat?: boolean;
 }
 
 /**
@@ -265,7 +279,14 @@ export class ActService {
       chapterId: member.chapterId,
       batchId: randomUUID(),
       requestedFor: member.userId,
-      source: { ...source, title: 'Ask Frapp' },
+      source: { ...source, title: 'Frapp Intelligence' },
+      askId: member.askId ?? null,
+      drewOnChat: member.drewOnChat === true,
+      request:
+        member.question ??
+        ('request' in member && typeof member.request === 'string'
+          ? member.request
+          : null),
       proposals: [{ kind: tool.kind, payload: draft.payload }],
       // The member is looking at it; a push would tell them what they know.
       notify: [],
@@ -350,7 +371,8 @@ export class ActService {
     ) {
       throw new ForbiddenException({
         code: 'ai.act.forbidden',
-        message: 'You do not have permission to have Ask take actions.',
+        message:
+          'You do not have permission to have Frapp Intelligence take actions.',
       });
     }
     const proposing = this.tools.filter((tool) => tool.effect === 'propose');

@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   ConflictException,
@@ -18,6 +19,9 @@ import {
   ApiOkResponse,
 } from '@nestjs/swagger';
 import { MemberService } from '../../application/services/member.service';
+import { InviteService } from '../../application/services/invite.service';
+import { MemberPhoneReachService } from '../../application/services/member-phone-reach.service';
+import { CustomFieldService } from '../../application/services/custom-field.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
@@ -36,9 +40,14 @@ import {
 } from '../dtos/member.dto';
 import {
   MemberBirthdayDto,
+  MemberPhoneReachListDto,
   MemberProfileDto,
   MemberRosterEntryDto,
 } from '../dtos/member-profile.dto';
+import {
+  OwnCustomFieldDto,
+  UpdateOwnCustomFieldsDto,
+} from '../dtos/custom-field.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
   FeatureEvent,
@@ -50,9 +59,16 @@ import {
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('members')
 export class MemberController {
-  constructor(private readonly memberService: MemberService) {}
+  constructor(
+    private readonly memberService: MemberService,
+    private readonly phoneReachService: MemberPhoneReachService,
+    private readonly inviteService: InviteService,
+    private readonly customFieldService: CustomFieldService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List chapter members' })
@@ -105,6 +121,65 @@ export class MemberController {
   @ApiOkResponse({ type: MemberBirthdayDto, isArray: true })
   async birthdays(@CurrentChapterId() chapterId: string) {
     return this.memberService.findBirthdaysByChapter(chapterId);
+  }
+
+  // MUST stay above `@Get(':id')`, like `search` and `roster` (#990).
+  @Get('phone-reach')
+  @ApiOperation({
+    summary: "Whether Frapp's notifications reach each member's phone",
+    description:
+      'Per member: notifications on, off, not reported yet, or web only (no phone signed in), with the platform and last-opened date. Officers who can invite members or manage roles get every member; anyone else gets only themselves.',
+  })
+  @ApiOkResponse({ type: MemberPhoneReachListDto })
+  async phoneReach(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') viewerUserId: string,
+  ) {
+    return this.phoneReachService.findForViewer(chapterId, viewerUserId);
+  }
+
+  /**
+   * Your own custom-field values (#581): every field the chapter keeps on a
+   * member, whatever its tier, with your value. Own only: the membership is
+   * `ChapterGuard`'s, never a parameter, so no one reads another member's
+   * values here. MUST stay above `@Get(':id')`, like `search` (#990).
+   */
+  @Get('me/custom-fields')
+  @ApiOperation({ summary: 'Your own custom-field values' })
+  @ApiOkResponse({ type: OwnCustomFieldDto, isArray: true })
+  async getOwnCustomFields(
+    @CurrentChapterId() chapterId: string,
+    @CurrentMember() member: { id: string },
+  ) {
+    return this.customFieldService.findOwnFields(chapterId, member.id);
+  }
+
+  /**
+   * Set or clear your own custom-field values (#581). Like `me/onboarding`,
+   * a write that rides the class-level `members:view`: it writes only the
+   * caller's own membership, resolved by `ChapterGuard`, so there is no id to
+   * authorize. Officers can't set another member's values; nothing does
+   * (`spec/behavior/members.md` § Custom Fields).
+   */
+  @Patch('me/custom-fields')
+  @ApiOperation({
+    summary: 'Set your own custom-field values',
+    description:
+      "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.",
+  })
+  @ApiOkResponse({ type: OwnCustomFieldDto, isArray: true })
+  async updateOwnCustomFields(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentMember() member: { id: string },
+    @Body() dto: UpdateOwnCustomFieldsDto,
+  ) {
+    return this.customFieldService.updateOwnValues(
+      chapterId,
+      member.id,
+      userId,
+      dto.values,
+    );
   }
 
   // Two segments, so `:id` never swallows it. Chat knows a person by their
@@ -162,14 +237,15 @@ export class MemberController {
    * An officer fixes another member's name or graduation year (#4367). The
    * guard is `roles:manage`, the officers who already set a member's roles
    * and pledge class; `MemberService.correctProfile` narrows it to members
-   * ranked below the caller, never the caller, and only a member of this
-   * chapter alone, since both fields live on the shared `users` row.
+   * ranked below the caller or at their own rank (#5900), never the caller,
+   * and only a member of this chapter alone, since both fields live on the
+   * shared `users` row.
    */
   @Patch(':id/profile')
   @ApiOperation({
     summary: "Fix a member's name or graduation year (officers)",
     description:
-      "Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked at or above you, and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.",
+      "Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked above you (a member at your own rank is in reach, #5900), and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.",
   })
   @ApiOkResponse({ type: MemberProfileDto })
   @RequirePermissions(SystemPermissions.ROLES_MANAGE)
@@ -196,10 +272,15 @@ export class MemberController {
     @CurrentMember() member: { id: string },
     @Body() dto: UpdateOnboardingDto,
   ) {
-    return this.memberService.updateOnboarding(
-      member.id,
-      dto.has_completed_onboarding,
-    );
+    const { member: updated, firstFinish } =
+      await this.memberService.updateOnboarding(
+        member.id,
+        dto.has_completed_onboarding,
+      );
+    // The member has just given their name (web /welcome, phone s03), so the
+    // chapter hears who joined now rather than at redeem (#5627).
+    if (firstFinish) await this.inviteService.announceJoin(updated);
+    return updated;
   }
 
   /**

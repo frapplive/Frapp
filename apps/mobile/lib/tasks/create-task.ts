@@ -68,8 +68,8 @@ export function storedDueOf(due: { dueDay: string; dueAt: string | null }): {
 
 export interface NewTaskDraft {
   title: string;
-  /** `YYYY-MM-DD`, device-local. */
-  dueDate: string;
+  /** `YYYY-MM-DD`, device-local, or `null` for no due date (#5761). */
+  dueDate: string | null;
   /**
    * `HH:MM` on the 24-hour clock, device-local, when the task is due at a
    * time of day (#4003); `null` or absent for a task due by the day.
@@ -166,7 +166,13 @@ export function duePresets(now: Date): DuePreset[] {
  * picked (see {@link DuePreset.relative}).
  */
 export type DueChoice =
-  { kind: "relative"; id: string } | { kind: "date"; date: string };
+  | { kind: "relative"; id: string }
+  | { kind: "date"; date: string }
+  /** No due date (#5761): the task sends none, and can't repeat. */
+  | { kind: "none" };
+
+/** The due choice "No due date" (#5761). */
+export const NO_DUE_CHOICE: DueChoice = { kind: "none" };
 
 /** A new draft's due choice: "Today". */
 export const DEFAULT_DUE_CHOICE: DueChoice = { kind: "relative", id: "today" };
@@ -179,8 +185,11 @@ export function dueChoiceOf(preset: DuePreset): DueChoice {
 }
 
 export interface ResolvedDue {
-  /** `YYYY-MM-DD`, device-local: the date Create sends. */
-  date: string;
+  /**
+   * `YYYY-MM-DD`, device-local: the date Create sends, or `null` for a task
+   * with no due date (#5761).
+   */
+  date: string | null;
   /** The chip `now`'s presets draw for `date`, or `null` when none does. */
   chipId: string | null;
 }
@@ -192,9 +201,10 @@ export interface ResolvedDue {
  * the chip shown selected is whichever of today's resolves to it: a "Friday"
  * picked on Wednesday is the Tomorrow chip on Thursday, and a "Next week"
  * kept a day matches no chip at all. A held date that has passed falls back to
- * Today: a chip never files a task already overdue.
+ * Today: a chip never files a task already overdue. No due date stays none.
  */
 export function resolveDue(choice: DueChoice, now: Date): ResolvedDue {
+  if (choice.kind === "none") return { date: null, chipId: null };
   const presets = duePresets(now);
   const today = localIsoDate(now);
   const held =
@@ -208,7 +218,7 @@ export function resolveDue(choice: DueChoice, now: Date): ResolvedDue {
 }
 
 /**
- * The drawn date-field label — "Fri, Aug 21".
+ * The drawn date-field label — "Friday, August 21".
  *
  * Parsed at local noon so a bare `YYYY-MM-DD` renders as its own day in every
  * zone, the same fix `lib/more/service-hours.ts` documents.
@@ -252,7 +262,8 @@ export interface ValidatedNewTask {
    * create: a task, a copy each, or one task up for grabs.
    */
   who: TaskWho;
-  due_date: string;
+  /** Absent for a task with no due date (#5761). */
+  due_date?: string;
   /** The moment it is due, when the draft has a time. */
   due_at?: string;
   /** Subtask titles, in order, when the draft has any. */
@@ -273,13 +284,21 @@ export interface ValidatedNewTask {
    * person's task only; the API refuses it on a group or up for grabs.
    */
   recurrence_rule?: string;
+  /**
+   * The tier, role or group it is from (#5473): added by the sheet from its
+   * From field, never by {@link validateNewTask}. Not on a task up for grabs
+   * (once claimed it is the claimer's own) nor a repeating one, which the
+   * API refuses.
+   */
+  followed_by?: string;
 }
 
 /**
  * The draft as a request body, or `null` while it is not yet postable.
  *
  * Mirrors `CreateTaskDto`: title non-empty and ≤ 255, `assignee_id` a member id,
- * `due_date` a `YYYY-MM-DD`, `point_reward` an optional integer in
+ * `due_date` a `YYYY-MM-DD` or none at all (#5761, never a time without a
+ * day), `point_reward` an optional integer in
  * `0 … POINTS_ADJUSTMENT_MAX`. The assignee comes from the roster picker, so
  * only its presence is checked here — the server re-validates chapter
  * membership regardless.
@@ -292,17 +311,28 @@ export function validateNewTask(
   if (title.length === 0 || title.length > TASK_TITLE_MAX_LENGTH) return null;
   const who = draft.who ? normalizeTaskWho(draft.who) : null;
   if (!who) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.dueDate)) return null;
-  if (draft.dueTime && !/^\d{2}:\d{2}$/.test(draft.dueTime)) return null;
-  if (dueTimePassed(draft, now)) return null;
+  const dueDate = draft.dueDate;
+  // A task up for grabs needs a day (`CreateOpenTaskDto`): the sheet never
+  // offers it none.
+  if (dueDate === null && who.kind === "someone") return null;
+  if (dueDate !== null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return null;
+    if (draft.dueTime && !/^\d{2}:\d{2}$/.test(draft.dueTime)) return null;
+    if (dueTimePassed({ dueDate, dueTime: draft.dueTime }, now)) return null;
+  }
 
   const points = parsePointReward(draft.pointsInput);
   if (points.kind === "invalid") return null;
 
-  const body: ValidatedNewTask = { title, who, due_date: draft.dueDate };
-  if (draft.dueTime) {
-    const { due_at } = dueEntryFields(`${draft.dueDate}T${draft.dueTime}`);
-    if (due_at) body.due_at = due_at;
+  // No due date sends neither a day nor a time: the API refuses a time
+  // without a day.
+  const body: ValidatedNewTask = { title, who };
+  if (dueDate !== null) {
+    body.due_date = dueDate;
+    if (draft.dueTime) {
+      const { due_at } = dueEntryFields(`${dueDate}T${draft.dueTime}`);
+      if (due_at) body.due_at = due_at;
+    }
   }
   const subtasks = (draft.subtasks ?? [])
     .map((step) => step.trim())
@@ -331,14 +361,19 @@ export interface TaskPrefill {
   pointsInput: string;
   proofKind: TaskProofKind;
   subtasks: string[];
-  /** Its own day while that is still ahead, else New task's default. */
+  /**
+   * Its own day while that is still ahead, none for a task with no due date
+   * (#5761), else New task's default.
+   */
   due: DueChoice;
   dueTime: string | null;
+  /** The tier, role or group it is from (#5473), or `null`. */
+  followedBy: string | null;
 }
 
 /**
  * Who a Duplicate goes to: the same person, or the group a copy was one of,
- * named as its read names it (the chapter, a role, a chapter group); people
+ * named as its read names it (the chapter, a tier, a role, a chapter group); people
  * picked one by one are its copies' assignees. `null`, for the officer to
  * pick, when a group's members can't be read off `copies`.
  */
@@ -354,7 +389,9 @@ export function duplicateWho(
     return { kind: "each", target: { kind: "chapter" } };
   }
   if (
-    (group.audience === "role" || group.audience === "group") &&
+    (group.audience === "role" ||
+      group.audience === "group" ||
+      group.audience === "tier") &&
     group.targetId
   ) {
     return {
@@ -395,8 +432,13 @@ export function taskDuplicateOf(
     pointsInput: row.pointReward ? String(row.pointReward) : "",
     proofKind: row.proofKind,
     subtasks: row.subtasks.map((subtask) => subtask.title),
-    due: ahead ? { kind: "date", date: dueDate } : DEFAULT_DUE_CHOICE,
+    due: !row.dueDay
+      ? NO_DUE_CHOICE
+      : ahead
+        ? { kind: "date", date: dueDate }
+        : DEFAULT_DUE_CHOICE,
     dueTime: time,
+    followedBy: row.followedBy,
   };
 }
 
@@ -425,21 +467,28 @@ export type CreateTaskBody = Parameters<
 /**
  * The create a validated form makes (`taskWhoRequest`): `POST /v1/tasks` for
  * one person or a copy each, `POST /v1/open-tasks` for one task up for grabs,
- * which carries no photos.
+ * which carries no photos and no From.
  */
 export type TaskCreateRequest =
   | { route: "task"; body: CreateTaskBody }
   | { route: "open"; body: CreateOpenTaskBody };
 
 export function createRequestOf(task: ValidatedNewTask): TaskCreateRequest {
-  const { who, reference_photo_paths, recurrence_rule, ...fields } = task;
+  const { who, reference_photo_paths, recurrence_rule, followed_by, ...fields } =
+    task;
   const request = taskWhoRequest(who);
   if (!request) {
     // `validateNewTask` never lets nobody through.
     throw new Error("A task needs someone to do it.");
   }
   if (request.endpoint === "/v1/open-tasks") {
-    return { route: "open", body: { ...fields, ...request.fields } };
+    const { due_date } = fields;
+    // `validateNewTask` never lets one up for grabs through without a day.
+    if (!due_date) throw new Error("A task up for grabs needs a due date.");
+    return {
+      route: "open",
+      body: { ...fields, ...request.fields, due_date },
+    };
   }
   return {
     route: "task",
@@ -448,6 +497,7 @@ export function createRequestOf(task: ValidatedNewTask): TaskCreateRequest {
       ...request.fields,
       ...(reference_photo_paths ? { reference_photo_paths } : {}),
       ...(recurrence_rule ? { recurrence_rule } : {}),
+      ...(followed_by && !recurrence_rule ? { followed_by } : {}),
     },
   };
 }

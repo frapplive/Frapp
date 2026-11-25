@@ -1,5 +1,6 @@
 import { contrastRatio, parseHex } from "@repo/color";
-import { ROLE_COLOR_PALETTE } from "@repo/validation";
+import { hsvToHex } from "@repo/color";
+import { pickRoleColor, ROLE_COLOR_PALETTE } from "@repo/validation";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -107,16 +108,39 @@ describe("memberAvatarTint contrast", () => {
     },
   );
 
+  // A custom role color (#5784, #5966) reaches an avatar the same way; the
+  // picker's square is sampled across saturation and brightness, its darkest
+  // and greyest edges included, one hue every 2 degrees.
+  it("keeps every custom role color's initials at AA on their tint", () => {
+    const picks: [number, string][] = [];
+    for (let hue = 0; hue < 360; hue += 2) {
+      for (const s of [0, 0.5, 1]) {
+        for (const v of [0, 0.3, 1]) {
+          picks.push([hue, pickRoleColor(hsvToHex({ h: hue, s, v }))!.hex]);
+        }
+      }
+    }
+    for (const [hue, hex] of picks) {
+      const tint = memberAvatarTint(hex);
+      expect(
+        ratio(tint.text, tint.fill),
+        `${hue}° ${hex}`,
+      ).toBeGreaterThanOrEqual(AA_TEXT);
+    }
+  });
+
   it("reproduces the #3860 measurements, re-seated for the #3826 ladder", () => {
     // #3860 measured 18% over the old `--popover`: Orange `#443426` at 5.34:1,
-    // Violet 4.79:1. 14% over the new `--card` paints nearly the same fill.
-    expect(memberAvatarTint("#F2994A").fill).toBe("#43362B");
+    // Violet 4.79:1. 14% over the `--card` paints nearly the same fill
+    // (`#43362B` on the 2026-11-12 card; `#3D2E2A` on the darker 2026-11-19
+    // violet card, which only raises the initials' contrast).
+    expect(memberAvatarTint("#F2994A").fill).toBe("#3D2E2A");
     expect(ratio("#F2994A", memberAvatarTint("#F2994A").fill)).toBeCloseTo(
-      5.24,
+      5.81,
       1,
     );
     expect(ratio("#B392F0", memberAvatarTint("#B392F0").fill)).toBeCloseTo(
-      4.69,
+      5.19,
       1,
     );
   });

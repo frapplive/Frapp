@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { isModuleEnabled } from '@repo/validation';
@@ -34,6 +35,11 @@ import {
   type IChapterRepository,
 } from '#domain/repositories/chapter.repository.interface';
 import { RbacService } from './rbac.service';
+import {
+  AiSuggestionChangeLogService,
+  type AiSuggestionDecided,
+} from './ai-suggestion-change-log.service';
+import type { SuggestionChanges } from '#domain/utils/ai-suggestion-changes';
 import { NotificationService } from './notification.service';
 import { AnalyticsService } from './analytics.service';
 import { assertModuleEnabled, type EnabledModules } from './module-gate';
@@ -67,6 +73,18 @@ export interface ProposeAiSuggestionsInput {
   /** One batch is one push. Reuse it on a retry: a written row is not written again. */
   batchId: string;
   runId?: string | null;
+  /** The Ask turn that proposed it, when Ask did (`ai_ask_traces.id`). */
+  askId?: string | null;
+  /**
+   * The member's question, when they asked for it. Kept only sealed, only
+   * while the card waits, for the change log (Paul, 2026-11-22).
+   */
+  request?: string | null;
+  /**
+   * The Ask turn read channel messages before proposing it: their authors'
+   * words may be in it, so the change log keeps none of its words.
+   */
+  drewOnChat?: boolean;
   /** The member the run acted for. Notified by default. */
   requestedFor: string | null;
   source: {
@@ -212,6 +230,9 @@ export class AiSuggestionService {
     private readonly analytics: AnalyticsService,
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapters: IChapterRepository,
+    /** What people change when they decide (Paul, 2026-11-22). */
+    @Optional()
+    private readonly changeLog?: AiSuggestionChangeLogService,
   ) {
     this.kinds = new Map(kindHandlers.map((h) => [h.kind, h]));
     this.sources = new Map(sourceAccess.map((s) => [s.sourceType, s]));
@@ -236,12 +257,24 @@ export class AiSuggestionService {
     const now = this.now();
     const rows: NewAiSuggestion[] = [];
     let dropped = 0;
+    // A card drawn from chat keeps no words in the change log, so its
+    // question is not kept waiting for one either.
+    const drewOnChat = input.drewOnChat === true;
+    const requestSealed = drewOnChat
+      ? null
+      : (this.changeLog?.sealRequest(
+          input.chapterId,
+          input.batchId,
+          input.request,
+        ) ?? null);
 
     input.proposals.forEach((proposal, ordinal) => {
       const handler = this.kinds.get(proposal.kind);
       const payload =
         ordinal < AI_SUGGESTION_BATCH_MAX && handler
-          ? handler.normalizeProposal(proposal.payload)
+          ? handler.normalizeProposal(proposal.payload, {
+              sourceType: input.source.type,
+            })
           : null;
       if (
         !handler ||
@@ -265,6 +298,9 @@ export class AiSuggestionService {
         quote,
         quote_author_id: quote ? (proposal.quoteAuthorId ?? null) : null,
         dedupe_key: proposal.dedupeKey ?? null,
+        ask_id: input.askId ?? null,
+        request_sealed: requestSealed,
+        drew_on_chat: drewOnChat,
         required_permission: handler.requiredPermission,
         expires_at: new Date(
           now.getTime() +
@@ -319,7 +355,9 @@ export class AiSuggestionService {
       { payload: AiSuggestion['payload']; raw: unknown; quote: string | null }
     >();
     for (const proposal of input.proposals) {
-      const payload = handler.normalizeProposal(proposal.payload);
+      const payload = handler.normalizeProposal(proposal.payload, {
+        sourceType: input.source.type,
+      });
       if (!payload || wanted.has(proposal.dedupeKey)) continue;
       wanted.set(proposal.dedupeKey, {
         payload,
@@ -736,10 +774,32 @@ export class AiSuggestionService {
       });
     }
 
+    // What changed between the proposal and what was saved (Paul,
+    // 2026-11-22). Read with the row as it stood before the accept emptied it.
+    const decided = {
+      row,
+      decision: 'accepted' as const,
+      userId,
+      handler,
+      accepted: payload,
+      resultId,
+    };
+    const changes = await this.logDecision(decided);
+
     this.emit(
       this.analytics.track('ai-suggestion-accepted', userId, {
         chapterId,
-        properties: { kind: row.kind, edited },
+        properties: {
+          kind: row.kind,
+          edited,
+          // Field names only (codes), never what was in them.
+          ...(changes
+            ? {
+                changed_fields: changes.changed.join(','),
+                changed_field_count: changes.changed.length,
+              }
+            : {}),
+        },
       }),
     );
     return {
@@ -810,7 +870,7 @@ export class AiSuggestionService {
     id: string,
     reason?: 'already_doing',
   ): Promise<AiSuggestionDecisionResult> {
-    const { row } = await this.loadForDecision(chapterId, userId, id);
+    const { row, handler } = await this.loadForDecision(chapterId, userId, id);
     if (!this.isWaiting(row)) {
       return this.alreadyDecided(row, userId, 'dismissed');
     }
@@ -827,6 +887,7 @@ export class AiSuggestionService {
         'dismissed',
       );
     }
+    await this.logDecision({ row, decision: 'dismissed', userId, handler });
     this.emit(
       this.analytics.track('ai-suggestion-dismissed', userId, {
         chapterId,
@@ -834,6 +895,142 @@ export class AiSuggestionService {
       }),
     );
     return { suggestion: claimed, result: null };
+  }
+
+  /**
+   * Closes a waiting suggestion as handled another way rather than accepted
+   * (#5790: a suggested task sent to the next meeting's agenda instead of
+   * made a task). It is decided as dismissed, so it is never proposed again,
+   * and counted as a dismissal with `reason`.
+   *
+   * `make` runs first, with the row's text intact (deciding empties it), and
+   * `findMade` answers a repeat: a suggestion already handled this way gives
+   * back what it made, whoever sent it. When the decision then loses to an
+   * accept, or the suggestion expired meanwhile, what `make` made is taken
+   * back with `unmake` and the refusal says what happened. One that lost to a
+   * dismiss at the same moment keeps it: the two answers agree that it is
+   * not a task. A send racing a send must make the same thing (the caller
+   * keys what it makes by the suggestion), so the loser keeps it too.
+   */
+  async handleElsewhere<T>(
+    chapterId: string,
+    userId: string,
+    id: string,
+    handling: {
+      reason: 'to_agenda';
+      /** Whether this suggestion can be handled this way at all. */
+      accepts: (row: AiSuggestion) => boolean;
+      findMade: (row: AiSuggestion) => Promise<T | null>;
+      make: (row: AiSuggestion) => Promise<T>;
+      unmake: (made: T) => Promise<void>;
+    },
+  ): Promise<T> {
+    const { row } = await this.loadForDecision(chapterId, userId, id);
+    // A repeat first: a decided row has no text left for `accepts` to read.
+    const already = await handling.findMade(row);
+    if (already) return already;
+    if (!this.isWaiting(row)) throw this.refusal(row);
+    if (!handling.accepts(row)) {
+      throw new BadRequestException({
+        code: 'ai.suggestion.not_handled_here',
+        message: 'This suggestion can’t be handled that way.',
+      });
+    }
+
+    const made = await handling.make(row);
+    let claimed: AiSuggestion | null;
+    try {
+      claimed = await this.repo.claim(chapterId, id, {
+        status: 'dismissed',
+        decidedBy: userId,
+        edited: false,
+        now: this.now().toISOString(),
+      });
+    } catch (error) {
+      await handling.unmake(made);
+      throw error;
+    }
+    if (!claimed) {
+      const now = await this.reread(chapterId, id);
+      if (now.status !== 'dismissed') {
+        await handling.unmake(made);
+        throw this.refusal(now);
+      }
+      return made;
+    }
+    // Sent elsewhere (the agenda) is a dismissal of the card as proposed.
+    await this.logDecision({
+      row,
+      decision: 'dismissed',
+      userId,
+      handler: this.kinds.get(row.kind),
+    });
+    this.emit(
+      this.analytics.track('ai-suggestion-dismissed', userId, {
+        chapterId,
+        properties: { kind: row.kind, reason: handling.reason },
+      }),
+    );
+    return made;
+  }
+
+  /**
+   * Undo of `handleElsewhere` (#5790): checks `mayUndo`, puts the
+   * suggestion back to waiting with the words `wordsOf` kept for it, then
+   * takes back what was made; if that fails, the suggestion is closed again
+   * so it can't also become a task. Refused, with what happened, when there
+   * is nothing to undo, the words are gone, or the suggestion expired.
+   */
+  async undoHandled<T>(
+    chapterId: string,
+    userId: string,
+    id: string,
+    handling: {
+      findMade: (row: AiSuggestion) => Promise<T | null>;
+      /** Throws when this member may not take back what was made. */
+      mayUndo: (made: T) => Promise<void>;
+      /** The suggestion's words, or null once they are no longer kept. */
+      wordsOf: (made: T) => {
+        payload: Record<string, unknown>;
+        quote: string | null;
+      } | null;
+      unmake: (made: T) => Promise<void>;
+    },
+  ): Promise<void> {
+    const { row } = await this.loadForDecision(chapterId, userId, id);
+    const made = await handling.findMade(row);
+    if (!made) {
+      // Undone already (a second tap): it is waiting again, as asked.
+      if (this.isWaiting(row)) return;
+      throw this.refusal(row);
+    }
+    await handling.mayUndo(made);
+    const words = handling.wordsOf(made);
+    if (!words) throw this.refusal(row);
+    const now = this.now().toISOString();
+    const reopened = await this.repo.reopen(chapterId, id, words, now);
+    if (!reopened) {
+      const after = await this.reread(chapterId, id);
+      if (after.status === 'dismissed' && after.expires_at <= now) {
+        throw new ConflictException({
+          code: 'ai.suggestion.expired',
+          message: 'This suggestion has expired.',
+        });
+      }
+      throw this.refusal(after);
+    }
+    try {
+      await handling.unmake(made);
+    } catch (error) {
+      // Closed again, so it can't become a task while the item stands.
+      await this.repo.claim(chapterId, id, {
+        status: 'dismissed',
+        decidedBy: userId,
+        edited: false,
+        now: this.now().toISOString(),
+      });
+      throw error;
+    }
   }
 
   /**
@@ -935,22 +1132,27 @@ export class AiSuggestionService {
             : null,
       };
     }
+    throw this.refusal(row);
+  }
+
+  /** The 409 for a suggestion that is no longer waiting, saying why. */
+  private refusal(row: AiSuggestion): ConflictException {
     // Mid-accept, or (re-read after a lost claim) put back by an accept that
     // failed: either way it may be waiting again in a moment.
     if (row.status === 'accepting' || this.isWaiting(row)) {
-      throw new ConflictException({
+      return new ConflictException({
         code: 'ai.suggestion.accepting',
         message:
           'Someone is already accepting this suggestion. Try again in a moment.',
       });
     }
     if (row.status === 'pending' || row.status === 'expired') {
-      throw new ConflictException({
+      return new ConflictException({
         code: 'ai.suggestion.expired',
         message: 'This suggestion has expired.',
       });
     }
-    throw new ConflictException({
+    return new ConflictException({
       code: 'ai.suggestion.decided',
       message:
         row.status === 'accepted'
@@ -1006,6 +1208,7 @@ export class AiSuggestionService {
    */
   async expireDue(): Promise<number> {
     const expired = await this.repo.expireDue(this.now().toISOString());
+    await this.changeLog?.recordExpired(expired, this.now());
     const byChapterKind = countBy(
       expired,
       (row) => `${row.chapter_id}|${row.kind}`,
@@ -1020,6 +1223,28 @@ export class AiSuggestionService {
       );
     }
     return expired.length;
+  }
+
+  /**
+   * Deletes change log rows past their 90 days (`ai_suggestion_changes`).
+   * Called by the hourly sweep. Returns how many.
+   */
+  async deleteExpiredChanges(): Promise<number> {
+    return this.changeLog ? this.changeLog.deleteExpired(this.now()) : 0;
+  }
+
+  /**
+   * Compares and keeps one decision's change log row (Paul, 2026-11-22).
+   * Returns the changes, or null with no change log or when they couldn't
+   * be worked out. Never throws.
+   */
+  private async logDecision(
+    decided: AiSuggestionDecided,
+  ): Promise<SuggestionChanges | null> {
+    if (!this.changeLog) return null;
+    const changes = await this.changeLog.compare(decided);
+    await this.changeLog.recordDecision(decided, changes, this.now());
+    return changes;
   }
 }
 

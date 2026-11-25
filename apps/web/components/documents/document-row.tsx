@@ -1,30 +1,33 @@
 "use client";
 
-import { Download, Loader2, MoreHorizontal, Trash2, Users } from "lucide-react";
-import { formatDay } from "@repo/formatting";
-import { memberAvatarTint } from "@repo/hooks";
-import { isDriveCopy, uploadedLine } from "@repo/hooks/document-library";
-import { IconButton } from "@/components/ui/icon-button";
+import { Download, Loader2, Trash2, Users } from "lucide-react";
+import { formatDay, formatWeekdayDay } from "@repo/formatting";
+import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
+import { can } from "@repo/validation";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  effectiveLine,
+  isDriveCopy,
+  isMinutesDocument,
+  minutesDocumentFacts,
+  uploadedLine,
+} from "@repo/hooks/document-library";
+import { IconButton } from "@/components/ui/icon-button";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Can } from "@/components/shared/can";
+import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import {
   DocumentsGlyph,
   PinGlyph,
   StarGlyph,
 } from "@/components/documents/resources-glyphs";
+import { MeetingsGlyph } from "@/components/layout/nav-glyphs";
 import { OPEN_DOCUMENT_ATTRIBUTE } from "@/components/documents/document-viewer";
 import { KEEP_FOCUS_ATTRIBUTE } from "@/components/documents/use-keep-focus";
 import { LimitedMark } from "@/components/documents/document-access";
 import { useDocumentDownload } from "@/components/documents/use-document-download";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import type { ChapterDocument } from "@/components/documents/document-types";
-import { cn, labelled } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /**
  * What a file row says about a file, in the row's order: when and by whom,
@@ -34,6 +37,18 @@ export function documentFacts(
   doc: ChapterDocument,
   uploader: string | null,
 ): { uploaded: string | null; filed: string[]; description: string | null } {
+  // A meeting's minutes (#5949) lead with the day the meeting met, then
+  // where they are filed and what they hold, in the Minutes list's words,
+  // and end with the TL;DR's first line where a file has its description.
+  if (doc.minutes) {
+    return {
+      uploaded: formatWeekdayDay(doc.minutes.event_start_time),
+      filed: [doc.folder, ...minutesDocumentFacts(doc.minutes)].filter(
+        (part): part is string => !!part,
+      ),
+      description: doc.minutes.gist,
+    };
+  }
   return {
     uploaded: uploadedLine(
       formatDay(doc.created_at),
@@ -47,15 +62,11 @@ export function documentFacts(
   };
 }
 
-/**
- * "Effective <day>", left out when it is the day the file was uploaded: the
- * upload panel starts the date on Today and the phone sends the upload day
- * (#5207), so a matching date says nothing the Uploaded line doesn't.
- */
 function effectiveFact(doc: ChapterDocument): string | null {
-  const effective = formatDay(doc.effective_date);
-  if (effective && effective === formatDay(doc.created_at)) return null;
-  return labelled("Effective", effective);
+  return effectiveLine(
+    formatDay(doc.effective_date),
+    formatDay(doc.created_at),
+  );
 }
 
 function DownloadButton({ id, title }: { id: string; title: string }) {
@@ -87,15 +98,18 @@ function DownloadButton({ id, title }: { id: string; title: string }) {
  * glance. The folder is in the row's words already, so the tile is
  * decoration to a screen reader.
  */
-function FolderHueTile({ hue }: { hue: string }) {
+function FolderHueTile({ hue, minutes }: { hue: string; minutes: boolean }) {
   const tint = memberAvatarTint(hue);
+  // Minutes wear the minutes glyph, so a row that opens a record reads apart
+  // from one that opens a file before its line is read.
+  const Glyph = minutes ? MeetingsGlyph : DocumentsGlyph;
   return (
     <span
       aria-hidden="true"
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
       style={{ backgroundColor: tint.fill, color: tint.text }}
     >
-      <DocumentsGlyph className="h-4 w-4" />
+      <Glyph className="h-4 w-4" />
     </span>
   );
 }
@@ -108,8 +122,9 @@ function FolderHueTile({ hue }: { hue: string }) {
  * `invisible`, so Tab still reaches them and their focus brings them up;
  * `pointer-events-none` keeps a click at the end of a row from landing on a
  * control nobody can see. A touch screen has no hover, so there the same
- * actions sit behind one More button (`RowActionsMenu`), as Drive's and
- * Dropbox's touch layouts put them.
+ * actions sit behind one More button (`useRowActions` through `RowMenu`), as
+ * Drive's and Dropbox's touch layouts put them. The same list opens on a
+ * right-click or a long-press anywhere on the row.
  */
 const ROW_CONTROLS_CLASS = [
   "shrink-0 pointer-coarse:hidden",
@@ -157,6 +172,17 @@ export function DocumentRow({
 }) {
   const facts = documentFacts(doc, uploader);
   const pinned = !!doc.pinned_at;
+  const entries = useRowActions({
+    doc,
+    gate,
+    deleting,
+    starred,
+    pinBusy,
+    onDelete,
+    onToggleStar,
+    onTogglePin,
+    onSetAccess,
+  });
   return (
     /*
       One line at every width (#5576): the tile, the title over its facts,
@@ -169,90 +195,96 @@ export function DocumentRow({
       `min-h-11`, deliberately: §2's touch-target floor outranks the board's
       density. Do not "correct" the row to 40 to match the board.
     */
-    <li className="group/row relative flex min-h-11 items-center gap-2 py-1 transition-colors hover:bg-card-hover focus-within:bg-card-hover">
-      {/*
+    <RowMenu entries={entries} label={`More for ${doc.title}`}>
+      {(menuButton) => (
+        <li className="group/row relative flex min-h-11 items-center gap-2 py-1 transition-colors hover:bg-card-hover focus-within:bg-card-hover">
+          {/*
         The tile and both lines are one button that opens the document
         (#3849), so the whole name is the target, not a word in it.
       */}
-      <button
-        type="button"
-        onClick={() => onOpen(doc)}
-        {...{ [OPEN_DOCUMENT_ATTRIBUTE]: doc.id }}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 text-left",
-          FOCUS_RING,
-        )}
-      >
-        <FolderHueTile hue={hue} />
-        <span className="block min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
-            <span className="truncate">{doc.title}</span>
-            {limited ? <LimitedMark className="text-muted" /> : null}
-            {/*
+          <button
+            type="button"
+            onClick={() => onOpen(doc)}
+            {...{ [OPEN_DOCUMENT_ATTRIBUTE]: doc.id }}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 text-left",
+              FOCUS_RING,
+            )}
+          >
+            <FolderHueTile hue={hue} minutes={isMinutesDocument(doc)} />
+            <span className="block min-w-0 flex-1">
+              <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
+                <span className="truncate">{doc.title}</span>
+                {limited ? <LimitedMark className="text-muted" /> : null}
+                {/*
               A star or pin stays in sight while the controls are away, as
               Drive's starred mark does: a mark is the file's state, not an
               action. The lit controls carry the names; these are the look.
             */}
-            {pinned ? (
-              <PinGlyph
-                className="h-3.5 w-3.5 shrink-0 text-accent-text"
-                active
-              />
-            ) : null}
-            {starred ? (
-              <StarGlyph
-                className="h-3.5 w-3.5 shrink-0 text-accent-text"
-                active
-              />
-            ) : null}
-          </span>
-          {/*
+                {pinned ? (
+                  <PinGlyph
+                    className="h-3.5 w-3.5 shrink-0 text-accent-text"
+                    active
+                  />
+                ) : null}
+                {starred ? (
+                  <StarGlyph
+                    className="h-3.5 w-3.5 shrink-0 text-accent-text"
+                    active
+                  />
+                ) : null}
+              </span>
+              {/*
             Description LAST, and the order is load-bearing: the line is
             `truncate`, so whatever leads it is what survives a narrow row.
             The structured fields are short, bounded and the ones a member
             scans by; the description is the free-text field and the right
             thing to lose to an ellipsis.
           */}
-          <span className="block truncate text-caption text-muted">
-            {[facts.uploaded, ...facts.filed, facts.description]
-              .filter(Boolean)
-              .join(" · ")}
+              <span className="block truncate text-caption text-muted">
+                {[facts.uploaded, ...facts.filed, facts.description]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+          </button>
+          <DocumentControls
+            doc={doc}
+            gate={gate}
+            deleting={deleting}
+            starred={starred}
+            pinBusy={pinBusy}
+            onDelete={onDelete}
+            onToggleStar={onToggleStar}
+            onTogglePin={onTogglePin}
+            onSetAccess={onSetAccess}
+            className={ROW_CONTROLS_CLASS}
+          />
+          {/*
+        Touch only: with a mouse the hover controls above are the visible
+        door, and the right-click menu holds the same list.
+      */}
+          <span className="hidden shrink-0 pointer-coarse:inline-flex">
+            {menuButton}
           </span>
-        </span>
-      </button>
-      <DocumentControls
-        doc={doc}
-        gate={gate}
-        deleting={deleting}
-        starred={starred}
-        pinBusy={pinBusy}
-        onDelete={onDelete}
-        onToggleStar={onToggleStar}
-        onTogglePin={onTogglePin}
-        onSetAccess={onSetAccess}
-        className={ROW_CONTROLS_CLASS}
-      />
-      <RowActionsMenu
-        doc={doc}
-        gate={gate}
-        deleting={deleting}
-        starred={starred}
-        pinBusy={pinBusy}
-        onDelete={onDelete}
-        onToggleStar={onToggleStar}
-        onTogglePin={onTogglePin}
-        onSetAccess={onSetAccess}
-      />
-    </li>
+        </li>
+      )}
+    </RowMenu>
   );
 }
 
+// The menu's star and pin, solid while on, as the hover controls draw them.
+const StarOnIcon = () => <StarGlyph className="h-4 w-4" active />;
+const StarOffIcon = () => <StarGlyph className="h-4 w-4" active={false} />;
+const PinOnIcon = () => <PinGlyph className="h-4 w-4" active />;
+const PinOffIcon = () => <PinGlyph className="h-4 w-4" active={false} />;
+
 /**
- * The row's actions on a touch screen (#5576): one More button opening the
- * same Star, Pin, Who can see, Download and Delete, under the same names and
- * gates as the hover controls. Hidden wherever a mouse can hover.
+ * The row's actions as one menu (#5576): Star, Pin, Who can see, Download
+ * and Delete, under the same names and gates as the hover controls. Opened
+ * from the touch More button, or a right-click or long-press on the row.
  */
-function RowActionsMenu({
+function useRowActions({
   doc,
   gate,
   deleting,
@@ -262,72 +294,75 @@ function RowActionsMenu({
   onToggleStar,
   onTogglePin,
   onSetAccess,
-}: Omit<Parameters<typeof DocumentControls>[0], "className">) {
+}: Omit<Parameters<typeof DocumentControls>[0], "className">): RowMenuEntry[] {
   const { download, fetchingId } = useDocumentDownload();
+  const permissions = useMyPermissions().data?.permissions;
+  const canManage = !!permissions && can("chapter_docs:manage", permissions);
   const pinned = !!doc.pinned_at;
+  // The gate's reason: the notice's id, or offline, a native title.
   const { title, "aria-describedby": describedBy } = gate.controlProps();
-  const gateReason = { title, "aria-describedby": describedBy };
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton
-          label={`Actions for ${doc.title}`}
-          className="hidden shrink-0 pointer-coarse:inline-flex"
-        >
-          <MoreHorizontal />
-        </IconButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[200px]">
-        <DropdownMenuItem
-          disabled={!gate.allowed}
-          {...gateReason}
-          onSelect={() => onToggleStar(doc)}
-        >
-          <StarGlyph className="h-4 w-4" active={starred} />
-          {starred ? "Unstar" : "Star"}
-        </DropdownMenuItem>
-        <Can permission="chapter_docs:manage">
-          <DropdownMenuItem
-            disabled={!gate.allowed || pinBusy}
-            {...gateReason}
-            onSelect={() => onTogglePin(doc)}
-          >
-            <PinGlyph className="h-4 w-4" active={pinned} />
-            {pinned ? "Unpin for the chapter" : "Pin for the chapter"}
-          </DropdownMenuItem>
-        </Can>
-        {onSetAccess ? (
-          <DropdownMenuItem
-            disabled={!gate.allowed}
-            {...gateReason}
-            onSelect={() => onSetAccess(doc)}
-          >
-            <Users className="h-4 w-4" aria-hidden="true" />
-            Who can see
-          </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuItem
-          disabled={fetchingId === doc.id}
-          onSelect={() => void download(doc.id)}
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          Download
-        </DropdownMenuItem>
-        <Can permission="chapter_docs:manage">
-          {isDriveCopy(doc) ? null : (
-            <DropdownMenuItem
-              disabled={!gate.allowed || deleting}
-              {...gateReason}
-              onSelect={() => onDelete(doc)}
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </Can>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  const entries: RowMenuEntry[] = [
+    {
+      type: "item",
+      key: "star",
+      label: starred ? "Unstar" : "Star",
+      icon: starred ? StarOnIcon : StarOffIcon,
+      disabled: !gate.allowed,
+      describedBy,
+      title,
+      onSelect: () => onToggleStar(doc),
+    },
+  ];
+  if (canManage) {
+    entries.push({
+      type: "item",
+      key: "pin",
+      label: pinned ? "Unpin for the chapter" : "Pin for the chapter",
+      icon: pinned ? PinOnIcon : PinOffIcon,
+      disabled: !gate.allowed || pinBusy,
+      describedBy,
+      title,
+      onSelect: () => onTogglePin(doc),
+    });
+  }
+  if (onSetAccess) {
+    entries.push({
+      type: "item",
+      key: "access",
+      label: "Who can see",
+      icon: Users,
+      disabled: !gate.allowed,
+      describedBy,
+      title,
+      onSelect: () => onSetAccess(doc),
+    });
+  }
+  // A meeting's minutes (#5949) have no file to save, and are deleted as
+  // minutes, from their own page.
+  if (isMinutesDocument(doc)) return entries;
+  entries.push({
+    type: "item",
+    key: "download",
+    label: "Download",
+    icon: Download,
+    disabled: fetchingId === doc.id,
+    onSelect: () => void download(doc.id),
+  });
+  // A copy of a Drive file has no Delete (see `DocumentControls`).
+  if (canManage && !isDriveCopy(doc)) {
+    entries.push({
+      type: "item",
+      key: "delete",
+      label: "Delete",
+      icon: Trash2,
+      destructive: true,
+      disabled: !gate.allowed || deleting,
+      describedBy,
+      title,
+      onSelect: () => onDelete(doc),
+    });
+  }
+  return entries;
 }
 
 /**
@@ -419,13 +454,16 @@ function DocumentControls({
           <Users />
         </IconButton>
       ) : null}
-      <DownloadButton id={doc.id} title={doc.title} />
+      {isMinutesDocument(doc) ? null : (
+        <DownloadButton id={doc.id} title={doc.title} />
+      )}
       {/*
         A copy of a Drive file (#5157) has no Delete: Drive owns it, the API
-        refuses, and the next sync would bring it back.
+        refuses, and the next sync would bring it back. Nor do a meeting's
+        minutes (#5949): they are deleted as minutes, from their own page.
       */}
       <Can permission="chapter_docs:manage">
-        {isDriveCopy(doc) ? null : (
+        {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
           <>
             {/*
         `DELETE /v1/documents/:id` sits behind the same guard

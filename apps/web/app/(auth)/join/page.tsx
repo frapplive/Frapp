@@ -11,7 +11,7 @@ import {
   redeemChapterId,
   useAccessibleChapters,
   useActiveChapterId,
-  useJoinTermsCheckbox,
+  joinRedeemBody,
   useMyPermissions,
   usePendingInvites,
   useRedeemInvite,
@@ -21,10 +21,11 @@ import {
   chapterInitials,
   extractInviteToken,
   extractInviteTokenFromQuery,
+  INVITE_PASTE_COPY,
 } from "@repo/validation";
+import { JoinWithInvite } from "@/components/join/join-with-invite";
+import { TermsLine } from "@/components/join/terms-line";
 import { AuthNote, AuthScreen } from "@/components/auth/auth-screen";
-import { AppHandoff } from "@/components/auth/app-handoff";
-import { TermsAcceptance } from "@/components/auth/terms-acceptance";
 import { LinkGlyph } from "@/components/profile/profile-glyphs";
 import { CrestTile } from "@/components/layout/crest-tile";
 import { SignedInAs } from "@/components/auth/signed-in-as";
@@ -42,15 +43,15 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { getLiveSessionUser } from "@/lib/auth/rejected-session";
 import { useSelectChapter } from "@/lib/auth/select-chapter";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { usePhonePlatform } from "@/lib/use-phone-platform";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { asArray } from "@/lib/utils";
 import { isLockedOutOfChapter } from "@/lib/auth/no-access";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
 import {
   CREATE_CHAPTER_PATH,
-  JOIN_IN_BROWSER_KEY,
-  JOIN_IN_BROWSER_VALUE,
+  START_COUNCIL_PATH,
   JOIN_FROM_SIGN_IN_PATH,
+  WELCOME_PATH,
   isJoinSkipCandidate,
   shouldSkipJoinForMember,
 } from "@/lib/auth/join-visit";
@@ -58,15 +59,11 @@ import {
 /**
  * s02 — Join chapter (`spec/ui/design-system/reference/canvas-screens.dc.html`).
  *
- * **Where the transcription stops, and why.** s02 draws a six-cell row for a
- * shared chapter code. `spec/behavior/onboarding.md` §Invite Token Rules
- * specifies single-use opaque tokens that expire after 24 hours, and
- * `spec/ui/README.md`'s precedence rule puts behavior above UI on what the
- * product *does* — so the chrome transfers and the input model does not. This
- * is the same call `apps/mobile/app/(auth)/join.tsx` already records in its own
- * docstring; both surfaces now say it in the same place so neither drifts.
- * The field accepts a pasted raw token or the join URL officers copy
- * (`extractInviteToken`); posting the URL as the token is a 410.
+ * s02's canvas draws a six-cell row for a shared chapter code; joining is by
+ * invite link instead (a personal one, or an officer's chapter link), so the page takes s02's chrome and not its
+ * input (`spec/ui/web-dashboard/README.md` records the call). The field, behind
+ * the invite card, takes a pasted raw token or a join link
+ * (`extractInviteToken`); posting the link as the token is a 410.
  *
  * The #920 Profile & pre-auth slice replaced a two-card grid that explained
  * database behaviour to a member ("Invite redemption writes directly to the
@@ -106,6 +103,23 @@ import {
  * re-triggers it mid-redeem. The other entries are deliberate.
  */
 function JoinPageContent() {
+  const searchParams = useSearchParams();
+  const token = useMemo(
+    () => extractInviteTokenFromQuery((key) => searchParams.get(key)),
+    [searchParams],
+  );
+  // Keyed by the invite, so opening another link starts its card fresh.
+  if (token) return <JoinWithInvite key={token} token={token} />;
+  return <JoinWithoutInvite />;
+}
+
+/**
+ * `/join` with no invite in the URL: the chapter switcher's Join another
+ * chapter, `/no-access`, or the sign-in footer's Join your chapter. It offers
+ * the invites emailed to the account and takes a pasted link. An invite link
+ * gets `JoinWithInvite` instead (#5625).
+ */
+function JoinWithoutInvite() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -113,28 +127,11 @@ function JoinPageContent() {
   const redeemInviteMutation = useRedeemInvite();
   const selectChapter = useSelectChapter();
   const { confirmDrop, confirmDropDialog } = useConfirmDropBulkUploads();
-  const initialToken = useMemo(
-    () => extractInviteTokenFromQuery((key) => searchParams.get(key)) ?? "",
-    [searchParams],
-  );
   const [editedToken, setEditedToken] = useState<string | null>(null);
-  const token = editedToken ?? initialToken;
+  const token = editedToken ?? "";
   const [sessionState, setSessionState] = useState<
     "checking" | "signed-out" | "ready" | "failed"
   >("checking");
-  // An invite link opened on a phone may offer the app first (#4002);
-  // `proxy.ts` lets a signed-out visit here for that. Continue in the browser
-  // marks the URL, so the choice outlives the sign-in round trip it starts
-  // (`JOIN_IN_BROWSER_KEY`).
-  const phone = usePhonePlatform();
-  const inBrowser =
-    searchParams.get(JOIN_IN_BROWSER_KEY) === JOIN_IN_BROWSER_VALUE;
-  const phoneInvite = phone !== null && initialToken !== "" && !inBrowser;
-  const continueInBrowser = useCallback(() => {
-    const next = new URLSearchParams(searchParams.toString());
-    next.set(JOIN_IN_BROWSER_KEY, JOIN_IN_BROWSER_VALUE);
-    router.replace(`/join?${next.toString()}`);
-  }, [router, searchParams]);
   const [account, setAccount] = useState<{
     id: string;
     email: string | null;
@@ -142,14 +139,10 @@ function JoinPageContent() {
   const userId = account?.id ?? null;
   const [attempt, setAttempt] = useState(0);
   const [redeemError, setRedeemError] = useState<string | null>(null);
-  // When to show the Terms checkbox, and what a refused join means for it,
-  // is shared with mobile s02 (#2302).
-  const terms = useJoinTermsCheckbox({ enabled: sessionState === "ready" });
   const pendingInvites = usePendingInvites(
     sessionState === "ready" ? userId : null,
   );
-  // A link carries one invite, and that is the one the visitor came for.
-  const offers = initialToken ? [] : (pendingInvites.data ?? []);
+  const offers = pendingInvites.data ?? [];
   const chaptersQuery = useAccessibleChapters({
     enabled: sessionState === "ready",
   });
@@ -171,26 +164,8 @@ function JoinPageContent() {
   );
   const openChatMembership = hasAccess ? currentMembership : null;
 
-  // Who the app is offered to: a signed-out visitor, or an account with no
-  // chapter. A member of a chapter keeps the web form, because the app sends
-  // a member with a chapter to its tabs and drops the invite (its `(auth)`
-  // layout), so the web is still the only place they can join a second one.
-  // A signed-in visit waits for the chapter list, so the offer never flashes.
-  const offerApp =
-    phoneInvite &&
-    (sessionState === "signed-out" ||
-      (sessionState === "ready" &&
-        !chaptersQuery.isLoading &&
-        memberships.length === 0));
-  const decidingAppOffer =
-    phoneInvite && sessionState === "ready" && chaptersQuery.isLoading;
-
   const visitFrom = searchParams.get("from");
-  const visitHasInvite = initialToken !== "";
-  const skipCandidate = isJoinSkipCandidate({
-    from: visitFrom,
-    hasInvite: visitHasInvite,
-  });
+  const skipCandidate = isJoinSkipCandidate({ from: visitFrom });
   // Decided once, on arrival. Re-deciding on every render would fire mid-join:
   // a redeem refetches the chapter list, which turns 0 memberships into 1
   // while `selectChapter` is still running.
@@ -252,15 +227,14 @@ function JoinPageContent() {
     };
   }, [attempt]);
 
-  // Signed out, the page goes on to sign-in, unless it is offering the app:
-  // then only once the visitor picks Continue in the browser.
+  // Signed out, the page goes on to sign-in.
   useEffect(() => {
-    if (sessionState !== "signed-out" || offerApp) return;
+    if (sessionState !== "signed-out") return;
     const query = searchParams.toString();
     const signInUrl = new URL("/sign-in", window.location.origin);
     signInUrl.searchParams.set("redirectTo", `/join${query ? `?${query}` : ""}`);
     router.replace(signInUrl.pathname + signInUrl.search);
-  }, [sessionState, offerApp, router, searchParams]);
+  }, [sessionState, router, searchParams]);
 
   // Decided while rendering (React's "adjusting state when a prop changes"),
   // once the reads it needs have settled; the effect below only navigates.
@@ -268,7 +242,6 @@ function JoinPageContent() {
     setSkipDecision(
       shouldSkipJoinForMember({
         from: visitFrom,
-        hasInvite: visitHasInvite,
         membershipCount: memberships.length,
         offerCount: pendingInvites.data?.length ?? 0,
         hasAccess,
@@ -315,10 +288,6 @@ function JoinPageContent() {
 
   async function redeem(extracted: string, onError: (copy: string) => void) {
     if (busy || otherAccount.signingOut) return;
-    if (terms.blocker) {
-      onError(terms.blocker);
-      return;
-    }
     setBusy(true);
     let joined = false;
     try {
@@ -327,19 +296,19 @@ function JoinPageContent() {
       joined = await joinWith(extracted, onError);
     } finally {
       // A join that landed keeps the page locked: `router.replace` only starts
-      // the navigation, and this page stays mounted until `/chat` arrives.
+      // the navigation, and this page stays mounted until `/welcome` arrives.
       if (!joined) setBusy(false);
     }
   }
 
-  /** True once the member is in and the page is on its way to `/chat`. */
+  /** True once the member is in and the page is on its way to `/welcome`. */
   async function joinWith(
     extracted: string,
     onError: (copy: string) => void,
   ): Promise<boolean> {
     try {
       const result = await redeemInviteMutation.mutateAsync(
-        terms.redeemBody(extracted),
+        joinRedeemBody(extracted),
       );
       const chapterId = redeemChapterId(result);
 
@@ -349,36 +318,17 @@ function JoinPageContent() {
         await selectChapter(chapterId);
       }
 
-      toast({
-        title: "Chapter joined",
-        description: "You're in. Opening chat.",
-      });
-      router.replace("/chat");
+      toast({ title: "Chapter joined" });
+      // Their name and photo first, then chat (#5627).
+      router.replace(WELCOME_PATH);
       router.refresh();
       return true;
     } catch (error) {
-      terms.onJoinError(error);
       onError(joinErrorCopy(error));
       return false;
     }
   }
 
-  // One Terms box, above whichever Join it guards (#5076). It used to sit
-  // under the paste field even when an offered invite's Join was above it, so
-  // that Join failed with "accept the terms" and the box read as belonging to
-  // the second button.
-  const termsBox = terms.needed ? (
-    <TermsAcceptance
-      id="join-accept-legal"
-      accepted={terms.accepted}
-      onAcceptedChange={(next) => {
-        terms.setAccepted(next);
-        setRedeemError(null);
-        setOfferError(null);
-      }}
-      disabled={busy || otherAccount.signingOut}
-    />
-  ) : null;
   const hasOffers = offers.length > 0;
   // A field already in use stays: typed into, or showing a redeem's error
   // that a refetch of the invites must not fold away.
@@ -386,23 +336,12 @@ function JoinPageContent() {
     !hasOffers || pasteOpen || editedToken !== null || redeemError !== null;
   // Held while the emailed invites are read, so the field never shows and
   // then folds away under a member already typing in it, taking a redeem
-  // error with it. A link brings its own invite, so that visit doesn't wait.
-  const awaitingOffers = !initialToken && pendingInvites.isLoading;
-
-  if (phone !== null && offerApp) {
-    return (
-      <AppHandoff
-        platform={phone}
-        token={initialToken}
-        onContinueInBrowser={continueInBrowser}
-      />
-    );
-  }
+  // error with it.
+  const awaitingOffers = pendingInvites.isLoading;
 
   if (
     sessionState === "checking" ||
     sessionState === "signed-out" ||
-    decidingAppOffer ||
     awaitingSkipDecision ||
     skipDecision === "skip"
   ) {
@@ -482,7 +421,6 @@ function JoinPageContent() {
       ) : null}
       {hasOffers ? (
         <section aria-label="Your invites" className="mb-6 flex flex-col gap-3">
-          {termsBox}
           {offers.map((offer) => (
             <div
               key={offer.token}
@@ -521,6 +459,7 @@ function JoinPageContent() {
               {offerError}
             </p>
           ) : null}
+          <TermsLine action="joining" className="text-left" />
           {pasteOpen ? null : (
             <Button
               type="button"
@@ -570,7 +509,6 @@ function JoinPageContent() {
               </p>
             ) : null}
           </div>
-          {hasOffers ? null : termsBox}
           <Button
             type="submit"
             className="w-full"
@@ -584,6 +522,7 @@ function JoinPageContent() {
             ) : null}
             Join chapter
           </Button>
+          {hasOffers ? null : <TermsLine action="joining" />}
         </form>
       ) : null}
 
@@ -601,7 +540,6 @@ function JoinPageContent() {
         // an emailed invite, and held until both reads have settled, so it
         // never shows and then vanishes. A read that failed counts as settled:
         // this is the way out, so it shows rather than hides.
-        !initialToken &&
         !pendingInvites.isLoading &&
         offers.length === 0 &&
         !chaptersQuery.isLoading &&
@@ -625,15 +563,27 @@ function JoinPageContent() {
 
 /** Shared with the Suspense fallback, so the column does not grow on hydration. */
 const JOIN_FOOTER = (
-  <p>
-    Starting a chapter?{" "}
-    <Link
-      href={CREATE_CHAPTER_PATH}
-      className="font-semibold text-accent-text hover:underline"
-    >
-      Create a chapter
-    </Link>
-  </p>
+  <>
+    <p>
+      {INVITE_PASTE_COPY.startingPrompt}{" "}
+      <Link
+        href={CREATE_CHAPTER_PATH}
+        className="font-semibold text-accent-text hover:underline"
+      >
+        {INVITE_PASTE_COPY.startingAction}
+      </Link>
+    </p>
+    {/* Beside starting a chapter, for a school's council (#5933). */}
+    <p>
+      {START_COUNCIL_ENTRY.prompt}{" "}
+      <Link
+        href={START_COUNCIL_PATH}
+        className="font-semibold text-accent-text hover:underline"
+      >
+        {START_COUNCIL_ENTRY.action}
+      </Link>
+    </p>
+  </>
 );
 
 export default function JoinPage() {

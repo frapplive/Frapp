@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -62,6 +63,7 @@ export class NotificationController {
       userId,
       dto.token,
       dto.device_name,
+      dto.notifications_enabled,
     );
   }
 
@@ -78,6 +80,7 @@ export class NotificationController {
   @Get('notifications')
   @VerifySessionLocally()
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
   @FreeTier()
   @ApiOperation({ summary: 'List in-app notifications for current user' })
@@ -94,6 +97,7 @@ export class NotificationController {
   @Post('notifications/read')
   @HttpCode(200)
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
   @FreeTier()
   @ApiOperation({
@@ -115,6 +119,7 @@ export class NotificationController {
   @Post('notifications/clear')
   @HttpCode(200)
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
   @FreeTier()
   @ApiOperation({
@@ -136,6 +141,7 @@ export class NotificationController {
 
   @Patch('notifications/:id/read')
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
   @FreeTier()
   @ApiOperation({ summary: 'Mark notification as read' })

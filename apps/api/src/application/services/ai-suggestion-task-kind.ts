@@ -1,17 +1,28 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
+  CHANNEL_ACCESS_ENTRY_PATTERN,
+  POINTS_ADJUSTMENT_MAX,
   TASK_AUDIENCE_EVERYONE,
   TASK_AUDIENCE_SOMEONE,
   TASK_PEOPLE_MAX,
+  TASK_PROOF_KINDS,
   TASK_SUBTASK_TITLE_MAX_LENGTH,
   TASK_SUBTASKS_MAX,
   TASK_SUGGESTION_AUDIENCES,
   TASK_TITLE_MAX_LENGTH,
+  type TaskProofKind,
   type TaskSuggestionAudience,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
-import type { AiSuggestionKindHandler } from './ai-suggestion-kinds';
+import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type {
+  AiSuggestionChangeLog,
+  AiSuggestionKindHandler,
+} from './ai-suggestion-kinds';
 import { TaskService } from './task.service';
 import { OpenTaskService } from './open-task.service';
 import type { TaskAudienceTarget } from './task-audience.service';
@@ -23,9 +34,12 @@ export const TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH = 2000;
 const TASK_SUGGESTION_EXPIRY_DAYS = 14;
 
 /**
- * A suggested task, as stored and as listed. Never carries points
- * (`spec/behavior/meetings.md` § Suggested tasks): "give Jake 50 points" said
- * in a meeting is not an instruction, and the officer adds points by hand.
+ * A suggested task, as stored and as listed. A task suggested from minutes
+ * never carries points (`spec/behavior/meetings.md` § Suggested tasks): "give
+ * Jake 50 points" said in a meeting is not an instruction, and the officer
+ * adds points by hand. A card Frapp Intelligence drafts from the officer's own words
+ * may (2026-11-22, `spec/behavior/ai.md` § Asking Frapp to do something):
+ * the officer said them.
  */
 export interface TaskSuggestionPayload {
   title: string;
@@ -50,6 +64,11 @@ export interface TaskSuggestionPayload {
   audience_role_id: string | null;
   /** With `audience`: only this chapter group's members. */
   audience_group_id: string | null;
+  /**
+   * With `audience`: only the members holding a role in this tier (#5473,
+   * 2026-11-22). Present only when set, so older payloads read the same.
+   */
+  audience_tier_id?: string;
   /** YYYY-MM-DD, when a day was named. */
   due_date: string | null;
   /** The moment it is due, when a time of day was named. */
@@ -60,7 +79,25 @@ export interface TaskSuggestionPayload {
    * year's task, its source, was due. The screen words the row from it.
    */
   last_year_on?: string;
+  /**
+   * The rest of the task form (2026-11-22), each present only when set so a
+   * suggestion that never had them reads as it always did: points on
+   * completion (Ask's own cards only), what Mark done needs, and the tier,
+   * role or group the task is from (`followed_by`, #5473).
+   */
+  point_reward?: number;
+  proof_kind?: TaskProofKind;
+  followed_by?: string;
 }
+
+/** Where a proposal came from, as the kind is told. */
+export interface TaskProposalContext {
+  /** The suggestion source's type: `request` is Frapp Intelligence. */
+  sourceType?: string;
+}
+
+/** The source type of an officer's own request to Frapp Intelligence. */
+const ASK_SOURCE_TYPE = 'request';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -122,6 +159,44 @@ function subtaskList(value: unknown): string[] {
     .slice(0, TASK_SUBTASKS_MAX);
 }
 
+function pointsOrNull(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= POINTS_ADJUSTMENT_MAX
+    ? value
+    : null;
+}
+
+function proofOrNull(value: unknown): TaskProofKind | null {
+  return typeof value === 'string' &&
+    (TASK_PROOF_KINDS as readonly string[]).includes(value) &&
+    value !== 'none'
+    ? (value as TaskProofKind)
+    : null;
+}
+
+function followerOrNull(value: unknown): string | null {
+  return typeof value === 'string' && CHANNEL_ACCESS_ENTRY_PATTERN.test(value)
+    ? value
+    : null;
+}
+
+/** The optional task-form fields, each key only when it holds a value. */
+function extras(input: {
+  point_reward: number | null;
+  proof_kind: TaskProofKind | null;
+  followed_by: string | null;
+}): Pick<TaskSuggestionPayload, 'point_reward' | 'proof_kind' | 'followed_by'> {
+  return {
+    ...(input.point_reward === null
+      ? {}
+      : { point_reward: input.point_reward }),
+    ...(input.proof_kind === null ? {} : { proof_kind: input.proof_kind }),
+    ...(input.followed_by === null ? {} : { followed_by: input.followed_by }),
+  };
+}
+
 /** Reads a stored payload back; the shape `normalizeProposal` wrote. */
 export function readTaskPayload(
   payload: AiSuggestionPayload,
@@ -135,6 +210,11 @@ export function readTaskPayload(
     due_at: instantOrNull(payload.due_at),
     subtasks: subtaskList(payload.subtasks),
     ...lastYearOn(payload.last_year_on),
+    ...extras({
+      point_reward: pointsOrNull(payload.point_reward),
+      proof_kind: proofOrNull(payload.proof_kind),
+      followed_by: followerOrNull(payload.followed_by),
+    }),
   };
 }
 
@@ -146,6 +226,7 @@ type TaskSuggestionWho = Pick<
   | 'audience'
   | 'audience_role_id'
   | 'audience_group_id'
+  | 'audience_tier_id'
 >;
 
 const WHO_KEYS = [
@@ -154,6 +235,7 @@ const WHO_KEYS = [
   'audience',
   'audience_role_id',
   'audience_group_id',
+  'audience_tier_id',
 ] as const;
 
 const NOBODY: TaskSuggestionWho = {
@@ -167,8 +249,8 @@ const NOBODY: TaskSuggestionWho = {
 /**
  * One answer to "who", read from whatever fields are set. A group wins over
  * people, and people over one person, as the wider ask: `audience` with a
- * role, else a group, else (for `someone`) the listed people, else the
- * chapter; then several people, a copy each; then one person.
+ * role, else a group, else a tier, else (for `someone`) the listed people,
+ * else the chapter; then several people, a copy each; then one person.
  */
 function who(input: Record<string, unknown>): TaskSuggestionWho {
   const audience = audienceOrNull(input.audience);
@@ -176,8 +258,12 @@ function who(input: Record<string, unknown>): TaskSuggestionWho {
   if (audience) {
     const roleId = uuidOrNull(input.audience_role_id);
     const groupId = roleId ? null : uuidOrNull(input.audience_group_id);
+    const tierId =
+      roleId || groupId ? null : uuidOrNull(input.audience_tier_id);
     const among =
-      audience === TASK_AUDIENCE_SOMEONE && !roleId && !groupId ? people : [];
+      audience === TASK_AUDIENCE_SOMEONE && !roleId && !groupId && !tierId
+        ? people
+        : [];
     // "Someone among" one person is that person's task.
     if (among.length === 1) return { ...NOBODY, assignee_id: among[0] };
     return {
@@ -185,6 +271,7 @@ function who(input: Record<string, unknown>): TaskSuggestionWho {
       audience,
       audience_role_id: roleId,
       audience_group_id: groupId,
+      ...(tierId ? { audience_tier_id: tierId } : {}),
       assignee_ids: among.length > 1 ? among : null,
     };
   }
@@ -206,6 +293,7 @@ function targetOf(task: TaskSuggestionWho): TaskAudienceTarget {
   if (task.audience_group_id) {
     return { kind: 'group', id: task.audience_group_id };
   }
+  if (task.audience_tier_id) return { kind: 'tier', id: task.audience_tier_id };
   if (task.assignee_ids?.length) {
     return { kind: 'people', userIds: task.assignee_ids };
   }
@@ -220,6 +308,53 @@ function lastYearOn(value: unknown): { last_year_on?: string } {
 
 function toPayload(task: TaskSuggestionPayload): AiSuggestionPayload {
   return { ...task };
+}
+
+/** What the change log compares for a suggested task (Paul, 2026-11-22). */
+const TASK_CHANGE_FIELDS: ChangeFieldSpec = {
+  title: 'text',
+  description: 'text',
+  // Who: one person and several people read as one set.
+  assignee_ids: 'ids',
+  audience: 'text',
+  audience_role_id: 'id',
+  audience_group_id: 'id',
+  audience_tier_id: 'id',
+  due_date: 'date',
+  due_at: 'instant',
+  subtasks: 'text',
+  subtask_count: 'number',
+  // The rest of the task form, as an Ask card sets it (#5864).
+  point_reward: 'number',
+  proof_kind: 'text',
+  followed_by: 'text',
+};
+
+/** A stored proposal as the change log's fields. */
+export function taskChangeView(payload: AiSuggestionPayload): ChangeView {
+  const task = readTaskPayload(payload);
+  const people = task.assignee_ids?.length
+    ? task.assignee_ids
+    : task.assignee_id
+      ? [task.assignee_id]
+      : null;
+  return {
+    title: task.title,
+    description: task.description,
+    assignee_ids: people,
+    audience: task.audience,
+    audience_role_id: task.audience_role_id,
+    audience_group_id: task.audience_group_id,
+    audience_tier_id: task.audience_tier_id ?? null,
+    due_date: task.due_date,
+    due_at: task.due_at,
+    subtasks: task.subtasks.length > 0 ? task.subtasks.join('\n') : null,
+    subtask_count: task.subtasks.length,
+    point_reward: task.point_reward ?? null,
+    // No proof asked reads as "none", as a saved task stores it.
+    proof_kind: task.proof_kind ?? 'none',
+    followed_by: task.followed_by ?? null,
+  };
 }
 
 /**
@@ -250,6 +385,31 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
   readonly expiresAfterDays = TASK_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'tasks';
 
+  /**
+   * An accept that names a task the chapter already has ("Already a task")
+   * is compared with that task as it stands, on the fields one task shows
+   * for itself; who it went to is left out, since a group's copies each
+   * name one member.
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: TASK_CHANGE_FIELDS,
+    view: taskChangeView,
+    readSaved: async ({ chapterId, payload }) => {
+      const existingId = existingTaskIdOf(payload);
+      if (!existingId) return null;
+      const task = await this.tasks.findById(existingId, chapterId);
+      return {
+        title: task.title,
+        description: task.description,
+        due_date: task.due_date,
+        due_at: task.due_at,
+        point_reward: task.point_reward,
+        proof_kind: task.proof_kind,
+        followed_by: task.followed_by,
+      };
+    },
+  };
+
   constructor(
     private readonly tasks: TaskService,
     private readonly openTasks: OpenTaskService,
@@ -261,24 +421,40 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       : `${count} suggested tasks to review`;
   }
 
-  normalizeProposal(raw: unknown): AiSuggestionPayload | null {
+  normalizeProposal(
+    raw: unknown,
+    context: TaskProposalContext = {},
+  ): AiSuggestionPayload | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const input = raw as Record<string, unknown>;
     const title = text(input.title, TASK_TITLE_MAX_LENGTH);
     if (!title) return null;
     const dueDate = dateOrNull(input.due_date);
+    // Only the officer's own request to Ask may carry points.
+    const fromAsk = context.sourceType === ASK_SOURCE_TYPE;
+    const asked = who(input);
     return toPayload({
       title,
       description: text(
         input.description,
         TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH,
       ),
-      ...who(input),
+      ...asked,
       due_date: dueDate,
       // A time needs its day; the task service checks they agree on accept.
       due_at: dueDate ? instantOrNull(input.due_at) : null,
       subtasks: subtaskList(input.subtasks),
       ...lastYearOn(input.last_year_on),
+      ...extras({
+        point_reward: fromAsk ? pointsOrNull(input.point_reward) : null,
+        proof_kind: proofOrNull(input.proof_kind),
+        // A task up for grabs is the claimer's own once claimed: it is from
+        // nobody (`spec/behavior/tasks.md`), so its card never says so.
+        followed_by:
+          asked.audience === TASK_AUDIENCE_SOMEONE
+            ? null
+            : followerOrNull(input.followed_by),
+      }),
     });
   }
 
@@ -325,6 +501,31 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
     }
     if (has('due_at')) next.due_at = instantOrNull(edits.due_at);
     if (has('subtasks')) next.subtasks = subtaskList(edits.subtasks);
+    // The officer's own edits may set points on any suggestion: that is
+    // them adding points by hand, before the task exists.
+    if (has('point_reward')) {
+      delete next.point_reward;
+      Object.assign(
+        next,
+        extras({
+          point_reward: pointsOrNull(edits.point_reward),
+          proof_kind: null,
+          followed_by: null,
+        }),
+      );
+    }
+    if (has('proof_kind')) {
+      delete next.proof_kind;
+      const proof = proofOrNull(edits.proof_kind);
+      if (proof) next.proof_kind = proof;
+    }
+    if (has('followed_by')) {
+      delete next.followed_by;
+      const follower = followerOrNull(edits.followed_by);
+      if (follower) next.followed_by = follower;
+    }
+    // Up for grabs is from nobody, whichever edit made it so.
+    if (next.audience === TASK_AUDIENCE_SOMEONE) delete next.followed_by;
     return toPayload(next);
   }
 
@@ -357,10 +558,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
         message: 'Pick who this task is for.',
       });
     }
-    if (!task.due_date) {
+    // A task can have no due date (#5761); one up for grabs still needs
+    // one, since whoever claims it gets it by then.
+    if (!task.due_date && task.audience === TASK_AUDIENCE_SOMEONE) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick a due date.',
+        message: 'A task up for grabs needs a due date.',
       });
     }
   }
@@ -378,11 +581,11 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       return { resultId: existing.id };
     }
     const task = readTaskPayload(input.payload);
-    // `assertAcceptable` ran before the claim; these narrow the types.
-    if (!namesSomeone(task) || !task.due_date) {
+    // `assertAcceptable` ran before the claim; this narrows the type.
+    if (!namesSomeone(task)) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick who this task is for and when it is due.',
+        message: 'Pick who this task is for.',
       });
     }
     // A task from minutes names them by id (#5562), so its screens read the
@@ -391,6 +594,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
     // "Someone in…" posts one task up for grabs (2026-11-18); the result is
     // the posting's id.
     if (task.audience === TASK_AUDIENCE_SOMEONE) {
+      if (!task.due_date) {
+        throw new BadRequestException({
+          code: 'ai.suggestion.incomplete',
+          message: 'A task up for grabs needs a due date.',
+        });
+      }
       const posting = await this.openTasks.create({
         chapter_id: input.chapterId,
         created_by: input.userId,
@@ -399,7 +608,8 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
         due_date: task.due_date,
         due_at: task.due_at,
         subtasks: task.subtasks,
-        point_reward: null,
+        point_reward: task.point_reward ?? null,
+        proof_kind: task.proof_kind ?? 'none',
         target: targetOf(task),
         ...(meetingId ? { meeting_id: meetingId } : {}),
       });
@@ -418,6 +628,9 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
             audience: TASK_AUDIENCE_EVERYONE,
             audience_role_id: task.audience_role_id,
             audience_group_id: task.audience_group_id,
+            ...(task.audience_tier_id
+              ? { audience_tier_id: task.audience_tier_id }
+              : {}),
           }
         : {
             assignee_id: task.assignee_ids?.length ? null : task.assignee_id,
@@ -430,8 +643,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       due_date: task.due_date,
       due_at: task.due_at,
       subtasks: task.subtasks,
-      // Never points, and never a chat card (no `channel_id`).
-      point_reward: null,
+      // Points only when the officer set them (Ask's card, or an edit);
+      // never a chat card (no `channel_id`). Proof and From are sent only
+      // when set, as the task form leaves them out (#4313).
+      point_reward: task.point_reward ?? null,
+      ...(task.proof_kind ? { proof_kind: task.proof_kind } : {}),
+      ...(task.followed_by ? { followed_by: task.followed_by } : {}),
       ...(meetingId ? { meeting_id: meetingId } : {}),
     });
     return { resultId: created.id };

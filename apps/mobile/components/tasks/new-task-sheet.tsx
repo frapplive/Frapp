@@ -14,6 +14,7 @@ import {
   TASK_TITLE_MAX_LENGTH,
   aiSuggestionRefusalLine,
   noTaskRepeatDraft,
+  TASK_REPEAT_NEEDS_DUE_DATE,
   taskFirstDue,
   taskRepeatRuleOf,
   taskRepeatSummary,
@@ -53,6 +54,7 @@ import { DueTimeField } from "@/components/tasks/due-time-field";
 import { SubtaskDraftField } from "@/components/tasks/subtask-draft-field";
 import { TaskPhotoPicker } from "@/components/tasks/task-photos";
 import { TaskRepeatField } from "@/components/tasks/repeat-field";
+import { FollowerField } from "@/components/tasks/task-follower";
 import {
   AssigneeRow,
   PointsField,
@@ -72,6 +74,7 @@ import {
 } from "@repo/formatting";
 import {
   DEFAULT_DUE_CHOICE,
+  NO_DUE_CHOICE,
   TASK_FORM_COPY,
   createRequestOf,
   storedDueOf,
@@ -109,7 +112,11 @@ import { whoOfLegacyAssignee } from "@/lib/tasks/who-rows";
  *
  * The drawn free date field, as the platform's picker (`due-date-field.tsx`,
  * #3597), with the preset chips under it kept as quick picks: most tasks are
- * due today, tomorrow or this week, and a chip is one tap.
+ * due today, tomorrow or this week, and a chip is one tap. The field's clear
+ * makes it No due date (#5761): no day or time is sent, the time and any
+ * Repeat go with it, and a chip or a tap on the field gives it a day again.
+ * A task up for grabs always has a day (`CreateOpenTaskDto`), so it isn't
+ * offered there.
  *
  * ## One deviation from the drawing, forced
  *
@@ -183,9 +190,10 @@ export interface NewTaskSheetProps {
    * Accept a suggested task through the form (#4313): the fields open on what
    * the minutes suggested, titled "Change before creating", and the button
    * creates it. Who it is for starts empty when the meeting named nobody, never
-   * on the viewer: a wrong owner is worse than none. Points are left out (a
-   * suggestion carries none). The host mounts one sheet per suggestion
-   * (`key` on its id).
+   * on the viewer: a wrong owner is worse than none. Points, proof and From
+   * are left out for a task suggested from minutes, which carries none, and
+   * offered for a Frapp Intelligence card (`full`, 2026-11-22), the officer's own
+   * request. The host mounts one sheet per suggestion (`key` on its id).
    */
   suggestion?: TaskSuggestionSeed;
   /**
@@ -229,6 +237,8 @@ type KeptTask = {
   pickedPhotos: PendingTaskPhoto[];
   /** How it repeats (#5119); absent in a draft kept before Repeat. */
   repeat?: RepeatDraft;
+  /** The tier, role or group it is from (#5473); absent before From. */
+  followedBy?: string | null;
 };
 
 /** Who a kept draft holds, read from a draft kept before `who` too. */
@@ -246,6 +256,15 @@ export interface TaskSuggestionSeed {
   dueDay: string | null;
   dueAt: string | null;
   subtasks: readonly string[];
+  /**
+   * The rest of the task form, offered (2026-11-22): points, proof and
+   * From, opening on what the card proposed. Frapp Intelligence's cards set it; a
+   * task suggested from minutes doesn't.
+   */
+  full?: boolean;
+  pointReward?: number | null;
+  proofKind?: TaskProofKind | null;
+  followedBy?: string | null;
   /**
    * Accepts the suggestion as the form stands. Rejects with the server's
    * error, whose refusal codes the sheet puts into words.
@@ -313,7 +332,10 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       opening?.title ?? suggestion?.title ?? prefill?.title ?? "",
     );
     const [pointsInput, setPointsInput] = useState(
-      opening?.pointsInput ?? prefill?.pointsInput ?? "",
+      opening?.pointsInput ??
+        (suggestion?.pointReward ? String(suggestion.pointReward) : null) ??
+        prefill?.pointsInput ??
+        "",
     );
     // The chip as the draft holds it, resolved against today's below.
     const [due, setDue] = useState<DueChoice>(
@@ -341,10 +363,13 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       opening ? keptWho(opening) : (suggestion?.who ?? prefill?.who ?? null),
     );
     // Photos and proof (#4635): the ones picked here, which go up on Create,
-    // and the proof control. A suggestion carries none, so its form leaves
-    // them out.
+    // and the proof control. A suggestion carries no photos; only an Ask
+    // card's (`full`) offers proof, opening on what it proposed.
     const [proofKind, setProofKind] = useState<TaskProofKind>(
-      opening?.proofKind ?? prefill?.proofKind ?? "none",
+      opening?.proofKind ??
+        suggestion?.proofKind ??
+        prefill?.proofKind ??
+        "none",
     );
     const [pickedPhotos, setPickedPhotos] = useState<PendingTaskPhoto[]>(
       () => opening?.pickedPhotos ?? [],
@@ -356,6 +381,14 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     );
     const [repeatOpen, setRepeatOpen] = useState(
       () => !!opening?.repeat && opening.repeat.preset !== "NONE",
+    );
+    // From (#5473): a tier, role or group the officer is in, or just them.
+    const [followedBy, setFollowedBy] = useState<string | null>(
+      () =>
+        opening?.followedBy ??
+        suggestion?.followedBy ??
+        prefill?.followedBy ??
+        null,
     );
     const kept = useKeptSheetDraft<KeptTask>(
       keptName,
@@ -370,6 +403,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         proofKind,
         pickedPhotos,
         repeat,
+        followedBy,
       },
       JSON.stringify([
         title,
@@ -382,6 +416,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         proofKind,
         pickedPhotos.map(({ image }) => image.uri),
         repeat,
+        followedBy,
       ]),
       opening,
     );
@@ -456,7 +491,10 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               : "Member"));
 
     // See the header: a relative chip re-reads today, a held date stays put.
-    const { date: dueDate, chipId: dueChipId } = resolveDue(due, at);
+    // A task up for grabs needs a day, so No due date reads as Today there.
+    const heldDue =
+      upForGrabs && due.kind === "none" ? DEFAULT_DUE_CHOICE : due;
+    const { date: dueDate, chipId: dueChipId } = resolveDue(heldDue, at);
     const pending =
       createTask.isPending || createOpenTask.isPending || posting || uploading;
 
@@ -475,14 +513,44 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     // card, and a suggestion is one task from one meeting.
     const repeatOffered = !suggestion && !postToChannel;
     const showRepeat = repeatOffered && !forGroup && !upForGrabs;
-    const firstDue = taskFirstDue(
-      dueTime ? `${dueDate}T${dueTime}` : dueDate,
-      repeat.timeZone,
-    );
+    // No due date can't repeat (#5761): with no first day there is no rule.
+    const firstDue = dueDate
+      ? taskFirstDue(
+          dueTime ? `${dueDate}T${dueTime}` : dueDate,
+          repeat.timeZone,
+        )
+      : null;
     const repeatRule =
       showRepeat && firstDue ? taskRepeatRuleOf(repeat, firstDue) : null;
-    const body = withRepeat(validateNewTask(draft, at), repeatRule);
-    const timePassed = dueTimePassed(draft, at);
+    // From (#5473), for a task made from the Tasks screen, the quick
+    // actions or an Ask card (`full`, 2026-11-22): not a chat's card or a
+    // minutes suggestion, whose routes carry none, nor a task up for grabs,
+    // which is the claimer's own once claimed. A repeating task can't have
+    // one yet; the field says so.
+    const fullForm = !suggestion || suggestion.full === true;
+    const fromOffered = offerGroups && fullForm && !postToChannel;
+    const followerChoices = fromOffered ? whoRead.followers : [];
+    const repeating = !!(repeatRule?.ok && repeatRule.rule);
+    // Only one of the officer's own (#5473): a Duplicate of a task from a
+    // group they aren't in, or one deleted since, would only be refused, so
+    // it opens on Just you; so does a kept draft until the choices are read.
+    // A card's proposed From is kept while the choices are still being read,
+    // so a Create pressed before they arrive doesn't clear it; the server
+    // checks it either way.
+    const ownFollower =
+      followedBy &&
+      (followerChoices.some((choice) => choice.entry === followedBy) ||
+        (whoRead.sets !== "ready" && followedBy === suggestion?.followedBy))
+        ? followedBy
+        : null;
+    const sentFollower =
+      fromOffered && !upForGrabs && !repeating ? ownFollower : null;
+    const body = withFollower(
+      withRepeat(validateNewTask(draft, at), repeatRule),
+      sentFollower,
+    );
+    const timePassed =
+      dueDate !== null && dueTimePassed({ dueDate, dueTime }, at);
     const pointsInvalid = parsePointReward(pointsInput).kind === "invalid";
     const canSubmit =
       body !== null && repeatRule?.ok !== false && !pending && refusal === null;
@@ -502,6 +570,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       setPhotoProblem(null);
       setRepeat(noTaskRepeatDraft());
       setRepeatOpen(false);
+      setFollowedBy(null);
     }, [clearKept]);
 
     /** Add photos from the library, several at once, up to the room left. */
@@ -840,16 +909,26 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
             </View>
 
             <View style={styles.splitRow}>
-              <View style={[styles.field, styles.splitField]}>
+              <View style={[styles.field, styles.dueField]}>
                 <DueDateField
                   value={dueDate}
                   today={localIsoDate(at)}
                   disabled={pending}
                   onChange={(date) => setDue({ kind: "date", date })}
+                  onClear={
+                    upForGrabs
+                      ? undefined
+                      : () => {
+                          setDue(NO_DUE_CHOICE);
+                          setDueTime(null);
+                          setRepeat(noTaskRepeatDraft());
+                          setRepeatOpen(false);
+                        }
+                  }
                 />
               </View>
 
-              {suggestion ? null : (
+              {fullForm ? (
                 <PointsField
                   input={BottomSheetTextInput}
                   value={pointsInput}
@@ -857,7 +936,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
                   editable={!pending}
                   style={styles.splitField}
                 />
-              )}
+              ) : null}
             </View>
 
             <FilterChips
@@ -873,14 +952,16 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               accessibilityLabel="Due date"
             />
 
-            <View style={styles.field}>
-              <DueTimeField
-                value={dueTime}
-                suggested={suggestedDueTime(dueDate, at)}
-                disabled={pending}
-                onChange={setDueTime}
-              />
-            </View>
+            {dueDate ? (
+              <View style={styles.field}>
+                <DueTimeField
+                  value={dueTime}
+                  suggested={suggestedDueTime(dueDate, at)}
+                  disabled={pending}
+                  onChange={setDueTime}
+                />
+              </View>
+            ) : null}
 
             {showRepeat ? (
               <TaskRepeatField
@@ -898,6 +979,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
                 fieldStyle={styles.field}
                 input={BottomSheetTextInput}
                 error={repeatRule && !repeatRule.ok ? repeatRule.error : null}
+                unavailable={dueDate ? null : TASK_REPEAT_NEEDS_DUE_DATE}
               />
             ) : repeatOffered && repeat.preset !== "NONE" ? (
               <Text style={styles.note}>
@@ -921,41 +1003,40 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               Web puts them under More options; this sheet has none, so they
               sit here, quiet until used. */}
             {suggestion ? null : (
-              <>
-                <View style={styles.group}>
-                  <Text style={styles.groupLabel}>Photos</Text>
-                  <Text style={styles.note}>
-                    {photosAllowed
-                      ? `What the job looks like (optional, up to ${TASK_PHOTOS_MAX}).`
-                      : upForGrabs
-                        ? `A task ${TASK_AUDIENCE_COPY.upForGrabs.toLowerCase()} can't carry photos yet.`
-                        : TASK_AUDIENCE_COPY.noPhotos}
-                  </Text>
-                  {!photosAllowed ? null : (
-                    <TaskPhotoPicker
-                      picked={pickedPhotos.map(({ image }) => image)}
-                      onRemovePicked={(index) =>
-                        setPickedPhotos((current) =>
-                          current.filter((_, i) => i !== index),
-                        )
-                      }
-                      onAdd={() => void addPhotos()}
-                      disabled={pending}
-                      adding={addingPhotos}
-                    />
-                  )}
-                  {photoProblem && photosAllowed ? (
-                    <Text style={styles.error}>{photoProblem}</Text>
-                  ) : null}
-                </View>
-
-                <ProofField
-                  value={proofKind}
-                  onChange={setProofKind}
-                  disabled={pending}
-                />
-              </>
+              <View style={styles.group}>
+                <Text style={styles.groupLabel}>Photos</Text>
+                <Text style={styles.note}>
+                  {photosAllowed
+                    ? `What the job looks like (optional, up to ${TASK_PHOTOS_MAX}).`
+                    : upForGrabs
+                      ? `A task ${TASK_AUDIENCE_COPY.upForGrabs.toLowerCase()} can't carry photos yet.`
+                      : TASK_AUDIENCE_COPY.noPhotos}
+                </Text>
+                {!photosAllowed ? null : (
+                  <TaskPhotoPicker
+                    picked={pickedPhotos.map(({ image }) => image)}
+                    onRemovePicked={(index) =>
+                      setPickedPhotos((current) =>
+                        current.filter((_, i) => i !== index),
+                      )
+                    }
+                    onAdd={() => void addPhotos()}
+                    disabled={pending}
+                    adding={addingPhotos}
+                  />
+                )}
+                {photoProblem && photosAllowed ? (
+                  <Text style={styles.error}>{photoProblem}</Text>
+                ) : null}
+              </View>
             )}
+            {fullForm ? (
+              <ProofField
+                value={proofKind}
+                onChange={setProofKind}
+                disabled={pending}
+              />
+            ) : null}
 
             <AssigneeRow
               label={assigneeLabel}
@@ -968,6 +1049,16 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               <Text style={styles.note}>
                 {whoHint(effectiveWho, directory)}
               </Text>
+            ) : null}
+
+            {fromOffered && !upForGrabs ? (
+              <FollowerField
+                value={sentFollower}
+                choices={followerChoices}
+                onChange={setFollowedBy}
+                disabled={pending}
+                repeating={repeating}
+              />
             ) : null}
 
             {timePassed ? (
@@ -1023,6 +1114,14 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
   },
 );
 
+/** The validated task with its From (#5473), when it has one. */
+function withFollower(
+  task: ValidatedNewTask | null,
+  followedBy: string | null,
+): ValidatedNewTask | null {
+  return task && followedBy ? { ...task, followed_by: followedBy } : task;
+}
+
 /** The validated task with the Repeat's rule, when it repeats (#5119). */
 function withRepeat(
   task: ValidatedNewTask | null,
@@ -1057,6 +1156,11 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
     },
     splitField: {
       flex: 1,
+    },
+    // The day ("Wednesday, November 25") and its clear need the room more
+    // than the points do, so the day reads on one line (#5761).
+    dueField: {
+      flex: 2,
     },
     error: {
       ...typeRole(tokens.typography.role.caption),

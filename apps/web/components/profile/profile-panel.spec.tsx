@@ -27,15 +27,11 @@ const mocks = vi.hoisted(() => {
       fetchStatus: "idle" as string,
       refetch: vi.fn(),
     },
-    stats: {
-      points: 1240 as number | null,
-      serviceHours: "18.5" as string | null,
-      hasChapter: true,
-      visible: true,
-      pointsFailed: false,
-      serviceFailed: false,
-    },
+    chapterId: "c-1" as string | null,
+    open: null as string | null,
+    replace: vi.fn(),
     permissions: ["members:view"] as string[],
+    majors: ["Mechanical Engineering", "Music", "Computer Science"],
     memberByUserId: vi.fn<(userId: string) => { data: unknown }>(() => ({
       data: undefined,
     })),
@@ -56,16 +52,24 @@ vi.mock("@/components/profile/profile-photo-control", () => ({
     mocks.photoControl(props),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {
     profileIdentityLine: actual.profileIdentityLine,
-    profileStatsErrorNote: actual.profileStatsErrorNote,
+    useActiveChapterId: () => mocks.chapterId,
     useMemberDisplayNames: () => ({ avatarTintFor: () => null }),
     useCurrentUser: () => mocks.userQuery,
     useUpdateUser: () => mocks.updateUser,
-    useMyProfileStats: () => mocks.stats,
     usePermissionList: () => mocks.permissions,
+    useChapterMajors: () => mocks.majors,
     useMemberByUserId: (userId: string) => mocks.memberByUserId(userId),
   };
 });
@@ -75,6 +79,44 @@ vi.mock("@repo/hooks", async (importOriginal) => {
 vi.mock("@/components/members/member-pledge-class-section", () => ({
   MemberPledgeClassSection: (props: Record<string, unknown>) =>
     mocks.classSection(props),
+}));
+
+// Last week and This semester are `StandingCards`' own (#5779); the panel's
+// job is whether it draws them.
+vi.mock("@/components/activity/standing-cards", () => ({
+  StandingCards: () => <div data-testid="standing-cards" />,
+}));
+
+// The doors and the three panels have their own specs
+// (`standing-stats.spec.tsx`, `my-points-panel.spec.tsx`,
+// `my-service-panel.spec.tsx`, `my-study-panel.spec.tsx`); the profile's job
+// is where they sit and which is open.
+vi.mock("@/components/standing/standing-stats", () => ({
+  StandingStats: () => <div data-testid="standing-stats" />,
+}));
+vi.mock("@/components/standing/standing-panels", () => ({
+  StandingPanels: ({
+    open,
+    onClose,
+  }: {
+    open: string | null;
+    onClose: () => void;
+  }) =>
+    open ? (
+      <button type="button" data-testid={`panel-${open}`} onClick={onClose}>
+        Close panel
+      </button>
+    ) : null,
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mocks.replace }),
+  useSearchParams: () => new URLSearchParams(mocks.open ? `open=${mocks.open}` : ""),
+}));
+
+// More details is its own spec's business (#581); the panel's job is the gate.
+vi.mock("@/components/profile/own-custom-fields-section", () => ({
+  OwnCustomFieldsSection: ({ enabled }: { enabled: boolean }) =>
+    enabled ? <div data-testid="own-custom-fields" /> : null,
 }));
 
 // The picker is its own spec's business (#4958).
@@ -257,6 +299,46 @@ describe("ProfilePanel — offline, then loading, then error, then the screen", 
   });
 });
 
+describe("ProfilePanel — Major suggests the chapter's majors (#5778)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetQueries();
+  });
+
+  it("offers matching majors and saves the picked spelling", async () => {
+    render(<ProfilePanel />);
+    const major = screen.getByRole("combobox", { name: /major/i });
+    await userEvent.type(major, "mu");
+    const list = await screen.findByRole("listbox", {
+      name: "Majors in your chapter",
+    });
+    expect(
+      Array.from(list.querySelectorAll('[role="option"]')).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Music"]);
+    await userEvent.click(screen.getByRole("option", { name: "Music" }));
+    expect(major).toHaveValue("Music");
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /save profile/i }),
+    );
+    await waitFor(() =>
+      expect(mocks.updateUser.mutateAsync).toHaveBeenCalled(),
+    );
+    expect(mocks.updateUser.mutateAsync.mock.calls[0]![0].major).toBe("Music");
+  });
+
+  it("still takes a major nobody has yet", async () => {
+    render(<ProfilePanel />);
+    const major = screen.getByRole("combobox", { name: /major/i });
+    await userEvent.type(major, "Industrial Systems");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(major).toHaveValue("Industrial Systems");
+  });
+});
+
 describe("ProfilePanel — graduation year guard (#2206)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -329,18 +411,67 @@ describe("ProfilePanel — profile details (2026-11-06 form fixes)", () => {
   });
 
   // #3711: the member's own phone, checked on Save, not per keystroke.
-  it("sends the phone the member typed", async () => {
+  // #5798: formatted as it is typed, sent normalized.
+  it("formats the phone as it is typed and sends it normalized", async () => {
     render(<ProfilePanel />);
 
-    await userEvent.type(screen.getByLabelText("Phone"), "(518) 555-0142");
+    const phone = screen.getByLabelText("Phone");
+    await userEvent.type(phone, "5185550142");
+    expect(phone).toHaveValue("(518) 555-0142");
     await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
     await waitFor(() => {
       expect(mocks.updateUser.mutateAsync).toHaveBeenCalled();
     });
     expect(mocks.updateUser.mutateAsync.mock.calls[0]![0]).toMatchObject({
-      phone: "(518) 555-0142",
+      phone: "+15185550142",
     });
+  });
+
+  it("keeps a number starting with + in its country's format", async () => {
+    render(<ProfilePanel />);
+    const phone = screen.getByLabelText("Phone");
+    await userEvent.type(phone, "+442079460958");
+    expect(phone).toHaveValue("+44 20 7946 0958");
+  });
+
+  it("shows a stored number formatted", async () => {
+    mocks.userQuery.data = { ...mocks.userQuery.data, phone: "+15185550142" };
+    render(<ProfilePanel />);
+    expect(screen.getByLabelText("Phone")).toHaveValue("(518) 555-0142");
+  });
+
+  it("backspaces through the formatting a digit at a time", async () => {
+    render(<ProfilePanel />);
+    const phone = screen.getByLabelText("Phone");
+    await userEvent.type(phone, "555");
+    expect(phone).toHaveValue("(555)");
+    await userEvent.type(phone, "{Backspace}");
+    expect(phone).toHaveValue("55");
+  });
+
+  it("keeps the caret after a digit typed mid-number", async () => {
+    render(<ProfilePanel />);
+    const phone = screen.getByLabelText("Phone") as HTMLInputElement;
+    await userEvent.type(phone, "555123456");
+    expect(phone).toHaveValue("(555) 123-456");
+    // Between "(55" and "5": type a 9.
+    await userEvent.type(phone, "9", {
+      initialSelectionStart: 3,
+      initialSelectionEnd: 3,
+    });
+    expect(phone).toHaveValue("(559) 512-3456");
+    expect(phone.selectionStart).toBe(4);
+  });
+
+  it("leaves an extension in the field for Save to refuse", async () => {
+    render(<ProfilePanel />);
+    await userEvent.type(screen.getByLabelText("Phone"), "5185550142 x12");
+    // The space is formatting the field drops; the letter stops it.
+    expect(screen.getByLabelText("Phone")).toHaveValue("(518) 555-0142x12");
+    await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter a phone number");
+    expect(mocks.updateUser.mutateAsync).not.toHaveBeenCalled();
   });
 
   it("draws no share switch while there is no birthday (#5282)", () => {
@@ -399,6 +530,61 @@ describe("ProfilePanel — profile details (2026-11-06 form fixes)", () => {
     });
   });
 
+  it("shows a locked name read-only, says who sets it, and never sends it (#5801)", async () => {
+    mocks.updateUser.mutateAsync.mockClear();
+    mocks.userQuery.data = {
+      ...mocks.userQuery.data,
+      display_name: "Ethan Smith",
+      display_name_locked: true,
+    };
+    render(<ProfilePanel />);
+
+    const name = screen.getByLabelText("Name");
+    expect(name).toHaveAttribute("readonly");
+    expect(name).toHaveValue("Ethan Smith");
+    expect(name).toHaveAccessibleDescription(
+      "Your chapter's officers set names.",
+    );
+    await userEvent.type(name, "Paul");
+    await userEvent.type(screen.getByLabelText("Major"), "Economics");
+    await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => {
+      expect(mocks.updateUser.mutateAsync).toHaveBeenCalled();
+    });
+    expect(mocks.updateUser.mutateAsync.mock.calls[0]![0]).toEqual({
+      major: "Economics",
+    });
+  });
+
+  it("drops a name typed before the lock arrived (#5801)", async () => {
+    mocks.updateUser.mutateAsync.mockClear();
+    mocks.userQuery.data = {
+      ...mocks.userQuery.data,
+      display_name: "Ethan Smith",
+    };
+    const { rerender } = render(<ProfilePanel />);
+    const name = screen.getByLabelText("Name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Paul");
+    await userEvent.type(screen.getByLabelText("Major"), "Economics");
+
+    mocks.userQuery.data = {
+      ...mocks.userQuery.data,
+      display_name_locked: true,
+    };
+    rerender(<ProfilePanel />);
+    expect(screen.getByLabelText("Name")).toHaveValue("Ethan Smith");
+    await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => {
+      expect(mocks.updateUser.mutateAsync).toHaveBeenCalled();
+    });
+    expect(mocks.updateUser.mutateAsync.mock.calls[0]![0]).toEqual({
+      major: "Economics",
+    });
+  });
+
   it("stops the name at the length the API takes", () => {
     render(<ProfilePanel />);
     expect(screen.getByLabelText("Name")).toHaveAttribute("maxlength", "100");
@@ -440,7 +626,9 @@ describe("ProfilePanel — profile details (2026-11-06 form fixes)", () => {
   it("refuses something that isn't a phone number, and says so", async () => {
     render(<ProfilePanel />);
 
-    await userEvent.type(screen.getByLabelText("Phone"), "call me");
+    // Letters never land in the field (#5798), so a number too short to dial
+    // is what it refuses.
+    await userEvent.type(screen.getByLabelText("Phone"), "55501");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
@@ -478,36 +666,27 @@ describe("ProfilePanel — profile details (2026-11-06 form fixes)", () => {
 describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
   beforeEach(() => {
     resetQueries();
-    mocks.stats.points = 1240;
-    mocks.stats.serviceHours = "18.5";
-    mocks.stats.pointsFailed = false;
-    mocks.stats.serviceFailed = false;
-    mocks.stats.hasChapter = true;
-    mocks.stats.visible = true;
+    mocks.chapterId = "c-1";
+    mocks.open = null;
+    mocks.replace.mockClear();
     mocks.permissions = ["members:view"];
     mocks.memberByUserId.mockClear();
     mocks.classSection.mockClear();
   });
 
-  it("shows your points and approved service hours", () => {
+  it("draws your numbers as doors, and opens the one the address names (#5950)", async () => {
+    mocks.open = "service";
     render(<ProfilePanel />);
-    expect(screen.getByText("Points").nextElementSibling).toHaveTextContent(
-      "1,240",
-    );
-    expect(
-      screen.getByText("Service hours").nextElementSibling,
-    ).toHaveTextContent("18.5");
+    expect(screen.getByTestId("standing-stats")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("panel-service"));
+    // Closing returns to the profile under it.
+    expect(mocks.replace).toHaveBeenCalledWith("/profile", { scroll: false });
   });
 
-  it("draws a dash, not a zero, for a number not read yet, and says which read failed", () => {
-    mocks.stats.points = null;
-    mocks.stats.serviceHours = null;
-    mocks.stats.serviceFailed = true;
+  it("opens no panel for an address that names none, or one that isn't a door", () => {
+    mocks.open = "dues";
     render(<ProfilePanel />);
-    expect(screen.getAllByText("—")).toHaveLength(2);
-    expect(
-      screen.getByText("Service hours couldn't load just now."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Close panel")).toBeNull();
   });
 
   it("puts major · company · year under the name, from what is saved", () => {
@@ -539,21 +718,15 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     expect(screen.queryByText("History · '27")).toBeNull();
   });
 
-  it("says to choose a chapter when there is none to read points in", () => {
-    mocks.stats.hasChapter = false;
-    mocks.stats.points = null;
-    mocks.stats.serviceHours = null;
+  it("shows Last week and This semester beside your numbers (#5779)", () => {
     render(<ProfilePanel />);
-    expect(
-      screen.getByText("Choose a chapter to see your points."),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("standing-cards")).toBeInTheDocument();
   });
 
-  it("leaves the numbers out for a role that can't read them", () => {
-    mocks.stats.visible = false;
+  it("draws no standing without a chapter to read it in (#5779)", () => {
+    mocks.chapterId = null;
     render(<ProfilePanel />);
-    expect(screen.queryByText("Points")).toBeNull();
-    expect(screen.queryByText("Service hours")).toBeNull();
+    expect(screen.queryByTestId("standing-cards")).toBeNull();
   });
 
   it("hands your class and number to read-only rows", () => {
@@ -576,5 +749,15 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     mocks.permissions = [];
     render(<ProfilePanel />);
     expect(mocks.memberByUserId).not.toHaveBeenCalledWith("u-1");
+  });
+
+  it("draws More details behind the Directory's permission (#581)", () => {
+    const { unmount } = render(<ProfilePanel />);
+    expect(screen.getByTestId("own-custom-fields")).toBeInTheDocument();
+    unmount();
+
+    mocks.permissions = [];
+    render(<ProfilePanel />);
+    expect(screen.queryByTestId("own-custom-fields")).toBeNull();
   });
 });

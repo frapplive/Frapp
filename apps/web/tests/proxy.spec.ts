@@ -6,7 +6,9 @@ const SUPABASE_ENV_KEYS = [
 ] as const;
 
 describe("apps/web/proxy.ts", () => {
-  const originalEnv: Partial<Record<(typeof SUPABASE_ENV_KEYS)[number], string | undefined>> = {};
+  const originalEnv: Partial<
+    Record<(typeof SUPABASE_ENV_KEYS)[number], string | undefined>
+  > = {};
 
   beforeEach(() => {
     for (const key of SUPABASE_ENV_KEYS) {
@@ -41,30 +43,37 @@ describe("apps/web/proxy.ts", () => {
   test("matcher gates every protected and auth route, skipping only dashboard prefetches", async () => {
     // Compiled by Next's own build-time matcher code, so this checks what a
     // deployment actually runs, not a hand-copied regex.
-    const { config, PROTECTED_ROUTE_PREFIXES, AUTH_ROUTES } = await import(
-      "../proxy"
-    );
+    const { config, PROTECTED_ROUTE_PREFIXES, AUTH_ROUTES } =
+      await import("../proxy");
     // Internal Next module: it exports this at runtime, but its type
     // declarations leave it out.
-    const { getMiddlewareMatchers } = (await import(
-      "next/dist/build/analysis/get-page-static-info.js"
-    )) as unknown as {
-      getMiddlewareMatchers: (
-        matcher: unknown,
-        nextConfig: { basePath: string; i18n: undefined },
-      ) => { regexp: string; missing?: unknown[] }[];
-    };
+    const { getMiddlewareMatchers } =
+      (await import("next/dist/build/analysis/get-page-static-info.js")) as unknown as {
+        getMiddlewareMatchers: (
+          matcher: unknown,
+          nextConfig: { basePath: string; i18n: undefined },
+        ) => { regexp: string; missing?: unknown[] }[];
+      };
     const compiled = getMiddlewareMatchers(config.matcher, {
       basePath: "",
       i18n: undefined,
     }).map((m) => ({ re: new RegExp(m.regexp), skipsPrefetch: !!m.missing }));
-    const onNavigation = (path: string) => compiled.some((m) => m.re.test(path));
+    const onNavigation = (path: string) =>
+      compiled.some((m) => m.re.test(path));
     const onPrefetch = (path: string) =>
       compiled.some((m) => !m.skipsPrefetch && m.re.test(path));
 
     // Static routes: Next reuses their prefetch as the navigation, so the
     // proxy must run on the prefetch too.
-    const staticRoutes = ["/", ...AUTH_ROUTES, "/join", "/no-access", "/dashboard"];
+    const staticRoutes = [
+      "/",
+      ...AUTH_ROUTES,
+      "/join",
+      "/no-access",
+      "/welcome",
+      "/start-council",
+      "/dashboard",
+    ];
     for (const path of staticRoutes) {
       expect(onNavigation(path), path).toBe(true);
       expect(onPrefetch(path), path).toBe(true);
@@ -98,8 +107,36 @@ describe("apps/web/proxy.ts", () => {
       [...dynamicPrefixes].sort(),
     );
 
-    for (const path of ["/robots.txt", "/auth/callback", "/_next/static/a.js"]) {
+    for (const path of [
+      "/robots.txt",
+      "/auth/callback",
+      // The desktop app's sign-in returns here signed out (#4841).
+      "/auth/desktop",
+      "/desktop-sign-in",
+      "/_next/static/a.js",
+    ]) {
       expect(onNavigation(path), path).toBe(false);
+    }
+  });
+
+  test("gates every dashboard page: a route under app/(dashboard) is a protected prefix", async () => {
+    // `/ask` (2026-11-22), `/meetings` and `/whats-new` were left out of
+    // both lists, so a signed-out visit rendered an empty shell instead of
+    // going to sign-in, and the check above, which only holds the two lists
+    // to each other, stayed green.
+    const { readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { PROTECTED_ROUTE_PREFIXES } = await import("../proxy");
+    const dashboard = join(__dirname, "../app/(dashboard)");
+    const routes = readdirSync(dashboard).filter(
+      (name) =>
+        statSync(join(dashboard, name)).isDirectory() &&
+        !name.startsWith("(") &&
+        !name.startsWith("_"),
+    );
+    expect(routes.length).toBeGreaterThan(10);
+    for (const route of routes) {
+      expect(PROTECTED_ROUTE_PREFIXES, `/${route}`).toContain(`/${route}`);
     }
   });
 
@@ -143,26 +180,19 @@ describe("apps/web/proxy.ts", () => {
     );
   });
 
-  test("an invite link opened on a phone reaches /join signed out, and nothing else does (#4002)", async () => {
-    const { isPhoneInviteVisit } = await import("../proxy");
+  test("an invite link reaches /join signed out on any device, and nothing else does (#5625)", async () => {
+    const { isInviteVisit } = await import("../proxy");
     const { NextRequest } = await import("next/server");
-    const IPHONE =
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1";
-    const DESKTOP =
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Safari/605.1.15";
-    const visit = (url: string, ua: string) =>
-      isPhoneInviteVisit(
-        new NextRequest(url, { headers: { "user-agent": ua } }),
-      );
+    const visit = (url: string) => isInviteVisit(new NextRequest(url));
 
-    expect(visit("https://app.frapp.live/join?token=abc", IPHONE)).toBe(true);
-    expect(visit("https://app.frapp.live/join?code=abc", IPHONE)).toBe(true);
-    // No invite to hand over: the page has nothing to offer the app.
-    expect(visit("https://app.frapp.live/join", IPHONE)).toBe(false);
-    expect(visit("https://app.frapp.live/join?token=", IPHONE)).toBe(false);
-    expect(visit("https://app.frapp.live/join?from=sign-in", IPHONE)).toBe(false);
+    expect(visit("https://app.frapp.live/join?token=abc")).toBe(true);
+    expect(visit("https://app.frapp.live/join?code=abc")).toBe(true);
+    expect(visit("https://app.frapp.live/join?token=abc&web=1")).toBe(true);
+    // No invite, so no card to show: sign in first.
+    expect(visit("https://app.frapp.live/join")).toBe(false);
+    expect(visit("https://app.frapp.live/join?token=")).toBe(false);
+    expect(visit("https://app.frapp.live/join?from=sign-in")).toBe(false);
     // Only /join: every other gated page still bounces to sign-in.
-    expect(visit("https://app.frapp.live/chat?token=abc", IPHONE)).toBe(false);
-    expect(visit("https://app.frapp.live/join?token=abc", DESKTOP)).toBe(false);
+    expect(visit("https://app.frapp.live/chat?token=abc")).toBe(false);
   });
 });

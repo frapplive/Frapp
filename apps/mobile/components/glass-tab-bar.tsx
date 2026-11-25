@@ -26,14 +26,13 @@ import { GlassSurface } from "@/components/glass-surface";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { useQuickActionsHost } from "@/components/quick-actions/quick-actions-host";
 import { useQuickActions } from "@/components/quick-actions/use-quick-actions";
-import { useActivity } from "@repo/hooks";
+import { activityCountChip, useActivity } from "@repo/hooks";
 import { useAiSurfaces } from "@/lib/ai/availability";
 import { MEMBER_STATUS_LABEL } from "@repo/hooks/member-status";
 import { useOwnStatus } from "@/lib/account/own-status";
-import { activityCountChip } from "@/lib/activity/count-chip";
 import { useActivityRereadOnTab } from "@/lib/activity/use-activity-reread";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 import { TabLabel } from "@/components/tab-glyphs";
-import { useTourAnchor } from "@/components/onboarding/tour";
 import {
   unreadConversationsSpoken,
   useUnreadConversationCount,
@@ -81,7 +80,7 @@ const FOLDED_DOT_STEP = 12;
  * screen. The + opens the quick-actions panel above the bar and turns into an
  * X while it is open (`spec/ui/mobile/navigation.md` § Quick actions).
  *
- * Above both, for a member who has Ask, sits the Ask Frapp bar
+ * Above both, for a member who has Ask, sits the Frapp Intelligence bar
  * (`ask/ask-bar.tsx`, #4702): on all four tabs, not inside the + panel, where
  * it was until 2026-11-13. The open panel covers it. While the member reads
  * down a tab screen the bar folds and the Ask bar joins the tabs' row (#4904,
@@ -104,7 +103,11 @@ export function GlassTabBar({
   // became a tab (#4610). It is read again on every change of tab, on every
   // return to the tabs from a pushed screen, on every visit to Activity, and
   // on every return to the app.
-  const needsYou = activityCountChip(useActivity().data);
+  // Not in a council, whose Activity tab is its home and reads no Activity
+  // route (#5933): it would only be refused.
+  const needsYou = activityCountChip(
+    useActivity({ enabled: useServesChapterFeatures() }).data,
+  );
   // Messages' tab carries the count of conversations with anything unread,
   // which Chat home's Messages door carried until the tab replaced it (#5310).
   const unreadConversations = useUnreadConversationCount();
@@ -112,11 +115,6 @@ export function GlassTabBar({
     unreadConversationsSpoken(unreadConversations);
   const reduceMotion = useReducedMotion();
   const { shown, available, save, ready } = useQuickActions();
-  // Three of the first-run tour's stops: the Messages tab, the + and the
-  // You tab.
-  const messagesAnchor = useTourAnchor("messages");
-  const plusAnchor = useTourAnchor("quickActions");
-  const youAnchor = useTourAnchor("you");
   // The status a member picked (#3845) shows on the You tab's avatar, so the
   // tab names it too. Online is the one nobody picks, so it says nothing.
   const own = useOwnStatus();
@@ -219,7 +217,7 @@ export function GlassTabBar({
     return () => subscription.remove();
   }, [open, editing, closePanel]);
 
-  // The Ask Frapp bar is there only for a member who has Ask; the server
+  // The Frapp Intelligence bar is there only for a member who has Ask; the server
   // decides. The tab screens are told, so their last row and anything that
   // floats above the tab bar clears it (`useAskBarLift`).
   const hasAsk = useAiSurfaces().ask;
@@ -230,7 +228,7 @@ export function GlassTabBar({
 
   // The fold (#4904, Paul's direction A, 2026-11-17): reading down a tab
   // screen folds the four tabs to the current one, a round the size of the
-  // +, and brings the Ask Frapp bar down into the row between them, Bevel's
+  // +, and brings the Frapp Intelligence bar down into the row between them, Bevel's
   // three pieces and iOS 26's own minimised tab bar. Any move back up opens
   // it (`useBarScroll`). Only with the Ask bar to bring down, never while the
   // + panel is open, and never under a screen reader, which keeps every tab
@@ -277,7 +275,7 @@ export function GlassTabBar({
     FLOATING_TAB_BAR.actionGap;
   const panelWidth = width - FLOATING_TAB_BAR.side * 2;
   const askBarBottom = floatingTabBarTop(bottomInset) + FLOATING_ASK_BAR.gap;
-  // A confirmation sits above the Ask Frapp bar where there is one.
+  // A confirmation sits above the Frapp Intelligence bar where there is one.
   const aboveAskBar = hasAsk
     ? askBarBottom + FLOATING_ASK_BAR.height + FLOATING_TAB_BAR.actionGap
     : aboveBar;
@@ -429,13 +427,6 @@ export function GlassTabBar({
             return (
               <Pressable
                 key={route.key}
-                ref={
-                  name === "you"
-                    ? youAnchor
-                    : name === "messages"
-                      ? messagesAnchor
-                      : undefined
-                }
                 accessibilityRole="tab"
                 accessibilityState={{ selected: focused }}
                 accessibilityLabel={
@@ -588,7 +579,6 @@ export function GlassTabBar({
         ]}
       >
         <Pressable
-          ref={plusAnchor}
           // The Maestro flows tap the + by this id: open, its label is shared
           // with the scrim, whose center sits under the panel.
           testID="tab-plus"

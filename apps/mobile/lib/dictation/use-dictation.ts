@@ -16,7 +16,8 @@ import {
 } from "./speech";
 
 /**
- * Dictation into Ask's field (#5276), as Paul picked it on 2026-11-17 from
+ * Dictation into Ask's field (#5276) and the phone's chat composers (#5772,
+ * through `components/dictation/use-field-dictation.ts`), as Paul picked it on 2026-11-17 from
  * the design page: tap the mic, talk while a waveform follows the voice, tap
  * the check, and the words land in the field tidied up (no fillers or false
  * starts, with punctuation). Nothing is sent by speaking: the member reads,
@@ -25,7 +26,7 @@ import {
  * Phases: `idle`, `listening` (the recogniser is on, words and level arrive)
  * and `cleaning` (the words are with Frapp's AI for about a second). The
  * cleanup is the caller's `clean`, which resolves the tidied text or `null`;
- * `null`, a timeout or no Frapp AI all leave the words as heard.
+ * `null`, a timeout or no Frapp Intelligence all leave the words as heard.
  *
  * **The fast values live outside React state.** The level arrives every
  * 60 ms, so it, the words and the clock are kept in {@link DictationLive}, a

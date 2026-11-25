@@ -42,6 +42,11 @@ import {
   useKeptDraftKeys,
 } from "@repo/hooks/kept-drafts";
 import { drawnText, screenText } from "@/test/screen-text";
+import {
+  currentItemMenu,
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
 
 /**
  * s06, rendered: the Calendar's month (`app/(app)/events.tsx`) and the Day
@@ -298,6 +303,7 @@ afterEach(() => {
   act(() => {
     for (const tree of mounted.splice(0)) tree.unmount();
   });
+  dismissItemMenu();
   vi.useRealTimers();
 });
 
@@ -410,7 +416,7 @@ describe("Calendar states", () => {
     query = { isPending: true, isError: false, isFetching: false };
     const tree = render();
 
-    expect(screenText(tree)).toContain("Choose a chapter from You");
+    expect(screenText(tree)).toContain("then Switch chapter");
     expect(skeletons(tree)).toHaveLength(0);
   });
 
@@ -562,7 +568,7 @@ describe("Calendar day rows", () => {
     expect(drawnText(row)).toContain(`Chapter · Every ${weekday}`);
   });
 
-  it("draws a later row with no card fill and Mandatory as a hairline", () => {
+  it("draws a later row with no card fill and Required as a hairline", () => {
     events = [make("a", 0), make("b", 2, { is_mandatory: true })];
     const tree = render();
     pickDay(tree, at(2));
@@ -577,7 +583,7 @@ describe("Calendar day rows", () => {
     const chip = row.find(
       (node) =>
         (node.type as unknown) === "Text" &&
-        node.props.children === "Mandatory",
+        node.props.children === "Required",
     );
     expect(StyleSheet.flatten(chip.props.style).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
@@ -605,12 +611,12 @@ describe("Calendar day rows", () => {
     const tiles = row.findAllByType(LeadTile);
     expect(tiles).toHaveLength(1);
     expect(tiles[0]!.props.size).toBe("lead");
-    // The chevron is the row's last thing, after Mandatory.
+    // The chevron is the row's last thing, after Required.
     const trailing = row.findAll(
       (node) =>
         node.type === ForwardGlyph ||
         ((node.type as unknown) === "Text" &&
-          node.props.children === "Mandatory"),
+          node.props.children === "Required"),
     );
     expect(trailing.map((node) => node.type === ForwardGlyph)).toEqual([
       false,
@@ -637,6 +643,10 @@ describe("Calendar day rows", () => {
     // A count read as text is written out, as web writes it (#4135).
     expect(screenText(tree)).toMatch(/Library · 15 points/);
     expect(screenText(tree)).not.toContain("+15 pts");
+    // Start to end, as web's agenda row says it (2026-11-19).
+    expect(screenText(tree)).toMatch(
+      /\d{1,2}:\d{2}( [AP]M)? – \d{1,2}:\d{2} [AP]M · Library/,
+    );
   });
 
   it("splits a day's rows by hairlines, none above the first, and bleeds into the gutter", () => {
@@ -975,18 +985,40 @@ describe("Calendar long-press menus", () => {
     );
   });
 
-  it("asks a repeating event's Delete this one or all upcoming", () => {
+  it("asks a repeating event's Delete this one or all upcoming", async () => {
     permissions = ["*"];
     events = [{ ...EVENT, recurrence_rule: "WEEKLY", parent_event_id: null }];
     const tree = render();
     openMenu(eventRow(tree));
     pick(tree, "Delete");
-    const [, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
-    expect((buttons as AlertButton[]).map((button) => button.text)).toEqual([
-      SERIES_SCOPE_COPY.thisEvent,
-      SERIES_SCOPE_COPY.allUpcoming,
-      "Cancel",
+    expect(Alert.alert).not.toHaveBeenCalled();
+    const menu = currentItemMenu()!;
+    expect(menu.title).toBe(SERIES_SCOPE_COPY.deleteTitle);
+    expect(menu.message).toBe(SERIES_SCOPE_COPY.deleteMessage);
+    // Only the every-upcoming answer is red.
+    expect(
+      menu.actions.map((action) => [action.label, !!action.destructive]),
+    ).toEqual([
+      [SERIES_SCOPE_COPY.thisEvent, false],
+      [SERIES_SCOPE_COPY.allUpcoming, true],
     ]);
+    expect(deleteEvent).not.toHaveBeenCalled();
+    await act(async () => pickItemMenuAction(SERIES_SCOPE_COPY.allUpcoming));
+    expect(deleteEvent).toHaveBeenCalledWith(
+      { id: "evt-1", scope: "series" },
+      expect.any(Object),
+    );
+  });
+
+  it("deletes nothing when a repeating event's question is dismissed", async () => {
+    permissions = ["*"];
+    events = [{ ...EVENT, recurrence_rule: "WEEKLY", parent_event_id: null }];
+    const tree = render();
+    openMenu(eventRow(tree));
+    pick(tree, "Delete");
+    await act(async () => dismissItemMenu());
+    expect(currentItemMenu()).toBeNull();
+    expect(deleteEvent).not.toHaveBeenCalled();
   });
 
   it("offers a member their own task's Mark done, and an officer's two separate tasks none", () => {
@@ -1336,6 +1368,24 @@ describe("Tasks on the Calendar", () => {
       },
     ];
   }
+
+  it("leads a task due at a time with its time (#5116)", () => {
+    const at5 = new Date(MOUNTED_AT);
+    at5.setHours(17, 0, 0, 0);
+    tasks = [
+      {
+        id: "t-timed",
+        title: "Book the bus",
+        assignee_id: "me",
+        created_by: "m1",
+        due_date: localIsoDate(MOUNTED_AT),
+        due_at: at5.toISOString(),
+        status: "TODO",
+      },
+    ];
+    const tree = render();
+    expect(screenText(tree)).toContain("5 PM · To do");
+  });
 
   it("lists the day's tasks under its events, with where they stand", () => {
     withTasks();
@@ -1739,10 +1789,44 @@ describe("Calendar day screen", () => {
     expect(screenText(tree)).toContain("Clean the kitchen");
   });
 
-  it("says when a block's event is mandatory", () => {
+  it("draws a task due at a time at that time, not in the All day strip (#5116)", () => {
+    const day = today();
+    const at5 = new Date(day);
+    at5.setHours(17, 0, 0, 0);
+    tasks = [
+      {
+        id: "t-timed",
+        title: "Book the bus",
+        assignee_id: "me",
+        created_by: "m1",
+        due_date: localIsoDate(day),
+        due_at: at5.toISOString(),
+        status: "TODO",
+      },
+    ];
+    const tree = renderDay(day);
+    expect(screenText(tree)).not.toContain("All day");
+    const [marker] = tree.root.findAll(
+      (node) =>
+        node.props.testID === "time-grid-task-task:t-timed" &&
+        typeof node.props.style !== "undefined",
+    );
+    expect(marker).toBeDefined();
+    expect(marker!.props.accessibilityLabel).toBe(
+      "Book the bus, due 5 PM, your task, to do",
+    );
+    const style = StyleSheet.flatten(
+      typeof marker!.props.style === "function"
+        ? marker!.props.style({ pressed: false })
+        : marker!.props.style,
+    );
+    expect(style.top).toBe(17 * 48);
+  });
+
+  it("says when a block's event is required", () => {
     events = [{ ...EVENT, is_mandatory: true }];
     const tree = renderDay(new Date(EVENT.start_time));
     const [block] = blocks(tree);
-    expect(block!.props.accessibilityLabel).toMatch(/, mandatory$/);
+    expect(block!.props.accessibilityLabel).toMatch(/, required$/);
   });
 });

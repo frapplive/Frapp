@@ -12,6 +12,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { MeetingTaskSuggestionsService } from '../../application/services/meeting-task-suggestions.service';
+import { RbacService } from '../../application/services/rbac.service';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
@@ -26,6 +27,7 @@ import {
   MeetingActionItemTaskDto,
   SeriesOpenActionItemsDto,
 } from '../dtos/meeting-action-item-task.dto';
+import { VerifySessionLocally } from '../decorators/session-check.decorator';
 
 /**
  * The tasks posted minutes' action items became, for the minutes' checkboxes
@@ -41,12 +43,16 @@ import {
 @RequireModule('meetings')
 @Controller('meetings')
 export class MeetingActionItemTasksController {
-  constructor(private readonly suggestions: MeetingTaskSuggestionsService) {}
+  constructor(
+    private readonly suggestions: MeetingTaskSuggestionsService,
+    private readonly rbac: RbacService,
+  ) {}
 
   @Get(':id/action-item-tasks')
+  @VerifySessionLocally()
   @ApiOperation({
     summary:
-      'Which action items of posted minutes became tasks, and whether each is done. Empty for a draft',
+      'Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051)',
   })
   @ApiOkResponse({ type: MeetingActionItemTaskDto, isArray: true })
   async list(
@@ -54,7 +60,18 @@ export class MeetingActionItemTasksController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<MeetingActionItemTaskDto[]> {
-    return this.suggestions.actionItemTasks(chapterId, id, userId);
+    // Who may read every task may be told which task and whose (#6051);
+    // everyone else sees only the done mark (`tasks.md` § Visibility).
+    const withTask = await this.rbac.memberHasAnyPermission(chapterId, userId, [
+      SystemPermissions.TASKS_MANAGE,
+    ]);
+    const marks = await this.suggestions.actionItemTasks(
+      chapterId,
+      id,
+      userId,
+      { withTask },
+    );
+    return marks.map((mark) => MeetingActionItemTaskDto.from(mark));
   }
 
   @Get('series/:key/open-action-items')

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiSuggestionChangeLogService } from '../../application/services/ai-suggestion-change-log.service';
 import { AiSuggestionService } from '../../application/services/ai-suggestion.service';
 import { AiSuggestionConsentListener } from '../../application/services/ai-suggestion-consent.listener';
 import { AI_SUGGESTION_KIND_HANDLERS } from '../../application/services/ai-suggestion-kinds';
@@ -32,6 +33,7 @@ import { ChannelAccessModule } from '../channel-access/channel-access.module';
 import { AiConsentModule } from '../ai-consent/ai-consent.module';
 import { MeetingModule } from '../meeting/meeting.module';
 import { MeetingTaskSuggestionsService } from '../../application/services/meeting-task-suggestions.service';
+import { MinutesNextAgendaService } from '../../application/services/minutes-next-agenda.service';
 import { LastYearSuggestionsService } from '../../application/services/last-year-suggestions.service';
 import { LastYearSweepService } from '../../application/workers/last-year-sweep.service';
 import { AiRunsModule } from '../ai-runs/ai-runs.module';
@@ -39,6 +41,10 @@ import { SupabaseMemberRepository } from '../../infrastructure/supabase/reposito
 import { SupabaseRoleRepository } from '../../infrastructure/supabase/repositories/supabase-role.repository';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface';
+import { EVENT_AGENDA_SUGGESTION_REPOSITORY } from '#domain/repositories/event-agenda-suggestion.repository.interface';
+import { SupabaseEventAgendaSuggestionRepository } from '../../infrastructure/supabase/repositories/supabase-event-agenda-suggestion.repository';
+import { MEETING_NEXT_AGENDA_ITEM_REPOSITORY } from '#domain/repositories/meeting-next-agenda-item.repository.interface';
+import { SupabaseMeetingNextAgendaItemRepository } from '../../infrastructure/supabase/repositories/supabase-meeting-next-agenda-item.repository';
 
 /**
  * AI suggestions (#4309). A new kind is a handler added to the kinds list; a
@@ -65,6 +71,7 @@ import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface'
   controllers: [AiSuggestionController, MeetingActionItemTasksController],
   providers: [
     AiSuggestionService,
+    AiSuggestionChangeLogService,
     AiSuggestionConsentListener,
     AiSuggestionExpiryService,
     AiEnabledGuard,
@@ -78,6 +85,7 @@ import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface'
     RequestSuggestionSource,
     TaskSuggestionSource,
     MeetingTaskSuggestionsService,
+    MinutesNextAgendaService,
     LastYearSuggestionsService,
     LastYearSweepService,
     {
@@ -115,6 +123,16 @@ import { ROLE_REPOSITORY } from '#domain/repositories/role.repository.interface'
     {
       provide: AI_SUGGESTION_REPOSITORY,
       useClass: SupabaseAiSuggestionRepository,
+    },
+    // What earlier minutes sent to the next meeting's agenda (#5790), and
+    // whether an officer already added an offered one (Undo).
+    {
+      provide: EVENT_AGENDA_SUGGESTION_REPOSITORY,
+      useClass: SupabaseEventAgendaSuggestionRepository,
+    },
+    {
+      provide: MEETING_NEXT_AGENDA_ITEM_REPOSITORY,
+      useClass: SupabaseMeetingNextAgendaItemRepository,
     },
     // The batch push reads the chapter's modules (a kind's module off means
     // nobody is told).

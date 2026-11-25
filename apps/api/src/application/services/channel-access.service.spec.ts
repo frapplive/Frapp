@@ -141,6 +141,9 @@ describe('ChannelAccessService', () => {
       update: jest.fn(),
     };
     mockMemberRepo = {
+      completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUser: jest.fn(),
       findByUserAndChapter: jest.fn(),
@@ -153,6 +156,7 @@ describe('ChannelAccessService', () => {
       claimPresidencyAtomic: jest.fn(),
       setRoleIds: jest.fn(),
       setSelfAssignedRole: jest.fn(),
+      countByChapter: jest.fn(),
     };
     mockRbac = {
       // Default: an active member holding nothing a list names.
@@ -317,7 +321,8 @@ describe('ChannelAccessService', () => {
     const member = (user_id: string, channel_access: ChannelAccessHolder) => ({
       user_id,
       permissions: new Set<string>(),
-      top_role_order: null,
+      top_role_rank: null,
+      top_tier: null,
       top_role: null,
       channel_access,
     });
@@ -390,28 +395,32 @@ describe('ChannelAccessService', () => {
       {
         user_id: 'president',
         permissions: new Set(['*']),
-        top_role_order: 0,
+        top_role_rank: 0,
+        top_tier: { id: 't-cabinet', name: 'Cabinet', position: 1 },
         top_role: { id: 'r-pres', name: 'President' },
         channel_access: WILDCARD,
       },
       {
         user_id: 'member-of-private',
         permissions: new Set<string>(),
-        top_role_order: 4,
+        top_role_rank: 4,
+        top_tier: null,
         top_role: { id: 'r-mem', name: 'Member' },
         channel_access: EMPTY_ACCESS_HOLDER,
       },
       {
         user_id: 'secret-holder',
         permissions: new Set<string>(),
-        top_role_order: 2,
+        top_role_rank: 2,
+        top_tier: null,
         top_role: { id: 'r-sec', name: 'Secret' },
         channel_access: holderOf(SECRET),
       },
       {
         user_id: 'no-role',
         permissions: new Set<string>(),
-        top_role_order: null,
+        top_role_rank: null,
+        top_tier: null,
         top_role: null,
         channel_access: EMPTY_ACCESS_HOLDER,
       },
@@ -438,24 +447,47 @@ describe('ChannelAccessService', () => {
           role_rank: 0,
           role_id: 'r-pres',
           role_name: 'President',
+          title: 'President',
+          tier_id: 't-cabinet',
+          tier_name: 'Cabinet',
+          tier_rank: 1,
         },
         {
           user_id: 'member-of-private',
           role_rank: 4,
           role_id: 'r-mem',
           role_name: 'Member',
+          title: 'Member',
+          tier_id: null,
+          tier_name: null,
+          tier_rank: null,
         },
         {
           user_id: 'secret-holder',
           role_rank: 2,
           role_id: 'r-sec',
           role_name: 'Secret',
+          title: 'Secret',
+          tier_id: null,
+          tier_name: null,
+          tier_rank: null,
         },
-        { user_id: 'no-role', role_rank: null, role_id: null, role_name: null },
+        {
+          user_id: 'no-role',
+          role_rank: null,
+          role_id: null,
+          role_name: null,
+          title: null,
+          tier_id: null,
+          tier_name: null,
+          tier_rank: null,
+        },
       ]);
       expect(mockRbac.getChapterMemberAccess).toHaveBeenCalledWith(
         'chap-1',
         false,
+        undefined,
+        true,
       );
     });
 
@@ -494,6 +526,10 @@ describe('ChannelAccessService', () => {
           role_rank: 4,
           role_id: 'r-mem',
           role_name: 'Member',
+          title: 'Member',
+          tier_id: null,
+          tier_name: null,
+          tier_rank: null,
         },
       ]);
     });
@@ -504,7 +540,8 @@ describe('ChannelAccessService', () => {
         {
           user_id: 'plain-member',
           permissions: new Set<string>(),
-          top_role_order: 4,
+          top_role_rank: 4,
+          top_tier: null,
           top_role: { id: 'r-everyone', name: 'Everyone', everyone: true },
           channel_access: EMPTY_ACCESS_HOLDER,
         },
@@ -522,6 +559,10 @@ describe('ChannelAccessService', () => {
           role_rank: 4,
           role_id: 'r-everyone',
           role_name: 'Members',
+          title: null,
+          tier_id: null,
+          tier_name: null,
+          tier_rank: null,
         },
       ]);
     });
@@ -1306,6 +1347,128 @@ describe('ChannelAccessService', () => {
 
       expect(result.map((c) => c.can_post)).toEqual([true, false]);
       expect(mockRbac.getChannelAccessHolder).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Chat timeouts (#6006, spec/behavior/chat/README.md § Timeouts).
+  describe('assertChannelAccess — chat timeout', () => {
+    const NOW = Date.parse('2026-11-25T15:00:00.000Z');
+    const timedOut = {
+      ...member,
+      chat_timeout_until: '2026-11-25T15:40:00.000Z',
+      chat_timeout_reason: 'spamming',
+    } as Member;
+    const dm: ChatChannel = {
+      ...publicChannel,
+      id: 'ch-dm',
+      type: 'DM',
+      member_ids: ['user-1', 'user-2'],
+    };
+    const groupDm: ChatChannel = { ...dm, id: 'ch-gdm', type: 'GROUP_DM' };
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW });
+      mockRbac.getChannelAccessHolder.mockResolvedValue(EMPTY_ACCESS_HOLDER);
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(timedOut);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    const refusal = (promise: Promise<unknown>) =>
+      promise.then(
+        () => null,
+        (error: ForbiddenException) => ({
+          status: error.getStatus(),
+          body: error.getResponse(),
+        }),
+      );
+
+    it.each(['post', 'thread', 'react'] as const)(
+      'refuses a %s in a channel with the coded 403',
+      async (operation) => {
+        mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+        await expect(
+          refusal(
+            service.assertChannelAccess(
+              'ch-public',
+              'chap-1',
+              'user-1',
+              operation,
+            ),
+          ),
+        ).resolves.toEqual({
+          status: 403,
+          body: expect.objectContaining({ code: 'chat.timed_out' }),
+        });
+      },
+    );
+
+    it.each(['read', 'vote', 'answer', 'close', 'modify'] as const)(
+      'still allows a %s in a channel',
+      async (operation) => {
+        mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+        await expect(
+          service.assertChannelAccess(
+            'ch-public',
+            'chap-1',
+            'user-1',
+            operation,
+          ),
+        ).resolves.toBe(publicChannel);
+      },
+    );
+
+    it.each([dm, groupDm])(
+      'leaves posting and reacting in a $type alone',
+      async (channel) => {
+        mockChannelRepo.findById.mockResolvedValue(channel);
+
+        for (const operation of ['post', 'react'] as const) {
+          await expect(
+            service.assertChannelAccess(
+              channel.id,
+              'chap-1',
+              'user-1',
+              operation,
+            ),
+          ).resolves.toBe(channel);
+        }
+      },
+    );
+
+    it('lets the member post again once the time has passed', async () => {
+      mockChannelRepo.findById.mockResolvedValue(publicChannel);
+      jest.setSystemTime(Date.parse('2026-11-25T15:40:00.001Z'));
+
+      await expect(
+        service.assertChannelAccess('ch-public', 'chap-1', 'user-1', 'post'),
+      ).resolves.toBe(publicChannel);
+    });
+
+    it('answers a channel the member cannot see as no access, not a timeout', async () => {
+      mockChannelRepo.findById.mockResolvedValue(privateChannel);
+
+      await expect(
+        service.assertChannelAccess('ch-private', 'chap-1', 'user-1', 'post'),
+      ).rejects.toThrow('You do not have access to this channel');
+    });
+
+    it('refuses a reaction on a message in a channel', async () => {
+      mockMessageRepo.findById.mockResolvedValue({
+        id: 'msg-1',
+        channel_id: 'ch-public',
+      } as ChatMessage);
+      mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+      await expect(
+        refusal(
+          service.assertMessageAccess('msg-1', 'chap-1', 'user-1', 'react'),
+        ),
+      ).resolves.toMatchObject({ status: 403 });
+      await expect(
+        service.assertMessageAccess('msg-1', 'chap-1', 'user-1', 'read'),
+      ).resolves.toMatchObject({ id: 'msg-1' });
     });
   });
 });

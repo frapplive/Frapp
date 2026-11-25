@@ -285,9 +285,14 @@ describe("native Google sign-in", () => {
       "Unacceptable audience in id_token: [ios-client.apps.googleusercontent.com]",
       "Passed nonce and nonce in id_token should either both exist or not.",
     ]) {
+      const onProviderRejected = vi.fn();
       await expect(
-        signInWithNativeGoogle(fakeSupabase({ message }).client),
+        signInWithNativeGoogle(
+          fakeSupabase({ message }).client,
+          onProviderRejected,
+        ),
       ).resolves.toBe("unavailable");
+      expect(onProviderRejected).toHaveBeenCalledWith({ message });
     }
   });
 

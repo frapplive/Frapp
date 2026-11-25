@@ -29,7 +29,7 @@ import { drawnText, screenText } from "@/test/screen-text";
 import { AskTurn } from "./ask-turn";
 
 /**
- * One turn of the Ask conversation (`spec/behavior/ai.md` § Ask; #450, #451).
+ * One turn of the Ask conversation (`spec/behavior/ai.md` § Frapp Intelligence; #450, #451).
  * Every word is read from `ASK_COPY`, the same object web reads, so the two
  * can't drift.
  */
@@ -50,6 +50,9 @@ const thumbs = vi.hoisted(() => ({
 }));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // The pacing is `use-smooth-text.spec.ts`'s; here a preview is drawn as
+  // it arrives.
+  useSmoothText: (text: string) => text,
   useChannels: () => {
     channelList.reads += 1;
     return { data: [{ id: "c1", name: "rush-week", type: "PUBLIC" }] };

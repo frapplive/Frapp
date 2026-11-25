@@ -105,6 +105,38 @@ describe('SupabaseTaskRepository — tenant scope', () => {
     },
   );
 
+  it('findByChapterCounted keeps the chapter predicate and counts only that chapter (#5746)', async () => {
+    const { tasks, total } = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.findByChapterCounted(
+        CHAPTER_B,
+        {
+          assigneeId: USER_SHARED,
+          unconfirmedOrCompletedSince: '2026-11-08T00:00:00.000Z',
+          limit: 10,
+        },
+        { withTotal: true },
+      ),
+    );
+
+    expect(tasks.map((t) => t.id)).toEqual([TASK_B]);
+    expect(total).toBe(1);
+    // A list shorter than its page is one request, with no empty page after.
+    expect(harness.ops).toHaveLength(1);
+  });
+
+  it('findByChapterCounted counts an uncapped read, and not a capped one unless asked (#5746)', async () => {
+    const uncapped = await repo.findByChapterCounted(CHAPTER_B);
+    expect(uncapped.total).toBe(1);
+    expect(harness.ops).toHaveLength(1);
+
+    harness.reset();
+    // Capped and not asked: no count, so a short page reads on to an empty one.
+    const capped = await repo.findByChapterCounted(CHAPTER_B, { limit: 10 });
+    expect(capped.tasks.map((t) => t.id)).toEqual([TASK_B]);
+    expect(capped.total).toBeNull();
+    expect(harness.ops).toHaveLength(2);
+  });
+
   describe('findByChapter filters narrow in SQL (#4037)', () => {
     const OTHER = '0c000000-0000-4000-8000-000000000060';
     const GROUP = '0c000000-0000-4000-8000-000000000061';
@@ -197,6 +229,58 @@ describe('SupabaseTaskRepository — tenant scope', () => {
         expect(tasks.map((t) => t.id)).toEqual(expected.map(id));
       },
     );
+
+    it.each([
+      // Not yet confirmed (1, 2, 3); 4 was confirmed and done before it.
+      ['after the confirmed one was done', '2026-01-02T00:00:00Z', [3, 2, 1]],
+      // Done at or after the instant, confirmed or not.
+      ['at the confirmed one', '2026-01-01T00:00:00Z', [4, 3, 2, 1]],
+    ] as const)(
+      'unconfirmedOrCompletedSince %s keeps only those (#5746)',
+      async (_name, since, expected) => {
+        const { tasks } = await harness.expectTenantScoped(CHAPTER_B, () =>
+          repo.findByChapterCounted(CHAPTER_B, {
+            unconfirmedOrCompletedSince: since,
+          }),
+        );
+
+        expect(tasks.map((t) => t.id)).toEqual(expected.map(id));
+        expect(harness.ops[0].orGroups).toEqual([
+          [
+            expect.objectContaining({
+              column: 'confirmed_at',
+              op: 'is',
+              value: null,
+            }),
+            expect.objectContaining({
+              column: 'completed_at',
+              op: 'gte',
+              value: since,
+            }),
+          ],
+        ]);
+      },
+    );
+
+    it('findByChapterCounted orders a waiting list longest-waiting first and counts it in the same request (#5746)', async () => {
+      const { tasks, total } = await harness.expectTenantScoped(CHAPTER_B, () =>
+        repo.findByChapterCounted(
+          CHAPTER_B,
+          {
+            status: TaskStatus.COMPLETED,
+            confirmed: false,
+            order: 'longest_waiting',
+            limit: 1,
+          },
+          { withTotal: true },
+        ),
+      );
+
+      // Done first, waiting longest: 3, before 2, which the cap leaves out.
+      expect(tasks.map((t) => t.id)).toEqual([id(3)]);
+      expect(total).toBe(2);
+      expect(harness.ops).toHaveLength(1);
+    });
 
     it('orders a waiting list longest-waiting first, and counts it in SQL', async () => {
       const waiting = {
@@ -432,6 +516,7 @@ describe('SupabaseTaskRepository — tenant scope', () => {
           ...row,
           status: 'COMPLETED',
           completed_at: '2026-08-30T00:00:00Z',
+          completed_by: 'officer-1',
           points_awarded: false,
         })),
       },
@@ -446,6 +531,8 @@ describe('SupabaseTaskRepository — tenant scope', () => {
       id: TASK_B,
       status: 'IN_PROGRESS',
       completed_at: null,
+      // Who marked it done goes with the completion (#5732).
+      completed_by: null,
     });
     // The assignee's own take-back is not a send-back.
     expect(reopened).not.toHaveProperty('sent_back_at', expect.any(String));
@@ -789,6 +876,7 @@ describe('SupabaseTaskRepository — task photos (#4635)', () => {
           point_reward: null,
           proof_kind: 'none',
           subtask_titles: [],
+          attachments: [],
           due_time: null,
           recurrence_rule: 'FREQ=DAILY;INTERVAL=1;TZID=UTC',
           first_due_date: '2026-11-16',
@@ -1089,6 +1177,51 @@ describe('SupabaseTaskRepository — taking members out of a group (#5492)', () 
   });
 });
 
+describe('SupabaseTaskRepository — adding members to a group (#5905)', () => {
+  const GROUP = '0c000000-0000-4000-8000-000000000070';
+  const TEMPLATE_B = '0b000000-0000-4000-8000-000000000071';
+  const MADE_B = '0b000000-0000-4000-8000-000000000072';
+
+  it('passes the chapter, group, template and members to the RPC, and returns the copies made', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: { add_task_group_copies: { data: [{ id: MADE_B }] } },
+    });
+    const repo = new SupabaseTaskRepository(harness.client);
+
+    const made = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.addGroupCopies(CHAPTER_B, GROUP, TEMPLATE_B, [USER_SHARED]),
+    );
+
+    expect(made.map((row) => row.id)).toEqual([MADE_B]);
+    expect(harness.rpcCalls[0]).toEqual({
+      fn: 'add_task_group_copies',
+      args: {
+        p_chapter_id: CHAPTER_B,
+        p_group_id: GROUP,
+        p_template_id: TEMPLATE_B,
+        p_assignee_ids: [USER_SHARED],
+      },
+    });
+  });
+
+  it('throws what the RPC refuses', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: {
+        add_task_group_copies: {
+          error: { message: 'task group not found', code: 'P0001' },
+        },
+      },
+    });
+    const repo = new SupabaseTaskRepository(harness.client);
+
+    await expect(
+      repo.addGroupCopies(CHAPTER_B, GROUP, TEMPLATE_B, [USER_SHARED]),
+    ).rejects.toThrow('task group not found');
+  });
+});
+
 describe('SupabaseTaskRepository — a group from minutes (#5562)', () => {
   const copies = [
     { id: 'c1', group_id: 'g1', meeting_id: null },
@@ -1108,6 +1241,7 @@ describe('SupabaseTaskRepository — a group from minutes (#5562)', () => {
     point_reward: null,
     proof_kind: 'none' as const,
     subtask_titles: [],
+    attachments: [],
     meeting_id: 'm1',
   };
   const fakeClient = (linkResult: { data: unknown; error: unknown }) => {

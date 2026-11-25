@@ -101,6 +101,15 @@ export class SupabaseMemberRepository implements IMemberRepository {
     return data || [];
   }
 
+  async countByChapter(chapterId: string): Promise<number> {
+    const { count, error } = await this.supabase
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+      .eq('chapter_id', chapterId);
+    if (error) throw new SupabaseQueryError(error);
+    return count ?? 0;
+  }
+
   async findChapterMemberIdentities(
     chapterId: string,
   ): Promise<ChapterMemberIdentity[]> {
@@ -167,6 +176,56 @@ export class SupabaseMemberRepository implements IMemberRepository {
       .single();
     if (error) throw new SupabaseQueryError(error);
     return data;
+  }
+
+  async clearChatTimeout(
+    id: string,
+    expectedUntil: string,
+  ): Promise<Member | null> {
+    const { data, error } = await this.supabase
+      .from('members')
+      .update({
+        chat_timeout_until: null,
+        chat_timeout_reason: null,
+        chat_timeout_by: null,
+      })
+      .eq('id', id)
+      .eq('chat_timeout_until', expectedUntil)
+      .select()
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
+  async findEndedChatTimeouts(at: string, limit: number): Promise<Member[]> {
+    const { data, error } = await this.supabase
+      .from('members')
+      .select('*')
+      .not('chat_timeout_until', 'is', null)
+      .lte('chat_timeout_until', at)
+      .order('chat_timeout_until', { ascending: true })
+      .limit(limit);
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
+  }
+
+  async completeOnboarding(
+    id: string,
+  ): Promise<{ member: Member; changed: boolean }> {
+    const { data, error } = await this.supabase
+      .from('members')
+      .update({ has_completed_onboarding: true })
+      .eq('id', id)
+      .eq('has_completed_onboarding', false)
+      .select()
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    if (data) return { member: data, changed: true };
+    // Already done: read the row as it stands.
+    return {
+      member: await this.update(id, { has_completed_onboarding: true }),
+      changed: false,
+    };
   }
 
   async setRoleIds(

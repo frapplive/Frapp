@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
@@ -23,8 +24,8 @@ function groupsKey(chapterId: string | null | undefined) {
 
 /**
  * The chapter's groups with who is in each: manual ones first, then pledge
- * classes and class years, which the server keeps and leaves out while
- * nobody is in them. Needs `members:view`, like the Directory.
+ * classes, class years and majors, which the server keeps and leaves out
+ * while nobody is in them. Needs `members:view`, like the Directory.
  */
 export function useGroups(options?: { enabled?: boolean }) {
   const client = useFrappClient();
@@ -41,13 +42,24 @@ export function useGroups(options?: { enabled?: boolean }) {
   });
 }
 
-/** The groups one member is in, in the list's order. */
-export function groupsOfMember(
-  groups: readonly ChapterGroup[] | undefined,
-  userId: string | null | undefined,
-): ChapterGroup[] {
-  if (!groups || !userId) return [];
-  return groups.filter((group) => group.member_ids.includes(userId));
+/**
+ * The majors the chapter's members have now, as each major's group is named
+ * (the spelling most of its members use, #5778): what the profile's Major
+ * field suggests, so a member joins an existing major's group rather than
+ * starting a near twin. Empty while the groups load, or for a member who
+ * can't read them.
+ */
+export function useChapterMajors(options?: { enabled?: boolean }): string[] {
+  const groups = useGroups(options);
+  return useMemo(
+    () =>
+      (groups.data ?? [])
+        .filter(
+          (group) => group.kind === "major" && group.member_ids.length > 0,
+        )
+        .map((group) => group.name),
+    [groups.data],
+  );
 }
 
 function useInvalidateAfterGroupWrite() {
@@ -76,7 +88,8 @@ export function useCreateGroup() {
 
 /**
  * Rename, recolor or switch pinging. Only a manual group may be renamed; an
- * automatic one's name follows its class or year. Needs `groups:manage`.
+ * automatic one's name follows its class, year or major. Needs
+ * `groups:manage`.
  */
 export function useUpdateGroup() {
   const client = useFrappClient();
@@ -122,6 +135,52 @@ export function useSetGroupMembers() {
       return data;
     },
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Put one member in a manual group, or take them out (`in: false`), from
+ * their profile. Needs `groups:manage`, and `channels:manage` too when a
+ * channel list names the group. The groups list is written from the answer
+ * at once, so the chip lands without waiting for the re-read.
+ */
+export function useSetGroupMembership() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  const invalidate = useInvalidateAfterGroupWrite();
+  return useMutation({
+    mutationKey: ["groups", "membership"],
+    mutationFn: async ({
+      groupId,
+      userId,
+      in: inGroup,
+    }: {
+      groupId: string;
+      userId: string;
+      in: boolean;
+    }) => {
+      const params = { path: { id: groupId, userId } };
+      const { data, error } = inGroup
+        ? await client.POST("/v1/groups/{id}/members/{userId}", { params })
+        : await client.DELETE("/v1/groups/{id}/members/{userId}", { params });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (group) => {
+      if (group) {
+        queryClient.setQueryData<ChapterGroup[]>(
+          groupsKey(chapterId),
+          (groups) =>
+            groups?.map((row) =>
+              row.id === group.id
+                ? { ...row, member_ids: group.member_ids }
+                : row,
+            ),
+        );
+      }
+      return invalidate();
+    },
   });
 }
 

@@ -20,6 +20,7 @@ import {
   meetingTabledFromLabel,
   meetingVoteLine,
   minutesActionMeta,
+  minutesActionOwner,
   minutesActionRows,
   minutesActionStatePrefix,
   minutesAttendanceDetail,
@@ -35,9 +36,25 @@ import {
 } from "@repo/validation";
 import { CheckGlyph, DisclosureGlyph } from "@/components/control-glyphs";
 import { eyebrowStyle } from "@/components/eyebrow";
-import { Segmented } from "@/components/segmented";
+import {
+  itemMenuAccessibility,
+  longPressOf,
+  type ItemMenuHandle,
+} from "@/components/item-actions-menu";
+import { PressableRow } from "@/components/list-section";
+import { ViewLabels } from "@/components/view-labels";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
+
+/**
+ * An action item's long-press menu, from the host (#6051): Create task or
+ * Open task for an officer, or null for a row with nothing to offer.
+ */
+export type ActionItemMenuFor = (row: {
+  index: number;
+  item: MeetingContent["action_items"][number];
+  task: MeetingActionItemTask | undefined;
+}) => ItemMenuHandle | null;
 
 /**
  * Minutes as a member reads them (`spec/behavior/meetings.md` § Reading
@@ -59,6 +76,8 @@ export function MinutesBody({
   viewerId = null,
   tasks,
   onSectionLayout,
+  renderDates,
+  actionItemMenu,
 }: {
   meeting: MeetingMinutes;
   content: MeetingContent;
@@ -69,6 +88,13 @@ export function MinutesBody({
   tasks?: ReadonlyMap<number, MeetingActionItemTask>;
   /** Where each section sits in the body, for the jump bar. */
   onSectionLayout?: (key: MeetingSectionKey, y: number) => void;
+  /**
+   * Coming up, drawn by the host: the minutes screen tracks each date
+   * (`ComingUpDates`, #5672). Plain tiles without it.
+   */
+  renderDates?: (dates: MeetingContent["dates"]) => ReactNode;
+  /** Each action item's long-press menu (#6051). */
+  actionItemMenu?: ActionItemMenuFor;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -106,6 +132,8 @@ export function MinutesBody({
             nameFor={nameFor}
             viewerId={viewerId}
             tasks={tasks ?? EMPTY_TASKS}
+            renderDates={renderDates}
+            actionItemMenu={actionItemMenu}
           />
         </View>
       ))}
@@ -294,12 +322,16 @@ function Section({
   nameFor,
   viewerId,
   tasks,
+  renderDates,
+  actionItemMenu,
 }: {
   sectionKey: MeetingSectionKey;
   content: MeetingContent;
   nameFor: (userId: string) => string | null;
   viewerId: string | null;
   tasks: ReadonlyMap<number, MeetingActionItemTask>;
+  renderDates?: (dates: MeetingContent["dates"]) => ReactNode;
+  actionItemMenu?: ActionItemMenuFor;
 }) {
   switch (sectionKey) {
     case "tldr":
@@ -307,7 +339,11 @@ function Section({
     case "summary":
       return <Paragraph text={content.summary} />;
     case "dates":
-      return <Dates dates={content.dates} />;
+      return renderDates ? (
+        renderDates(content.dates)
+      ) : (
+        <MinutesDates dates={content.dates} />
+      );
     case "decisions":
       return <Decisions decisions={content.decisions} />;
     case "action_items":
@@ -317,6 +353,7 @@ function Section({
           nameFor={nameFor}
           viewerId={viewerId}
           tasks={tasks}
+          menuFor={actionItemMenu}
         />
       );
     case "tabled":
@@ -375,8 +412,23 @@ function TldrCard({ tldr, summary }: { tldr: string; summary: string }) {
   );
 }
 
-/** Coming up: each day the meeting named as a calendar tile. */
-function Dates({ dates }: { dates: MeetingContent["dates"] }) {
+/**
+ * Coming up: each day the meeting named as a calendar tile. `below` draws
+ * under a date's words (what tracks it, #5672) and `trailing` at its edge
+ * (its ⋯), as web's `DatesView` takes them.
+ */
+export function MinutesDates({
+  dates,
+  below,
+  trailing,
+}: {
+  dates: MeetingContent["dates"];
+  below?: (item: MeetingContent["dates"][number], index: number) => ReactNode;
+  trailing?: (
+    item: MeetingContent["dates"][number],
+    index: number,
+  ) => ReactNode;
+}) {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
   const styles = createStyles(tokens);
@@ -385,13 +437,11 @@ function Dates({ dates }: { dates: MeetingContent["dates"] }) {
       {dates.map((item, index) => {
         const tile = minutesDateTile(item.date);
         return (
-          <View
-            key={`${item.date}-${index}`}
-            accessible
-            accessibilityLabel={`${item.text}, ${meetingDueLabel(item.date)}`}
-            style={styles.dateRow}
-          >
+          <View key={`${item.date}-${index}`} style={styles.dateRow}>
+            {/* Said by the words' label, so a reader hears it once. */}
             <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
               style={[styles.tile, { backgroundColor: tint(accent, 0.16) }]}
             >
               <Text style={[styles.tileMonth, { color: accent }]}>
@@ -402,10 +452,17 @@ function Dates({ dates }: { dates: MeetingContent["dates"] }) {
               </Text>
             </View>
             <View style={styles.flex}>
-              <Text style={styles.strong}>{item.text}</Text>
-              {/* The tile says the month and day; the line, the weekday. */}
-              <Text style={styles.meta}>{tile.line}</Text>
+              <View
+                accessible
+                accessibilityLabel={`${item.text}, ${meetingDueLabel(item.date)}`}
+              >
+                <Text style={styles.strong}>{item.text}</Text>
+                {/* The tile says the month and day; the line, the weekday. */}
+                <Text style={styles.meta}>{tile.line}</Text>
+              </View>
+              {below?.(item, index)}
             </View>
+            {trailing?.(item, index)}
           </View>
         );
       })}
@@ -452,18 +509,21 @@ function Decisions({ decisions }: { decisions: MeetingContent["decisions"] }) {
  * The action items as a checklist, ticked as each item's task is done; the
  * reader's own first, then the ones with a due day. Mine narrows to the
  * reader's own. The boxes only show: an item is checked off by doing its
- * task.
+ * task. An officer's long-press on an item offers Create task, or Open task
+ * once it is one (#6051, `menuFor`), as web's row and ⋯ menu do.
  */
 function ActionChecklist({
   items,
   nameFor,
   viewerId,
   tasks,
+  menuFor,
 }: {
   items: MeetingContent["action_items"];
   nameFor: (userId: string) => string | null;
   viewerId: string | null;
   tasks: ReadonlyMap<number, MeetingActionItemTask>;
+  menuFor?: ActionItemMenuFor;
 }) {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
@@ -483,9 +543,10 @@ function ActionChecklist({
       {mineCount > 0 || done > 0 ? (
         <View style={styles.checklistBar}>
           {mineCount > 0 ? (
-            <Segmented
-              dense
-              accessibilityLabel={MINUTES_READ_COPY.mine}
+            <ViewLabels
+              compact
+              flush
+              accessibilityLabel={MINUTES_READ_COPY.whoseActionItems}
               value={filter}
               onChange={setFilter}
               options={[
@@ -507,9 +568,14 @@ function ActionChecklist({
         const meta = [
           mine ? MINUTES_READ_COPY.yours : null,
           minutesActionMeta({
-            owner: item.owner_user_id
-              ? memberLabel(nameFor(item.owner_user_id), item.owner_user_id)
-              : MINUTES_READ_COPY.nobodyNamed,
+            // Who the task went to once an officer made it one, else who
+            // the minutes named (#6051).
+            owner: minutesActionOwner({
+              ownerId: item.owner_user_id,
+              task: task?.task ?? null,
+              group: task?.group ?? null,
+              nameOf: (userId) => memberLabel(nameFor(userId), userId),
+            }),
             dueLabel: item.due_date ? meetingDueLabel(item.due_date) : null,
             group: task?.group ?? null,
             done: isDone,
@@ -517,13 +583,10 @@ function ActionChecklist({
         ]
           .filter(Boolean)
           .join(" · ");
-        return (
-          <View
-            key={index}
-            accessible
-            accessibilityLabel={`${minutesActionStatePrefix(isDone, !!task)}${item.text}. ${meta}`}
-            style={styles.item}
-          >
+        const menu = menuFor?.({ index, item, task }) ?? null;
+        const label = `${minutesActionStatePrefix(isDone, !!task)}${item.text}. ${meta}`;
+        const content = (
+          <>
             <View
               style={[
                 styles.box,
@@ -540,6 +603,26 @@ function ActionChecklist({
               </Text>
               <Text style={styles.meta}>{meta}</Text>
             </View>
+          </>
+        );
+        return menu ? (
+          <PressableRow
+            key={index}
+            accessibilityLabel={label}
+            onLongPress={longPressOf(menu)}
+            {...itemMenuAccessibility(menu)}
+            style={styles.item}
+          >
+            {content}
+          </PressableRow>
+        ) : (
+          <View
+            key={index}
+            accessible
+            accessibilityLabel={label}
+            style={styles.item}
+          >
+            {content}
           </View>
         );
       })}

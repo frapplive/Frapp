@@ -41,16 +41,18 @@ const LOADED_USER = {
 };
 let currentUser: Record<string, unknown> = LOADED_USER;
 let hiddenFeatures = new Set<string>();
-/** The member's weekly study goal in minutes (#1062), from `useMyGoals`. */
-let studyGoal: number | null = null;
-const goalReadOptions: ({ enabled?: boolean } | undefined)[] = [];
 /** True while `/v1/users/me/permissions` hasn't answered. */
 let permissionsLoading = false;
 const hiddenFeatureCalls: unknown[][] = [];
 let chapterModules: Record<string, boolean> = {};
+/** More of the chapter's member view: its archetype and words (#5924). */
+let chapterExtra: Record<string, unknown> = {};
+/** The open tenant's kind (#5933): a council's You is the member's own. */
+let tenantKind: "chapter" | "council" = "chapter";
 /** False while `useCurrentChapter` hasn't answered (#5281's slow-read case). */
 let chapterLoaded = true;
 /** What `useMyProfileStats` answers (#5281); its reads are its own spec's. */
+const statsWanted: { points?: boolean; service?: boolean }[] = [];
 let profileStats = {
   points: null as number | null,
   serviceHours: null as string | null,
@@ -61,11 +63,21 @@ let profileStats = {
   serviceFailed: false,
 };
 const invoiceReadOptions: ({ enabled?: boolean } | undefined)[] = [];
+/** The standing read behind This semester (#5779), and Last week's. */
+let standingRead: { data: unknown; isPending: boolean } = {
+  data: undefined,
+  isPending: false,
+};
+let recapRead: { data: unknown } = { data: undefined };
 
 // `@repo/validation`'s beta list, emptied so these specs draw You as a
 // chapter with dues on sees it. The beta's own case, dues off, sets
 // `betaOff.keys`.
 const betaOff = vi.hoisted(() => ({ keys: [] as string[] }));
+const chapterList = vi.hoisted(() => ({
+  value: [{ id: "chapter-1" }] as { id: string }[],
+}));
+
 vi.mock("@repo/validation/beta-off-modules", () => ({
   get BETA_OFF_MODULES() {
     return betaOff.keys;
@@ -107,14 +119,17 @@ vi.mock("@/components/profile/edit-profile-sheet", async () => {
   };
 });
 
+// More details is its own spec's business (#581, `lib/more/own-custom-fields.spec.ts`).
+vi.mock("@/components/you/own-custom-fields", () => ({
+  OwnCustomFieldsSection: () => null,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // The Edit sheet's Major suggestions (#5778) are its own spec's business.
+  useChapterMajors: () => [],
   useOwnAvatarTint: () => null,
-  useMyGoals: (options?: { enabled?: boolean }) => {
-    goalReadOptions.push(options);
-    return { data: { points: null, service: null, study: studyGoal } };
-  },
-  useListChapters: () => ({ isSuccess: true, data: [{ id: "chapter-1" }] }),
+  useListChapters: () => ({ isSuccess: true, data: chapterList.value }),
   usePermissionList: () => permissions,
   useMyPermissions: () => ({
     data: permissionsLoading ? undefined : { permissions },
@@ -133,12 +148,23 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     return { data: invoices };
   },
   useCurrentUser: () => currentUser,
-  useMyProfileStats: () => profileStats,
+  useMyProfileStats: (wanted?: { points?: boolean; service?: boolean }) => {
+    statsWanted.push(wanted ?? {});
+    return profileStats;
+  },
+  // Their cards have their own spec (`standing-cards.spec.tsx`).
+  useActivityStanding: () => ({
+    ...standingRead,
+    refetch: () => Promise.resolve(),
+  }),
+  useActivityRecap: () => recapRead,
   useCurrentChapter: () => ({
     data: !chapterLoaded
       ? undefined
       : {
           name: "FIJI Tau Nu",
+          ...chapterExtra,
+          kind: tenantKind,
           enabled_modules: chapterModules,
           theme_palette: {
             "--signet-accent-text": "#7FB2FF",
@@ -150,6 +176,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 }));
 
 import YouScreen from "@/app/(app)/(tabs)/you";
+import { StandingCards } from "@/components/activity/standing-cards";
+import { SemesterStripSkeleton } from "@/components/activity/semester-strip";
 import { ForwardGlyph } from "@/components/control-glyphs";
 import { LeadTile } from "@/components/lead-tile";
 import { ListRow, ListSection } from "@/components/list-section";
@@ -217,12 +245,12 @@ describe("You tab clock (#2101)", () => {
       },
     ];
     const tree = render();
-    expect(screenText(tree)).toMatch(/(^|\n)Due Sep 30(\n|$)/);
+    expect(screenText(tree)).toMatch(/(^|\n)Due September 30(\n|$)/);
     expect(screenText(tree)).not.toContain("Past due");
 
     tick();
 
-    expect(screenText(tree)).toMatch(/(^|\n)Past due Sep 30(\n|$)/);
+    expect(screenText(tree)).toMatch(/(^|\n)Past due September 30(\n|$)/);
   });
 
   it("moves Host check-in to the next event when a check-in window closes while the screen is up", () => {
@@ -258,90 +286,6 @@ describe("You tab clock (#2101)", () => {
 
     expect(screenText(tree)).toContain("Rush dinner");
     expect(screenText(tree)).not.toContain("Chapter meeting");
-  });
-
-  it("starts a new Study hours week at the week boundary while the screen is up", () => {
-    // Saturday 23:59:30. The week starts on Sunday (`startOfWeek`).
-    vi.setSystemTime(new Date(2026, 9, 3, 23, 59, 30));
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 12, 0).toISOString(),
-        total_foreground_minutes: 120,
-      },
-    ];
-    const tree = render();
-    expect(screenText(tree)).toContain("2.0 hrs");
-
-    tick();
-
-    // A new week with nothing studied and no goal says nothing (#5281).
-    expect(screenText(tree)).not.toContain("2.0 hrs");
-    const study = tree.root
-      .findAllByType(ListRow)
-      .find((row) => row.props.label === "Study hours");
-    expect(study?.props.value).toBeNull();
-  });
-
-  it("reads the week against the member's study goal when the chapter sets one (#1062)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    studyGoal = 360;
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 14, 0).toISOString(),
-        total_foreground_minutes: 240,
-      },
-    ];
-    try {
-      expect(screenText(render())).toContain("4.0 / 6.0 hrs");
-    } finally {
-      studyGoal = null;
-    }
-  });
-
-  it("says nothing for a week that would draw as 0.0 hrs (#5281)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 10, 2).toISOString(),
-        total_foreground_minutes: 2,
-      },
-    ];
-    const study = render()
-      .root.findAllByType(ListRow)
-      .find((row) => row.props.label === "Study hours");
-    expect(study?.props.value).toBeNull();
-  });
-
-  it("keeps 0.0 against a goal, which says how far there is to go (#5281)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    studyGoal = 360;
-    sessions = [];
-    try {
-      expect(screenText(render())).toContain("0.0 / 6.0 hrs");
-    } finally {
-      studyGoal = null;
-    }
-  });
-
-  it("doesn't read the study goal when Study is hidden", () => {
-    hiddenFeatures = new Set(["study"]);
-    goalReadOptions.length = 0;
-    try {
-      render();
-      expect(goalReadOptions.length).toBeGreaterThan(0);
-      expect(goalReadOptions.every((o) => o?.enabled === false)).toBe(true);
-    } finally {
-      hiddenFeatures = new Set();
-    }
   });
 });
 
@@ -379,9 +323,33 @@ describe("You tab anatomy (#1048, #3839)", () => {
       );
     expect(order[0]).toBe("ProfileHead");
     expect(order[1]).toBe("Status");
-    expect(order[2]).toBe("Study hours");
+    // Study hours and Service hours left the rows for the gauges (#5950).
+    expect(order[2]).toBe("Dues");
     expect(order.at(-1)).toBe("ProfileDetails");
     expect(screenText(tree)).toMatch(/^You/);
+  });
+
+  it("draws a council's You with the member's own rows only (#5933)", () => {
+    tenantKind = "council";
+    permissions = ["*"];
+    try {
+      const tree = render();
+      const rows = tree.root
+        .findAllByType(ListRow)
+        .map((node) => node.props.label as string);
+      expect(rows).toEqual([
+        "Status",
+        "Directory",
+        "Settings",
+        "Invite members",
+      ]);
+      // A council reads no chapter route: no points in the title's corner.
+      expect(
+        tree.root.findAll((n) => (n.type as unknown) === "PointsLabel"),
+      ).toHaveLength(0);
+    } finally {
+      tenantKind = "chapter";
+    }
   });
 
   it("draws the skeleton head and no Details while the profile loads, and keeps every row", () => {
@@ -393,7 +361,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(
       tree.root.findAll((n) => (n.type as unknown) === "ProfileDetails"),
     ).toHaveLength(0);
-    expect(screenText(tree)).toContain("Switch chapter");
+    expect(screenText(tree)).toContain("Directory");
   });
 
   it("says the profile failed in place of the head, and keeps every row", () => {
@@ -407,7 +375,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
     const tree = render();
     const text = screenText(tree);
     expect(text).toContain("Couldn't load your profile");
-    expect(text).toContain("Switch chapter");
+    expect(text).toContain("Directory");
     expect(
       tree.root.findAll((n) => (n.type as unknown) === "ProfileHead"),
     ).toHaveLength(0);
@@ -446,20 +414,16 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(present).toHaveBeenCalledTimes(1);
   });
 
-  it("draws labels without a description line, and names the current chapter", () => {
+  it("draws labels without a description line", () => {
     const text = screenText(render());
     for (const label of [
-      "Study hours",
-      "Service hours",
       "Dues",
-      "Documents",
+      "Resources",
       "Directory",
       "Settings",
-      "Switch chapter",
     ]) {
       expect(text).toContain(label);
     }
-    expect(text).toContain("FIJI Tau Nu");
   });
 
   it("gives no row a description line", () => {
@@ -468,7 +432,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
     for (const row of rows) expect(row.props.description).toBeUndefined();
   });
 
-  it("groups chapter tools, then your settings and chapter, then Admin", () => {
+  it("groups chapter tools, then your settings, then Admin", () => {
     permissions = ["events:update"];
     const sections = render()
       .root.findAllByType(ListSection)
@@ -477,29 +441,50 @@ describe("You tab anatomy (#1048, #3839)", () => {
       );
     expect(sections).toEqual([
       ["Status"],
-      [
-        "Study hours",
-        "Service hours",
-        "Dues",
-        "Documents",
-        "Minutes",
-        "Directory",
-      ],
-      ["Settings", "Switch chapter"],
+      ["Dues", "Resources", "Directory"],
+      ["Settings"],
       ["Host check-in"],
     ]);
   });
 
-  it("drops the Minutes row while meetings is beta-off, and for a chapter with it off", () => {
-    betaOff.keys = ["meetings"];
+  // One row for Documents and the minutes filed in it (#5949): shown on
+  // either of the two rows' conditions it replaced, and opening Documents.
+  it("draws one Resources row while Documents is shown or the chapter keeps minutes", () => {
     const labels = () =>
       render()
         .root.findAllByType(ListRow)
         .map((row) => row.props.label);
-    expect(labels()).not.toContain("Minutes");
-    betaOff.keys = [];
-    chapterModules = { meetings: false };
-    expect(labels()).not.toContain("Minutes");
+    try {
+      expect(labels()).not.toContain("Documents");
+      expect(labels()).not.toContain("Minutes");
+      expect(labels().filter((label) => label === "Resources")).toHaveLength(1);
+      // Documents unset for this member, but the chapter keeps minutes.
+      hiddenFeatures = new Set(["documents"]);
+      expect(labels()).toContain("Resources");
+      // Neither: Documents unset and meetings beta-off, or off for the chapter.
+      betaOff.keys = ["meetings"];
+      expect(labels()).not.toContain("Resources");
+      betaOff.keys = [];
+      chapterModules = { meetings: false };
+      expect(labels()).not.toContain("Resources");
+      // Documents shown with meetings off.
+      hiddenFeatures = new Set();
+      expect(labels()).toContain("Resources");
+    } finally {
+      hiddenFeatures = new Set();
+      chapterModules = {};
+      betaOff.keys = [];
+    }
+  });
+
+  it("opens Documents from the Resources row", () => {
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    const row = render()
+      .root.findAllByType(ListRow)
+      .find((candidate) => candidate.props.label === "Resources")!;
+    act(() => row.props.onPress());
+    expect(push).toHaveBeenCalledWith("/documents");
   });
 
   it("drops the Dues row while dues is beta-off", () => {
@@ -508,7 +493,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       .root.findAllByType(ListRow)
       .map((row) => row.props.label);
     expect(labels).not.toContain("Dues");
-    expect(labels).toContain("Documents");
+    expect(labels).toContain("Resources");
   });
 
   // A member must still be able to pay an invoice the chapter already sent.
@@ -530,18 +515,27 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(invoiceReadOptions.at(-1)).toEqual({ enabled: false });
   });
 
-  it("drops Study hours and Documents while nobody has set them up for this member", () => {
-    hiddenFeatures = new Set(["study", "documents"]);
+  it("draws no Study hours or Service hours row: the gauges open them (#5950)", () => {
+    const labels = render()
+      .root.findAllByType(ListRow)
+      .map((row) => row.props.label);
+    expect(labels).not.toContain("Study hours");
+    expect(labels).not.toContain("Service hours");
+  });
+
+  it("drops Resources while nobody has set it up for this member", () => {
+    hiddenFeatures = new Set(["documents"]);
+    // Resources stays while the chapter keeps minutes, which nobody sets up.
+    chapterModules = { meetings: false };
     try {
       const labels = render()
         .root.findAllByType(ListRow)
         .map((row) => row.props.label);
-      expect(labels).not.toContain("Study hours");
-      expect(labels).not.toContain("Documents");
-      expect(labels).toContain("Service hours");
+      expect(labels).not.toContain("Resources");
       expect(labels).toContain("Directory");
     } finally {
       hiddenFeatures = new Set();
+      chapterModules = {};
     }
   });
 
@@ -630,14 +624,10 @@ describe("You tab anatomy (#1048, #3839)", () => {
     const labels = buttons.map((node) => node.props.accessibilityLabel);
     expect(labels).toEqual([
       "Status",
-      "Study hours",
-      "Service hours",
       "Dues",
-      "Documents",
-      "Minutes",
+      "Resources",
       "Directory",
       "Settings",
-      "Switch chapter",
     ]);
     // One drawn chevron inside each press target (#3628: never a typed `›`).
     for (const button of buttons) {
@@ -695,11 +685,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       .at(-1)
       ?.findAllByType(ListRow)
       .map((row) => row.props.label);
-    expect(labels).toEqual([
-      "Invite members",
-      "Host check-in",
-      "Chapter settings",
-    ]);
+    expect(labels).toEqual(["Invite members", "Host check-in"]);
     const row = tree.root.find(
       (node) =>
         (node.type as unknown) === "Pressable" &&
@@ -713,54 +699,38 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(push).toHaveBeenCalledWith("/invite");
   });
 
-  it("gives Chapter settings to whoever has a page in it, and fails closed (#4074)", () => {
-    const hasRow = () => screenText(render()).includes("Chapter settings");
-    // `[]` is also what the permission list is while it loads.
-    permissions = [];
-    expect(hasRow()).toBe(false);
-    permissions = ["members:view", "events:update"];
-    expect(hasRow()).toBe(false);
-    // Plan and billing doesn't come to the phone, so a treasurer who holds
-    // only that gets no door to an empty screen.
-    permissions = ["billing:view"];
-    expect(hasRow()).toBe(false);
-    permissions = ["chapter-config:view"];
-    expect(hasRow()).toBe(true);
-    permissions = ["roles:manage"];
-    const tree = render();
-    const row = tree.root.find(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        node.props.accessibilityLabel === "Chapter settings",
-    );
-    const push = vi.mocked(useRouter().push);
-    push.mockClear();
-    act(() => {
-      row.props.onPress();
-    });
-    expect(push).toHaveBeenCalledWith("/chapter-settings");
+  it("draws neither Chapter settings nor Switch chapter: Chat home's chapter menu holds both", () => {
+    // One door each, as on web (Paul, 2026-11-19).
+    permissions = ["*"];
+    const text = screenText(render());
+    expect(text).not.toContain("Chapter settings");
+    expect(text).not.toContain("Switch chapter");
+  });
+
+  it("keeps Create a chapter for a member with no chapter, who has no chapter name to open (#1084)", () => {
+    chapterList.value = [];
+    try {
+      const tree = render();
+      const row = tree.root.find(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "Create a chapter",
+      );
+      const push = vi.mocked(useRouter().push);
+      push.mockClear();
+      act(() => {
+        row.props.onPress();
+      });
+      expect(push).toHaveBeenCalledWith("/(auth)/create-chapter");
+    } finally {
+      chapterList.value = [{ id: "chapter-1" }];
+    }
+    expect(screenText(render())).not.toContain("Create a chapter");
   });
 
   it("draws no Invite members row for a role that can't invite", () => {
     permissions = ["members:view", "events:update"];
     expect(screenText(render())).not.toContain("Invite members");
-  });
-
-  it("tells the chapter picker that You opened it, so it draws ‹ You", () => {
-    const row = render().root.find(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        node.props.accessibilityLabel === "Switch chapter",
-    );
-    const push = vi.mocked(useRouter().push);
-    push.mockClear();
-    act(() => {
-      row.props.onPress();
-    });
-    expect(push).toHaveBeenCalledWith({
-      pathname: "/(auth)/chapter-picker",
-      params: { from: "you" },
-    });
   });
 });
 
@@ -769,7 +739,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
  * Points is a quiet figure at the top right; service hours is the Service
  * hours row's value. Both say nothing at zero or with their module off.
  */
-describe("You tab points and service hours (#5281)", () => {
+describe("You tab points (#5281, #5950)", () => {
   const baseStats = { ...profileStats };
 
   beforeEach(() => {
@@ -801,10 +771,6 @@ describe("You tab points and service hours (#5281)", () => {
         (node.type as unknown) === "PointsLabel" ||
         (typeof node.type === "function" && node.type.name === "PointsLabel"),
     );
-  const serviceRow = (tree: ReactTestRenderer) =>
-    tree.root
-      .findAllByType(ListRow)
-      .find((row) => row.props.label === "Service hours");
 
   it("hands the points to the title's corner, and nothing with Points off", () => {
     profileStats.points = 60;
@@ -820,19 +786,6 @@ describe("You tab points and service hours (#5281)", () => {
     profileStats.points = 60;
     profileStats.visible = false;
     expect(pointsLabel(render())).toHaveLength(0);
-  });
-
-  it("puts approved service hours on their row, and nothing at zero", () => {
-    profileStats.serviceMinutes = 150;
-    profileStats.serviceHours = "2.5";
-    expect(serviceRow(render())?.props.value).toBe("2.5 hrs");
-
-    profileStats.serviceMinutes = 0;
-    profileStats.serviceHours = "0";
-    const zero = serviceRow(render());
-    // The row stays at zero: it is where a member logs hours.
-    expect(zero).toBeDefined();
-    expect(zero?.props.value).toBeNull();
   });
 
   it("draws no corner figure at zero, and a dash when the read failed", () => {
@@ -851,33 +804,151 @@ describe("You tab points and service hours (#5281)", () => {
     expect(pointsLabel(render())[0]?.props.points).toBe(-5);
   });
 
-  it("formats service hours as Study's row does, singular at one hour", () => {
-    profileStats.serviceMinutes = 60;
-    profileStats.serviceHours = "1";
-    expect(serviceRow(render())?.props.value).toBe("1.0 hr");
-  });
-
-  it("says nothing for a total that would draw as zero", () => {
-    profileStats.serviceMinutes = 2;
-    profileStats.serviceHours = "0.0";
-    expect(serviceRow(render())?.props.value).toBeNull();
-  });
-
-  it("gives the Service hours row a dash when its read failed", () => {
-    profileStats.serviceFailed = true;
-    expect(serviceRow(render())?.props.value).toBe("—");
-  });
-
   it("hides nothing while the chapter hasn't loaded: its modules count as on", () => {
     chapterLoaded = false;
     profileStats.points = 60;
-    const tree = render();
-    expect(pointsLabel(tree)).toHaveLength(1);
-    expect(serviceRow(tree)).toBeDefined();
+    expect(pointsLabel(render())).toHaveLength(1);
   });
 
-  it("drops the Service hours row for a chapter with the module off", () => {
-    chapterModules = { hours: false };
-    expect(serviceRow(render())).toBeUndefined();
+  it("opens the member's own points from the figure (#5950)", () => {
+    profileStats.points = 60;
+    const push = vi.mocked(useRouter().push);
+    const label = pointsLabel(render())[0]!;
+    act(() => label.props.onPress());
+    expect(push).toHaveBeenLastCalledWith("/points");
+  });
+
+  it("asks for no service total: its number is on the gauge and its screen", () => {
+    render();
+    expect(statsWanted.at(-1)).toMatchObject({ service: false });
+  });
+});
+
+describe("You tab standing (#5779)", () => {
+  const baseStats = { ...profileStats };
+  const STANDING = {
+    points: { total: 42, rank: 5, ranked: 58, goal: null },
+    required_events: { required: 8, attended: 6, excused: 0 },
+    service: { approved_minutes: 0, pending_minutes: 0, goal_minutes: null },
+    study: {
+      minutes: 0,
+      week_start: "2026-11-01T04:00:00.000Z",
+      goal_minutes: null,
+    },
+    unavailable: [],
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 4, 12, 0, 0));
+    currentUser = LOADED_USER;
+    permissions = [];
+    profileStats = { ...baseStats };
+    standingRead = { data: STANDING, isPending: false };
+  });
+
+  afterEach(() => {
+    act(() => {
+      for (const tree of mounted.splice(0)) tree.unmount();
+    });
+    vi.useRealTimers();
+    profileStats = { ...baseStats };
+    standingRead = { data: undefined, isPending: false };
+    recapRead = { data: undefined };
+  });
+
+  it("draws This semester under Status and over the rows, which Activity no longer shows", () => {
+    const tree = render();
+    expect(tree.root.findAllByType(StandingCards)).toHaveLength(1);
+    const text = screenText(tree);
+    expect(text).toContain("This semester");
+    expect(text.indexOf("Status")).toBeLessThan(text.indexOf("This semester"));
+    expect(text.indexOf("This semester")).toBeLessThan(
+      text.indexOf("Directory"),
+    );
+  });
+
+  it("holds the gauges' place while their read is out", () => {
+    standingRead = { data: undefined, isPending: true };
+    expect(render().root.findAllByType(SemesterStripSkeleton)).toHaveLength(1);
+  });
+
+  it("draws neither card for a member with no chapter, whose reads they are", () => {
+    profileStats = { ...baseStats, hasChapter: false };
+    const tree = render();
+    expect(tree.root.findAllByType(StandingCards)).toHaveLength(0);
+    expect(screenText(tree)).not.toContain("This semester");
+  });
+});
+
+describe("You tab recruitment row (#5924)", () => {
+  const RUSH = ["members:view", "rush:view"];
+
+  afterEach(() => {
+    act(() => {
+      for (const tree of mounted.splice(0)) tree.unmount();
+    });
+    permissions = [];
+    chapterModules = {};
+    chapterExtra = {};
+    permissionsLoading = false;
+  });
+
+  const rowLabels = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(ListRow).map((row) => row.props.label);
+
+  it("draws the row, under the chapter's own word, for members:view and rush:view", () => {
+    permissions = RUSH;
+    chapterExtra = { org_archetype: "nphc" };
+    const tree = render();
+    expect(rowLabels(tree)).toContain("Intake");
+    const row = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Intake",
+    );
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => {
+      row.props.onPress();
+    });
+    expect(push).toHaveBeenCalledWith("/rush");
+  });
+
+  it("sits with the chapter's places, after the Directory", () => {
+    permissions = RUSH;
+    const labels = rowLabels(render());
+    expect(labels.indexOf("Rush")).toBe(labels.indexOf("Directory") + 1);
+  });
+
+  it("is left out without rush:view, or without members:view", () => {
+    permissions = ["members:view"];
+    expect(rowLabels(render())).not.toContain("Rush");
+    permissions = ["rush:view"];
+    expect(rowLabels(render())).not.toContain("Rush");
+  });
+
+  it("is left out while Recruitment is off", () => {
+    permissions = RUSH;
+    chapterModules = { rush: false };
+    expect(rowLabels(render())).not.toContain("Rush");
+  });
+
+  it("waits for the permissions and the chapter rather than flashing in", () => {
+    permissions = RUSH;
+    permissionsLoading = true;
+    expect(rowLabels(render())).not.toContain("Rush");
+    permissionsLoading = false;
+    chapterLoaded = false;
+    try {
+      expect(rowLabels(render())).not.toContain("Rush");
+    } finally {
+      chapterLoaded = true;
+    }
+  });
+
+  it("holds an officer's wildcard", () => {
+    permissions = ["*"];
+    expect(rowLabels(render())).toContain("Rush");
   });
 });

@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, MoreHorizontal, Undo2, Users } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { CheckCircle2, Undo2, UserPlus, Users } from "lucide-react";
 import {
   TASK_ACTION_LABELS,
-  TASK_CONFIRMED_LABEL,
-  TASK_NEEDS_CHANGES_LABEL,
-  TASK_STATUS_LABELS,
   actionStatus,
   canReopenOwnTask,
   isSentBack,
+  taskStatusLabel,
+  taskHandedInLine,
+  useAddToTaskGroup,
   useMeeting,
   useReleaseTask,
   useUpdateTask,
@@ -26,10 +26,13 @@ import {
 import {
   AI_SUGGESTION_COPY,
   TASK_AUDIENCE_COPY,
+  TASK_FOLLOWER_COPY,
   TASK_PHOTOS_MAX,
   TASK_PROOF_KINDS,
   TASK_PROOF_KIND_HINTS,
   TASK_PROOF_KIND_LABELS,
+  TASK_NO_DUE_DATE_LABEL,
+  TASK_REPEAT_NEEDS_DUE_DATE,
   TASK_SERIES_SCOPE_COPY,
   TASK_TITLE_MAX_LENGTH,
   noTaskRepeatDraft,
@@ -45,6 +48,9 @@ import {
   type RepeatDraft,
   type TaskProofKind,
   type TaskWho,
+  FRAPP_LINK_COPY,
+  readFrappLinks,
+  type FrappLink,
 } from "@repo/validation";
 import {
   Panel,
@@ -54,23 +60,22 @@ import {
   OWNS_ESCAPE,
 } from "@/components/shared/panel";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import { FrappLinksEditor } from "@/components/shared/frapp-links";
 import { RepeatOptions } from "@/components/shared/repeat-options";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SegmentedChoice } from "@/components/ui/segmented";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ActionMenuButton } from "@/components/shared/row-menu";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { useToast } from "@/lib/hooks/use-toast";
 import { toastFailure } from "@/lib/failure-toast";
+import {
+  FollowerSelect,
+  useFollowerChoices,
+} from "@/components/tasks/task-follower";
 import { cn, guardIntDraft, initials, parseGuardedInt } from "@/lib/utils";
 import type { BoardTask, GroupTileData } from "./board-task";
 import { DueDateField, dueEntryPassed } from "./due-date-field";
@@ -85,8 +90,9 @@ import {
   useUploadTaskPhotos,
   type CompletionProof,
 } from "./task-photo";
-import { WhoPicker } from "./who-picker";
-import type { RowPerson } from "./task-row";
+import { WhoPicker, useWhoDirectory } from "./who-picker";
+import { peopleToAdd } from "@repo/hooks/task-who-picker";
+import { copyAudience, type RowPerson } from "./task-row";
 import { movesDayTo } from "./task-edit-form";
 
 /** What the panel shows: one task, or a group task's copies. */
@@ -111,6 +117,11 @@ export interface TaskPanelProps {
   onReject: (task: BoardTask) => void;
   onDelete: (task: BoardTask) => void;
   onDeleteGroup: (tile: GroupTileData) => void;
+  /**
+   * A group's copies the viewer can read (#5905), for marking who already
+   * has one in Add people. A copy's panel has only itself otherwise.
+   */
+  groupCopies?: (groupId: string) => readonly BoardTask[];
 }
 
 /**
@@ -165,39 +176,33 @@ function MoreMenu({
   const isGroup = target.kind === "group";
   const title = isGroup ? target.tile.sample.title : target.task.title;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton
-          label={`More for ${title}`}
-          className="text-muted-foreground"
-        >
-          <MoreHorizontal className="h-[18px] w-[18px]" aria-hidden="true" />
-        </IconButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          className="text-destructive-text"
-          disabled={!!gate.controlProps().disabled}
-          onSelect={() =>
-            isGroup ? onDeleteGroup(target.tile) : onDelete(target.task)
-          }
-        >
-          {isGroup ? "Delete for everyone" : "Delete task"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ActionMenuButton
+      label={`More for ${title}`}
+      entries={[
+        {
+          type: "item",
+          key: "delete",
+          label: isGroup ? "Delete for everyone" : "Delete task",
+          destructive: true,
+          disabled: !!gate.controlProps().disabled,
+          onSelect: () =>
+            isGroup ? onDeleteGroup(target.tile) : onDelete(target.task),
+        },
+      ]}
+    />
   );
 }
 
 /** "Thursday, November 20 at 5 PM", or "Thursday, November 20". */
 function writtenDue(task: {
-  due_date: string;
+  due_date: string | null;
   due_at?: string | null;
 }): string {
+  if (!task.due_date && !task.due_at) return TASK_NO_DUE_DATE_LABEL;
   const at = task.due_at
     ? new Date(task.due_at)
-    : parseBareDateLocalNoon(task.due_date);
-  if (!at || Number.isNaN(at.getTime())) return task.due_date;
+    : parseBareDateLocalNoon(task.due_date ?? "");
+  if (!at || Number.isNaN(at.getTime())) return task.due_date ?? "";
   const now = new Date();
   const day = at.toLocaleDateString(undefined, {
     weekday: "long",
@@ -218,6 +223,7 @@ function TaskPanelBody({
   onChangeStatus,
   onConfirm,
   onReject,
+  groupCopies,
 }: TaskPanelProps & { target: TaskPanelTarget }) {
   const { toast } = useToast();
   const updateTask = useUpdateTask();
@@ -229,7 +235,6 @@ function TaskPanelBody({
   const task = isGroup ? target.tile.sample : target.task;
   const viewerUnknown = myUserId === "";
   const isMine = !viewerUnknown && !isGroup && task.assignee_id === myUserId;
-  const status = actionStatus(task);
   const sentBack = isSentBack(task);
   const editable = canManage && !task.points_awarded;
   const repeats = taskSeriesLive(task.series);
@@ -349,16 +354,50 @@ function TaskPanelBody({
     await save({ reference_photo_paths: [...keptPaths, ...uploaded] });
   }
 
-  const statusWord = sentBack
-    ? TASK_NEEDS_CHANGES_LABEL
-    : status === "COMPLETED" && task.points_awarded
-      ? TASK_CONFIRMED_LABEL
-      : TASK_STATUS_LABELS[task.status];
+  const statusWord = taskStatusLabel(task);
 
   const assignee = personOf(task.assignee_id);
   const references = (task.photos ?? []).filter(
     (photo) => photo.kind === "reference",
   );
+  const copyOf = isGroup ? null : copyAudience(task);
+  // Handed in (#5732): who marked it done and when, under the status, with
+  // the proof under it, so a done task reads as one before its fields do.
+  const handedIn = isGroup
+    ? null
+    : taskHandedInLine(task, (userId) =>
+        userId === myUserId ? "You" : personOf(userId).name,
+      );
+  const proof = isGroup ? null : (
+    <TaskProof
+      task={
+        editable
+          ? {
+              ...task,
+              photos: (task.photos ?? []).filter((p) => p.kind !== "reference"),
+            }
+          : task
+      }
+      showProof={isMine || canManage}
+      sentBack={sentBack}
+    />
+  );
+  // Add people (#5905): an officer hands a group task to more members, from
+  // the group's Who and a copy's For.
+  const addPeople =
+    canManage && task.group_id ? (
+      <AddPeople
+        taskId={task.id}
+        holders={
+          isGroup
+            ? target.copies.map((copy) => copy.assignee_id)
+            : (groupCopies?.(task.group_id) ?? [task]).map(
+                (copy) => copy.assignee_id,
+              )
+        }
+        disabled={!!gate.controlProps().disabled}
+      />
+    ) : null;
   const groupLabel = isGroup
     ? taskGroupLabel({
         audience: task.group?.audience ?? "everyone",
@@ -392,15 +431,29 @@ function TaskPanelBody({
           }
         />
       )}
+      {handedIn ? (
+        <div className="grid gap-3">
+          <p className="text-body text-foreground">{handedIn}</p>
+          {proof}
+        </div>
+      ) : null}
       <dl className="grid gap-1">
         <FieldRow label="Who">
           {isGroup ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-sm">
-              <Users
-                className="h-4 w-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              {`${groupLabel} · ${target.tile.total}`}
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 px-2 py-1.5 text-sm">
+                <Users
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate">
+                  {/* "7 people" already counts them; don't say 7 twice. */}
+                  {task.group?.audience === "people"
+                    ? groupLabel
+                    : `${groupLabel} · ${target.tile.total}`}
+                </span>
+              </span>
+              {addPeople}
             </span>
           ) : editable ? (
             <WhoPicker
@@ -427,7 +480,36 @@ function TaskPanelBody({
             </span>
           )}
         </FieldRow>
-        <DueRow task={task} editable={editable} onSave={save} />
+        {copyOf ? (
+          // A copy of a group task (#5699): Who is this copy's person, and
+          // For says who else got the same task and how far they are, as
+          // the phone's task screen does.
+          <FieldRow label="For">
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 px-2 py-1.5 text-sm">
+                <Users
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate">
+                  {TASK_AUDIENCE_COPY.groupLine(
+                    copyOf.label,
+                    copyOf.done,
+                    copyOf.total,
+                  )}
+                </span>
+              </span>
+              {addPeople}
+            </span>
+          </FieldRow>
+        ) : null}
+        <DueRow
+          task={task}
+          editable={editable}
+          // A repeating copy keeps its day (#5761).
+          canClear={!task.series}
+          onSave={save}
+        />
         <PointsRow
           task={task}
           editable={editable}
@@ -474,6 +556,17 @@ function TaskPanelBody({
         {task.meeting_id ? (
           <FromMinutesRow meetingId={task.meeting_id} />
         ) : null}
+        <AttachedRow
+          task={task}
+          editable={editable}
+          onSave={(attachments) => save({ attachments })}
+        />
+        <FollowerRow
+          task={task}
+          editable={editable && !task.series}
+          disabled={saving || !!gate.controlProps().disabled}
+          onSave={(followed_by) => save({ followed_by })}
+        />
         {isGroup ? null : (
           <FieldRow label="Steps" alignTop>
             <div className="px-2 py-1">
@@ -525,21 +618,8 @@ function TaskPanelBody({
           copies={target.copies}
           personOf={personOf}
         />
-      ) : (
-        <TaskProof
-          task={
-            editable
-              ? {
-                  ...task,
-                  photos: (task.photos ?? []).filter(
-                    (p) => p.kind !== "reference",
-                  ),
-                }
-              : task
-          }
-          showProof={isMine || canManage}
-          sentBack={sentBack}
-        />
+      ) : handedIn ? null : (
+        proof
       )}
       {editable ? (
         // One line held at its height, so "Saving…" never moves anything.
@@ -579,6 +659,172 @@ export function FromMinutesRow({ meetingId }: { meetingId: string }) {
         {name}
       </Link>
     </FieldRow>
+  );
+}
+
+/**
+ * Attached (`spec/behavior/frapp-links.md`): the task's documents, minutes,
+ * events, chat messages and web links, each named live for whoever reads
+ * it. A `tasks:manage` holder attaches and removes in place; the row shows
+ * the change at once and goes back if the save is refused. Hidden for a
+ * member when nothing is attached.
+ */
+function AttachedRow({
+  task,
+  editable,
+  onSave,
+}: {
+  task: BoardTask;
+  editable: boolean;
+  onSave: (attachments: FrappLink[]) => Promise<boolean>;
+}) {
+  const stored = useMemo(
+    () => readFrappLinks(task.attachments),
+    [task.attachments],
+  );
+  const [shown, setShown] = useState<FrappLink[] | null>(null);
+  // Only the latest save puts the row back on the stored list, so an
+  // earlier save finishing late never flashes the list it replaced.
+  const turn = useRef(0);
+  const links = shown ?? stored;
+  if (!editable && links.length === 0) return null;
+  return (
+    <FieldRow label={FRAPP_LINK_COPY.field} alignTop>
+      <div className="px-2 py-1">
+        <FrappLinksEditor
+          links={links}
+          canEdit={editable}
+          onChange={(update) => {
+            const next = update(links);
+            const mine = ++turn.current;
+            setShown(next);
+            void onSave(next).finally(() => {
+              if (turn.current === mine) setShown(null);
+            });
+          }}
+        />
+      </div>
+    </FieldRow>
+  );
+}
+
+/**
+ * From (#5473): the tier, role or group the task is from, whose members can
+ * see it and how it's going. An officer picks one they're in; everyone else
+ * reads it. Hidden for a member when it is from nobody. Not on a repeating
+ * task yet, which the API refuses.
+ */
+function FollowerRow({
+  task,
+  editable,
+  disabled,
+  onSave,
+}: {
+  task: BoardTask;
+  editable: boolean;
+  disabled: boolean;
+  onSave: (entry: string | null) => Promise<boolean>;
+}) {
+  const choices = useFollowerChoices({ enabled: editable });
+  const value = task.followed_by ?? null;
+  if (!editable && !value) return null;
+  return (
+    <FieldRow label={TASK_FOLLOWER_COPY.field}>
+      {editable ? (
+        <div className="grid gap-1 px-2 py-1">
+          <FollowerSelect
+            value={value}
+            currentName={task.followed_by_name}
+            choices={choices}
+            onChange={(next) => {
+              if (next !== value) void onSave(next);
+            }}
+            disabled={disabled}
+            className="h-8 w-fit min-w-[10rem]"
+          />
+          {value ? (
+            <span className="text-caption text-muted-foreground">
+              {task.followed_by_name
+                ? TASK_FOLLOWER_COPY.hint(task.followed_by_name)
+                : TASK_FOLLOWER_COPY.deletedHint}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <StaticValue>
+          {task.followed_by_name ?? TASK_FOLLOWER_COPY.deleted}
+        </StaticValue>
+      )}
+    </FieldRow>
+  );
+}
+
+/**
+ * Add people to a group task (#5905): the Who picker, people only, with
+ * everyone who already has a copy ticked and fixed, and an Add button that
+ * gives each one picked a To do copy. Asana's and Microsoft Planner's
+ * assignee menus add people to a task that exists; here each gets their own
+ * copy, as Remove people takes one away. Nothing is optimistic: the new
+ * copies are rows the server makes, and the board redraws once it answers.
+ */
+export function AddPeople({
+  taskId,
+  holders,
+  disabled,
+}: {
+  taskId: string;
+  holders: readonly string[];
+  disabled: boolean;
+}) {
+  const { toast } = useToast();
+  const add = useAddToTaskGroup();
+  const [picked, setPicked] = useState<TaskWho | null>(null);
+  const { directory } = useWhoDirectory({ enabled: picked !== null });
+  const marked = new Set(holders);
+
+  async function submit() {
+    const assigneeIds = peopleToAdd(picked, directory, marked);
+    setPicked(null);
+    if (assigneeIds.length === 0) {
+      toast({ title: TASK_AUDIENCE_COPY.addedLine(0) });
+      return;
+    }
+    try {
+      const result = await add.mutateAsync({ id: taskId, assigneeIds });
+      toast({ title: TASK_AUDIENCE_COPY.addedLine(result.added.length) });
+    } catch (error) {
+      toastFailure({
+        title: TASK_AUDIENCE_COPY.addFailed,
+        error,
+        fallback: "Retry in a moment.",
+      });
+    }
+  }
+
+  return (
+    <WhoPicker
+      allow="people"
+      label={TASK_AUDIENCE_COPY.addPeople}
+      value={picked}
+      onChange={setPicked}
+      marked={marked}
+      markedNote={TASK_AUDIENCE_COPY.alreadyHasIt}
+      doneLabel={TASK_AUDIENCE_COPY.addButton}
+      onDone={() => void submit()}
+      align="end"
+      trigger={
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="shrink-0 gap-1.5"
+          disabled={disabled || add.isPending}
+        >
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
+          {TASK_AUDIENCE_COPY.addPeople}
+        </Button>
+      }
+    />
   );
 }
 
@@ -769,12 +1015,15 @@ export function TitleField({
 export function DueRow({
   task,
   editable,
+  canClear,
   onSave,
 }: {
-  task: { due_date: string; due_at?: string | null };
+  task: { due_date: string | null; due_at?: string | null };
   editable: boolean;
+  /** Whether the field may be emptied to No due date (#5761). */
+  canClear: boolean;
   onSave: (
-    body: { due_date: string; due_at: string | null },
+    body: { due_date: string | null; due_at: string | null },
     options: { movesDay: boolean },
   ) => Promise<boolean>;
 }) {
@@ -782,10 +1031,11 @@ export function DueRow({
   const [draft, setDraft] = useState<string | null>(null);
   const [problem, setProblem] = useState<"missing" | "passed" | null>(null);
   const shown = writtenDue(task);
+  const none = stored === "";
   if (!editable) {
     return (
       <FieldRow label="Due">
-        <StaticValue>{shown}</StaticValue>
+        <StaticValue muted={none}>{shown}</StaticValue>
       </FieldRow>
     );
   }
@@ -794,7 +1044,7 @@ export function DueRow({
       <FieldRow label="Due">
         <button
           type="button"
-          className={valueButtonClass}
+          className={cn(valueButtonClass, none && "text-muted-foreground")}
           aria-label={`Due: ${shown}`}
           onClick={() => setDraft(stored)}
         >
@@ -811,7 +1061,7 @@ export function DueRow({
           setProblem(null);
         }}
         onCommit={() => {
-          if (!draft) {
+          if (!draft && !canClear) {
             setProblem("missing");
             return;
           }
@@ -823,13 +1073,15 @@ export function DueRow({
             setProblem("passed");
             return;
           }
-          const fields = dueEntryFields(draft);
+          // An emptied field takes the due date off (#5761).
+          const fields = draft ? dueEntryFields(draft) : null;
+          const dueDate = fields?.due_date ?? null;
           const typed = draft;
           setDraft(null);
           setProblem(null);
           void onSave(
-            { due_date: fields.due_date, due_at: fields.due_at ?? null },
-            { movesDay: movesDayTo(task, fields.due_date) },
+            { due_date: dueDate, due_at: fields?.due_at ?? null },
+            { movesDay: movesDayTo(task, dueDate) },
           ).then((ok) => {
             if (!ok) setDraft(typed);
           });
@@ -838,7 +1090,7 @@ export function DueRow({
         <DueDateField
           autoFocus
           aria-label="Due date"
-          placeholder="Friday 5pm"
+          placeholder={canClear ? TASK_NO_DUE_DATE_LABEL : "Friday 5pm"}
           value={draft}
           missing={problem === "missing"}
           passed={problem === "passed"}
@@ -942,6 +1194,14 @@ function RepeatRow({
     return (
       <FieldRow label="Repeat">
         <StaticValue muted>{TASK_AUDIENCE_COPY.noRepeat}</StaticValue>
+      </FieldRow>
+    );
+  }
+  if (!task.series && !task.due_date && !task.due_at) {
+    // A repeat counts from the due day (#5761).
+    return (
+      <FieldRow label="Repeat">
+        <StaticValue muted>{TASK_REPEAT_NEEDS_DUE_DATE}</StaticValue>
       </FieldRow>
     );
   }
@@ -1124,8 +1384,11 @@ function StatusActions({
   // Fails closed, as the list does: an unknown viewer might be the assignee.
   const cannotConfirm = isMine || viewerUnknown;
   const controls = gate.controlProps(pending);
+  // Someone else's completion only: no one confirms or sends back their own
+  // task (#5917); Mark not done takes your own "done" back.
   const reviewable =
     canManage &&
+    !cannotConfirm &&
     status === "COMPLETED" &&
     (!task.points_awarded || autoSignedOff);
   return (
@@ -1175,7 +1438,7 @@ function StatusActions({
             {TASK_ACTION_LABELS.reopen}
           </Button>
         ) : null}
-        {reviewable && !cannotConfirm && needsSignOff ? (
+        {reviewable && needsSignOff ? (
           <Button
             size="sm"
             className="gap-1.5"
@@ -1253,11 +1516,7 @@ function GroupProgress({
                     : "text-muted-foreground",
                 )}
               >
-                {isSentBack(copy)
-                  ? TASK_NEEDS_CHANGES_LABEL
-                  : copy.status === "COMPLETED" && copy.points_awarded
-                    ? TASK_CONFIRMED_LABEL
-                    : TASK_STATUS_LABELS[copy.status]}
+                {taskStatusLabel(copy)}
               </span>
             </li>
           );

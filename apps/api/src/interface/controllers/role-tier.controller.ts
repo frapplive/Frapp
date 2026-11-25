@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -34,6 +35,7 @@ import {
   UpdateRoleTierDto,
 } from '../dtos/rbac.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
+import { VerifySessionLocally } from '../decorators/session-check.decorator';
 
 /**
  * A chapter's tiers of roles (#4071). Reading them takes `members:view`, as
@@ -45,11 +47,14 @@ import { SystemPermissions } from '#domain/constants/permissions';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('role-tiers')
 export class RoleTierController {
   constructor(private readonly tiers: RoleTierService) {}
 
   @Get()
+  @VerifySessionLocally()
   @ApiOperation({ summary: "List the chapter's role tiers, highest first" })
   @ApiOkResponse({ type: RoleTierDto, isArray: true })
   async list(@CurrentChapterId() chapterId: string) {

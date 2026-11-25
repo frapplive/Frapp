@@ -23,26 +23,28 @@ const Select = SelectPrimitive.Root;
 
 const SelectValue = SelectPrimitive.Value;
 
+/*
+ * The §4 text-input recipe: a select is a field, so it matches the field
+ * beside it in height, fill, hairline and focus. No vertical padding: the row
+ * is already centred by `items-center`, and `py-2` only mattered as a floor,
+ * which made the control overflow its own border the moment a call site
+ * pinned a shorter `h-*`. The error outline is keyed off `aria-invalid` as the
+ * input's is, so a missing pick reads like a missing field beside it (#3983).
+ */
+const SELECT_TRIGGER_CLASS = cn(
+  "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted [&>span]:line-clamp-1",
+  FOCUS_RING,
+  "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
+  "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",
+);
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
-    className={cn(
-      // The §4 text-input recipe: a select is a field, so it matches the
-      // field beside it in height, fill, hairline and focus.
-      // No vertical padding: the row is already centred by `items-center`, and
-      // `py-2` only mattered as a floor — which made the control overflow its
-      // own border the moment a call site pinned a shorter `h-*`.
-      "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1",
-      FOCUS_RING,
-      // The input's error outline, keyed off `aria-invalid` as the input's is,
-      // so a missing pick reads like a missing field beside it (#3983).
-      "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
-      "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",
-      className,
-    )}
+    className={cn(SELECT_TRIGGER_CLASS, className)}
     {...props}
   >
     {children}
@@ -52,6 +54,28 @@ const SelectTrigger = React.forwardRef<
   </SelectPrimitive.Trigger>
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
+
+/**
+ * A field that opens a menu other than a `Select` (the Type menu, which
+ * searches and creates), drawn as `SelectTrigger` is so the two read as one
+ * kind of field side by side. `placeholder` draws its value in the muted tone.
+ */
+const SelectFieldButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { placeholder?: boolean }
+>(({ className, children, placeholder = false, ...props }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    data-placeholder={placeholder ? "" : undefined}
+    className={cn(SELECT_TRIGGER_CLASS, className)}
+    {...props}
+  >
+    <span>{children}</span>
+    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+  </button>
+));
+SelectFieldButton.displayName = "SelectFieldButton";
 
 const SelectScrollUpButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
@@ -96,7 +120,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-select-content-transform-origin]",
+        "relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-select-content-transform-origin)",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
         className,
@@ -120,14 +144,23 @@ const SelectContent = React.forwardRef<
 ));
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
+/*
+ * `description` is a muted second line under an option that needs one to be
+ * told apart (a council type's "The council of a school's NPC sororities").
+ * It sits outside `ItemText`, so the field shows the option's label alone
+ * once picked.
+ */
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    description?: React.ReactNode;
+  }
+>(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex min-h-8 w-full cursor-default select-none items-center rounded-xs px-2 py-1.5 pr-8 text-sm outline-none pointer-coarse:min-h-11 pointer-coarse:text-base transition-colors focus:bg-card-hover focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:text-disabled",
+      description ? "flex-col items-start gap-0.5" : null,
       className,
     )}
     {...props}
@@ -138,6 +171,9 @@ const SelectItem = React.forwardRef<
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {description ? (
+      <span className="text-caption text-muted-foreground">{description}</span>
+    ) : null}
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
@@ -172,6 +208,7 @@ const SelectSeparator = React.forwardRef<
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
 export {
+  SelectFieldButton,
   Select,
   SelectValue,
   SelectTrigger,

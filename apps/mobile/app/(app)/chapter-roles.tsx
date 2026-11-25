@@ -1,17 +1,33 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import type { BottomSheetModal } from "@gorhom/bottom-sheet";
+import {
+  groupFollowsLabel,
+  useChapterRoleColors,
+  useGroups,
+  useIsPermissionHidden,
+  usePermissionList,
+  useUpdateGroup,
+  useViewerDisplayName,
+  type ChapterGroup,
+} from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
   byDisplayOrder,
   isWildcardRole,
+  reachesOutside,
+  shownPermissionCount,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
 import {
+  canAny,
+  groupDisplayName,
   isEveryoneRole,
+  NEW_PICKABLE_ROLE_COPY,
   roleColorOrNull,
-  selfAssignableSectionCaption,
+  SELF_ASSIGNABLE_SECTION_CAPTION,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
@@ -23,15 +39,21 @@ import {
   SectionHeader,
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import { usePendingColors } from "@/components/roles/role-color-row";
+import { RoleColorSheet } from "@/components/roles/role-color-sheet";
+import { describeError } from "@/lib/roles/save-error";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
+import { PlusGlyph } from "@/components/control-glyphs";
 import { useRolesData } from "@/lib/roles/use-roles-data";
+import { newRolePlacements } from "@/lib/roles/new-role";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
-/** A role list longer than this gets a search field, as web's does. */
+/** A list longer than this gets a search field, as web's does. */
 const SEARCH_FROM = 8;
 
 /**
- * Chapter settings → Roles on the phone (#4074): the chapter's tiers in rank
+ * Chapter settings → Roles and groups on the phone (#4074): the chapter's tiers in rank
  * order, each with its roles, then the roles outside the tiers. Web's Roles
  * tab (#3990) in the grouped-list shape iOS Settings and Discord mobile's
  * Server Settings → Roles use: one section per tier, a Permissions row first
@@ -40,25 +62,75 @@ const SEARCH_FROM = 8;
  *
  * Built for a chapter with a hundred roles, not five: the tiers carry the
  * permissions, so an officer changes five tiers rather than a hundred roles,
- * and a search field narrows the list once it passes eight roles. Making,
- * reordering and deleting tiers and roles stay on web, where a chapter sets
- * its structure up once; the phone changes what they can do.
+ * and a search field narrows the list once it passes eight roles. Making
+ * tiers, and reordering and deleting tiers and roles, stay on web, where a
+ * chapter sets its structure up once; the phone changes what they can do, and
+ * makes a role (Chapter settings → New role, #5296, and the Non-chapter
+ * business Add role below).
  *
  * Roles members pick themselves (Non-chapter business, #4958) get their own
- * section after the roles outside the tiers, as on web.
+ * section after the roles outside the tiers, as on web, with its own Add
+ * role (#5736): an intramurals team or a study group is made
+ * during the season, not at setup, so its Add role opens a name sheet that
+ * creates it already pickable, as web's does.
  *
  * Tier names, and the word for a tier, are the chapter's own
  * (`tierWords(vocab("tier"))`), never a constant.
+ *
+ * Groups follow the roles on the same screen (Paul, 2026-11-19: roles and
+ * groups live in one place, as on web's Roles and groups tab): the chapter's
+ * own groups, then the ones that follow each member's pledge class,
+ * graduation year and major, each with how many are in it. A member is put in or taken
+ * out of a group from their profile; making and renaming groups stays on web
+ * with the rest of the structure. The roles part shows to whoever web shows
+ * it to (`chapter-config:view` or `roles:manage`), so a `groups:manage`
+ * holder without either sees only the groups.
  */
 export default function ChapterRolesScreen() {
   const router = useRouter();
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const data = useRolesData();
-  const { rolesQuery, tiersQuery, roles, tiers, memberCounts, words, canManage } =
-    data;
+  const {
+    rolesQuery,
+    tiersQuery,
+    roles,
+    tiers,
+    memberCounts,
+    words,
+    canManage,
+    reach,
+  } = data;
+  const newPickableRef = useRef<BottomSheetModal>(null);
+  const canAddPickable = canManage && reach.known && reachesOutside(reach);
+  // Whether Chapter settings draws New role for this viewer (#5296), so the
+  // note below points there only when the row is there.
+  const canAddRole =
+    canManage && newRolePlacements(reach, tiers, words.plural).length > 0;
   const [query, setQuery] = useState("");
   const filtering = normalizeWords(query).length > 0;
+  const permissions = usePermissionList();
+  const isHidden = useIsPermissionHidden();
+  const canSeeRoles = canAny(
+    ["roles:manage", "chapter-config:view"],
+    permissions,
+  );
+  const groupsQuery = useGroups({ enabled: true });
+  const groupColor = useGroupColor(
+    canAny(["groups:manage"], permissions),
+    groupsQuery.data,
+    groupsQuery.dataUpdatedAt,
+  );
+  const groups = useMemo(() => {
+    const all = groupsQuery.data ?? [];
+    const shown = filtering
+      ? all.filter((group) => matchesWordStarts(groupDisplayName(group), query))
+      : all;
+    return [
+      ...shown.filter((group) => group.kind === "manual"),
+      ...shown.filter((group) => group.kind !== "manual"),
+    ];
+  }, [groupsQuery.data, filtering, query]);
 
   const sections = useMemo(() => {
     const tierIds = new Set(tiers.map((tier) => tier.id));
@@ -109,7 +181,10 @@ export default function ChapterRolesScreen() {
     router.push({ pathname: "/role", params: { roleId: role.id } });
 
   let body: React.ReactNode;
-  if ((rolesQuery.isError && rolesQuery.data === undefined) || (tiersQuery.isError && tiersQuery.data === undefined)) {
+  if (
+    (rolesQuery.isError && rolesQuery.data === undefined) ||
+    (tiersQuery.isError && tiersQuery.data === undefined)
+  ) {
     body = (
       <ErrorState
         title="Couldn't load roles"
@@ -137,23 +212,26 @@ export default function ChapterRolesScreen() {
     const shown = sections.filter(
       (section) =>
         section.roles.length > 0 ||
-        (!filtering && (section.tier !== null || (section.pickable && canManage))),
+        (!filtering &&
+          (section.tier !== null || (section.pickable && canManage))),
     );
     body = (
       <>
-        {roles.length > SEARCH_FROM ? (
+        {roles.length + (groupsQuery.data?.length ?? 0) > SEARCH_FROM ? (
           <SearchField
             value={query}
             onChangeText={setQuery}
-            placeholder="Find a role"
-            accessibilityLabel="Find a role"
+            placeholder="Find a role or group"
+            accessibilityLabel="Find a role or group"
             searchGlyph
           />
         ) : null}
-        {filtering && shown.length === 0 ? (
-          <Text style={styles.note}>No role matches “{query.trim()}”.</Text>
+        {filtering &&
+        (canSeeRoles ? shown.length : 0) === 0 &&
+        groups.length === 0 ? (
+          <Text style={styles.note}>Nothing matches “{query.trim()}”.</Text>
         ) : null}
-        {shown.map((section) => (
+        {(canSeeRoles ? shown : []).map((section) => (
           <Fragment key={section.key}>
             <SectionHeader count={section.roles.length}>
               {section.title}
@@ -162,7 +240,7 @@ export default function ChapterRolesScreen() {
               {section.tier && !filtering ? (
                 <ListRow
                   label="Permissions"
-                  value={`${section.tier.permissions.length} on`}
+                  value={`${shownPermissionCount(section.tier.permissions, isHidden)} on`}
                   accessibilityHint={`Opens what every role in ${section.tier.name} can do.`}
                   onPress={() =>
                     router.push({
@@ -181,7 +259,7 @@ export default function ChapterRolesScreen() {
               {section.pickable && section.roles.length === 0 ? (
                 <ListRow
                   label="None yet"
-                  description={selfAssignableSectionCaption(words.plural)}
+                  description={SELF_ASSIGNABLE_SECTION_CAPTION}
                   variant="detail"
                 />
               ) : null}
@@ -222,13 +300,86 @@ export default function ChapterRolesScreen() {
                   />
                 );
               })}
+              {section.pickable && canAddPickable && !filtering ? (
+                <ListRow
+                  label={NEW_PICKABLE_ROLE_COPY.add}
+                  leading={
+                    <PlusGlyph color={tokens.color.text.mutedForeground} />
+                  }
+                  accessibilityHint="Adds a role members can join themselves."
+                  onPress={() => newPickableRef.current?.present()}
+                />
+              ) : null}
             </ListSection>
           </Fragment>
         ))}
+        {groupsQuery.data && (groups.length > 0 || !filtering) ? (
+          <>
+            <SectionHeader count={groups.length}>Groups</SectionHeader>
+            <ListSection>
+              {groups.length === 0 ? (
+                <ListRow
+                  label="No groups yet"
+                  description="Groups, such as In house or a committee, are for pinging and assigning. They give no permissions."
+                  variant="detail"
+                />
+              ) : (
+                groups.map((group) => {
+                  const color = groupColor.shown(group);
+                  const count = group.member_ids.length;
+                  return (
+                    <ListRow
+                      key={group.id}
+                      variant="detail"
+                      label={groupDisplayName(group)}
+                      leading={
+                        <View
+                          style={[
+                            styles.dot,
+                            color ? { backgroundColor: color } : null,
+                          ]}
+                        />
+                      }
+                      description={
+                        groupColor.failure?.groupId === group.id
+                          ? groupColor.failure.message
+                          : groupFollowsLabel(group)
+                      }
+                      descriptionTone={
+                        groupColor.failure?.groupId === group.id
+                          ? "destructive"
+                          : "default"
+                      }
+                      value={String(count)}
+                      accessibilityValue={`${count} ${count === 1 ? "member" : "members"}`}
+                      accessibilityHint={
+                        groupColor.canEdit ? "Opens its color." : undefined
+                      }
+                      onPress={
+                        groupColor.canEdit
+                          ? () => groupColor.open(group)
+                          : undefined
+                      }
+                    />
+                  );
+                })
+              )}
+            </ListSection>
+          </>
+        ) : null}
         <Text style={styles.note}>
-          Add, rename and reorder {words.plural} and roles on the web
-          dashboard.
+          {canAddRole
+            ? `Add ${words.plural} and groups, and rename and reorder ${words.plural}, roles and groups, on the web dashboard. Add a role from Chapter settings → New role.`
+            : `Add, rename and reorder ${words.plural}, roles and groups on the web dashboard.`}{" "}
+          Put someone in a group from their profile.
         </Text>
+        {groupColor.sheet}
+        <NewRoleSheet
+          ref={newPickableRef}
+          onCreated={(roleId) =>
+            router.push({ pathname: "/role", params: { roleId } })
+          }
+        />
       </>
     );
   }
@@ -236,13 +387,88 @@ export default function ChapterRolesScreen() {
   return (
     <ScreenShell
       back={BACK_TO_CHAPTER_SETTINGS}
-      title="Roles"
-      subtitle={subtitle}
-      refresh={() => Promise.all([rolesQuery.refetch(), tiersQuery.refetch()])}
+      title="Roles and groups"
+      subtitle={canSeeRoles ? subtitle : undefined}
+      refresh={() =>
+        Promise.all([
+          rolesQuery.refetch(),
+          tiersQuery.refetch(),
+          groupsQuery.refetch(),
+        ])
+      }
     >
       {body}
     </ScreenShell>
   );
+}
+
+/**
+ * A group's color on the phone (#5966, folding in #5791): a `groups:manage`
+ * holder taps a group's row for the same picker as a role's, as web's group
+ * editor offers it; a swatch saves on the tap and Custom when the sheet
+ * closes. Naming, members and pinging stay where they are. The sheet reads
+ * the group live from the groups read, so it follows a save that lands while
+ * it's open.
+ */
+function useGroupColor(
+  canEdit: boolean,
+  groups: readonly ChapterGroup[] | undefined,
+  groupsUpdatedAt: number,
+) {
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const updateGroup = useUpdateGroup();
+  const chapterColors = useChapterRoleColors({ enabled: canEdit });
+  const memberName = useViewerDisplayName();
+  const colors = usePendingColors(groupsUpdatedAt);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = groups?.find((group) => group.id === editingId) ?? null;
+  const [failure, setFailure] = useState<{
+    groupId: string;
+    message: string;
+  } | null>(null);
+
+  const shown = (group: ChapterGroup) =>
+    colors.shown(group.id, roleColorOrNull(group.color));
+
+  async function save(group: ChapterGroup, color: string | null) {
+    setFailure((current) => (current?.groupId === group.id ? null : current));
+    const error = await colors.save(group.id, color, () =>
+      updateGroup.mutateAsync({ id: group.id, body: { color } }),
+    );
+    if (error) {
+      setFailure({
+        groupId: group.id,
+        message: describeError(
+          groupDisplayName(group),
+          error,
+          "The color was not changed. Try again in a moment.",
+        ),
+      });
+    }
+  }
+
+  return {
+    canEdit,
+    shown,
+    failure,
+    open: (group: ChapterGroup) => {
+      setEditingId(group.id);
+      sheetRef.current?.present();
+    },
+    sheet: canEdit ? (
+      <RoleColorSheet
+        ref={sheetRef}
+        value={editing ? shown(editing) : null}
+        subject={editing?.id ?? ""}
+        onChange={(next) => {
+          if (editing) void save(editing, next);
+        }}
+        previewName={editing ? groupDisplayName(editing) : ""}
+        memberName={memberName}
+        chapterColors={chapterColors}
+      />
+    ) : null,
+  };
 }
 
 function createStyles(tokens: SignetTokens) {

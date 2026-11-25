@@ -14,6 +14,7 @@ import {
   MinLength,
   ValidateIf,
   ValidateNested,
+  ArrayNotEmpty,
 } from 'class-validator';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 import { MaxJsonLength } from '../decorators/max-json-length.decorator';
@@ -63,6 +64,7 @@ import {
   LIST_QUERY_LIMIT_MAX,
   LIST_QUERY_LIMIT_MIN,
 } from '#domain/constants/list-query-limits';
+import { splitIdList } from './id-list-query';
 
 const CHANNEL_TYPES = ['PUBLIC', 'PRIVATE', 'ROLE_GATED'] as const;
 
@@ -327,7 +329,7 @@ export class ChannelMemberDto {
     type: Number,
     nullable: true,
     description:
-      "The `display_order` of the member's highest role (lower ranks higher), or null when they hold no role. For sorting the list; names, avatars and role colors come from `GET /v1/members/roster`.",
+      "Where the member's highest-ranked role sits among the chapter's roles in rank order (the President's role first, then by tier, then each role's order in its tier), 0 for the top; lower ranks higher, null when they hold no role. For sorting the list; names, avatars and role colors come from `GET /v1/members/roster`.",
   })
   role_rank: number | null;
 
@@ -344,9 +346,40 @@ export class ChannelMemberDto {
     type: String,
     nullable: true,
     description:
-      "The group's heading: that role's name, \"Members\" for the chapter's Everyone role, or null when they hold no role.",
+      'That role\'s name, "Members" for the chapter\'s Everyone role, or null when they hold no role. Older app builds group by it; current ones group by tier.',
   })
   role_name: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "The member's title: their highest-ranked role's name, or null for the chapter's Everyone role or no role.",
+  })
+  title: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The highest tier any of their roles is in, the group the list files them under, or null when none of their roles is in a tier.',
+  })
+  tier_id: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "That tier's name, the group's heading; null with tier_id.",
+  })
+  tier_name: string | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: "That tier's position, 1 for the top tier; null with tier_id.",
+  })
+  tier_rank: number | null;
 }
 
 export class CreateGroupDmDto {
@@ -916,7 +949,8 @@ export class ChatUploadUrlResponseDto {
 export class MentionRoleDto {
   @ApiProperty({
     format: 'uuid',
-    description: "The role's id, or the tier's or group's (`kind`).",
+    description:
+      "The role's id, or the tier's or group's (`kind`). A class year's standing (`@Seniors`, #5786) has its own id, fixed for that group and standing, so no two rows share one.",
   })
   role_id: string;
 
@@ -933,7 +967,8 @@ export class MentionRoleDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'The role’s palette color, or null.',
+    description:
+      'The role’s color (a palette color or a readable custom `#RRGGBB`, `isPaintableRoleColor`), or null.',
   })
   color: string | null;
 
@@ -970,7 +1005,7 @@ export class ChannelAccessOptionDto {
     type: String,
     nullable: true,
     description:
-      "A role's palette color; null for a tier or an uncolored role.",
+      "A role's color (palette or readable custom, `isPaintableRoleColor`); null for a tier or an uncolored role.",
   })
   color: string | null;
 
@@ -1214,6 +1249,30 @@ export class ResolveAuthorAvatarsDto {
   })
   @IsArray()
   @ArrayMaxSize(MAX_AUTHOR_AVATAR_PATHS_PER_REQUEST)
+  @IsUUID(undefined, { each: true })
+  message_ids: string[];
+}
+
+/**
+ * Server cap on one batched attachments request (#5667). Clients chunk at
+ * this size (`ATTACHMENT_REQUEST_CHUNK_SIZE` in `@repo/hooks`). With at most
+ * 10 attachments a message, a full request stays under PostgREST's 1000-row
+ * read cap.
+ */
+const MAX_ATTACHMENT_MESSAGES_PER_REQUEST = 50;
+
+export class ListMessagesAttachmentsQueryDto {
+  @ApiProperty({
+    type: String,
+    description:
+      'Comma-separated IDs of messages in this channel whose attachments to list, at most 50. Each id is a key of the answer; a message that is deleted, outside this channel, or from a sender the caller has blocked maps to an empty list.',
+    example:
+      '3f0c1d9e-0000-4000-8000-000000000001,3f0c1d9e-0000-4000-8000-000000000002',
+  })
+  @Transform(({ value }: { value: unknown }) => splitIdList(value))
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ATTACHMENT_MESSAGES_PER_REQUEST)
   @IsUUID(undefined, { each: true })
   message_ids: string[];
 }

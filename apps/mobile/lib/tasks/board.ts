@@ -20,8 +20,10 @@ import {
   type MyTasksGroup,
 } from "@repo/hooks";
 import {
+  readFrappLinks,
   taskNeedsSignOff,
   taskSignedOffAutomatically,
+  type FrappLink,
   type TaskProofKind,
   type TaskSeriesLine,
 } from "@repo/validation";
@@ -59,6 +61,8 @@ export interface TaskRowModel {
   /** Whom it is assigned to. */
   assigneeId: string | null;
   completedAt: string | null;
+  /** Who marked it done (#5732); null while open or from an older read. */
+  completedBy: string | null;
   /** When an officer confirmed it; `null` while it waits on one. */
   confirmedAt: string | null;
   pointReward: number | null;
@@ -84,6 +88,16 @@ export interface TaskRowModel {
   groupId: string | null;
   /** The minutes it was suggested from (#5562): read for their name now. */
   meetingId: string | null;
+  /**
+   * The tier, role or group it is from (#5473, `tasks.md` § Following a
+   * task), as `tier:<id>` / `role:<id>` / `group:<id>`, or `null` for a task
+   * from its creator alone.
+   */
+  followedBy: string | null;
+  /** That tier's, role's or group's name now; `null` once deleted. */
+  followedByName: string | null;
+  /** Its Frapp links (`spec/behavior/frapp-links.md`), ids only for a record. */
+  attachments: FrappLink[];
   /**
    * The group this copy is one of (#4295 step 3; 2026-11-18): who the task
    * went to and how far along the copies are, or `null` for one person's.
@@ -188,8 +202,9 @@ function toSubtasks(value: unknown): TaskRowSubtask[] {
 }
 
 /**
- * The board by My tasks' groups (#4295 step 5): Today (overdue first), This
- * week, Later, by the rule web's My tasks uses (`myTasksGroup`).
+ * The board by My tasks' groups (#4295 step 5): Overdue (#5906), Today, This
+ * week, Later, then No due date (#5761), by the rule web's My tasks uses
+ * (`myTasksGroup`).
  */
 export interface TaskBoard {
   groups: Record<MyTasksGroup, TaskRowModel[]>;
@@ -198,7 +213,7 @@ export interface TaskBoard {
 }
 
 const EMPTY_BOARD: TaskBoard = {
-  groups: { today: [], week: [], later: [] },
+  groups: { overdue: [], today: [], week: [], later: [], none: [] },
   total: 0,
 };
 
@@ -225,6 +240,7 @@ export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
     dueAt: str(row, "due_at"),
     assigneeId: str(row, "assignee_id"),
     completedAt: str(row, "completed_at"),
+    completedBy: str(row, "completed_by"),
     confirmedAt: str(row, "confirmed_at"),
     pointReward: num(row, "point_reward"),
     pointsAwarded: row.points_awarded === true,
@@ -247,6 +263,9 @@ export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
     createdAt: str(row, "created_at"),
     groupId: str(row, "group_id"),
     meetingId: str(row, "meeting_id"),
+    followedBy: str(row, "followed_by"),
+    followedByName: str(row, "followed_by_name"),
+    attachments: readFrappLinks(row.attachments),
     group: toGroup(row.group),
     openTaskId: str(row, "open_task_id"),
     series: readTaskSeries(row.series),
@@ -254,11 +273,9 @@ export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
 }
 
 /**
- * Days until this row is due, or `null` when the date is missing or unreadable.
- *
- * `due_date` is `NOT NULL` in `task.entity.ts`, so `null` here is defensive
- * only — but the row is still kept and sorted last rather than dropped, because
- * hiding a task the member owes is the worse failure.
+ * Days until this row is due, or `null` when it has no due date (#5761) or an
+ * unreadable one. The row is still kept and sorted last rather than dropped,
+ * because hiding a task the member owes is the worse failure.
  */
 function dueInDays(row: TaskRowModel, now: Date): number | null {
   if (!row.dueDate) return null;
@@ -317,9 +334,11 @@ export function selectTaskRows(
   if (!viewerUserId) return EMPTY_BOARD;
 
   const groups: Record<MyTasksGroup, RankedRow[]> = {
+    overdue: [],
     today: [],
     week: [],
     later: [],
+    none: [],
   };
 
   for (const raw of records(data)) {
@@ -349,16 +368,21 @@ export function selectTaskRows(
       if (sinceDone !== null && sinceDone > COMPLETED_RETENTION_DAYS) continue;
     }
 
-    // Today, This week or Later by the shared rule. An overdue row leads
-    // Today rather than taking a section of its own: it is the most urgent
-    // thing the board can say, and burying it under a later heading would
-    // invert that (Canvas draws no OVERDUE section either). A finished row
-    // whose day has passed stays in Today too, where it was finished, until
-    // it retires above.
+    // Overdue, Today, This week or Later by the shared rule. Overdue has its
+    // own section above Today since #5906 (Shawn: "the stuff that's overdue
+    // should go into an overdue section not the today section"). A finished
+    // row stays where it was finished until it retires above: one finished
+    // late in Overdue, one whose day has since passed in Today.
     const stored = isTaskStatus(row.storedStatus) ? row.storedStatus : null;
     const shown = isTaskStatus(row.displayStatus) ? row.displayStatus : stored;
     const group = myTasksGroup(
-      { due_date: row.dueDay ?? row.dueDate, due_at: row.dueAt, status: shown },
+      {
+        due_date: row.dueDay ?? row.dueDate,
+        due_at: row.dueAt,
+        status: shown,
+        stored_status: stored ?? undefined,
+        completed_at: row.completedAt,
+      },
       now,
     );
     groups[group].push({ row, days });
@@ -368,10 +392,17 @@ export function selectTaskRows(
     rows.sort(compareRows).map((entry) => entry.row);
   return {
     groups: {
+      overdue: sorted(groups.overdue),
       today: sorted(groups.today),
       week: sorted(groups.week),
       later: sorted(groups.later),
+      none: sorted(groups.none),
     },
-    total: groups.today.length + groups.week.length + groups.later.length,
+    total:
+      groups.overdue.length +
+      groups.today.length +
+      groups.week.length +
+      groups.later.length +
+      groups.none.length,
   };
 }

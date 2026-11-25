@@ -35,6 +35,7 @@ describe('TaskController', () => {
       rejectCompletion: jest.fn(),
       delete: jest.fn(),
       getPhotoDownloadUrl: jest.fn(),
+      shareToChat: jest.fn().mockResolvedValue(undefined),
       // Who may read a task (#5473): its assignee, an officer, or a member
       // of the group following it, here `role:followers`.
       mayRead: jest.fn((task, _chapterId, userId, isAdmin) =>
@@ -156,6 +157,42 @@ describe('TaskController', () => {
         },
         [],
       );
+    });
+  });
+
+  describe('share (#5772)', () => {
+    const body = {
+      channel_id: '11111111-1111-4111-8111-111111111111',
+      client_message_id: '22222222-2222-4222-8222-222222222222',
+    };
+
+    it('posts the card, as the member, for a task they can read', async () => {
+      const task = { id: 'task-1', assignee_id: 'user-1' } as any;
+      taskService.findById.mockResolvedValue(task);
+      rbacService.memberHasAnyPermission.mockResolvedValue(false);
+
+      await expect(
+        controller.share('chapter-1', 'user-1', 'task-1', body),
+      ).resolves.toEqual({ card_posted: true });
+      expect(taskService.shareToChat).toHaveBeenCalledWith(task, {
+        chapter_id: 'chapter-1',
+        channel_id: body.channel_id,
+        sender_id: 'user-1',
+        client_message_id: body.client_message_id,
+      });
+    });
+
+    it("refuses a task the member can't read, and posts nothing", async () => {
+      taskService.findById.mockResolvedValue({
+        id: 'task-1',
+        assignee_id: 'someone-else',
+      } as any);
+      rbacService.memberHasAnyPermission.mockResolvedValue(false);
+
+      await expect(
+        controller.share('chapter-1', 'user-2', 'task-1', body),
+      ).rejects.toThrow(ForbiddenException);
+      expect(taskService.shareToChat).not.toHaveBeenCalled();
     });
   });
 
@@ -424,6 +461,42 @@ describe('TaskController', () => {
       await controller.delete('chapter-1', 't', { scope: 'group' });
 
       expect(taskService.deleteGroup).toHaveBeenCalledWith('t', 'chapter-1');
+    });
+  });
+
+  describe('addToGroup (#5905)', () => {
+    it('passes the members and the officer to the service and returns the group', async () => {
+      const result = {
+        added: ['user-5'],
+        group: {
+          id: 'group-1',
+          audience: 'people' as const,
+          total: 5,
+          done: 0,
+          confirmed: 0,
+        },
+      };
+      taskService.addToGroup = jest.fn().mockResolvedValue(result);
+
+      await expect(
+        controller.addToGroup('chapter-1', 'admin-1', 't', {
+          assignee_ids: ['user-5'],
+        }),
+      ).resolves.toEqual(result);
+      expect(taskService.addToGroup).toHaveBeenCalledWith(
+        't',
+        'chapter-1',
+        'admin-1',
+        ['user-5'],
+      );
+    });
+
+    it('needs tasks:manage, so a member who is not an officer gets a 403', () => {
+      const required = Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        TaskController.prototype.addToGroup,
+      ) as string[];
+      expect(required).toEqual([SystemPermissions.TASKS_MANAGE]);
     });
   });
 

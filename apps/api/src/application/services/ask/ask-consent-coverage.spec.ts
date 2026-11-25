@@ -14,7 +14,7 @@ type Row = AiConsentSheetDataKind['key'];
  * added to any of the three lists fails below until someone decides which row
  * covers it. Data no row's label names needs the label widened or a new row
  * (`ai-consent-sheet.ts` says when that is a new version), and the privacy
- * policy's Frapp AI section changes with it.
+ * policy's Frapp Intelligence section changes with it.
  */
 const TOOL_ROWS: Record<string, readonly Row[]> = {
   // The one-shot reads (`ask-tools.ts`).
@@ -27,6 +27,7 @@ const TOOL_ROWS: Record<string, readonly Row[]> = {
   // People, tasks, events and standing (`agent/tools-chapter`).
   FindMemberAgentTool: ['roster'],
   RosterAgentTool: ['roster'],
+  ChapterRolesAgentTool: ['roster', 'chapter_records'],
   MyTasksAgentTool: ['chapter_records'],
   ChapterTasksAgentTool: ['chapter_records'],
   EventsAgentTool: ['chapter_records'],

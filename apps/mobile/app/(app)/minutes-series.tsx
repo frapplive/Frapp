@@ -6,6 +6,7 @@ import {
   useMeetings,
   useMemberDisplayNames,
   useSeriesOpenActionItems,
+  type MeetingSummary,
   type SeriesOpenActionItems,
 } from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
@@ -17,7 +18,7 @@ import {
   TASK_AUDIENCE_COPY,
   meetingDueLabel,
 } from "@repo/validation";
-import type { BackTarget } from "@/components/back-row";
+import { BACK_TO_MINUTES } from "@/components/back-row";
 import { InlineNote } from "@/components/inline-note";
 import {
   ListRowSkeleton,
@@ -28,18 +29,13 @@ import { MinutesRow } from "@/components/minutes/minutes-row";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import { ScreenShell } from "@/components/screen-shell";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
-import {
-  minutesRowTime,
-  seriesRows,
-  type MinutesListRow,
-} from "@/lib/minutes/minutes-list";
+import { minutesRowTime, seriesRows } from "@/lib/minutes/series";
 import { typeRole, useFrappTheme } from "@/lib/theme";
-
-const BACK_TO_MINUTES: BackTarget = { label: "Minutes", href: "/minutes" };
 
 /**
  * One repeating meeting's minutes (#5290), opened from the Minutes list's
- * Series row: the action items still open across all its posted minutes,
+ * Series row until that list was folded into Documents (#5949), where a
+ * series' minutes are filed in their own folder: the action items still open across all its posted minutes,
  * newest meeting first, then its meetings by date. That is the question a
  * weekly meeting asks ("what did we say we'd do?"); Granola keeps a recurring
  * meeting's earlier notes beside the new one in the same spirit.
@@ -64,7 +60,7 @@ function MinutesSeriesBody() {
   const refresh = useRefetchAll([meetingsQuery, openQuery]);
   // The clock as the screen opened: groups and times stay put while it is open.
   const [now] = useState(Date.now);
-  const rows: MinutesListRow[] = seriesRows(meetingsQuery.data ?? [], key);
+  const rows: MeetingSummary[] = seriesRows(meetingsQuery.data ?? [], key);
   const newest = rows[0];
 
   if (meetingsQuery.isPending) {
@@ -108,7 +104,7 @@ function MinutesSeriesBody() {
   const hasItems = rows.some(
     (row) => row.status === "posted" && row.action_item_count > 0,
   );
-  const years = new Map<number, MinutesListRow[]>();
+  const years = new Map<number, MeetingSummary[]>();
   for (const row of rows) {
     const year = new Date(row.event_start_time).getFullYear();
     years.set(year, [...(years.get(year) ?? []), row]);
@@ -141,10 +137,8 @@ function MinutesSeriesBody() {
                 type={row.meeting_type}
                 otherLabel={row.other_label}
                 time=""
-                draft={row.status === "draft"}
-                recorded={row.recorded}
-                decisions={row.decision_count}
-                actionItems={row.action_item_count}
+                facts={row}
+                gist={row.gist}
                 onPress={() =>
                   router.push({
                     pathname: "/minutes-details",

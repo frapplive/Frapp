@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -51,6 +52,8 @@ import { VerifySessionLocally } from '../decorators/session-check.decorator';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('chat-sidebar')
 export class ChatSidebarController {
   constructor(private readonly sidebarService: ChatSidebarService) {}

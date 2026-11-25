@@ -16,6 +16,7 @@ import {
   Hash,
   MessageSquareText,
   Search,
+  Settings,
   User,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +31,8 @@ import {
 import { canAny } from "@repo/validation";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
+import { useSettingsSearch } from "@/lib/settings/use-settings-search";
 import { asArray, cn } from "@/lib/utils";
 import { AnalyticsContext } from "@/lib/providers/analytics-provider";
 import { FOCUS_RING } from "@/components/ui/focus";
@@ -44,8 +47,8 @@ import {
 } from "@/components/layout/find-results";
 
 /**
- * The Find dialog: a centered search over channels, members, messages, events
- * and backwork, opened by Cmd/Ctrl+F or the top-bar field (`find-bar.tsx`).
+ * The Find dialog: a centered search over channels, settings, members,
+ * messages, events and backwork, opened by Cmd/Ctrl+F or the top-bar field (`find-bar.tsx`).
  *
  * **Why a dialog again.** #2141 replaced the ⌘K palette with a field that
  * dropped its results under itself, 520px wide. Paul picked a centered dialog
@@ -67,9 +70,12 @@ import {
  */
 
 export const FIND_PLACEHOLDER = "Find channels, members, messages and more";
+/** A council's Find lists its channels alone (#5933). */
+export const COUNCIL_FIND_PLACEHOLDER = "Find channels";
 
 const GROUP_ICON: Record<FindGroup, LucideIcon> = {
   Channels: Hash,
+  Settings: Settings,
   Members: User,
   Messages: MessageSquareText,
   Events: CalendarDays,
@@ -155,8 +161,8 @@ export function FindDialog({
             Find
           </DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
-            Search channels, members, messages, events and backwork. Use the
-            arrow keys to move through results and Enter to open one.
+            Search channels, settings, members, messages, events and backwork.
+            Use the arrow keys to move through results and Enter to open one.
           </DialogPrimitive.Description>
           <FindPanel
             query={query}
@@ -194,7 +200,8 @@ function FindPanel({
   // Null until the member moves the highlight, which otherwise sits on the
   // first result.
   const [movedTo, setMovedTo] = useState<number | null>(null);
-  const placeholder = FIND_PLACEHOLDER;
+  // Set below, once the tenant's kind is read.
+  let placeholder = FIND_PLACEHOLDER;
 
   // The server search is debounced; the channel match is not, in effect,
   // because it reads the same debounced query and the channel list is cached.
@@ -209,10 +216,17 @@ function FindPanel({
    */
   const hasMinQuery = debouncedQuery.trim().length >= SEARCH_MIN_QUERY_LENGTH;
   const isDebouncing = query !== debouncedQuery;
-  const search = useSearch(debouncedQuery);
+  // A council's Find is its channels (#5933): `/v1/search` serves chapters
+  // only, so the search-backed groups (members, messages, events, backwork)
+  // never ask there, and Settings' index names a chapter's settings.
+  const isCouncil = useIsCouncil();
+  if (isCouncil) placeholder = COUNCIL_FIND_PLACEHOLDER;
+  const search = useSearch(isCouncil ? "" : debouncedQuery);
   const channels = useChannels();
   const isModuleEnabled = useChapterModuleGate();
   const permissions = usePermissionList();
+  // Settings the member can change, found by name or synonym (2026-11-19).
+  const findSettings = useSettingsSearch();
   // `null` outside `AnalyticsProvider` (tests, or an opted-out member).
   const track = useContext(AnalyticsContext);
   // Set by the member typing in this mount; see the telemetry effect.
@@ -234,8 +248,13 @@ function FindPanel({
       if (key && !(isModuleEnabled?.(key) ?? false)) hidden.add(group);
     }
     if (!canBrowseBackwork) hidden.add("Backwork");
+    if (isCouncil) {
+      for (const group of FIND_GROUPS) {
+        if (group !== "Channels") hidden.add(group);
+      }
+    }
     return hidden;
-  }, [isModuleEnabled, canBrowseBackwork]);
+  }, [isModuleEnabled, canBrowseBackwork, isCouncil]);
   const departments = useDepartments({
     enabled: !hiddenGroups.has("Backwork"),
   });
@@ -257,6 +276,7 @@ function FindPanel({
             payload: search.data?.payload,
             departments: departments.data,
             hiddenGroups,
+            settings: findSettings(debouncedQuery),
           })
         : [],
     [
@@ -267,6 +287,7 @@ function FindPanel({
       search.data,
       departments.data,
       hiddenGroups,
+      findSettings,
     ],
   );
 
@@ -405,10 +426,14 @@ function FindPanel({
     const group = GROUP_FOR_SOURCE[source];
     return group ? shownGroup(group) : true;
   });
+  // Channels and Settings are matched on this device, so the server's
+  // timeout or failure says nothing about them.
+  const matchedHere =
+    effectiveFilter === "Channels" || effectiveFilter === "Settings";
   const timedOut =
     allTimedOutSources.length > 0
       ? timedOutSources.length > 0
-      : (search.data?.timedOut ?? false) && effectiveFilter !== "Channels";
+      : (search.data?.timedOut ?? false) && !matchedHere;
 
   /*
    * "We stopped looking here" must read differently from "we found nothing"
@@ -422,7 +447,7 @@ function FindPanel({
     statusMessage = null;
   } else if (isLoading) {
     statusMessage = "Searching...";
-  } else if (search.isError) {
+  } else if (search.isError && !matchedHere) {
     statusMessage = "Search is unavailable right now. Try again in a moment.";
   } else if (results.length === 0) {
     statusMessage = timedOut
@@ -458,36 +483,39 @@ function FindPanel({
             onQueryChange(e.target.value);
           }}
           onKeyDown={onInputKeyDown}
-          className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted-foreground"
+          className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted"
         />
       </div>
 
-      <div
-        role="group"
-        aria-label="Show"
-        className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-1 pt-3"
-      >
-        {chips.map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            aria-pressed={effectiveFilter === chip}
-            onClick={() => {
-              setFilter(chip);
-              inputRef.current?.focus();
-            }}
-            className={cn(
-              "h-7 rounded-full border px-3 text-caption transition",
-              effectiveFilter === chip
-                ? "border-transparent bg-accent-subtle text-accent-text"
-                : "border-border text-muted-foreground hover:text-foreground",
-              FOCUS_RING,
-            )}
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
+      {/* One group (a council's channels, #5933) is nothing to narrow. */}
+      {chips.length > 2 ? (
+        <div
+          role="group"
+          aria-label="Show"
+          className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-1 pt-3"
+        >
+          {chips.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              aria-pressed={effectiveFilter === chip}
+              onClick={() => {
+                setFilter(chip);
+                inputRef.current?.focus();
+              }}
+              className={cn(
+                "h-7 rounded-full border px-3 text-caption transition",
+                effectiveFilter === chip
+                  ? "border-transparent bg-accent-subtle text-accent-text"
+                  : "border-border text-muted-foreground hover:text-foreground",
+                FOCUS_RING,
+              )}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/*
         A live region outside the list, so a screen reader hears "Searching...",

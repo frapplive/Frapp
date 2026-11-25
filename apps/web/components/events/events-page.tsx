@@ -12,11 +12,8 @@ import {
 } from "react";
 import { OpenLinkedEvent } from "./open-linked-event";
 import { CalendarSubscribeMenu } from "./calendar-subscribe-menu";
-import { ChevronLeft, ChevronRight, ListFilter, Plus } from "lucide-react";
-import {
-  RolesGlyph,
-  SearchGlyph,
-} from "@/components/events/chapter-ops-glyphs";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { RolesGlyph } from "@/components/events/chapter-ops-glyphs";
 import {
   useAutoAbsent,
   useCalendarBirthdays,
@@ -71,21 +68,22 @@ import {
   attendanceFieldsOf,
   can,
   canAll,
+  CHECK_IN_OPEN_LABEL,
   EVENT_CREATE_PERMISSIONS,
   eventSetsRolesApart,
   eventsCount,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
+import { NewButton } from "@/components/ui/new-button";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
+import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { SegmentedChoice } from "@/components/ui/segmented";
+  ActiveFilterChips,
+  FilterMenu,
+  type FilterMenuFilter,
+} from "@/components/shared/filter-menu";
 import { anyReadUncached } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
@@ -100,8 +98,6 @@ import {
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
-  dashboardToolbarSearchClassName,
-  dashboardToolbarSearchGlyphClassName,
   denseListClassName,
 } from "@/components/shared/table-controls";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -126,7 +122,7 @@ import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import {
   formatDayHeading,
   formatRelativeDayTime,
-  formatTimeOfDay,
+  formatTimeRange,
   localIsoDate,
   parseInstant,
 } from "@repo/formatting";
@@ -139,7 +135,10 @@ import {
   type AgendaRow,
 } from "@/lib/events/agenda";
 import { useIsNarrow } from "@/lib/use-is-narrow";
-import { checkInClosesAt } from "@/components/events/check-in-close";
+import {
+  checkInClosesAt,
+  checkInOpenNow,
+} from "@/components/events/check-in-close";
 import { useChapterStore } from "@/lib/stores/chapter-store";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
 import {
@@ -166,7 +165,7 @@ const TIME_OPTIONS = [
 
 const ATTENDANCE_OPTIONS = [
   { value: "all", label: "All" },
-  { value: "mandatory", label: "Mandatory" },
+  { value: "mandatory", label: "Required" },
   { value: "optional", label: "Optional" },
 ] as const satisfies readonly { value: AttendanceFilter; label: string }[];
 
@@ -234,10 +233,6 @@ export function EventsPage() {
     useState<AttendanceFilter>("all");
   const [recurrenceFilter, setRecurrenceFilter] =
     useState<CadenceFilter>("all");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  // Beside chat the search is a glyph until pressed (#5560); it stays a
-  // field while it holds text.
-  const [searchOpen, setSearchOpen] = useState(false);
   // Bulk actions live behind Select (#3822): the default list has no
   // checkboxes.
   const [selecting, setSelecting] = useState(false);
@@ -829,6 +824,16 @@ export function EventsPage() {
    * those paint `--card`, which on a flush route redraws the card the route
    * deleted (`spec/ui/web-dashboard/README.md` § Page grammar).
    */
+  // New's "New event" (`new-intent.ts`): the form this page's button opens,
+  // once the page that holds it is drawn.
+  useNewIntent(
+    () => openCreate(null),
+    canCreateEvents &&
+      eventWriteGate.allowed &&
+      !eventsQuery.isLoading &&
+      !eventsQuery.isError,
+  );
+
   if (isOffline && anyReadUncached(eventsQuery)) {
     return (
       <div className="space-y-4">
@@ -869,20 +874,37 @@ export function EventsPage() {
   const narrowedByKind =
     attendanceFilter !== "all" || recurrenceFilter !== "all";
   const hasEvents = events.length > 0;
-  // Filters away from their defaults, for the Filter button's count.
-  const activeFilterCount =
-    (timeFilter !== "upcoming" ? 1 : 0) +
-    (attendanceFilter !== "all" ? 1 : 0) +
-    (recurrenceFilter !== "all" ? 1 : 0);
   const shownCount = visibleEventIds.length;
   const nowDate = new Date(nowTick);
 
-  // The popover's Clear: every filter back to its default.
-  function clearFilters() {
-    setTimeFilter("upcoming");
-    setAttendanceFilter("all");
-    setRecurrenceFilter("all");
-  }
+  // The Filter menu's rows, also drawn as the chips of the filters that are
+  // on. Upcoming is Time's resting value, so it counts as no filter.
+  const eventFilters: FilterMenuFilter[] = [
+    {
+      key: "time",
+      label: "Time",
+      options: TIME_OPTIONS,
+      value: timeFilter,
+      anyValue: "upcoming",
+      onChange: (value) => setTimeFilter(value as TimeFilter),
+    },
+    {
+      key: "attendance",
+      label: "Attendance",
+      options: ATTENDANCE_OPTIONS,
+      value: attendanceFilter,
+      anyValue: "all",
+      onChange: (value) => setAttendanceFilter(value as AttendanceFilter),
+    },
+    {
+      key: "cadence",
+      label: "Cadence",
+      options: CADENCE_OPTIONS,
+      value: recurrenceFilter,
+      anyValue: "all",
+      onChange: (value) => setRecurrenceFilter(value as CadenceFilter),
+    },
+  ];
 
   // The "No events match these filters" line's Clear filters: only the kind
   // filters it blames. Time stays, so an officer working in Past stays there.
@@ -939,10 +961,21 @@ export function EventsPage() {
     // (#5560). An event that sets roles apart also says so with a badge.
     const isRequired = requiredOf(fields);
     const isTargeted = eventSetsRolesApart(fields);
-    // A series row says how it repeats where a one-time row says only its
-    // time: the day heading above already says which day.
+    // A series says how it repeats after its name, muted, as the phone's row
+    // does ("Chapter · Every Sunday"). The day heading above says which day,
+    // so the meta line starts at the time.
     const cadence = series ? seriesCadenceOf(events, event) : null;
-    const time = formatTimeOfDay(event.start_time) || null;
+    // Start to end, "7:00 – 9:00 PM", as the phone's row says it: a member
+    // deciding whether to go wants to know when it lets out (2026-11-19).
+    const time = formatTimeRange(event.start_time, event.end_time, nowDate);
+    // Said on the row while it lasts, as the phone's row says it, so a member
+    // walking in sees where to check in without opening the event.
+    const checkInOpen = checkInOpenNow(
+      event.start_time,
+      event.end_time,
+      event.check_in_opens_minutes,
+      nowTick,
+    );
     // One derived value: the row fill and the checkbox must never disagree
     // about whether the row is selected.
     const isSelected = selecting && selectedIdSet.has(eventId);
@@ -951,11 +984,7 @@ export function EventsPage() {
         ? event.location.trim()
         : null;
     // An absent fact drops out of the line rather than reading "TBD" or "0".
-    const meta = [
-      [cadence, time].filter(Boolean).join(" · "),
-      location,
-      pointsLabel(event.point_value),
-    ]
+    const meta = [time, location, pointsLabel(event.point_value)]
       .filter(Boolean)
       .join(" · ");
     const hue = EVENT_HUE;
@@ -996,6 +1025,11 @@ export function EventsPage() {
             <span className="flex min-w-0 items-baseline gap-2">
               <span className="truncate text-sm font-semibold text-foreground">
                 {eventName}
+                {cadence ? (
+                  <span className="font-normal text-muted-foreground">
+                    {` · ${cadence}`}
+                  </span>
+                ) : null}
               </span>
               {isRequired ? (
                 <span
@@ -1009,6 +1043,11 @@ export function EventsPage() {
             {meta ? (
               <span className="truncate text-caption text-muted-foreground">
                 {meta}
+              </span>
+            ) : null}
+            {checkInOpen ? (
+              <span className="text-caption font-semibold text-success">
+                {CHECK_IN_OPEN_LABEL}
               </span>
             ) : null}
           </span>
@@ -1161,138 +1200,26 @@ export function EventsPage() {
         pressed and closes again on Escape or blur while empty.
       */}
       <PageActions className={cn("gap-x-2 gap-y-2", narrow && "flex-nowrap")}>
-        {narrow && !searchOpen && !query ? (
-          <IconButton
-            variant="secondary"
-            className="shrink-0"
-            label="Search events"
-            onClick={() => setSearchOpen(true)}
-          >
-            <SearchGlyph className="h-4 w-4" />
-          </IconButton>
-        ) : (
-          <div
-            className={cn(
-              "relative min-w-0 flex-1",
-              !narrow && "basis-full @xl:max-w-56 @xl:basis-auto",
-            )}
-          >
-            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-            <Input
-              type="search"
-              value={query}
-              autoFocus={narrow && searchOpen}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && !query) setSearchOpen(false);
-              }}
-              onBlur={() => {
-                if (!query) setSearchOpen(false);
-              }}
-              placeholder="Search events"
-              aria-label="Search events by name or location"
-              className={dashboardToolbarSearchClassName}
-            />
-          </div>
-        )}
-        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <PopoverTrigger asChild>
-            {narrow ? (
-              <IconButton
-                variant="secondary"
-                className="relative shrink-0"
-                label={
-                  activeFilterCount > 0
-                    ? `Filter events, ${activeFilterCount} on`
-                    : "Filter events"
-                }
-              >
-                <ListFilter className="h-4 w-4" aria-hidden="true" />
-                {activeFilterCount > 0 ? (
-                  <Badge
-                    variant="default"
-                    aria-hidden="true"
-                    className="absolute -right-1.5 -top-1.5 h-4 min-w-4 justify-center px-1"
-                  >
-                    {activeFilterCount}
-                  </Badge>
-                ) : null}
-              </IconButton>
-            ) : (
-              <Button
-                size="toolbar"
-                variant="secondary"
-                className="shrink-0 gap-2"
-                aria-label={
-                  activeFilterCount > 0
-                    ? `Filter events, ${activeFilterCount} on`
-                    : "Filter events"
-                }
-              >
-                <ListFilter className="h-4 w-4" aria-hidden="true" />
-                Filter
-                {activeFilterCount > 0 ? (
-                  <Badge variant="default" aria-hidden="true">
-                    {activeFilterCount}
-                  </Badge>
-                ) : null}
-              </Button>
-            )}
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto min-w-72 space-y-4">
-            <FilterRow label="Time">
-              <SegmentedChoice
-                label="Time"
-                options={TIME_OPTIONS}
-                value={timeFilter}
-                onChange={setTimeFilter}
-                fill
-              />
-            </FilterRow>
-            <FilterRow label="Attendance">
-              <SegmentedChoice
-                label="Attendance"
-                options={ATTENDANCE_OPTIONS}
-                value={attendanceFilter}
-                onChange={setAttendanceFilter}
-                fill
-              />
-            </FilterRow>
-            <FilterRow label="Cadence">
-              <SegmentedChoice
-                label="Cadence"
-                options={CADENCE_OPTIONS}
-                value={recurrenceFilter}
-                onChange={setRecurrenceFilter}
-                fill
-              />
-            </FilterRow>
-            <div className="flex justify-end">
-              <Button
-                size="toolbar"
-                variant="ghost"
-                disabled={activeFilterCount === 0}
-                onClick={clearFilters}
-              >
-                Clear
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <HeaderSearch
+          narrow={narrow}
+          value={query}
+          onChange={setQuery}
+          placeholder="Search events"
+          label="Search events by name or location"
+          glyphLabel="Search events"
+          className="flex-1 basis-full @xl:max-w-56 @xl:basis-auto"
+        />
+        <FilterMenu filters={eventFilters} thing="events" narrow={narrow} />
         <CalendarSubscribeMenu iconOnly={narrow} />
         <Can allOf={EVENT_CREATE_PERMISSIONS}>
-          <Button
-            size="toolbar"
-            variant="ghost"
-            className="gap-2 border-primary/35 text-primary hover:bg-primary/10 hover:text-primary"
+          <NewButton
+            thing="event"
             {...eventWriteControls}
             onClick={() => openCreate(null)}
-          >
-            <Plus className="h-4 w-4" />
-            New event
-          </Button>
+          />
         </Can>
       </PageActions>
+      <ActiveFilterChips filters={eventFilters} />
 
       {/*
         Under the row it explains. Search and the filters stay live: a lapsed
@@ -1651,24 +1578,6 @@ export function EventsPage() {
         }}
       />
       {confirmDialog}
-    </div>
-  );
-}
-
-/** One filter in the popover: its name over its segmented answers. */
-function FilterRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-caption font-semibold text-muted-foreground">
-        {label}
-      </p>
-      {children}
     </div>
   );
 }

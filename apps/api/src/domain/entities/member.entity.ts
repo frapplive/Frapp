@@ -26,6 +26,24 @@ export interface Member {
    * bond number), set by officers. Null when the chapter keeps none.
    */
   order_number: number | null;
+  /**
+   * The invite this membership was redeemed from (#5627), kept so the
+   * "<name> joined" notices can wait until the member has given their name.
+   * Null for a founder, a member added another way, and memberships from
+   * before the column.
+   */
+  joined_via_invite_id: string | null;
+  /**
+   * Until when this member can't post or react in the chapter's channels
+   * (#6006, `spec/behavior/chat/README.md` § Timeouts). Null, or a time
+   * already past, is no timeout. DMs and group DMs are unaffected. Optional
+   * only so fixtures written before the column needn't name it.
+   */
+  chat_timeout_until?: string | null;
+  /** The reason the officer gave, if any (up to 200 characters). */
+  chat_timeout_reason?: string | null;
+  /** The `users.id` of the officer who set the timeout. */
+  chat_timeout_by?: string | null;
   created_at: string;
   updated_at: string;
 }

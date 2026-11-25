@@ -48,6 +48,24 @@ vi.mock("expo-file-system/legacy", () => ({
   },
 }));
 
+// The keychain, in memory. `lib/query-client.ts` reaches it through
+// `clearProductQueryCache` (the first-paint copy's profile lives there,
+// #5768), so every spec that loads the query client would otherwise fail on
+// the native module. Empty at the start of every spec file; a spec that cares
+// what is in it mocks this module or `lib/supabase` itself.
+vi.mock("expo-secure-store", () => {
+  const items = new Map<string, string>();
+  return {
+    getItemAsync: vi.fn(async (key: string) => items.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => {
+      items.set(key, value);
+    }),
+    deleteItemAsync: vi.fn(async (key: string) => {
+      items.delete(key);
+    }),
+  };
+});
+
 // Default-denied on purpose: a spec that wants the happy path says so, and
 // nothing accidentally exercises a granted-library path it did not set up.
 vi.mock("expo-image-picker", () => ({
@@ -87,9 +105,13 @@ vi.mock("expo-location", () => ({
 }));
 
 // The clipboard is native; specs assert on the call (expo-clipboard).
+// No system Paste button (`UIPasteControl`) here, so Paste is Frapp's own
+// button, which reads `getStringAsync` on the tap (#5626).
 vi.mock("expo-clipboard", () => ({
   setStringAsync: vi.fn().mockResolvedValue(true),
   getStringAsync: vi.fn().mockResolvedValue(""),
+  isPasteButtonAvailable: false,
+  ClipboardPasteButton: () => null,
 }));
 
 // Chapter setup marks the chapter going live with a tap (#3351), and a
@@ -449,6 +471,11 @@ vi.mock("react-native-reanimated", () => {
     // A spec can read what an animation was asked for (the tab bar fold).
     withTiming: vi.fn(<T>(value: T) => value),
     withRepeat: vi.fn(<T>(value: T) => value),
+    // There is one thread here: a gesture's call back to JS runs at once.
+    runOnJS:
+      <A extends unknown[], R>(fn: (...args: A) => R) =>
+      (...args: A) =>
+        fn(...args),
     cancelAnimation: vi.fn(),
     useReducedMotion: vi.fn(() => false),
     Easing: {
@@ -526,6 +553,8 @@ vi.mock("expo-web-browser", () => ({
 vi.mock("expo-router/react-navigation", () => ({
   NavigationContext: React.createContext(undefined),
   NavigationRouteContext: React.createContext(undefined),
+  // Asks before leaving unsaved posted minutes (#4412); a no-op off a stack.
+  usePreventRemove: () => undefined,
 }));
 
 vi.mock("expo-font", () => ({

@@ -1,11 +1,15 @@
+import type { DocumentMinutes } from "@repo/hooks/document-library";
+
 export type ChapterDocument = {
   id: string;
   chapter_id: string;
   title: string;
   description: string | null;
   folder: string | null;
-  storage_path: string;
-  uploaded_by: string;
+  /** Null on a row that files a meeting's minutes (`meeting_id`, #5949). */
+  storage_path: string | null;
+  /** Null on a row that files a meeting's minutes. */
+  uploaded_by: string | null;
   created_at: string;
   content_type: string | null;
   byte_size: number | null;
@@ -31,7 +35,25 @@ export type ChapterDocument = {
    * up. Null when the reader can't see that folder.
    */
   drive_held_folder_id?: string | null;
+  /**
+   * Set on the row that files a meeting's posted minutes (#5949,
+   * `spec/behavior/chapter-docs.md` § Minutes): the minutes' id. The row has
+   * no file and opens the minutes; only members who may read them get it.
+   */
+  meeting_id?: string | null;
+  /** What a minutes row shows of its minutes; null on a file. */
+  minutes?: DocumentMinutes | null;
 };
+
+/** A row with a stored file: every row but a meeting's minutes. */
+export type ChapterFileDocument = ChapterDocument & { storage_path: string };
+
+/** Whether the row is a file, not a meeting's minutes (#5949). */
+export function isFileDocument(
+  doc: ChapterDocument,
+): doc is ChapterFileDocument {
+  return typeof doc.storage_path === "string";
+}
 
 export type ChapterDocumentFolder = {
   id: string;
@@ -43,6 +65,11 @@ export type ChapterDocumentFolder = {
   who_can_see?: string[] | null;
   /** Set on a folder Google Drive sync made (#5220): Drive renames and deletes it. */
   drive_folder_id?: string | null;
+  /**
+   * Set on a folder the minutes flow files into (#5949): `root` for the
+   * chapter's Minutes folder, or a repeating meeting's series.
+   */
+  minutes_series_key?: string | null;
 };
 
 /**

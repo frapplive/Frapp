@@ -287,6 +287,20 @@ console.log("\n=== Functional: the AI corpus (20261112165050, #720) ===");
         otherModel[0].sparse_rank === 1,
       { otherModel: otherModel.map((r) => [r.dense_rank, r.sparse_rank]) },
     );
+    // What the API sends when the question could not be embedded
+    // (`SupabaseCorpusRepository.match`): a zero vector of the column's
+    // width and a model name no passage carries.
+    const ZERO = `[${new Array(1536).fill(0).join(",")}]`;
+    const wordsOnly = await match(CH_A, U_A, "dues", ZERO, "");
+    check(
+      "with no embedding (empty model name) only the word half answers",
+      wordsOnly.length === 1 &&
+        wordsOnly[0].dense_rank == null &&
+        wordsOnly[0].distance == null &&
+        wordsOnly[0].sparse_rank === 1 &&
+        (await match(CH_A, U_A, "the of and", ZERO, "")).length === 0,
+      { wordsOnly: wordsOnly.map((r) => [r.dense_rank, r.sparse_rank]) },
+    );
     check(
       "a question of only stopwords, or an empty one, still returns the nearest passages",
       (await match(CH_A, U_A, "the of and")).every((r) => r.sparse_rank == null) &&

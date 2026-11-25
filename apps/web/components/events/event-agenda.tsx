@@ -1,41 +1,25 @@
 "use client";
 
-import { useId, useMemo, useState, type FormEvent } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  FileText,
-  Link2,
-  Loader2,
-  Plus,
-  X,
-} from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
+import { GripVertical, Loader2, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { randomClientId, statusOf } from "@repo/api-sdk";
+import { randomClientId } from "@repo/api-sdk";
 import {
   useAgendaSuggestionActions,
   useAgendaSuggestions,
-  selectDownloadUrl,
-  useDocumentDownloadUrl,
-  useDocuments,
   useEventListsEditor,
   type EventLists,
 } from "@repo/hooks";
 import {
+  AGENDA_CHECK_OFF_LOCKED_COPY,
   AGENDA_SUGGESTION_COPY,
+  agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
-  attachmentLinkProblem,
-  attachmentLinkTitle,
-  attachmentTitle,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
-  EVENT_ATTACHMENT_TITLE_MAX,
-  EVENT_ATTACHMENTS_MAX,
-  moveEventEntry,
   normalizeAgendaText,
-  normalizeAttachmentUrl,
-  proofLinkDomain,
+  reorderEventEntry,
   toggleAgendaItem,
   type AgendaSuggestion,
   type EventAgendaItem,
@@ -44,9 +28,10 @@ import {
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
 import { QUIET_LINK } from "@/components/ui/quiet-link";
-import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
+import { FOCUS_RING, FOCUS_RING_OFFSET } from "@/components/ui/focus";
+import { FrappLinksEditor } from "@/components/shared/frapp-links";
+import { useSortableList } from "@/components/shared/use-sortable-list";
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
@@ -66,7 +51,8 @@ import { cn } from "@/lib/utils";
  * of this meeting's whole lists, never the series'.
  */
 
-const SECTION = "grid gap-2 rounded-lg border border-border p-3";
+const SECTION = "grid gap-2";
+const HEADING = "text-sm font-semibold text-foreground";
 const LABEL = "text-caption text-muted-foreground";
 
 /** Whether Chapter Files is on: `null` while the module read can't say. */
@@ -77,6 +63,7 @@ export function EventMeetingLists({
   lists,
   canEdit,
   upcoming,
+  checkOffOpen,
   documentsOn,
 }: {
   eventId: string;
@@ -84,10 +71,15 @@ export function EventMeetingLists({
   /** Holds `events:update`, and the event is there to write to. */
   canEdit: boolean;
   /**
-   * The meeting hasn't ended and the chapter has minutes on: Suggested
-   * shows only then.
+   * The meeting hasn't ended and the chapter has minutes on. Suggested
+   * shows only while this holds and the meeting hasn't started either.
    */
   upcoming: boolean;
+  /**
+   * The meeting has started: its items can be checked off, and no longer
+   * added, moved or removed.
+   */
+  checkOffOpen: boolean;
   documentsOn: DocumentsModule;
 }) {
   // A paid write, like the sheet's Edit: a lapsed chapter or an offline
@@ -105,21 +97,32 @@ export function EventMeetingLists({
   // While an Add is out the agenda's controls wait: the server is writing
   // the list, and an edit now would send the copy without the new item.
   const [adding, setAdding] = useState(false);
+  // Suggestions add items, so they go once the agenda is locked.
+  const showSuggestions = editable && upcoming && !checkOffOpen;
   return (
     <>
-      <EventAgendaSection
-        agenda={editor.agenda}
-        canEdit={editable}
-        locked={adding}
-        onChange={(update) => editor.change("agenda", update)}
-      />
-      {editable && upcoming ? (
-        <AgendaSuggestions
-          eventId={eventId}
-          full={editor.agenda.length >= EVENT_AGENDA_MAX}
-          settleAgenda={editor.settle}
-          onAdding={setAdding}
-        />
+      {/* A started meeting's empty agenda can't be started any more, so
+          an editor gets no empty section for it. */}
+      {editor.agenda.length > 0 || (editable && !checkOffOpen) ? (
+        // The agenda and what's suggested for it read as one section.
+        <div className="grid gap-3">
+          <EventAgendaSection
+            agenda={editor.agenda}
+            canEdit={editable}
+            checkOffOpen={checkOffOpen}
+            itemsLocked={checkOffOpen}
+            locked={adding}
+            onChange={(update) => editor.change("agenda", update)}
+          />
+          {showSuggestions ? (
+            <AgendaSuggestions
+              eventId={eventId}
+              full={editor.agenda.length >= EVENT_AGENDA_MAX}
+              settleAgenda={editor.settle}
+              onAdding={setAdding}
+            />
+          ) : null}
+        </div>
       ) : null}
       <EventAttachmentsSection
         attachments={editor.attachments}
@@ -131,22 +134,76 @@ export function EventMeetingLists({
   );
 }
 
+/**
+ * The agenda: a checklist for whoever can edit the event, numbered for
+ * everyone else. An editor drags a row by its grip to move it (the grip's
+ * arrow keys do the same), and removes it from the row's end; the checkboxes
+ * wait for the meeting to start (`agendaCheckOffOpen`). `checkable={false}`
+ * is the event form's list (`AgendaDraftList`): a new event has nothing to
+ * check off yet.
+ */
 export function EventAgendaSection({
   agenda,
   canEdit,
+  checkOffOpen = true,
+  checkable = true,
+  itemsLocked = false,
   locked = false,
+  bare = false,
+  draft: heldDraft,
+  onDraftChange,
   onChange,
 }: {
   agenda: EventAgendaItem[];
   canEdit: boolean;
+  /**
+   * The add field's text, when the caller holds it: a form sends a line
+   * typed but never entered (`agendaWithPending`).
+   */
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
+  /** The meeting has started; before then the checkboxes wait. */
+  checkOffOpen?: boolean;
+  /** Draw checkboxes at all (not on the form's list). */
+  checkable?: boolean;
+  /**
+   * The meeting has started: items are checked off but no longer added,
+   * moved or removed (Paul 2026-11-20, "lock agenda edits once the meeting
+   * has started"). The API refuses such a change too.
+   */
+  itemsLocked?: boolean;
   /** The controls show but wait (a suggestion is being added). */
   locked?: boolean;
+  /** No heading: the form's row names the list. */
+  bare?: boolean;
   onChange: (update: (current: EventAgendaItem[]) => EventAgendaItem[]) => void;
 }) {
   const { toast } = useToast();
-  const [draft, setDraft] = useState("");
+  const [ownDraft, setOwnDraft] = useState("");
+  const draft = heldDraft ?? ownDraft;
+  const setDraft = onDraftChange ?? setOwnDraft;
   const inputId = useId();
-  if (agenda.length === 0 && !canEdit) return null;
+  const lockNoteId = useId();
+  // Who may add, move and remove items: an editor, until the meeting starts.
+  const reshape = canEdit && !itemsLocked;
+  const sortable = useSortableList({
+    count: agenda.length,
+    disabled: locked || !reshape,
+    // By id, against the list as it stands when the update runs: a save
+    // or a suggestion may have landed since this one was drawn.
+    onMove: (from, to) => {
+      const moved = agenda[from]?.id;
+      const onto = agenda[to]?.id;
+      onChange((current) =>
+        reorderEventEntry(
+          current,
+          current.findIndex((entry) => entry.id === moved),
+          current.findIndex((entry) => entry.id === onto),
+        ),
+      );
+    },
+  });
+  if (agenda.length === 0 && !reshape) return null;
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,28 +222,69 @@ export function EventAgendaSection({
   }
 
   const full = agenda.length >= EVENT_AGENDA_MAX;
+  const done = agenda.filter((item) => item.done).length;
+  const showChecks = canEdit && checkable;
+  // Said once, not on every box: nothing to check off before the start.
+  const waiting = showChecks && !checkOffOpen && agenda.length > 0;
 
   return (
     <section aria-label="Agenda" className={SECTION}>
-      <p className={LABEL}>Agenda</p>
+      {bare ? null : (
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className={HEADING}>Agenda</h3>
+          {agenda.length > 0 && checkOffOpen && checkable ? (
+            <span className={LABEL}>
+              {done} of {agenda.length} done
+            </span>
+          ) : null}
+        </div>
+      )}
+      {waiting ? (
+        <p id={lockNoteId} className={LABEL}>
+          {AGENDA_CHECK_OFF_LOCKED_COPY}
+        </p>
+      ) : null}
       {agenda.length > 0 ? (
-        <ol className="grid gap-1">
+        <ol className="grid">
           {agenda.map((item, index) => (
             <li
               key={item.id}
-              className="group flex min-h-9 items-center gap-2 pointer-coarse:min-h-11"
+              ref={sortable.rowRef(index)}
+              style={sortable.rowStyle(index)}
+              className={cn(
+                "group flex min-h-9 items-center gap-1.5 rounded-md bg-background pointer-coarse:min-h-11",
+                sortable.dragging === index &&
+                  "bg-surface-1 shadow-lg ring-1 ring-border",
+              )}
             >
-              {canEdit ? (
+              {reshape ? (
+                <button
+                  type="button"
+                  {...sortable.handleProps(index, item.text)}
+                  className={cn(
+                    "-ml-1 flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-default pointer-coarse:h-11 pointer-coarse:opacity-100",
+                    sortable.dragging === index && "opacity-100",
+                    FOCUS_RING_OFFSET,
+                  )}
+                >
+                  <GripVertical className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : null}
+              {showChecks ? (
                 <label className={dashboardCheckboxHitAreaClassName}>
                   <input
                     type="checkbox"
                     checked={item.done}
-                    disabled={locked}
+                    disabled={locked || !checkOffOpen}
                     aria-label={item.text}
+                    aria-describedby={waiting ? lockNoteId : undefined}
                     onChange={() =>
                       onChange((current) => toggleAgendaItem(current, item.id))
                     }
-                    className={dashboardTableCheckboxClassName}
+                    className={cn(
+                      dashboardTableCheckboxClassName,
+                      !checkOffOpen && "cursor-not-allowed opacity-50",
+                    )}
                   />
                 </label>
               ) : (
@@ -199,11 +297,11 @@ export function EventAgendaSection({
               )}
               <span
                 className={cn(
-                  "min-w-0 flex-1 break-words text-sm",
+                  "min-w-0 flex-1 break-words py-1.5 text-sm",
                   item.done && "text-muted-foreground line-through",
                 )}
               >
-                {!canEdit && item.done ? (
+                {!showChecks && item.done ? (
                   <span className="sr-only">Done: </span>
                 ) : null}
                 {item.text}
@@ -211,86 +309,95 @@ export function EventAgendaSection({
                   <TabledFromLink from={item.tabled_from} />
                 ) : null}
               </span>
-              {canEdit ? (
-                <span className="flex shrink-0 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
-                  <IconButton
-                    label={`Move "${item.text}" up`}
-                    disabled={locked || index === 0}
-                    onClick={() =>
-                      onChange((current) =>
-                        moveEventEntry(
-                          current,
-                          current.findIndex((entry) => entry.id === item.id),
-                          -1,
-                        ),
-                      )
-                    }
-                  >
-                    <ArrowUp className="h-4 w-4" aria-hidden="true" />
-                  </IconButton>
-                  <IconButton
-                    label={`Move "${item.text}" down`}
-                    disabled={locked || index === agenda.length - 1}
-                    onClick={() =>
-                      onChange((current) =>
-                        moveEventEntry(
-                          current,
-                          current.findIndex((entry) => entry.id === item.id),
-                          1,
-                        ),
-                      )
-                    }
-                  >
-                    <ArrowDown className="h-4 w-4" aria-hidden="true" />
-                  </IconButton>
-                  <IconButton
-                    label={`Remove "${item.text}"`}
-                    disabled={locked}
-                    onClick={() =>
-                      onChange((current) =>
-                        current.filter((entry) => entry.id !== item.id),
-                      )
-                    }
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </IconButton>
-                </span>
+              {reshape ? (
+                <IconButton
+                  label={`Remove "${item.text}"`}
+                  disabled={locked}
+                  className="shrink-0 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
+                  onClick={() =>
+                    onChange((current) =>
+                      current.filter((entry) => entry.id !== item.id),
+                    )
+                  }
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </IconButton>
               ) : null}
             </li>
           ))}
         </ol>
       ) : null}
-      {canEdit && !full ? (
-        <form onSubmit={add} className="flex items-center gap-2">
+      {reshape ? (
+        <p aria-live="polite" className="sr-only">
+          {sortable.announcement}
+        </p>
+      ) : null}
+      {reshape && !full ? (
+        <form onSubmit={add} className="flex items-center gap-1.5">
           <label htmlFor={inputId} className="sr-only">
             Add an agenda item
           </label>
-          <Input
+          <Plus
+            className="ml-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          {/* Enter adds and keeps the caret here for the next one, as a
+              checklist in Notion or Reminders does: no Add button to aim
+              for between items. */}
+          <input
             id={inputId}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            disabled={locked}
             placeholder={
               agenda.length === 0 ? "Add the first item" : "Add an item"
             }
             maxLength={EVENT_AGENDA_ITEM_MAX}
+            enterKeyHint="done"
+            className={cn(
+              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
+              FOCUS_RING,
+            )}
           />
-          <Button
-            type="submit"
-            size="sm"
-            variant="secondary"
-            disabled={locked || !normalizeAgendaText(draft)}
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add
-          </Button>
         </form>
       ) : null}
-      {canEdit && full ? (
-        <p className="text-caption text-muted-foreground">
-          An agenda holds {EVENT_AGENDA_MAX} items.
-        </p>
+      {reshape && full ? (
+        <p className={LABEL}>An agenda holds {EVENT_AGENDA_MAX} items.</p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The event form's Agenda row (Paul 2026-11-19, "where is the ability to add
+ * agenda items"): the same list the event's page draws, typed before the
+ * event exists, sent with the create. Nothing to check off yet.
+ */
+export function AgendaDraftList({
+  agenda,
+  onChange,
+  draft,
+  onDraftChange,
+  disabled = false,
+}: {
+  agenda: EventAgendaItem[];
+  onChange: (next: EventAgendaItem[]) => void;
+  /** The add field's text: Create sends it even if Enter wasn't pressed. */
+  draft: string;
+  onDraftChange: (draft: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <EventAgendaSection
+      agenda={agenda}
+      canEdit
+      checkable={false}
+      locked={disabled}
+      bare
+      draft={draft}
+      onDraftChange={onDraftChange}
+      onChange={(update) => onChange(update(agenda))}
+    />
   );
 }
 
@@ -302,9 +409,23 @@ export function EventAgendaSection({
 function TabledFromLink({ from }: { from: EventAgendaTabledFrom }) {
   const label = agendaTabledFromLabel(from);
   if (!label) return null;
+  return <MinutesLink meetingId={from.meeting_id} label={label} />;
+}
+
+/**
+ * A line under an item that opens the minutes it came from: "Tabled from
+ * {day}", or "From the minutes of {day}" for an action item sent on (#5790).
+ */
+function MinutesLink({
+  meetingId,
+  label,
+}: {
+  meetingId: string;
+  label: string;
+}) {
   return (
     <Link
-      href={`/meetings/${from.meeting_id}`}
+      href={`/meetings/${meetingId}`}
       className={cn(
         "block w-fit rounded-sm text-caption text-muted-foreground no-underline hover:underline",
         FOCUS_RING_OFFSET,
@@ -387,6 +508,11 @@ function AgendaSuggestions({
                 {row.text}
                 {row.tabled_from ? (
                   <TabledFromLink from={row.tabled_from} />
+                ) : row.from_minutes ? (
+                  <MinutesLink
+                    meetingId={row.from_minutes.meeting_id}
+                    label={agendaFromMinutesLabel(row.from_minutes)}
+                  />
                 ) : row.reason ? (
                   <span className="block text-caption text-muted-foreground">
                     {row.reason}
@@ -436,40 +562,11 @@ function AgendaSuggestions({
 }
 
 /**
- * Open a Chapter Files document to read, in a new tab (the inline signed
- * link, not the forced download). A file deleted since it was attached says
- * so rather than failing generically.
+ * The event's attachments: the shared Frapp link list
+ * (`spec/behavior/frapp-links.md`), the same rows and picker as a task's
+ * Attached row. A document keeps its name, as every event entry carries a
+ * title for phone builds from before Frapp links.
  */
-function useOpenDocument() {
-  const signedLinks = useDocumentDownloadUrl();
-  const { toast } = useToast();
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  async function open(documentId: string) {
-    setOpeningId(documentId);
-    try {
-      const url = selectDownloadUrl(await signedLinks.mutateAsync(documentId));
-      if (!url) throw new Error("No link to the file came back.");
-      window.open(url, "_blank", "noopener");
-    } catch (error) {
-      if (statusOf(error) === 404) {
-        toast({
-          title: "This file is gone from Chapter Files",
-          description: "Someone removed it after it was attached.",
-        });
-      } else {
-        toastFailure({
-          title: "Couldn't open that file",
-          error,
-          fallback: "Try again in a moment.",
-        });
-      }
-    } finally {
-      setOpeningId(null);
-    }
-  }
-  return { open, openingId };
-}
-
 export function EventAttachmentsSection({
   attachments,
   canEdit,
@@ -481,296 +578,16 @@ export function EventAttachmentsSection({
   documentsOn: DocumentsModule;
   onChange: (update: (current: EventAttachment[]) => EventAttachment[]) => void;
 }) {
-  const { open, openingId } = useOpenDocument();
-  const [adding, setAdding] = useState<"link" | "document" | null>(null);
   if (attachments.length === 0 && !canEdit) return null;
-
-  const full = attachments.length >= EVENT_ATTACHMENTS_MAX;
-  const attachedDocuments = new Set(
-    attachments.flatMap((a) => (a.kind === "document" ? [a.document_id] : [])),
-  );
-  const add = (attachment: EventAttachment) => {
-    onChange((current) =>
-      current.length >= EVENT_ATTACHMENTS_MAX
-        ? current
-        : [...current, attachment],
-    );
-    setAdding(null);
-  };
-
   return (
     <section aria-label="Attachments" className={SECTION}>
-      <p className={LABEL}>Attachments</p>
-      {attachments.length > 0 ? (
-        <ul className="grid gap-1">
-          {attachments.map((attachment) => (
-            <li
-              key={attachment.id}
-              className="flex min-h-9 items-center gap-2 pointer-coarse:min-h-11"
-            >
-              {attachment.kind === "link" ? (
-                <a
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-sm hover:underline",
-                    FOCUS_RING_OFFSET,
-                  )}
-                >
-                  <Link2
-                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{attachment.title}</span>
-                  <span className="shrink-0 text-caption text-muted-foreground">
-                    {proofLinkDomain(attachment.url)}
-                  </span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  // Only a module read that answered "off" disables it; one
-                  // that can't say yet lets the server answer.
-                  disabled={documentsOn === false || openingId !== null}
-                  onClick={() => void open(attachment.document_id)}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left text-sm hover:underline disabled:no-underline",
-                    FOCUS_RING_OFFSET,
-                  )}
-                >
-                  {openingId === attachment.document_id ? (
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <FileText
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="truncate">{attachment.title}</span>
-                  <span className="shrink-0 text-caption text-muted-foreground">
-                    {documentsOn === false
-                      ? "Chapter Files is off"
-                      : "Chapter Files"}
-                  </span>
-                </button>
-              )}
-              {canEdit ? (
-                <IconButton
-                  label={`Remove "${attachment.title}"`}
-                  onClick={() =>
-                    onChange((current) =>
-                      current.filter((entry) => entry.id !== attachment.id),
-                    )
-                  }
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </IconButton>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {canEdit && full ? (
-        <p className="text-caption text-muted-foreground">
-          An event holds {EVENT_ATTACHMENTS_MAX} attachments.
-        </p>
-      ) : null}
-      {canEdit && !full && adding === "link" ? (
-        <AddLinkForm
-          onCancel={() => setAdding(null)}
-          onAdd={(url, title) =>
-            add({ id: randomClientId(), kind: "link", url, title })
-          }
-        />
-      ) : null}
-      {canEdit && !full && adding === "document" ? (
-        <PickDocument
-          attached={attachedDocuments}
-          onCancel={() => setAdding(null)}
-          onPick={(documentId, title) =>
-            add({
-              id: randomClientId(),
-              kind: "document",
-              document_id: documentId,
-              title: attachmentTitle(title),
-            })
-          }
-        />
-      ) : null}
-      {canEdit && !full && adding === null ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <button
-            type="button"
-            className={QUIET_LINK}
-            onClick={() => setAdding("link")}
-          >
-            Add a link
-          </button>
-          {documentsOn === true ? (
-            <button
-              type="button"
-              className={QUIET_LINK}
-              onClick={() => setAdding("document")}
-            >
-              Attach from Chapter Files
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <h3 className={HEADING}>Attachments</h3>
+      <FrappLinksEditor
+        links={attachments}
+        canEdit={canEdit}
+        documentsOn={documentsOn}
+        onChange={onChange}
+      />
     </section>
-  );
-}
-
-function AddLinkForm({
-  onAdd,
-  onCancel,
-}: {
-  onAdd: (url: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const urlId = useId();
-  const titleId = useId();
-  const problemId = useId();
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const refused = attachmentLinkProblem(url);
-    const normalized = normalizeAttachmentUrl(url);
-    if (refused || !normalized) {
-      setProblem(refused ?? "Paste a web address.");
-      return;
-    }
-    onAdd(normalized, attachmentLinkTitle(title, normalized));
-  }
-
-  return (
-    <form onSubmit={submit} className="grid gap-2">
-      <label htmlFor={urlId} className="sr-only">
-        Link
-      </label>
-      <Input
-        id={urlId}
-        value={url}
-        onChange={(event) => {
-          setUrl(event.target.value);
-          setProblem(null);
-        }}
-        placeholder="https://"
-        inputMode="url"
-        autoFocus
-        aria-invalid={problem ? true : undefined}
-        aria-describedby={problem ? problemId : undefined}
-      />
-      <label htmlFor={titleId} className="sr-only">
-        Title
-      </label>
-      <Input
-        id={titleId}
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="Title (optional)"
-        maxLength={EVENT_ATTACHMENT_TITLE_MAX}
-      />
-      {problem ? (
-        <p id={problemId} className="text-sm text-destructive-text">
-          {problem}
-        </p>
-      ) : null}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={!url.trim()}>
-          Add link
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function PickDocument({
-  attached,
-  onPick,
-  onCancel,
-}: {
-  attached: ReadonlySet<string>;
-  onPick: (documentId: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const [search, setSearch] = useState("");
-  const searchId = useId();
-  const documents = useDocuments();
-  const matches = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return (documents.data ?? [])
-      .filter((doc) => !attached.has(doc.id))
-      .filter((doc) => !needle || doc.title.toLowerCase().includes(needle))
-      .slice(0, 8);
-  }, [documents.data, search, attached]);
-
-  return (
-    <div className="grid gap-2">
-      <label htmlFor={searchId} className="sr-only">
-        Find a file in Chapter Files
-      </label>
-      <Input
-        id={searchId}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Find a file in Chapter Files"
-        autoFocus
-      />
-      {documents.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading files…</p>
-      ) : documents.isError ? (
-        <p className="text-sm text-muted-foreground">
-          Couldn&apos;t load Chapter Files. Try again in a moment.
-        </p>
-      ) : matches.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {search.trim()
-            ? "No file matches that."
-            : "Chapter Files has nothing to attach yet. Upload it there first."}
-        </p>
-      ) : (
-        <ul className="grid gap-1">
-          {matches.map((doc) => (
-            <li key={doc.id}>
-              <button
-                type="button"
-                onClick={() => onPick(doc.id, doc.title)}
-                className={cn(
-                  "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card-hover pointer-coarse:min-h-11",
-                  FOCUS_RING_OFFSET,
-                )}
-              >
-                <FileText
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <span className="truncate">{doc.title}</span>
-                {doc.folder ? (
-                  <span className="ml-auto shrink-0 text-caption text-muted-foreground">
-                    {doc.folder}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
   );
 }

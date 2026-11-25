@@ -60,6 +60,7 @@ const doc = (over: Partial<ChapterDocument> = {}): ChapterDocument => ({
   drive_link_status: 'active',
   drive_synced_at: NOW.toISOString(),
   who_can_see: null,
+  meeting_id: null,
   ...over,
 });
 
@@ -144,6 +145,10 @@ describe('GoogleDriveLinkService', () => {
       listChildren: jest.fn(),
       download: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
       exportAs: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4])),
+      userTokenInfo: jest.fn(),
+      getItemAs: jest.fn(),
+      shareWithServiceAccount: jest.fn(),
+      unshare: jest.fn(),
     };
     links = {
       create: jest.fn().mockResolvedValue(link()),

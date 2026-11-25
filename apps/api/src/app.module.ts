@@ -22,19 +22,29 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { InviteModule } from './modules/invite/invite.module';
 import { EventModule } from './modules/event/event.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
+import { FrappLinkModule } from './modules/frapp-link/frapp-link.module';
+import { DesktopUpdateModule } from './modules/desktop-update/desktop-update.module';
 import { MeetingDraftModule } from './modules/meeting/meeting-draft.module';
 import { MeetingRecordingModule } from './modules/meeting/meeting-recording.module';
+import { MeetingMinutesRequestModule } from './modules/meeting/meeting-minutes-request.module';
+import { MeetingNoMinutesModule } from './modules/meeting/meeting-no-minutes.module';
+import { MeetingDateReminderModule } from './modules/meeting/meeting-date-reminder.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { PointsModule } from './modules/points/points.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { FinancialInvoiceModule } from './modules/financial-invoice/financial-invoice.module';
 import { BackworkModule } from './modules/backwork/backwork.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { SchoolModule } from './modules/school/school.module';
+import { AffiliationModule } from './modules/affiliation/affiliation.module';
 import { ServiceEntryModule } from './modules/service-entry/service-entry.module';
 import { TaskModule } from './modules/task/task.module';
+import { TenantModule } from './modules/tenant/tenant.module';
 import { AiSuggestionModule } from './modules/ai-suggestion/ai-suggestion.module';
 import { PledgeClassModule } from './modules/pledge-class/pledge-class.module';
 import { ChapterGroupModule } from './modules/chapter-group/chapter-group.module';
+import { InterestFormModule } from './modules/interest-form/interest-form.module';
+import { ChatTimeoutModule } from './modules/chat-timeout/chat-timeout.module';
 import { RushModule } from './modules/rush/rush.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { StudyModule } from './modules/study/study.module';
@@ -44,7 +54,6 @@ import { PredictionModule } from './modules/prediction/prediction.module';
 import { SemesterRolloverModule } from './modules/semester-rollover/semester-rollover.module';
 import { ReportModule } from './modules/report/report.module';
 import { SearchModule } from './modules/search/search.module';
-import { ActivityFeedModule } from './modules/activity-feed/activity-feed.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { BirthdayModule } from './modules/birthday/birthday.module';
 import { GoalsModule } from './modules/goals/goals.module';
@@ -52,7 +61,6 @@ import { AiRunsModule } from './modules/ai-runs/ai-runs.module';
 import { CorpusModule } from './modules/corpus/corpus.module';
 import { ChapterConfigModule } from './modules/chapter-config/chapter-config.module';
 import { ChapterDirectoryModule } from './modules/chapter-directory/chapter-directory.module';
-import { ChatBridgeWorkerModule } from './modules/chat-bridge-worker/chat-bridge-worker.module';
 import { ChatPushWorkerModule } from './modules/chat-push-worker/chat-push-worker.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ScheduledJobsModule } from './modules/scheduled-jobs/scheduled-jobs.module';
@@ -114,21 +122,29 @@ import { validateEnv } from './config/env.validation';
     FinancialInvoiceModule,
     BackworkModule,
     ChatModule,
+    SchoolModule,
     ServiceEntryModule,
     TaskModule,
+    TenantModule,
     AiSuggestionModule,
     PledgeClassModule,
     ChapterGroupModule,
+    // Chat timeouts (#6006).
+    ChatTimeoutModule,
     RushModule,
+    InterestFormModule,
     NotificationModule,
     StudyModule,
     ChapterDocumentModule,
+    // Names the records tasks' and events' attachments point at.
+    FrappLinkModule,
+    // Where the desktop app looks for updates.
+    DesktopUpdateModule,
     PollModule,
     PredictionModule,
     SemesterRolloverModule,
     ReportModule,
     SearchModule,
-    ActivityFeedModule,
     ActivityModule,
     BirthdayModule,
     GoalsModule,
@@ -136,7 +152,6 @@ import { validateEnv } from './config/env.validation';
     CorpusModule,
     ChapterConfigModule,
     ChapterDirectoryModule,
-    ChatBridgeWorkerModule,
     ChatPushWorkerModule,
     AnalyticsModule,
     ScheduledJobsModule,
@@ -160,7 +175,12 @@ import { validateEnv } from './config/env.validation';
     // the exported contract.
     MeetingDraftModule,
     MeetingRecordingModule,
+    MeetingMinutesRequestModule,
+    MeetingNoMinutesModule,
+    MeetingDateReminderModule,
     BootstrapModule,
+    // Last, so its routes append to the exported contract (#5974).
+    AffiliationModule,
   ],
   providers: [
     {

@@ -14,11 +14,13 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CHANNEL_ACCESS_ENTRY_PATTERN,
+  FRAPP_LINKS_MAX,
   MAX_REPEAT_RULE_LENGTH,
   POINTS_ADJUSTMENT_MAX,
   TASK_COMPLETION_NOTE_MAX,
@@ -34,6 +36,7 @@ import {
   TASK_TITLE_MAX_LENGTH,
   type TaskAudience,
   type TaskGroupAudience,
+  type FrappLink,
   type TaskProofKind,
 } from '@repo/validation';
 import {
@@ -68,6 +71,10 @@ import {
   LIST_QUERY_LIMIT_MIN,
 } from '#domain/constants/list-query-limits';
 import type { AssertNever } from './drift-guard';
+import { FrappLinkDto } from './frapp-link.dto';
+
+/** `attachments` on task writes (`spec/behavior/frapp-links.md`). */
+const TASK_ATTACHMENTS_DESCRIPTION = `What is attached, in order: at most ${FRAPP_LINKS_MAX} Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and \`[]\` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored.`;
 
 /** `followed_by` on task writes and reads (#5473). */
 const TASK_FOLLOWED_BY_DESCRIPTION =
@@ -174,7 +181,7 @@ export class CreateTaskDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'With `audience: "everyone"` only (2026-11-18): just the active members of this chapter group (manual, pledge class or class year) get a copy. An empty group is a 400. Not with `audience_role_id`.',
+      'With `audience: "everyone"` only (2026-11-18): just the active members of this chapter group (manual, pledge class, class year or major) get a copy. An empty group is a 400. Not with `audience_role_id`.',
   })
   @IsOptional()
   @IsUUID()
@@ -199,13 +206,31 @@ export class CreateTaskDto {
   @Matches(CHANNEL_ACCESS_ENTRY_PATTERN, { message: TASK_FOLLOWED_BY_MESSAGE })
   followed_by?: string;
 
-  @ApiProperty({ description: 'Due date (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    type: () => [FrappLinkDto],
+    maxItems: FRAPP_LINKS_MAX,
+    description: TASK_ATTACHMENTS_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => FrappLinkDto)
+  attachments?: FrappLinkDto[];
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      "Due date (YYYY-MM-DD). Omit, or send null, for a task with no due date (#5761): it is never overdue, gets no due reminders and can't repeat.",
+  })
+  @IsOptional()
   @IsDateString()
-  due_date: string;
+  due_date?: string | null;
 
   @ApiPropertyOptional({
     description:
-      'The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it. Omit for a task due on `due_date` with no time.',
+      'The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it, so it needs a `due_date`. Omit for a task due on `due_date` with no time.',
     format: 'date-time',
   })
   @IsOptional()
@@ -359,8 +384,13 @@ export class CreateTaskResponseDto implements Task {
   @ApiProperty({ format: 'uuid' })
   created_by: string;
 
-  @ApiProperty({ format: 'date' })
-  due_date: string;
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'Null for a task with no due date (#5761).',
+  })
+  due_date: string | null;
 
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   due_at: string | null;
@@ -424,6 +454,15 @@ export class CreateTaskResponseDto implements Task {
     format: 'uuid',
     nullable: true,
     description:
+      'Who marked it done (#5732): the assignee, or an officer marking it done for them. Null while it is open, and on a completion from before this was kept.',
+  })
+  completed_by: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
       'The repeating series this task is a copy of (#5119), or null for a task that doesn’t repeat.',
   })
   series_id: string | null;
@@ -460,6 +499,13 @@ export class CreateTaskResponseDto implements Task {
     description: TASK_FOLLOWED_BY_DESCRIPTION,
   })
   followed_by: string | null;
+
+  @ApiProperty({
+    type: () => [FrappLinkDto],
+    description:
+      'What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open.',
+  })
+  attachments: FrappLink[];
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;
@@ -570,9 +616,9 @@ export class CreateTaskSubtaskDto {
 
 /**
  * An officer's edit of a task (#4296). Every field is optional and an omitted
- * one is left as it is. `null` clears `description`, `due_at` (the task is
- * then due by the end of `due_date`) and `point_reward`; the API refuses null
- * for the rest. Steps are edited through the subtask routes.
+ * one is left as it is. `null` clears `description`, `due_date` (#5761; the
+ * time goes with it), `due_at` (the task is then due by the end of
+ * `due_date`) and `point_reward`; the API refuses null for the rest. Steps are edited through the subtask routes.
  */
 export class UpdateTaskDto {
   @ApiPropertyOptional({ maxLength: TASK_TITLE_MAX_LENGTH })
@@ -594,10 +640,15 @@ export class UpdateTaskDto {
   @IsUUID()
   assignee_id?: string;
 
-  @ApiPropertyOptional({ description: 'Due date (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Due date (YYYY-MM-DD), or null to take it off (#5761), which takes the time off too. A copy of a repeating task keeps its day.',
+  })
   @IsOptional()
   @IsDateString()
-  due_date?: string;
+  due_date?: string | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -648,6 +699,18 @@ export class UpdateTaskDto {
   @IsString()
   @Matches(CHANNEL_ACCESS_ENTRY_PATTERN, { message: TASK_FOLLOWED_BY_MESSAGE })
   followed_by?: string | null;
+
+  @ApiPropertyOptional({
+    type: () => [FrappLinkDto],
+    maxItems: FRAPP_LINKS_MAX,
+    description: `${TASK_ATTACHMENTS_DESCRIPTION} With \`scope: group\` every copy not yet confirmed takes it; with \`scope: series\` the next copies are made with it.`,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => FrappLinkDto)
+  attachments?: FrappLinkDto[];
 
   @ApiPropertyOptional({
     enum: TASK_EDIT_SCOPES,
@@ -706,6 +769,42 @@ export class RemoveFromTaskGroupResponseDto {
   group: TaskGroupSummaryDto;
 }
 
+/**
+ * The most members one `POST /v1/tasks/:id/group/add` adds (#5905): the
+ * bound on picking people for a new task.
+ */
+export const TASK_GROUP_ADD_MAX = TASK_PEOPLE_MAX;
+
+/** `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupDto {
+  @ApiProperty({
+    description: `The members who get a copy, 1 to ${TASK_GROUP_ADD_MAX}, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.`,
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: TASK_GROUP_ADD_MAX,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TASK_GROUP_ADD_MAX)
+  @IsUUID('all', { each: true })
+  assignee_ids: string[];
+}
+
+/** The group after `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupResponseDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The members who got a copy; anyone who already had one is left out.',
+  })
+  added: string[];
+
+  @ApiProperty({ type: () => TaskGroupSummaryDto })
+  group: TaskGroupSummaryDto;
+}
+
 /** `DELETE /v1/tasks/:id` (#5119). */
 export class DeleteTaskQueryDto {
   @ApiPropertyOptional({
@@ -744,7 +843,7 @@ export class UpdateTaskStatusDto {
 
   @ApiPropertyOptional({
     description:
-      "With `status: COMPLETED` only: a link proof, http or https (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it).",
+      "With `status: COMPLETED` only: a link proof, http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5882; 400 otherwise) (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it).",
     maxLength: TASK_PROOF_LINK_MAX,
   })
   @IsOptional()
@@ -849,3 +948,34 @@ export type CreateTaskResponseDtoExtraFields = AssertNever<
     keyof Task | 'card_posted' | 'photos' | 'group'
   >
 >;
+
+/**
+ * Post an existing task's card into a chat channel (#5772): the + sheet's
+ * Task row links a task the member can already read, the way Linear and
+ * GitHub unfurl an issue pasted into Slack.
+ */
+export class ShareTaskToChatDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'The channel to post the card in.',
+  })
+  @IsUUID()
+  channel_id: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Client-generated idempotency key, reconciling the optimistic placeholder.',
+  })
+  @IsUUID()
+  client_message_id: string;
+}
+
+/** Whether the linked task's card posted. */
+export class ShareTaskToChatResponseDto {
+  @ApiProperty({
+    description:
+      'True once the card is in the channel. The route answers 4xx instead of `false` when it could not post.',
+  })
+  card_posted: boolean;
+}

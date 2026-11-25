@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,6 +18,7 @@ import {
 } from '../decorators/current-user.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { MemberThreadDto } from '../dtos/chat.dto';
+import { VerifySessionLocally } from '../decorators/session-check.decorator';
 
 /**
  * All threads (#4960): the caller's threads across every channel they may
@@ -29,11 +31,14 @@ import { MemberThreadDto } from '../dtos/chat.dto';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('threads')
 export class MemberThreadController {
   constructor(private readonly threads: ChatThreadService) {}
 
   @Get()
+  @VerifySessionLocally()
   @ApiOperation({
     summary:
       'Every thread the caller follows or muted, across channels, newest activity first, with new-reply counts',

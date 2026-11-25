@@ -1,8 +1,16 @@
-import { can, canAny, isBetaOffModule } from "@repo/validation";
+import {
+  CHAPTER_LOGS_PERMISSIONS,
+  can,
+  canAll,
+  canAny,
+  isBetaOffModule,
+} from "@repo/validation";
 import { isModuleSettingsTab } from "@/components/settings/settings-modules";
 import {
   CHAT_SETTINGS_PATH,
   DISCORD_IMPORT_SETTINGS_PATH,
+  HOURS_SETTINGS_PATH,
+  POINTS_SETTINGS_PATH,
   REPORTS_SETTINGS_PATH,
   STUDY_ZONES_SETTINGS_PATH,
 } from "@/components/settings/settings-paths";
@@ -13,14 +21,14 @@ import {
  * Settings is the one door to officer setup and officer tools (#2946). The
  * sidebar used to carry a six-row Admin group (Roles, Study Zones, Reports,
  * Chat Admin, Discord Import, Settings). That group is what pushed an admin's
- * nav past a 768px window, so it folded into a single Settings row. Roles was
+ * nav past a 768px window, so it folded into Chapter settings. Roles was
  * already a Settings tab. The other four kept full-width pages of their own
  * until #3837: each now opens inside its module's page in Chapter settings
  * (`page`), so the rail stays on screen and chat does not come back beside it
  * (Paul, 2026-11-12: "I want to phase those out").
  *
- * The nav's Settings row (`nav-config.ts`), the chapter switcher's "Chapter
- * settings" link, the Settings rail and the page's "nothing here for you" state
+ * The member menu's "Chapter settings" item (`account-menu.tsx`, the one
+ * door since 2026-11-19, on the chapter menu until #5946), the Settings rail and the page's "nothing here for you" state
  * all read this module, so the question "can this viewer open something in
  * Settings?" has one answer. The rules are owned by
  * `spec/behavior/settings/README.md` § Who sees what.
@@ -41,12 +49,19 @@ export type SettingsTool = {
   page: string;
   /**
    * The tool is drawn on its module page itself (Study zones' zone list, the
-   * Reports form, Chat's channels and report queue), so `href` is that page
+   * Reports form, Chat's channels and report queue, the points ledger, the
+   * chapter's service history), so `href` is that page
    * and the page lists no row for it. A tool without it (Discord import) is a
    * row on its module page that opens it in place of the page, with a way
    * back, still inside Chapter settings.
    */
   embedded?: boolean;
+  /**
+   * The embedded body is a list that keeps growing (the points ledger, the
+   * service history), so it is drawn last on its page, under the rules and
+   * who-can, which stay a screen from the top however long it gets.
+   */
+  growsLong?: boolean;
 };
 
 export const SETTINGS_TOOLS: readonly SettingsTool[] = [
@@ -69,6 +84,34 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     href: DISCORD_IMPORT_SETTINGS_PATH,
     permission: "channels:manage",
     page: "chat",
+  },
+  {
+    // The chapter's points ledger, with Adjust points for a role that may
+    // (#5950). The Points page's Audit section and Adjust button until then.
+    id: "points-ledger",
+    label: "Points ledger",
+    description:
+      "Every points transaction in the chapter, flagged adjustments, and Adjust points.",
+    href: POINTS_SETTINGS_PATH,
+    permission: "points:view_all",
+    page: "points",
+    module: "points",
+    embedded: true,
+    growsLong: true,
+  },
+  {
+    // The chapter's reviewed service entries (#5950). The Service hours
+    // page's Chapter history until then; pending ones are reviewed in
+    // Activity.
+    id: "service-history",
+    label: "Service history",
+    description: "Every member's approved and rejected service entries.",
+    href: HOURS_SETTINGS_PATH,
+    permission: "service:approve",
+    page: "hours",
+    module: "hours",
+    embedded: true,
+    growsLong: true,
   },
   {
     id: "study-zones",
@@ -109,7 +152,8 @@ const CHAPTER_CONFIG_VIEW = "chapter-config:view";
  * its own.
  */
 const TAB_EXTRA_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
-  roles: ["roles:manage"],
+  // Roles and groups: `groups:manage` alone opens it for its groups.
+  roles: ["roles:manage", "groups:manage"],
   semester: ["semester:rollover"],
 };
 
@@ -121,32 +165,15 @@ const TAB_EXTRA_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
  */
 const TAB_ONLY_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
   classes: ["roles:manage"],
-  // Groups (#4076) read `GET /v1/groups` and write with `groups:manage`; no
-  // chapter config.
-  groups: ["groups:manage"],
   /*
    * Plan and billing (#3827) reads `GET /v1/billing/status` and the invoice
    * list, both `billing:view`, and no chapter config. It is the gate the
    * sidebar's Billing row used, so whoever reached billing before still does,
-   * and the nav's Chapter settings row now admits a treasurer who holds only
-   * this. Plan actions stay behind `billing:manage` inside the section.
+   * and the member menu's Chapter settings item admits a treasurer who holds
+   * only this. Plan actions stay behind `billing:manage` inside the section.
    */
   billing: ["billing:view"],
 };
-
-/**
- * Holding any one of these means Settings has a tab or a tool for the viewer.
- * The nav's Settings row is gated on the set, and `hasSettingsDestination`
- * then drops the row when the only tools behind it are switched off.
- */
-export const SETTINGS_ENTRY_PERMISSIONS: readonly string[] = Array.from(
-  new Set([
-    CHAPTER_CONFIG_VIEW,
-    ...Object.values(TAB_EXTRA_PERMISSIONS).flat(),
-    ...Object.values(TAB_ONLY_PERMISSIONS).flat(),
-    ...SETTINGS_TOOLS.map((tool) => tool.permission),
-  ]),
-);
 
 /**
  * Whether a Settings tab shows for this viewer.
@@ -180,6 +207,13 @@ export function isSettingsTabVisible(
       )
     );
   }
+  /*
+    Logs (Paul, 2026-11-21) reads `GET /v1/audit-log`, which takes both
+    `chapter-config:view` and `members:view`: entries name who removed whom.
+  */
+  if (tab === "logs") {
+    return canAll(CHAPTER_LOGS_PERMISSIONS, permissions);
+  }
   const only = TAB_ONLY_PERMISSIONS[tab];
   if (only) return canAny(only, permissions);
   return canAny(
@@ -209,10 +243,10 @@ export function visibleSettingsTools(
 
 /**
  * Whether Settings holds anything for this viewer: a tab, or a tool whose
- * module is on. The nav's Settings row and the chapter switcher's "Chapter
- * settings" link both ask this, so neither opens onto an empty page. A
- * treasurer whose only tool is Reports loses the row when the chapter switches
- * Reports off, the same way the Reports row used to hide (#2946).
+ * module is on. The member menu's "Chapter settings" item asks this, so it
+ * never opens onto an empty page. A treasurer whose only tool is Reports loses
+ * the link when the chapter switches Reports off, the same way the Reports row
+ * used to hide (#2946).
  *
  * False while permissions are `undefined` (in flight, or failed online): a
  * door is drawn only once the viewer's grants are known to open it (#3854), as

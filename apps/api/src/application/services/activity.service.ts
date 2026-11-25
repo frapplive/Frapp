@@ -9,7 +9,10 @@ import {
   CHECK_IN_GRACE_MINUTES,
   can,
   checkInWindowBounds,
+  EVENTS_NOW_LIMIT,
+  eventOnAt,
   isModuleEnabled,
+  MAX_CHECK_IN_OPENS_MINUTES,
 } from '@repo/validation';
 import { ACTIVITY_ITEM_READ_REPOSITORY } from '#domain/repositories/activity-item-read.repository.interface';
 import type {
@@ -24,6 +27,7 @@ import { CHAT_FORM_RESPONSE_REPOSITORY } from '#domain/repositories/chat-form-re
 import type { IChatFormResponseRepository } from '#domain/repositories/chat-form-response.repository.interface';
 import { isCardClosed } from '#domain/utils/card-closing';
 import { formQuestions } from '#domain/utils/form-card-rules';
+import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import {
   SIGNUP_ACTION_TYPE,
   isHeadcountCard,
@@ -49,6 +53,7 @@ import type {
   ChatMessage,
 } from '#domain/entities/chat.entity';
 import type { Event } from '#domain/entities/event.entity';
+import type { EventAttendance } from '#domain/entities/event-attendance.entity';
 import type { Member } from '#domain/entities/member.entity';
 import type { ServiceEntry } from '#domain/entities/service-entry.entity';
 import { TaskStatus } from '#domain/entities/task.entity';
@@ -63,6 +68,8 @@ import {
 import type { CardPollPayload } from '#domain/utils/poll-vote-rules';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import { ActivityLinkService } from './activity-link.service';
+import { ActivityMinutesService } from './activity-minutes.service';
+import type { ActivityMinutes } from './activity-minutes.service';
 import {
   acceptableWeekStart,
   defaultWeekStart,
@@ -106,6 +113,7 @@ export const ACTIVITY_SECTIONS = [
   'made_events',
   'links',
   'reminders',
+  'minutes',
 ] as const;
 export type ActivitySection = (typeof ACTIVITY_SECTIONS)[number];
 
@@ -117,7 +125,8 @@ export type ActivitySection = (typeof ACTIVITY_SECTIONS)[number];
 export interface ActivityTask {
   id: string;
   title: string;
-  due_date: string;
+  /** Null for a task with no due date (#5761). */
+  due_date: string | null;
   /** The moment it is due, when it has a time of day (#4003). */
   due_at: string | null;
   /** Display status: `OVERDUE` for an open task past its due date. */
@@ -175,7 +184,7 @@ export interface ActivityTaskGroup extends TaskGroupSummary {
   /** What the copies share, read from one not yet confirmed. */
   title: string;
   description: string | null;
-  due_date: string;
+  due_date: string | null;
   due_at: string | null;
   point_reward: number | null;
   proof_kind: TaskProofKind;
@@ -353,6 +362,11 @@ export interface ActivityEvent {
    */
   checked_in: boolean | null;
   /**
+   * When the member checked in, read with `checked_in`; `null` otherwise and
+   * when the row has no time (#5777: the Now card's "Checked in 9:24 PM").
+   */
+  checked_in_at: string | null;
+  /**
    * Who made it; `null` for an event made before makers were recorded
    * (`spec/behavior/events.md` § Event Creation).
    */
@@ -446,6 +460,13 @@ export interface ActivityView {
    * (`ChatReminderService.listFor`). Due ones count in `needs_you_count`.
    */
   reminders: ActivityReminder[];
+  /**
+   * Minutes waiting on the caller (#5949), while the chapter has Meetings on:
+   * meetings to write minutes for (a `meetings:record` holder's), their own
+   * unposted drafts, and the drafts they take notes on
+   * (`ActivityMinutesService`). Up to 25 of each.
+   */
+  minutes: ActivityMinutes;
   made_by_you: {
     /**
      * The caller's poll cards, newest first: up to 25 open and the 25 most
@@ -468,12 +489,6 @@ export interface ActivityView {
      */
     task_items: ActivityTaskItem[];
     /**
-     * Always empty. Uploads left Activity (#4291); the field stays only so a
-     * client built before that, an open web tab or a phone's over-the-air
-     * bundle, does not fail on its absence. Removal is tracked separately.
-     */
-    files: unknown[];
-    /**
      * Events the caller made that have not ended, soonest first. A recurring
      * series is one row, its next meeting. Events made before creators were
      * recorded are not here.
@@ -483,7 +498,9 @@ export interface ActivityView {
   /**
    * How many things wait on the caller: every `needs_you` row, counted before
    * the per-list cap, plus events whose check-in is open and not yet used,
-   * less what the caller snoozed (`snoozed_until`).
+   * due reminders, and the `minutes` rows that ask something (every meeting
+   * to write, every own draft, and notes the caller was added to but hasn't
+   * started), less what the caller snoozed (`snoozed_until`).
    */
   needs_you_count: number;
   /** Sections that could not be read this time and are served empty. */
@@ -501,6 +518,17 @@ export interface ActivityView {
 /** The sections of the Archive's read (#5127), as `unavailable` names them. */
 export const ARCHIVE_SECTIONS = ['events', 'tasks', 'polls'] as const;
 export type ArchiveSection = (typeof ARCHIVE_SECTIONS)[number];
+
+/** `GET /v1/activity/now` (`spec/behavior/activity.md` § Now, #5777). */
+export interface ActivityNow {
+  /**
+   * The events on right now that are the caller's to see as on: required of
+   * them, checked in to, or made by them, and every one for a holder of
+   * `events:update`; never one they are excused from. The one they checked
+   * in to first, then the latest start.
+   */
+  events: ActivityEvent[];
+}
 
 /**
  * What the member has finished, apart from the Activity page that lists what
@@ -525,6 +553,25 @@ export interface ActivityArchive {
 
 /** Rows each list carries. The count in `needs_you_count` is taken before it. */
 const LIST_LIMIT = 25;
+/** The minutes section with nothing in it: Meetings off, or a failed read. */
+const NO_MINUTES: ActivityMinutes = {
+  to_write: [],
+  drafts: [],
+  taking_notes: [],
+};
+
+/**
+ * How many minutes rows wait on the caller (#5949): every meeting to write,
+ * every own draft, and notes they were added to but haven't started; notes
+ * they are already taking are theirs, not an ask.
+ */
+function minutesWaiting(minutes: ActivityMinutes): number {
+  return (
+    minutes.to_write.length +
+    minutes.drafts.length +
+    minutes.taking_notes.filter((row) => !row.joined).length
+  );
+}
 /** Members a task-for-everyone row names for its faces. */
 const GROUP_FACES = 5;
 /** How many of the chapter's newest poll cards are checked for "open and unvoted". */
@@ -540,6 +587,7 @@ const COMING_UP_LIMIT = 10;
  */
 const MADE_EVENTS_SCAN_LIMIT = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 /** How far back the Archive's events and tasks reach (#5127). */
 const ARCHIVE_WINDOW_MS = 30 * DAY_MS;
 /**
@@ -584,6 +632,8 @@ function dueBefore(
   task: Pick<ActivityTask, 'due_date' | 'due_at'>,
   weekEnd: number,
 ): boolean {
+  // A task with no due date isn't due this week or any other (#5761).
+  if (task.due_date === null) return false;
   const at = Date.parse(task.due_at ?? `${task.due_date}T12:00:00Z`);
   // An unreadable date is still the member's to do.
   return Number.isNaN(at) || at < weekEnd;
@@ -739,6 +789,8 @@ function activityEventRow(
     needsCode: boolean;
     /** Whether the member checked in; `null` when it wasn't (or couldn't be) read. */
     checkedIn: boolean | null;
+    /** When they checked in, when that was read. */
+    checkedInAt?: string | null;
   },
 ): ActivityEvent {
   return {
@@ -754,6 +806,7 @@ function activityEventRow(
     check_in_needs_location: event.check_in_zone != null,
     check_in_needs_code: member.needsCode,
     checked_in: member.checkedIn,
+    checked_in_at: member.checkedInAt ?? null,
     created_by: event.created_by,
     progress: null,
     created_at: event.created_at,
@@ -886,6 +939,8 @@ interface EventViewer {
  *   an event that leaves the member out contributes nothing.
  * - **Links** are read by {@link ActivityLinkService}, under chat's channel
  *   list and the block list, as polls are.
+ * - **Minutes** are read by {@link ActivityMinutesService}, through the
+ *   event read rule, the minutes' own read rule and note-taking's (#5949).
  *
  * A module the chapter has switched off contributes nothing. The sections
  * are read independently: one that fails is served empty and named in
@@ -919,13 +974,14 @@ export class ActivityService {
     @Inject(CHAT_FORM_RESPONSE_REPOSITORY)
     private readonly formResponseRepo: IChatFormResponseRepository,
     private readonly channelAccess: ChannelAccessService,
+    private readonly minutesService: ActivityMinutesService,
   ) {}
 
   async getActivity(
     chapterId: string,
     userId: string,
     enabledModules: EnabledModules,
-    options: { weekStart?: Date; now?: Date } = {},
+    options: { weekStart?: Date; now?: Date; minutes?: boolean } = {},
   ): Promise<ActivityView> {
     const permissions = await this.rbacService.getEffectivePermissions(
       chapterId,
@@ -997,6 +1053,7 @@ export class ActivityService {
       links,
       reminders,
       weekEvents,
+      minutes,
     ] = await Promise.all([
       this.settle('tasks', chapterId, () =>
         on('tasks')
@@ -1072,6 +1129,14 @@ export class ActivityService {
             )
           : Promise.resolve(null),
       ),
+      // What the Meetings list page asked of an officer (#5949), while the
+      // chapter has Meetings on, for a client that draws it: a build from
+      // before it gets none, so its badge never counts rows it can't show.
+      this.settle('minutes', chapterId, () =>
+        options.minutes && on('meetings')
+          ? this.minutesService.listFor(chapterId, userId, permissions, now)
+          : Promise.resolve(NO_MINUTES),
+      ),
     ]);
 
     const unavailable: ActivitySection[] = [];
@@ -1108,6 +1173,7 @@ export class ActivityService {
     const myEvents = valueOf('made_events', madeEvents, []);
     const myLinks = valueOf('links', links, []);
     const myReminders = valueOf('reminders', reminders, []);
+    const myMinutes = valueOf('minutes', minutes, NO_MINUTES);
 
     const snoozes = await snoozesRead;
     // A snoozed row is still served, carrying `snoozed_until`, so a client
@@ -1165,7 +1231,10 @@ export class ActivityService {
       awake(upcoming).filter(
         (event) => event.check_in_open && !event.checked_in,
       ).length +
-      myReminders.filter((reminder) => reminder.due).length;
+      myReminders.filter((reminder) => reminder.due).length +
+      // Minutes rows have no snooze (#5949): their ids name meetings and
+      // events, which Coming up's event snooze would collide with.
+      minutesWaiting(myMinutes);
 
     return this.withUnread(chapterId, userId, snoozes.ended, {
       needs_you: {
@@ -1178,12 +1247,16 @@ export class ActivityService {
       coming_up: awakeFirst(upcoming),
       links: awakeFirst(withSnooze('link', myLinks, (row) => row.id)),
       reminders: myReminders,
+      minutes: {
+        to_write: myMinutes.to_write.slice(0, LIST_LIMIT),
+        drafts: myMinutes.drafts.slice(0, LIST_LIMIT),
+        taking_notes: myMinutes.taking_notes.slice(0, LIST_LIMIT),
+      },
       made_by_you: {
         // Capped per state in `readPolls`: 25 open and 25 closed.
         polls: pollLists.mine,
         tasks: taskLists.assigned.slice(0, LIST_LIMIT),
         task_items: taskLists.assignedItems,
-        files: [],
         events: myEvents.slice(0, LIST_LIMIT),
       },
       needs_you_count: needsYouCount,
@@ -1483,6 +1556,128 @@ export class ActivityService {
   }
 
   /**
+   * What is on right now for the caller (`spec/behavior/activity.md` § Now,
+   * #5777): the Now card on Chat, Activity and the event, on both apps. Its
+   * own small read, so Chat home and web's chat pane, which show it, don't
+   * pay for the whole page's.
+   *
+   * An event is on from when its check-in opens until its end
+   * (`eventOnAt`), whether or not the caller checked in: checking in used to
+   * drop the event from Activity, which is how Paul sat in a meeting no
+   * screen showed (2026-11-19). It is read as the caller, so an event that
+   * leaves them out is never on for them, and it is theirs to see as on
+   * when it requires them, they checked in to it, or they made it. An
+   * optional event they skipped stays on the Calendar, not at the top of
+   * every screen.
+   */
+  async getNow(
+    chapterId: string,
+    userId: string,
+    enabledModules: EnabledModules,
+    options: { now?: Date } = {},
+  ): Promise<ActivityNow> {
+    if (!isModuleEnabled(enabledModules, 'events')) return { events: [] };
+    const now = (options.now ?? new Date()).getTime();
+    // On now means check-in has opened, so the start is at most the longest
+    // lead ahead, and the end is still to come.
+    const startsBefore = now + MAX_CHECK_IN_OPENS_MINUTES * MINUTE_MS;
+    const events = (
+      await this.eventService.findByChapter(chapterId, userId, {
+        endsAfter: new Date(now).toISOString(),
+        startsBefore: new Date(startsBefore).toISOString(),
+      })
+    ).filter((event) =>
+      eventOnAt(
+        event.start_time,
+        event.end_time,
+        event.check_in_opens_minutes,
+        now,
+      ),
+    );
+    if (events.length === 0) return { events: [] };
+    let viewerRead: Promise<EventViewer> | null = null;
+    const viewer = () =>
+      (viewerRead ??= this.readViewer(chapterId, userId, () =>
+        this.rbacService.getAlumniRoleId(chapterId),
+      ));
+    const permissions = await this.rbacService.getEffectivePermissions(
+      chapterId,
+      userId,
+    );
+    // An officer who runs events sees every one on (#5777), invited or not:
+    // they are the ones asked where the meeting is. The event read already
+    // lets them see any event, for editing.
+    const runsEvents = can(SystemPermissions.EVENTS_UPDATE, permissions);
+    // No per-event reads: the card shows neither the code nor a per-row
+    // check-in, and this is read every minute by every open Chat. The
+    // member's own rows are read once, below.
+    const rows = await this.toEventRows(userId, now, events, viewer, {
+      startsBefore,
+      limit: events.length,
+      keepUninvited: runsEvents,
+      memberReads: false,
+    });
+    const mine = await this.ownAttendance(
+      userId,
+      rows.map((row) => row.id),
+    );
+    const shown = rows
+      .flatMap((row) => {
+        const own = mine?.get(row.id);
+        // Excused is not attending: Now never says "Checked in" for it.
+        if (own?.status === 'EXCUSED') return [];
+        const present = own?.status === 'PRESENT' || own?.status === 'LATE';
+        return [
+          {
+            ...row,
+            checked_in: mine === null ? null : present,
+            checked_in_at: present ? (own?.check_in_time ?? null) : null,
+          },
+        ];
+      })
+      .filter(
+        (row) =>
+          runsEvents ||
+          row.attendance === 'required' ||
+          row.checked_in === true ||
+          (row.created_by !== null && row.created_by === userId),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.checked_in === true) - Number(a.checked_in === true) ||
+          Date.parse(b.start_time) - Date.parse(a.start_time),
+      );
+    return { events: shown.slice(0, EVENTS_NOW_LIMIT) };
+  }
+
+  /**
+   * The member's own attendance rows for these events, by event id, in one
+   * read. `null` when the read fails: Now still lists the events, with
+   * whether they checked in unknown.
+   */
+  private async ownAttendance(
+    userId: string,
+    eventIds: string[],
+  ): Promise<Map<string, EventAttendance> | null> {
+    if (eventIds.length === 0) return new Map();
+    try {
+      const rows = await this.attendanceRepo.findByUserForEvents(
+        userId,
+        eventIds,
+      );
+      return new Map(rows.map((row) => [row.event_id, row]));
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'activity-now-attendance-read',
+        message: `Now could not read attendance for user ${userId}`,
+        error,
+      });
+      return null;
+    }
+  }
+
+  /**
    * The Archive (`spec/behavior/activity.md` § Archive, #5127): what the
    * member has finished, by the same rules the page uses to drop it. Its own
    * read, made only when the member opens the Archive, so the page's read
@@ -1602,11 +1797,10 @@ export class ActivityService {
       userId,
       kept.map(({ event }) => event.id),
     );
-    const statusOf = new Map(
-      attendance.map((row) => [row.event_id, row.status]),
-    );
+    const attendanceOf = new Map(attendance.map((row) => [row.event_id, row]));
     return kept.map(({ event, answer }) => {
-      const status = statusOf.get(event.id);
+      const mine = attendanceOf.get(event.id);
+      const status = mine?.status;
       return activityEventRow(event, {
         attendance:
           answer.status === 'required' && !(isAlumni && !answer.byRole)
@@ -1615,6 +1809,10 @@ export class ActivityService {
         checkInOpen: false,
         needsCode: false,
         checkedIn: status === 'PRESENT' || status === 'LATE',
+        checkedInAt:
+          status === 'PRESENT' || status === 'LATE'
+            ? (mine?.check_in_time ?? null)
+            : null,
       });
     });
   }
@@ -1636,16 +1834,18 @@ export class ActivityService {
       userId,
     );
     const completedSince = new Date(since).toISOString();
+    const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
     const [own, assigned] = await Promise.all([
       // Each read capped, newest made first, so a busy month never reads
-      // (with every task's subtasks and photos) hundreds of rows to keep 25.
-      this.taskService.list(chapterId, userId, false, {
+      // hundreds of rows to keep 25. The task's own columns only, as the
+      // page reads them (#5746).
+      this.taskService.listRows(chapterId, userId, false, {
         status: TaskStatus.COMPLETED,
         completedSince,
         limit: ARCHIVE_TASK_SCAN_LIMIT,
       }),
       can(SystemPermissions.TASKS_MANAGE, permissions)
-        ? this.taskService.list(chapterId, userId, true, {
+        ? this.taskService.listRows(chapterId, userId, true, {
             createdBy: userId,
             status: TaskStatus.COMPLETED,
             confirmed: true,
@@ -1653,18 +1853,24 @@ export class ActivityService {
             // days ago leaves Tasks you assigned today, so it lands here.
             limit: ARCHIVE_TASK_SCAN_LIMIT,
           })
-        : Promise.resolve([]),
+        : none,
     ]);
     const byId = new Map<string, TaskView>();
-    for (const task of [...own, ...assigned]) byId.set(task.id, task);
+    for (const task of [...own.tasks, ...assigned.tasks]) {
+      byId.set(task.id, task);
+    }
     // When it last finished: confirmed, or marked done.
     const doneAt = (task: TaskView) =>
       new Date(
         latest(task.completed_at ?? task.created_at, task.confirmed_at),
       ).getTime() || 0;
-    const finished = [...byId.values()]
-      .sort((a, b) => doneAt(b) - doneAt(a))
-      .slice(0, LIST_LIMIT);
+    // Only the 25 kept get their groups read.
+    const finished = await this.taskService.withGroupSummaries(
+      chapterId,
+      [...byId.values()]
+        .sort((a, b) => doneAt(b) - doneAt(a))
+        .slice(0, LIST_LIMIT),
+    );
     const names = await this.namesOf(
       finished.flatMap((task) => [task.assignee_id, task.created_by]),
     );
@@ -1800,63 +2006,83 @@ export class ActivityService {
   }> {
     const canManage = can(SystemPermissions.TASKS_MANAGE, permissions);
     // Each list is its own read, filtered in SQL, so none depends on reading
-    // the chapter's whole task history (#4037).
+    // the chapter's whole task history (#4037). Each reads the task's own
+    // columns only (`TaskService.listRows`): a row draws no subtask, photo or
+    // series, so the page doesn't read them (#5746).
     // Finished tasks waiting on a confirm: the 25 waiting longest, and how
-    // many wait in all, for `needs_you_count`. Confirming your own completion
-    // is refused (`TaskService.confirmCompletion`, the no-self-award rule), so
-    // yours are not offered as waiting on you.
-    const waitingFilter = {
-      status: TaskStatus.COMPLETED,
-      confirmed: false,
-      notAssigneeId: userId,
-    };
-    const [own, waiting, waitingCount, made, madeItems, doneThisWeek] =
-      await Promise.all([
-        this.taskService.list(chapterId, userId, false, { confirmed: false }),
-        canManage
-          ? this.taskService.list(chapterId, userId, true, {
-              ...waitingFilter,
-              order: 'longest_waiting',
-              limit: LIST_LIMIT,
-            })
-          : Promise.resolve([]),
-        canManage
-          ? this.taskService.count(chapterId, userId, true, waitingFilter)
-          : Promise.resolve(0),
-        // Only while the caller can still read tasks they don't hold: a creator
-        // who has lost `tasks:manage` gets a 403 from `GET /v1/tasks/:id`, and a
-        // row that opens to a refusal is worse than no row.
-        canManage
-          ? this.taskService.list(chapterId, userId, true, {
-              createdBy: userId,
-              limit: LIST_LIMIT,
-            })
-          : Promise.resolve([]),
-        // The same, a task for everyone once (#5492), under the same rule.
-        canManage
-          ? this.taskService.listAssignedItems(
-              chapterId,
-              userId,
-              LIST_LIMIT,
-              now,
-            )
-          : Promise.resolve([]),
-        // Done this week, confirmed or not: marking it done was the member's
-        // part. One sent back since is open again and is not counted here.
-        this.taskService.count(chapterId, userId, false, {
-          status: TaskStatus.COMPLETED,
-          completedSince: new Date(weekStart).toISOString(),
-        }),
-      ]);
-
-    const mine = own
-      .filter((task) => task.stored_status !== TaskStatus.COMPLETED)
+    // many wait in all, for `needs_you_count`, counted by the same request.
+    // Confirming your own completion is refused
+    // (`TaskService.confirmCompletion`, the no-self-award rule), so yours are
+    // not offered as waiting on you.
+    const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
+    const [own, waiting, made, madeItems] = await Promise.all([
+      // The caller's tasks not yet confirmed and, in the same read, those
+      // they marked done since the week began, confirmed or not: marking it
+      // done was the member's part. One sent back since is open again and is
+      // not counted as done.
+      this.taskService.listRows(chapterId, userId, false, {
+        unconfirmedOrCompletedSince: new Date(weekStart).toISOString(),
+      }),
+      canManage
+        ? this.taskService.listRows(chapterId, userId, true, {
+            status: TaskStatus.COMPLETED,
+            confirmed: false,
+            notAssigneeId: userId,
+            order: 'longest_waiting',
+            limit: LIST_LIMIT,
+            withTotal: true,
+          })
+        : none,
+      // Only while the caller can still read tasks they don't hold: a creator
+      // who has lost `tasks:manage` gets a 403 from `GET /v1/tasks/:id`, and a
+      // row that opens to a refusal is worse than no row.
+      canManage
+        ? this.taskService.listRows(chapterId, userId, true, {
+            createdBy: userId,
+            limit: LIST_LIMIT,
+          })
+        : none,
+      // The same, a task for everyone once (#5492), under the same rule.
+      canManage
+        ? this.taskService.listAssignedItems(chapterId, userId, LIST_LIMIT, now)
+        : Promise.resolve([]),
+    ]);
+    const doneThisWeek = own.tasks.filter(
+      (task) =>
+        task.stored_status === TaskStatus.COMPLETED &&
+        task.completed_at !== null &&
+        since(task.completed_at, weekStart),
+    ).length;
+    const open = own.tasks
+      .filter(
+        (task) =>
+          task.confirmed_at === null &&
+          task.stored_status !== TaskStatus.COMPLETED,
+      )
       // By day, and within a day by time, a task with no time last: it is
-      // due by the end of the day.
-      .sort(byAscending((task) => `${task.due_date} ${task.due_at ?? '~'}`));
+      // due by the end of the day. One with no due date goes after every
+      // dated one (#5761).
+      .sort(
+        (a, b) =>
+          ascendingNullsLast(a.due_date, b.due_date) ||
+          ascendingNullsLast(a.due_at, b.due_at),
+      );
+
+    // The groups of every row drawn, in one read, then each list as it was.
+    const grouped = await this.taskService.withGroupSummaries(chapterId, [
+      ...open,
+      ...waiting.tasks,
+      ...made.tasks,
+    ]);
+    const mine = grouped.slice(0, open.length);
     // Already oldest first from the database.
-    const confirmations = waiting;
-    const assigned = made.sort(byNewest);
+    const confirmations = grouped.slice(
+      open.length,
+      open.length + waiting.tasks.length,
+    );
+    const assigned = grouped
+      .slice(open.length + waiting.tasks.length)
+      .sort(byNewest);
 
     const singles = madeItems.flatMap((item) =>
       item.kind === 'task' ? [item.task] : [],
@@ -1871,7 +2097,8 @@ export class ActivityService {
     return {
       mine: mine.map(toRow),
       confirmations: confirmations.map(toRow),
-      confirmationsWaiting: waitingCount,
+      // Counted with the read whenever it ran (`withTotal`).
+      confirmationsWaiting: waiting.total ?? waiting.tasks.length,
       assigned: assigned.map(toRow),
       assignedItems: madeItems.map((item): ActivityTaskItem =>
         item.kind === 'task'
@@ -2476,10 +2703,22 @@ export class ActivityService {
     now: number,
     events: Event[],
     viewer: () => Promise<EventViewer>,
-    options: { startsBefore: number; limit: number },
+    options: {
+      startsBefore: number;
+      limit: number;
+      /**
+       * Keep events that don't invite the member too, as optional and with
+       * no check-in (Now, for an `events:update` holder). Their row opens the
+       * event, not chat's card, so it offers no check-in the server refuses.
+       */
+      keepUninvited?: boolean;
+      /** Read whether they checked in and whether the code is needed; default true. */
+      memberReads?: boolean;
+    },
   ): Promise<ActivityEvent[]> {
     if (events.length === 0) return [];
     const { roleIds, isAlumni } = await viewer();
+    const memberReads = options.memberReads ?? true;
 
     const kept = events
       .map((event) => ({
@@ -2489,7 +2728,7 @@ export class ActivityService {
       }))
       .filter(
         ({ event, window, answer }) =>
-          answer.status !== 'not_invited' &&
+          (options.keepUninvited || answer.status !== 'not_invited') &&
           window !== null &&
           window.closesAt > now &&
           new Date(event.start_time).getTime() <= options.startsBefore,
@@ -2509,18 +2748,26 @@ export class ActivityService {
         // event is optional and is not something to check in to.
         const alumniByDefault = isAlumni && !answer.byRole;
         const checkInOpen =
-          window !== null && window.opensAt <= now && !alumniByDefault;
+          answer.status !== 'not_invited' &&
+          window !== null &&
+          window.opensAt <= now &&
+          !alumniByDefault;
         // Both only for an event the member can check in to right now, which
         // is rarely more than one, and read together. `checked_in`: the
         // answer is what decides whether it still needs them.
         // `check_in_needs_code`: whether an officer's screen now needs the
         // code (#4808); never fails the row.
-        const [checkedIn, needsCode] = checkInOpen
-          ? await Promise.all([
-              this.hasCheckedIn(event.id, userId),
-              this.eventService.checkInNeedsCode(event, userId, new Date(now)),
-            ])
-          : [null, false];
+        const [checkIn, needsCode] =
+          checkInOpen && memberReads
+            ? await Promise.all([
+                this.checkInOf(event.id, userId),
+                this.eventService.checkInNeedsCode(
+                  event,
+                  userId,
+                  new Date(now),
+                ),
+              ])
+            : [null, false];
         return activityEventRow(event, {
           attendance:
             answer.status === 'required' && !alumniByDefault
@@ -2528,7 +2775,8 @@ export class ActivityService {
               : 'optional',
           checkInOpen,
           needsCode,
-          checkedIn,
+          checkedIn: checkIn === null ? null : checkIn.checkedIn,
+          checkedInAt: checkIn?.at ?? null,
         });
       }),
     );
@@ -2552,13 +2800,14 @@ export class ActivityService {
   }
 
   /**
-   * `null` when the read fails: the event still lists, and it counts as
-   * needing the member, which a failed read cannot rule out.
+   * Whether the member checked in, and when. `null` when the read fails: the
+   * event still lists, and it counts as needing the member, which a failed
+   * read cannot rule out.
    */
-  private async hasCheckedIn(
+  private async checkInOf(
     eventId: string,
     userId: string,
-  ): Promise<boolean | null> {
+  ): Promise<{ checkedIn: boolean; at: string | null } | null> {
     try {
       // The row itself, not `AttendanceService.getMyAttendance`: that one
       // re-reads the event and its visibility, which the list read above has
@@ -2567,7 +2816,10 @@ export class ActivityService {
         eventId,
         userId,
       );
-      return attendance !== null;
+      return {
+        checkedIn: attendance !== null,
+        at: attendance?.check_in_time ?? null,
+      };
     } catch (error) {
       // Per event, and the event still lists: a best-effort step the page
       // absorbs, so `warning`.

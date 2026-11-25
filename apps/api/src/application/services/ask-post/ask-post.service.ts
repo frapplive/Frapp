@@ -32,7 +32,7 @@ import { ChapterDocumentService } from '../chapter-document.service';
 import type { ChapterMemberAccess } from '../rbac.service';
 
 /**
- * Posts an Ask Frapp answer to a channel (#4713, `spec/behavior/ai.md`
+ * Posts a Frapp Intelligence answer to a channel (#4713, `spec/behavior/ai.md`
  * § Posting an answer to the channel).
  *
  * The one place an answer leaves its asker. Ask itself still posts nothing
@@ -83,7 +83,7 @@ export class AskPostService {
     now: Date;
   }): Promise<AskPostOutcome> {
     // What asking checks, checked again (`AskService.assertMayAsk`): the
-    // president may have turned Ask off, or the member said No to Frapp AI,
+    // president may have turned Ask off, or the member said No to Frapp Intelligence,
     // since the answer was written, and neither should still put an AI
     // answer in a channel.
     const entry = aiCatalogEntry('ask.answer');

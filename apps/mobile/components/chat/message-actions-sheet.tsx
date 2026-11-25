@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import type { TimeoutSheetTarget } from "./timeout-member-sheet";
 import {
   AccessibilityInfo,
   Alert,
@@ -245,6 +247,11 @@ export interface MessageActionsTarget {
   canReport: boolean;
   /** `users.id` to block; `null` when the sender is not blockable. */
   blockUserId: string | null;
+  /**
+   * Time out (#6006): the sender, where the viewer holds `members:timeout`
+   * and this is a channel (`canTimeOutSender`). Absent draws no row.
+   */
+  timeOut?: TimeoutSheetTarget | null;
   /** Resolved display name, or `null` when the roster cannot name them. */
   senderName: string | null;
   /**
@@ -352,6 +359,8 @@ export interface MessageActionsSheetProps {
   onDelete?: (messageId: string) => void;
   /** Put `@Sender` in the composer's draft. */
   onMention?: (messageId: string) => void;
+  /** Opens the timeout sheet on the sender (#6006). */
+  onTimeOut?: (target: TimeoutSheetTarget) => void;
   /** Mark the channel unread from this message on (#3723). */
   onMarkUnread?: (messageId: string) => void;
   /**
@@ -390,6 +399,7 @@ export const MessageActionsSheet = forwardRef<
     onEdit,
     onDelete,
     onMention,
+    onTimeOut,
     onMarkUnread,
     onReact,
     onUnreact,
@@ -937,8 +947,21 @@ export const MessageActionsSheet = forwardRef<
               </View>
             </View>
           ) : null}
-          {target?.canReport || target?.canDelete ? (
+          {target?.canReport ||
+          target?.canDelete ||
+          (target?.timeOut && onTimeOut) ? (
             <ListSection>
+              {target.timeOut && onTimeOut ? (
+                <ListRow
+                  label={CHAT_TIMEOUT_COPY.action}
+                  action
+                  onPress={() => {
+                    const timeOut = target.timeOut;
+                    menuRef.current?.dismiss();
+                    if (timeOut) onTimeOut(timeOut);
+                  }}
+                />
+              ) : null}
               {target.canReport ? (
                 <ListRow
                   label={REPORT_FORM_TITLE}
@@ -1122,7 +1145,7 @@ export const MessageActionsSheet = forwardRef<
 });
 
 /**
- * "Today at 5:16 PM", "Sunday, Sep 28 at 9:41 PM": the day as the thread's
+ * "Today at 5:16 PM", "Sunday, September 28 at 9:41 PM": the day as the thread's
  * divider names it, then the time. The only place a phone shows a follow-on
  * row's time.
  */

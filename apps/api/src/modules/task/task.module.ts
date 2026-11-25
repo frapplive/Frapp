@@ -8,6 +8,7 @@ import { TaskAudienceService } from '../../application/services/task-audience.se
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
 import { SupabaseOpenTaskRepository } from '../../infrastructure/supabase/repositories/supabase-open-task.repository';
 import { ChapterModule } from '../chapter/chapter.module';
+import { FrappLinkCheckModule } from '../frapp-link/frapp-link-check.module';
 import { SupabaseTaskRepository } from '../../infrastructure/supabase/repositories/supabase-task.repository';
 import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
@@ -30,6 +31,8 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
     ChatModule,
     AuthModule,
     ChapterModule,
+    // A task's attachments must be the chapter's own records.
+    FrappLinkCheckModule,
   ],
   controllers: [TaskController, OpenTaskController],
   providers: [
@@ -49,7 +52,8 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
   // ActivityModule reads tasks through the service (#3897); the scheduled
   // jobs push each new repeating-task copy through it (#5119).
   // An accepted suggestion for "someone" posts a task up for grabs
-  // (AiSuggestionModule).
-  exports: [TaskService, OpenTaskService],
+  // (AiSuggestionModule). Ask's task card checks who a task may be from
+  // (ActModule, 2026-11-22).
+  exports: [TaskService, OpenTaskService, TaskAudienceService],
 })
 export class TaskModule {}

@@ -27,6 +27,11 @@ import {
   SUBSCRIPTION_GRACE_BLOCKED_KEY,
 } from '../decorators/subscription.decorator';
 import { REQUIRED_MODULE_KEY } from '../decorators/module.decorator';
+import {
+  DEFAULT_TENANT_KINDS,
+  TENANT_KINDS_KEY,
+} from '../decorators/tenant-kinds.decorator';
+import { isTenantKind, type TenantKind } from '@repo/validation';
 import type { SubscriptionStatus } from '#domain/entities/chapter.entity';
 import {
   assertModuleEnabled,
@@ -75,7 +80,17 @@ type ChapterRow = {
   subscription_status: SubscriptionStatus;
   past_due_since: string | null;
   enabled_modules: Record<string, boolean> | null;
+  /** `chapters.kind` (ADR-27): which routes may serve this tenant. */
+  kind: TenantKind;
 };
+
+/** The refusal for a chapter the caller may not act in, whatever the reason. */
+function notAMember(): ForbiddenException {
+  return new ForbiddenException({
+    code: 'chapter.context.invalid',
+    message: 'You are not a member of the requested chapter.',
+  });
+}
 
 /**
  * Process-wide, not per guard instance: Nest builds a guard per module, and
@@ -162,7 +177,7 @@ function lookupChapter(
     chapterLookups.run(chapterId, () =>
       supabase
         .from('chapters')
-        .select('subscription_status, past_due_since, enabled_modules')
+        .select('subscription_status, past_due_since, enabled_modules, kind')
         .eq('id', chapterId)
         .maybeSingle<ChapterRow>(),
     );
@@ -284,6 +299,11 @@ function asRequestContext(data: unknown): RequestContextAnswer | null {
     return null;
   }
   if (!Array.isArray(answer.roles)) return null;
+  // A chapter without a known kind (a `get_request_context` from before
+  // 20261123194106) is no answer, so the guard reads the row itself, with
+  // `kind`, rather than serving a tenant whose kind it can't check.
+  const chapter = answer.chapter as { kind?: unknown } | null | undefined;
+  if (chapter && !isTenantKind(chapter.kind)) return null;
   return answer as RequestContextAnswer;
 }
 
@@ -392,16 +412,22 @@ export function readAppUserId(
 }
 
 /**
- * Reads the active chapter the caller named, per
- * spec/behavior/multi-tenancy.md:
+ * Reads the active chapter the caller named, per ADR-27 decision 3
+ * (`spec/architecture/adr/adr-27.md`):
  *
- * 1. The JWT `active_chapter_id` claim is authoritative.
- * 2. `x-chapter-id` is a fallback for clients that have not refreshed their
- *    token since the claim was introduced.
- * 3. Both present and disagreeing is a hard `403 chapter.context.mismatch` —
- *    the header never overrides the JWT.
- * 4. Neither present: a single-chapter user is auto-resolved server-side
+ * 1. An `x-chapter-id` header is authoritative. The page's URL names the
+ *    tenant and the client sends it per tab, so two tabs in two tenants share
+ *    one token and each names its own chapter.
+ * 2. Without a header, the JWT `active_chapter_id` claim is the default.
+ * 3. Neither: a single-chapter user is auto-resolved server-side
  *    (`resolveSoleChapter`); anyone else gets `400 chapter.context.required`.
+ *
+ * A header that disagrees with the claim is no longer refused (it was `403
+ * chapter.context.mismatch` until #5918). That refusal kept a client
+ * consistent mid-switch and never stopped anyone reaching a chapter: the
+ * membership check in `canActivate` is the tenant boundary, and it runs on
+ * whichever chapter this returns. `chapter.context.mismatch` itself stays,
+ * thrown by `ChapterConfigController.assertMatchesActiveChapter`.
  *
  * A refusal is returned, not thrown, so the caller can report it in its
  * place after the user lookup. A plain function of the claims and headers,
@@ -414,25 +440,8 @@ function readRequestedChapter(
   | { kind: 'explicit'; chapterId: string }
   | { kind: 'auto' }
   | { kind: 'refused'; refusal: ForbiddenException } {
-  const jwtChapterId = getActiveChapterClaim(claims);
-  const headerChapterId = getHeaderValue(headers, 'x-chapter-id');
-
-  if (
-    jwtChapterId &&
-    headerChapterId &&
-    jwtChapterId.toLowerCase() !== headerChapterId.toLowerCase()
-  ) {
-    return {
-      kind: 'refused',
-      refusal: new ForbiddenException({
-        code: 'chapter.context.mismatch',
-        message:
-          'The x-chapter-id header disagrees with the active chapter in your token.',
-      }),
-    };
-  }
-
-  const explicit = jwtChapterId ?? headerChapterId;
+  const explicit =
+    getHeaderValue(headers, 'x-chapter-id') || getActiveChapterClaim(claims);
   if (!explicit) return { kind: 'auto' };
 
   // A chapter id that is not a uuid names no chapter, so it is refused as
@@ -440,13 +449,7 @@ function readRequestedChapter(
   // answers a malformed uuid comparison with an error (22P02), not zero
   // rows, which the membership lookup would now report as a 503 (#3143).
   if (!UUID_PATTERN.test(explicit)) {
-    return {
-      kind: 'refused',
-      refusal: new ForbiddenException({
-        code: 'chapter.context.invalid',
-        message: 'You are not a member of the requested chapter.',
-      }),
-    };
+    return { kind: 'refused', refusal: notAMember() };
   }
   // #688: Postgres `uuid` comparison is case-insensitive, so an
   // uppercase-cased header/claim is authorized normally — but storage
@@ -510,11 +513,21 @@ export class ChapterGuard implements CanActivate {
       throw requested.refusal;
     }
 
+    // ADR-27: a route serves the tenant kinds it declares, `chapter` alone by
+    // default.
+    const declaredKinds = this.reflector.getAllAndOverride<unknown>(
+      TENANT_KINDS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const servedKinds: readonly TenantKind[] = Array.isArray(declaredKinds)
+      ? declaredKinds
+      : DEFAULT_TENANT_KINDS;
+
     // Resolved after the user, because auto-resolving a single-chapter user
     // requires knowing which memberships they hold.
     const resolved = explicitChapterId
       ? { chapterId: explicitChapterId }
-      : await this.resolveSoleChapter(appUser.id);
+      : await this.resolveSoleChapter(appUser.id, servedKinds);
     const chapterId = resolved.chapterId;
 
     // The auto-resolve path already read the membership row it selected the
@@ -523,10 +536,7 @@ export class ChapterGuard implements CanActivate {
       resolved.member ?? (await this.findMembership(appUser.id, chapterId));
 
     if (!member) {
-      throw new ForbiddenException({
-        code: 'chapter.context.invalid',
-        message: 'You are not a member of the requested chapter.',
-      });
+      throw notAMember();
     }
 
     const { data: chapter, error: chapterError } =
@@ -540,6 +550,14 @@ export class ChapterGuard implements CanActivate {
     }
     if (!chapter) {
       throw new ForbiddenException('Chapter not found');
+    }
+
+    // A tenant of a kind the route doesn't serve is refused as a non-member
+    // is, so a council's id sent to a chapter route (or the reverse) says
+    // nothing about what the id is, and before the subscription check, whose
+    // refusal would.
+    if (!servedKinds.includes(chapter.kind)) {
+      throw notAMember();
     }
 
     // Copies of the two shared lookups (`appUserLookups`, `chapterLookups`):
@@ -565,16 +583,26 @@ export class ChapterGuard implements CanActivate {
     return true;
   }
 
-  /** Rule 4 of `readRequestedChapter`: neither the claim nor the header. */
+  /**
+   * Rule 3 of `readRequestedChapter`: neither the header nor the claim.
+   *
+   * Counts only memberships in tenants of the kinds the route serves (#5933,
+   * from #5925's review): a member of one chapter and one council calling a
+   * chapter route is still a single-chapter member there, and a council's
+   * route resolves their one council. The kind check after it then always
+   * passes for a tenant chosen here.
+   */
   private async resolveSoleChapter(
     appUserId: string,
+    servedKinds: readonly TenantKind[],
   ): Promise<{ chapterId: string; member?: MemberContext }> {
-    // Two rows is all it takes to tell "exactly one" from "more than one".
+    // A person's memberships are a handful of rows, so all are read, then
+    // narrowed to the served kinds. Two reads, on the one path where the
+    // request named no tenant at all.
     const { data: memberships, error: membershipsError } = await this.supabase
       .from('members')
       .select('id, role_ids, chapter_id')
-      .eq('user_id', appUserId)
-      .limit(2);
+      .eq('user_id', appUserId);
 
     // Without this a failed read fell through to `chapter.context.required`,
     // a 400 telling a single-chapter member to pick a chapter they already have.
@@ -585,9 +613,33 @@ export class ChapterGuard implements CanActivate {
       );
     }
 
-    if (memberships?.length === 1) {
-      const sole = memberships[0] as MemberContext & { chapter_id: string };
-      return { chapterId: sole.chapter_id, member: sole };
+    const rows = (memberships ?? []) as (MemberContext & {
+      chapter_id: string;
+    })[];
+    if (rows.length > 0) {
+      // Two rows is all it takes to tell "exactly one" from "more than one".
+      const { data: served, error: servedError } = await this.supabase
+        .from('chapters')
+        .select('id')
+        .in(
+          'id',
+          rows.map((row) => row.chapter_id),
+        )
+        .in('kind', [...servedKinds])
+        .limit(2);
+      if (servedError) {
+        throw lookupUnavailable(
+          LOOKUP_FAILED,
+          new SupabaseQueryError(servedError),
+        );
+      }
+      if (served?.length === 1) {
+        const sole = rows.find((row) => row.chapter_id === served[0].id)!;
+        return {
+          chapterId: sole.chapter_id,
+          member: { id: sole.id, role_ids: sole.role_ids },
+        };
+      }
     }
 
     throw new BadRequestException({

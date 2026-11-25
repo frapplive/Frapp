@@ -1,3 +1,9 @@
+import { parseAiTextKeyRing, openAiText } from '#domain/utils/ai-text-cipher';
+import {
+  AiSuggestionChangeLogService,
+  aiSuggestionChangeContext,
+  type AiSuggestionChangeWords,
+} from './ai-suggestion-change-log.service';
 import {
   BadRequestException,
   ConflictException,
@@ -8,6 +14,7 @@ import type { AiSuggestion } from '#domain/entities/ai-suggestion.entity';
 import type {
   IAiSuggestionRepository,
   NewAiSuggestion,
+  NewAiSuggestionChange,
 } from '#domain/repositories/ai-suggestion.repository.interface';
 import {
   AI_SUGGESTION_LIST_LIMIT,
@@ -84,6 +91,9 @@ class FakeRepo implements IAiSuggestionRepository {
         const stored: AiSuggestion = {
           ...row,
           dedupe_key: row.dedupe_key ?? null,
+          ask_id: row.ask_id ?? null,
+          request_sealed: row.request_sealed ?? null,
+          drew_on_chat: row.drew_on_chat ?? false,
           id: `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`,
           chapter_id: chapterId,
           status: 'pending',
@@ -214,6 +224,25 @@ class FakeRepo implements IAiSuggestionRepository {
     if (row?.status === 'accepting') Object.assign(row, BACK_TO_WAITING);
   });
 
+  reopen = jest.fn(
+    async (
+      chapterId: string,
+      id: string,
+      words: { payload: Record<string, unknown>; quote: string | null },
+      now: string,
+    ) => {
+      const row = this.find(chapterId, id);
+      if (!row || row.status !== 'dismissed' || row.expires_at <= now) {
+        return false;
+      }
+      Object.assign(row, BACK_TO_WAITING, {
+        payload: words.payload,
+        quote: words.quote,
+      });
+      return true;
+    },
+  );
+
   releaseStale = jest.fn(async (before: string) => {
     const stale = this.rows.filter(
       (r) => r.status === 'accepting' && (r.decided_at ?? '') < before,
@@ -229,7 +258,38 @@ class FakeRepo implements IAiSuggestionRepository {
     for (const row of due) {
       Object.assign(row, NO_TEXT, { status: 'expired' });
     }
-    return due.map((r) => ({ chapter_id: r.chapter_id, kind: r.kind }));
+    return due.map((r) => ({
+      id: r.id,
+      chapter_id: r.chapter_id,
+      kind: r.kind,
+      source_type: r.source_type,
+      requested_for: r.requested_for,
+      ask_id: r.ask_id,
+    }));
+  });
+
+  changes: NewAiSuggestionChange[] = [];
+
+  recordChanges = jest.fn(async (rows: readonly NewAiSuggestionChange[]) => {
+    for (const row of rows) {
+      if (!this.changes.some((c) => c.suggestion_id === row.suggestion_id)) {
+        this.changes.push(row);
+      }
+    }
+  });
+
+  deleteChangesForUser = jest.fn(async (userId: string) => {
+    const before = this.changes.length;
+    this.changes = this.changes.filter(
+      (c) => c.decided_by !== userId && c.requested_for !== userId,
+    );
+    return before - this.changes.length;
+  });
+
+  deleteExpiredChanges = jest.fn(async (now: string) => {
+    const before = this.changes.length;
+    this.changes = this.changes.filter((c) => c.expires_at > now);
+    return before - this.changes.length;
   });
 
   dropQuotesBy = jest.fn(async (userId: string) => {
@@ -241,7 +301,12 @@ class FakeRepo implements IAiSuggestionRepository {
   });
 }
 
-const NO_TEXT = { payload: {}, quote: null, quote_author_id: null };
+const NO_TEXT = {
+  payload: {},
+  quote: null,
+  quote_author_id: null,
+  request_sealed: null,
+};
 const BACK_TO_WAITING = {
   status: 'pending' as const,
   decided_by: null,
@@ -254,6 +319,8 @@ function build(
     permissions?: Record<string, string[]>;
     openable?: string[];
     chapterModules?: Record<string, boolean>;
+    /** The change log, with this consent answer and key (Paul, 2026-11-22). */
+    changeLog?: { consent: 'yes' | 'no' | null | 'fails'; key: boolean };
   } = {},
 ) {
   const repo = new FakeRepo();
@@ -297,6 +364,26 @@ function build(
       enabled_modules: options.chapterModules ?? {},
     })),
   };
+  let changeLog: AiSuggestionChangeLogService | undefined;
+  if (options.changeLog) {
+    const answer = options.changeLog.consent;
+    changeLog = new AiSuggestionChangeLogService(
+      repo,
+      {
+        findByUserAndChapter: jest.fn(async (userId: string) => ({
+          id: `member-of-${userId}`,
+        })),
+      } as never,
+      {
+        getConsentState: jest.fn(async () => {
+          if (answer === 'fails') throw new Error('consent read failed');
+          return { answer };
+        }),
+      } as never,
+    );
+    const ring = options.changeLog.key ? TEST_KEY_RING : null;
+    changeLog.keyRing = () => ring;
+  }
   const service = new AiSuggestionService(
     repo,
     [new TaskSuggestionKind(tasks as never, {} as never)],
@@ -305,6 +392,7 @@ function build(
     notifications as never,
     analytics as never,
     chapters as never,
+    changeLog,
   );
   service.now = () => NOW;
   return {
@@ -347,6 +435,9 @@ async function proposeTen(service: AiSuggestionService) {
 }
 
 const enabledModules = null;
+const TEST_KEY_RING = parseAiTextKeyRing(
+  `test:${Buffer.alloc(32, 7).toString('base64')}`,
+);
 
 describe('AiSuggestionService (#4309)', () => {
   describe('proposeBatch', () => {
@@ -1029,6 +1120,210 @@ describe('AiSuggestionService (#4309)', () => {
     });
   });
 
+  describe('handleElsewhere (#5790)', () => {
+    function handling() {
+      const made: { id: string; text: string }[] = [];
+      return {
+        made,
+        options: {
+          reason: 'to_agenda' as const,
+          accepts: (row: AiSuggestion) => row.kind === 'task',
+          findMade: jest.fn(
+            async (row: AiSuggestion) =>
+              made.find((entry) => entry.id === `made-${row.id}`) ?? null,
+          ),
+          make: jest.fn(async (row: AiSuggestion) => {
+            const entry = {
+              id: `made-${row.id}`,
+              text: String(row.payload.title),
+            };
+            made.push(entry);
+            return entry;
+          }),
+          unmake: jest.fn(async (entry: { id: string }) => {
+            made.splice(
+              made.findIndex((m) => m.id === entry.id),
+              1,
+            );
+          }),
+        },
+      };
+    }
+
+    it('makes the thing from the text, then closes the suggestion as dismissed, not a task', async () => {
+      const { service, tasks, repo, analytics } = build();
+      const { created } = await proposeTen(service);
+      const { made, options } = handling();
+      const result = await service.handleElsewhere(
+        CHAPTER,
+        OFFICER,
+        created[0].id,
+        options,
+      );
+      expect(result).toEqual({ id: `made-${created[0].id}`, text: 'Task 1' });
+      expect(made).toHaveLength(1);
+      expect(tasks.create).not.toHaveBeenCalled();
+      expect(repo.rows[0]).toMatchObject({ status: 'dismissed', payload: {} });
+      expect(analytics.track).toHaveBeenCalledWith(
+        'ai-suggestion-dismissed',
+        OFFICER,
+        {
+          chapterId: CHAPTER,
+          properties: { kind: 'task', reason: 'to_agenda' },
+        },
+      );
+    });
+
+    it('answers a repeat with what was made, once', async () => {
+      const { service } = build();
+      const { created } = await proposeTen(service);
+      const { made, options } = handling();
+      await service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options);
+      const again = await service.handleElsewhere(
+        CHAPTER,
+        OFFICER,
+        created[0].id,
+        options,
+      );
+      expect(again.id).toBe(`made-${created[0].id}`);
+      expect(made).toHaveLength(1);
+      expect(options.make).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a suggestion already made a task, and makes nothing', async () => {
+      const { service } = build();
+      const { created } = await proposeTen(service);
+      await service.accept(CHAPTER, OFFICER, created[0].id, { enabledModules });
+      const { made, options } = handling();
+      await expect(
+        service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options),
+      ).rejects.toMatchObject({
+        response: { code: 'ai.suggestion.decided' },
+      });
+      expect(made).toHaveLength(0);
+    });
+
+    it('takes back what it made when an accept wins the race', async () => {
+      const { service, repo } = build();
+      const { created } = await proposeTen(service);
+      const { made, options } = handling();
+      repo.claim.mockImplementationOnce(async (_c, id) => {
+        const row = repo.rows.find((r) => r.id === id)!;
+        Object.assign(row, { status: 'accepting', decided_by: MEMBER });
+        return null;
+      });
+      await expect(
+        service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options),
+      ).rejects.toMatchObject({
+        response: { code: 'ai.suggestion.accepting' },
+      });
+      expect(options.unmake).toHaveBeenCalledTimes(1);
+      expect(made).toHaveLength(0);
+    });
+
+    it('undoes: puts the suggestion back with its words, then takes back what was made', async () => {
+      const { service, repo } = build();
+      const { created } = await proposeTen(service);
+      const { made, options } = handling();
+      await service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options);
+      await service.undoHandled(CHAPTER, OFFICER, created[0].id, {
+        findMade: options.findMade,
+        mayUndo: async () => undefined,
+        wordsOf: () => ({ payload: { title: 'Task 1' }, quote: 'Task 1' }),
+        unmake: options.unmake,
+      });
+      expect(repo.rows[0]).toMatchObject({
+        status: 'pending',
+        payload: { title: 'Task 1' },
+        quote: 'Task 1',
+        decided_by: null,
+      });
+      expect(made).toHaveLength(0);
+      // A second Undo finds it waiting and changes nothing.
+      await service.undoHandled(CHAPTER, OFFICER, created[0].id, {
+        findMade: options.findMade,
+        mayUndo: async () => undefined,
+        wordsOf: () => ({ payload: {}, quote: null }),
+        unmake: options.unmake,
+      });
+      expect(options.unmake).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers a repeat even though the decided row has no text left to check', async () => {
+      const { service } = build();
+      const { created } = await proposeTen(service);
+      const { options } = handling();
+      // As the real caller does: it can only judge a row that still has text.
+      const needsText = {
+        ...options,
+        accepts: (row: AiSuggestion) => typeof row.payload.title === 'string',
+      };
+      await service.handleElsewhere(CHAPTER, OFFICER, created[0].id, needsText);
+      const again = await service.handleElsewhere(
+        CHAPTER,
+        OFFICER,
+        created[0].id,
+        needsText,
+      );
+      expect(again.id).toBe(`made-${created[0].id}`);
+    });
+
+    it('closes the suggestion again when taking the thing back fails', async () => {
+      const { service, repo } = build();
+      const { created } = await proposeTen(service);
+      const { options } = handling();
+      await service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options);
+      await expect(
+        service.undoHandled(CHAPTER, OFFICER, created[0].id, {
+          findMade: options.findMade,
+          mayUndo: async () => undefined,
+          wordsOf: () => ({ payload: { title: 'Task 1' }, quote: null }),
+          unmake: async () => {
+            throw new Error('db down');
+          },
+        }),
+      ).rejects.toThrow('db down');
+      expect(repo.rows[0].status).toBe('dismissed');
+    });
+
+    it('refuses Undo once the kept words are gone, leaving everything as it was', async () => {
+      const { service, repo } = build();
+      const { created } = await proposeTen(service);
+      const { made, options } = handling();
+      await service.handleElsewhere(CHAPTER, OFFICER, created[0].id, options);
+      await expect(
+        service.undoHandled(CHAPTER, OFFICER, created[0].id, {
+          findMade: options.findMade,
+          mayUndo: async () => undefined,
+          wordsOf: () => null,
+          unmake: options.unmake,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'ai.suggestion.decided' } });
+      expect(repo.rows[0].status).toBe('dismissed');
+      expect(made).toHaveLength(1);
+    });
+
+    it('refuses a kind it can’t handle, and a member who may not decide it', async () => {
+      const { service } = build();
+      const { created } = await proposeTen(service);
+      const { options } = handling();
+      await expect(
+        service.handleElsewhere(CHAPTER, OFFICER, created[0].id, {
+          ...options,
+          accepts: () => false,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'ai.suggestion.not_handled_here' },
+      });
+      await expect(
+        service.handleElsewhere(CHAPTER, MEMBER, created[0].id, options),
+      ).rejects.toMatchObject({
+        response: { code: 'ai.suggestion.forbidden' },
+      });
+      expect(options.make).not.toHaveBeenCalled();
+    });
+  });
+
   describe('expireDue', () => {
     it('expires what nobody decided, empties its text, and counts it without text', async () => {
       const { service, repo, analytics } = build();
@@ -1126,7 +1421,7 @@ describe("a member's own request as a source (#718)", () => {
       chapterId: CHAPTER,
       batchId: `${userId.slice(0, 8)}-0000-4000-8000-${String(title.length).padStart(12, '0')}`,
       requestedFor: userId,
-      source: { type: 'request', id: userId, title: 'Ask Frapp' },
+      source: { type: 'request', id: userId, title: 'Frapp Intelligence' },
       proposals: [taskProposal(title)],
       notify: [],
       expiresWithinDays: 1,
@@ -1200,5 +1495,226 @@ describe('verifiedQuote', () => {
     expect(verifiedQuote('', NOTES)).toBeNull();
     expect(verifiedQuote('book the venue', null)).toBeNull();
     expect(verifiedQuote('x'.repeat(1001), 'x'.repeat(2000))).toBeNull();
+  });
+});
+
+describe('AiSuggestionService change log (Paul, 2026-11-22)', () => {
+  async function proposeOne(
+    service: AiSuggestionService,
+    request: string | null = 'make a task to book the venue',
+  ) {
+    const { created } = await service.proposeBatch({
+      chapterId: CHAPTER,
+      batchId: BATCH,
+      requestedFor: OFFICER,
+      askId: '99999999-9999-4999-8999-999999999999',
+      request,
+      source: { type: 'meeting', id: MEETING, title: 'Chapter meeting' },
+      proposals: [
+        taskProposal('Book the venue', { description: 'Call the hall' }),
+      ],
+    });
+    return created[0];
+  }
+
+  it('logs, field by field, what the officer changed, linked to the Ask turn', async () => {
+    const { service, repo, analytics } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    expect(suggestion.request_sealed).toMatch(/^v1\.test\./);
+
+    await service.accept(CHAPTER, OFFICER, suggestion.id, {
+      edits: {
+        kind: 'task',
+        fields: { title: 'Book the venue by Friday', due_date: '2026-11-16' },
+      },
+      enabledModules,
+    });
+
+    expect(repo.changes).toHaveLength(1);
+    const change = repo.changes[0];
+    expect(change).toMatchObject({
+      suggestion_id: suggestion.id,
+      chapter_id: CHAPTER,
+      decided_by: OFFICER,
+      member_id: `member-of-${OFFICER}`,
+      ask_id: '99999999-9999-4999-8999-999999999999',
+      decision: 'accepted',
+      via: 'card',
+    });
+    expect(change.fields).toMatchObject({
+      title: { verdict: 'changed' },
+      description: { verdict: 'kept' },
+      assignee_ids: {
+        verdict: 'kept',
+        proposed: [ASSIGNEE],
+        saved: [ASSIGNEE],
+      },
+      due_date: { verdict: 'changed', delta_minutes: 2 * 24 * 60 },
+    });
+    // No words outside the sealed column.
+    expect(JSON.stringify(change.fields)).not.toContain('venue');
+
+    const words = JSON.parse(
+      openAiText(
+        TEST_KEY_RING,
+        change.words_sealed!,
+        aiSuggestionChangeContext(suggestion.id),
+      ),
+    ) as AiSuggestionChangeWords;
+    expect(words).toEqual({
+      request: 'make a task to book the venue',
+      proposed: expect.objectContaining({
+        title: 'Book the venue',
+        description: 'Call the hall',
+      }),
+      saved: expect.objectContaining({
+        title: 'Book the venue by Friday',
+        description: 'Call the hall',
+      }),
+    });
+
+    expect(analytics.track).toHaveBeenCalledWith(
+      'ai-suggestion-accepted',
+      OFFICER,
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          changed_fields: 'title,due_date',
+          changed_field_count: 2,
+        }),
+      }),
+    );
+  });
+
+  it('keeps no words for a decider who has not said yes to Frapp Intelligence', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: null, key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules });
+    expect(repo.changes[0].words_sealed).toBeNull();
+    expect(repo.changes[0].fields).toMatchObject({
+      title: { verdict: 'kept' },
+    });
+  });
+
+  it('keeps no words, and seals no question, without a key', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: false },
+    });
+    const suggestion = await proposeOne(service);
+    expect(suggestion.request_sealed).toBeNull();
+    await service.dismiss(CHAPTER, OFFICER, suggestion.id);
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'dismissed',
+      via: null,
+      fields: {},
+      words_sealed: null,
+    });
+  });
+
+  it('logs a dismissal with the proposal sealed, and empties the question on the card', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.dismiss(CHAPTER, OFFICER, suggestion.id);
+    const stored = repo.rows.find((r) => r.id === suggestion.id)!;
+    expect(stored.request_sealed).toBeNull();
+    const words = JSON.parse(
+      openAiText(
+        TEST_KEY_RING,
+        repo.changes[0].words_sealed!,
+        aiSuggestionChangeContext(suggestion.id),
+      ),
+    ) as AiSuggestionChangeWords;
+    expect(words.saved).toEqual({});
+    expect(words.proposed.title).toBe('Book the venue');
+  });
+
+  it('logs an expired suggestion, and forgets change logs after 90 days', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    service.now = () => new Date(NOW.getTime() + 30 * 24 * 60 * 60 * 1000);
+    await service.expireDue();
+    expect(repo.changes[0]).toMatchObject({
+      suggestion_id: suggestion.id,
+      decision: 'expired',
+      decided_by: null,
+    });
+    service.now = () => new Date(NOW.getTime() + 200 * 24 * 60 * 60 * 1000);
+    expect(await service.deleteExpiredChanges()).toBe(1);
+  });
+
+  it('seals neither the question nor the words of a card drawn from chat', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const { created } = await service.proposeBatch({
+      chapterId: CHAPTER,
+      batchId: BATCH,
+      requestedFor: OFFICER,
+      request: 'make a task from what Sam said',
+      drewOnChat: true,
+      source: { type: 'meeting', id: MEETING, title: 'Chapter meeting' },
+      proposals: [taskProposal('Book the venue')],
+    });
+    expect(created[0]).toMatchObject({
+      request_sealed: null,
+      drew_on_chat: true,
+    });
+    await service.dismiss(CHAPTER, OFFICER, created[0].id);
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'dismissed',
+      words_sealed: null,
+    });
+  });
+
+  it('logs a suggestion sent to the agenda as dismissed', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.handleElsewhere(CHAPTER, OFFICER, suggestion.id, {
+      reason: 'to_agenda',
+      accepts: () => true,
+      findMade: async () => null,
+      make: async () => ({ id: 'item' }),
+      unmake: async () => undefined,
+    });
+    expect(repo.changes).toEqual([
+      expect.objectContaining({
+        suggestion_id: suggestion.id,
+        decision: 'dismissed',
+        decided_by: OFFICER,
+      }),
+    ]);
+  });
+
+  it('keeps the changes when the words cannot be sealed', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'fails', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules });
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'accepted',
+      words_sealed: null,
+      fields: expect.objectContaining({ title: { verdict: 'kept' } }),
+    });
+  });
+
+  it('never fails an accept when the log cannot be written', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    repo.recordChanges.mockRejectedValueOnce(new Error('db down'));
+    const suggestion = await proposeOne(service);
+    await expect(
+      service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules }),
+    ).resolves.toMatchObject({ result: { kind: 'task' } });
   });
 });

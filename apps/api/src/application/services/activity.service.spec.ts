@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import * as caughtFailure from '../../infrastructure/observability/report-caught-failure';
 import { ActivityService } from './activity.service';
 import type { ActivityLink } from './activity-link.service';
-import type { AssignedTaskItem, TaskListOptions } from './task.service';
+import type { AssignedTaskItem, TaskRowListOptions } from './task.service';
 import { TaskStatus } from '#domain/entities/task.entity';
 import type { TaskView } from '#domain/entities/task.entity';
 import type { ChatMessage } from '#domain/entities/chat.entity';
@@ -37,6 +37,7 @@ const task = (overrides: Partial<TaskView>): TaskView => ({
   point_reward: 5,
   points_awarded: false,
   completed_at: null,
+  completed_by: null,
   confirmed_at: null,
   sent_back_at: null,
   proof_kind: 'none',
@@ -48,6 +49,7 @@ const task = (overrides: Partial<TaskView>): TaskView => ({
   group_id: null,
   meeting_id: null,
   followed_by: null,
+  attachments: [],
   created_at: iso(-48 * HOUR),
   ...overrides,
 });
@@ -94,8 +96,14 @@ const event = (overrides: Partial<Event>): Event =>
 
 function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const taskService = {
-    list: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
+    listRows: jest.fn().mockResolvedValue({ tasks: [], total: 0 }),
+    // As `TaskService.withGroupSummaries` gives them: a fixture's group, or
+    // null for a one-person task.
+    withGroupSummaries: jest.fn((_chapterId: string, tasks: TaskView[]) =>
+      Promise.resolve(
+        tasks.map((row) => ({ ...row, group: row.group ?? null })),
+      ),
+    ),
     listAssignedItems: jest.fn().mockResolvedValue([]),
   };
   const serviceEntryService = {
@@ -179,6 +187,12 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     snooze: jest.fn().mockResolvedValue(undefined),
     unsnooze: jest.fn().mockResolvedValue(undefined),
   };
+  // Minutes rows (#5949): nothing waits unless a test says so.
+  const minutesService = {
+    listFor: jest
+      .fn()
+      .mockResolvedValue({ to_write: [], drafts: [], taking_notes: [] }),
+  };
   const service = new ActivityService(
     taskService as never,
     serviceEntryService as never,
@@ -196,9 +210,11 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     readRepo,
     formResponseRepo as never,
     channelAccess as never,
+    minutesService as never,
   );
   return {
     service,
+    minutesService,
     channelAccess,
     readRepo,
     formResponseRepo,
@@ -298,11 +314,11 @@ const formCard = (
  * separately, each narrowed as the repository narrows it in SQL (#4037).
  */
 function serveTasks(
-  taskService: { list: jest.Mock; count: jest.Mock },
+  taskService: { listRows: jest.Mock },
   own: TaskView[],
   all: TaskView[] = [],
 ) {
-  const matching = (isAdmin: boolean, options: TaskListOptions) =>
+  const matching = (isAdmin: boolean, options: TaskRowListOptions) =>
     (isAdmin ? all : own).filter(
       (row) =>
         (options.status === undefined ||
@@ -315,14 +331,18 @@ function serveTasks(
           row.assignee_id !== options.notAssigneeId) &&
         (options.completedSince === undefined ||
           (row.completed_at !== null &&
-            row.completed_at >= options.completedSince)),
+            row.completed_at >= options.completedSince)) &&
+        (options.unconfirmedOrCompletedSince === undefined ||
+          row.confirmed_at === null ||
+          (row.completed_at !== null &&
+            row.completed_at >= options.unconfirmedOrCompletedSince)),
     );
-  taskService.list.mockImplementation(
+  taskService.listRows.mockImplementation(
     (
       _chapterId: string,
       _userId: string,
       isAdmin: boolean,
-      options: TaskListOptions = {},
+      options: TaskRowListOptions = {},
     ) => {
       const rows = matching(isAdmin, options);
       if (options.order === 'longest_waiting') {
@@ -330,16 +350,11 @@ function serveTasks(
           (a.completed_at ?? '').localeCompare(b.completed_at ?? ''),
         );
       }
-      return Promise.resolve(rows.slice(0, options.limit ?? rows.length));
+      return Promise.resolve({
+        tasks: rows.slice(0, options.limit ?? rows.length),
+        total: rows.length,
+      });
     },
-  );
-  taskService.count.mockImplementation(
-    (
-      _chapterId: string,
-      _userId: string,
-      isAdmin: boolean,
-      options: TaskListOptions = {},
-    ) => Promise.resolve(matching(isAdmin, options).length),
   );
 }
 
@@ -672,7 +687,6 @@ describe('ActivityService', () => {
         senderId: ME,
         limit: 100,
       });
-      expect(view.made_by_you.files).toEqual([]);
     });
 
     it('reads no polls while the Polls module is off', async () => {
@@ -937,9 +951,10 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      expect(taskService.list).toHaveBeenCalledTimes(1);
-      expect(taskService.list).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        confirmed: false,
+      // One read: their tasks not yet confirmed, with this week's done ones.
+      expect(taskService.listRows).toHaveBeenCalledTimes(1);
+      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
+        unconfirmedOrCompletedSince: WEEK_START,
       });
       expect(view.needs_you.tasks.map((row) => row.id)).toEqual([
         'sooner',
@@ -1019,29 +1034,22 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      // Two filtered reads, never the chapter's whole history (#4037).
-      const waiting = {
+      // Two filtered reads, never the chapter's whole history (#4037); the
+      // waiting ones counted by the same read (#5746).
+      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
         status: TaskStatus.COMPLETED,
         confirmed: false,
         notAssigneeId: ME,
-      };
-      expect(taskService.list).toHaveBeenCalledWith(CHAPTER, ME, true, {
-        ...waiting,
         order: 'longest_waiting',
         limit: 25,
+        withTotal: true,
       });
-      expect(taskService.count).toHaveBeenCalledWith(
-        CHAPTER,
-        ME,
-        true,
-        waiting,
-      );
-      expect(taskService.list).toHaveBeenCalledWith(CHAPTER, ME, true, {
+      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
         createdBy: ME,
         limit: 25,
       });
       // Every chapter-wide read is narrowed and capped.
-      for (const [, , isAdmin, options] of taskService.list.mock.calls) {
+      for (const [, , isAdmin, options] of taskService.listRows.mock.calls) {
         if (isAdmin) expect(options).toHaveProperty('limit', 25);
       }
       expect(view.needs_you.task_confirmations.map((row) => row.id)).toEqual([
@@ -1101,7 +1109,7 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, { tasks: false });
 
-      expect(taskService.list).not.toHaveBeenCalled();
+      expect(taskService.listRows).not.toHaveBeenCalled();
       expect(taskService.listAssignedItems).not.toHaveBeenCalled();
       expect(view.made_by_you.task_items).toEqual([]);
     });
@@ -2414,7 +2422,7 @@ describe('ActivityService', () => {
 
   it('serves the other sections when one fails, and names the one that did', async () => {
     const { service, taskService, messageRepo } = build();
-    taskService.list.mockRejectedValue(new Error('db down'));
+    taskService.listRows.mockRejectedValue(new Error('db down'));
     servePolls(messageRepo, [pollCard({ id: 'poll-1' })]);
 
     const view = await service.getActivity(CHAPTER, ME, null);
@@ -2453,9 +2461,12 @@ describe('ActivityService', () => {
 
   it('caps each list at 25 rows and counts what waits before the cap', async () => {
     const { service, taskService } = build();
-    taskService.list.mockResolvedValue(
-      Array.from({ length: 30 }, (_, index) => task({ id: `task-${index}` })),
-    );
+    taskService.listRows.mockResolvedValue({
+      tasks: Array.from({ length: 30 }, (_, index) =>
+        task({ id: `task-${index}` }),
+      ),
+      total: 30,
+    });
 
     const view = await service.getActivity(CHAPTER, ME, null);
 
@@ -2500,9 +2511,8 @@ describe('ActivityService', () => {
 
       expect(named.week.start).toBe('2026-11-08T05:00:00.000Z');
       expect(named.week.end).toBe('2026-11-15T05:00:00.000Z');
-      expect(taskService.count).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        status: TaskStatus.COMPLETED,
-        completedSince: '2026-11-08T05:00:00.000Z',
+      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
+        unconfirmedOrCompletedSince: '2026-11-08T05:00:00.000Z',
       });
       expect(wide.week.start).toBe(WEEK_START);
     });
@@ -2822,7 +2832,7 @@ describe('ActivityService', () => {
 
     it('serves a part that failed null and names it, so it never reads as zero', async () => {
       const { service, taskService, eventService, attendanceRepo } = build();
-      taskService.count.mockRejectedValue(new Error('boom'));
+      taskService.listRows.mockRejectedValue(new Error('boom'));
       eventService.findByChapter.mockResolvedValue([
         event({ id: 'e', start_time: iso(HOUR), end_time: iso(2 * HOUR) }),
       ]);
@@ -3201,6 +3211,278 @@ describe('ActivityService', () => {
     });
   });
 
+  describe('minutes (#5949)', () => {
+    const toWrite = (id: string) => ({
+      event_id: id,
+      name: 'Chapter meeting',
+      start_time: iso(-48 * HOUR),
+      end_time: iso(-47 * HOUR),
+    });
+    const draft = (id: string) => ({
+      meeting_id: id,
+      event_id: `event-${id}`,
+      name: 'Exec meeting',
+      event_start_time: iso(-24 * HOUR),
+      started: true,
+      recording_by: null,
+      recording_by_name: null,
+    });
+    const taking = (id: string, joined: boolean) => ({
+      meeting_id: id,
+      event_id: `event-${id}`,
+      name: 'Recruitment Committee',
+      event_start_time: iso(-24 * HOUR),
+      author_name: 'Other Member',
+      joined,
+      added: true,
+    });
+
+    it('serves the minutes rows and counts what asks something', async () => {
+      const { service, minutesService } = build([
+        SystemPermissions.MEMBERS_VIEW,
+        SystemPermissions.MEETINGS_RECORD,
+      ]);
+      minutesService.listFor.mockResolvedValue({
+        to_write: [toWrite('a'), toWrite('b')],
+        drafts: [draft('m1')],
+        // One the member was added to and hasn't started, one they're in.
+        taking_notes: [taking('m2', false), taking('m3', true)],
+      });
+
+      const view = await service.getActivity(CHAPTER, ME, null, {
+        now: NOW,
+        minutes: true,
+      });
+
+      expect(minutesService.listFor).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        [SystemPermissions.MEMBERS_VIEW, SystemPermissions.MEETINGS_RECORD],
+        NOW.getTime(),
+      );
+      expect(view.minutes.to_write.map((row) => row.event_id)).toEqual([
+        'a',
+        'b',
+      ]);
+      expect(view.minutes.drafts).toHaveLength(1);
+      expect(view.minutes.taking_notes).toHaveLength(2);
+      // Two to write, one draft, one note-taking ask; notes already being
+      // taken are the member's own.
+      expect(view.needs_you_count).toBe(4);
+      expect(view.unavailable).toEqual([]);
+    });
+
+    it('serves and counts no minutes rows to a build that does not draw them', async () => {
+      const { service, minutesService } = build([
+        SystemPermissions.MEETINGS_RECORD,
+      ]);
+      minutesService.listFor.mockResolvedValue({
+        to_write: [toWrite('a')],
+        drafts: [],
+        taking_notes: [],
+      });
+
+      const view = await service.getActivity(CHAPTER, ME, null, { now: NOW });
+
+      expect(minutesService.listFor).not.toHaveBeenCalled();
+      expect(view.minutes.to_write).toEqual([]);
+      expect(view.needs_you_count).toBe(0);
+    });
+
+    it('reads nothing while the chapter has Meetings off', async () => {
+      const { service, minutesService } = build();
+
+      const view = await service.getActivity(
+        CHAPTER,
+        ME,
+        { meetings: false },
+        { minutes: true },
+      );
+
+      expect(minutesService.listFor).not.toHaveBeenCalled();
+      expect(view.minutes).toEqual({
+        to_write: [],
+        drafts: [],
+        taking_notes: [],
+      });
+    });
+
+    it('serves no minutes rows, and says so, when their read fails', async () => {
+      const { service, minutesService } = build();
+      minutesService.listFor.mockRejectedValue(new Error('db down'));
+
+      const view = await service.getActivity(CHAPTER, ME, null, {
+        minutes: true,
+      });
+
+      expect(view.minutes).toEqual({
+        to_write: [],
+        drafts: [],
+        taking_notes: [],
+      });
+      expect(view.unavailable).toEqual(['minutes']);
+      expect(view.needs_you_count).toBe(0);
+    });
+  });
+
+  describe('now (#5777)', () => {
+    const on = (overrides: Partial<Event> = {}) =>
+      event({
+        id: 'on',
+        start_time: iso(-HOUR / 2),
+        end_time: iso(HOUR / 2),
+        ...overrides,
+      });
+
+    it('reads only events whose check-in could have opened and that have not ended', async () => {
+      const { service, eventService } = build();
+
+      await service.getNow(CHAPTER, ME, null);
+
+      expect(eventService.findByChapter).toHaveBeenCalledWith(CHAPTER, ME, {
+        endsAfter: iso(0),
+        startsBefore: iso(2 * HOUR),
+      });
+    });
+
+    it('keeps an event on after the caller checked in, which Activity counted as done', async () => {
+      const { service, eventService, attendanceRepo } = build();
+      eventService.findByChapter.mockResolvedValue([on()]);
+      attendanceRepo.findByUserForEvents.mockResolvedValue([
+        {
+          event_id: 'on',
+          user_id: ME,
+          status: 'PRESENT',
+          check_in_time: iso(-HOUR / 2),
+        },
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events).toEqual([
+        expect.objectContaining({
+          id: 'on',
+          checked_in: true,
+          checked_in_at: iso(-HOUR / 2),
+        }),
+      ]);
+      // One read of the member's rows, none per event.
+      expect(attendanceRepo.findByEventAndUser).not.toHaveBeenCalled();
+    });
+
+    it('is on from when check-in opens, and off at the end', async () => {
+      const { service, eventService } = build();
+      eventService.findByChapter.mockResolvedValue([
+        // Check-in opened 5 minutes ago (10 before a start 5 minutes ahead).
+        on({ id: 'opening', start_time: iso(HOUR / 12), end_time: iso(HOUR) }),
+        // Starts in 20 minutes: check-in hasn't opened.
+        on({ id: 'later', start_time: iso(HOUR / 3), end_time: iso(HOUR) }),
+        // Ended a minute ago, inside the check-in grace.
+        on({ id: 'ended', start_time: iso(-HOUR), end_time: iso(-HOUR / 60) }),
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events.map((row) => row.id)).toEqual(['opening']);
+    });
+
+    it('shows an optional event only to who checked in or made it', async () => {
+      const { service, eventService, attendanceRepo } = build();
+      eventService.findByChapter.mockResolvedValue([
+        on({ id: 'skipped', is_mandatory: false }),
+        on({ id: 'attended', is_mandatory: false }),
+        on({ id: 'mine', is_mandatory: false, created_by: ME }),
+      ]);
+      attendanceRepo.findByUserForEvents.mockResolvedValue([
+        { event_id: 'attended', user_id: ME, status: 'LATE' },
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events.map((row) => row.id).sort()).toEqual([
+        'attended',
+        'mine',
+      ]);
+    });
+
+    it('shows every event on to an officer who runs events', async () => {
+      const { service, eventService } = build([
+        SystemPermissions.MEMBERS_VIEW,
+        SystemPermissions.EVENTS_UPDATE,
+      ]);
+      eventService.findByChapter.mockResolvedValue([
+        on({ id: 'optional', is_mandatory: false }),
+        // Invites only another role: the officer is asked where it is anyway.
+        on({
+          id: 'committee',
+          is_mandatory: false,
+          optional_role_ids: ['role-other'],
+          others_invited: false,
+        }),
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events.map((row) => row.id).sort()).toEqual([
+        'committee',
+        'optional',
+      ]);
+      expect(
+        now.events.find((row) => row.id === 'committee')?.check_in_open,
+      ).toBe(false);
+    });
+
+    it('leaves out an event the caller is excused from, and one that leaves them out', async () => {
+      const { service, eventService, attendanceRepo } = build();
+      eventService.findByChapter.mockResolvedValue([
+        on({ id: 'excused' }),
+        on({
+          id: 'not-mine',
+          is_mandatory: false,
+          optional_role_ids: ['role-other'],
+          others_invited: false,
+        }),
+      ]);
+      attendanceRepo.findByUserForEvents.mockResolvedValue([
+        { event_id: 'excused', user_id: ME, status: 'EXCUSED' },
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events).toEqual([]);
+    });
+
+    it('puts the one the caller checked in to first, then the latest start', async () => {
+      const { service, eventService, attendanceRepo } = build();
+      eventService.findByChapter.mockResolvedValue([
+        on({ id: 'early', start_time: iso(-HOUR) }),
+        on({ id: 'late', start_time: iso(-HOUR / 4) }),
+        on({ id: 'here', start_time: iso(-2 * HOUR) }),
+      ]);
+      attendanceRepo.findByUserForEvents.mockResolvedValue([
+        { event_id: 'here', user_id: ME, status: 'PRESENT' },
+      ]);
+
+      const now = await service.getNow(CHAPTER, ME, null);
+
+      expect(now.events.map((row) => row.id)).toEqual([
+        'here',
+        'late',
+        'early',
+      ]);
+    });
+
+    it('reads nothing while the Events module is off', async () => {
+      const { service, eventService } = build();
+      eventService.findByChapter.mockResolvedValue([on()]);
+
+      const now = await service.getNow(CHAPTER, ME, { events: false });
+
+      expect(eventService.findByChapter).not.toHaveBeenCalled();
+      expect(now.events).toEqual([]);
+    });
+  });
+
   describe('archive (#5127)', () => {
     it('serves events that invited the caller once their check-in has closed, newest first, with whether they checked in', async () => {
       const { service, eventService, attendanceRepo } = build();
@@ -3348,7 +3630,7 @@ describe('ActivityService', () => {
       const archive = await service.getArchive(CHAPTER, ME, null);
 
       expect(archive.tasks).toEqual([]);
-      for (const [, , isAdmin] of taskService.list.mock.calls) {
+      for (const [, , isAdmin] of taskService.listRows.mock.calls) {
         expect(isAdmin).toBe(false);
       }
     });
@@ -3485,7 +3767,7 @@ describe('ActivityService', () => {
         polls: false,
       });
 
-      expect(taskService.list).not.toHaveBeenCalled();
+      expect(taskService.listRows).not.toHaveBeenCalled();
       expect(messageRepo.findCardsByChapter).not.toHaveBeenCalled();
       expect(archive).toEqual({
         events: [],

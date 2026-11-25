@@ -117,8 +117,6 @@ describe("isNavItemVisible", () => {
       requireAnyOf: ["backwork:upload", "backwork:admin"],
     };
     expect(isNavItemVisible(anyOfItem, undefined, () => true)).toBe(false);
-    const showWhenItem: NavItem = { ...coreItem, showWhen: () => true };
-    expect(isNavItemVisible(showWhenItem, undefined)).toBe(false);
   });
 
   it("shows a gated row when the offline dashboard can't ask (null)", async () => {
@@ -140,10 +138,10 @@ describe("isNavItemVisible", () => {
     expect(isNavItemVisible(moduleItem, undefined, undefined)).toBe(true);
   });
 
-  it("hides the real Directory and Chapter settings rows until permissions resolve", async () => {
+  it("hides the real Directory row until permissions resolve", async () => {
     const { isNavItemVisible } = await import("./protected-nav-item");
     const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
-    for (const id of ["members", "settings", "backwork"]) {
+    for (const id of ["members"]) {
       const row = DASHBOARD_NAV_ITEMS.find((item) => item.id === id);
       expect(row, id).toBeDefined();
       expect(
@@ -155,6 +153,45 @@ describe("isNavItemVisible", () => {
         id,
       ).toBe(true);
     }
+  });
+
+  // #2956: a row over several views shows while the viewer can open one,
+  // and opens the first they can.
+  it("shows a row with views while the viewer can open one, and opens the first they can", async () => {
+    const { isNavItemVisible, navItemTarget } = await import(
+      "./protected-nav-item"
+    );
+    const item = {
+      ...coreItem,
+      href: "/documents",
+      views: [
+        { href: "/documents", anyModule: ["documents", "meetings"] },
+        {
+          href: "/backwork",
+          anyModule: ["backwork"],
+          requireAnyOf: ["backwork:upload", "backwork:admin"],
+        },
+      ],
+    };
+    const onlyBackwork = (key: string) => key === "backwork";
+    // Only Backwork on: shown to a member who can browse it, and it opens
+    // Backwork; hidden from one who can't.
+    expect(isNavItemVisible(item, ["backwork:upload"], onlyBackwork)).toBe(
+      true,
+    );
+    expect(navItemTarget(item, ["backwork:upload"], onlyBackwork)).toBe(
+      "/backwork",
+    );
+    expect(isNavItemVisible(item, [], onlyBackwork)).toBe(false);
+    // Nothing on: hidden.
+    expect(isNavItemVisible(item, ["*"], () => false)).toBe(false);
+    // Documents on: shown to everyone, and it opens Documents.
+    expect(isNavItemVisible(item, [], () => true)).toBe(true);
+    expect(navItemTarget(item, [], () => true)).toBe("/documents");
+    // A module gate not answered yet hides nothing ungated; a gated view
+    // waits for permissions.
+    expect(isNavItemVisible(item, [], undefined)).toBe(true);
+    expect(navItemTarget(item, undefined, onlyBackwork)).toBe("/documents");
   });
 
   it("renders nothing, so nothing is clickable, while permissions are unresolved", () => {
@@ -199,44 +236,54 @@ describe("isNavItemVisible", () => {
   });
 });
 
-// The restructure's whole point is that a member sees a short list of things
-// they can actually open. These pin the shape rather than the wording.
-describe("DASHBOARD_NAV structure", () => {
-  it("has no officer-only section: officer setup and tools sit behind one Settings row", async () => {
-    const { DASHBOARD_NAV } = await import("./nav-config");
+// The sidebar's whole point is that every member sees the same short list of
+// homes (#5946). These pin the shape rather than the wording.
+describe("the sidebar's rows (#5946)", () => {
+  it("are the five homes, in order, after New and Search", async () => {
+    const { SIDEBAR_ROWS } = await import("./nav-config");
+    expect(SIDEBAR_ROWS.map((item) => item.label)).toEqual([
+      "Activity",
+      "Messages",
+      "Calendar",
+      "Resources",
+      // A council's row only (#5974); a chapter's sidebar never draws it.
+      "Chapters",
+      "Directory",
+    ]);
+  });
+
+  it("show a member every one of them but Directory's permission and Resources' setup gate", async () => {
+    const { SIDEBAR_ROWS } = await import("./nav-config");
     const { isNavItemVisible } = await import("./protected-nav-item");
-    const { SETTINGS_ENTRY_PERMISSIONS, SETTINGS_TOOLS } =
+    const memberRows = SIDEBAR_ROWS.filter((item) =>
+      isNavItemVisible(item, ["members:view"], () => true),
+    );
+    expect(memberRows.map((item) => item.id)).toEqual(
+      SIDEBAR_ROWS.filter((item) => item.id !== "chapters").map(
+        (item) => item.id,
+      ),
+    );
+  });
+
+  it("hold no Chapter settings row and no officer tool: those open from the member's menu", async () => {
+    const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
+    const { SETTINGS_TOOLS } =
       await import("@/components/settings/settings-access");
-
-    // The six-row Admin group is what pushed a President's nav past a 768px
-    // window (#2946). A section whose every row is officer-gated is that group
-    // coming back.
-    for (const section of DASHBOARD_NAV) {
-      const memberRows = section.items.filter((item) =>
-        isNavItemVisible(item, ["members:view"]),
-      );
-      expect(memberRows.length, section.id).toBeGreaterThan(0);
-    }
-
-    const items = DASHBOARD_NAV.flatMap((section) => section.items);
-    const settings = items.find((item) => item.id === "settings");
-    expect(settings?.requireAnyOf).toEqual(SETTINGS_ENTRY_PERMISSIONS);
-    expect(isNavItemVisible(settings!, ["members:view"])).toBe(false);
-    // Every officer tool opens inside Chapter settings (#3837), and none of
-    // them is a row of its own.
+    const items = DASHBOARD_NAV_ITEMS;
+    // One door into Chapter settings (Paul, 2026-11-19), at the sidebar's foot.
+    expect(items.some((item) => item.href.startsWith("/settings"))).toBe(false);
+    // Every officer tool opens inside Chapter settings (#3837).
     for (const tool of SETTINGS_TOOLS) {
-      expect(tool.href.startsWith(`${settings?.href}?`), tool.id).toBe(true);
+      expect(tool.href.startsWith("/settings?"), tool.id).toBe(true);
       expect(items.some((item) => item.href === tool.href)).toBe(false);
     }
   });
 
-  it("leads with Chat, then Direct messages, as an anchor that renders no heading (#3774)", async () => {
-    const { DASHBOARD_NAV } = await import("./nav-config");
-    expect(DASHBOARD_NAV[0]?.anchor).toBe(true);
-    expect(DASHBOARD_NAV[0]?.items.map((i) => i.href)).toEqual([
-      "/chat",
-      "/chat?view=direct",
-    ]);
+  it("hold no row for chat: the channels are the sidebar's list (#5946)", async () => {
+    const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
+    expect(
+      DASHBOARD_NAV_ITEMS.some((item) => item.href.startsWith("/chat")),
+    ).toBe(false);
   });
 
   it("keeps Profile out of the chapter nav — it lives in the account menu", async () => {
@@ -252,5 +299,31 @@ describe("DASHBOARD_NAV structure", () => {
     // /alumni still resolves as a route, but it redirects into the Alumni tab
     // and must not reappear as its own nav row.
     expect(hrefs).not.toContain("/alumni");
+  });
+});
+
+// The recruitment row (#5924) needs both keys its routes check.
+describe("isNavItemVisible with requireAllOf", () => {
+  const rush: NavItem = {
+    id: "rush",
+    label: "Rush",
+    icon: PointsGlyph,
+    href: "/rush",
+    module: "rush",
+    requireAllOf: ["members:view", "rush:view"],
+  };
+
+  it("shows only when every key is held", async () => {
+    const { isNavItemVisible } = await import("./protected-nav-item");
+    expect(isNavItemVisible(rush, ["members:view", "rush:view"])).toBe(true);
+    expect(isNavItemVisible(rush, ["rush:view"])).toBe(false);
+    expect(isNavItemVisible(rush, ["members:view"])).toBe(false);
+    expect(isNavItemVisible(rush, ["*"])).toBe(true);
+  });
+
+  it("stays hidden while permissions load, and with the module off", async () => {
+    const { isNavItemVisible } = await import("./protected-nav-item");
+    expect(isNavItemVisible(rush, undefined)).toBe(false);
+    expect(isNavItemVisible(rush, ["*"], (key) => key !== "rush")).toBe(false);
   });
 });

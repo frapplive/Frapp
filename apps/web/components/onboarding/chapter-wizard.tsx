@@ -2,6 +2,7 @@
 
 import { BILLING_SETTINGS_PATH } from "@/components/billing/billing-paths";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
@@ -64,7 +65,11 @@ import { TermsAcceptance } from "@/components/auth/terms-acceptance";
 import { SignedInAs } from "@/components/auth/signed-in-as";
 import { OtherAccountLine } from "@/components/auth/other-account-line";
 import { useSignOutToSignIn } from "@/components/auth/use-sign-out";
-import { JOIN_FROM_SIGN_IN_PATH } from "@/lib/auth/join-visit";
+import {
+  JOIN_FROM_SIGN_IN_PATH,
+  START_COUNCIL_PATH,
+} from "@/lib/auth/join-visit";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
 import { SearchGlyph } from "@/components/profile/profile-glyphs";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { EYEBROW } from "@/components/ui/typography";
@@ -113,9 +118,8 @@ const CHAT_LANDING_PATH = "/chat";
 const INVITE_ROLE = EVERYONE_ROLE_NAME;
 
 /**
- * `display` is the founder's own chat display pick (#4056): founders never see
- * the first-run tour that asks a joining member, so the wizard asks it once the
- * chapter exists, before the invite.
+ * `display` is the founder's own chat display pick (#4056): the wizard asks it
+ * once the chapter exists, before the invite.
  */
 type WizardStep = "find" | "archetype" | "identity" | "display" | "invite";
 const STEP_ORDER: WizardStep[] = [
@@ -372,6 +376,16 @@ export function ChapterWizard({ onComplete }: { onComplete: () => void }) {
                     signingOut={otherAccount.signingOut}
                     failed={otherAccount.failed}
                   />
+                  {/* Here for a school's council instead (#5933). */}
+                  <p className="mt-2 text-center text-sm text-muted-foreground">
+                    {START_COUNCIL_ENTRY.prompt}{" "}
+                    <Link
+                      href={START_COUNCIL_PATH}
+                      className="font-semibold text-accent-text hover:underline"
+                    >
+                      {START_COUNCIL_ENTRY.action}
+                    </Link>
+                  </p>
                 </div>
               ) : null}
 
@@ -859,7 +873,7 @@ function IdentityStep({
 }
 
 /**
- * The same cards as Profile's Chat density (the first-run tour's display stop draws them as one segmented control).
+ * The same cards as Profile's Chat density.
  * The browser's current display is preselected (Cozy on a browser that never
  * picked one) and a click saves at once, so Continue keeps what is checked.
  */

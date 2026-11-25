@@ -38,6 +38,10 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // these is a client sending what its own validation should have stopped,
   // or contract drift between a shipped build and the API.
   "request.validation_failed",
+  // A chapter's role or tier write holding a `council:` key (#5933,
+  // `school-layer.md` § 4.2 rule 3). A chapter's catalog never offers one,
+  // so only a client sending a string it typed itself meets it.
+  "roles.permission.reserved",
   // A reason sent with a thumbs up on an Ask answer (#4902), which the
   // shared schema (`AskFeedbackRequestSchema`) refuses before it is sent.
   "ai.ask.feedback.reason_needs_down",
@@ -48,9 +52,14 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // A config PATCH switching off an always-on module. Chapter settings draws
   // those locked and never sends it (#4073).
   "chapter.config.module_always_on",
-  // Renaming the Everyone role or moving it out of its tier (#4191). Its role
-  // page draws both locked and never sends a change.
+  // Renaming the Everyone role or putting it in a tier, or moving the Actives
+  // role out of its tier (2026-11-21). Their role pages draw both locked and
+  // never send a change.
   "role.everyone_fixed",
+  // A member's roles saved with two base roles (New Member, Actives, Alumni)
+  // and neither newly added. Both apps settle the list with `rolesAfterSave`
+  // first, which keeps one.
+  "role.base_conflict",
   // Changes for one kind of suggestion sent to accept another kind. The
   // review screen sends a suggestion's edits under its own kind (#4309).
   "ai.suggestion.edits_kind",
@@ -67,9 +76,33 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
 
 export const MEMBER_CAUSED_ERROR_CODES = [
   "chapter.context.invalid",
-  // Header and JWT name different chapters: a chapter switched in another
-  // tab while this one still sent the old header.
+  // A chapter-config URL (`/chapters/:id/config`) naming another chapter than
+  // the request's: a settings page left open across a chapter switch. The
+  // chapter guard no longer throws it for a header that differs from the
+  // token's claim (ADR-27, #5918).
   "chapter.context.mismatch",
+  // A tenant slug the caller can't open (ADR-27, #5918): unknown, or another
+  // tenant's, as an old link to a chapter they left would be.
+  "tenant.not_found",
+  // Starting a council (#5933): the school already has one of that type, or
+  // the founder hasn't verified a school email there.
+  "council.type_taken",
+  "council.school_unverified",
+  "council.title_taken",
+  // Affiliations and PNM records (#5974): a link step the other side or a
+  // race already took, a chapter whose school isn't confirmed, a council
+  // with no recruitment, a season or record that isn't there (or isn't
+  // this council's), or a merge the database refuses.
+  "affiliation.no_shared_school",
+  "affiliation.exists",
+  "affiliation.invalid_transition",
+  "affiliation.not_found",
+  "council.recruitment_off",
+  "council.season_not_found",
+  "council.season_exists",
+  "pnm.not_found",
+  "pnm.already_merged",
+  "pnm.two_accounts",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",
@@ -92,10 +125,14 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // President invite minted before the rule, or a sender demoted since
   // (#1830).
   "invite.role_out_of_reach",
-  // An officer replacing a chapter link made by an officer above them
-  // (#3353), or two officers making one at the same moment.
-  "invite.chapter_link_out_of_reach",
+  // Two officers making a chapter link for the same role at the same
+  // moment (#3353, #5633).
   "invite.chapter_link_conflict",
+  // Ask for a new link on an invite that still works (another tab saw it
+  // revived), or from someone already in its chapter (#5625). The card
+  // refetches and shows the live link or the chapter.
+  "invite.still_live",
+  "invite.already_member",
   // An officer named a role so it reads as @everyone (#4191) or @here.
   "role.everyone_name",
   // A tier reorder that would lift New members or Alumni above Everyone
@@ -113,7 +150,17 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // Joining or leaving a role an officer unmarked or changed since the
   // picker loaded it.
   "role.not_self_assignable",
+  // Giving or taking a role the rank rules refuse (#5730): the role or the
+  // member ranks at or above the officer, or the role carries a permission
+  // the officer lacks. The "+ Add" list disables those it can see; a list
+  // loaded before a role or tier change can still offer one.
+  "role.assign_out_of_reach",
+  "role.assign_permission_not_held",
   "chat.since_not_found",
+  // A send, reaction or other channel write while an officer has the member
+  // timed out (#6006). A state the member is in, which the composer answers
+  // with its "You're timed out until …" banner.
+  "chat.timed_out",
   // An AI route while `AI_ENABLED` is off on the server (#4310, and
   // `AiEnabledGuard`, ADR-28). A state the deployment is in, and how a
   // client learns to hide its AI entry points.
@@ -144,6 +191,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "ai.suggestion.decided",
   "ai.suggestion.accepting",
   "ai.suggestion.incomplete",
+  // Add to next meeting's agenda (#5790) on a suggestion that isn't a task
+  // from minutes (only an old or hand-made request), or from minutes whose
+  // meeting was deleted since (the menu offers it; the refusal says why).
+  "ai.suggestion.not_handled_here",
   // The acting agent (#718): a member without `ai:act`, a points proposal
   // for more members than the chapter's hourly limit leaves, and one whose
   // members have all left the chapter.
@@ -173,6 +224,19 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "meeting.not_in_audience",
   "meeting.notes_too_long",
   "meeting.event_linked",
+  // Posting minutes started with no meeting before one is linked (Paul,
+  // 2026-11-20). Current clients hold Post until then; an older phone build
+  // that can open such minutes doesn't.
+  "meeting.no_event",
+  // An agenda change other than a check-off once the meeting has started
+  // (Paul, 2026-11-20): a page opened before the start and saved after.
+  "event.agenda_locked",
+  // Asking for minutes (#5471): they were posted meanwhile, or the meeting
+  // hasn't ended yet. The third is a 503 (the reminder couldn't be sent and
+  // nothing was recorded), so its status reports it as a server fault.
+  "meeting.already_posted",
+  "meeting.not_over",
+  "meeting.request_not_sent",
   // A recording Frapp doesn't take (#712): the wrong kind of file, too
   // large, too short or too long. The upload step checks first, but the
   // server's limits follow the provider it is set up with.
@@ -203,6 +267,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // of one already counted.
   "attendance.check_in.window_closed",
   "attendance.already_checked_in",
+  // A picked Drive folder with files in it (#5583): Google lets a picker
+  // sign-in share only the folder, not what's inside, so the officer shares
+  // it with Frapp's address in Drive and the panel connects once they have.
+  "google_drive.share_by_hand",
 ] as const;
 
 export type ClientContractErrorCode =
