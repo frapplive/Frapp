@@ -47,6 +47,16 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
+ * An action item's long-press menu, from the host (#6051): Create task or
+ * Open task for an officer, or null for a row with nothing to offer.
+ */
+export type ActionItemMenuFor = (row: {
+  index: number;
+  item: MeetingContent["action_items"][number];
+  task: MeetingActionItemTask | undefined;
+}) => ItemMenuHandle | null;
+
+/**
  * Minutes as a member reads them (`spec/behavior/meetings.md` § Reading
  * minutes; #5562, Paul 2026-11-19: "Scrolling through the minutes, nothing
  * stands out"). Each kind of thing has its own shape, so a scroll says what
@@ -59,16 +69,6 @@ import { tint, typeRole, useFrappTheme } from "@/lib/theme";
  * same words, all from `@repo/validation`'s `minutes-read.ts`, so switching
  * between the two never feels like two systems (Paul, 2026-11-19).
  */
-/**
- * An action item's long-press menu, from the host (#6051): Create task or
- * Open task for an officer, or null for a row with nothing to offer.
- */
-export type ActionItemMenuFor = (row: {
-  index: number;
-  item: MeetingContent["action_items"][number];
-  task: MeetingActionItemTask | undefined;
-}) => ItemMenuHandle | null;
-
 export function MinutesBody({
   meeting,
   content,

@@ -223,6 +223,23 @@ export function needsDue(who: TaskWho | null): boolean {
   return who?.kind === "someone";
 }
 
+/**
+ * Whether Create task must ask first: who is missing, a task up for grabs
+ * has no due day, or a newly picked time has already gone by (the
+ * suggestion's own is kept). The card and an action item's row both ask
+ * it (#6051).
+ */
+export function acceptBlocked(
+  item: WaitingSuggestion,
+  values: RowValues,
+): boolean {
+  return (
+    !values.who ||
+    (!values.due && needsDue(values.who)) ||
+    dueEntryPassed(values.due, new Date(), dueEntryOf(item.task))
+  );
+}
+
 /** Why an accept or dismiss was refused, in words an officer can act on. */
 export function suggestionRefusalLine(error: unknown): string {
   return (
@@ -332,12 +349,7 @@ export function SuggestedTasks({
 
   async function acceptRow(item: WaitingSuggestion) {
     const values = valuesOf(item);
-    if (
-      !values.who ||
-      (!values.due && needsDue(values.who)) ||
-      // A newly picked time already gone by; the suggestion's own is kept.
-      dueEntryPassed(values.due, new Date(), dueEntryOf(item.task))
-    ) {
+    if (acceptBlocked(item, values)) {
       setFlagged((previous) => new Set(previous).add(item.id));
       return false;
     }
@@ -679,15 +691,6 @@ function SuggestedTaskRow({
   acceptWith: (task: TaskSuggestionEdits) => Promise<void>;
 }) {
   const { task } = item;
-  const missingWho = flagged && !values.who;
-  const missingDue = flagged && !values.due && needsDue(values.who);
-  const passedDue =
-    flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(item.task));
-  const dueProblem = dueChipProblem({
-    value: values.due,
-    missing: missingDue,
-    passed: passedDue,
-  });
 
   if (formOpen) {
     return (
@@ -760,6 +763,59 @@ function SuggestedTaskRow({
           />
         </div>
       </div>
+      <SuggestionChips
+        item={item}
+        values={values}
+        suggestedWho={suggestedWho}
+        suggestedDue={suggestedDue}
+        flagged={flagged}
+        disabled={disabled}
+        onEdit={onEdit}
+        idPrefix={item.id}
+      />
+    </div>
+  );
+}
+
+/**
+ * Who and when as chips, each opening its own picker in place, with what is
+ * still missing said under them once Create task was pressed. The card and
+ * an action item's quick create both draw these (#6051).
+ */
+export function SuggestionChips({
+  item,
+  values,
+  suggestedWho,
+  suggestedDue,
+  flagged,
+  disabled,
+  onEdit,
+  idPrefix,
+}: {
+  item: WaitingSuggestion;
+  values: RowValues;
+  /** Who, or when, is Frapp's suggestion rather than the minutes' word. */
+  suggestedWho: boolean;
+  suggestedDue: boolean;
+  /** Create task was pressed with something missing. */
+  flagged: boolean;
+  disabled: boolean;
+  onEdit: (patch: RowEdits) => void;
+  /** Unique on the page, for the alerts' ids. */
+  idPrefix: string;
+}) {
+  const { task } = item;
+  const missingWho = flagged && !values.who;
+  const missingDue = flagged && !values.due && needsDue(values.who);
+  const passedDue =
+    flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(item.task));
+  const dueProblem = dueChipProblem({
+    value: values.due,
+    missing: missingDue,
+    passed: passedDue,
+  });
+  return (
+    <>
       <div className="flex flex-wrap items-center gap-1.5">
         <WhoPicker
           chip
@@ -775,7 +831,7 @@ function SuggestedTaskRow({
           onChange={(next) => onEdit({ who: next })}
           disabled={disabled}
           invalid={missingWho}
-          aria-describedby={missingWho ? `${item.id}-who` : undefined}
+          aria-describedby={missingWho ? `${idPrefix}-who` : undefined}
         />
         <DueChip
           label={`Due date for ${task.title}`}
@@ -788,12 +844,12 @@ function SuggestedTaskRow({
           value={values.due}
           onChange={(value) => onEdit({ due: value })}
           disabled={disabled}
-          aria-describedby={dueProblem ? `${item.id}-due` : undefined}
+          aria-describedby={dueProblem ? `${idPrefix}-due` : undefined}
         />
       </div>
       {missingWho ? (
         <p
-          id={`${item.id}-who`}
+          id={`${idPrefix}-who`}
           role="alert"
           className="text-caption text-destructive-text"
         >
@@ -803,14 +859,14 @@ function SuggestedTaskRow({
       {/* Said here too: the chip's own field is in its closed popover. */}
       {dueProblem ? (
         <p
-          id={`${item.id}-due`}
+          id={`${idPrefix}-due`}
           role="alert"
           className="text-caption text-destructive-text"
         >
           {dueProblem}
         </p>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -894,7 +950,7 @@ function SuggestionMenu({
  * A suggestion beside the open task it reads like (#5562): the two titles
  * side by side, where the existing one stands, and the one question.
  */
-function SimilarTaskCard({
+export function SimilarTaskCard({
   item,
   existing,
   disabled,

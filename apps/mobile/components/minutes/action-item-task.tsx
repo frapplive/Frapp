@@ -3,24 +3,27 @@ import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import {
   useAcceptAiSuggestion,
+  useSimilarTasks,
   type AiSuggestion,
   type MeetingActionItemTask,
 } from "@repo/hooks";
 import {
   AI_SUGGESTION_COPY,
   MINUTES_READ_COPY,
+  SIMILAR_TASK_COPY,
   minutesActionSuggestions,
-  taskWhoOf,
   type MeetingActionItem,
 } from "@repo/validation";
-import { ForwardGlyph, PlusGlyph } from "@/components/control-glyphs";
+import {
+  CheckGlyph,
+  ForwardGlyph,
+  PlusGlyph,
+} from "@/components/control-glyphs";
 import type { ItemMenu, ItemMenuHandle } from "@/components/item-actions-menu";
 import type { ActionItemMenuFor } from "@/components/minutes/minutes-body";
-import {
-  NewTaskSheet,
-  type TaskSuggestionSeed,
-} from "@/components/tasks/new-task-sheet";
-import { suggestionEdits } from "@/lib/tasks/suggestion-edits";
+import { NewTaskSheet } from "@/components/tasks/new-task-sheet";
+import { suggestionSeed } from "@/components/tasks/suggestion-seed";
+import { alertFailure } from "@/lib/failure-alert";
 
 type Waiting = AiSuggestion & { task: NonNullable<AiSuggestion["task"]> };
 
@@ -28,10 +31,12 @@ type Waiting = AiSuggestion & { task: NonNullable<AiSuggestion["task"]> };
  * Create task from any action item of posted minutes, on the phone (#6051;
  * Winston, 2026-11-25). An officer long-presses the item and picks Create
  * task, which opens the task form on that item's waiting suggestion, the
- * sheet the Suggested tasks card opens for Change before creating; Create
- * there accepts the suggestion, so the task is the one the card would make
- * and the card stops offering it. An item already made a task offers Open
- * task instead. Web's row does the same from its Create task and ⋯ menu
+ * sheet the Suggested tasks card opens for Change before creating
+ * (`suggestionSeed`); Create there accepts the suggestion, so the task is the
+ * one the card would make and the card stops offering it. An item that reads
+ * like a task the chapter already has asks first, as the card does: Already
+ * a task, or Create anyway. An item already made a task offers Open task.
+ * Web's row does the same from its Create task and ⋯ menu
  * (`apps/web/components/meetings/action-item-task.tsx`).
  *
  * The server lists a suggestion only to someone who could accept it, and
@@ -50,16 +55,18 @@ export function useActionItemTaskMenu({
 }): { menuFor: ActionItemMenuFor; sheet: React.ReactNode } {
   const router = useRouter();
   const accept = useAcceptAiSuggestion();
-  const byIndex = useMemo(
+  const waiting = useMemo(
     () =>
-      minutesActionSuggestions(
-        items,
-        suggestions.filter(
-          (item): item is Waiting => item.kind === "task" && !!item.task,
-        ),
+      suggestions.filter(
+        (item): item is Waiting => item.kind === "task" && !!item.task,
       ),
-    [items, suggestions],
+    [suggestions],
   );
+  const byIndex = useMemo(
+    () => minutesActionSuggestions(items, waiting),
+    [items, waiting],
+  );
+  const similar = useSimilarTasks(waiting);
   const [formFor, setFormFor] = useState<Waiting | null>(null);
   const formRef = useRef<BottomSheetModal>(null);
   useEffect(() => {
@@ -77,8 +84,6 @@ export function useActionItemTaskMenu({
       task: MeetingActionItemTask | undefined;
     }) => {
       const taskId = task?.task?.id ?? null;
-      // A task the item already became wins over a suggestion.
-      const waiting = taskId ? null : (byIndex.get(index) ?? null);
       if (taskId) {
         return handleFor({
           title: item.text,
@@ -96,7 +101,44 @@ export function useActionItemTaskMenu({
           ],
         });
       }
-      if (!waiting) return null;
+      // A task the item already became wins over a suggestion.
+      const suggestion = byIndex.get(index);
+      if (!suggestion) return null;
+      const twin = similar.twinOf(suggestion.id);
+      if (twin) {
+        return handleFor({
+          title: item.text,
+          message: `${SIMILAR_TASK_COPY.heading}: ${twin.title}`,
+          actions: [
+            {
+              key: "same",
+              label: SIMILAR_TASK_COPY.same,
+              glyph: (color) => <CheckGlyph color={color} />,
+              run: () =>
+                void accept
+                  .mutateAsync({
+                    id: suggestion.id,
+                    task: { existing_task_id: twin.id },
+                  })
+                  .catch((error: unknown) =>
+                    alertFailure({
+                      title: SIMILAR_TASK_COPY.linkFailed,
+                      error,
+                    }),
+                  ),
+            },
+            {
+              key: "different",
+              label: SIMILAR_TASK_COPY.different,
+              glyph: (color) => <PlusGlyph color={color} />,
+              run: () => {
+                similar.keep(suggestion.id);
+                setFormFor(suggestion);
+              },
+            },
+          ],
+        });
+      }
       return handleFor({
         title: item.text,
         actions: [
@@ -104,41 +146,23 @@ export function useActionItemTaskMenu({
             key: "create-task",
             label: AI_SUGGESTION_COPY.accept,
             glyph: (color) => <PlusGlyph color={color} />,
-            run: () => setFormFor(waiting),
+            run: () => setFormFor(suggestion),
           },
         ],
       });
     },
-    [byIndex, handleFor, router],
+    [accept, byIndex, handleFor, router, similar],
   );
 
-  const seed: TaskSuggestionSeed | undefined = formFor
-    ? {
-        title: formFor.task.title,
-        // One member, several, a role, a group or everyone, as the card's.
-        who: taskWhoOf(formFor.task),
-        dueDay: formFor.task.due_date,
-        dueAt: formFor.task.due_at,
-        subtasks: formFor.task.subtasks,
-        accept: async (form) => {
-          await accept.mutateAsync({
-            id: formFor.id,
-            task: suggestionEdits(formFor.task, form),
-          });
-        },
-      }
-    : undefined;
-
-  const sheet =
-    formFor && seed ? (
-      <NewTaskSheet
-        key={formFor.id}
-        ref={formRef}
-        suggestion={seed}
-        offerGroups
-        onClosed={() => setFormFor(null)}
-      />
-    ) : null;
+  const sheet = formFor ? (
+    <NewTaskSheet
+      key={formFor.id}
+      ref={formRef}
+      suggestion={suggestionSeed(formFor, accept.mutateAsync)}
+      offerGroups
+      onClosed={() => setFormFor(null)}
+    />
+  ) : null;
 
   return { menuFor, sheet };
 }

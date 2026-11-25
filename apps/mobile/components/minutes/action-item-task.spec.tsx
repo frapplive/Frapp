@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   accept: vi.fn(),
   push: vi.fn(),
   sheet: { current: null as null | Record<string, unknown> },
+  /** The open task each suggestion reads like (#5562), by suggestion id. */
+  twins: { current: {} as Record<string, { id: string; title: string }> },
+  kept: [] as string[],
 }));
 
 vi.mock("@/lib/chapter-branding", () => ({
@@ -24,6 +27,12 @@ vi.mock("expo-router", () => ({
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useAcceptAiSuggestion: () => ({ mutateAsync: mocks.accept }),
+  useSimilarTasks: () => ({
+    twinOf: (id: string) =>
+      mocks.kept.includes(id) ? null : (mocks.twins.current[id] ?? null),
+    keep: (id: string) => mocks.kept.push(id),
+    known: true,
+  }),
 }));
 // The task form has its own specs; here only what it is opened on.
 vi.mock("@/components/tasks/new-task-sheet", () => ({
@@ -151,6 +160,39 @@ describe("an action item's long-press on the phone (#6051)", () => {
     mocks.accept.mockReset().mockResolvedValue({});
     mocks.push.mockReset();
     mocks.sheet.current = null;
+    mocks.twins.current = {};
+    mocks.kept.length = 0;
+  });
+
+  it("asks first when the item reads like a task the chapter already has, as the card does", async () => {
+    mocks.twins.current = {
+      "s-shirts": { id: "t-old", title: "Order chapter shirts" },
+    };
+    const tree = render({
+      items: [item("Order shirts")],
+      suggestions: [suggestion("s-shirts", "Order shirts")],
+    });
+
+    const menu = longPress(tree, "Order shirts");
+    expect(menu.message).toBe(
+      "Looks like a task you already have: Order chapter shirts",
+    );
+    expect(menu.actions.map((action) => action.label)).toEqual([
+      "Already a task",
+      "Create anyway",
+    ]);
+    await act(async () => menu.actions[0]!.run());
+    expect(mocks.accept).toHaveBeenCalledWith({
+      id: "s-shirts",
+      task: { existing_task_id: "t-old" },
+    });
+
+    // Create anyway opens the form on the suggestion, as Create task does.
+    act(() => menu.actions[1]!.run());
+    expect(mocks.kept).toEqual(["s-shirts"]);
+    expect((mocks.sheet.current?.suggestion as { title: string }).title).toBe(
+      "Order shirts",
+    );
   });
 
   it("offers Create task, which opens the task form on the item's suggestion and accepts it", async () => {

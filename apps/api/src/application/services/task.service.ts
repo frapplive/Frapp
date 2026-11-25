@@ -597,19 +597,18 @@ export class TaskService {
     ids: string[],
   ): Promise<Map<string, TaskDoneMark>> {
     const tasks = await this.taskRepo.findByIds(chapterId, [...new Set(ids)]);
-    const groupIds = [
-      ...new Set(
-        tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
-      ),
-    ];
-    const [groupRows, copies] =
-      groupIds.length > 0
-        ? await Promise.all([
-            this.taskRepo.findGroups(chapterId, groupIds),
-            this.taskRepo.findGroupCopyStates(chapterId, groupIds),
-          ])
-        : [[], []];
-    const groups = await this.summarize(chapterId, groupRows, copies);
+    const { summaries: groups, copies } = await this.readGroups(
+      chapterId,
+      tasks,
+    );
+    // Each group's people, read once however many of its copies are asked.
+    const assigneesOf = new Map<string, string[]>();
+    for (const copy of copies) {
+      if (!copy.group_id) continue;
+      const list = assigneesOf.get(copy.group_id) ?? [];
+      list.push(copy.assignee_id);
+      assigneesOf.set(copy.group_id, list);
+    }
     const marks = new Map<string, TaskDoneMark>();
     for (const task of tasks) {
       const summary = task.group_id ? groups.get(task.group_id) : undefined;
@@ -629,9 +628,7 @@ export class TaskService {
               // its name, however many copies it has.
               assignee_ids:
                 summary.audience === 'people'
-                  ? copies.flatMap((copy) =>
-                      copy.group_id === task.group_id ? [copy.assignee_id] : [],
-                    )
+                  ? (assigneesOf.get(summary.id) ?? [])
                   : [],
             }
           : {
@@ -730,17 +727,34 @@ export class TaskService {
     chapterId: string,
     tasks: Task[],
   ): Promise<Map<string, TaskGroupSummary>> {
+    return (await this.readGroups(chapterId, tasks)).summaries;
+  }
+
+  /**
+   * {@link groupSummaries}, with the copies it counted, for a caller that
+   * also names a group's people (`doneMarks`, #6051).
+   */
+  private async readGroups(
+    chapterId: string,
+    tasks: Task[],
+  ): Promise<{
+    summaries: Map<string, TaskGroupSummary>;
+    copies: TaskGroupCopyState[];
+  }> {
     const ids = [
       ...new Set(
         tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
       ),
     ];
-    if (ids.length === 0) return new Map();
+    if (ids.length === 0) return { summaries: new Map(), copies: [] };
     const [groups, copies] = await Promise.all([
       this.taskRepo.findGroups(chapterId, ids),
       this.taskRepo.findGroupCopyStates(chapterId, ids),
     ]);
-    return this.summarize(chapterId, groups, copies);
+    return {
+      summaries: await this.summarize(chapterId, groups, copies),
+      copies,
+    };
   }
 
   /**

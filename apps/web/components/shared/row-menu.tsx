@@ -82,6 +82,15 @@ export type RowMenuEntry =
   | { type: "separator"; key: string }
   | { type: "label"; key: string; label: string };
 
+/**
+ * Out of the way until the row is hovered or focused; never hidden from
+ * touch, where there is no hover. The row's ⋯ and any other control a row
+ * shows the same way (an action item's Create task, #6051) take it, so they
+ * appear together.
+ */
+export const ROW_REVEAL =
+  "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
+
 const DESTRUCTIVE_ITEM_CLASS =
   "text-destructive-text focus:bg-destructive-tint focus:text-destructive-text";
 
@@ -272,10 +281,7 @@ function MoreButton({
           className={cn(
             compactControlClassName,
             "shrink-0",
-            // Out of the way until the row is hovered or focused; never hidden
-            // from touch, where there is no hover.
-            onRow &&
-              "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100",
+            onRow && ROW_REVEAL,
           )}
         >
           {busy ? (

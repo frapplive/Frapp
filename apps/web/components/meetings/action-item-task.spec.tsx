@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,9 +12,14 @@ import { chapterSubscription } from "@/tests/chapter-subscription";
 const mocks = vi.hoisted(() => ({
   items: { current: [] as unknown[] },
   accept: vi.fn(),
+  dismiss: vi.fn(),
   toast: vi.fn(),
+  /** The chapter's open tasks, for the look-alike check (#5562). */
+  tasks: { current: [] as { id: string; title: string; status: string }[] },
   suggestionsEnabled: [] as boolean[],
   currentChapter: vi.fn(),
+  react: null as unknown as typeof import("react"),
+  similarTask: null as unknown as typeof import("@repo/validation").similarTask,
 }));
 
 vi.mock("@repo/hooks", () => ({
@@ -36,6 +42,26 @@ vi.mock("@repo/hooks", () => ({
     mutateAsync: mocks.accept,
     isPending: false,
   }),
+  useDismissAiSuggestion: () => ({
+    mutateAsync: mocks.dismiss,
+    isPending: false,
+  }),
+  // `similarTask`'s own rule over the open tasks, with Create anyway.
+  useSimilarTasks: (items: { id: string; task: { title: string } }[]) => {
+    const [kept, setKept] = mocks.react.useState<ReadonlySet<string>>(
+      new Set(),
+    );
+    return {
+      twinOf: (id: string) => {
+        const item = items.find((row) => row.id === id);
+        if (!item || kept.has(id)) return null;
+        return mocks.similarTask(item.task.title, mocks.tasks.current);
+      },
+      keep: (id: string) => setKept((previous) => new Set(previous).add(id)),
+      known: true,
+    };
+  },
+  existingTaskLine: () => "To do",
   useMembers: () => ({
     data: [
       { user_id: "u-jake", display_name: "Jake Ross" },
@@ -48,6 +74,8 @@ vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
 
+mocks.react = await import("react");
+mocks.similarTask = (await import("@repo/validation")).similarTask;
 const { ActionChecklist } = await import("./minutes-read");
 const { useActionItemTaskRow } = await import("./action-item-task");
 
@@ -124,6 +152,8 @@ describe("Create task from an action item's row (#6051)", () => {
   beforeEach(() => {
     mocks.items.current = [];
     mocks.accept.mockReset().mockResolvedValue({});
+    mocks.dismiss.mockReset().mockResolvedValue({});
+    mocks.tasks.current = [];
     mocks.toast.mockReset();
     mocks.suggestionsEnabled.length = 0;
     chapter.active();
@@ -196,6 +226,51 @@ describe("Create task from an action item's row (#6051)", () => {
     await waitFor(() =>
       expect(mocks.accept.mock.calls[0]![0].task).toMatchObject({
         assignee_id: "u-sam",
+      }),
+    );
+  });
+
+  it("opens the quick create from the row's ⋯ menu, and keeps it open as the menu closes", async () => {
+    mocks.items.current = [suggestion("s-shirts", "Order shirts")];
+    render(<Checklist items={[item("Order shirts")]} />);
+
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "More for Order shirts" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Create task" }));
+
+    const form = await screen.findByRole("form", {
+      name: "Create task: Order shirts",
+    });
+    // The menu hands focus back to its ⋯ as it closes; the popover stays.
+    act(() => {
+      screen.getByRole("button", { name: "More for Order shirts" }).focus();
+    });
+    await waitFor(() => expect(form.isConnected).toBe(true));
+    expect(screen.getByRole("form")).toBe(form);
+  });
+
+  it("asks first when the item reads like a task the chapter already has, as the card does", async () => {
+    mocks.tasks.current = [
+      { id: "t-old", title: "Order chapter shirts", status: "TODO" },
+    ];
+    mocks.items.current = [suggestion("s-shirts", "Order chapter shirts")];
+    render(<Checklist items={[item("Order chapter shirts")]} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create task: Order chapter shirts" }),
+    );
+    expect(
+      await screen.findByText("Looks like a task you already have"),
+    ).toBeTruthy();
+    expect(screen.queryByRole("form")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Already a task" }));
+    await waitFor(() =>
+      expect(mocks.accept).toHaveBeenCalledWith({
+        id: "s-shirts",
+        task: { existing_task_id: "t-old" },
       }),
     );
   });

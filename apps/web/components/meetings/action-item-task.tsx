@@ -6,37 +6,40 @@ import { ExternalLink, ListPlus, Pencil } from "lucide-react";
 import {
   useAcceptAiSuggestion,
   useAiSuggestions,
+  useDismissAiSuggestion,
   useMembers,
+  useSimilarTasks,
+  type ExistingTask,
   type MeetingActionItemTask,
   type TaskSuggestionEdits,
 } from "@repo/hooks";
 import {
   AI_SUGGESTION_COPY,
   MINUTES_READ_COPY,
+  SIMILAR_TASK_COPY,
   minutesActionSuggestions,
   sameTaskWho,
   type MeetingActionItem,
-  type TaskWho,
 } from "@repo/validation";
 import {
+  SimilarTaskCard,
+  SuggestionChips,
   SuggestionTaskForm,
-  dueEntryOf,
+  acceptBlocked,
   editsFor,
   isWaitingTask,
-  needsDue,
   rowValues,
   suggestionGuess,
   suggestionRefusalLine,
   type RowEdits,
+  type RowValues,
   type WaitingSuggestion,
 } from "@/components/ai/suggested-tasks";
-import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import {
-  DueChip,
-  dueChipProblem,
-  dueEntryPassed,
-} from "@/components/tasks/due-date-field";
-import { WhoPicker } from "@/components/tasks/who-picker";
+  ROW_REVEAL,
+  RowMenu,
+  type RowMenuEntry,
+} from "@/components/shared/row-menu";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -57,12 +60,15 @@ import { cn } from "@/lib/utils";
  * Fellow assigns a meeting's action items from the list.
  *
  * It is a faster door onto the same path, not a second one: the row's
- * Create task accepts that item's waiting suggestion, so the task is made
- * under the officer's own permission, keeps the minutes' id, tells its
- * assignees, and the card stops offering it. Only an item with a waiting
- * suggestion offers it, and the server lists a suggestion only to someone
- * who could accept it, so a member who can't manage tasks sees nothing. An
- * item already made a task offers Open task to an officer, who may read it.
+ * Create task accepts that item's waiting suggestion, with the card's own
+ * chips, checks and form (`suggested-tasks.tsx`), so the task is made under
+ * the officer's own permission, keeps the minutes' id, tells its assignees,
+ * and the card stops offering it. A suggestion that reads like a task the
+ * chapter already has asks first, as the card does. Only an item with a
+ * waiting suggestion offers it, and the server lists a suggestion only to
+ * someone who could accept it, so a member who can't manage tasks sees
+ * nothing. An item already made a task offers Open task to an officer, who
+ * may read it.
  *
  * Its controls: a small popover anchored to the row (Who, an optional Due,
  * Create task, and Change before creating, which opens the board's task form
@@ -86,13 +92,10 @@ export type ActionItemTaskRowRenderer = (
   draw: ActionItemRowDraw,
 ) => ReactElement;
 
-/** Out of the way until the row is hovered or focused, as a row's ⋯ is. */
-const REVEAL =
-  "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-
 /**
  * The rows' Create task and Open task for posted minutes: the waiting
- * suggestions read once for the page, each matched to its item.
+ * suggestions read once for the page, each matched to its item, and the
+ * open tasks each one reads like.
  */
 export function useActionItemTaskRow({
   meetingId,
@@ -110,21 +113,25 @@ export function useActionItemTaskRow({
     source: { type: "meeting", id: meetingId },
     enabled,
   });
-  const byIndex = useMemo(
-    () =>
-      minutesActionSuggestions(
-        items,
-        (suggestionsQuery.data?.items ?? []).filter(isWaitingTask),
-      ),
-    [items, suggestionsQuery.data],
+  const waiting = useMemo(
+    () => (suggestionsQuery.data?.items ?? []).filter(isWaitingTask),
+    [suggestionsQuery.data],
   );
+  const byIndex = useMemo(
+    () => minutesActionSuggestions(items, waiting),
+    [items, waiting],
+  );
+  const similar = useSimilarTasks(enabled ? waiting : NONE);
   if (!enabled) return undefined;
   return function TaskRow(row, draw) {
+    const suggestion = byIndex.get(row.index) ?? null;
     return (
       <ActionItemTaskRow
         key={row.index}
         item={row.item}
-        suggestion={byIndex.get(row.index) ?? null}
+        suggestion={suggestion}
+        twin={suggestion ? similar.twinOf(suggestion.id) : null}
+        onDifferent={() => suggestion && similar.keep(suggestion.id)}
         taskId={row.task?.task?.id ?? null}
         meetingStart={meetingStart}
         draw={draw}
@@ -133,15 +140,22 @@ export function useActionItemTaskRow({
   };
 }
 
+const NONE: WaitingSuggestion[] = [];
+
 function ActionItemTaskRow({
   item,
   suggestion,
+  twin,
+  onDifferent,
   taskId,
   meetingStart,
   draw,
 }: {
   item: MeetingActionItem;
   suggestion: WaitingSuggestion | null;
+  /** The open task the suggestion reads like, until the officer says. */
+  twin: ExistingTask | null;
+  onDifferent: () => void;
   taskId: string | null;
   meetingStart: string | null;
   draw: ActionItemRowDraw;
@@ -150,6 +164,8 @@ function ActionItemTaskRow({
   const [formOpen, setFormOpen] = useState(false);
   const [edits, setEdits] = useState<RowEdits>({});
   const accept = useAcceptAiSuggestion();
+  const dismiss = useDismissAiSuggestion();
+  const { toast } = useToast();
   const membersQuery = useMembers();
   const members = useMemo(
     () => (membersQuery.data ?? []).filter((member) => member.user_id),
@@ -186,7 +202,7 @@ function ActionItemTaskRow({
                 asChild
                 size="sm"
                 variant="ghost"
-                className={cn("shrink-0", REVEAL)}
+                className={cn("shrink-0", ROW_REVEAL)}
               >
                 <Link href={href}>{MINUTES_READ_COPY.openTask}</Link>
               </Button>
@@ -203,6 +219,32 @@ function ActionItemTaskRow({
   const acceptWith = async (task: TaskSuggestionEdits | undefined) => {
     await accept.mutateAsync({ id: waiting.id, task });
   };
+  /** Already a task: the suggestion is that task, and its item follows it. */
+  async function link(existing: ExistingTask) {
+    try {
+      await acceptWith({ existing_task_id: existing.id });
+      setCreating(false);
+      toast({ title: SIMILAR_TASK_COPY.linked, description: existing.title });
+    } catch (error) {
+      toast({
+        title: SIMILAR_TASK_COPY.linkFailed,
+        description: suggestionRefusalLine(error),
+        variant: "destructive",
+      });
+    }
+  }
+  async function dismissIt() {
+    try {
+      await dismiss.mutateAsync({ id: waiting!.id });
+      setCreating(false);
+    } catch (error) {
+      toast({
+        title: AI_SUGGESTION_COPY.dismissFailed,
+        description: suggestionRefusalLine(error),
+        variant: "destructive",
+      });
+    }
+  }
   const entries: RowMenuEntry[] = [
     {
       type: "item",
@@ -219,6 +261,7 @@ function ActionItemTaskRow({
       onSelect: () => setFormOpen(true),
     },
   ];
+  const busy = accept.isPending || dismiss.isPending;
   return (
     <RowMenu entries={entries} label={label}>
       {(menuButton) =>
@@ -229,7 +272,7 @@ function ActionItemTaskRow({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className={cn("shrink-0", REVEAL)}
+                  className={cn("shrink-0", ROW_REVEAL)}
                   aria-label={`${AI_SUGGESTION_COPY.accept}: ${item.text}`}
                 >
                   {AI_SUGGESTION_COPY.accept}
@@ -237,38 +280,54 @@ function ActionItemTaskRow({
               </PopoverTrigger>
               <PopoverContent
                 align="end"
-                className="w-80 p-3"
+                className={cn("p-3", twin ? "w-[28rem]" : "w-80")}
+                // Opened from the row's ⋯ menu, the menu hands focus back
+                // to its ⋯ as it closes, outside this popover: that is not
+                // the officer leaving it. A click outside still closes it.
+                onFocusOutside={(event) => event.preventDefault()}
                 // Portaled, but React bubbles its events to the row's
                 // context-menu trigger, as `RowMenu`'s own ⋯ menu stops.
                 onContextMenu={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                <QuickCreate
-                  item={waiting}
-                  values={values}
-                  suggestedWho={
-                    edits.who === undefined &&
-                    !!guess?.who &&
-                    sameTaskWho(values.who, guess.who)
-                  }
-                  suggestedDue={
-                    edits.due === undefined &&
-                    !!guess?.due &&
-                    values.due === guess.due
-                  }
-                  onEdit={(patch) =>
-                    setEdits((previous) => ({ ...previous, ...patch }))
-                  }
-                  pending={accept.isPending}
-                  onCreate={async () => {
-                    await acceptWith(editsFor(waiting, values));
-                    setCreating(false);
-                  }}
-                  onMore={() => {
-                    setCreating(false);
-                    setFormOpen(true);
-                  }}
-                />
+                {twin ? (
+                  <SimilarTaskCard
+                    item={waiting}
+                    existing={twin}
+                    disabled={busy}
+                    pending={busy}
+                    onSame={() => void link(twin)}
+                    onDifferent={onDifferent}
+                    onDismiss={() => void dismissIt()}
+                  />
+                ) : (
+                  <QuickCreate
+                    item={waiting}
+                    values={values}
+                    suggestedWho={
+                      edits.who === undefined &&
+                      !!guess?.who &&
+                      sameTaskWho(values.who, guess.who)
+                    }
+                    suggestedDue={
+                      edits.due === undefined &&
+                      !!guess?.due &&
+                      values.due === guess.due
+                    }
+                    onEdit={(patch) =>
+                      setEdits((previous) => ({ ...previous, ...patch }))
+                    }
+                    pending={accept.isPending}
+                    onCreate={async () => {
+                      await acceptWith(editsFor(waiting, values));
+                      setCreating(false);
+                    }}
+                    onMore={() => {
+                      setCreating(false);
+                      setFormOpen(true);
+                    }}
+                  />
+                )}
               </PopoverContent>
             </Popover>
             {menuButton}
@@ -290,9 +349,9 @@ function ActionItemTaskRow({
 }
 
 /**
- * The popover's few fields: who (pre-picked from the minutes, or Frapp's
- * dashed suggestion), an optional due day, and Create task, which Enter
- * presses too.
+ * The popover's few fields: the card's own who and when chips (pre-picked
+ * from the minutes, or Frapp's dashed suggestion), Create task, which Enter
+ * presses too, and Change before creating.
  */
 function QuickCreate({
   item,
@@ -305,7 +364,7 @@ function QuickCreate({
   onMore,
 }: {
   item: WaitingSuggestion;
-  values: { who: TaskWho | null; due: string };
+  values: RowValues;
   suggestedWho: boolean;
   suggestedDue: boolean;
   onEdit: (patch: RowEdits) => void;
@@ -316,22 +375,9 @@ function QuickCreate({
   const { toast } = useToast();
   const [flagged, setFlagged] = useState(false);
   const { task } = item;
-  const missingWho = flagged && !values.who;
-  const missingDue = flagged && !values.due && needsDue(values.who);
-  const passedDue =
-    flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(task));
-  const dueProblem = dueChipProblem({
-    value: values.due,
-    missing: missingDue,
-    passed: passedDue,
-  });
 
   async function submit() {
-    if (
-      !values.who ||
-      (!values.due && needsDue(values.who)) ||
-      dueEntryPassed(values.due, new Date(), dueEntryOf(task))
-    ) {
+    if (acceptBlocked(item, values)) {
       setFlagged(true);
       return;
     }
@@ -360,55 +406,16 @@ function QuickCreate({
       <p className="line-clamp-2 break-words text-sm font-medium">
         {task.title}
       </p>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <WhoPicker
-          chip
-          guessed={suggestedWho}
-          allow="any"
-          label={
-            suggestedWho
-              ? `Assignee for ${task.title}, ${AI_SUGGESTION_COPY.suggestedWho.toLowerCase()}`
-              : `Assignee for ${task.title}`
-          }
-          placeholder={AI_SUGGESTION_COPY.who}
-          value={values.who}
-          onChange={(next) => onEdit({ who: next })}
-          disabled={pending}
-          invalid={missingWho}
-          aria-describedby={missingWho ? `${item.id}-row-who` : undefined}
-        />
-        <DueChip
-          label={`Due date for ${task.title}`}
-          timeLabel={`Due time for ${task.title}`}
-          placeholder={AI_SUGGESTION_COPY.when}
-          guessed={suggestedDue}
-          note={suggestedDue ? AI_SUGGESTION_COPY.suggestedDue : null}
-          missing={missingDue}
-          passed={passedDue}
-          value={values.due}
-          onChange={(value) => onEdit({ due: value })}
-          disabled={pending}
-          aria-describedby={dueProblem ? `${item.id}-row-due` : undefined}
-        />
-      </div>
-      {missingWho ? (
-        <p
-          id={`${item.id}-row-who`}
-          role="alert"
-          className="text-caption text-destructive-text"
-        >
-          {AI_SUGGESTION_COPY.missingWho}
-        </p>
-      ) : null}
-      {dueProblem ? (
-        <p
-          id={`${item.id}-row-due`}
-          role="alert"
-          className="text-caption text-destructive-text"
-        >
-          {dueProblem}
-        </p>
-      ) : null}
+      <SuggestionChips
+        item={item}
+        values={values}
+        suggestedWho={suggestedWho}
+        suggestedDue={suggestedDue}
+        flagged={flagged}
+        disabled={pending}
+        onEdit={onEdit}
+        idPrefix={`${item.id}-row`}
+      />
       <div className="flex items-center justify-end gap-1">
         <Button
           type="button"
