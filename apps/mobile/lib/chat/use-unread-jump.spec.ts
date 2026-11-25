@@ -10,7 +10,10 @@ import {
   type ContentSpan,
 } from "./use-unread-jump";
 
-vi.mock("@/lib/use-reduce-motion", () => ({ useReduceMotion: () => false }));
+const motion = vi.hoisted(() => ({ reduce: false }));
+vi.mock("@/lib/use-reduce-motion", () => ({
+  useReduceMotion: () => motion.reduce,
+}));
 
 const INSETS = { top: 44, bottom: 100 };
 const t = (key: string, addressed = false): UnreadJumpTarget => ({
@@ -84,7 +87,9 @@ describe("unreadJumpScrollY", () => {
 });
 
 describe("useUnreadJump", () => {
-  function setup() {
+  type Props = { targets: UnreadJumpTarget[]; layout?: unknown };
+
+  function setup(initial: UnreadJumpTarget[] = [t("row:a"), t("row:b", true)]) {
     const inner = {};
     const scrollTo = vi.fn();
     const scrollRef = {
@@ -93,36 +98,53 @@ describe("useUnreadJump", () => {
         scrollTo,
       } as unknown as ScrollView,
     };
-    const node = (top: number, height: number) =>
+    // Where each row is drawn now; a test moves one to stand in for a pin.
+    const tops = new Map<string, number>([
+      ["row:a", 100],
+      ["row:b", 1000],
+      ["row:c", 1500],
+    ]);
+    const measured = vi.fn();
+    const node = (key: string) =>
       ({
         measureLayout: (
           relativeTo: unknown,
           onSuccess: (x: number, y: number, w: number, h: number) => void,
         ) => {
           expect(relativeTo).toBe(inner);
-          onSuccess(0, top, 300, height);
+          measured(key);
+          onSuccess(0, tops.get(key)!, 300, 50);
         },
       }) as unknown as View;
-    const targets = [t("row:a"), t("row:b", true)];
-    const hook = renderHook(() =>
-      useUnreadJump({ targets, scrollRef, insets: INSETS }),
+    const renders = { count: 0 };
+    const hook = renderHook(
+      ({ targets, layout }: Props) => {
+        renders.count += 1;
+        return useUnreadJump({ targets, scrollRef, insets: INSETS, layout });
+      },
+      { initialProps: { targets: initial } as Props },
     );
     act(() => {
-      hook.result.current.refFor("row:a")(node(100, 50));
-      hook.result.current.refFor("row:b")(node(1000, 50));
+      for (const key of ["row:a", "row:b", "row:c"]) {
+        hook.result.current.refFor(key)(node(key));
+      }
     });
-    return { hook, scrollTo };
+    return { hook, scrollTo, tops, measured, renders };
   }
+
+  const settle = () =>
+    act(async () => {
+      vi.advanceTimersByTime(200);
+    });
 
   it("measures the rows against the content and scrolls to the nearest one, lit", async () => {
     vi.useFakeTimers();
+    motion.reduce = false;
     const { hook, scrollTo } = setup();
     act(() => {
       hook.result.current.onScroll({ y: 0, viewport: 600, content: 2000 });
     });
-    await act(async () => {
-      vi.advanceTimersByTime(200);
-    });
+    await settle();
     expect(hook.result.current.state.below).toEqual({
       next: t("row:b", true),
       addressed: true,
@@ -134,6 +156,72 @@ describe("useUnreadJump", () => {
       vi.advanceTimersByTime(1300);
     });
     expect(hook.result.current.litKey).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("jumps without animating under reduced motion", async () => {
+    vi.useFakeTimers();
+    motion.reduce = true;
+    const { hook, scrollTo } = setup();
+    act(() => {
+      hook.result.current.onScroll({ y: 0, viewport: 600, content: 2000 });
+    });
+    await settle();
+    act(() => hook.result.current.jump("below"));
+    expect(scrollTo).toHaveBeenCalledWith({ y: 725, animated: false });
+    motion.reduce = false;
+    vi.useRealTimers();
+  });
+
+  it("shows a pill when a message lands below with the list still", async () => {
+    vi.useFakeTimers();
+    const { hook } = setup([t("row:a")]);
+    act(() => {
+      hook.result.current.onScroll({ y: 0, viewport: 600, content: 2000 });
+    });
+    await settle();
+    expect(hook.result.current.state.below).toBeNull();
+    // No scroll, no content change: only the counts move.
+    hook.rerender({ targets: [t("row:a"), t("row:c")] });
+    await settle();
+    expect(hook.result.current.state.below?.next.key).toBe("row:c");
+    vi.useRealTimers();
+  });
+
+  it("measures again when rows move without the content's height changing", async () => {
+    vi.useFakeTimers();
+    const targets = [t("row:b")];
+    const { hook, tops, measured } = setup(targets);
+    act(() => {
+      hook.result.current.onScroll({ y: 0, viewport: 600, content: 2000 });
+    });
+    await settle();
+    expect(hook.result.current.state.below?.next.key).toBe("row:b");
+    // A pin lifts row b into view; the targets are the same array.
+    tops.set("row:b", 300);
+    measured.mockClear();
+    hook.rerender({ targets, layout: "pinned" });
+    await settle();
+    expect(measured).toHaveBeenCalledWith("row:b");
+    expect(hook.result.current.state.below).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("renders the screen only when a pill changes, not on every scroll", async () => {
+    vi.useFakeTimers();
+    const { hook, renders } = setup();
+    act(() => {
+      hook.result.current.onScroll({ y: 0, viewport: 600, content: 2000 });
+    });
+    await settle();
+    const before = renders.count;
+    act(() => {
+      for (let y = 1; y <= 30; y++) {
+        hook.result.current.onScroll({ y, viewport: 600, content: 2000 });
+      }
+    });
+    await settle();
+    expect(renders.count).toBe(before);
     vi.useRealTimers();
   });
 });

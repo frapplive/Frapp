@@ -556,6 +556,8 @@ export default function ChatHomeScreen() {
     targets: jumpTargets,
     scrollRef,
     insets: jumpInsets,
+    // A pin or a fold moves rows without changing the content's height.
+    layout: arranged,
   });
 
   /*

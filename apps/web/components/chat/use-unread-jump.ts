@@ -18,6 +18,7 @@ import {
   type RefObject,
 } from "react";
 import { prefersReducedMotion } from "./use-rail-flip";
+import { scrollerOf } from "./use-rail-reorder";
 
 /**
  * The web rail's "New unreads" pills (#6045): which unread rows and folded
@@ -26,7 +27,8 @@ import { prefersReducedMotion } from "./use-rail-flip";
  * phone's rule too; this hook only measures where each one is drawn.
  *
  * A target is found by the `data-flip` key the rail already puts on every row
- * (`row:<id>`) and heading (`head:<key>`). The part of the list on screen is
+ * (`row:<id>`) and heading (`head:<key>`), which hold ids and section keys
+ * only, so they go into the selector unescaped. The part of the list on screen is
  * its nearest scrolling ancestor, less the pinned section heading over its
  * top for a row (a heading pinned there is itself in view).
  */
@@ -47,9 +49,14 @@ export function useUnreadJump(
     null,
   );
 
+  // Found once by the listener below, so a scroll frame walks no ancestors.
+  const scrollerRef = useRef<HTMLElement | null>(null);
+
   const measure = useCallback(() => {
     const list = listRef.current;
-    const scroller = list ? scrollParentOf(list) : null;
+    const scroller =
+      scrollerRef.current ??
+      (list ? scrollerOf(list.parentElement, { overflowing: false }) : null);
     if (!list || !scroller) {
       setState((prev) =>
         sameUnreadJumpState(prev, NO_UNREAD_JUMP) ? prev : NO_UNREAD_JUMP,
@@ -61,9 +68,7 @@ export function useUnreadJump(
       .querySelector<HTMLElement>('[data-flip^="head:"]')
       ?.getBoundingClientRect().height;
     const next = unreadJumpState(targetsRef.current, (target) => {
-      const el = list.querySelector<HTMLElement>(
-        `[data-flip="${cssEscape(target.key)}"]`,
-      );
+      const el = list.querySelector<HTMLElement>(`[data-flip="${target.key}"]`);
       if (!el) return null;
       const rect = el.getBoundingClientRect();
       const isHead = target.key.startsWith("head:");
@@ -83,7 +88,10 @@ export function useUnreadJump(
 
   useEffect(() => {
     const list = listRef.current;
-    const scroller = list ? scrollParentOf(list) : null;
+    const scroller = list
+      ? scrollerOf(list.parentElement, { overflowing: false })
+      : null;
+    scrollerRef.current = scroller;
     if (!list || !scroller) return;
     let frame: number | null = null;
     const schedule = () => {
@@ -106,6 +114,7 @@ export function useUnreadJump(
       scroller.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       resize?.disconnect();
+      scrollerRef.current = null;
     };
   }, [listRef, measure]);
 
@@ -127,7 +136,7 @@ export function useUnreadJump(
       return;
     const key = landed.key;
     const el = listRef.current?.querySelector<HTMLElement>(
-      `[data-flip="${cssEscape(key)}"]`,
+      `[data-flip="${key}"]`,
     );
     const focusable =
       el?.tagName === "BUTTON" ? el : el?.querySelector<HTMLElement>("button");
@@ -139,9 +148,7 @@ export function useUnreadJump(
       const target = state[side]?.next;
       const list = listRef.current;
       if (!target || !list) return;
-      const el = list.querySelector<HTMLElement>(
-        `[data-flip="${cssEscape(target.key)}"]`,
-      );
+      const el = list.querySelector<HTMLElement>(`[data-flip="${target.key}"]`);
       // Centred, so the pinned heading never covers it and the next press
       // has the one after it to go to.
       el?.scrollIntoView?.({
@@ -155,23 +162,4 @@ export function useUnreadJump(
   );
 
   return { state, jump, litKey };
-}
-
-/** The element the list scrolls in: its nearest ancestor that scrolls. */
-function scrollParentOf(el: HTMLElement): HTMLElement | null {
-  for (
-    let node = el.parentElement;
-    node && node !== document.body;
-    node = node.parentElement
-  ) {
-    const { overflowY } = getComputedStyle(node);
-    if (overflowY === "auto" || overflowY === "scroll") return node;
-  }
-  return null;
-}
-
-function cssEscape(value: string): string {
-  return typeof CSS !== "undefined" && typeof CSS.escape === "function"
-    ? CSS.escape(value)
-    : value.replace(/["\\]/g, "\\$&");
 }

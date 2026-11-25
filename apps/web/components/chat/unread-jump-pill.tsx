@@ -7,7 +7,7 @@ import {
 } from "@repo/hooks";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
-import { UnreadJumpGlyph } from "./chat-glyphs";
+import { JumpToLatestGlyph, SendArrowGlyph } from "./chat-glyphs";
 
 /**
  * The channel list's "New unreads" pill (#6045, Winston 2026-11-25), over the
@@ -57,7 +57,12 @@ export function UnreadJumpPill({
           FOCUS_RING,
         )}
       >
-        <UnreadJumpGlyph direction={direction} className="h-3.5 w-3.5" />
+        {/* The chat family's arrow, up or down to where the unread are. */}
+        {direction === "above" ? (
+          <SendArrowGlyph className="h-3.5 w-3.5" />
+        ) : (
+          <JumpToLatestGlyph className="h-3.5 w-3.5" />
+        )}
         {NEW_UNREADS_LABEL}
       </button>
     </div>

@@ -157,26 +157,6 @@ export function JumpToLatestGlyph({ className }: ChatGlyphProps) {
   );
 }
 
-/**
- * New unreads (#6045) — the channel list's pill over its top or bottom edge:
- * `SendArrowGlyph`'s arrow pointing where the unread channels are, at its
- * weight, since it is drawn small on a pill too.
- */
-export function UnreadJumpGlyph({
-  className,
-  direction,
-}: ChatGlyphProps & { direction: "above" | "below" }) {
-  return (
-    <Svg className={className}>
-      {direction === "above" ? (
-        SEND_ARROW
-      ) : (
-        <g transform="rotate(180 12 12)">{SEND_ARROW}</g>
-      )}
-    </Svg>
-  );
-}
-
 /** Announcement / broadcast. Horn filled, sound lines stroke-only. */
 export function AnnouncementGlyph({ className, active }: ChatGlyphProps) {
   return (

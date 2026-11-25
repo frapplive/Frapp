@@ -1,7 +1,9 @@
 import { isDirectChannel } from "@repo/validation";
 import {
+  addressedCount,
   countsLookUnread,
   isAddressed,
+  withUnreadThreadChannels,
   type ArrangedSidebar,
   type SidebarChannelLike,
   type SidebarUnreadCounts,
@@ -66,15 +68,38 @@ export function unreadJumpTargets<C extends SidebarChannelLike>(
   const { unreadByChannelId, mutedChannelIds, activeChannelId } = input;
   if (!unreadByChannelId) return [];
   const threadIds = input.unreadThreadChannelIds;
+  // What the arrangement summed into each folded total: the server's counts
+  // plus one for a channel whose thread has new replies.
+  const arrangedCounts = withUnreadThreadChannels(
+    unreadByChannelId,
+    threadIds ?? new Set(),
+  );
   const targets: UnreadJumpTarget[] = [];
   for (const section of arranged.sections) {
     // A folded heading shows the unread total of what it folds (the
-    // arrangement's, a muted plain unread left out), so it stands for them.
-    if (section.collapsed && (section.unreadCount > 0 || section.addressed)) {
-      targets.push({
-        key: unreadJumpHeadKey(section.key),
-        addressed: section.addressed,
-      });
+    // arrangement's, a muted plain unread left out), so it stands for them,
+    // less the open channel's share: that one is on screen.
+    if (section.collapsed) {
+      let unread = section.unreadCount;
+      let addressedTotal = section.addressedCount;
+      const open = section.rows.find((c) => c.id === activeChannelId);
+      if (open) {
+        const own = arrangedCounts?.get(open.id) ?? NO_UNREAD;
+        const isDirect = isDirectChannel(open);
+        const quiet =
+          (mutedChannelIds?.has(open.id) ?? false) &&
+          !countsLookUnread(isDirect, own, true);
+        if (!quiet) {
+          unread -= own.unreadCount;
+          addressedTotal -= addressedCount(isDirect, own);
+        }
+      }
+      if (unread > 0 || addressedTotal > 0) {
+        targets.push({
+          key: unreadJumpHeadKey(section.key),
+          addressed: addressedTotal > 0,
+        });
+      }
     }
     for (const channel of section.rows) {
       if (channel.id === activeChannelId) continue;

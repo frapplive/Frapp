@@ -665,7 +665,6 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
 - **One sidebar, then the page and the open conversation** (#5946, Paul, 2026-11-24, epic [#5943](https://github.com/pdcarlson/Frapp/issues/5943); [`dashboard-shell.tsx`](../../../apps/web/components/layout/dashboard-shell.tsx), the state model in [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts)).
   The chapter's channel list is in the sidebar ([§ Navigation map](#navigation-map)).
   It is chat's own list, drawn there through a portal ([`channel-list-slot.tsx`](../../../apps/web/components/layout/channel-list-slot.tsx)), never a copy, so nothing is read or subscribed twice; its filters open from a control on its first category heading.
-  While an unread channel is scrolled out of sight, a **New unreads** pill floats over that edge of the list, and pressing it scrolls to the nearest one without opening it ([`spec/behavior/chat/README.md`](../../behavior/chat/README.md) § Sidebar arrangement, "New unreads"; [#6045](https://github.com/frapplive/Frapp/issues/6045)).
   So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows:
   - **`/chat`** is the open conversation alone, with the member column beside it from 1280px (below).
   - **`/messages`** is the Messages page, which the Messages row opens: the member's direct and group conversations in a 240px list pane titled "Messages", with the New message pencil and the people search, beside the open conversation.
@@ -677,6 +676,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
     Picking a channel while on `/messages` goes to `/chat`.
     The Chat and Direct messages rows, the `frapp_chat_view` cookie, `?view=` and the home view (`chapter-home.tsx`) are deleted.
     The split breakpoint is `lg`, 1024px (1056px until #5946): the full sidebar beside both 375px floors fits from there ([§ Responsive contract](#responsive-contract)).
+  - **New unreads.** While an unread channel is scrolled out of sight, a **New unreads** pill floats over that edge of the list, and pressing it scrolls to the nearest one without opening it ([`spec/behavior/chat/README.md`](../../behavior/chat/README.md) § Sidebar arrangement, "New unreads"; [#6045](https://github.com/frapplive/Frapp/issues/6045)).
 - **Chat opens beside the chapter tools** ([#3779](https://github.com/pdcarlson/Frapp/issues/3779); proposed by Winston, approved by Paul 2026-11-10).
   Chat is a panel of the shell, not a page: the nav column always stays, its **Chat** row opens and closes the chat panel (channels, thread, members) right of the nav, and a tool row (Events, Tasks, …) opens that tool's page right of chat.
   Changed in #5575 by pdcarlson, 2026-11-19 (Paul asked, from his screen critique): with a tool open, **the tool page takes the main column right of the nav and chat is a side panel on the right**, 375px unless the member drags it wider, showing one pane at a time.

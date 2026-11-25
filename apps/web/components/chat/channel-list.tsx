@@ -672,15 +672,21 @@ export function ChannelList({
   // so Unread only keeps it and its threads, and a folded section reads unread
   // over it. The rows' own weight and badges read the server's counts alone.
   const threadsByChannel = threads?.byChannel;
-  const arrangementUnread = useMemo(
+  // One set for the arrangement and the New unreads pills, so a folded
+  // heading and the pill never disagree on what is unread.
+  const unreadThreadChannelIds = useMemo(
     () =>
       threadsByChannel
-        ? withUnreadThreadChannels(
-            unreadByChannelId,
-            channelsWithUnreadThreads(threadsByChannel),
-          )
+        ? channelsWithUnreadThreads(threadsByChannel)
+        : undefined,
+    [threadsByChannel],
+  );
+  const arrangementUnread = useMemo(
+    () =>
+      unreadThreadChannelIds
+        ? withUnreadThreadChannels(unreadByChannelId, unreadThreadChannelIds)
         : unreadByChannelId,
-    [unreadByChannelId, threadsByChannel],
+    [unreadByChannelId, unreadThreadChannelIds],
   );
   const { arranged, hiddenDms, inputSections, sectionOrder } = useMemo(() => {
     // A DM the member hid (#2303) moves to the collapsed group at the end,
@@ -790,9 +796,7 @@ export function ChannelList({
         ? unreadJumpTargets(arranged, {
             unreadByChannelId,
             mutedChannelIds,
-            unreadThreadChannelIds: threadsByChannel
-              ? channelsWithUnreadThreads(threadsByChannel)
-              : undefined,
+            unreadThreadChannelIds,
             activeChannelId,
           })
         : [],
@@ -802,7 +806,7 @@ export function ChannelList({
       arranged,
       unreadByChannelId,
       mutedChannelIds,
-      threadsByChannel,
+      unreadThreadChannelIds,
       activeChannelId,
     ],
   );
@@ -1475,7 +1479,9 @@ export function ChannelList({
     // The pills ride zero-height bands pinned to the scroller's edges, outside
     // the spaced list so they add no gap to it.
     <div ref={jumpListRef}>
-      {unreadJump.state.above ? (
+      {/* Not while a row or heading is held: a pill sits in the drag's
+          autoscroll band, outside the rail, where a drop would land nowhere. */}
+      {unreadJump.state.above && !dragging ? (
         <UnreadJumpPill
           direction="above"
           side={unreadJump.state.above}
@@ -1682,7 +1688,7 @@ export function ChannelList({
           </div>
         ) : null}
       </div>
-      {unreadJump.state.below ? (
+      {unreadJump.state.below && !dragging ? (
         <UnreadJumpPill
           direction="below"
           side={unreadJump.state.below}

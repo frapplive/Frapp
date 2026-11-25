@@ -260,9 +260,11 @@ type BarScrollProps = Pick<
  * member reads down it: the scroll handler (throttled to 16ms), and its
  * content size and layout, so a list that turns too short to scroll (a
  * shorter view, rows filtered away) unfolds the bar with no scroll event.
- * Empty off the tab bar: a pushed screen has no bar to fold. `ScreenShell`
- * spreads it for every screen it hosts; a screen with its own list opts in
- * the same way.
+ * Empty off the tab bar, where there is no bar to fold, unless the screen
+ * watches its own scroll (`ScreenScrollWatchProvider`): then the handlers
+ * come back on any screen, report every move to the watch, and fold nothing
+ * off the tab bar. `ScreenShell` spreads it for every screen it hosts; a
+ * screen with its own list opts in the same way.
  */
 export function useBarScroll(): BarScrollProps {
   const { tabBar } = useFloatingChrome();

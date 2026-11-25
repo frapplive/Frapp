@@ -234,6 +234,55 @@ describe("New unreads pills (#6045)", () => {
     );
   });
 
+  it("counts a row under the pinned heading as out of view", async () => {
+    render(list(counts({ c1: { unreadCount: 1 } })));
+    expect(pill("above")).toBeNull();
+    // c1 now draws 8px to 40px, its middle under the 32px heading pinned
+    // over the top of the view.
+    await scrollTo(56);
+    expect(pill("above")).not.toBeNull();
+  });
+
+  it("scrolls smoothly, or at once under reduced motion", () => {
+    const matchMedia = (reduce: boolean) =>
+      vi
+        .fn()
+        .mockReturnValue({
+          matches: reduce,
+        }) as unknown as typeof window.matchMedia;
+    const original = window.matchMedia;
+    try {
+      window.matchMedia = matchMedia(false);
+      const { unmount } = render(list(counts({ c9: { unreadCount: 1 } })));
+      fireEvent.click(pill("below")!);
+      expect(scrollIntoView.mock.calls[0]![0]).toMatchObject({
+        behavior: "smooth",
+      });
+      unmount();
+      window.matchMedia = matchMedia(true);
+      render(list(counts({ c9: { unreadCount: 1 } })));
+      fireEvent.click(pill("below")!);
+      expect(scrollIntoView.mock.calls[1]![0]).toMatchObject({
+        behavior: "auto",
+      });
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it("hands focus to the row it landed on when the pill under focus goes", async () => {
+    render(list(counts({ c9: { unreadCount: 1 } })));
+    const below = pill("below")!;
+    below.focus();
+    fireEvent.click(below);
+    // The jump brings c9 into view, and the pill goes with nothing left below.
+    await scrollTo(6 * ROW);
+    expect(pill("below")).toBeNull();
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-flip="row:c9"] button'),
+    );
+  });
+
   it("never counts the open channel", () => {
     render(list(counts({ c9: { unreadCount: 3 } }), sidebar(), "c9"));
     expect(pill("below")).toBeNull();

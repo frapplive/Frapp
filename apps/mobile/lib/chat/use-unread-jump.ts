@@ -1,5 +1,6 @@
 import {
   NO_UNREAD_JUMP,
+  sameUnreadJumpState,
   UNREAD_JUMP_HIGHLIGHT_MS,
   unreadJumpEdgeOf,
   unreadJumpState,
@@ -9,7 +10,6 @@ import {
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type RefObject,
@@ -26,9 +26,10 @@ import { useReduceMotion } from "@/lib/use-reduce-motion";
  *
  * Each target's view registers through `refFor(key)`, and is measured against
  * the scroll view's content (`measureLayout` on its inner view, as
- * `components/settings/setting-anchor.tsx` does) whenever the targets or the
- * content's height change, and again once a scroll settles (a heading
- * measured while pinned reads where it was pinned). The scroll position comes
+ * `components/settings/setting-anchor.tsx` does) whenever the targets, the
+ * content's height or the caller's `layout` change, and again once a scroll
+ * settles (a heading measured while pinned reads where it was pinned). The
+ * screen renders only when a pill changes, never per scroll frame. The scroll position comes
  * from the shell's own handler (`ScreenScrollWatchProvider`).
  */
 
@@ -87,10 +88,16 @@ export function useUnreadJump({
   targets,
   scrollRef,
   insets,
+  layout,
 }: {
   targets: readonly UnreadJumpTarget[];
   scrollRef: RefObject<ScrollView | null>;
   insets: ViewInsets;
+  /**
+   * Anything that changes when rows move without the content's height
+   * changing (a pin moving a row into Pinned): a new value re-measures.
+   */
+  layout?: unknown;
 }): {
   state: UnreadJumpState;
   jump: (side: "above" | "below") => void;
@@ -104,14 +111,26 @@ export function useUnreadJump({
   const reduceMotion = useReduceMotion();
   const nodes = useRef(new Map<string, View>());
   const refs = useRef(new Map<string, (node: View | null) => void>());
-  const [spans, setSpans] = useState<ReadonlyMap<string, ContentSpan>>(
-    () => new Map(),
-  );
-  const [scroll, setScroll] = useState<ScreenScroll | null>(null);
-  const [litKey, setLitKey] = useState<string | null>(null);
+  // Where things are lives in refs: a scroll reports about 60 times a second,
+  // and the screen renders only when a pill changes (`sameUnreadJumpState`).
+  const spans = useRef<ReadonlyMap<string, ContentSpan>>(new Map());
+  const scroll = useRef<ScreenScroll | null>(null);
   const targetsRef = useRef(targets);
+  const insetsRef = useRef(insets);
+  const [state, setState] = useState<UnreadJumpState>(NO_UNREAD_JUMP);
+  const [litKey, setLitKey] = useState<string | null>(null);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastContent = useRef(0);
+
+  const recompute = useCallback(() => {
+    const next = phoneUnreadJumpState(
+      targetsRef.current,
+      spans.current,
+      scroll.current,
+      insetsRef.current,
+    );
+    setState((prev) => (sameUnreadJumpState(prev, next) ? prev : next));
+  }, []);
 
   const measure = useCallback(() => {
     const scrollView = scrollRef.current as
@@ -123,13 +142,17 @@ export function useUnreadJump({
       .map((t) => t.key)
       .filter((key) => nodes.current.has(key));
     let left = keys.length;
+    const finish = () => {
+      spans.current = next;
+      recompute();
+    };
     if (left === 0) {
-      setSpans(next);
+      finish();
       return;
     }
     const done = () => {
       left -= 1;
-      if (left === 0) setSpans(next);
+      if (left === 0) finish();
     };
     for (const key of keys) {
       (nodes.current.get(key) as Measurable).measureLayout(
@@ -141,20 +164,17 @@ export function useUnreadJump({
         done,
       );
     }
-  }, [scrollRef]);
+  }, [scrollRef, recompute]);
 
-  const targetKeys = useMemo(
-    () => targets.map((t) => t.key).join("|"),
-    [targets],
-  );
+  // New targets (a message landed, a channel was read), new insets or a
+  // moved row: re-measure once the rows have laid out.
   useEffect(() => {
     targetsRef.current = targets;
-  }, [targets]);
-  useEffect(() => {
-    // A frame for the rows to lay out.
+    insetsRef.current = insets;
+    recompute();
     const timer = setTimeout(measure, 0);
     return () => clearTimeout(timer);
-  }, [measure, targetKeys]);
+  }, [measure, recompute, targets, insets, layout]);
 
   useEffect(
     () => () => {
@@ -165,15 +185,17 @@ export function useUnreadJump({
 
   const onScroll = useCallback(
     (next: ScreenScroll) => {
-      setScroll(next);
+      scroll.current = next;
       if (next.content !== lastContent.current) {
         lastContent.current = next.content;
         measure();
+      } else {
+        recompute();
       }
       if (settle.current) clearTimeout(settle.current);
       settle.current = setTimeout(measure, SETTLE_MS);
     },
-    [measure],
+    [measure, recompute],
   );
 
   const refFor = useCallback((key: string) => {
@@ -188,11 +210,6 @@ export function useUnreadJump({
     return ref;
   }, []);
 
-  const state = useMemo(
-    () => phoneUnreadJumpState(targets, spans, scroll, insets),
-    [targets, spans, scroll, insets],
-  );
-
   useEffect(() => {
     if (!litKey) return;
     const timer = setTimeout(() => setLitKey(null), UNREAD_JUMP_HIGHLIGHT_MS);
@@ -202,15 +219,16 @@ export function useUnreadJump({
   const jump = useCallback(
     (side: "above" | "below") => {
       const target = state[side]?.next;
-      const span = target ? spans.get(target.key) : undefined;
-      if (!target || !span || !scroll) return;
+      const span = target ? spans.current.get(target.key) : undefined;
+      const at = scroll.current;
+      if (!target || !span || !at) return;
       scrollRef.current?.scrollTo({
-        y: unreadJumpScrollY(span, scroll),
+        y: unreadJumpScrollY(span, at),
         animated: !reduceMotion,
       });
       setLitKey(target.key);
     },
-    [state, spans, scroll, scrollRef, reduceMotion],
+    [state, scrollRef, reduceMotion],
   );
 
   return { state, jump, refFor, onScroll, litKey };

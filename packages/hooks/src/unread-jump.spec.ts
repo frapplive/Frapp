@@ -28,6 +28,7 @@ function arrange(
     unread?: Record<string, Partial<SidebarUnreadCounts>>;
     muted?: string[];
     collapsed?: string[];
+    active?: string;
   } = {},
 ) {
   const unread = new Map(
@@ -46,7 +47,7 @@ function arrange(
     pinnedIds: new Set(),
     collapsed: new Set(options.collapsed ?? []),
     filters: { unreadOnly: false, hideMuted: false },
-    activeChannelId: null,
+    activeChannelId: options.active ?? null,
     titleOf: (c) => c.id,
     unreadByChannelId: unread,
     mutedChannelIds: muted,
@@ -143,6 +144,40 @@ describe("unreadJumpTargets", () => {
         activeChannelId: "open",
       }),
     ).toEqual([{ key: "row:t", addressed: false }]);
+  });
+
+  it("leaves the open channel's share out of a folded heading", () => {
+    const sections = [
+      { key: "category:x" as const, rows: [ch("open"), ch("b")] },
+    ];
+    const onlyOpen = arrange(sections, {
+      unread: { open: { unreadCount: 2, mentionCount: 1 } },
+      collapsed: ["category:x"],
+      active: "open",
+    });
+    expect(
+      unreadJumpTargets(onlyOpen.arranged, {
+        unreadByChannelId: onlyOpen.unread,
+        mutedChannelIds: onlyOpen.muted,
+        activeChannelId: "open",
+      }),
+    ).toEqual([]);
+    const withOther = arrange(sections, {
+      unread: {
+        open: { unreadCount: 2, mentionCount: 1 },
+        b: { unreadCount: 1 },
+      },
+      collapsed: ["category:x"],
+      active: "open",
+    });
+    // Neutral: the mention is the open channel's.
+    expect(
+      unreadJumpTargets(withOther.arranged, {
+        unreadByChannelId: withOther.unread,
+        mutedChannelIds: withOther.muted,
+        activeChannelId: "open",
+      }),
+    ).toEqual([{ key: "head:category:x", addressed: false }]);
   });
 
   it("has none while the counts are unknown", () => {
