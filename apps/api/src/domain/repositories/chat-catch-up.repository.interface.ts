@@ -110,4 +110,13 @@ export interface IChatCatchUpRepository {
     chapterId: string;
     messageId: string;
   }): Promise<CatchUpMessagePlace | null>;
+
+  /**
+   * Which of these thread roots are a recruitment candidate's card. The
+   * replies under one are talk about a prospect, and no rush
+   * data reaches a model (`spec/behavior/ai.md`), so every read leaves them
+   * out: a stretch here, and messages a caller already holds
+   * (`ChatCatchUpService.readableAmong`).
+   */
+  findRushRootIds(rootIds: readonly string[]): Promise<ReadonlySet<string>>;
 }

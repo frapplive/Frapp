@@ -28,7 +28,11 @@ import {
 } from '#domain/utils/document-access';
 import { isDocumentFile } from '#domain/entities/chapter-document.entity';
 import { RbacService } from '../rbac.service';
-import type { CorpusSourceAdapter, CorpusSourceRead } from './corpus-source';
+import type {
+  CorpusSourceAdapter,
+  CorpusSourceDescription,
+  CorpusSourceRead,
+} from './corpus-source';
 
 const DOCUMENTS_BUCKET = 'documents';
 
@@ -103,6 +107,32 @@ export class ChapterDocumentCorpusSource implements CorpusSourceAdapter {
         sections: extracted.sections,
       },
     };
+  }
+
+  /**
+   * Each document's type, folder and uploader, as the library shows them
+   * (#5180). A meeting's minutes filed here have no uploader.
+   */
+  async describe(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceDescription>> {
+    const facts = new Map<string, CorpusSourceDescription>();
+    if (sourceIds.length === 0) return facts;
+    for (const document of await this.documents.findByIds(
+      [...sourceIds],
+      chapterId,
+    )) {
+      facts.set(document.id, {
+        type: document.document_type,
+        folder: document.folder,
+        by: document.uploaded_by
+          ? { verb: 'uploaded', userId: document.uploaded_by }
+          : null,
+        fromDrive: document.drive_file_id !== null,
+      });
+    }
+    return facts;
   }
 
   async readableBy(

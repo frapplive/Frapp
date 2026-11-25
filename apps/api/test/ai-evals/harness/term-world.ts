@@ -911,6 +911,8 @@ export function createTermWorld(
     total: rows.length,
   });
   const stretches: IChatCatchUpRepository = {
+    // The term's chat holds no recruitment candidate's card.
+    findRushRootIds: () => quietly(new Set<string>()),
     unreadStart: () => quietly(null),
     readChannelSince: (input) =>
       quietly(
