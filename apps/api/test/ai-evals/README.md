@@ -162,8 +162,9 @@ used):
 - **The set expects what a role does not hold.** A chair is expected to get task cards
   (`ai:act` is the president's), and a House Manager to see who came to an event
   (`event_attendance` takes `events:update`). Frapp said it could not, which is what ships.
-- **No queue of hours to approve.** `service_hours` counts approved hours only, so "which hours are
-  waiting on me" has nothing to read, and "who has logged none" names members whose hours wait.
+- **No queue of hours to approve.** `service_hours` counted approved hours only, so "which hours are
+  waiting on me" had nothing to read, and "who has logged none" named members whose hours wait.
+  Fixed 2026-11-25 (#6075): a `service:approve` holder is shown the entries waiting for approval.
 - **Length.** Most other code-check misses are an answer a few words over its question's limit.
 
 The run also found a request the provider refuses outright (a tool result with both sources and a
