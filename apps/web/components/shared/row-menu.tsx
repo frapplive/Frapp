@@ -177,11 +177,17 @@ function Entries({
 export function RowMenu({
   entries,
   label,
+  size = "row",
   children,
 }: {
   entries: readonly RowMenuEntry[];
   /** Accessible name for the ⋯ button, e.g. "More for Cog Sci Homework 2". */
   label: string;
+  /**
+   * `heading` draws the ⋯ at a list heading's glyph size (20px), beside the
+   * heading's other controls, such as a channel category's + (#6053).
+   */
+  size?: "row" | "heading";
   children: (menuButton: ReactNode) => ReactElement;
 }) {
   // Decided on every pointerdown, which React flushes before the browser fires
@@ -190,7 +196,9 @@ export function RowMenu({
   // cleared as it passes: Radix skips its long-press timer while the trigger is
   // disabled, so a verdict left standing would swallow the next long-press.
   const [browserMenu, setBrowserMenu] = useState(false);
-  const button = <MoreButton entries={entries} label={label} onRow />;
+  const button = (
+    <MoreButton entries={entries} label={label} onRow size={size} />
+  );
 
   return (
     <ContextMenu>
@@ -240,6 +248,7 @@ function MoreButton({
   entries,
   label,
   onRow = false,
+  size = "row",
   disabled = false,
   busy = false,
   onOpenChange,
@@ -247,6 +256,7 @@ function MoreButton({
   entries: readonly RowMenuEntry[];
   label: string;
   onRow?: boolean;
+  size?: "row" | "heading";
   disabled?: boolean;
   busy?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -270,7 +280,9 @@ function MoreButton({
           aria-label={label}
           title="More"
           className={cn(
-            compactControlClassName,
+            size === "heading"
+              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              : compactControlClassName,
             "shrink-0",
             // Out of the way until the row is hovered or focused; never hidden
             // from touch, where there is no hover.
@@ -281,7 +293,10 @@ function MoreButton({
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            <MoreHorizontal
+              className={size === "heading" ? "h-3.5 w-3.5" : "h-4 w-4"}
+              aria-hidden="true"
+            />
           )}
         </Button>
       </DropdownMenuTrigger>

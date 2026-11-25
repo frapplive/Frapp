@@ -3,7 +3,8 @@ import {
   arrangeChannelSidebar,
   compareLatestFirst,
   countsLookUnread,
-  foldedSectionAnnouncement,
+  foldAllSectionKeys,
+  foldSectionLabel,
   sidebarMutedChannelIds,
   sidebarSections,
   sidebarUnreadCounts,
@@ -347,23 +348,31 @@ describe("arrangeChannelSidebar", () => {
   });
 
   describe("folding", () => {
-    it("folds a section to its header, keeping the totals of what it holds", () => {
-      const result = arrange({
-        collapsed: new Set(["channels"]),
-        unreadByChannelId: counts({ general: [3, 0], social: [2, 1] }),
-      });
-      const channels = result.sections[0]!;
-      expect(channels).toMatchObject({
+    it("folds a section with nothing new to its heading", () => {
+      const result = arrange({ collapsed: new Set(["channels"]) });
+      expect(result.sections[0]).toEqual({
         key: "channels",
+        label: "Channels",
         collapsed: true,
         rows: [],
-        unreadCount: 5,
-        mentionCount: 1,
-        addressed: true,
       });
     });
 
-    it("keeps the open channel visible under a folded header", () => {
+    // #6053, Discord's collapsed categories: folding hides what the member
+    // has read, never what is new.
+    it("keeps every channel with something new in view under a folded heading", () => {
+      const result = arrange({
+        collapsed: new Set(["channels", CATEGORY_KEY]),
+        unreadByChannelId: counts({ zeta: [3, 0], general: [2, 1] }),
+      });
+      expect(layout(result)).toEqual([
+        "channels (folded): general, zeta",
+        `${CATEGORY_KEY} (folded): `,
+        "direct: dm-a, dm-m",
+      ]);
+    });
+
+    it("keeps the open channel visible under a folded heading", () => {
       const result = arrange({
         collapsed: new Set(["channels"]),
         activeChannelId: "social",
@@ -390,61 +399,52 @@ describe("arrangeChannelSidebar", () => {
       ]);
     });
 
-    it("adds nothing to a folded header for a muted channel's plain unread", () => {
+    it("folds away a muted channel's plain unread, but not its mention", () => {
       const result = arrange({
         collapsed: new Set(["channels"]),
         mutedChannelIds: new Set(["general", "social"]),
         unreadByChannelId: counts({ general: [7, 0], social: [3, 1] }),
       });
-      expect(result.sections[0]).toMatchObject({
-        key: "channels",
-        unreadCount: 3,
-        mentionCount: 1,
-        addressedCount: 1,
-        addressed: true,
-      });
-      const quiet = arrange({
-        collapsed: new Set(["channels"]),
-        mutedChannelIds: new Set(["general"]),
-        unreadByChannelId: counts({ general: [7, 0] }),
-      });
-      expect(quiet.sections[0]).toMatchObject({
-        unreadCount: 0,
-        mentionCount: 0,
-        addressed: false,
-      });
+      expect(layout(result)[0]).toBe("channels (folded): social");
     });
 
-    it("counts a muted channel's unread while the mute levels are unknown", () => {
+    it("keeps a muted channel's unread in view while the mute levels are unknown", () => {
       // Missing data never quiets a row, the rule the filters already follow.
       const result = arrange({
         collapsed: new Set(["channels"]),
         mutedChannelIds: undefined,
         unreadByChannelId: counts({ general: [7, 0] }),
       });
-      expect(result.sections[0]).toMatchObject({ unreadCount: 7 });
+      expect(layout(result)[0]).toBe("channels (folded): general");
     });
 
-    it("totals only rows that passed the filters", () => {
+    it("keeps nothing in view while the unread counts are unknown", () => {
+      // Unknown is not "unread": the folded section stays folded.
+      const result = arrange({
+        collapsed: new Set(["channels"]),
+        unreadByChannelId: undefined,
+      });
+      expect(layout(result)[0]).toBe("channels (folded): ");
+    });
+
+    it("shows only rows that passed the filters", () => {
       const result = arrange({
         collapsed: new Set(["channels"]),
         filters: { unreadOnly: false, hideMuted: true },
         mutedChannelIds: new Set(["general"]),
-        unreadByChannelId: counts({ general: [7, 0], social: [2, 0] }),
+        unreadByChannelId: counts({ general: [7, 1], social: [2, 0] }),
       });
-      expect(result.sections[0]).toMatchObject({
-        unreadCount: 2,
-        addressed: false,
-      });
+      // A mention gets general past Hide muted, as it does unfolded.
+      expect(layout(result)[0]).toBe("channels (folded): general, social");
     });
 
-    it("marks a folded Direct section addressed when a DM is unread", () => {
+    it("keeps an unread DM in view under a folded Direct section", () => {
       const result = arrange({
         collapsed: new Set(["direct"]),
         unreadByChannelId: counts({ "dm-m": [1, 0] }),
       });
       const direct = result.sections.find((s) => s.key === "direct");
-      expect(direct).toMatchObject({ collapsed: true, addressed: true });
+      expect(direct).toMatchObject({ collapsed: true, rows: [dmMarcus] });
     });
 
     it("folds Pinned and categories by their own keys", () => {
@@ -546,35 +546,22 @@ describe("sidebarUnreadCounts and sidebarMutedChannelIds", () => {
   });
 });
 
-describe("foldedSectionAnnouncement", () => {
-  it("names mentions first", () => {
+describe("Fold all (#6053)", () => {
+  it("changes every section of the channel list but Pinned and Direct messages", () => {
     expect(
-      foldedSectionAnnouncement({
-        unreadCount: 5,
-        mentionCount: 1,
-        addressed: true,
-      }),
-    ).toBe("1 mention, 5 unread");
+      foldAllSectionKeys([
+        { key: "pinned" },
+        { key: "channels" },
+        { key: CATEGORY_KEY },
+        { key: "direct" },
+        { key: "system" },
+      ]),
+    ).toEqual(["channels", CATEGORY_KEY, "system"]);
   });
 
-  it("says when the red comes from direct messages", () => {
-    expect(
-      foldedSectionAnnouncement({
-        unreadCount: 3,
-        mentionCount: 0,
-        addressed: true,
-      }),
-    ).toBe("3 unread messages, including direct messages");
-  });
-
-  it("is plain unread otherwise", () => {
-    expect(
-      foldedSectionAnnouncement({
-        unreadCount: 1,
-        mentionCount: 0,
-        addressed: false,
-      }),
-    ).toBe("1 unread message");
+  it("names the heading's own fold by its state", () => {
+    expect(foldSectionLabel("Committees", false)).toBe("Fold Committees");
+    expect(foldSectionLabel("Committees", true)).toBe("Unfold Committees");
   });
 });
 

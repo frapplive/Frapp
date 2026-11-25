@@ -20,12 +20,15 @@ import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
 import {
   arrangeChannelSidebar,
   countsLookUnread,
-  foldedSectionAnnouncement,
+  FOLD_ALL_LABEL,
+  foldAllSectionKeys,
+  foldSectionLabel,
   groupChannelsByCategory,
   NO_MATCHING_CHANNELS,
   SHOW_ALL_CHANNELS_LABEL,
   SIDEBAR_SAVE_FAILED_BODY,
   SIDEBAR_SAVE_FAILED_TITLE,
+  UNFOLD_ALL_LABEL,
   sidebarMutedChannelIds,
   sidebarSections,
   sidebarUnreadCounts,
@@ -72,7 +75,7 @@ import {
   resolveAuthorName,
 } from "@repo/hooks";
 import { channelPreviewLine } from "@repo/chat-core/channel-preview";
-import { can } from "@repo/validation";
+import { can, type SidebarSectionKey } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ChapterMark } from "@/components/chapter-mark";
 import { useAnchoredMenu } from "@/components/anchored-menu";
@@ -109,11 +112,7 @@ import {
   ChannelFilterMenu,
   useChannelFilterMenu,
 } from "@/components/chat/channel-filter-menu";
-import {
-  ChannelListSkeleton,
-  ChannelRow,
-  UnreadBadge,
-} from "@/components/chat/channel-row";
+import { ChannelListSkeleton, ChannelRow } from "@/components/chat/channel-row";
 import { channelMarkFor } from "@repo/hooks/channel-start";
 import { gutterBleed, PressableRow } from "@/components/list-section";
 import { ErrorState, NoChapterState } from "@/components/state-block";
@@ -163,6 +162,7 @@ import {
 import { useConnection } from "@/lib/connection/use-connection";
 import { pressHaptic } from "@/lib/haptics";
 import { focusReturnOf } from "@/lib/overlay";
+import { openItemMenu } from "@/components/item-actions-menu";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { InlineNote } from "@/components/inline-note";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
@@ -487,15 +487,20 @@ export default function ChatHomeScreen() {
       displayChannelName(channel, viewerId, memberNames),
     [viewerId, memberNames],
   );
-  const arranged = useMemo(() => {
-    return arrangeChannelSidebar({
-      // Labels per `spec/behavior/chat/README.md` § Channels (the "Channel
-      // categories" rule): the default group is "Channels", and it stays first
-      // below Pinned.
-      sections: sidebarSections(groupChannelsByCategory(channels, categories), {
+  // Labels per `spec/behavior/chat/README.md` § Channels (the "Channel
+  // categories" rule): the default group is "Channels", and it stays first
+  // below Pinned.
+  const inputSections = useMemo(
+    () =>
+      sidebarSections(groupChannelsByCategory(channels, categories), {
         channels: "Channels",
         direct: "Direct messages",
       }),
+    [channels, categories],
+  );
+  const arranged = useMemo(() => {
+    return arrangeChannelSidebar({
+      sections: inputSections,
       pinnedIds: preferences.pinnedIds,
       collapsed: preferences.collapsed,
       // Unread only hides nothing on counts that aren't the server's yet.
@@ -508,8 +513,7 @@ export default function ChatHomeScreen() {
       mutedChannelIds,
     });
   }, [
-    channels,
-    categories,
+    inputSections,
     preferences,
     unread.provisional,
     arrangementUnread,
@@ -518,6 +522,40 @@ export default function ChatHomeScreen() {
   ]);
   const filtersOn =
     preferences.filters.unreadOnly || preferences.filters.hideMuted;
+  // A heading's menu (#6053), web's heading menu on the phone's long-press:
+  // fold this section, or every section at once. Fold all leaves out an empty
+  // group, which draws no heading, and writes only what it changes.
+  const foldKeys = useMemo(
+    () =>
+      foldAllSectionKeys(
+        inputSections.filter((section) => section.channels.length > 0),
+      ),
+    [inputSections],
+  );
+  const setAllFolded = (fold: boolean) => {
+    for (const sectionKey of foldKeys) {
+      if (preferences.collapsed.has(sectionKey) !== fold) {
+        setSectionCollapsed({ sectionKey, collapsed: fold });
+      }
+    }
+  };
+  const headingMenuActions = (
+    sectionKey: SidebarSectionKey,
+    label: string,
+    collapsed: boolean,
+  ) => [
+    {
+      key: "fold",
+      label: foldSectionLabel(label, collapsed),
+      run: () => setSectionCollapsed({ sectionKey, collapsed: !collapsed }),
+    },
+    { key: "fold-all", label: FOLD_ALL_LABEL, run: () => setAllFolded(true) },
+    {
+      key: "unfold-all",
+      label: UNFOLD_ALL_LABEL,
+      run: () => setAllFolded(false),
+    },
+  ];
 
   /*
     Launch opens the last channel the member was in, the way Discord does
@@ -989,9 +1027,10 @@ export default function ChatHomeScreen() {
                   <StickyHeader key={`${section.key}:heading`}>
                     <View style={styles.headingRow}>
                       {/*
-                      A header that folds (#2877). Folded, it keeps the
-                      section's unread total, red when anything inside
-                      addresses the member, so folding never hides a mention.
+                      A header that folds (#2877). Folded, it keeps every
+                      channel with something new in view under it (#6053),
+                      so it carries no count of its own. A long press opens
+                      its menu: fold it, or every section at once.
                       The header role keeps each section on the screen
                       reader's headings rotor. A header has no button trait,
                       and iOS never announces "collapsed", so the label says
@@ -1003,9 +1042,7 @@ export default function ChatHomeScreen() {
                         accessibilityState={{ expanded: !section.collapsed }}
                         accessibilityLabel={
                           section.collapsed
-                            ? section.unreadCount > 0 || section.addressed
-                              ? `${section.label}, folded, ${foldedSectionAnnouncement(section)}`
-                              : `${section.label}, folded`
+                            ? `${section.label}, folded`
                             : section.label
                         }
                         accessibilityHint={
@@ -1013,26 +1050,52 @@ export default function ChatHomeScreen() {
                             ? "Double-tap to show its channels."
                             : "Double-tap to fold this section."
                         }
+                        accessibilityActions={headingMenuActions(
+                          section.key,
+                          section.label,
+                          section.collapsed,
+                        )
+                          .slice(1)
+                          .map(({ key, label }) => ({ name: key, label }))}
+                        onAccessibilityAction={(event) =>
+                          headingMenuActions(
+                            section.key,
+                            section.label,
+                            section.collapsed,
+                          )
+                            .find(
+                              (action) =>
+                                action.key === event.nativeEvent.actionName,
+                            )
+                            ?.run()
+                        }
                         onPress={() =>
                           setSectionCollapsed({
                             sectionKey: section.key,
                             collapsed: !section.collapsed,
                           })
                         }
+                        onLongPress={(event) =>
+                          openItemMenu(
+                            {
+                              title: section.label,
+                              actions: headingMenuActions(
+                                section.key,
+                                section.label,
+                                section.collapsed,
+                              ),
+                            },
+                            {
+                              pageY: event?.nativeEvent?.pageY,
+                              trigger: focusReturnOf(event),
+                            },
+                          )
+                        }
                         style={[styles.sectionHeader, styles.headingGrow]}
                       >
                         <Text
                           numberOfLines={1}
-                          style={[
-                            styles.heading,
-                            styles.headingInHeader,
-                            // Folded over something unread: reads as an
-                            // unread row does, since only a mention or DM
-                            // carries a number (2026-11-07).
-                            section.collapsed && section.unreadCount > 0
-                              ? styles.headingUnread
-                              : null,
-                          ]}
+                          style={[styles.heading, styles.headingInHeader]}
                         >
                           {section.label}
                         </Text>
@@ -1047,14 +1110,6 @@ export default function ChatHomeScreen() {
                           size={18}
                           direction={section.collapsed ? "right" : "down"}
                         />
-                        {section.collapsed && section.addressed ? (
-                          <View style={styles.headingBadge}>
-                            <UnreadBadge
-                              unreadCount={section.addressedCount}
-                              mentionCount={section.mentionCount}
-                            />
-                          </View>
-                        ) : null}
                       </PressableRow>
                       {/* Outside the fold control, so a screen reader
                           reaches each as its own button. The filter comes
@@ -1236,9 +1291,6 @@ function createStyles(tokens: SignetTokens) {
     },
     // A folded section's count, at the fold control's right end, where the
     // rows' badges sit.
-    headingBadge: {
-      marginLeft: "auto",
-    },
     headerActions: {
       flexDirection: "row",
       alignItems: "center",
@@ -1259,13 +1311,6 @@ function createStyles(tokens: SignetTokens) {
     heading: {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.text.mutedForeground,
-    },
-    headingUnread: {
-      ...typeRole({
-        ...tokens.typography.role.label,
-        weight: tokens.typography.weight.bold,
-      }),
-      color: tokens.color.text.foreground,
     },
     // The fold header takes the rows' `gutterBleed`, so its name lines up
     // with the rows' sigils.
