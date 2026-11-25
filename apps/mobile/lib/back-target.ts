@@ -52,8 +52,12 @@ export const SCREEN_TITLES = {
   preferences: "Settings",
   "service-hours": "Service hours",
   study: "Study hours",
+  // A member's own points and their history, pushed from You (#5950).
+  points: "Points",
   dues: "Dues",
-  documents: "Documents",
+  // Titled Resources, as web's page and the You row are: a meeting's
+  // minutes are filed here (#5949).
+  documents: SECTION_NAMES.resources,
   directory: SECTION_NAMES.directory,
   // A member's profile, pushed from the Directory or chat (#5568).
   member: "Profile",
@@ -62,6 +66,8 @@ export const SCREEN_TITLES = {
   "host-check-in": "Host check-in",
   "whats-new": "What's new",
   "finish-profile": "Finish your profile",
+  // Forwards to Documents on the Minutes file type since #5949 and draws
+  // nothing; the stack layout still registers it, so it keeps a title.
   minutes: "Minutes",
   // One meeting's minutes: the capsule over it says where back goes.
   "minutes-details": "Minutes",

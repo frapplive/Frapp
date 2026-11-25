@@ -8,6 +8,7 @@ import {
   useSetDocumentAccess,
 } from "@repo/hooks";
 import { isEmptyChannelAccessChoice } from "@repo/hooks/channel-access";
+import { isMinutesDocument } from "@repo/hooks/document-library";
 import {
   FILE_ALWAYS_LINE,
   FOLDER_ALWAYS_LINE,
@@ -50,10 +51,12 @@ export function useDocumentAccessChoices(enabled = true) {
  * read with, so the control isn't offered to someone whose list can't load.
  */
 export function canSetDocumentAccess(
-  doc: Pick<ChapterDocument, "uploaded_by" | "drive_file_id">,
+  doc: Pick<ChapterDocument, "uploaded_by" | "drive_file_id" | "meeting_id">,
   userId: string | null,
   { manages, uploads }: { manages: boolean; uploads: boolean },
 ): boolean {
+  // Minutes are seen by who their meeting invites, set on the event (#5949).
+  if (isMinutesDocument(doc)) return false;
   if (manages) return true;
   return uploads && !!userId && doc.uploaded_by === userId && !isDriveCopy(doc);
 }

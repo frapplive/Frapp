@@ -590,9 +590,6 @@ SELECT d.id::uuid, 'c0ffee00-0000-4000-8000-000000000001', d.title, d.descr, d.f
        (SELECT id FROM u WHERE n = d.who), now() - (interval '1 day' * d.days)
 FROM (VALUES
  ('c0ffee00-0000-4000-8000-800000000001','Chapter Bylaws (Revised 2026)','Adopted at the spring business meeting.','Bylaws & Governance',1,120),
- ('c0ffee00-0000-4000-8000-800000000002','Chapter Meeting Minutes — Week 9','Approved.','Meeting Minutes',4,5),
- ('c0ffee00-0000-4000-8000-800000000003','Chapter Meeting Minutes — Week 8','Approved.','Meeting Minutes',4,12),
- ('c0ffee00-0000-4000-8000-800000000004','Chapter Meeting Minutes — Week 7','Approved.','Meeting Minutes',4,19),
  ('c0ffee00-0000-4000-8000-800000000005','Fall 2026 Operating Budget','Approved by exec and the house corporation.','Finance',2,60),
  ('c0ffee00-0000-4000-8000-800000000006','Dues Payment Plan Policy','Installments, grace period, and late fee schedule.','Finance',2,58),
  ('c0ffee00-0000-4000-8000-800000000007','Risk Management Policy','Social event guidelines and sober monitor rotation.','Risk Management',3,90),
@@ -600,6 +597,38 @@ FROM (VALUES
  ('c0ffee00-0000-4000-8000-800000000009','Recruitment Handbook','Conversation guides, bid process, and timeline.','Recruitment',3,45),
  ('c0ffee00-0000-4000-8000-800000000010','New Member Education Curriculum','Eight-week schedule with learning objectives.','Recruitment',3,44)
 ) AS d(id, title, descr, folder, who, days);
+
+-- ── Minutes ──────────────────────────────────────────────────────────────────
+-- The two past Chapter Meetings have posted minutes, kept by the Secretary
+-- (u4), so the demo shows them filed in Documents (#5949): the same
+-- `file_minutes_document` the API calls when minutes post files each one in
+-- the chapter's Meeting Minutes folder, which it takes as its Minutes folder.
+-- Until #5949 the folder held three uploaded PDFs of minutes beside a Meetings
+-- page listing the same meetings, the duplication that change removed.
+INSERT INTO meetings (id, chapter_id, event_id, event_name, event_start_time,
+                      meeting_type, status, content, created_by, updated_by,
+                      posted_by, posted_at, created_at, updated_at)
+SELECT m.id::uuid, 'c0ffee00-0000-4000-8000-000000000001', e.id, e.name, e.start_time,
+       'chapter', 'posted', m.content::jsonb,
+       (SELECT id FROM u WHERE n = 4), (SELECT id FROM u WHERE n = 4),
+       (SELECT id FROM u WHERE n = 4), e.end_time + interval '1 day',
+       e.end_time + interval '2 hours', e.end_time + interval '1 day'
+FROM (VALUES
+ ('c0ffee00-0000-4000-8000-c00000000001', 'c0ffee00-0000-4000-8000-3000000000f4',
+  '{"tldr":"- Formal is at the Westfield Hotel on December 4\n- Dues are due before Thanksgiving break","summary":"Chapter heard officer reports, picked the formal venue and set the dues deadline.","announcements":"Philanthropy 5K needs course marshals.","decisions":[{"text":"Formal will be held at the Westfield Hotel Grand Hall.","headline":"Formal at the Westfield Hotel","vote":{"for":41,"against":3,"abstain":2}}],"action_items":[{"text":"Send the venue deposit to the Westfield Hotel.","owner_user_id":null,"due_date":null},{"text":"Post the formal sign-up sheet in #general.","owner_user_id":null,"due_date":null}],"tabled":[],"dates":[],"officer_reports":"","old_business":"","new_business":"","discussion_log":"Formal venue\n- Three venues were priced; the Grand Hall fits the whole chapter."}'),
+ ('c0ffee00-0000-4000-8000-c00000000002', 'c0ffee00-0000-4000-8000-3000000000f1',
+  '{"tldr":"- Highway cleanup is Saturday at 9 AM\n- New member education moves to Wednesdays","summary":"Chapter planned the highway cleanup and moved new member education.","announcements":"Founders Day photos are up in Documents.","decisions":[{"text":"New member education meets on Wednesdays for the rest of the semester.","headline":"New member education on Wednesdays","vote":null}],"action_items":[{"text":"Book the van for the highway cleanup.","owner_user_id":null,"due_date":null}],"tabled":[],"dates":[],"officer_reports":"","old_business":"","new_business":"","discussion_log":"Service\n- Highway cleanup covers mile markers 41 to 43."}')
+) AS m(id, event_id, content)
+JOIN events e ON e.id = m.event_id::uuid;
+
+DO $$
+BEGIN
+  PERFORM public.file_minutes_document(chapter_id, id)
+     FROM meetings
+    WHERE chapter_id = 'c0ffee00-0000-4000-8000-000000000001'
+      AND status = 'posted';
+END
+$$;
 
 -- ── Polls ────────────────────────────────────────────────────────────────────
 -- A poll is a chat_message of type POLL; the question and options live in

@@ -183,6 +183,7 @@ vi.mock("@/lib/providers/network-provider", () => networkMock(mockOffline));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => "/backwork",
 }));
 
 const { BackworkPage } = await import("./backwork-page");

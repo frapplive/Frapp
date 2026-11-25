@@ -24,6 +24,7 @@ import { isUniqueViolation } from '#domain/constants/postgres-error-codes';
 import { normalizeManualCode } from '#domain/utils/check-in-token';
 import { ChapterDocumentService } from '../chapter-document.service';
 import { toReportableError } from '../../../infrastructure/observability/reportable-error';
+import { reportSwallowed } from '../../../infrastructure/observability/report-swallowed';
 import {
   googleDrivePicker,
   type GoogleDrivePicker,
@@ -209,11 +210,7 @@ export class GoogleDriveService {
       );
     }
     if (!reshare) await this.refuseIfTaken(chapterId, folder);
-    const permissionId = await this.shareIfUnseen(
-      accessToken,
-      folder.id,
-      email,
-    );
+    const permissionId = await this.shareIfUnseen(accessToken, folder, email);
     if (reshare) {
       // Active again and due now, so the panel shows it syncing at once; a
       // pass that still can't see it turns it back.
@@ -277,18 +274,31 @@ export class GoogleDriveService {
    * (shared by hand before, or sitting in a folder that was): then nothing
    * is added, and nothing is taken back if connecting fails. Returns the
    * permission made, or null.
+   *
+   * An editor can't always share. Google says so up front (`canShare`), so
+   * the officer is told who can, rather than Google's refusal after asking.
    */
   private async shareIfUnseen(
     accessToken: string,
-    folderId: string,
+    folder: GoogleDriveItem,
     email: string,
   ): Promise<string | null> {
-    const seen = await this.fromDrive(() => this.drive.getItem(folderId), {
+    const seen = await this.fromDrive(() => this.drive.getItem(folder.id), {
       unseen: null,
     });
     if (seen) return null;
+    if (folder.canShare === false) {
+      // Recorded too: whether `canShare` read through a `drive.file` sign-in
+      // matches what Google then allows isn't proved on live Drive yet.
+      this.reportRefusedShare('canShare_false', null, folder);
+      throw new ForbiddenException(
+        folder.driveId
+          ? `In that shared drive, your role can’t share folders. Ask one of the drive’s Managers to connect it, or to share it with ${email} as a Viewer.`
+          : `Only the folder’s owner can share it: they’ve turned off sharing for editors. Ask the owner to connect it, or to share it with ${email} as a Viewer.`,
+      );
+    }
     try {
-      return await this.drive.shareWithServiceAccount(accessToken, folderId);
+      return await this.drive.shareWithServiceAccount(accessToken, folder.id);
     } catch (error) {
       if (
         error instanceof GoogleDriveApiError &&
@@ -310,6 +320,11 @@ export class GoogleDriveService {
           error.kind === 'not_found' ||
           error.status === 400)
       ) {
+        // A 403 never reaches Sentry or the request log with its cause, and
+        // this one is Google's setting, not ours: record Google's reason so
+        // the next refusal names it (2026-11-24, a staging connect refused
+        // with no record of why).
+        this.reportRefusedShare(error.reason, error.status, folder);
         throw new ForbiddenException(
           `Google didn’t let you share that folder. Ask its owner to connect it, or to share it with ${email} as a Viewer.`,
           { cause: toReportableError(error) },
@@ -320,6 +335,32 @@ export class GoogleDriveService {
         { cause: toReportableError(error) },
       );
     }
+  }
+
+  /**
+   * Google's reason for not sharing a picked folder, or `canShare_false`
+   * when Google said so before Frapp asked. Never a token, an email or an id.
+   */
+  private reportRefusedShare(
+    reason: string,
+    status: number | null,
+    folder: GoogleDriveItem,
+  ): void {
+    const where = folder.driveId ? 'shared_drive' : 'my_drive';
+    this.logger.warn(
+      `Google refused to share a picked folder: ${status ?? 'no status'} ${reason} (${where})`,
+    );
+    reportSwallowed(this.logger, 'a refused Drive share', () => ({
+      message: 'Google Drive refused to share a picked folder',
+      fingerprint: ['google-drive-picked-share-refused', reason],
+      level: 'warning',
+      tags: {
+        feature: 'google-drive-picker',
+        google_reason: reason,
+        google_status: String(status ?? 'none'),
+        drive_location: where,
+      },
+    }));
   }
 
   /** Records the connection; a race to the same folder answers 409. */

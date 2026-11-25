@@ -609,13 +609,17 @@ export class GoogleDriveSyncService {
         drive_modified_at: file.item.modifiedTime,
         drive_url: file.item.webViewLink,
       });
-      await this.storage
-        .deleteFile(DOCUMENTS_BUCKET, previous.storage_path)
-        .catch((error: unknown) =>
-          this.logger.warn(
-            `Could not remove a replaced Drive copy's old file: ${toReportableError(error).message}`,
-          ),
-        );
+      // A Drive copy always has a stored file; only a meeting's minutes row
+      // has none (#5949).
+      if (previous.storage_path !== null) {
+        await this.storage
+          .deleteFile(DOCUMENTS_BUCKET, previous.storage_path)
+          .catch((error: unknown) =>
+            this.logger.warn(
+              `Could not remove a replaced Drive copy's old file: ${toReportableError(error).message}`,
+            ),
+          );
+      }
       return true;
     }
     try {
@@ -665,7 +669,9 @@ export class GoogleDriveSyncService {
     await this.storage
       .deleteFiles(
         DOCUMENTS_BUCKET,
-        copies.map((copy) => copy.storage_path),
+        copies.flatMap((copy) =>
+          copy.storage_path !== null ? [copy.storage_path] : [],
+        ),
       )
       .catch((error: unknown) =>
         this.logger.warn(

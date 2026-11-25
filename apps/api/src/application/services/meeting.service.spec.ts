@@ -164,6 +164,16 @@ describe('MeetingService', () => {
       findByIds: jest.fn(async (_chapterId: string, ids: readonly string[]) =>
         ids.flatMap((id) => rows.get(id) ?? []),
       ),
+      // As the repository answers it: posted rows only, no transcript.
+      findPostedSummaries: jest.fn(
+        async (_chapterId: string, ids: readonly string[]) =>
+          ids.flatMap((id) => {
+            const row = rows.get(id);
+            if (!row || row.status !== 'posted') return [];
+            const { transcript, ...rest } = row;
+            return [{ ...rest, has_transcript: transcript !== null }];
+          }),
+      ),
       findByEvent: jest.fn(
         async (_chapterId, eventId) =>
           [...rows.values()].find((row) => row.event_id === eventId) ?? null,
@@ -171,6 +181,22 @@ describe('MeetingService', () => {
       findByChapter: jest.fn(async (_chapterId: string, _limit: number) => [
         ...rows.values(),
       ]),
+      findEventIdsWithMinutes: jest.fn(
+        async (_chapterId: string, eventIds: readonly string[]) =>
+          new Set(
+            [...rows.values()].flatMap((row) =>
+              row.event_id && eventIds.includes(row.event_id)
+                ? [row.event_id]
+                : [],
+            ),
+          ),
+      ),
+      findDraftsBy: jest.fn(
+        async (_chapterId: string, userId: string, _limit: number) =>
+          [...rows.values()].filter(
+            (row) => row.status === 'draft' && row.created_by === userId,
+          ),
+      ),
       findPostedSince: jest.fn(
         async (_chapterId: string, _since: string, _limit: number) =>
           [...rows.values()].filter((row) => row.status === 'posted'),
@@ -462,6 +488,57 @@ describe('MeetingService', () => {
         recorded: false,
       });
       expect(repo.findRecordedIds).toHaveBeenCalledWith(CHAPTER, []);
+    });
+  });
+
+  describe("Activity's minutes reads (#5949)", () => {
+    it('eventIdsWithMinutes names an event with any minutes, a draft the caller cannot read included', async () => {
+      // The VP's draft on the chapter meeting: the secretary can't read it.
+      rows.set(
+        'mtg-vp',
+        meeting({ id: 'mtg-vp', created_by: VP, status: 'draft' }),
+      );
+      const ids = await service.eventIdsWithMinutes(CHAPTER, [
+        CHAPTER_EVENT.id,
+        EXEC_EVENT.id,
+      ]);
+      expect([...ids]).toEqual([CHAPTER_EVENT.id]);
+    });
+
+    it('ownDrafts lists only the caller’s drafts they may still read, with their state', async () => {
+      rows.set('mtg-mine', meeting({ id: 'mtg-mine' }));
+      // The secretary's own, on an event that no longer invites them.
+      events.set(
+        'evt-hidden',
+        event({
+          id: 'evt-hidden',
+          others_invited: false,
+          required_role_ids: ['role-other'],
+        }),
+      );
+      rows.set(
+        'mtg-hidden',
+        meeting({ id: 'mtg-hidden', event_id: 'evt-hidden' }),
+      );
+      // Posted, so no longer a draft; and someone else's draft.
+      rows.set('mtg-posted', meeting({ id: 'mtg-posted', status: 'posted' }));
+      rows.set('mtg-vp', meeting({ id: 'mtg-vp', created_by: VP }));
+      liveRecorders.set('mtg-mine', {
+        userId: VP,
+        seenAt: new Date().toISOString(),
+      });
+
+      const { rows: drafts, facts } = await service.ownDrafts(
+        CHAPTER,
+        SECRETARY,
+        10,
+      );
+
+      expect(drafts.map((row) => row.id)).toEqual(['mtg-mine']);
+      expect(facts.get('mtg-mine')).toMatchObject({
+        started: false,
+        recording_by: VP,
+      });
     });
   });
 
@@ -878,6 +955,96 @@ describe('MeetingService', () => {
       await expect(service.canRead(CHAPTER, 'nope', PRESIDENT)).resolves.toBe(
         false,
       );
+    });
+  });
+
+  // What Documents asks for a row that files a meeting's minutes (#5949):
+  // the same rule as every other door, for posted minutes only.
+  describe('readablePosted (#5949)', () => {
+    const posted = (over: Partial<Meeting> = {}) =>
+      meeting({
+        status: 'posted',
+        posted_at: '2026-11-10T03:00:00.000Z',
+        ...over,
+      });
+    const exec = () =>
+      posted({
+        id: 'mtg-exec',
+        event_id: EXEC_EVENT.id,
+        event_name: EXEC_EVENT.name,
+        meeting_type: 'exec',
+      });
+
+    it('answers a member only the posted minutes their events invite them to', async () => {
+      rows.set('mtg-1', posted());
+      rows.set('mtg-exec', exec());
+
+      const jake = await service.readablePosted(CHAPTER, JAKE, [
+        'mtg-1',
+        'mtg-exec',
+        'no-such-minutes',
+      ]);
+      expect([...jake.keys()]).toEqual(['mtg-1']);
+
+      const president = await service.readablePosted(CHAPTER, PRESIDENT, [
+        'mtg-1',
+        'mtg-exec',
+      ]);
+      expect([...president.keys()].sort()).toEqual(['mtg-1', 'mtg-exec']);
+    });
+
+    it('never answers a draft, its author included: only posted minutes are filed', async () => {
+      rows.set('mtg-1', meeting());
+      await expect(
+        service.readablePosted(CHAPTER, SECRETARY, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+      await expect(
+        service.readablePosted(CHAPTER, PRESIDENT, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+    });
+
+    it('keeps posted minutes whose event is gone to officers who can edit any minutes', async () => {
+      rows.set('mtg-1', posted({ event_id: null }));
+      await expect(
+        service.readablePosted(CHAPTER, JAKE, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+      expect(
+        (await service.readablePosted(CHAPTER, PRESIDENT, ['mtg-1'])).has(
+          'mtg-1',
+        ),
+      ).toBe(true);
+    });
+
+    it('carries what the row shows: the name, the start, the counts and the gist', async () => {
+      rows.set(
+        'mtg-1',
+        posted({
+          transcript: 'Speaker 1: hello',
+          content: {
+            ...EMPTY_MEETING_CONTENT,
+            tldr: '- Dues are due Friday\n- Formal is December 4',
+            decisions: [{ text: 'Raise dues', vote: null }],
+            action_items: [
+              { text: 'Email the roster', owner_user_id: null, due_date: null },
+              { text: 'Book it', owner_user_id: null, due_date: null },
+            ],
+          },
+        }),
+      );
+      const facts = (
+        await service.readablePosted(CHAPTER, JAKE, ['mtg-1'])
+      ).get('mtg-1');
+      expect(facts).toEqual({
+        meeting_id: 'mtg-1',
+        event_name: rows.get('mtg-1')?.event_name,
+        event_start_time: rows.get('mtg-1')?.event_start_time,
+        meeting_type: 'chapter',
+        other_label: null,
+        decision_count: 1,
+        action_item_count: 2,
+        recorded: true,
+        gist: 'Dues are due Friday',
+      });
     });
   });
 

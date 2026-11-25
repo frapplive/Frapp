@@ -226,6 +226,77 @@ describe('SupabaseChapterDocumentRepository — tenant scope', () => {
       harness.rows('chapter_documents').find((d) => d.id === DOC_A)?.pinned_at,
     ).toBeUndefined();
   });
+
+  // #5949: the minutes flow's reads and writes name their chapter too.
+  it('findInFolders reads only this chapter’s documents, though both chapters use the folder name', async () => {
+    const found = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.findInFolders(CHAPTER_A, [FOLDER]),
+    );
+    expect(found.map((doc) => doc.id)).toEqual([DOC_A]);
+    await expect(repo.findInFolders(CHAPTER_A, [])).resolves.toEqual([]);
+  });
+
+  it('findByChapter leaves out the rows that file minutes when asked for files only', async () => {
+    harness = createTenantHarness({
+      tables: {
+        chapter_documents: [
+          ...seed().chapter_documents.map((row) => ({
+            ...row,
+            meeting_id: null,
+          })),
+          inA({
+            id: '0a000000-0000-4000-8000-0000000000a2',
+            title: 'Chapter Meeting',
+            folder: 'Minutes',
+            storage_path: null,
+            uploaded_by: null,
+            meeting_id: '0a000000-0000-4000-8000-0000000000b2',
+            created_at: '2026-02-01T00:00:00.000Z',
+          }),
+          inB({
+            id: '0b000000-0000-4000-8000-0000000000a2',
+            title: 'Chapter Meeting',
+            folder: 'Minutes',
+            storage_path: null,
+            uploaded_by: null,
+            meeting_id: '0b000000-0000-4000-8000-0000000000b2',
+            created_at: '2026-02-01T00:00:00.000Z',
+          }),
+        ],
+      },
+      // A meeting belongs to one chapter, so its id can't collide either.
+      collisionExempt: { chapter_documents: ['storage_path', 'meeting_id'] },
+    });
+    repo = new SupabaseChapterDocumentRepository(harness.client);
+
+    const files = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.findByChapter(CHAPTER_A, { filesOnly: true }),
+    );
+    expect(files.map((doc) => doc.id)).toEqual([DOC_A]);
+    const all = await repo.findByChapter(CHAPTER_A);
+    expect(all).toHaveLength(2);
+  });
+
+  it('fileMinutes hands the database the chapter under its own name', async () => {
+    harness = createTenantHarness({
+      tables: seed(),
+      collisionExempt: { chapter_documents: ['storage_path'] },
+      rpc: { file_minutes_document: { data: DOC_A } },
+      rpcChapterArg: 'p_chapter_id',
+    });
+    repo = new SupabaseChapterDocumentRepository(harness.client);
+
+    const filed = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.fileMinutes(CHAPTER_A, 'meeting-1'),
+    );
+    expect(filed).toBe(DOC_A);
+    expect(harness.rpcCalls).toEqual([
+      {
+        fn: 'file_minutes_document',
+        args: { p_chapter_id: CHAPTER_A, p_meeting_id: 'meeting-1' },
+      },
+    ]);
+  });
 });
 
 /**

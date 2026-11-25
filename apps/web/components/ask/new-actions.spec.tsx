@@ -49,11 +49,11 @@ describe("NewActions (#5946)", () => {
   it("draws what a browser can start, in the shared order, each opening its page's own form", () => {
     render(<NewActions />);
     expect(actions()).toEqual([
-      ["New minutes", "/meetings?new=1"],
+      ["New minutes", "/documents?type=minutes&new=minutes"],
       ["New event", "/events?new=1"],
       ["New task", "/tasks?new=1"],
       ["New message", "/messages?new=1"],
-      ["Log hours", "/service?new=1"],
+      ["Log hours", "/profile?open=service&new=1"],
       ["Upload", "/documents?new=1"],
     ]);
   });

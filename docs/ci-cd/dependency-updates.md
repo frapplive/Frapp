@@ -273,7 +273,10 @@ makes auto-updates tolerable.
 *transitive* dependencies) are invisible to it, so they neither get bumped nor get cleaned up as the
 direct dependencies that pulled them in move on. An override that shares its name with a direct
 dependency is the exception: #2963 bumped the exact root `sharp` devDependency and `overrides.sharp`
-together (2026-09-30). Reviewing that block is a manual job; `npm run check:npm-audit` is what tells you an
+together (2026-09-30). `undici` has been one of those since 2026-11-24: `apps/api` depends on it
+directly for its Supabase connection pool (`supabase-fetch.ts`), so a bump of that dependency past
+the override's range changes `package.json` while the override keeps the lockfile where it was, with
+no error. Move the two together. Reviewing that block is a manual job; `npm run check:npm-audit` is what tells you an
 override is no longer doing its work.
 
 ## Dependabot PRs need no docs exemption

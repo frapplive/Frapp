@@ -11,7 +11,9 @@ import { PointsAdjustmentForm } from "./points-adjustment-form";
 type PointsAdjustmentDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdjusted: () => Promise<void> | void;
+  onAdjusted?: () => Promise<void> | void;
+  /** The member it was opened from; named in the title and not asked for. */
+  member?: { userId: string; name: string };
   /**
    * Forwarded to the underlying `DialogContent`. `useGatedDialog` splits its
    * contract across `dialogProps` and `contentProps`, and a parent that owns
@@ -33,6 +35,7 @@ export function PointsAdjustmentDialog({
   open,
   onOpenChange,
   onAdjusted,
+  member,
   onCloseAutoFocus,
 }: PointsAdjustmentDialogProps) {
   return (
@@ -48,11 +51,14 @@ export function PointsAdjustmentDialog({
         aria-describedby={undefined}
       >
         <DialogHeader>
-          <DialogTitle>Adjust points</DialogTitle>
+          <DialogTitle>
+            {member ? `Adjust ${member.name}'s points` : "Adjust points"}
+          </DialogTitle>
         </DialogHeader>
         <PointsAdjustmentForm
           layout="dialog"
           onAdjusted={onAdjusted}
+          member={member}
           onDone={() => onOpenChange(false)}
           onCancel={() => onOpenChange(false)}
         />

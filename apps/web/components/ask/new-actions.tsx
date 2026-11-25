@@ -9,7 +9,9 @@ import {
   WEB_NEW_ACTIONS,
   type NewActionKey,
 } from "@repo/validation";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import { newIntentHref } from "@/components/layout/new-intent";
+import { standingHref } from "@/components/standing/standing-doors";
 import {
   DirectMessagesGlyph,
   DocumentsGlyph,
@@ -46,11 +48,19 @@ const WEB_ACTIONS: Record<
   NewActionKey,
   { href: string; icon: NavGlyphComponent } | null
 > = {
-  newMinutes: { href: newIntentHref("/meetings"), icon: MeetingsGlyph },
+  // Minutes are filed in Documents (#5949): its add menu holds New minutes.
+  newMinutes: {
+    href: newIntentHref(MINUTES_DOCUMENTS_HREF, "minutes"),
+    icon: MeetingsGlyph,
+  },
   newEvent: { href: newIntentHref("/events"), icon: EventsGlyph },
   newTask: { href: newIntentHref("/tasks"), icon: TasksGlyph },
   message: { href: newIntentHref(MESSAGES_ROUTE), icon: DirectMessagesGlyph },
-  logHours: { href: newIntentHref("/service"), icon: ServiceGlyph },
+  // The member's own Service hours panel on Profile holds the form (#5950).
+  logHours: {
+    href: newIntentHref(standingHref("service")),
+    icon: ServiceGlyph,
+  },
   upload: { href: newIntentHref("/documents"), icon: DocumentsGlyph },
   // The phone's, or another row's (`WEB_NEW_ACTIONS`).
   search: null,

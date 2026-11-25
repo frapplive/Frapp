@@ -68,6 +68,8 @@ import {
 import type { CardPollPayload } from '#domain/utils/poll-vote-rules';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import { ActivityLinkService } from './activity-link.service';
+import { ActivityMinutesService } from './activity-minutes.service';
+import type { ActivityMinutes } from './activity-minutes.service';
 import {
   acceptableWeekStart,
   defaultWeekStart,
@@ -111,6 +113,7 @@ export const ACTIVITY_SECTIONS = [
   'made_events',
   'links',
   'reminders',
+  'minutes',
 ] as const;
 export type ActivitySection = (typeof ACTIVITY_SECTIONS)[number];
 
@@ -457,6 +460,13 @@ export interface ActivityView {
    * (`ChatReminderService.listFor`). Due ones count in `needs_you_count`.
    */
   reminders: ActivityReminder[];
+  /**
+   * Minutes waiting on the caller (#5949), while the chapter has Meetings on:
+   * meetings to write minutes for (a `meetings:record` holder's), their own
+   * unposted drafts, and the drafts they take notes on
+   * (`ActivityMinutesService`). Up to 25 of each.
+   */
+  minutes: ActivityMinutes;
   made_by_you: {
     /**
      * The caller's poll cards, newest first: up to 25 open and the 25 most
@@ -488,7 +498,9 @@ export interface ActivityView {
   /**
    * How many things wait on the caller: every `needs_you` row, counted before
    * the per-list cap, plus events whose check-in is open and not yet used,
-   * less what the caller snoozed (`snoozed_until`).
+   * due reminders, and the `minutes` rows that ask something (every meeting
+   * to write, every own draft, and notes the caller was added to but hasn't
+   * started), less what the caller snoozed (`snoozed_until`).
    */
   needs_you_count: number;
   /** Sections that could not be read this time and are served empty. */
@@ -541,6 +553,25 @@ export interface ActivityArchive {
 
 /** Rows each list carries. The count in `needs_you_count` is taken before it. */
 const LIST_LIMIT = 25;
+/** The minutes section with nothing in it: Meetings off, or a failed read. */
+const NO_MINUTES: ActivityMinutes = {
+  to_write: [],
+  drafts: [],
+  taking_notes: [],
+};
+
+/**
+ * How many minutes rows wait on the caller (#5949): every meeting to write,
+ * every own draft, and notes they were added to but haven't started; notes
+ * they are already taking are theirs, not an ask.
+ */
+function minutesWaiting(minutes: ActivityMinutes): number {
+  return (
+    minutes.to_write.length +
+    minutes.drafts.length +
+    minutes.taking_notes.filter((row) => !row.joined).length
+  );
+}
 /** Members a task-for-everyone row names for its faces. */
 const GROUP_FACES = 5;
 /** How many of the chapter's newest poll cards are checked for "open and unvoted". */
@@ -908,6 +939,8 @@ interface EventViewer {
  *   an event that leaves the member out contributes nothing.
  * - **Links** are read by {@link ActivityLinkService}, under chat's channel
  *   list and the block list, as polls are.
+ * - **Minutes** are read by {@link ActivityMinutesService}, through the
+ *   event read rule, the minutes' own read rule and note-taking's (#5949).
  *
  * A module the chapter has switched off contributes nothing. The sections
  * are read independently: one that fails is served empty and named in
@@ -941,13 +974,14 @@ export class ActivityService {
     @Inject(CHAT_FORM_RESPONSE_REPOSITORY)
     private readonly formResponseRepo: IChatFormResponseRepository,
     private readonly channelAccess: ChannelAccessService,
+    private readonly minutesService: ActivityMinutesService,
   ) {}
 
   async getActivity(
     chapterId: string,
     userId: string,
     enabledModules: EnabledModules,
-    options: { weekStart?: Date; now?: Date } = {},
+    options: { weekStart?: Date; now?: Date; minutes?: boolean } = {},
   ): Promise<ActivityView> {
     const permissions = await this.rbacService.getEffectivePermissions(
       chapterId,
@@ -1019,6 +1053,7 @@ export class ActivityService {
       links,
       reminders,
       weekEvents,
+      minutes,
     ] = await Promise.all([
       this.settle('tasks', chapterId, () =>
         on('tasks')
@@ -1094,6 +1129,14 @@ export class ActivityService {
             )
           : Promise.resolve(null),
       ),
+      // What the Meetings list page asked of an officer (#5949), while the
+      // chapter has Meetings on, for a client that draws it: a build from
+      // before it gets none, so its badge never counts rows it can't show.
+      this.settle('minutes', chapterId, () =>
+        options.minutes && on('meetings')
+          ? this.minutesService.listFor(chapterId, userId, permissions, now)
+          : Promise.resolve(NO_MINUTES),
+      ),
     ]);
 
     const unavailable: ActivitySection[] = [];
@@ -1130,6 +1173,7 @@ export class ActivityService {
     const myEvents = valueOf('made_events', madeEvents, []);
     const myLinks = valueOf('links', links, []);
     const myReminders = valueOf('reminders', reminders, []);
+    const myMinutes = valueOf('minutes', minutes, NO_MINUTES);
 
     const snoozes = await snoozesRead;
     // A snoozed row is still served, carrying `snoozed_until`, so a client
@@ -1187,7 +1231,10 @@ export class ActivityService {
       awake(upcoming).filter(
         (event) => event.check_in_open && !event.checked_in,
       ).length +
-      myReminders.filter((reminder) => reminder.due).length;
+      myReminders.filter((reminder) => reminder.due).length +
+      // Minutes rows have no snooze (#5949): their ids name meetings and
+      // events, which Coming up's event snooze would collide with.
+      minutesWaiting(myMinutes);
 
     return this.withUnread(chapterId, userId, snoozes.ended, {
       needs_you: {
@@ -1200,6 +1247,11 @@ export class ActivityService {
       coming_up: awakeFirst(upcoming),
       links: awakeFirst(withSnooze('link', myLinks, (row) => row.id)),
       reminders: myReminders,
+      minutes: {
+        to_write: myMinutes.to_write.slice(0, LIST_LIMIT),
+        drafts: myMinutes.drafts.slice(0, LIST_LIMIT),
+        taking_notes: myMinutes.taking_notes.slice(0, LIST_LIMIT),
+      },
       made_by_you: {
         // Capped per state in `readPolls`: 25 open and 25 closed.
         polls: pollLists.mine,

@@ -18,9 +18,16 @@ import {
   DirectMessageGlyph,
   MuteGlyph,
   PinGlyph,
+  StartThreadGlyph,
 } from "./chat-glyphs";
 import { LinkGlyph } from "@/components/profile/profile-glyphs";
 import { ChannelLinksPanel, useChannelLinkCount } from "./channel-links-panel";
+import {
+  AllThreadsPanel,
+  ThreadsUnreadDot,
+  threadsUnreadPhrase,
+  type AllThreadsProps,
+} from "./all-threads-popover";
 import { ChatGlyph, SearchGlyph } from "@/components/layout/nav-glyphs";
 import { cn } from "@/lib/utils";
 import { EYEBROW } from "@/components/ui/typography";
@@ -53,6 +60,7 @@ import {
 } from "@/lib/chat/chat-density";
 import type { ChatMessage } from "@repo/chat-core/types";
 import {
+  ALL_THREADS_TITLE,
   CHANNEL_LEVEL_DETAIL,
   HIDE_CONVERSATION_CONFIRM_ACTION,
   HIDE_CONVERSATION_CONFIRM_BODY,
@@ -65,7 +73,9 @@ import {
 
 /**
  * The channel header's one overflow control: Search, Pinned, Saved, Links
- * (the channel's sign-up links, #5779) and Notifications behind a single `⋯`.
+ * (the channel's sign-up links, #5779) and Notifications behind a single `⋯`,
+ * and Threads first of all while the header is too narrow for its own button
+ * (Paul, 2026-11-24).
  *
  * The board merges them (`1t`: "Channel header: Search, Pins, Bookmarks,
  * Notification level buttons → one ⋯ menu merged") and the geometry forces it
@@ -116,7 +126,8 @@ type View =
   | "notifications"
   | "display"
   | "hide"
-  | "background";
+  | "background"
+  | "threads";
 
 type ChannelMenuProps = {
   /** The channel currently open, or `null` when none is selected yet. */
@@ -193,6 +204,16 @@ type ChannelMenuProps = {
     error: string | null;
     onPick: (pick: ChatBackgroundPick) => void;
   };
+  /**
+   * All threads, as a row here rather than the header's own Threads button.
+   * The shell passes it only while the header is too narrow for that button
+   * (chat beside a page, or a thread open beside the channel), so the
+   * channel's name keeps the room (Paul, 2026-11-24). Absent, no row.
+   */
+  threads?: AllThreadsProps & {
+    /** Threads with new replies: the row's count and the `⋯`'s dot. */
+    unread: number;
+  };
 };
 
 type MenuRow = {
@@ -224,6 +245,7 @@ const VIEW_TITLES: Record<Exclude<View, "menu">, string> = {
   display: "Display",
   hide: HIDE_CONVERSATION_LABEL,
   background: "Background",
+  threads: ALL_THREADS_TITLE,
 };
 
 export function ChannelMenu({
@@ -250,6 +272,7 @@ export function ChannelMenu({
   catchUp,
   displayLock,
   background,
+  threads,
 }: ChannelMenuProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("menu");
@@ -289,7 +312,22 @@ export function ChannelMenu({
   }, [view, open]);
 
   const linkCount = useChannelLinkCount(activeChannelId, open);
+  const unreadThreads = threads?.unread ?? 0;
+  // The header widened past the point Threads lives here while its view was
+  // open: show the menu rather than a titled, empty panel.
+  const shownView = view === "threads" && !threads ? "menu" : view;
   const rows: MenuRow[] = [
+    // First when it is here: it stands in for a header button.
+    ...(threads
+      ? [
+          {
+            view: "threads" as const,
+            label: ALL_THREADS_TITLE,
+            Glyph: StartThreadGlyph,
+            count: unreadThreads || undefined,
+          },
+        ]
+      : []),
     { view: "search", label: "Search messages", Glyph: SearchGlyph },
     {
       view: "pins",
@@ -361,6 +399,44 @@ export function ChannelMenu({
       : []),
   ];
 
+  // Threads, when it is here, leads even Catch up: it stands in for a header
+  // button the member reaches for first.
+  const leadRows = threads ? rows.slice(0, 1) : [];
+  const restRows = threads ? rows.slice(1) : rows;
+  const renderRow = ({
+    view: target,
+    label,
+    Glyph,
+    count,
+    detail,
+  }: MenuRow) => (
+    <li key={target}>
+      <button
+        type="button"
+        onClick={() => setView(target)}
+        // Spelled out rather than left to name computation: the count
+        // sits in its own element pushed to the far end of the row,
+        // and concatenating the two text nodes yields "Pinned2".
+        aria-label={
+          count
+            ? `${label}, ${count}`
+            : detail
+              ? `${label}, ${detail}`
+              : undefined
+        }
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-foreground transition-colors hover:bg-card-hover"
+      >
+        <Glyph className="h-5 w-5 shrink-0 text-muted-foreground" />
+        {label}
+        {count || detail ? (
+          <span className="ml-auto text-caption font-normal text-muted-foreground">
+            {count || detail}
+          </span>
+        ) : null}
+      </button>
+    </li>
+  );
+
   // Every jump navigates the timeline behind this popover, so the popover has
   // to get out of the way. Closing also resets the view, so the next open
   // starts at the menu rather than resuming wherever the member left off.
@@ -381,7 +457,7 @@ export function ChannelMenu({
         <Button
           variant="ghost"
           size="icon"
-          className={compactControlClassName}
+          className={cn(compactControlClassName, "relative")}
           // NOT disabled without a channel. Four separate triggers collapsed
           // into this one, and two of the panels behind it are chapter-wide:
           // `BookmarksPanel` never reads a channel id, and `ChatSearchPanel`
@@ -390,9 +466,15 @@ export function ChannelMenu({
           // offline in exactly the states this lane keeps the frame up for — a
           // stale `?channel=` link, or a chapter with no channels yet. Only
           // `NotificationLevelPanel` needs one, and it has its own `disabled`.
-          aria-label="Channel menu"
+          aria-label={
+            unreadThreads > 0
+              ? `Channel menu, ${threadsUnreadPhrase(unreadThreads)}`
+              : "Channel menu"
+          }
         >
           <MoreHorizontal className="h-5 w-5" />
+          {/* The header's Threads button's dot, carried here with its row. */}
+          {unreadThreads > 0 ? <ThreadsUnreadDot /> : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -402,7 +484,7 @@ export function ChannelMenu({
         // viewport so it holds the 375px floor.
         className={cn(
           "p-0",
-          view === "search" ? "w-[min(32rem,calc(100vw-1rem))]" : "w-80",
+          shownView === "search" ? "w-[min(32rem,calc(100vw-1rem))]" : "w-80",
         )}
         align="end"
         // An open picker inside a panel (search's `from:` / `in:` list) takes
@@ -420,10 +502,11 @@ export function ChannelMenu({
           }
         }}
       >
-        {view === "menu" ? (
+        {shownView === "menu" ? (
           <ul className="divide-y divide-border">
+            {leadRows.map(renderRow)}
             {/*
-              First, because it is about what the member just walked into,
+              First after Threads, because it is about what the member just walked into,
               and like Pin to top it opens no view here: the summary is a
               panel beside the channel, so the menu gets out of its way.
             */}
@@ -445,33 +528,7 @@ export function ChannelMenu({
                 </button>
               </li>
             ) : null}
-            {rows.map(({ view: target, label, Glyph, count, detail }) => (
-              <li key={target}>
-                <button
-                  type="button"
-                  onClick={() => setView(target)}
-                  // Spelled out rather than left to name computation: the count
-                  // sits in its own element pushed to the far end of the row,
-                  // and concatenating the two text nodes yields "Pinned2".
-                  aria-label={
-                    count
-                      ? `${label}, ${count}`
-                      : detail
-                        ? `${label}, ${detail}`
-                        : undefined
-                  }
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-foreground transition-colors hover:bg-card-hover"
-                >
-                  <Glyph className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  {label}
-                  {count || detail ? (
-                    <span className="ml-auto text-caption font-normal text-muted-foreground">
-                      {count || detail}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            ))}
+            {restRows.map(renderRow)}
             {pinToTop ? (
               <li>
                 <button
@@ -511,10 +568,10 @@ export function ChannelMenu({
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className={cn(EYEBROW, "text-muted-foreground")}>
-                {VIEW_TITLES[view]}
+                {VIEW_TITLES[shownView]}
               </span>
             </div>
-            {view === "search" ? (
+            {shownView === "search" ? (
               <ChatSearchPanel
                 activeChannelId={activeChannelId}
                 channels={searchChannels}
@@ -527,7 +584,7 @@ export function ChannelMenu({
                 }}
               />
             ) : null}
-            {view === "pins" ? (
+            {shownView === "pins" ? (
               <PinsPanel
                 messages={messages}
                 hidden={hiddenPins}
@@ -538,7 +595,7 @@ export function ChannelMenu({
                 }}
               />
             ) : null}
-            {view === "saved" ? (
+            {shownView === "saved" ? (
               <BookmarksPanel
                 bookmarks={bookmarks}
                 nameFor={nameFor}
@@ -554,10 +611,19 @@ export function ChannelMenu({
                 onRemove={onRemoveBookmark}
               />
             ) : null}
-            {view === "links" && activeChannelId ? (
+            {shownView === "threads" && threads ? (
+              <AllThreadsPanel
+                {...threads}
+                onOpenThread={(channelId, rootId) => {
+                  close();
+                  threads.onOpenThread(channelId, rootId);
+                }}
+              />
+            ) : null}
+            {shownView === "links" && activeChannelId ? (
               <ChannelLinksPanel channelId={activeChannelId} />
             ) : null}
-            {view === "hide" && hideConversation ? (
+            {shownView === "hide" && hideConversation ? (
               <div className="space-y-3 px-3 py-3">
                 <p className="text-sm font-semibold text-foreground">
                   {hideConversationConfirmTitle(hideConversation.name)}
@@ -583,14 +649,14 @@ export function ChannelMenu({
                 </div>
               </div>
             ) : null}
-            {view === "display" && activeChannelId ? (
+            {shownView === "display" && activeChannelId ? (
               <ChannelDisplayPanel
                 channelId={activeChannelId}
                 onChange={close}
                 lockControl={displayLock}
               />
             ) : null}
-            {view === "background" && background ? (
+            {shownView === "background" && background ? (
               // Stays open while saving: the swatches show the pending state,
               // and a refused photo needs its error read here.
               <ChatBackgroundPicker
@@ -603,7 +669,7 @@ export function ChannelMenu({
                 onPick={background.onPick}
               />
             ) : null}
-            {view === "notifications" ? (
+            {shownView === "notifications" ? (
               <NotificationLevelPanel
                 level={notificationLevel}
                 fromChapterLevel={notificationFromChapterLevel}

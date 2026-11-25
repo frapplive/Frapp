@@ -20,6 +20,13 @@ import {
   readDateRange,
 } from './conversation-lines';
 
+/**
+ * The search by meaning is down and no passage held the question's words.
+ * Not "nothing matched": a record worded differently may still answer.
+ */
+const WORDS_ONLY_MISS_NOTE =
+  'Searching by meaning is not working right now, so only exact words were matched, and none were found. Try the words the record itself would use, and do not conclude that the chapter has no record of this.';
+
 export const DOCUMENT_SOURCE_TYPE: CorpusSourceType = 'chapter_document';
 export const MINUTES_SOURCE_TYPE: CorpusSourceType = 'meeting_minutes';
 
@@ -176,7 +183,9 @@ export class SearchRecordsTool implements AgentReadTool<Args> {
       entities: [],
       note:
         fitted.sources.length === 0
-          ? 'Nothing in the documents or minutes you can open matched.'
+          ? retrieved.wordsOnly
+            ? WORDS_ONLY_MISS_NOTE
+            : 'Nothing in the documents or minutes you can open matched.'
           : fitted.cut
             ? 'More matched than fits here: passages were left off or the last one is cut short. Narrow the search, or read the document or the minutes in full.'
             : null,

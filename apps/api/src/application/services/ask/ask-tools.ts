@@ -247,7 +247,7 @@ export class MyPointsAskTool implements AskTool {
   }
 }
 
-/** This semester's standings, as the Points page shows them to every member. */
+/** This semester's standings, as the Directory's points sort shows them to every member. */
 @Injectable()
 export class PointsLeaderboardAskTool implements AskTool {
   readonly name = 'points_leaderboard';
@@ -255,7 +255,7 @@ export class PointsLeaderboardAskTool implements AskTool {
     "The chapter's points standings this semester: who has the most points.";
   readonly kind = 'points' as const;
   readonly title = 'Points standings';
-  readonly page = 'points' as const;
+  readonly page = 'standings' as const;
   readonly permission = SystemPermissions.MEMBERS_VIEW;
   readonly module = 'points';
   readonly reach = 'chapter' as const;

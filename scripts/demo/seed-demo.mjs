@@ -548,7 +548,9 @@ export async function uploadPlaceholders({ supabaseUrl, serviceKey, namespace, f
     const { bucket, table } = BUCKETS[kind];
     const rows = await request(
       fetchImpl,
-      `${supabaseUrl}/rest/v1/${table}?select=id,title,storage_path&chapter_id=eq.${chapterId}&order=id`,
+      // Files only: a row that files a meeting's minutes (#5949) has no
+      // object to upload.
+      `${supabaseUrl}/rest/v1/${table}?select=id,title,storage_path&chapter_id=eq.${chapterId}&storage_path=not.is.null&order=id`,
       { headers: serviceHeaders(serviceKey) },
       `reading ${table}`,
     );

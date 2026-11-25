@@ -517,7 +517,7 @@ describe("DashboardShell", () => {
 
     it("lights More on a page it still holds (#5943 folds them later)", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/points";
+      mockPathname.value = "/tasks";
       shell();
       expect(
         within(primary()).getByRole("button", { name: /More/ }),
@@ -582,6 +582,19 @@ describe("DashboardShell", () => {
       ).toBeInTheDocument();
     });
 
+    it("opens Backwork from Resources in a chapter with only Backwork on (#5949)", () => {
+      mockPermissions.value = ["members:view", "backwork:upload"];
+      mockChapter.value = {
+        name: "Alpha Beta Gamma",
+        enabled_modules: { documents: false, meetings: false },
+      };
+      setWindowWidth(1440);
+      shell();
+      expect(
+        within(primary()).getByRole("link", { name: "Resources" }),
+      ).toHaveAttribute("href", "/backwork");
+    });
+
     it("keeps a council's sidebar to what its routes serve (#5933)", () => {
       mockChapter.value = {
         name: "Westfield IFC",
@@ -623,11 +636,11 @@ describe("DashboardShell", () => {
 
     it("titles a page in its own header from lg up, as the route's only h1", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/study";
+      mockPathname.value = "/documents";
       const { container } = shell();
       const headings = screen.getAllByRole("heading", { level: 1 });
       expect(headings).toHaveLength(1);
-      expect(headings[0]).toHaveTextContent("Study hours");
+      expect(headings[0]).toHaveTextContent("Resources");
       expect(
         container.querySelector("[data-tool-page-header]"),
       ).toContainElement(headings[0]!);
@@ -645,7 +658,7 @@ describe("DashboardShell", () => {
 
     it("titles the page in the top bar below lg, as its only h1", () => {
       setWindowWidth(800);
-      mockPathname.value = "/study";
+      mockPathname.value = "/documents";
       const { container } = shell();
       const headings = screen.getAllByRole("heading", { level: 1 });
       expect(headings).toHaveLength(1);
@@ -662,9 +675,39 @@ describe("DashboardShell", () => {
       const header = container.querySelector(
         "[data-tool-page-header]",
       ) as HTMLElement;
+      // Bulk upload is under Resources and goes back to Backwork, the view
+      // it was opened from (#5949).
       expect(
-        within(header).getByRole("link", { name: "Backwork" }),
+        within(header).getByRole("link", { name: "Resources" }),
       ).toHaveAttribute("href", "/backwork");
+    });
+
+    it("offers no crumb to Backwork to a member who can't open Backwork", () => {
+      // The Resources row showing for Documents doesn't make Backwork a door
+      // this member can open.
+      setWindowWidth(1440);
+      mockPermissions.value = ["members:view"];
+      mockPathname.value = "/backwork/upload";
+      const { container } = shell();
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      expect(
+        within(header).queryByRole("link", { name: "Resources" }),
+      ).toBeNull();
+    });
+
+    it("offers no crumb to Backwork while permissions are still loading (#3854)", () => {
+      setWindowWidth(1440);
+      mockPermissions.value = undefined;
+      mockPathname.value = "/backwork/upload";
+      const { container } = shell();
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      expect(
+        within(header).queryByRole("link", { name: "Resources" }),
+      ).toBeNull();
     });
 
     it("titles New for a member without Frapp Intelligence by what it is", () => {

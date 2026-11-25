@@ -9,11 +9,7 @@ import {
   PanelLeftOpen,
   Plus,
 } from "lucide-react";
-import {
-  activityCountChip,
-  useActivity,
-  useHiddenUnsetFeatures,
-} from "@repo/hooks";
+import { activityCountChip, useActivity } from "@repo/hooks";
 import { SECTION_NAMES } from "@repo/validation";
 import { cn } from "@/lib/utils";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
@@ -28,6 +24,7 @@ import { useFind } from "@/components/layout/find-bar";
 import {
   MORE_ROWS,
   SIDEBAR_ROWS,
+  navItemHolds,
   withChapterWords,
   type NavItem,
 } from "@/components/layout/nav-config";
@@ -38,6 +35,7 @@ import {
 } from "@/components/layout/notifications-bell";
 import {
   isNavItemVisible,
+  navItemTarget,
   navRowClassName,
   ProtectedNavItem,
 } from "@/components/layout/protected-nav-item";
@@ -130,16 +128,16 @@ const ICON = "h-[18px] w-[18px]";
 
 /**
  * A row's `aria-current`: "page" on its own page, "true" on a page under it
- * (a meeting's minutes under Meetings, Bulk upload under Backwork), so the
- * sidebar always says where you are (rulebook § 8). Only "page" makes the row
- * close the page it opened; under it, the row goes back to its list.
+ * (a meeting's minutes and Backwork's Bulk upload under Resources, #5949), so
+ * the sidebar always says where you are (rulebook § 8). Only "page" makes the
+ * row close the page it opened; under it, the row goes back to its list.
  */
 export function currentFor(
-  item: Pick<NavItem, "href">,
+  item: Pick<NavItem, "href" | "routes" | "views">,
   pathname: string,
 ): "page" | "true" | undefined {
   if (item.href === pathname) return "page";
-  return pathname.startsWith(`${item.href}/`) ? "true" : undefined;
+  return navItemHolds(item, pathname) ? "true" : undefined;
 }
 
 export function Sidebar({
@@ -165,19 +163,10 @@ export function Sidebar({
   const activityCount = activityCountChip(
     useActivity({ enabled: !isCouncil }).data,
   );
-  // Study hours with no active zone, and Documents with nothing in it for a
-  // viewer who can't upload, leave the nav (`nav-config.ts`, Setup gating).
-  const hiddenFeatures = useHiddenUnsetFeatures(permissions, isModuleEnabled);
   // A row named in the chapter's own word (Recruitment's Rush / Intake).
   const vocabulary = useChapterVocabulary();
   const visible = (item: NavItem) =>
-    isNavItemVisible(
-      item,
-      permissions,
-      isModuleEnabled,
-      hiddenFeatures,
-      tenantKind,
-    );
+    isNavItemVisible(item, permissions, isModuleEnabled, tenantKind);
 
   const counts: Record<
     string,
@@ -268,16 +257,31 @@ export function Sidebar({
       >
         <NewRow pathname={pathname} collapsed={rail} onNavigate={onNavigate} />
         <SearchRow collapsed={rail} onNavigate={onNavigate} />
-        {SIDEBAR_ROWS.map((item) => {
+        {SIDEBAR_ROWS.map((row) => {
+          // A row over several views opens the first the viewer can
+          // (Resources opens Backwork in a chapter with only Backwork on).
+          const item = {
+            ...row,
+            href: navItemTarget(row, permissions, isModuleEnabled),
+          };
           const current = currentFor(item, pathname);
-          // A gated row is hidden until the permission read answers (#3854).
-          // It holds its place meanwhile, so More and the channel list don't
-          // move down a row when it arrives.
+          // A gated row is hidden until the permission read answers (#3854),
+          // as is a row whose only open view is gated. It holds its place
+          // meanwhile, so More and the channel list don't move down a row
+          // when it arrives.
+          const gated = (
+            rule: Pick<
+              NavItem,
+              "requirePermission" | "requireAnyOf" | "requireAllOf"
+            >,
+          ) =>
+            rule.requirePermission !== undefined ||
+            rule.requireAnyOf !== undefined ||
+            rule.requireAllOf !== undefined;
           if (
             permissions === undefined &&
-            (item.requirePermission !== undefined ||
-              item.requireAnyOf !== undefined ||
-              item.requireAllOf !== undefined) &&
+            (gated(item) ||
+              (item.views?.some(gated) === true && !visible(item))) &&
             (!tenantKind || (item.kinds ?? ["chapter"]).includes(tenantKind))
           ) {
             return (
@@ -299,7 +303,6 @@ export function Sidebar({
               onNavigate={onNavigate}
               focusClassName={FOCUS_RING_SHELL}
               isModuleEnabled={isModuleEnabled}
-              hiddenFeatures={hiddenFeatures}
               tenantKind={tenantKind}
               collapsed={rail}
               count={counts[item.id]}
@@ -308,7 +311,7 @@ export function Sidebar({
                     // Only the row whose own page is open.
                     onSelect: onCloseTool,
                     pressed: true,
-                    selectLabel: `Close ${item.title ?? item.label}`,
+                    selectLabel: `Close ${item.label}`,
                   }
                 : {})}
             />

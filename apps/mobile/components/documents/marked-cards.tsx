@@ -9,7 +9,13 @@ import { pageSurfaces } from "@/lib/surfaces";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { NavGlyph } from "@/components/nav-glyph";
 import { PressableRow, SectionHeader } from "@/components/list-section";
-import type { DocumentFolder, MobileDocument } from "@/lib/more/documents";
+import {
+  MINUTES_SPOKEN_KIND,
+  documentOpenHint,
+  minutesMeta,
+  type DocumentFolder,
+  type MobileDocument,
+} from "@/lib/more/documents";
 import { StarGlyph } from "./document-glyphs";
 import { LIMITED_LABEL, LimitedMark } from "./limited-mark";
 
@@ -51,7 +57,7 @@ export function MarkedCards({
   /** The long press's spoken name, matched to what the viewer may do. */
   actionsLabel: string;
   onOpenFolder: (name: string) => void;
-  onOpenDocument: (id: string) => void;
+  onOpenDocument: (doc: MobileDocument) => void;
   onActions: (item: MarkedCardItem) => void;
   /** Every folder the member has, so a deep folder's card reads its own name (#5337). */
   folderNames: ReadonlySet<string>;
@@ -120,7 +126,7 @@ function CardList({
   deletingIds: ReadonlySet<string>;
   actionsLabel: string;
   onOpenFolder: (name: string) => void;
-  onOpenDocument: (id: string) => void;
+  onOpenDocument: (doc: MobileDocument) => void;
   onActions: (item: MarkedCardItem) => void;
   folderNames: ReadonlySet<string>;
 }) {
@@ -147,18 +153,24 @@ function CardList({
           : item.kind === "document"
             ? item.doc.title
             : "";
+        // A meeting's posted minutes (#5949): the minutes glyph, their own
+        // line (the day they met, where they are filed, what they hold), and
+        // a tap that opens them.
+        const minutes = item.kind === "document" ? item.doc.minutes : null;
         const meta =
           item.kind === "folder"
             ? (card?.meta ?? "")
-            : [
-                item.doc.document_type,
-                formatDay(item.doc.created_at || null)
-                  ? `Uploaded ${formatDay(item.doc.created_at || null)}`
-                  : null,
-                item.doc.folder,
-              ]
-                .filter(Boolean)
-                .join(" · ");
+            : minutes
+              ? (minutesMeta(item.doc, minutes) ?? "")
+              : [
+                  item.doc.document_type,
+                  formatDay(item.doc.created_at || null)
+                    ? `Uploaded ${formatDay(item.doc.created_at || null)}`
+                    : null,
+                  item.doc.folder,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
         const starred = isStarred(item);
         const limited = isLimited(item);
         // A file on its way out takes no second press or long press, as its
@@ -175,11 +187,22 @@ function CardList({
             accessibilityLabel={
               card?.where ? `${title}, in ${card.where}` : title
             }
-            accessibilityValue={limited ? { text: LIMITED_LABEL } : undefined}
+            accessibilityValue={
+              minutes || limited
+                ? {
+                    text: [
+                      minutes ? MINUTES_SPOKEN_KIND : null,
+                      limited ? LIMITED_LABEL : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", "),
+                  }
+                : undefined
+            }
             accessibilityHint={
               item.kind === "folder"
                 ? "Shows this folder's files."
-                : "Opens the share sheet to save it or open it in another app."
+                : documentOpenHint(item.doc)
             }
             accessibilityState={busy ? { busy: true } : undefined}
             accessibilityActions={
@@ -196,7 +219,7 @@ function CardList({
             onPress={() =>
               item.kind === "folder"
                 ? onOpenFolder(item.folder.name)
-                : onOpenDocument(item.doc.id)
+                : onOpenDocument(item.doc)
             }
             onLongPress={deleting ? undefined : () => onActions(item)}
             style={styles.card}
@@ -205,7 +228,9 @@ function CardList({
               paths={
                 item.kind === "folder"
                   ? NAV_GLYPHS.folder
-                  : NAV_GLYPHS.documents
+                  : minutes
+                    ? NAV_GLYPHS.meetings
+                    : NAV_GLYPHS.documents
               }
               color={accented ? accent : muted}
               size={22}

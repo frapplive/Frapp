@@ -55,7 +55,7 @@ const CAPTURE =
  * it do spell out the mechanism, which is what a regression test is for. The
  * client half — why the web dashboard hands the cursor back verbatim rather
  * than through `Date` — is stated once too, on `olderAuditCursor` in
- * `apps/web/components/points/points-audit-card.tsx`.
+ * `apps/web/components/points/points-ledger.tsx`.
  */
 export function parseIsoInstant(value: string): number | null {
   const m = CAPTURE.exec(value);

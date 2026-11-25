@@ -118,7 +118,6 @@ describe("the call sites", () => {
   const SELECTABLE = [
     "components/members/members-directory.tsx",
     "components/events/events-page.tsx",
-    "app/(dashboard)/points/page.tsx",
     "components/billing/invoice-list.tsx",
   ];
 

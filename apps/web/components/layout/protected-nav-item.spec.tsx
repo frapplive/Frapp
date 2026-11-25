@@ -138,10 +138,10 @@ describe("isNavItemVisible", () => {
     expect(isNavItemVisible(moduleItem, undefined, undefined)).toBe(true);
   });
 
-  it("hides the real Directory and Backwork rows until permissions resolve", async () => {
+  it("hides the real Directory row until permissions resolve", async () => {
     const { isNavItemVisible } = await import("./protected-nav-item");
     const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
-    for (const id of ["members", "backwork"]) {
+    for (const id of ["members"]) {
       const row = DASHBOARD_NAV_ITEMS.find((item) => item.id === id);
       expect(row, id).toBeDefined();
       expect(
@@ -153,6 +153,45 @@ describe("isNavItemVisible", () => {
         id,
       ).toBe(true);
     }
+  });
+
+  // #2956: a row over several views shows while the viewer can open one,
+  // and opens the first they can.
+  it("shows a row with views while the viewer can open one, and opens the first they can", async () => {
+    const { isNavItemVisible, navItemTarget } = await import(
+      "./protected-nav-item"
+    );
+    const item = {
+      ...coreItem,
+      href: "/documents",
+      views: [
+        { href: "/documents", anyModule: ["documents", "meetings"] },
+        {
+          href: "/backwork",
+          anyModule: ["backwork"],
+          requireAnyOf: ["backwork:upload", "backwork:admin"],
+        },
+      ],
+    };
+    const onlyBackwork = (key: string) => key === "backwork";
+    // Only Backwork on: shown to a member who can browse it, and it opens
+    // Backwork; hidden from one who can't.
+    expect(isNavItemVisible(item, ["backwork:upload"], onlyBackwork)).toBe(
+      true,
+    );
+    expect(navItemTarget(item, ["backwork:upload"], onlyBackwork)).toBe(
+      "/backwork",
+    );
+    expect(isNavItemVisible(item, [], onlyBackwork)).toBe(false);
+    // Nothing on: hidden.
+    expect(isNavItemVisible(item, ["*"], () => false)).toBe(false);
+    // Documents on: shown to everyone, and it opens Documents.
+    expect(isNavItemVisible(item, [], () => true)).toBe(true);
+    expect(navItemTarget(item, [], () => true)).toBe("/documents");
+    // A module gate not answered yet hides nothing ungated; a gated view
+    // waits for permissions.
+    expect(isNavItemVisible(item, [], undefined)).toBe(true);
+    expect(navItemTarget(item, undefined, onlyBackwork)).toBe("/documents");
   });
 
   it("renders nothing, so nothing is clickable, while permissions are unresolved", () => {

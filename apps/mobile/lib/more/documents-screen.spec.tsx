@@ -3,8 +3,10 @@ import React from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { Alert } from "react-native";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { FloatingCreateButton } from "@/components/floating-create-button";
+import { DocumentsGlyph, MinutesGlyph } from "@/components/more/more-glyphs";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
 
@@ -883,11 +885,20 @@ describe("Documents search, filters, sort and delete, as web's (#3938)", () => {
       "Budget FY2026",
       "Chapter bylaws",
     ]);
-    // The whole library, unnarrowed on the wire: no `search`, no `folder`.
+    // The whole library with its minutes rows (#5949), unnarrowed on the
+    // wire: no `search`, no `folder`.
     expect(documentsArgs.length).toBeGreaterThan(0);
-    expect(documentsArgs.every((args) => args.length === 0)).toBe(true);
+    expect(
+      documentsArgs.every(
+        (args) => JSON.stringify(args) === JSON.stringify([{ minutes: true }]),
+      ),
+    ).toBe(true);
     act(() => byLabel(tree, "Search documents").props.onChangeText("budget"));
-    expect(documentsArgs.every((args) => args.length === 0)).toBe(true);
+    expect(
+      documentsArgs.every(
+        (args) => JSON.stringify(args) === JSON.stringify([{ minutes: true }]),
+      ),
+    ).toBe(true);
     act(() => byLabel(tree, "Search documents").props.onChangeText(""));
     expect(screenText(tree)).toContain(
       "Uploaded October 1 by Ana Ruiz · Finance · Spreadsheet",
@@ -1812,5 +1823,161 @@ describe("Documents locks beyond the list (#5216)", () => {
       "Not everyone can see this",
     ]);
     expect(cards.length).toBe(3);
+  });
+});
+
+/**
+ * A meeting's posted minutes, filed as a row with no file (#5949): it wears
+ * the minutes glyph, reads as minutes, opens the minutes screen and never
+ * the share sheet, and offers no Delete. `/minutes` and a minutes screen's
+ * way back open s12 on the Minutes file type (`type=minutes`).
+ */
+describe("Documents with minutes filed in it (#5949)", () => {
+  const MINUTES = {
+    id: "d-m",
+    title: "Chapter meeting",
+    folder: "Minutes",
+    document_type: "Minutes",
+    uploaded_by: null,
+    storage_path: null,
+    created_at: "2026-11-04T02:00:00.000Z",
+    meeting_id: "m-1",
+    minutes: {
+      meeting_id: "m-1",
+      event_name: "Chapter meeting",
+      event_start_time: "2026-11-03T23:00:00.000Z",
+      meeting_type: "chapter",
+      other_label: null,
+      decision_count: 3,
+      action_item_count: 0,
+      recorded: true,
+      gist: "Formal moved to April",
+    },
+  };
+  const FILE = {
+    id: "d-1",
+    title: "Bylaws",
+    folder: "Governance",
+    created_at: "2026-10-02T12:00:00Z",
+    storage_path: "c/d1/bylaws.pdf",
+  };
+  const row = (tree: ReactTestRenderer, label: string) =>
+    tree.root
+      .findAllByType(ListRow)
+      .find((entry) => entry.props.label === label)!;
+  const labels = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(ListRow).map((entry) => entry.props.label);
+  const params = vi.mocked(useLocalSearchParams);
+
+  beforeEach(() => {
+    vi.mocked(useRouter().push).mockClear();
+  });
+  afterEach(() => {
+    params.mockReturnValue({});
+  });
+
+  it("opens the minutes on a tap, never the download or the share sheet", async () => {
+    documentRows = [MINUTES, FILE];
+    const tree = render();
+    await act(async () => {
+      row(tree, "Chapter meeting").props.onPress();
+    });
+    expect(useRouter().push).toHaveBeenCalledWith({
+      pathname: "/minutes-details",
+      params: { id: "m-1" },
+    });
+    expect(download).not.toHaveBeenCalled();
+    expect(shareDocument).not.toHaveBeenCalled();
+  });
+
+  it("opens the minutes from a Pinned card and a tile too", async () => {
+    documentRows = [
+      { ...MINUTES, pinned_at: "2026-11-11T00:00:00.000Z" },
+      FILE,
+    ];
+    const tree = render();
+    const pinned = tree.root
+      .findByType(MarkedCards)
+      .findAllByType(PressableRow)
+      .find((entry) => entry.props.accessibilityLabel === "Chapter meeting")!;
+    await act(async () => pinned.props.onPress());
+    act(() => setListLayout("documents", "grid"));
+    const grid = render();
+    const tile = grid.root
+      .findByType(DocumentTiles)
+      .findAll(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "Chapter meeting",
+      )[0]!;
+    await act(async () => tile.props.onPress());
+    expect(useRouter().push).toHaveBeenCalledTimes(2);
+    expect(download).not.toHaveBeenCalled();
+    expect(tile.props.accessibilityValue.text).toContain("Meeting minutes");
+  });
+
+  it("reads the day the meeting met, its folder and what the minutes hold, and says it is minutes", () => {
+    documentRows = [MINUTES];
+    // The chapter's Minutes folder is in everyone's list (`chapter-docs.md`).
+    folderRows = [{ id: "f-m", name: "Minutes" }];
+    const tree = render();
+    const minutes = row(tree, "Chapter meeting");
+    expect(minutes.props.description).toMatch(
+      / · Minutes · Recorded · 3 decisions$/,
+    );
+    expect(minutes.props.description).not.toContain("Uploaded");
+    expect(minutes.props.accessibilityValue).toBe("Meeting minutes");
+    expect(minutes.props.accessibilityHint).toBe(
+      "Formal moved to April. Opens the minutes.",
+    );
+  });
+
+  it("leads a minutes row with the minutes glyph and a file with the file glyph", () => {
+    documentRows = [MINUTES, FILE];
+    const tree = render();
+    expect(
+      row(tree, "Chapter meeting").findAllByType(MinutesGlyph),
+    ).toHaveLength(1);
+    expect(
+      row(tree, "Chapter meeting").findAllByType(DocumentsGlyph),
+    ).toHaveLength(0);
+    expect(row(tree, "Bylaws").findAllByType(MinutesGlyph)).toHaveLength(0);
+    expect(row(tree, "Bylaws").findAllByType(DocumentsGlyph)).toHaveLength(1);
+  });
+
+  it("offers Star and Pin on a minutes row's long press, and no Delete", () => {
+    permissions = ["chapter_docs:manage"];
+    documentRows = [MINUTES];
+    const tree = render();
+    act(() => row(tree, "Chapter meeting").props.onLongPress());
+    expect(
+      tree.root.findByType(DocumentActionsSheet).props.target,
+    ).toMatchObject({ kind: "document", id: "d-m", minutes: true });
+  });
+
+  it("opens on the Minutes file type when asked to, and not otherwise", () => {
+    params.mockReturnValue({ type: "minutes" });
+    documentRows = [MINUTES, FILE];
+    const tree = render();
+    expect(labels(tree)).toEqual(["Chapter meeting"]);
+    params.mockReturnValue({});
+    const plain = render();
+    expect(labels(plain)).toEqual(["Bylaws", "Chapter meeting"]);
+  });
+
+  it("says no minutes are filed yet on the Minutes type, not that a filter missed", () => {
+    params.mockReturnValue({ type: "minutes" });
+    documentRows = [FILE];
+    const tree = render();
+    expect(screenText(tree)).toContain(
+      "No minutes yet. Posted minutes are filed here.",
+    );
+    expect(screenText(tree)).not.toContain("No documents match");
+    params.mockReturnValue({});
+  });
+
+  it("is titled Resources, as the You row and web's page are", () => {
+    const tree = render();
+    expect(screenText(tree)).toContain("Resources");
   });
 });

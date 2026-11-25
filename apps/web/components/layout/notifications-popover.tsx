@@ -67,6 +67,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { standingHref } from "@/components/standing/standing-doors";
 import { asArray, cn } from "@/lib/utils";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
@@ -177,8 +178,10 @@ export function deepLinkFor(notification: Notification): string {
       });
     case "events":
       return target.meetingId ? `/meetings/${target.meetingId}` : "/events";
+    // "Points awarded" and "Points deducted" are about the member's own
+    // points, which open from their Profile (#5950).
     case "points":
-      return "/points";
+      return standingHref("points");
     case "billing":
       return "/billing";
     // "Shawn Klein submitted: Clean his room" opens that review in
@@ -196,8 +199,10 @@ export function deepLinkFor(notification: Notification): string {
       return target.sourceType === "meeting" && target.sourceId
         ? `/meetings/${target.sourceId}`
         : "/tasks";
+    // "Service hours approved" and "rejected" go to whoever logged the
+    // entry: their own log, on their Profile (#5950).
     case "service":
-      return "/service";
+      return standingHref("service");
     // The weekly recap push (#4985): Activity, where the "Last week" card is.
     case "activity":
       return "/activity";

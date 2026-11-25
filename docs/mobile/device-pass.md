@@ -149,8 +149,8 @@ in Expo Workflows, against staging, with no phone in hand. How to run them is in
 pass that a script can see:
 
 - Password sign-in reaches Chat home.
-- Every tab opens, and each You row that every member sees (Service hours, Directory,
-  Settings) opens its screen and comes back through its back row; on iOS, the edge swipe from
+- Every tab opens, and each You row that every member sees (Directory, Settings; Service hours
+  until its row left You in #5950) opens its screen and comes back through its back row; on iOS, the edge swipe from
   Settings does the same, and on Android the back button. This is the smoke checklist's dead-end
   rule ("if a control looks interactive, it must do something") on the main routes, and row 18
   once the flows have run green.

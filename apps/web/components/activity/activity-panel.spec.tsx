@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityRow } from "@repo/hooks";
 
 /*
@@ -38,11 +38,41 @@ vi.mock("@/components/tasks/task-review", () => ({
   ),
 }));
 vi.mock("@/components/service/use-service-review", () => ({
-  useServiceReview: () => ({}),
+  useServiceReview: () => ({
+    approve: () => Promise.resolve(false),
+    reject: () => Promise.resolve(false),
+    isPending: false,
+    confirmDialog: null,
+  }),
+}));
+
+// What an hours review reads beside chat's card (#5950): the chapter's rate,
+// the live entry's proof path, and the proof opener. `approvePointsPreview`
+// runs for real, so the line asserted is the one the panel builds.
+const hours = vi.hoisted(() => ({
+  rate: undefined as { minutes_per_point: number } | undefined,
+  proofPath: "chap-1/svc-1.jpg" as string | null,
+  viewProof: vi.fn(),
+  // The gate's verdict for this test: blocked hands every gated control
+  // `disabled` and the notice's id, as `useSubscriptionGate` does.
+  blocked: false,
+}));
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useServicePointsRate: () => ({ data: hours.rate }),
+  useServiceEntry: () => ({ data: { proof_path: hours.proofPath } }),
+}));
+vi.mock("@/components/service/use-view-service-proof", () => ({
+  useViewServiceProof: () => ({ viewProof: hours.viewProof, isPending: false }),
 }));
 vi.mock("@/components/shared/subscription-gate", () => ({
   SubscriptionNotice: () => null,
-  useSubscriptionGate: () => ({ controlProps: () => ({}) }),
+  useSubscriptionGate: () => ({
+    controlProps: () =>
+      hours.blocked
+        ? { disabled: true, "aria-describedby": "subscription-notice" }
+        : {},
+  }),
 }));
 vi.mock("./use-activity-poll", () => ({ useActivityPoll: () => ({}) }));
 
@@ -192,5 +222,104 @@ describe("ActivityPanel: a task (#4693)", () => {
     );
     expect(screen.getByTestId("task-card")).toBeTruthy();
     expect(screen.queryByTestId("task-review")).toBeNull();
+  });
+});
+
+describe("ActivityPanel: service hours to review (#5950)", () => {
+  // 2h, so the chapter's default rate of 1 per hour awards 2.
+  const hoursRow = {
+    kind: "hours",
+    key: "needs:hours:svc-1",
+    title: "Soup kitchen shift",
+    detail: "",
+    badge: null,
+    glyph: "hours",
+    entry: {
+      id: "svc-1",
+      user_id: "u-1",
+      member_name: "Shawn Klein",
+      date: "2026-08-01",
+      duration_minutes: 120,
+      description: "Soup kitchen shift",
+      created_at: "2026-08-01T00:00:00Z",
+      unread: false,
+    },
+  } as unknown as ActivityRow;
+
+  const renderHours = () =>
+    render(
+      <ActivityPanel
+        row={hoursRow}
+        viewerId="admin-9"
+        onClose={() => {}}
+        onActed={() => {}}
+      />,
+    );
+
+  beforeEach(() => {
+    hours.rate = undefined;
+    hours.proofPath = "chap-1/svc-1.jpg";
+    hours.viewProof.mockClear();
+    hours.blocked = false;
+  });
+
+  it("says how many points Approve awards at the chapter's rate", () => {
+    hours.rate = { minutes_per_point: 60 };
+    renderHours();
+
+    expect(
+      screen.getByText(
+        "Approving awards 2 service points, at the chapter's current rate of 1 per hour.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says plainly when the entry is under the rate", () => {
+    hours.rate = { minutes_per_point: 180 };
+    renderHours();
+
+    expect(
+      screen.getByText(
+        "Approving awards no points: 2h is under the chapter's current rate of 1 point per 3h.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("states no number when the rate couldn't be read", () => {
+    renderHours();
+
+    expect(screen.queryByText(/approving awards/i)).toBeNull();
+    // The proof link still has its place without the line.
+    expect(screen.getByRole("button", { name: "View proof" })).toBeEnabled();
+  });
+
+  it("opens the entry's own proof", () => {
+    renderHours();
+
+    fireEvent.click(screen.getByRole("button", { name: "View proof" }));
+    expect(hours.viewProof).toHaveBeenCalledWith("svc-1");
+  });
+
+  it("offers no proof link for an entry without proof", () => {
+    hours.proofPath = null;
+    renderHours();
+
+    expect(screen.queryByRole("button", { name: "View proof" })).toBeNull();
+  });
+
+  it("never gates reading a proof", () => {
+    // The signed link comes from `GET /v1/service-entries/:id/proof-url`, and
+    // `enforceSubscription` returns early for GET, so a chapter whose plan
+    // blocks writes still reads the proof it is deciding by.
+    hours.blocked = true;
+    renderHours();
+
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+    const view = screen.getByRole("button", { name: "View proof" });
+    expect(view).toBeEnabled();
+    expect(view).not.toHaveAttribute("aria-describedby");
+    fireEvent.click(view);
+    expect(hours.viewProof).toHaveBeenCalledWith("svc-1");
   });
 });

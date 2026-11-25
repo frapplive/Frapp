@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { can, canAll, canAny, type TenantKind } from "@repo/validation";
-import type { UnsetFeatureKey } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import type { NavItem } from "@/components/layout/nav-config";
+import type { NavItem, NavView } from "@/components/layout/nav-config";
 
 type Props = {
   item: NavItem;
@@ -33,8 +32,6 @@ type Props = {
    * initial load. Once that read has failed the gate says every module is off.
    */
   isModuleEnabled?: (moduleKey: string) => boolean;
-  /** The setup gate, from `useHiddenUnsetFeatures` (see `isNavItemVisible`). */
-  hiddenFeatures?: ReadonlySet<UnsetFeatureKey>;
   /** The active tenant's kind, from `useTenantKind` (see `isNavItemVisible`). */
   tenantKind?: TenantKind;
   /**
@@ -67,7 +64,7 @@ type Props = {
 const CHAPTER_ONLY: readonly TenantKind[] = ["chapter"];
 
 function isGranted(
-  item: NavItem,
+  item: Pick<NavItem, "requirePermission" | "requireAnyOf" | "requireAllOf">,
   permissions: readonly string[] | null | undefined,
 ): boolean {
   if (item.requirePermission) {
@@ -107,14 +104,10 @@ function isGranted(
  * showing it early only risks a member-visible row disappearing when an
  * officer has switched its module off.
  *
- * `hiddenFeatures` is the third gate, the setup gate, from
- * `useHiddenUnsetFeatures`: the features nobody has set up that this viewer
- * can't set up from the feature's own page. It hides nothing while
- * permissions or the module gate are unresolved, or while a list's read has
- * no answer; it hides on a list that answers "none", or on that list's module
- * being off.
+ * A row over several views (`NavItem.views`, Resources) shows while the
+ * viewer can open one of them (`isNavViewOpen`).
  *
- * `tenantKind` is the fourth, the kind gate (#5933): a row hides in a tenant
+ * `tenantKind` is the third, the kind gate (#5933): a row hides in a tenant
  * whose kind it doesn't serve (`NavItem.kinds`, chapters only when omitted),
  * so a council's nav never offers a page its routes refuse. Undefined while
  * the kind is unknown, which gates nothing, like the module gate, except a
@@ -124,7 +117,6 @@ export function isNavItemVisible(
   item: NavItem,
   permissions: readonly string[] | null | undefined,
   isModuleEnabled?: (moduleKey: string) => boolean,
-  hiddenFeatures?: ReadonlySet<UnsetFeatureKey>,
   tenantKind?: TenantKind,
 ): boolean {
   if (tenantKind && !(item.kinds ?? CHAPTER_ONLY).includes(tenantKind)) {
@@ -148,10 +140,55 @@ export function isNavItemVisible(
   if (item.module && isModuleEnabled && !isModuleEnabled(item.module)) {
     return false;
   }
-  if (item.hiddenUntilSetUp && hiddenFeatures?.has(item.hiddenUntilSetUp)) {
+  // A row over several views shows while the viewer can open one of them.
+  if (
+    item.views &&
+    !item.views.some((view) =>
+      isNavViewOpen(view, permissions, isModuleEnabled),
+    )
+  ) {
     return false;
   }
   return true;
+}
+
+/**
+ * Whether the viewer can open one of a row's views (`NavItem.views`): one of
+ * its modules is on (a module counts as on until the gate answers, as a row's
+ * does) and its permission rule holds, failing closed while permissions load
+ * (#3854), as a gated row does.
+ */
+export function isNavViewOpen(
+  view: NavView,
+  permissions: readonly string[] | null | undefined,
+  isModuleEnabled?: (moduleKey: string) => boolean,
+): boolean {
+  if (isModuleEnabled && !view.anyModule.some((key) => isModuleEnabled(key))) {
+    return false;
+  }
+  const gated =
+    view.requirePermission !== undefined ||
+    view.requireAnyOf !== undefined ||
+    view.requireAllOf !== undefined;
+  if (permissions === undefined) return !gated;
+  if (permissions === null) return true;
+  return isGranted(view, permissions);
+}
+
+/**
+ * Where a row takes the viewer: its first view they can open, so Resources in
+ * a chapter with only Backwork on opens Backwork; otherwise its `href`.
+ */
+export function navItemTarget(
+  item: NavItem,
+  permissions: readonly string[] | null | undefined,
+  isModuleEnabled?: (moduleKey: string) => boolean,
+): string {
+  return (
+    item.views?.find((view) =>
+      isNavViewOpen(view, permissions, isModuleEnabled),
+    )?.href ?? item.href
+  );
 }
 
 /**
@@ -209,7 +246,6 @@ export function ProtectedNavItem({
   onNavigate,
   focusClassName,
   isModuleEnabled,
-  hiddenFeatures,
   tenantKind,
   collapsed = false,
   onSelect,
@@ -218,15 +254,7 @@ export function ProtectedNavItem({
   highlight,
   count,
 }: Props) {
-  if (
-    !isNavItemVisible(
-      item,
-      permissions,
-      isModuleEnabled,
-      hiddenFeatures,
-      tenantKind,
-    )
-  ) {
+  if (!isNavItemVisible(item, permissions, isModuleEnabled, tenantKind)) {
     return null;
   }
   const isActive = current !== undefined;

@@ -121,7 +121,7 @@ export class PointsStandingsAgentTool implements AgentReadTool<Args> {
         kind: 'points',
         audience: { type: 'chapter' },
         title: 'Points standings',
-        page: 'points',
+        page: 'standings',
         lines: [...summary, ...shown, ...(cutLine ? [cutLine] : [])],
       }),
       people,

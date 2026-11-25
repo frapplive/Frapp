@@ -68,8 +68,9 @@ const ROUTES: Record<
   chat: { pathname: "/chat-thread", param: "channelId" },
   events: { pathname: "/event-details", param: "eventId", as: "id" },
   tasks: { pathname: "/tasks" },
-  // Points were absorbed into the task board in C3 — there is no points route.
-  points: { pathname: "/tasks" },
+  // "Points awarded" and "deducted" open the member's own points (#5950;
+  // the task board until then, when the phone had no points screen).
+  points: { pathname: "/points" },
   billing: { pathname: "/dues" },
   service: { pathname: "/service-hours" },
   members: { pathname: "/directory" },

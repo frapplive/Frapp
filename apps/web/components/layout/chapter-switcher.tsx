@@ -270,9 +270,13 @@ export function ChapterLabel({
     <div
       data-chapter-label=""
       title={collapsed ? (name ?? undefined) : undefined}
+      // `flex-1` in the rail too: the head is a row that doesn't centre, so a
+      // label only as wide as its crest sat at the head's left padding, 5px
+      // left of the icons under it (Paul, 2026-11-24). Filling the head,
+      // `justify-center` puts the crest on the rail's centre line.
       className={cn(
-        "flex h-10 min-w-0 items-center gap-2.5",
-        collapsed ? "justify-center" : "flex-1 pl-1.5",
+        "flex h-10 min-w-0 flex-1 items-center gap-2.5",
+        collapsed ? "justify-center" : "pl-1.5",
       )}
     >
       {loading ? (

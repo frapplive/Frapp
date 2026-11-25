@@ -1,10 +1,11 @@
-import { formatServiceHours, type ServiceLeaderboardRow } from "@repo/hooks";
+import { formatServiceHours } from "@repo/hooks";
 
 /**
- * The numbers at the top of `/service` (#4669): the viewer's own approved
- * hours this semester and all time, and what is still waiting on review.
+ * The numbers at the top of the member's Service hours panel (#4669, #5950):
+ * the viewer's own approved hours this semester and all time, and what is
+ * still waiting on review.
  *
- * Approved only for the two totals, as the leaderboard and the phone's
+ * Approved only for the two totals, as Directory's standings and the phone's
  * summary card count (`apps/mobile/lib/more/service-hours.ts`): pending time
  * isn't credited yet, so it stands beside them rather than inside them.
  */
@@ -60,64 +61,7 @@ export function ownServiceTotals(
   };
 }
 
-/** `90` → `"1.5 h"`, `0` → `"0 h"`: the stat and leaderboard number. */
+/** `90` → `"1.5 h"`, `0` → `"0 h"`: a stat's number. */
 export function hoursLabel(minutes: number): string {
   return `${formatServiceHours(minutes)} h`;
-}
-
-export type RankedServiceRow = ServiceLeaderboardRow & {
-  /** 1-based place; equal totals share one (1, 1, 3), as the points board counts. */
-  rank: number;
-  isViewer: boolean;
-};
-
-/**
- * Places for the server's ranking (approved minutes descending, then name).
- * Equal totals share a place, the way `/points` and the phone's points line
- * number a tie, so two members on the same hours never read as first and
- * second.
- */
-export function rankServiceLeaderboard(
-  rows: readonly ServiceLeaderboardRow[],
-  viewerUserId: string | null,
-): RankedServiceRow[] {
-  let rank = 0;
-  let previous: number | null = null;
-  return rows.map((row, index) => {
-    if (row.total_minutes !== previous) {
-      rank = index + 1;
-      previous = row.total_minutes;
-    }
-    return {
-      ...row,
-      rank,
-      isViewer: viewerUserId !== null && row.user_id === viewerUserId,
-    };
-  });
-}
-
-/**
- * How many rows the board shows before Show all: the top ten, as Strava's
- * club leaderboard opens. A viewer below them is pinned after a gap, so
- * their own place is always on screen without scrolling the whole chapter.
- */
-export const LEADERBOARD_PREVIEW = 10;
-
-/**
- * The rows to draw: all of them when expanded or when they fit; otherwise the
- * top {@link LEADERBOARD_PREVIEW} and, when the viewer is below them, the
- * viewer's own row as `pinned`.
- */
-export function visibleLeaderboard(
-  ranked: readonly RankedServiceRow[],
-  expanded: boolean,
-): { top: RankedServiceRow[]; pinned: RankedServiceRow | null } {
-  if (expanded || ranked.length <= LEADERBOARD_PREVIEW) {
-    return { top: [...ranked], pinned: null };
-  }
-  const top = ranked.slice(0, LEADERBOARD_PREVIEW);
-  const viewerRow = ranked.find((row) => row.isViewer) ?? null;
-  const pinned =
-    viewerRow && !top.some((row) => row.isViewer) ? viewerRow : null;
-  return { top, pinned };
 }

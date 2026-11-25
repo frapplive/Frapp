@@ -4,8 +4,10 @@ export interface ChapterDocument {
   title: string;
   description: string | null;
   folder: string | null;
-  storage_path: string;
-  uploaded_by: string;
+  /** The stored file's path, or null on a meeting's minutes (`meeting_id`). */
+  storage_path: string | null;
+  /** Who uploaded the file, or null on a meeting's minutes. */
+  uploaded_by: string | null;
   created_at: string;
   /** MIME type, client-declared at upload (e.g. `application/pdf`). */
   content_type: string | null;
@@ -60,6 +62,27 @@ export interface ChapterDocument {
    * must pass both (`document-access.ts`).
    */
   who_can_see: string[] | null;
+  /**
+   * Set on the row that files a meeting's posted minutes (#5949;
+   * `spec/behavior/chapter-docs.md` § Minutes), null on a file. Such a row
+   * has no file and no uploader, and is seen only by members the meeting's
+   * own rule lets read those minutes (`document-access.ts`).
+   */
+  meeting_id: string | null;
+}
+
+/** A row with a stored file: every row but a meeting's minutes. */
+export type ChapterDocumentFile = ChapterDocument & {
+  storage_path: string;
+  uploaded_by: string;
+  meeting_id: null;
+};
+
+/** Whether the row is a file, not a meeting's minutes. */
+export function isDocumentFile(
+  document: ChapterDocument,
+): document is ChapterDocumentFile {
+  return document.meeting_id === null && document.storage_path !== null;
 }
 
 /**
@@ -90,6 +113,28 @@ export interface ChapterDocumentFolder {
    * open Documents, else a list of `tier:`, `role:` and `group:` entries.
    */
   who_can_see: string[] | null;
+  /**
+   * Set on a folder the minutes flow files into (#5949): `root` for the
+   * chapter's Minutes folder, or a repeating meeting's series (its first
+   * event's id) for that series' folder. Filing finds the folder by it, so a
+   * rename sticks. A series folder shows only to a member who sees something
+   * in it (`ChapterDocumentService.listFolders`), so a series' name never
+   * reaches a member its meetings leave out.
+   */
+  minutes_series_key: string | null;
+}
+
+/** `ChapterDocumentFolder.minutes_series_key` of the chapter's Minutes folder. */
+export const MINUTES_ROOT_FOLDER_KEY = 'root';
+
+/** Whether the folder is a repeating meeting's own, made by the minutes flow. */
+export function isMinutesSeriesFolder(
+  folder: Pick<ChapterDocumentFolder, 'minutes_series_key'>,
+): boolean {
+  return (
+    folder.minutes_series_key !== null &&
+    folder.minutes_series_key !== MINUTES_ROOT_FOLDER_KEY
+  );
 }
 
 /**

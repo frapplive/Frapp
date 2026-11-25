@@ -372,13 +372,7 @@ function Shell({
         : resolvePageTitle(
             pathname,
             (item) =>
-              isNavItemVisible(
-                item,
-                permissions,
-                isModuleEnabled,
-                undefined,
-                tenantKind,
-              ),
+              isNavItemVisible(item, permissions, isModuleEnabled, tenantKind),
             chapterVocabulary,
             tenantKind,
           ),
