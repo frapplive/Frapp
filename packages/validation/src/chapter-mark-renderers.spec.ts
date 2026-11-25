@@ -39,8 +39,12 @@ const ALLOWED: Record<string, string> = {
     "the wizard's input for the field, and its preview feeds resolveChapterMark",
   "apps/web/components/settings/settings-org-tab.tsx":
     "the Settings input for the field",
-  "apps/web/components/settings/settings-page.tsx":
-    "reads the stored field into the Settings form",
+  "packages/hooks/src/chapter-tab.ts":
+    "the Chapter tab's form rules both apps share (#6027): reads the stored field, diffs the Identity form, and leaves it out of the Identity row for an organization that hides its letters; the mark's value goes through resolveChapterMark",
+  "apps/mobile/components/settings/chapter-identity-page.tsx":
+    "the phone's Settings input for the field (#6027), not drawn for an organization that hides its letters",
+  "apps/mobile/components/settings/chapter-mark-page.tsx":
+    "the phone's Chapter mark preview (#6027), which feeds resolveChapterMark",
   "apps/web/components/settings/settings-chapter-mark-card.tsx":
     "the Settings preview, which feeds resolveChapterMark",
   "apps/web/components/layout/crest-tile.tsx":
