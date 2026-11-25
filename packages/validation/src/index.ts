@@ -139,6 +139,9 @@ export {
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
 export * from "./frapp-link";
+// A chapter's public interest form (#5977): limits, the approved consent
+// text, refusal codes and the page's words.
+export * from "./interest-form";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -248,9 +251,11 @@ export {
   nextReleaseNoteSnapshot,
   parseReleaseNoteSnapshot,
   parseReleaseNoteVersion,
+  RELEASE_NOTE_TIME_ZONE,
   RELEASE_NOTE_VERSION_PATTERN,
   RELEASE_NOTES,
   type ReleaseNote,
+  releaseNoteDay,
   releaseNoteGroups,
   type ReleaseNoteSnapshot,
   releaseNoteStoreText,

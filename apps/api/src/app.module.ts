@@ -42,6 +42,7 @@ import { TenantModule } from './modules/tenant/tenant.module';
 import { AiSuggestionModule } from './modules/ai-suggestion/ai-suggestion.module';
 import { PledgeClassModule } from './modules/pledge-class/pledge-class.module';
 import { ChapterGroupModule } from './modules/chapter-group/chapter-group.module';
+import { InterestFormModule } from './modules/interest-form/interest-form.module';
 import { ChatTimeoutModule } from './modules/chat-timeout/chat-timeout.module';
 import { RushModule } from './modules/rush/rush.module';
 import { NotificationModule } from './modules/notification/notification.module';
@@ -130,6 +131,7 @@ import { validateEnv } from './config/env.validation';
     // Chat timeouts (#6006).
     ChatTimeoutModule,
     RushModule,
+    InterestFormModule,
     NotificationModule,
     StudyModule,
     ChapterDocumentModule,

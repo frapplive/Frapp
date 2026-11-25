@@ -270,7 +270,7 @@ export function isAddressed(
  * mentions, or a direct message's unread count. A channel that is merely
  * unread draws no number; its bold name says so.
  */
-function addressedCount(
+export function addressedCount(
   isDirect: boolean,
   counts: SidebarUnreadCounts,
 ): number {

@@ -206,6 +206,9 @@ describe('InviteService', () => {
       sendInviteEmail: jest.fn().mockResolvedValue(true),
       sendSchoolCodeEmail: jest.fn().mockResolvedValue(true),
       sendBidConfirmEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormCodeEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormReceiptEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormPushedUpEmail: jest.fn().mockResolvedValue(true),
     };
     mockConfig = { get: jest.fn().mockReturnValue(undefined) };
 

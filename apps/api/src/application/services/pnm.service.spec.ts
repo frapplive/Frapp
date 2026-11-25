@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { InterestFormService } from './interest-form.service';
 import { PnmService } from './pnm.service';
 import type { IPnmRepository } from '#domain/repositories/pnm.repository.interface';
 import type { IAffiliationRepository } from '#domain/repositories/affiliation.repository.interface';
@@ -132,12 +133,14 @@ function setup() {
     ]),
   };
   const chapters = { findById: jest.fn().mockResolvedValue(council()) };
+  const interestForms = { pushUpChapter: jest.fn().mockResolvedValue(0) };
   const service = new PnmService(
     pnms,
     affiliations as unknown as IAffiliationRepository,
     chapters as unknown as IChapterRepository,
+    interestForms as unknown as InterestFormService,
   );
-  return { service, pnms, affiliations, chapters };
+  return { service, pnms, affiliations, chapters, interestForms };
 }
 
 describe('PnmService — the master list', () => {
@@ -155,10 +158,9 @@ describe('PnmService — the master list', () => {
     const pat = list.pnms.find((r) => r.id === 'pnm-1')!;
     expect(pat.interest_count).toBe(2);
     expect(pat.has_phone).toBe(true);
-    expect(list.chapter_totals).toEqual([
-      { chapter_id: CH_A, name: 'Alpha', interested: 2 },
-      { chapter_id: CH_B, name: 'Beta', interested: 1 },
-    ]);
+    // No per-chapter totals in season: beside the counts they could tell
+    // where a PNM signed up (Winston, 2026-11-24).
+    expect(list.chapter_totals).toEqual([]);
     expect(JSON.stringify(list)).not.toContain('5550001111');
     // Interests only in the council's accepted chapters, never a proposed one.
     expect(pnms.findInterests).toHaveBeenCalledWith(
@@ -183,6 +185,7 @@ describe('PnmService — the master list', () => {
     expect(list.pnms.every((r) => r.interested_chapter_ids === null)).toBe(
       true,
     );
+    expect(list.chapter_totals).toEqual([]);
   });
 
   it('after the season closes, shows which member chapters', async () => {
@@ -195,6 +198,10 @@ describe('PnmService — the master list', () => {
     expect(
       list.pnms.find((r) => r.id === 'pnm-1')!.interested_chapter_ids,
     ).toEqual([CH_A, CH_B]);
+    expect(list.chapter_totals).toEqual([
+      { chapter_id: CH_A, name: 'Alpha', interested: 2 },
+      { chapter_id: CH_B, name: 'Beta', interested: 1 },
+    ]);
   });
 
   it('logs one row per PNM shown before returning them', async () => {
@@ -480,6 +487,26 @@ describe('PnmService — seasons', () => {
         closes_at: '2027-02-10T00:00:00Z',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it("opening a season pushes each accepted chapter's form PNMs up, once (#5977)", async () => {
+    const { service, pnms, interestForms } = setup();
+    pnms.findSeason.mockResolvedValueOnce(season('planned'));
+    pnms.updateSeason.mockResolvedValueOnce(season('open'));
+    await service.updateSeason(COUNCIL, TERM, { status: 'open' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(interestForms.pushUpChapter.mock.calls.map(([id]) => id)).toEqual([
+      CH_A,
+      CH_B,
+    ]);
+
+    // Saving an already-open season again pushes nothing.
+    interestForms.pushUpChapter.mockClear();
+    pnms.findSeason.mockResolvedValueOnce(season('open'));
+    pnms.updateSeason.mockResolvedValueOnce(season('open'));
+    await service.updateSeason(COUNCIL, TERM, { status: 'open' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(interestForms.pushUpChapter).not.toHaveBeenCalled();
   });
 
   it('refuses a season that closes before it opens', async () => {

@@ -21,6 +21,13 @@ const {
   searchParams: { current: new URLSearchParams() },
 }));
 
+// jsdom measures every box at 0, so the page reads as wide unless a test
+// says the pane is narrow (`useIsNarrow`).
+const narrowPane = vi.hoisted(() => ({ current: null as boolean | null }));
+vi.mock("@/lib/use-is-narrow", () => ({
+  useIsNarrow: () => [() => undefined, narrowPane.current],
+}));
+
 const TODAY = localIsoDate(new Date());
 
 const stage = (
@@ -64,6 +71,7 @@ const candidate = (
   bid_status: "none",
   created_by: "u-1",
   created_by_name: "Moiz Steenhuis",
+  origin: "manual" as const,
   created_at: `${TODAY}T12:00:00Z`,
   tag_ids: [],
   viewer_rating: null,
@@ -107,6 +115,7 @@ const bidMutate = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCandidateForm: () => ({ data: undefined }),
   useMyPermissions: () => ({
     data: { permissions: permissions.current },
     isPending: false,
@@ -604,5 +613,64 @@ describe("follow-ups on the recruitment page (#5934)", () => {
       await screen.findByRole("heading", { name: "Owen Park" }),
     ).toBeInTheDocument();
     expect(screen.getByText("No contact logged yet")).toBeInTheDocument();
+  });
+});
+
+describe("the recruitment page beside chat (2026-11-24)", () => {
+  beforeEach(() => {
+    narrowPane.current = null;
+  });
+
+  it("keeps the views as words when the pane has room", () => {
+    renderPage();
+    expect(screen.getByRole("tab", { name: "Board" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^View:/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("folds the views into one View menu on a narrow pane", async () => {
+    narrowPane.current = true;
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      screen.queryByRole("tab", { name: "Board" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View: Board" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "List" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View: List" }),
+    ).toBeInTheDocument();
+  });
+
+  it("folds All / Follow up into the same menu, and draws neither set as words", async () => {
+    narrowPane.current = true;
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.queryByRole("tab", { name: "All" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Follow up" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^View:/ }));
+    expect(
+      screen.getByRole("menuitemradio", { name: "All" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemradio", { name: "Follow up" }),
+    ).toBeInTheDocument();
+  });
+
+  it("folds an empty stage to its label and lets the stages with prospects share the width", () => {
+    const { container } = renderPage();
+    const columns = [
+      ...container.querySelectorAll<HTMLElement>("section[data-rush-column]"),
+    ];
+    const empty = columns.filter((c) => !c.querySelector("[data-rush-card]"));
+    const full = columns.filter((c) => c.querySelector("[data-rush-card]"));
+    expect(empty.length).toBeGreaterThan(0);
+    expect(full.length).toBeGreaterThan(0);
+    for (const column of empty) expect(column.className).toContain("w-max");
+    for (const column of full) expect(column.className).toContain("flex-1");
   });
 });

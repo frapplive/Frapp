@@ -17,8 +17,15 @@ describe("accountPredatesNote", () => {
     expect(accountPredatesNote("2025-01-01T00:00:00.000Z", NOTE)).toBe(true);
   });
 
+  // #6054: the entry is dated by its Eastern day, so the account's day is
+  // read there too. 7 PM Eastern on Nov 8 is already Nov 9 in UTC.
+  it("reads the account's day in the notes' zone, not UTC", () => {
+    expect(accountPredatesNote("2026-11-09T00:00:00.000Z", NOTE)).toBe(true);
+    expect(accountPredatesNote("2026-11-09T05:00:00.000Z", NOTE)).toBe(false);
+  });
+
   it("treats an account made on the entry's day or later as new", () => {
-    expect(accountPredatesNote("2026-11-09T00:00:00.000Z", NOTE)).toBe(false);
+    expect(accountPredatesNote("2026-11-09T05:00:00.000Z", NOTE)).toBe(false);
     expect(accountPredatesNote("2026-12-01T10:00:00.000Z", NOTE)).toBe(false);
   });
 

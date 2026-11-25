@@ -465,6 +465,15 @@ The categories themselves stay the chapter's (§ Channels).
   A channel whose only news is a thread with new replies adds one to that total (`withUnreadThreadChannels` in `@repo/hooks`), so a folded section over it still reads unread.
   The open channel stays visible under a folded header.
   While the list scrolls, the section in view keeps its header pinned at the top, so it can still be folded from there ([`../../ui/design-system/components.md`](../../ui/design-system/components.md#sidebar-item) § Sidebar item, "Pinned section headings").
+- **New unreads** (Winston, 2026-11-25, [#6045](https://github.com/frapplive/Frapp/issues/6045); Discord's "NEW UNREADS" bar and Slack's "Unread messages" pill are the comparables).
+  While something unread in the channel list is scrolled out of sight, a pill reading `New unreads` floats over that edge of the list, with an arrow up or down, and one at each edge when there is news both ways.
+  It counts what the list already draws as unread and nothing else: a row that reads unread (`countsLookUnread`, so a muted channel's plain unread doesn't count and its mention does), a row whose listed thread has new replies, and a folded heading that shows an unread total; the open channel never counts, and a hidden conversation isn't in the list.
+  It is in the mention red when anything out of sight that way addresses the member (a mention, a reply to them, or a DM), and neutral otherwise.
+  Pressing it scrolls the nearest one into the middle of the list and lights it for a moment; it doesn't open it.
+  Pressing again goes on to the next, and the pill goes away once nothing unread is out of sight that way.
+  It follows the live counts, so it comes and goes as messages land and are read, and draws nothing while the counts are unknown or are only the ones the phone saved (§ Read Receipts).
+  It is a button named `Jump to unread channels above` or `below`, and under reduced motion the scroll is instant.
+  The rule is `unreadJumpTargets` in `@repo/hooks`, for both clients; the channel list only, since the Messages list runs newest first.
 - **Where it lives.**
   `chat_sidebar_preferences` holds one row per (member, chapter): the two filters, the sort (`chapter`, `recent` or `alpha`; `20261115001542`) and the folded section keys.
   `chat_sidebar_pins` holds one row per pinned (member, channel).

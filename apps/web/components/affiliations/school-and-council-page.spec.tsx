@@ -183,6 +183,23 @@ describe("SchoolAndCouncilPage", () => {
     expect(state.linkSchool).toHaveBeenCalledWith("rpi");
   });
 
+  it("leads the school and council rows with their names, not an initials tile", () => {
+    withData({
+      schools: [school("active")],
+      councils: [council("ifc", "Interfraternity Council", null)],
+    });
+    render(<SchoolAndCouncilPage />);
+    expect(
+      screen.getByText("Rensselaer Polytechnic Institute"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Interfraternity Council").length,
+    ).toBeGreaterThan(0);
+    // #6066: Frapp holds no real school mark, so none is drawn.
+    expect(screen.queryByTestId("chapter-mark-text")).toBeNull();
+    expect(screen.queryByTestId("chapter-mark-logo")).toBeNull();
+  });
+
   it("confirms or refuses a proposed school", async () => {
     withData({ schools: [school("proposed")], councils: [] });
     const user = userEvent.setup();
