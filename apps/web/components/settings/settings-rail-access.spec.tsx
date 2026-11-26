@@ -129,7 +129,9 @@ vi.mock("@/components/settings/settings-tool-views", () => ({
   ),
 }));
 vi.mock("@/components/billing/plan-and-billing", () => ({
-  PlanAndBilling: () => <div data-testid="plan-and-billing" />,
+  PlanAndBilling: ({ page }: { page?: string | null }) => (
+    <div data-testid="plan-and-billing" data-page={page ?? ""} />
+  ),
 }));
 vi.mock("@/components/settings/settings-roles-tab", () => ({
   SettingsRolesTab: () => <p>Roles matrix</p>,
@@ -337,6 +339,41 @@ describe("Settings shows each viewer what they can use", () => {
     expect(
       screen.queryByText(/couldn't load chapter configuration/i),
     ).toBeNull();
+  });
+
+  it("opens Plan and billing's own page, and its lit row goes back (#6031)", () => {
+    permissions.current = ["*"];
+    search.current = "tab=billing&page=plan";
+    window.history.replaceState(null, "", "/settings?tab=billing&page=plan");
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId("plan-and-billing")).toHaveAttribute(
+      "data-page",
+      "plan",
+    );
+    // Its `page` is not taken for a Chapter tab page.
+    expect(window.location.search).toBe("?tab=billing&page=plan");
+    expect(
+      screen.getByRole("tab", { name: "Plan and billing" }),
+    ).toHaveAttribute("data-state", "active");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Plan and billing" }));
+    expect(window.location.search).toBe("?tab=billing");
+  });
+
+  it("leaves a Chapter page name on another row to that row", () => {
+    permissions.current = ["*"];
+    search.current = "tab=billing&page=identity";
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=billing&page=identity",
+    );
+    render(<SettingsPage />);
+    expect(
+      screen.getByRole("tab", { name: "Plan and billing" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(window.location.search).toBe("?tab=billing&page=identity");
   });
 
   it("opens Plan and billing from an old Danger zone link", () => {

@@ -75,8 +75,9 @@ export const SETUP_CHECKLIST_WEB_PATH: Readonly<
   // Zones row opens (#6030).
   "study-zone": "/settings?tab=geofences&page=study-zones",
   document: "/documents",
-  // Member invoices sit in Plan and billing since #3827.
-  dues: "/settings?tab=billing",
+  // Member invoices, with New invoice, are a page of Plan and billing
+  // (#3827, #6031).
+  dues: "/settings?tab=billing&page=invoices",
 };
 
 /** In the order an officer usually does them. */

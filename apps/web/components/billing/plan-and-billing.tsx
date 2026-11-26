@@ -1,13 +1,17 @@
 "use client";
 
 import { Suspense } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, LayoutGrid, Receipt } from "lucide-react";
 import { useBillingStatus, useCurrentUser, useInvoices } from "@repo/hooks";
 import { isBetaOffModule } from "@repo/validation";
 import { anyReadUncached, pausedRead } from "@/components/shared/async-states";
 import { NestedOffline } from "@/components/shared/nested-states";
 import { PlanPanel } from "@/components/billing/plan-panel";
-import { PlanMatrix } from "@/components/billing/plan-matrix";
+import {
+  PlanMatrix,
+  planMatrixModuleCount,
+  planMatrixTitle,
+} from "@/components/billing/plan-matrix";
 import { InvoiceList } from "@/components/billing/invoice-list";
 import { subscriptionStatusKind } from "@/components/billing/invoice-status";
 import { useChapterSubscription } from "@/lib/hooks/use-subscription-write-state";
@@ -15,8 +19,17 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { PlanPanelSkeleton } from "@/components/billing/billing-skeleton";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { Skeleton } from "@/components/shared/async-states";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import { SettingsSubpage } from "@/components/settings/settings-subpage";
+import {
+  BILLING_SETTINGS_PATH,
+  billingSettingsPagePath,
+  isBillingSettingsPage,
+} from "@/components/billing/billing-paths";
+import { asArray } from "@/lib/utils";
 
-const INVOICES_ANCHOR = "invoices";
+/** Plan and billing's own title, on its page and on the way back to it. */
+const PAGE_TITLE = "Plan and billing";
 
 /**
  * Plan and billing, a row of Chapter settings (#3827, decision 8 of #4068).
@@ -41,10 +54,18 @@ const INVOICES_ANCHOR = "invoices";
  * chapter is on (a chapter Frapp switched on by hand has no Stripe customer,
  * so "contact support from the billing portal" was advice it could not take).
  *
- * The section sits inside the settings tab panel, which supplies the page's
- * `<h1>` through the top bar; every block here is an `<h2>` section.
+ * **The settings-row shape (#6031).** The page has its own title, as every
+ * Chapter settings page does; the plan is one row with its single action;
+ * the plan table and the member invoices are rows that open pages of their
+ * own (`?page=plan|invoices`, `BILLING_SETTINGS_PAGES`), the way GitHub's,
+ * Linear's and Slack's billing pages keep the plan comparison and invoices a
+ * step away. No pricing, legal or plan wording changed: the rows' labels
+ * and counts are new, the plan's meta line lost its Invoices link to the
+ * Member invoices row, and the table names modules as the app does.
+ *
+ * The top bar supplies the route's `<h1>`; the page's title is an `<h2>`.
  */
-export function PlanAndBilling() {
+export function PlanAndBilling({ page = null }: { page?: string | null }) {
   const { isOffline } = useNetwork();
   /*
    * The invoice list leaves only while dues is beta-off. A chapter's own dues
@@ -109,16 +130,54 @@ export function PlanAndBilling() {
   }
 
   const onPaidPlan = status === "active" || status === "past_due";
+  const shownPage = isBillingSettingsPage(page)
+    ? page === "invoices" && !duesOn
+      ? null
+      : page
+    : null;
+
+  if (shownPage === "plan") {
+    return (
+      <SettingsSubpage
+        backHref={BILLING_SETTINGS_PATH}
+        backLabel={PAGE_TITLE}
+        title={planMatrixTitle(onPaidPlan)}
+      >
+        <div className="@container">
+          <PlanMatrix onPaidPlan={onPaidPlan} />
+        </div>
+      </SettingsSubpage>
+    );
+  }
+  if (shownPage === "invoices") {
+    return (
+      <SettingsSubpage
+        backHref={BILLING_SETTINGS_PATH}
+        backLabel={PAGE_TITLE}
+        title="Member invoices"
+      >
+        {/* A container (#4033): the invoice rows count the panel's width. */}
+        <div className="@container">
+          <InvoiceList />
+        </div>
+      </SettingsSubpage>
+    );
+  }
+
+  const openInvoices = invoicesQuery.isSuccess
+    ? asArray<{ status?: string }>(invoicesQuery.data).filter(
+        (invoice) => invoice.status === "OPEN",
+      ).length
+    : null;
 
   return (
-    // A container (#4033): the plan panel and invoice rows count the panel's
-    // own width, which the settings rail shares.
-    <div className="@container space-y-10">
-      {/*
-        No `PageActions` row: New invoice is gated on both
-        `billing:manage` and the subscription, and lives in the invoice list's
-        own toolbar beside the filter it shares state with.
-      */}
+    // A container (#4033): the plan row counts the panel's own width, which
+    // the settings rail shares.
+    <div className="@container space-y-8">
+      <header className="border-b border-border pb-6">
+        <h2 className="text-title text-foreground">{PAGE_TITLE}</h2>
+      </header>
+
       <div className="space-y-4">
         <PastDueBanner status={status} />
 
@@ -129,15 +188,32 @@ export function PlanAndBilling() {
           panel.
         */}
         <Suspense fallback={<PlanPanelSkeleton />}>
-          <PlanPanel
-            invoicesHref={duesOn ? `#${INVOICES_ANCHOR}` : undefined}
-          />
+          <PlanPanel />
         </Suspense>
+
+        <SettingsGroup label="Plan details">
+          <SettingsRow
+            icon={LayoutGrid}
+            label={planMatrixTitle(onPaidPlan)}
+            value={`${planMatrixModuleCount()} modules`}
+            href={billingSettingsPagePath("plan")}
+          />
+          {duesOn ? (
+            <SettingsRow
+              icon={Receipt}
+              label="Member invoices"
+              value={
+                openInvoices === null
+                  ? undefined
+                  : openInvoices === 0
+                    ? "None open"
+                    : `${openInvoices} open`
+              }
+              href={billingSettingsPagePath("invoices")}
+            />
+          ) : null}
+        </SettingsGroup>
       </div>
-
-      <PlanMatrix onPaidPlan={onPaidPlan} />
-
-      {duesOn ? <InvoiceList id={INVOICES_ANCHOR} /> : null}
 
       <CancelOrClose status={status} />
     </div>

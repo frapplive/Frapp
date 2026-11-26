@@ -45,6 +45,7 @@ export * from "./member-assignments";
 export * from "./member-avatar-color";
 export * from "./member-phone-reach";
 export * from "./member-threads";
+export * from "./new-messages";
 export * from "./open-chat-transport";
 // Your own custom-field values (#581).
 export * from "./own-custom-fields";
@@ -150,6 +151,7 @@ export * from "./use-meetings";
 export * from "./use-members";
 export * from "./use-message-reminders";
 export * from "./use-minutes-request";
+export * from "./use-new-messages";
 export * from "./use-notifications";
 export * from "./use-now";
 export * from "./use-open-tasks";
