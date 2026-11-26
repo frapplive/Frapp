@@ -1316,6 +1316,22 @@ export function activityRowTaskId(row: ActivityRow): string | null {
 }
 
 /**
+ * Whether an Activity row is the member's own open To do task with a fixed
+ * deadline (#6096), whose second line both apps draw in the danger red. The
+ * To do list's rows are the member's own (`needs:`); a task they assigned,
+ * or one waiting on their sign-off, isn't theirs to finish by it.
+ */
+export function activityRowFixedDeadline(row: ActivityRow): boolean {
+  return (
+    row.kind === "task" &&
+    row.glyph === "task" &&
+    row.key.startsWith("needs:") &&
+    row.task.fixed_deadline === true &&
+    row.task.stored_status !== "COMPLETED"
+  );
+}
+
+/**
  * The row an "asks for more time" push opens (`target.view ===
  * "extension"`, #6096): the waiting request on that task, or null once
  * someone answered it.

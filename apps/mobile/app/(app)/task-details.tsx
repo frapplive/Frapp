@@ -28,6 +28,7 @@ import {
   can,
   FRAPP_LINK_COPY,
   TASK_AUDIENCE_COPY,
+  TASK_EXTENSION_COPY,
   TASK_FOLLOWER_COPY,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -43,6 +44,7 @@ import {
   CloseGlyph,
   MinusGlyph,
   MoreGlyph,
+  MoreTimeGlyph,
   PencilGlyph,
   UndoGlyph,
 } from "@/components/control-glyphs";
@@ -104,6 +106,8 @@ import { useStartTask } from "@/lib/tasks/use-start-task";
 import { useMemberLabel } from "@/lib/tasks/use-member-label";
 import { MarkDoneHost, useTaskToggle } from "@/lib/tasks/use-task-toggle";
 import { useTaskReview } from "@/lib/tasks/use-task-review";
+import { useAskForMoreTime } from "@/lib/tasks/use-ask-for-more-time";
+import { extensionLines, rowDueUrgentForViewer } from "@/lib/tasks/extension";
 import {
   RELEASE_FAILED,
   RELEASED_LINE,
@@ -325,6 +329,10 @@ function TaskScreen({
     canManage,
     toggleRefused: toggles.refusal !== null || review.refusal?.gate === true,
   });
+  // Ask for more time (#6096): the sheet, and what it said once it landed,
+  // under the due until the next thing the member does here.
+  const [askedLine, setAskedLine] = useState<string | null>(null);
+  const askMore = useAskForMoreTime(setAskedLine);
 
   // Who has it reads the group's copies off the board's query, which holds
   // the chapter's every task for an officer (`groupCopies`).
@@ -585,6 +593,8 @@ function TaskScreen({
     sendBackInMore,
     editRound,
     editInMore,
+    askRound,
+    askInMore,
     moreShown: showMore,
     rounds,
   } = taskBarLayout({
@@ -595,6 +605,7 @@ function TaskScreen({
       confirm: controls.confirm === true,
       sendBack: controls.sendBack === true,
       edit: controls.edit === true,
+      askForMoreTime: controls.askForMoreTime === true,
     },
     removePeople: showRemovePeople,
     otherMoreRows: restOfMore.length,
@@ -611,7 +622,20 @@ function TaskScreen({
         ]
       : []),
     ...(editInMore ? [{ label: "Edit", onPress: startEdit }] : []),
-    ...restOfMore,
+    // Ask for more time after the status moves, before the deletes.
+    ...restOfMore.filter((moreRow) => !("style" in moreRow)),
+    ...(askInMore
+      ? [
+          {
+            label: TASK_EXTENSION_COPY.ask,
+            onPress: () => {
+              setAskedLine(null);
+              askMore.ask(row);
+            },
+          },
+        ]
+      : []),
+    ...restOfMore.filter((moreRow) => "style" in moreRow),
   ];
   // The glass menu, opened above the bar's More (owner, 2026-11-20: one
   // menu system, never the system's sheet).
@@ -630,6 +654,10 @@ function TaskScreen({
     );
 
   const status = rowStatus(row);
+  // Fixed deadline, waiting, blocked, and the latest request's answer
+  // (#6096), in web's words and order.
+  const moreTimeLines = extensionLines(row, { viewerId, canManage });
+  const dueRed = row.isOverdue || rowDueUrgentForViewer(row, viewerId);
   const due = formatDueDate(row.dueDate);
   const points = formatPointsChip(row.pointReward, row.pointsAwarded);
   // From: the tier, role or group it is from when one follows it (#5473),
@@ -702,6 +730,7 @@ function TaskScreen({
     sendBackRound ||
     editRound ||
     showRemovePeople ||
+    askRound ||
     showMore;
 
   return (
@@ -747,9 +776,9 @@ function TaskScreen({
               <TaskFact
                 label="Due"
                 value={due.replace(/^Due /, "")}
-                color={
-                  row.isOverdue ? tokens.color.semantic.destructiveText : null
-                }
+                // Red once overdue, and on a fixed deadline to its assignee
+                // (#6096).
+                color={dueRed ? tokens.color.semantic.destructiveText : null}
               />
             ) : null}
             {points ? (
@@ -784,6 +813,32 @@ function TaskScreen({
         ) : null}
 
         {!editing ? <TaskRepeatFact row={row} /> : null}
+
+        {!editing && (moreTimeLines.length > 0 || askedLine) ? (
+          <View style={styles.section}>
+            {askedLine ? (
+              <Text style={styles.moreTime} accessibilityLiveRegion="polite">
+                {askedLine}
+              </Text>
+            ) : null}
+            {moreTimeLines
+              // The ask's own line says how it went, blocked included; the
+              // read's would say it again once it is re-read.
+              .filter(() => !askedLine)
+              .map((line) => (
+                <Text
+                  key={line.text}
+                  style={
+                    line.tone === "danger"
+                      ? styles.moreTimeDanger
+                      : styles.moreTime
+                  }
+                >
+                  {line.text}
+                </Text>
+              ))}
+          </View>
+        ) : null}
 
         {seriesStopped && !editing ? (
           <Text style={styles.stoppedNote} accessibilityLiveRegion="polite">
@@ -960,6 +1015,18 @@ function TaskScreen({
               <MinusGlyph color={tokens.color.text.foreground} />
             </TaskBarIcon>
           ) : null}
+          {askRound ? (
+            <TaskBarIcon
+              label={TASK_EXTENSION_COPY.ask}
+              hint="Opens a sheet for the new due and your reason."
+              onPress={afterEdit(() => {
+                setAskedLine(null);
+                askMore.ask(row);
+              })}
+            >
+              <MoreTimeGlyph color={tokens.color.text.foreground} />
+            </TaskBarIcon>
+          ) : null}
           {showMore ? (
             <TaskBarIcon label="More" onPress={afterEdit(openMore)}>
               <MoreGlyph color={tokens.color.text.foreground} />
@@ -990,6 +1057,7 @@ function TaskScreen({
 
       <MarkDoneHost toggle={toggles} />
       {review.host}
+      {askMore.host}
     </View>
   );
 }
@@ -1016,6 +1084,16 @@ function createStyles(tokens: SignetTokens) {
       color: tokens.color.text.foreground,
     },
     notice: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.semantic.destructiveText,
+    },
+    // What more time stands at (#6096): one quiet line, or the fixed
+    // deadline's in the red, as web's Due row says them.
+    moreTime: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+    },
+    moreTimeDanger: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.semantic.destructiveText,
     },

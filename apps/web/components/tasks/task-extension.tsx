@@ -200,7 +200,7 @@ export function AskForMoreTimeDialog({
 
   const fieldProblem =
     problem === "missing-reason"
-      ? "Say why you need more time."
+      ? TASK_EXTENSION_COPY.reasonMissing
       : problem !== null && problem !== "missing-due" && problem !== "passed"
         ? problem
         : null;

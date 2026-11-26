@@ -17,13 +17,17 @@ import {
   readLiveTaskPhotos,
   readTaskSeries,
   type LiveTaskPhoto,
+  type TaskExtensionSummary,
   type MyTasksGroup,
 } from "@repo/hooks";
 import {
   readFrappLinks,
   taskNeedsSignOff,
   taskSignedOffAutomatically,
+  TASK_EXTENSION_NEEDS_OFFICER,
+  TASK_EXTENSION_STATUSES,
   type FrappLink,
+  type TaskExtensionNeedsOfficer,
   type TaskProofKind,
   type TaskSeriesLine,
 } from "@repo/validation";
@@ -113,6 +117,18 @@ export interface TaskRowModel {
    * and whether it ended, or `null` for a task that doesn't repeat.
    */
   series: TaskSeriesLine | null;
+  /**
+   * A fixed deadline (#6096): never extendable, and drawn urgent (the
+   * danger red) to its assignee.
+   */
+  fixedDeadline: boolean;
+  /** Its latest request for more time (#6096), or `null` for none. */
+  extension: TaskExtensionSummary | null;
+  /**
+   * On the assignee's own task (#6096): they used 3 extensions in 30 days and
+   * can't ask again until an officer restores it.
+   */
+  extensionRequestsBlocked: boolean;
 }
 
 /** A group task's summary, as the task reads carry it (`group`). */
@@ -269,6 +285,49 @@ export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
     group: toGroup(row.group),
     openTaskId: str(row, "open_task_id"),
     series: readTaskSeries(row.series),
+    fixedDeadline: row.fixed_deadline === true,
+    extension: readExtension(row.extension),
+    extensionRequestsBlocked: row.extension_requests_blocked === true,
+  };
+}
+
+const EXTENSION_STATUSES: readonly string[] = TASK_EXTENSION_STATUSES;
+const NEEDS_OFFICER: readonly string[] = TASK_EXTENSION_NEEDS_OFFICER;
+
+function readNeedsOfficer(
+  value: string | null,
+): TaskExtensionSummary["needs_officer"] {
+  return value && NEEDS_OFFICER.includes(value)
+    ? (value as TaskExtensionNeedsOfficer)
+    : null;
+}
+
+/**
+ * A task read's `extension` (#6096), or `null` for none or one this build
+ * can't read: a status it doesn't know, or no day asked for.
+ */
+function readExtension(value: unknown): TaskExtensionSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const id = str(record, "id");
+  const status = str(record, "status");
+  const toDueDate = str(record, "to_due_date");
+  if (!id || !status || !EXTENSION_STATUSES.includes(status) || !toDueDate) {
+    return null;
+  }
+  return {
+    id,
+    status: status as TaskExtensionSummary["status"],
+    reason: str(record, "reason") ?? "",
+    from_due_date: str(record, "from_due_date") ?? "",
+    from_due_at: str(record, "from_due_at"),
+    to_due_date: toDueDate,
+    to_due_at: str(record, "to_due_at"),
+    needs_officer: readNeedsOfficer(str(record, "needs_officer")),
+    auto_approved: record.auto_approved === true,
+    decline_reason: str(record, "decline_reason"),
+    decided_at: str(record, "decided_at"),
+    created_at: str(record, "created_at") ?? "",
   };
 }
 

@@ -15,6 +15,7 @@ import {
   editFactsOfLive,
   editFactsOfRow,
   attachmentsSave,
+  fixedDeadlineSave,
   followerSave,
   photosSave,
   pointsSave,
@@ -517,5 +518,21 @@ describe("Attached (spec/behavior/frapp-links.md)", () => {
     expect(scopedEdit(row({ group_id: "g1" }), { attachments: [doc] })).toEqual(
       { attachments: [doc], scope: "group" },
     );
+  });
+});
+
+describe("fixedDeadlineSave (#6096)", () => {
+  it("sends the switch only when it changed, to every copy on a group", () => {
+    expect(fixedDeadlineSave(row(), false)).toEqual({ kind: "none" });
+    const on = fixedDeadlineSave(row(), true);
+    expect(on).toEqual({ kind: "save", body: { fixed_deadline: true } });
+    expect(fixedDeadlineSave(row({ fixed_deadline: true }), false)).toEqual({
+      kind: "save",
+      body: { fixed_deadline: false },
+    });
+    expect(
+      scopedEdit(row({ group_id: "g1" }), { fixed_deadline: true }),
+    ).toEqual({ fixed_deadline: true, scope: "group" });
+    expect(rowAfter(row(), { fixed_deadline: true }).fixedDeadline).toBe(true);
   });
 });

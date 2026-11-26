@@ -135,12 +135,20 @@ export const TASK_EXTENSION_COPY = {
   approvedNow: "More time granted",
   declined: "Not extended",
   blocked: `You've had ${TASK_EXTENSION_BLOCK_COUNT} extensions in ${TASK_EXTENSION_BLOCK_DAYS} days, so an officer needs to restore extension requests before you ask again.`,
+  /** A missing or wrong field, before sending, and a send that failed. */
+  reasonMissing: "Say why you need more time.",
+  dueNotLater: "Pick a due later than this one.",
+  askFailed: "Couldn't send it. Try again.",
   /** The officer's actions. */
   approve: "Approve",
   decline: "Decline",
   declineTitle: "Decline more time",
   declineReasonLabel: "Why not?",
   declineReasonPlaceholder: "The event is Friday, so it can't move",
+  declineReasonMissing: "Say why it can't move.",
+  approveFailed: "Couldn't approve it. Try again.",
+  declineFailed: "Couldn't decline it. Try again.",
+  restoreFailed: "Couldn't restore extension requests. Try again.",
   /** Where the officer finds a blocked member. */
   restore: "Restore extension requests",
   restored: "Extension requests restored",

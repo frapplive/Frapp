@@ -68,6 +68,9 @@ function row(overrides: Partial<TaskRowModel> = {}): TaskRowModel {
     group: null,
     openTaskId: null,
     series: null,
+    fixedDeadline: false,
+    extension: null,
+    extensionRequestsBlocked: false,
     ...overrides,
   };
 }

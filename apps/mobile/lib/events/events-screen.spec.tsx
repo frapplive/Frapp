@@ -147,6 +147,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeleteTask: () => ({ mutateAsync: deleteTask, isPending: false }),
   useConfirmTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRejectTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateTaskStatus: () => ({ mutateAsync: updateStatus }),
 }));
 
@@ -582,8 +583,7 @@ describe("Calendar day rows", () => {
     expect(resting.borderRadius).toBeUndefined();
     const chip = row.find(
       (node) =>
-        (node.type as unknown) === "Text" &&
-        node.props.children === "Required",
+        (node.type as unknown) === "Text" && node.props.children === "Required",
     );
     expect(StyleSheet.flatten(chip.props.style).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
@@ -1054,6 +1054,7 @@ describe("Calendar long-press menus", () => {
     expect(labels(tree)).toEqual([
       "Mark done",
       "Start",
+      "Ask for more time",
       "Edit",
       "Reassign",
       "Duplicate",
@@ -1124,6 +1125,7 @@ describe("Calendar long-press menus", () => {
     expect(labels(tree)).toEqual([
       "Mark done",
       "Start",
+      "Ask for more time",
       "Edit",
       "Reassign",
       "Duplicate",

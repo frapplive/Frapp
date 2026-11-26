@@ -169,7 +169,8 @@ export function ExtensionReview({
                 });
                 onDone();
               },
-              onError: (error) => refused(error, "Couldn't approve it"),
+              onError: (error) =>
+                refused(error, TASK_EXTENSION_COPY.approveFailed),
             })
           }
         >
@@ -191,7 +192,7 @@ export function ExtensionReview({
             await decline.mutateAsync({ ...ids, reason });
           } catch (error) {
             if (isConflict(error)) {
-              refused(error, "Couldn't decline it");
+              refused(error, TASK_EXTENSION_COPY.declineFailed);
               return;
             }
             throw error;
@@ -230,14 +231,14 @@ export function DeclineExtensionDialog({
   }
   async function submit() {
     const why = reason.trim();
-    if (!why) return setProblem("Say why it can't move.");
+    if (!why) return setProblem(TASK_EXTENSION_COPY.declineReasonMissing);
     setBusy(true);
     try {
       await onSubmit(why);
       close();
     } catch (error) {
       setProblem(
-        getErrorMessage(error, "Couldn't decline it. Try again.", {
+        getErrorMessage(error, TASK_EXTENSION_COPY.declineFailed, {
           serverWritesForMembers: true,
         }),
       );

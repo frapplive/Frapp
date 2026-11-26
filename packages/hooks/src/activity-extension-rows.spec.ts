@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activityReviewRows,
+  activityRowFixedDeadline,
   activityRowAction,
   activityRowTaskId,
   extensionDueWords,
@@ -83,5 +84,24 @@ describe("requests for more time in Activity (#6096)", () => {
     const old = activity([]);
     delete (old.needs_you as Partial<Activity["needs_you"]>).task_extensions;
     expect(activityReviewRows(old, NOW)).toEqual([]);
+  });
+
+  it("reddens only the member's own open To do row with a fixed deadline", () => {
+    const row = (over: Record<string, unknown>, key = "needs:task:t1") =>
+      ({
+        kind: "task",
+        key,
+        glyph: "task",
+        task: { fixed_deadline: true, stored_status: "TODO", ...over },
+      }) as unknown as Parameters<typeof activityRowFixedDeadline>[0];
+    expect(activityRowFixedDeadline(row({}))).toBe(true);
+    expect(activityRowFixedDeadline(row({ fixed_deadline: false }))).toBe(
+      false,
+    );
+    expect(activityRowFixedDeadline(row({ stored_status: "COMPLETED" }))).toBe(
+      false,
+    );
+    // A task the member assigned is someone else's to finish by it.
+    expect(activityRowFixedDeadline(row({}, "made:task:t1"))).toBe(false);
   });
 });

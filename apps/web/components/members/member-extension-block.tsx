@@ -45,7 +45,7 @@ export function MemberExtensionBlock({
             onSuccess: () => toast({ title: TASK_EXTENSION_COPY.restored }),
             onError: (error) =>
               toast({
-                title: "Couldn't restore extension requests",
+                title: TASK_EXTENSION_COPY.restoreFailed,
                 description: getErrorMessage(error, "Try again in a moment.", {
                   serverWritesForMembers: true,
                 }),

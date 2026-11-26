@@ -10,6 +10,8 @@ import {
   type ActivityRow,
 } from "@repo/hooks/activity-rows";
 import { activityFaceStack, type ActivityFace } from "@repo/hooks";
+// The module, not the barrel: page specs mock the barrel whole.
+import { activityRowFixedDeadline } from "@repo/hooks/activity-rows";
 import { NavGlyph } from "@/components/layout/nav-glyphs";
 import { FaceWithBadge } from "@/components/shared/face-with-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -185,8 +187,17 @@ export function ActivityUnreadDot({ unread }: { unread: boolean }) {
 export function ActivityRowDetail({ row }: { row: ActivityRow }) {
   if (!row.detail) return null;
   const { lead, soon } = activityDetailParts(row);
+  // A fixed deadline on the member's own task reads in the red (#6096), as
+  // on the board, the task panel and the phone.
+  const fixed = activityRowFixedDeadline(row);
   return (
-    <span className="block truncate text-caption text-muted-foreground">
+    <span
+      className={cn(
+        "block truncate text-caption",
+        fixed ? "font-medium text-destructive-text" : "text-muted-foreground",
+      )}
+      data-fixed-deadline={fixed ? "" : undefined}
+    >
       {lead}
       {lead && soon ? " · " : null}
       {soon ? (
