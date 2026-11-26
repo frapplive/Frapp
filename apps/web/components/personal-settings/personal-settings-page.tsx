@@ -8,11 +8,15 @@ import {
   useAiConsent,
   useCurrentChapter,
 } from "@repo/hooks";
+import {
+  personalSettingsGroupLabel,
+  personalSettingsPageLabel,
+} from "@repo/validation";
 import { AccountSection } from "@/components/personal-settings/account-section";
 import { AiSection } from "@/components/personal-settings/ai-section";
 import { ChapterAlertsSection } from "@/components/personal-settings/chapter-alerts-section";
+import { ChatSection } from "@/components/personal-settings/chat-section";
 import { QuietHoursSection } from "@/components/personal-settings/quiet-hours-section";
-import { ReadReceiptsSection } from "@/components/personal-settings/read-receipts-section";
 import { MyInvoicesSection } from "@/components/personal-settings/my-invoices-section";
 import { PersonalSettingsBodySkeleton } from "@/components/personal-settings/personal-settings-skeleton";
 import {
@@ -23,10 +27,7 @@ import {
   type PersonalSettingsSection,
 } from "@/components/personal-settings/personal-settings-sections";
 import { BlockedMembersCard } from "@/components/profile/blocked-members-card";
-import { ChatDensityControl } from "@/components/profile/chat-density-control";
 import { LinkedAppsSection } from "@/components/linked-apps/linked-apps-section";
-import { CalendarSection } from "@/components/personal-settings/calendar-section";
-import { ProfileSection } from "@/components/profile/profile-section";
 import {
   SettingsNavRail,
   type SettingsNavGroup,
@@ -40,6 +41,11 @@ import { useSettingJump } from "@/lib/settings/use-setting-jump";
  * Discord splits User Settings from Server Settings and Slack splits
  * Preferences from workspace settings. Every section here used to be a block
  * at the bottom of `/profile`, which keeps the profile itself.
+ *
+ * Its rail is the phone Settings screen's list of rows, page for page (#6032),
+ * and each page is groups of Settings rows (`components.md` § Settings rows).
+ * It takes the full width like Chapter settings (`isFullWidthToolRoute`), so
+ * the rail stands as a column rather than wrapping beside chat.
  *
  * Only the open section mounts, so only its queries run. There is no
  * page-scale state ladder: no one read feeds the whole page, and each section
@@ -59,26 +65,22 @@ function PersonalSettingsContent() {
   // chapter is known (or with none active) it says so in general terms; each
   // chapter section already tells a member with no chapter to pick one.
   const { data: chapter } = useCurrentChapter();
-  const chapterName = chapter?.name.trim();
+  const chapterName = chapter?.name;
 
-  const groups: SettingsNavGroup[] = [
-    { label: "My account", group: "account" as const },
-    {
-      label: chapterName ? `In ${chapterName}` : "In your chapter",
-      group: "chapter" as const,
-    },
-  ].map(({ label, group }) => ({
-    label,
-    items: PERSONAL_SETTINGS_SECTIONS.filter(
-      (s) =>
-        s.group === group &&
-        isPersonalSettingsSectionShown(s.value, aiAvailable),
-    ).map((s) => ({
-      value: s.value,
-      label: s.label,
-      href: personalSettingsHref(s.value),
-    })),
-  }));
+  const groups: SettingsNavGroup[] = (["account", "chapter"] as const).map(
+    (group) => ({
+      label: personalSettingsGroupLabel(group, chapterName),
+      items: PERSONAL_SETTINGS_SECTIONS.filter(
+        (s) =>
+          s.group === group &&
+          isPersonalSettingsSectionShown(s.value, aiAvailable),
+      ).map((s) => ({
+        value: s.value,
+        label: s.label,
+        href: personalSettingsHref(s.value),
+      })),
+    }),
+  );
 
   /*
     The rail waits for the first AI read rather than drawing without the AI
@@ -100,6 +102,8 @@ function PersonalSettingsContent() {
         {/* A form's width, as on `/profile`: a 1,100px switch row is not one
             anyone reads across. */}
         <div className="min-w-0 max-w-2xl flex-1 @3xl:py-3">
+          {/* The page's name for a screen reader; the lit rail row shows it. */}
+          <h2 className="sr-only">{personalSettingsPageLabel(section)}</h2>
           <SectionBody section={section} />
         </div>
       </div>
@@ -110,33 +114,23 @@ function PersonalSettingsContent() {
 function SectionBody({ section }: { section: PersonalSettingsSection }) {
   switch (section) {
     case "notifications":
-      return <QuietHoursSection />;
-    case "appearance":
       /*
-        How tightly the thread draws (§11 § Density). Kept on the device, so
-        the hint says so: a phone can stay cozy while a laptop goes compact.
-        There is no theme choice here: Frapp is dark-only (#3330).
+        Everything that notifies the member, on one page (#6032): when they
+        are quiet, then which of the chapter's alerts they get. Slack keeps
+        the level and the schedule on one Notifications page the same way.
       */
       return (
         <div className="flex flex-col gap-8">
-          <ProfileSection
-            id="chat-density"
-            title="Chat density"
-            hint="Applies on this browser."
-          >
-            <ChatDensityControl />
-          </ProfileSection>
-          {/* Read receipts on direct messages (#5519): an account setting,
-              unlike density, so it follows the member everywhere. */}
-          <ReadReceiptsSection />
+          <QuietHoursSection />
+          <ChapterAlertsSection />
         </div>
       );
+    case "chat":
+      return <ChatSection />;
     case "account":
       return <AccountSection />;
     case "ai":
       return <AiSection />;
-    case "alerts":
-      return <ChapterAlertsSection />;
     case "blocked":
       /*
         The durable undo for a chat block (#2313): its own states, because a
@@ -147,8 +141,6 @@ function SectionBody({ section }: { section: PersonalSettingsSection }) {
       return <MyInvoicesSection />;
     case "apps":
       return <LinkedAppsSection />;
-    case "calendar":
-      return <CalendarSection />;
   }
 }
 

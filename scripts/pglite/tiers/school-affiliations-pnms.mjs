@@ -265,10 +265,13 @@ try {
 
   // ── Ending a school link ends the council link ──
   const endedSchool = await schoolStatus(linkB, CH_B, "ended");
+  // Read by id, not by `order by created_at desc limit 1`: the declined row
+  // and the asked-again row can share a `created_at` (the clock reads the
+  // same within a fast run), and the tie then returned either one, so this
+  // check passed or failed by luck.
   const bCouncil = await one(
-    `select status from council_chapters where council_id = $1 and chapter_id = $2
-      order by created_at desc limit 1`,
-    [IFC, CH_B],
+    `select status from council_chapters where id = $1`,
+    [askBAgain.link.id],
   );
 
   // ── Purge ──

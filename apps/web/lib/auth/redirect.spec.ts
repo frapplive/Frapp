@@ -155,10 +155,10 @@ describe("describeAuthError", () => {
       "email_exists",
     ]) {
       expect(describeAuthError(code)).not.toMatch(
-        /^Request a new link below, or sign in/,
+        /^Email yourself a code below, or sign in/,
       );
     }
-    expect(describeAuthError("something_else")).toMatch(/Request a new link/);
+    expect(describeAuthError("something_else")).toMatch(/Email yourself a code/);
   });
 
   it("uses the same identity-collision copy as OAuth kickoff", () => {

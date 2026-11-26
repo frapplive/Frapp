@@ -231,6 +231,7 @@ export * from "./permission-registry";
 // Client-side RBAC gates, shared by apps/web and apps/mobile. Moved out of
 // `apps/web/lib/auth/can.ts` with #994 so the wildcard rule has one definition.
 export * from "./permissions";
+export * from "./personal-settings";
 export * from "./phone";
 export * from "./phone-reach";
 // What each points category is called, and the officer action's one name,

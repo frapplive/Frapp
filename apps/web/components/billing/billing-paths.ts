@@ -5,6 +5,24 @@
  */
 export const BILLING_SETTINGS_PATH = "/settings?tab=billing";
 
+/**
+ * The pages Plan and billing's rows open (#6031): the plan table, and the
+ * chapter's member invoices while dues is on. Each has a way back to the page.
+ */
+export const BILLING_SETTINGS_PAGES = ["plan", "invoices"] as const;
+export type BillingSettingsPage = (typeof BILLING_SETTINGS_PAGES)[number];
+
+export function isBillingSettingsPage(
+  value: string | null | undefined,
+): value is BillingSettingsPage {
+  return (BILLING_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
+}
+
+/** One of Plan and billing's own pages. */
+export function billingSettingsPagePath(page: BillingSettingsPage): string {
+  return `${BILLING_SETTINGS_PATH}&page=${page}`;
+}
+
 /** Stripe's way back: Checkout's success and cancel URLs, the Portal's return. */
 export function billingReturnUrl(
   origin: string,

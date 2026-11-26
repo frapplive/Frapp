@@ -244,7 +244,7 @@ fi
 # the toolchain check at the end fails with `(dependencies)`, and that remedy includes the
 # build. A failed build is reported in whichever sentinel this run writes (see fail()),
 # since the sentinel body is what sessions read.
-if "$ROOT/node_modules/.bin/turbo" --version >/dev/null 2>&1; then
+if node_deps_turbo_runs "$ROOT"; then
   cs_log "Building the workspace packages..."
   if ! timeout 300 "$ROOT/node_modules/.bin/turbo" run build --filter='./packages/*' --output-logs=errors-only; then
     packages_build_failed=1

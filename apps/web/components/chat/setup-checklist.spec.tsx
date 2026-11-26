@@ -73,7 +73,7 @@ describe("SetupChecklistSection", () => {
       "/events",
       "/settings?tab=geofences&page=study-zones",
       "/documents",
-      "/settings?tab=billing",
+      "/settings?tab=billing&page=invoices",
     ]);
   });
 

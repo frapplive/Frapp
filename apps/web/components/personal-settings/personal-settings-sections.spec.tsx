@@ -109,6 +109,7 @@ vi.mock("@repo/hooks", () => ({
   useUpdateUserSettings: () => mocks.updateSettings,
   useDeleteAccount: () => mocks.deleteAccount,
   useActiveChapterId: () => mocks.chapterId,
+  useCurrentChapter: () => ({ data: { name: "Beta Theta Omega" } }),
   usePermissionList: () => mocks.permissions,
   useNotificationPreferences: () => mocks.preferencesQuery,
   useUpdateNotificationPreference: () => ({
@@ -121,6 +122,10 @@ vi.mock("@repo/hooks", () => ({
 
 vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: mocks.toast }),
+}));
+// Account's Sign in rows have their own spec (`linked-apps-section.spec.tsx`).
+vi.mock("@/components/linked-apps/sign-in-methods", () => ({
+  SignInMethodRows: () => null,
 }));
 vi.mock("@/lib/auth/session", () => ({
   signOutCurrentSession: () => mocks.signOutCurrentSession(),
@@ -137,6 +142,14 @@ import { QuietHoursSection } from "./quiet-hours-section";
 function lastSettingsBody() {
   const calls = mocks.updateSettingsMutateAsync.mock.calls;
   return calls[calls.length - 1]?.[0];
+}
+
+/** Types a time into one of the quiet-hours fields, as a member would. */
+function typeTime(label: string, value: string) {
+  const field = screen.getByLabelText(label);
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
 }
 
 async function savePreferences() {
@@ -190,7 +203,7 @@ describe("QuietHoursSection — quiet hours switch and zone", () => {
     render(<QuietHoursSection />);
 
     expect(quietSwitch().getAttribute("aria-checked")).toBe("false");
-    expect(screen.queryByLabelText("From")).toBeNull();
+    expect(screen.queryByLabelText("Quiet hours start")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /save quiet hours/i }),
     ).toBeNull();
@@ -231,9 +244,7 @@ describe("QuietHoursSection — quiet hours switch and zone", () => {
     mocks.settingsQuery.data = ON;
     render(<QuietHoursSection />);
 
-    fireEvent.change(screen.getByLabelText("From"), {
-      target: { value: "23:30" },
-    });
+    typeTime("Quiet hours start", "23:30");
     await savePreferences();
 
     await waitFor(() => {
@@ -361,9 +372,8 @@ describe("QuietHoursSection — draft survives an optimistic rollback (#312)", (
     );
     const { rerender } = render(<QuietHoursSection />);
 
-    const start = await screen.findByDisplayValue("22:00");
-    await userEvent.clear(start);
-    await userEvent.type(start, "21:00");
+    await screen.findByDisplayValue("10 PM");
+    typeTime("Quiet hours start", "9 PM");
     await savePreferences();
 
     await waitFor(() => {
@@ -378,16 +388,15 @@ describe("QuietHoursSection — draft survives an optimistic rollback (#312)", (
     mocks.settingsQuery.data = { ...STORED };
     rerender(<QuietHoursSection />);
 
-    expect(screen.getByDisplayValue("21:00")).toBeTruthy();
-    expect(screen.queryByDisplayValue("22:00")).toBeNull();
+    expect(screen.getByDisplayValue("9 PM")).toBeTruthy();
+    expect(screen.queryByDisplayValue("10 PM")).toBeNull();
   });
 
   it("resyncs from the server once a save succeeds", async () => {
     const { rerender } = render(<QuietHoursSection />);
 
-    const start = await screen.findByDisplayValue("22:00");
-    await userEvent.clear(start);
-    await userEvent.type(start, "21:00");
+    await screen.findByDisplayValue("10 PM");
+    typeTime("Quiet hours start", "9 PM");
     await savePreferences();
 
     // The success path is unchanged: `onSettled` invalidates, the refetch
@@ -395,7 +404,7 @@ describe("QuietHoursSection — draft survives an optimistic rollback (#312)", (
     mocks.settingsQuery.data = { ...STORED, quiet_hours_start: "21:00" };
     rerender(<QuietHoursSection />);
 
-    expect(screen.getByDisplayValue("21:00")).toBeTruthy();
+    expect(screen.getByDisplayValue("9 PM")).toBeTruthy();
   });
 });
 
@@ -503,7 +512,7 @@ describe("QuietHoursSection — the theme control is gone, not hidden", () => {
     render(<QuietHoursSection />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("22:00")).toBeTruthy();
+      expect(screen.getByDisplayValue("10 PM")).toBeTruthy();
     });
     await savePreferences();
 
@@ -710,13 +719,15 @@ describe("ChapterAlertsSection — notification categories (#564)", () => {
   it("draws the Chat messages choice for the active chapter only", () => {
     const { unmount } = render(<ChapterAlertsSection />);
     expect(
-      screen.getByRole("group", { name: "Chat messages" }),
+      screen.getByRole("combobox", { name: "Chat messages" }),
     ).toBeInTheDocument();
     unmount();
 
     mocks.chapterId = null;
     render(<ChapterAlertsSection />);
-    expect(screen.queryByRole("group", { name: "Chat messages" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Chat messages" }),
+    ).toBeNull();
   });
 
   it("renders a switch for every catalog category", () => {
@@ -1025,7 +1036,7 @@ describe("ChapterAlertsSection — notification categories (#564)", () => {
   it("says announcements are not switchable", () => {
     render(<ChapterAlertsSection />);
     expect(
-      screen.getByText(/chapter announcements always arrive/i),
+      screen.getByText(/announcements can.t be switched off here/i),
     ).toBeTruthy();
   });
 });

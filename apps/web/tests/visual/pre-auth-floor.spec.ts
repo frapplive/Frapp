@@ -129,5 +129,6 @@ test("the dashboard floor suite still exists and still measures every dashboard 
     // Fifteen since #5946: `/messages`, the Messages page.
     // Twelve since #5950: `/points`, `/service` and `/study` redirect to the
     // member's own panels on `/profile`, which this list already measures.
-  ).toHaveLength(12);
+    // Eleven since #5948: `/tasks` redirects to `/activity`, measured above.
+  ).toHaveLength(11);
 });

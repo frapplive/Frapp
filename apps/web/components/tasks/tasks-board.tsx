@@ -21,7 +21,6 @@ import {
   useCreateTask,
   useCurrentUser,
   useDeleteTask,
-  useEvents,
   useMemberDisplayNames,
   useMembers,
   useMyPermissions,
@@ -31,13 +30,9 @@ import {
   useChapterScope,
   useTasks,
   useUpdateTaskStatus,
-  MY_TASKS_GROUPS,
-  MY_TASKS_GROUP_EMPTY,
-  MY_TASKS_GROUP_LABELS,
   TASK_DUE_BUCKET_LABELS,
   TASK_DUE_FILTERS,
   compareTasksByDue,
-  myTasksGroup,
   taskDueBucket,
   type TaskDueBucket,
 } from "@repo/hooks";
@@ -47,7 +42,6 @@ import {
   formatDayTime,
   formatPointsChip,
   formatWeekdayDay,
-  nextUpLine,
 } from "@repo/formatting";
 import {
   TASK_AUDIENCE_COPY,
@@ -63,7 +57,7 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
 import { useNewIntent } from "@/components/layout/new-intent";
-import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
@@ -80,7 +74,6 @@ import {
 import { toastFailure } from "@/lib/failure-toast";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import {
   TASK_ACTION_LABELS,
   TASK_CONFIRMED_LABEL,
@@ -109,22 +102,24 @@ import {
   GroupTaskRow,
   TASK_ROWS_CLASS,
   TaskRow,
-  copyAudience,
   lowerFirst,
-  type CopyAudience,
   type RowPerson,
 } from "./task-row";
 import { TaskPanel, type TaskPanelTarget } from "./task-panel";
 import { OpenTaskPanel, UpForGrabs } from "./up-for-grabs";
 import { SuggestionsStrip } from "./suggestions-strip";
+import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
+
 import { TasksPageSkeleton } from "@/components/tasks/tasks-skeleton";
 import {
   ActiveFilterChips,
   FilterMenu,
   type FilterMenuFilter,
 } from "@/components/shared/filter-menu";
-import { ViewLabels } from "@/components/shared/view-labels";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
+
+/** The notifications Everyone's shows the subject of: suggested tasks. */
+const SUGGESTION_SCREENS = ["ai_suggestions"] as const;
 
 type Task = BoardTask;
 
@@ -182,15 +177,21 @@ function isOpenStatus(status: TaskStatus): boolean {
 }
 
 /**
- * Whose tasks the page shows (#4295 step 5). Everyone opens on their own
- * (#5578, Paul and Shawn, 2026-11-19: "it should default to my tasks, not
- * all tasks"), as Linear opens on My issues and Asana on My tasks. An
- * officer picks Everyone's in the header's switch for the chapter's board. A
- * member's read holds their own and, since #5473, the tasks a tier, role or
- * group they're in follows: one who follows any gets the same choice, where
- * Everyone's is everything they can read. Anyone else sees only their own.
+ * Which part of Activity the board draws (#5948, step 4 of #5943; Paul's
+ * pick of 2026-11-24, "two homes"). The Tasks page folded into Activity:
+ *
+ * - `everyone`: Everyone's, the chapter's board (#4295 step 5) by status or
+ *   by person, as a list or a grid, with its Filter and New task in the page
+ *   header and the officers' suggestions from minutes above it.
+ * - `mine`: what Activity's Mine view takes from the board, around its own
+ *   To do and Running: New task and its add line, Up for grabs, and the task
+ *   panel that `?task=` and `?group=` links open (`lib/tasks/task-links.ts`).
+ *   The member's own tasks are Activity's To do; the board's My tasks list
+ *   (Overdue, Today, This week, Later) is gone, so no task is listed twice.
+ *
+ * Who sees Everyone's: `everyoneOffered` (`./everyones-tasks.ts`).
  */
-type TasksView = "mine" | "all";
+export type TasksBoardPart = "mine" | "everyone";
 /** How the chapter's board groups: its status lanes, or one group a person. */
 type TasksGroupBy = "status" | "person";
 /** The Status filter: a lane's status, or the Confirmed list. */
@@ -202,11 +203,6 @@ type FilterOption = { value: string; label: string };
 
 /** The menu's "any" value for a filter; no task value can be it. */
 const ANY_FILTER = "\u0000any";
-
-const VIEW_OPTIONS = [
-  { value: "mine", label: "My tasks" },
-  { value: "all", label: "Everyone's" },
-] as const;
 
 const GROUP_BY_OPTIONS = [
   { value: "status", label: "By status" },
@@ -272,12 +268,18 @@ function confirmedAt(task: Task): number {
  */
 function LinkedTaskParam({
   tasks,
+  ready,
   refetch,
+  onAsked,
   onOpen,
   onMissing,
 }: {
   tasks: Task[];
+  /** The board's read has answered; until then a link waits. */
+  ready: boolean;
   refetch: () => Promise<unknown>;
+  /** A link is in the address: the board's read must run for it. */
+  onAsked: () => void;
   onOpen: (target: { kind: "task" | "group"; id: string }) => void;
   onMissing: () => void;
 }) {
@@ -289,9 +291,9 @@ function LinkedTaskParam({
   const rereading = useRef<string | null>(null);
   const [reread, setReread] = useState<string | null>(null);
   // The board hands new callbacks each render; the link is acted on once.
-  const latest = useRef({ refetch, onOpen, onMissing });
+  const latest = useRef({ refetch, onAsked, onOpen, onMissing });
   useEffect(() => {
-    latest.current = { refetch, onOpen, onMissing };
+    latest.current = { refetch, onAsked, onOpen, onMissing };
   });
   useEffect(() => {
     if (!key) {
@@ -299,6 +301,8 @@ function LinkedTaskParam({
       return;
     }
     if (handled.current === key) return;
+    latest.current.onAsked();
+    if (!ready) return;
     let target: { kind: "task" | "group"; id: string } | null = null;
     if (groupId) {
       if (tasks.some((task) => task.group_id === groupId))
@@ -324,17 +328,29 @@ function LinkedTaskParam({
     if (target) latest.current.onOpen(target);
     else latest.current.onMissing();
     // Next keeps `useSearchParams` in step with the History API, so this
-    // clears the parameter without a navigation.
+    // clears the parameter without a navigation. Only the link's own: the
+    // address is Activity's, whose `?view=` stays.
+    const url = new URL(window.location.href);
+    url.searchParams.delete(TASKS_GROUP_PARAM);
+    url.searchParams.delete(TASKS_TASK_PARAM);
     window.history.replaceState(
       window.history.state,
       "",
-      window.location.pathname,
+      `${url.pathname}${url.search}`,
     );
-  }, [key, groupId, taskId, tasks, reread]);
+  }, [key, groupId, taskId, tasks, reread, ready]);
   return null;
 }
 
-export function TasksBoard() {
+export function TasksBoard({
+  part,
+  onShowEveryone,
+}: {
+  part: TasksBoardPart;
+  /** Mine's "Show everyone's" on a task made for someone else. */
+  onShowEveryone?: () => void;
+}) {
+  const everyone = part === "everyone";
   const { toast } = useToast();
   const { isOffline } = useNetwork();
   // Every write on this board (create, status, confirm, reject, delete) hits
@@ -343,7 +359,11 @@ export function TasksBoard() {
   // for GET, and it remains the enforcement either way.
   const gate = useSubscriptionGate();
   const { confirm, confirmDialog } = useConfirmDialog();
-  const tasksQuery = useTasks();
+  // Mine draws no board, so it reads the tasks only once a `?task=` or
+  // `?group=` link asks for one (`LinkedTaskParam`), and keeps reading while
+  // the panel it opened is up. Activity's own read holds the member's tasks.
+  const [linkAsked, setLinkAsked] = useState(false);
+  const tasksQuery = useTasks({ enabled: part === "everyone" || linkAsked });
   // `none`: the server can't scope the read, so `useTasks` never sends it (#4094).
   const chapterScope = useChapterScope();
   const membersQuery = useMembers();
@@ -375,24 +395,13 @@ export function TasksBoard() {
   // board: one that can't run (offline) or failed once leaves the columns
   // to draw, as the permissions read above does, rather than wait out the
   // retries.
-  const suggestionsQuery = useAiSuggestions({ enabled: canManage });
+  // Everyone's only: Mine draws none of them.
+  const suggestionsQuery = useAiSuggestions({
+    enabled: everyone && canManage,
+  });
   const suggestionsLoading =
-    canManage && isFirstAiReadInFlight(suggestionsQuery);
-  const moduleGate = useChapterModuleGateState();
+    everyone && canManage && isFirstAiReadInFlight(suggestionsQuery);
   const nowTick = useNow();
-  // A member with nothing assigned sees one line instead of the board, and
-  // the line names the next event, so the read runs only for that member and
-  // only when Events is on (the module guard would refuse it otherwise).
-  // One who follows tasks (#5473) has a read that isn't empty: their page
-  // opens on Everyone's instead when none of it is theirs (below).
-  const plateIsClear =
-    permissionsKnown &&
-    !canManage &&
-    tasksQuery.data !== undefined &&
-    asArray<Task>(tasksQuery.data).length === 0;
-  const eventsOn =
-    moduleGate.status === "ready" && moduleGate.isModuleEnabled("events");
-  const eventsQuery = useEvents({ enabled: plateIsClear && eventsOn });
 
   const tasks = useMemo(
     () => asArray<Task>(tasksQuery.data),
@@ -452,60 +461,19 @@ export function TasksBoard() {
   const [layout, setLayout] = useListLayout("tasks");
   const isGrid = layout === "grid";
 
-  // Read here, ahead of the early returns, because My tasks needs it to pick
-  // an officer's own rows out of the chapter's board.
+  // Read here, ahead of the early returns: who a row is, and Confirm's gate.
   const myUserId = (currentUser.data as { id?: string } | undefined)?.id ?? "";
 
-  // The page opens on My tasks, or on Everyone's when nothing in the read is
-  // the viewer's, so it never opens on an empty page. That first answer is
-  // kept (below), so the view changes only when the viewer picks.
-  const [viewPick, setViewPick] = useState<TasksView | null>(null);
-  // A member following someone else's task (#5473): their read holds it.
-  const follows =
-    !canManage &&
-    myUserId !== "" &&
-    tasks.some((task) => !!task.followed_by && task.assignee_id !== myUserId) &&
-    // A member's read holds only their own and followed tasks; View as a role
-    // keeps the officer's whole read, which this keeps from reading as a
-    // follower's Everyone's.
-    tasks.every((task) => task.assignee_id === myUserId || !!task.followed_by);
-  const hasOwnTask =
-    myUserId !== "" && tasks.some((task) => task.assignee_id === myUserId);
-  // Until the account is known nothing reads as the viewer's, so an officer
-  // waits on My tasks (which says it is loading) rather than flash the
-  // chapter's board and jump. An account read that failed leaves the
-  // chapter's board, which still works without it (#1346).
-  const pickedView: TasksView =
-    viewPick ??
-    (myUserId === ""
-      ? currentUser.isError
-        ? "all"
-        : "mine"
-      : hasOwnTask
-        ? "mine"
-        : "all");
-  // Keep the opening view once both reads have answered, so a task given to
-  // or taken from the viewer later never moves the page under them.
-  // Set during render, React's pattern for state derived once from props.
-  if (viewPick === null && myUserId !== "" && tasksQuery.data !== undefined)
-    setViewPick(hasOwnTask ? "mine" : "all");
-  // Whether the header offers My tasks and Everyone's.
-  const canSwitchView = canManage || (permissionsKnown && follows);
-  // While permissions are unknown (the read failed) the page can't tell an
-  // officer from a member, so it keeps the status board it always drew,
-  // with no switch or filters, and the add row says why it isn't there.
-  const view: TasksView = canSwitchView
-    ? pickedView
-    : permissionsKnown
-      ? "mine"
-      : "all";
+  // Everyone's filters for an officer; a follower's (#5473) is their whole
+  // read, with no filters. While permissions are unknown (the read failed)
+  // the board can't tell an officer from a member, so it keeps the status
+  // board with no filters, and the add row says why it isn't there.
   const [groupBy, setGroupBy] = useState<TasksGroupBy>("status");
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   const [dueFilter, setDueFilter] = useState<DueFilter | null>(null);
-  // The filters belong to the chapter's board; My tasks ignores them.
   const filtering =
-    view === "all" &&
+    everyone &&
     (assigneeFilter !== null || statusFilter !== null || dueFilter !== null);
 
   // The filter chips list only values some task on the board has (the
@@ -585,7 +553,7 @@ export function TasksBoard() {
     onChange: (next) => onChange(next === ANY_FILTER ? null : next),
   });
   const taskFilters: FilterMenuFilter[] = [
-    ...(view === "all" && canManage
+    ...(canManage
       ? [
           filterRow(
             "assignee",
@@ -637,56 +605,19 @@ export function TasksBoard() {
     const now = new Date(nowTick);
     const nameOf = (id: string) =>
       membersByUserId.get(id) ?? memberFallbackLabel(id);
-    let pool: Task[];
-    if (view === "mine") {
-      // Only the viewer's own, whatever the read holds: an officer's is the
-      // chapter's, and so is one previewing a role without `tasks:manage`
-      // (View as a role keeps the officer's reads). Until the account is
-      // known an officer gets none (the page says why) and a member gets the
-      // read, which the server keeps to their own and the tasks their groups
-      // follow (#5473); the followed ones are left out, since whose they are
-      // can't be told yet.
-      pool =
-        myUserId !== ""
-          ? tasks.filter((task) => task.assignee_id === myUserId)
-          : canManage
-            ? []
-            : tasks.filter((task) => !task.followed_by);
-    } else {
-      pool = tasks.filter(
-        (task) =>
-          (assigneeFilter === null || task.assignee_id === assigneeFilter) &&
-          (statusFilter === null || statusOf(task) === statusFilter) &&
-          (dueFilter === null || taskDueBucket(task, now) === dueFilter),
-      );
-    }
+    const pool = tasks.filter(
+      (task) =>
+        (assigneeFilter === null || task.assignee_id === assigneeFilter) &&
+        (statusFilter === null || statusOf(task) === statusFilter) &&
+        (dueFilter === null || taskDueBucket(task, now) === dueFilter),
+    );
 
     const recent = pool.filter(isConfirmedRow);
     recent.sort((a, b) => confirmedAt(b) - confirmedAt(a));
     const live = pool.filter((task) => !isConfirmedRow(task));
 
     let drawn: TaskGroup[];
-    if (view === "mine") {
-      // Overdue, Today, This week and Later hold what is still to
-      // do; what waits on an officer is done from the member's side, so it
-      // follows them, as Asana's My tasks moves finished work out of the
-      // day lists.
-      drawn = MY_TASKS_GROUPS.map((group) => ({
-        id: group,
-        label: MY_TASKS_GROUP_LABELS[group],
-        empty: MY_TASKS_GROUP_EMPTY[group],
-        tasks: live.filter(
-          (task) =>
-            task.status !== "COMPLETED" && myTasksGroup(task, now) === group,
-        ),
-      }));
-      drawn.push({
-        id: "waiting",
-        label: TASK_STATUS_LABELS.COMPLETED,
-        empty: "Nothing waiting",
-        tasks: live.filter((task) => task.status === "COMPLETED"),
-      });
-    } else if (groupBy === "person") {
+    if (groupBy === "person") {
       // One group a person who has an unconfirmed task, by name, as Linear
       // groups a board by assignee. Nobody with nothing open gets an empty
       // group: in a chapter of sixty that would be most of the page.
@@ -762,7 +693,7 @@ export function TasksBoard() {
               : [],
       }));
     }
-    if (!isGrid && view === "all" && groupBy === "status") {
+    if (!isGrid && groupBy === "status") {
       // A list reads top to bottom, so what's late leads it, then what's
       // to do, as Linear's and Todoist's lists put overdue first.
       drawn.sort(
@@ -778,12 +709,10 @@ export function TasksBoard() {
   }, [
     tasks,
     filtering,
-    view,
     groupBy,
     assigneeFilter,
     statusFilter,
     dueFilter,
-    canManage,
     myUserId,
     membersByUserId,
     nowTick,
@@ -802,20 +731,20 @@ export function TasksBoard() {
         });
       } else {
         await createTask.mutateAsync(create.body);
-        // Made on My tasks for someone else, it lands where this list doesn't
-        // show, so the toast offers the board it went to, as Linear's
+        // Made on Mine for someone else, it lands where Mine doesn't show,
+        // so the toast offers Everyone's, where it went, as Linear's
         // "Created issue" toast links to an issue outside the view.
         const forViewer =
           "assignee_id" in create.body && create.body.assignee_id === myUserId;
         toast({
           title: "Task created",
           description: `${create.body.title} is now assigned.`,
-          ...(view === "mine" && canSwitchView && !forViewer
+          ...(!everyone && onShowEveryone && !forViewer
             ? {
                 action: (
                   <ToastAction
                     altText="Show everyone's tasks"
-                    onClick={() => setViewPick("all")}
+                    onClick={onShowEveryone}
                   >
                     {"Show everyone's"}
                   </ToastAction>
@@ -1012,7 +941,14 @@ export function TasksBoard() {
    * has the two cases), and nothing else would catch a paused one.
    * `membersQuery` is here for the same reason its assignee labels need it.
    */
-  if (isOffline && anyReadUncached(tasksQuery, membersQuery, currentUser)) {
+  // Mine draws no board, so it has no board states: Up for grabs says its
+  // own, and Activity says its read's. Its links wait for the read below.
+  const boardStates = everyone;
+  if (
+    boardStates &&
+    isOffline &&
+    anyReadUncached(tasksQuery, membersQuery, currentUser)
+  ) {
     return (
       <div className="space-y-6">
         <NestedOffline
@@ -1037,11 +973,11 @@ export function TasksBoard() {
    */
   // Before the pending gate: a read that never goes out stays pending, and
   // the skeleton would never end. Worded as chat's no-chapter pane is.
-  if (chapterScope === "none") {
+  if (boardStates && chapterScope === "none") {
     return <InlineNote>Pick an active chapter to load its tasks.</InlineNote>;
   }
 
-  if (tasksQuery.isPending || suggestionsLoading) {
+  if (boardStates && (tasksQuery.isPending || suggestionsLoading)) {
     return <TasksPageSkeleton />;
   }
 
@@ -1051,7 +987,7 @@ export function TasksBoard() {
   // action that fails offline triggers a refetch that also fails, and gating
   // on `isError` alone would replace a fully populated, readable board with an
   // error page every time.
-  if (tasksQuery.isError && !tasksQuery.data) {
+  if (boardStates && tasksQuery.isError && !tasksQuery.data) {
     return (
       <div className="space-y-6">
         <NestedError
@@ -1066,7 +1002,7 @@ export function TasksBoard() {
 
   // The status lanes say which status a task is in; any other grouping puts
   // the status on the row.
-  const statusGrouped = view === "all" && groupBy === "status";
+  const statusGrouped = groupBy === "status";
   const addRow =
     canManage || !permissionsKnown ? (
       <Can permission="tasks:manage">
@@ -1150,9 +1086,6 @@ export function TasksBoard() {
       gate,
       lifecycleWritePending,
       selected: opened?.kind === "task" && opened.id === task.id,
-      // My tasks lists the viewer's copy of a group task as theirs to do,
-      // and still says who else got it (#5699).
-      audience: view === "mine" ? copyAudience(task) : null,
       onOpen: () => setOpened({ kind: "task", id: task.id }),
       onChangeStatus: (next: TaskStatus, proof?: CompletionProof) =>
         changeStatus(task, next, proof),
@@ -1165,7 +1098,6 @@ export function TasksBoard() {
     assigneeName:
       membersByUserId.get(task.assignee_id) ??
       memberFallbackLabel(task.assignee_id),
-    audience: view === "mine" ? copyAudience(task) : null,
     myUserId,
     canManage,
     gate,
@@ -1177,6 +1109,99 @@ export function TasksBoard() {
     onReject: () => void rejectCompletion(task),
     onDelete: () => void removeTask(task),
   });
+
+  // The task panel, Up for grabs' posting panel, the send-back sheet, the
+  // delete confirmation and the `?task=` / `?group=` links: both parts.
+  const panels = (
+    <>
+      {confirmDialog}
+      <SendBackDialog
+        title={sendingBack?.title ?? ""}
+        proofKind={sendingBack?.proof_kind}
+        open={sendingBack !== null}
+        onClose={() => setSendingBack(null)}
+        onSubmit={(body) =>
+          sendingBack ? sendBack(sendingBack, body) : Promise.resolve()
+        }
+      />
+      <Suspense fallback={null}>
+        <LinkedTaskParam
+          tasks={tasks}
+          ready={tasksQuery.data !== undefined}
+          refetch={tasksQuery.refetch}
+          onAsked={() => setLinkAsked(true)}
+          onOpen={setOpened}
+          onMissing={() =>
+            toast({
+              title: "Couldn't find that task",
+              description: "It may have been deleted.",
+            })
+          }
+        />
+      </Suspense>
+      <TaskPanel
+        target={panelTarget}
+        onClose={() => setOpened(null)}
+        personOf={personOf}
+        myUserId={myUserId}
+        canManage={canManage}
+        gate={gate}
+        lifecycleWritePending={lifecycleWritePending}
+        onChangeStatus={changeStatus}
+        onConfirm={(task) => void confirmCompletion(task)}
+        onReject={(task) => rejectCompletion(task)}
+        onDelete={(task) => void removeTask(task)}
+        onDeleteGroup={(tile) => void removeGroup(tile)}
+        groupCopies={(groupId) =>
+          tasks.filter((row) => row.group_id === groupId)
+        }
+      />
+      {canManage ? (
+        <OpenTaskPanel
+          posting={
+            opened?.kind === "posting"
+              ? ((openTasksQuery.data ?? []).find(
+                  (posting) => posting.id === opened.id,
+                ) ?? null)
+              : null
+          }
+          gate={gate}
+          onClose={() => setOpened(null)}
+        />
+      ) : null}
+    </>
+  );
+  const newTask = canManage ? (
+    <NewButton
+      ref={newTaskRef}
+      type="button"
+      thing="task"
+      {...gate.controlProps()}
+      onClick={() => {
+        setAdding(true);
+        setExpandSignal((n) => n + 1);
+      }}
+    />
+  ) : null;
+
+  if (!everyone) {
+    // Activity's Mine (#5948): New task in the header beside Edit Activity,
+    // its add line where the first item goes (rule 2), and what is up for
+    // grabs, a card of its own. The member's own tasks are To do's rows.
+    return (
+      <>
+        {newTask ? <PageActions>{newTask}</PageActions> : null}
+        {canManage ? addRow : null}
+        <UpForGrabs
+          canManage={canManage}
+          gate={gate}
+          selectedId={opened?.kind === "posting" ? opened.id : null}
+          onOpen={(posting) => setOpened({ kind: "posting", id: posting.id })}
+        />
+        {panels}
+      </>
+    );
+  }
 
   return (
     // A container (#4022): beside chat (#3779) the page is narrow while the
@@ -1211,28 +1236,16 @@ export function TasksBoard() {
         }}
       />
 
-      {/* One line until asked for (Paul, 2026-11-18). */}
-      {canManage ? <SuggestionsStrip /> : null}
-
-      {plateIsClear ? (
-        /*
-          Done is one line (rule 7): a member's board with nothing on it is
-          four empty columns, so the line takes its place, and says what's
-          next rather than only what isn't there. What's up for grabs still
-          leads it.
-        */
+      {/* One line until asked for (Paul, 2026-11-18). Seen here, where they
+          are drawn, not on every Activity visit (`seen-screens.ts`). */}
+      {canManage ? (
         <>
-          <UpForGrabs
-            canManage={canManage}
-            gate={gate}
-            selectedId={opened?.kind === "posting" ? opened.id : null}
-            onOpen={(posting) => setOpened({ kind: "posting", id: posting.id })}
-          />
-          <InlineNote>
-            {nextUpLine(eventsOn ? eventsQuery.data : undefined, nowTick)}
-          </InlineNote>
+          <SuggestionsStrip />
+          <MarkScreensSeen screens={SUGGESTION_SCREENS} />
         </>
-      ) : permissionsLoading && tasks.length === 0 ? null : (
+      ) : null}
+
+      {permissionsLoading && tasks.length === 0 ? null : (
         /*
           Flush, not carded. A group is a section on the page surface, named
           by its label and count. In List (the default since 2026-11-18) each
@@ -1242,40 +1255,18 @@ export function TasksBoard() {
         */
         <>
           {/*
-            The page's header holds its views and its actions
-            (`page-actions.tsx`; rulebook § Filtering a list, `components.md`
-            § Filter bar and § View labels): My tasks and Everyone's as plain
-            words beside the title, since a viewer moves between the two sets
-            all day (Asana's My tasks beside a project, Linear's My issues
-            beside the team's; Paul 2026-11-24, #5947: no boxed switch), and
-            none for a member with only their own; then the one Filter button
-            with its count and New task beside the X. Grouping and List / Grid are rows in the Filter menu, as
-            Sort is on other lists. Nothing sits between the header and the
-            first task at rest (#5578); a filter that is on shows as a
-            removable chip under the header.
+            The page's header holds the actions (`page-actions.tsx`; rulebook
+            § Filtering a list, `components.md` § Filter bar): the one Filter
+            button with its count, and New task. Mine and Everyone's are
+            Activity's views, beside its title (`activity-page.tsx`).
+            Grouping and List / Grid are rows in the Filter menu, as Sort is
+            on other lists. Nothing sits between the header and the first
+            task at rest (#5578); a filter that is on shows as a removable
+            chip under the header.
           */}
-          <PageViews>
-            <ViewLabels
-              label="Whose tasks"
-              options={canSwitchView ? VIEW_OPTIONS : []}
-              value={view}
-              onChange={setViewPick}
-            />
-          </PageViews>
           <PageActions>
             <FilterMenu filters={taskFilters} thing="tasks" />
-            {canManage ? (
-              <NewButton
-                ref={newTaskRef}
-                type="button"
-                thing="task"
-                {...gate.controlProps()}
-                onClick={() => {
-                  setAdding(true);
-                  setExpandSignal((n) => n + 1);
-                }}
-              />
-            ) : null}
+            {newTask}
           </PageActions>
           <ActiveFilterChips filters={taskFilters} />
           {/*
@@ -1285,26 +1276,15 @@ export function TasksBoard() {
             task is still there next time (rulebook: keep the draft).
           */}
           {addRow}
-          <UpForGrabs
-            canManage={canManage}
-            gate={gate}
-            selectedId={opened?.kind === "posting" ? opened.id : null}
-            onOpen={(posting) => setOpened({ kind: "posting", id: posting.id })}
-          />
           {filtering && shown === 0 ? (
             <InlineNote>No tasks match these filters.</InlineNote>
-          ) : view === "mine" && canManage && myUserId === "" ? (
-            // The failed read says so above the board; until it answers,
-            // say what's coming rather than draw an empty page.
-            viewerUnreadable ? null : (
-              <InlineNote>Loading your tasks…</InlineNote>
-            )
-          ) : view === "mine" &&
-            canManage &&
-            shown === 0 &&
-            confirmed.length === 0 ? (
+          ) : !isGrid && shown === 0 && confirmed.length === 0 ? (
+            // Done is one line (rule 7): List draws no empty group, so it
+            // says so once. Grid keeps its four lanes, a board's shape.
             <InlineNote>
-              Nothing on your plate. Tasks given to you show up here.
+              {canManage
+                ? "No tasks yet. New task gives one to a member."
+                : "Nothing here yet."}
             </InlineNote>
           ) : (
             <div
@@ -1465,59 +1445,7 @@ export function TasksBoard() {
         </section>
       ) : null}
 
-      {confirmDialog}
-      <SendBackDialog
-        title={sendingBack?.title ?? ""}
-        proofKind={sendingBack?.proof_kind}
-        open={sendingBack !== null}
-        onClose={() => setSendingBack(null)}
-        onSubmit={(body) =>
-          sendingBack ? sendBack(sendingBack, body) : Promise.resolve()
-        }
-      />
-      <Suspense fallback={null}>
-        <LinkedTaskParam
-          tasks={tasks}
-          refetch={tasksQuery.refetch}
-          onOpen={setOpened}
-          onMissing={() =>
-            toast({
-              title: "Couldn't find that task",
-              description: "It may have been deleted.",
-            })
-          }
-        />
-      </Suspense>
-      <TaskPanel
-        target={panelTarget}
-        onClose={() => setOpened(null)}
-        personOf={personOf}
-        myUserId={myUserId}
-        canManage={canManage}
-        gate={gate}
-        lifecycleWritePending={lifecycleWritePending}
-        onChangeStatus={changeStatus}
-        onConfirm={(task) => void confirmCompletion(task)}
-        onReject={(task) => rejectCompletion(task)}
-        onDelete={(task) => void removeTask(task)}
-        onDeleteGroup={(tile) => void removeGroup(tile)}
-        groupCopies={(groupId) =>
-          tasks.filter((row) => row.group_id === groupId)
-        }
-      />
-      {canManage ? (
-        <OpenTaskPanel
-          posting={
-            opened?.kind === "posting"
-              ? ((openTasksQuery.data ?? []).find(
-                  (posting) => posting.id === opened.id,
-                ) ?? null)
-              : null
-          }
-          gate={gate}
-          onClose={() => setOpened(null)}
-        />
-      ) : null}
+      {panels}
     </div>
   );
 }
@@ -1538,7 +1466,6 @@ function TaskCard({
   task,
   showStatus = false,
   assigneeName,
-  audience = null,
   myUserId,
   canManage,
   gate,
@@ -1551,14 +1478,12 @@ function TaskCard({
 }: {
   task: Task;
   /**
-   * Say where the task stands on the tile: in My tasks and By person no
-   * status lane says it. To do needs no word (its Start says it), and
+   * Say where the task stands on the tile: By person has no status lane to
+   * say it. To do needs no word (its Start says it), and
    * Overdue is already the due line in the warning hue.
    */
   showStatus?: boolean;
   assigneeName: string;
-  /** My tasks: a group copy names who it went to, not the viewer (#5699). */
-  audience?: CopyAudience | null;
   myUserId: string;
   /** Holds `tasks:manage`: may check off and edit anyone's subtasks. */
   canManage: boolean;
@@ -1636,20 +1561,7 @@ function TaskCard({
             <span aria-hidden="true">·</span>
           </>
         ) : null}
-        {audience ? (
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <Users className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">
-              {TASK_AUDIENCE_COPY.groupLine(
-                audience.label,
-                audience.done,
-                audience.total,
-              )}
-            </span>
-          </span>
-        ) : (
-          <span className="min-w-0 truncate">{assigneeName}</span>
-        )}
+        <span className="min-w-0 truncate">{assigneeName}</span>
         {task.followed_by ? (
           <FollowerChip name={task.followed_by_name} className="ml-1" />
         ) : null}

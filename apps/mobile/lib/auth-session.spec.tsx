@@ -878,7 +878,7 @@ describe("AuthSessionProvider — sign-in", () => {
     await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
 
     await act(async () => {
-      await result.current.sendMagicLink({ email: "officer@university.edu" });
+      await result.current.sendEmailCode({ email: "officer@university.edu" });
     });
 
     // The redirect must be a deep link back into the app, or the emailed link
@@ -981,7 +981,7 @@ describe("AuthSessionProvider — magic-link callback", () => {
     );
 
     await act(async () => {
-      await result.current.sendMagicLink({ email: "officer@university.edu" });
+      await result.current.sendEmailCode({ email: "officer@university.edu" });
     });
 
     expect(result.current.callbackError).toBeNull();

@@ -2,20 +2,23 @@
 name: handoff
 description: >
   Draft the prompt that hands work to a fresh Claude Code session — queued as a suggested task where
-  the session has that tool, otherwise a copy-pasteable block — for when this session's context is
+  the session has that tool, started as its own cloud session where it has `create_session`,
+  otherwise a copy-pasteable block — for when this session's context is
   filling up, when a task is finishing and the next one should start clean, when a parallel
   workstream should run in its own chat, or when an idea or bug needs researching and defining before
   anyone builds it. Offer this proactively; do not wait to be asked.
 argument-hint: "[continue|next|parallel|walkthrough|research] [<what the new session should pick up>]"
-allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *)
+allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *), mcp__claude-code-remote__create_session
 ---
 
 # Hand this work to a fresh session
 
 A fresh session is often more capable on the same task than a long one whose context is full of
 dead ends and superseded plans; it only needs orientation. This skill produces that orientation as
-a suggested task the user starts with one click, or, where the session lacks that tool, as one fenced
-block the user pastes into a new chat.
+a suggested task the user starts with one click; where the session lacks that tool but has
+`create_session`, as a cloud session this one starts itself once the user says go; otherwise as one
+fenced block the user pastes into a new chat (Paul, 2026-11-25: start those chats yourself rather
+than handing over a block to paste).
 
 ## Write orientation, not instructions
 
@@ -46,14 +49,16 @@ Offer it in one sentence, without stopping work, when:
   this chat investigating inline or letting it drop. Don't file it first; the research session files.
 
 For example: *"This is a good handoff point — want me to draft a prompt for a fresh session?"* Run
-the skill if they say yes, and don't repeat the offer.
+the skill if they say yes, and don't repeat the offer. Where the session would start the chat itself
+(§ Start it yourself), offer that instead: *"want me to start a fresh session for this?"*
 
 Where the session has the suggested-task tool, the card can be the offer: the user starts or
 dismisses it. Queue it once and say so in one line, and don't queue it again after a dismissal.
 Whether a card is worth queuing at all is the judgment in
 [`AGENTS.md` § Operating mindset](../../../AGENTS.md#operating-mindset). A `continue` card hands
 this task over, so queue it when this session stops working the task, not while it carries on; two
-sessions on one branch collide.
+sessions on one branch collide. A `continue` session started with `create_session` holds to the same
+rule (§ Start it yourself).
 
 ## Modes
 
@@ -81,6 +86,37 @@ GitHub tools, so when you can't update it, say so in one line of the handoff ("t
 on X; update it before relying on that section") and let the fresh session fix it. No `gh` or raw
 REST fallback ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking)).
 
+## Keep the work moving
+
+Work handed off must not stall, and must not drift (Paul, 2026-11-26). A handoff of tracked work
+(a `next`, `continue` or `parallel` handoff of an issue or an epic's stage) carries one standing rule
+to the next session as its item 8, so the rule travels down the chain. It is the one rule a handoff
+states as a rule rather than orientation, because the next session can't rediscover it:
+
+- **When its work is done** (its PR green, or a `continue` handoff's stage finished), the session
+  looks at what's left: the epic's open sub-issues, and what its own stage left unfinished.
+- **It offers the next session, once, instead of ending silently.** Where it has the suggested-task
+  tool, the card is the offer (§ When to offer this unprompted). Where it has `create_session`, it
+  asks the user with AskUserQuestion, last in its message, naming what the next session would do,
+  and starts it only on a yes (§ Start it yourself where you can't queue a card). Without either, it offers `/handoff`. An unattended run puts the offer
+  in its end-of-run report.
+- **The epic is the boundary.** The next session is the epic's next stage, or, for a `continue`
+  handoff, the same stage. A stand-alone issue's chain ends when that issue is done. An idea that
+  surfaced along the way goes on the board the usual way (filed per
+  [`file-follow-up`](../file-follow-up/SKILL.md), or a `research` card, which files its own issue)
+  and waits for the user to choose it; it never rides into the next stage. A new-feature idea stays
+  in the Backlog unless Paul asks for it ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking)).
+- **Stages on the same screen wait their turn.** The one-PR-per-screen rule
+  ([`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)) holds between stages:
+  a next stage on the screen the last one changed opens its PR only after that one merges. Stages on
+  different screens and files can run as parallel lanes; a handoff says which lane it is and what
+  the other lane holds.
+
+A coordinator's handoff to its successor is its own procedure and starts the successor without
+asking ([`coordinator`](../coordinator/SKILL.md)); this rule doesn't apply to it. A `research` or
+`walkthrough` handoff carries no item 8: research ends by queuing its issue's card, and a
+walkthrough by recording the result.
+
 ## Gather live state
 
 Run these and use the real output, since recalled state is what's unreliable by now:
@@ -102,7 +138,7 @@ When the session has the suggested-task tool (`spawn_task`), deliver the handoff
 
 - `title`: a short imperative phrase, under 60 characters, that makes sense on its own.
 - `tldr`: one or two plain sentences on what the new session does and why it's worth doing.
-- `prompt`: the seven items below, in the same order, without the outer fence.
+- `prompt`: the items below, in the same order, without the outer fence.
 
 Only `prompt` reaches the new session. `title` and `tldr` are what the user reads on the card, so
 nothing the session needs lives only there.
@@ -121,7 +157,48 @@ because the user does the work.
 When a card goes stale (the work landed here, or a better-scoped card replaces it), withdraw it with
 `dismiss_task`. A card the user already started or dismissed stays as they left it.
 
-Without the tool, emit the block below.
+## Start it yourself where you can't queue a card
+
+A cloud session without `spawn_task` usually has `create_session` (the `claude-code-remote` MCP
+server), which starts a new Claude Code session at once. Use it in place of the block:
+
+- **Only on the user's go to start one.** A card waits for a click; a session starts working the
+  moment it's created and spends the user's budget. So the offer says what happens ("want me to
+  start a fresh session for this?"), and only a yes to that is the go: the user picking a fresh
+  session on an AskUserQuestion card, or saying "hand it off". A yes to drafting a prompt isn't one.
+  An unattended run starts none, and never two for one piece of work. The coordinator's 50%-context
+  self-handoff is its own rule and starts its successor without asking
+  ([`coordinator`](../coordinator/SKILL.md) § Context: hand off at 50%).
+- **A `continue` handoff ends this session's work on the task**, as a `continue` card does: two
+  sessions on one branch collide. Stop working the task, `unsubscribe_pr_activity` from its PR so
+  its events wake the successor's subscription instead, then start the session. The successor
+  subscribes itself.
+- `prompt`: the items below, in the same order, without the outer fence. It is all the new
+  session gets.
+- `title`: a short imperative phrase, under 60 characters, as a card's.
+- `source_url`: the repository's URL as `git remote get-url origin` gives it. `source_revision`: the
+  pushed branch the work builds on, or `main` when it starts clean. Work this session hasn't pushed
+  can't reach it. Unfinished work pushed only to hand it over is a parking push, so it goes up with
+  `--no-verify` rather than spending the branch's one review on half the change
+  ([`AGENTS.md` § Claude Code web sandbox](../../../AGENTS.md#claude-code-web-sandbox)); then item 3
+  says the branch's first push bypassed the gate, so the successor runs `/diff-review` before its PR
+  opens.
+- `tags`: the issue it carries, such as `issue:6030`.
+- `model` and `permission_mode` default to this session's, so leave them unset unless the user named
+  them. `effort` isn't inherited: unset, the new session runs at the default level
+  ([`agent-infra.md`](../../../docs/ci-cd/agent-infra.md) measured this 2026-11-09), so set it only
+  when the user named one.
+
+It starts now, so a handoff that must wait says so in its prompt rather than in its timing. For
+example, a phone PR that builds on a web PR still open builds on that PR's head branch and opens its
+own PR only once the first merges, as [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)'s
+one-open-PR-per-screen rule says.
+
+Then tell the user in one line that it's started, with the session's title, and don't also emit the
+block. The new session reports in its own chat; don't poll it. Archive it (`archive_session`) only
+when the user asks.
+
+Without either tool, emit the block below.
 
 ## Emit exactly one fenced block
 
@@ -152,6 +229,9 @@ In order:
 7. **A closing instruction to verify independently**, such as: *"Treat all of the above as a
    starting point that may be stale. Verify it against the repo before relying on it, and if your
    own reading disagrees, trust your reading and say so."*
+8. **Keep the work moving**, for tracked work only (§ Keep the work moving), in two or three
+   sentences: when this work is done, offer the next stage of the epic once (named), within the
+   epic and no further, and pass this rule on.
 
 Every factual claim comes from a command you just ran or a file you just read; mark anything
 uncertain as uncertain. Aim for roughly 40–70 lines. If it runs long, hand off less scope rather than

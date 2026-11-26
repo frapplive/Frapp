@@ -319,7 +319,7 @@ describe("Create task from an action item's row (#6051)", () => {
     const row = rowOf("Order shirts");
     expect(
       within(row).getByRole("link", { name: "Open task" }).getAttribute("href"),
-    ).toBe("/tasks?task=t-shirts");
+    ).toBe("/activity?task=t-shirts");
     expect(
       within(row).queryByRole("button", { name: /Create task/ }),
     ).toBeNull();

@@ -15,8 +15,8 @@ import {
 
 /**
  * Google Calendar's Linked apps row (#5407). Drawn on Settings → Linked apps
- * and Settings → Calendar; `webReturn` is which, so Google's sign-in comes
- * back to the same row. Nothing is drawn where the server doesn't offer
+ * (Settings → Calendar drew it too until #6032 folded that page in);
+ * `webReturn` names the page, so Google's sign-in comes back to the same row. Nothing is drawn where the server doesn't offer
  * Google Calendar, or before its status is read.
  *
  * Off: Connect. Connected: a "…" menu with Open Google Calendar and

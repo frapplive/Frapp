@@ -452,7 +452,7 @@ describe("NotificationsPopover: suggested tasks to review (#4313)", () => {
     ).toHaveAttribute("href", "/meetings/mtg-1");
     expect(
       screen.getByRole("link", { name: /1 suggested task to review/ }),
-    ).toHaveAttribute("href", "/tasks");
+    ).toHaveAttribute("href", "/activity?view=everyone");
   });
 
   it("opens the calendar for an event from this time last year (#3930)", () => {
@@ -810,9 +810,9 @@ describe("deepLinkFor: task notifications", () => {
     );
   });
 
-  it("opens the board for every other task notification", () => {
-    expect(deepLinkFor(task({ taskId: "t1" }))).toBe("/tasks");
-    expect(deepLinkFor(task({ view: "review" }))).toBe("/tasks");
+  it("opens every other task notification's task on Activity (#5948)", () => {
+    expect(deepLinkFor(task({ taskId: "t1" }))).toBe("/activity?task=t1");
+    expect(deepLinkFor(task({ view: "review" }))).toBe("/activity");
   });
 });
 
