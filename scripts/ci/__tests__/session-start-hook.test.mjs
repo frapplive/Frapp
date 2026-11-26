@@ -28,6 +28,7 @@ const HOOK = path.join(REPO_ROOT, ".claude/hooks/session-start.sh");
 const INSTALLER = path.join(REPO_ROOT, "scripts/setup-git-hooks.mjs");
 const LOCK_LIB = path.join(REPO_ROOT, "scripts/lib/bringup-lock.sh");
 const BRINGUP = path.join(REPO_ROOT, "scripts/cloud-sandbox-up.sh");
+const NODE_DEPS_LIB = path.join(REPO_ROOT, "scripts/lib/node-deps.sh");
 
 // Every git call sees only the scratch repo's own config. A developer's global hooksPath (a
 // common home for gitleaks or Talisman hooks) would otherwise read through as the "unset"
@@ -108,7 +109,7 @@ function stopRecordedBringup(dir, lock) {
  * Run the hook. `boot` is the current boot id, or null for a host that exposes none;
  * `btime` is the kernel boot time, in epoch seconds, the fake /proc/stat reports.
  */
-function hookEnv(s, { boot = "boot-B", btime = 1000, cloud = true } = {}) {
+function hookEnv(s, { boot = "boot-B", btime = 1000, cloud = true, env: extra = {} } = {}) {
   if (boot !== null) writeFileSync(s.bootFile, `${boot}\n`);
   writeFileSync(s.procStat, `cpu  1 2 3 4\nbtime ${btime}\nprocesses 1\n`);
   const env = {
@@ -123,11 +124,11 @@ function hookEnv(s, { boot = "boot-B", btime = 1000, cloud = true } = {}) {
   };
   if (cloud) env.FRAPP_CLOUD_SANDBOX = "1";
   else delete env.FRAPP_CLOUD_SANDBOX;
-  return env;
+  return { ...env, ...extra };
 }
 
-function runHook(s, options) {
-  const run = spawnSync("bash", [HOOK], { env: hookEnv(s, options), encoding: "utf8" });
+function runHook(s, options = {}) {
+  const run = spawnSync("bash", [HOOK], { env: hookEnv(s, options), input: options.input ?? "", encoding: "utf8" });
   assert.equal(run.status, 0, `hook exited ${run.status}: ${run.stderr}`);
   return run.stdout.trim() ? JSON.parse(run.stdout).hookSpecificOutput.additionalContext : "";
 }
@@ -226,7 +227,7 @@ test("the gate is armed before any bringup code runs", () => {
   const hook = readFileSync(HOOK, "utf8");
   const arm = hook.indexOf("node scripts/setup-git-hooks.mjs");
   assert.ok(arm > 0, "arming block not found");
-  for (const later of ["egress_summary() {", "launch_bringup() {", 'mkdir "$LOCK"']) {
+  for (const later of ["egress_summary() {", "launch_bringup() {", "repair_node_deps() {", 'mkdir "$LOCK"']) {
     const at = hook.indexOf(later);
     assert.ok(at > arm, `${later} must come after the gate is armed`);
   }
@@ -489,6 +490,126 @@ test("the starting message tells a (dependencies) session to build the packages,
   const context = runHook(s, { boot: "boot-B" });
   assert.match(context, /run 'npm ci' yourself, then build the workspace packages/);
   assert.ok(context.includes(`--filter="./packages/*"`), "the filter must be quoted");
+});
+
+// ── Repairing an unusable node_modules before bringup ───────────────────────
+//
+// setup's `npm ci` is cached ~7 days and non-fatal, so a broken install reached every session
+// as a `(dependencies)` sentinel the agent had to act on. The hook now runs `npm ci` itself,
+// before bringup and before the agent's first command, only when turbo does not run. A stub
+// `npm` on PATH stands in: it records each call (and when, against the stub bringup's own
+// record) and, unless told to fail, installs a working stub turbo.
+
+const NPM_OK = `echo "npm $* in $PWD" >> "$NPM_CALLS"; mkdir -p node_modules/.bin; printf '#!/bin/sh\necho 2.0.0\n' > node_modules/.bin/turbo; chmod +x node_modules/.bin/turbo`;
+
+function repairScratch(t, { npm = NPM_OK, turbo = false } = {}) {
+  const s = scratch(t, {
+    // The stub bringup notes, in the npm log, that it started, so a test can see the order.
+    bringupBody: 'echo bringup >> "$NPM_CALLS"\n',
+  });
+  copyFileSync(NODE_DEPS_LIB, path.join(s.root, "scripts", "lib", "node-deps.sh"));
+  const bin = path.join(s.dir, "bin");
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, "npm"), `#!/usr/bin/env bash\n${npm}\n`, { mode: 0o755 });
+  if (turbo) {
+    mkdirSync(path.join(s.root, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(path.join(s.root, "node_modules", ".bin", "turbo"), "#!/bin/sh\necho 2.0.0\n", { mode: 0o755 });
+  }
+  s.calls = path.join(s.dir, "npm-calls");
+  s.env = {
+    PATH: `${bin}:${process.env.PATH}`,
+    NPM_CALLS: s.calls,
+    FRAPP_NPM_CI_LOG: path.join(s.dir, "npm-ci.log"),
+  };
+  return s;
+}
+
+const npmCalls = (s) => (existsSync(s.calls) ? readFileSync(s.calls, "utf8").trim().split("\n") : []);
+
+test("a node_modules that cannot run turbo gets npm ci before bringup starts", async (t) => {
+  const s = repairScratch(t);
+  const context = runHook(s, { env: s.env });
+  assert.match(context, /node_modules could not run turbo, so this hook ran 'npm ci' before starting bringup/);
+  assert.match(context, /is starting in the background/);
+  assert.ok(await eventually(() => npmCalls(s).includes("bringup")));
+  const calls = npmCalls(s);
+  assert.equal(calls[0], `npm ci --no-audit --no-fund in ${s.root}`);
+  assert.deepEqual(calls.slice(1), ["bringup"], "one npm ci, then bringup, and never npm install");
+});
+
+test("a node_modules whose turbo runs is left alone", async (t) => {
+  const s = repairScratch(t, { turbo: true });
+  const context = runHook(s, { env: s.env });
+  assert.doesNotMatch(context, /npm ci' before/);
+  assert.ok(await eventually(() => npmCalls(s).includes("bringup")));
+  assert.deepEqual(npmCalls(s), ["bringup"]);
+});
+
+test("a failed npm ci is reported and the session still starts bringup", async (t) => {
+  const s = repairScratch(t, { npm: 'echo "npm $*" >> "$NPM_CALLS"; echo "ECONNRESET" >&2; exit 1' });
+  const context = runHook(s, { env: s.env });
+  assert.match(context, /this hook's 'npm ci' failed \(exit 1; log /);
+  assert.match(context, /is starting in the background/);
+  assert.match(readFileSync(s.env.FRAPP_NPM_CI_LOG, "utf8"), /ECONNRESET/);
+  assert.ok(await eventually(() => npmCalls(s).includes("bringup")));
+  assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 1, "no retry, no npm install");
+});
+
+test("an npm ci that exits 0 but leaves turbo broken counts as failed", (t) => {
+  const s = repairScratch(t, { npm: 'echo "npm $*" >> "$NPM_CALLS"' });
+  assert.match(runHook(s, { env: s.env }), /this hook's 'npm ci' failed \(exit 0; log /);
+});
+
+test("an npm ci past its time limit is stopped, so the hook still reports", (t) => {
+  const s = repairScratch(t, { npm: "sleep 30" });
+  const started = Date.now();
+  const context = runHook(s, { env: { ...s.env, FRAPP_NPM_CI_TIMEOUT: "1" } });
+  assert.ok(Date.now() - started < 15000, "the hook waited out npm ci");
+  assert.match(context, /did not finish within 1s, so it was stopped/);
+  assert.match(context, /is starting in the background/);
+});
+
+for (const source of ["clear", "compact"]) {
+  test(`a ${source} fire, mid-session, never runs npm ci`, (t) => {
+    const s = repairScratch(t);
+    runHook(s, { env: s.env, input: JSON.stringify({ hook_event_name: "SessionStart", source }) });
+    assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 0);
+  });
+}
+
+test("a resume fire repairs like a startup", (t) => {
+  const s = repairScratch(t);
+  const context = runHook(s, { env: s.env, input: JSON.stringify({ hook_event_name: "SessionStart", source: "resume" }) });
+  assert.match(context, /so this hook ran 'npm ci'/);
+});
+
+test("npm ci never runs beside a live bringup", async (t) => {
+  const s = repairScratch(t);
+  const pid = liveBringup(t, s);
+  priorLock(s, { boot: "boot-B", sentinel: null });
+  lockPid(s, pid);
+  const context = runHook(s, { env: s.env });
+  assert.match(context, /stack bringup is still running/);
+  assert.equal(npmCalls(s).length, 0);
+});
+
+test("two session starts at once run one npm ci; the second finds turbo working", async (t) => {
+  const s = repairScratch(t, { npm: `sleep 1; ${NPM_OK}` });
+  const env = hookEnv(s, { env: s.env });
+  const fire = () =>
+    new Promise((resolve) => {
+      const child = spawn("bash", [HOOK], { env, stdio: ["pipe", "pipe", "pipe"] });
+      child.stdin.end();
+      child.on("close", resolve);
+    });
+  assert.deepEqual(await Promise.all([fire(), fire()]), [0, 0]);
+  assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 1);
+});
+
+test("a laptop session never runs npm ci", (t) => {
+  const s = repairScratch(t);
+  runHook(s, { env: s.env, cloud: false });
+  assert.equal(npmCalls(s).length, 0);
 });
 
 // ── A bringup run by hand (#2547) ───────────────────────────────────────────

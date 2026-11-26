@@ -9,6 +9,16 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo 
 # Nothing to announce unless the cloud-sandbox bringup runs below.
 msg=""
 
+# Why the hook fired: Claude Code sends JSON on stdin whose `source` is startup, resume, clear
+# or compact. Only the node_modules repair below reads it. Read with a short timeout, so a
+# caller that leaves stdin open (a hand run in a terminal is skipped outright) cannot hang
+# session start; empty when there is no input, which counts as a startup.
+hook_source=""
+if [ ! -t 0 ]; then
+  hook_input="$(timeout 2 cat 2>/dev/null || true)"
+  hook_source="$(printf '%s' "$hook_input" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' | head -n1)"
+fi
+
 # The cloud sandbox: the /etc/frapp-cloud-sandbox marker (written by
 # scripts/cloud-sandbox-setup.sh) or FRAPP_CLOUD_SANDBOX=1. Laptop sessions skip everything
 # below that depends on it.
@@ -160,6 +170,59 @@ if [ -n "$in_cloud" ] && [ -f "$ROOT/scripts/cloud-sandbox-up.sh" ] && [ -f "$RO
     bringup_record "$LOCK" "$!" "$current_boot"
     disown || true
   }
+
+  # Repair an unusable node_modules HERE, before bringup and before the agent's first command,
+  # because nothing else will. cloud-sandbox-setup.sh's `npm ci` is non-fatal and its filesystem
+  # is cached ~7 days, so one failed install is handed to every session from that cache (#1631),
+  # and bringup only reports it (`(dependencies)`), for the reasons in cs_verify_node_deps
+  # (scripts/lib/cloud-sandbox-common.sh). Each of those reasons is answered here:
+  #
+  #   - `npm ci` deletes node_modules first, so it runs only when turbo does not run at all
+  #     (node_deps_turbo_runs, the very check bringup fails on): a tree that cannot start a
+  #     gate has nothing left to destroy. A merely incomplete tree is left alone.
+  #   - No race with the session: Claude's first response waits for SessionStart hooks, and
+  #     `clear` and `compact` fires, which come mid-session while the agent may have its own
+  #     commands running, never repair. No race with bringup either: it runs only when no
+  #     bringup holds the lock, and before this hook launches one. Two hooks at once take
+  #     turns on a flock beside the lock, and the second re-checks after the first.
+  #   - `npm ci` alone, never an `npm install` fallback, which would rewrite the tracked
+  #     package-lock.json on the session's branch.
+  #
+  # Bounded by NPM_CI_TIMEOUT, well under the 600-second default a SessionStart command hook
+  # gets: a hook cancelled at its timeout loses all its output, STARTING_MSG included. A
+  # failure is reported and the session starts as before; bringup's sentinel still reads
+  # `(dependencies)`. Bringup builds the workspace packages, so the hook does not.
+  NPM_CI_LOG="${FRAPP_NPM_CI_LOG:-/tmp/cloud-sandbox-npm-ci.log}"
+  NPM_CI_TIMEOUT="${FRAPP_NPM_CI_TIMEOUT:-420}"
+  repair_node_deps() {
+    node_deps_turbo_runs "$ROOT" && return 0
+    if [ -d "$LOCK" ] && bringup_lock_live "$LOCK"; then
+      return 0
+    fi
+    local started status
+    started="$(date +%s)"
+    (cd "$ROOT" && timeout "$NPM_CI_TIMEOUT" npm ci --no-audit --no-fund) >"$NPM_CI_LOG" 2>&1 \
+      && status=0 || status=$?
+    if [ "$status" -eq 0 ] && node_deps_turbo_runs "$ROOT"; then
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, so this hook ran 'npm ci' before starting bringup ($(( $(date +%s) - started ))s; log ${NPM_CI_LOG}). Bringup builds the workspace packages as usual."
+    elif [ "$status" -eq 124 ]; then
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' did not finish within ${NPM_CI_TIMEOUT}s, so it was stopped (log ${NPM_CI_LOG}). Run 'npm ci' yourself, then build the packages, as the '(dependencies)' sentinel will say."
+    else
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' failed (exit ${status}; log ${NPM_CI_LOG}). Read that log before blaming the network: the registry rides the default allowlist. Bringup's sentinel will read '(dependencies)'."
+    fi
+  }
+  if [ -f "$ROOT/scripts/lib/node-deps.sh" ] && command -v npm >/dev/null 2>&1; then
+    case "$hook_source" in
+      clear | compact) ;;
+      *)
+        # shellcheck source=scripts/lib/node-deps.sh
+        . "$ROOT/scripts/lib/node-deps.sh"
+        node_deps_guard "$LOCK.npm-ci" "$NPM_CI_TIMEOUT"
+        repair_node_deps
+        node_deps_unguard
+        ;;
+    esac
+  fi
 
   # One session start decides at a time. Every branch below reads the lock and then acts on
   # it (removes it, takes it, relaunches), and two fires interleaving between those steps
