@@ -971,7 +971,7 @@ export interface Database {
           channel_id: string;
           unread_count: number;
           mention_count: number;
-          /** `20261125020924` (#6052): the cursor counted from; null if never opened. */
+          /** `20261126001026` (#6052): the cursor counted from; null if never opened. */
           last_read_at: string | null;
         }[];
       };

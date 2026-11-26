@@ -1874,7 +1874,7 @@ The look is [`components.md` § New messages divider](../../ui/design-system/com
 
 - **Taken once a visit, as the channel opens.**
   Opening stamps the cursor to `now()` (above), and so does every message that lands while the member looks, so the thread does not read the live cursor.
-  It takes the count and the cursor from what `GET /v1/channels/unread` said as the channel opened (`last_read_at` on each row since `20261125020924`, the cursor the count was taken from), the answer the app already holds for the channel list, and keeps both for the visit.
+  It takes the count and the cursor from what `GET /v1/channels/unread` said as the channel opened (`last_read_at` on each row since `20261126001026`, the cursor the count was taken from), the answer the app already holds for the channel list, and keeps both for the visit.
   No stamp after that moves the divider or changes the pill's count while the member reads.
   A visit is an open of the channel: switching to it, and on web also the thread coming back on screen (below `lg`, back from the channel list; the panel shown again), since leaving stamped it read.
   The phone's thread coming back from a screen pushed over it is the same visit.

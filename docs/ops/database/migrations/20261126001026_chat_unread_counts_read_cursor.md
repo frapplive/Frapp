@@ -1,4 +1,4 @@
-# 20261125020924_chat_unread_counts_read_cursor.sql
+# 20261126001026_chat_unread_counts_read_cursor.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
