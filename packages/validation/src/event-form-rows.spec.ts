@@ -7,6 +7,7 @@ import {
   eventLengthLabel,
   eventTypeFromForm,
   type EventFormRow,
+  eventFormShowsRow,
 } from "./event-form-rows";
 
 describe("the event form's rows (#5561)", () => {
@@ -88,5 +89,27 @@ describe("eventTypeFromForm", () => {
     expect(eventTypeFromForm("A", "-3", false).point_value).toBe(0);
     expect(eventTypeFromForm("A", "1.5", false).point_value).toBe(0);
     expect(eventTypeFromForm("A", null, false).point_value).toBe(0);
+  });
+});
+
+describe("eventFormShowsRow (#6098)", () => {
+  it("hides Points and Check-in where nobody attends, and Repeat on a dated event", () => {
+    const timed = { timing: "timed" as const, calendarOnly: false };
+    expect(eventFormShowsRow("points", timed)).toBe(true);
+    expect(eventFormShowsRow("checkIn", timed)).toBe(true);
+    expect(eventFormShowsRow("repeat", timed)).toBe(true);
+    expect(
+      eventFormShowsRow("points", { timing: "timed", calendarOnly: true }),
+    ).toBe(false);
+    expect(
+      eventFormShowsRow("checkIn", { timing: "time_tbd", calendarOnly: false }),
+    ).toBe(false);
+    expect(
+      eventFormShowsRow("checkIn", { timing: "all_day", calendarOnly: false }),
+    ).toBe(true);
+    expect(
+      eventFormShowsRow("repeat", { timing: "all_day", calendarOnly: false }),
+    ).toBe(false);
+    expect(eventFormShowsRow("location", { timing: "all_day", calendarOnly: true })).toBe(true);
   });
 });

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   EVENT_DATED_SPAN_MAX_DAYS,
   addEventDays,
+  eventCoversDay,
+  eventDatedPhase,
+  eventDaySpan,
+  eventLastDay,
   eventDatesProblem,
   eventDayNumber,
   eventIsDated,
@@ -82,5 +86,38 @@ describe("eventDatesProblem", () => {
   it("refuses days on a timed event", () => {
     expect(eventDatesProblem("timed", "2027-01-11", null)).toMatch(/timed/);
     expect(eventDatesProblem("timed", null, null)).toBeNull();
+  });
+});
+
+describe("dated days", () => {
+  const span = {
+    timing: "all_day",
+    start_date: "2027-01-22",
+    end_date: "2027-02-12",
+  };
+  it("reads the last day and span", () => {
+    expect(eventLastDay(span)).toBe("2027-02-12");
+    expect(eventLastDay({ timing: "time_tbd", start_date: "2027-01-22" })).toBe(
+      "2027-01-22",
+    );
+    expect(eventLastDay({ timing: "timed" })).toBeNull();
+    expect(eventDaySpan(span)).toBe(22);
+    expect(eventDaySpan({ timing: "timed" })).toBe(0);
+  });
+
+  it("covers each of its days and no other", () => {
+    expect(eventCoversDay(span, "2027-01-22")).toBe(true);
+    expect(eventCoversDay(span, "2027-02-12")).toBe(true);
+    expect(eventCoversDay(span, "2027-02-13")).toBe(false);
+    expect(eventCoversDay({ timing: "timed" }, "2027-01-22")).toBe(false);
+  });
+
+  it("phases by the viewer's own day", () => {
+    const at = (iso: string) => new Date(`${iso}T23:30:00`);
+    expect(eventDatedPhase(span, at("2027-01-21"))).toBe("before");
+    expect(eventDatedPhase(span, at("2027-01-22"))).toBe("during");
+    expect(eventDatedPhase(span, at("2027-02-12"))).toBe("during");
+    expect(eventDatedPhase(span, at("2027-02-13"))).toBe("after");
+    expect(eventDatedPhase({}, at("2027-02-13"))).toBeNull();
   });
 });

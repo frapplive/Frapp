@@ -1,3 +1,5 @@
+import { EVENT_CALENDAR_ONLY_LABEL } from "./event-timing";
+
 /**
  * Who an event is for, per role: `spec/behavior/events.md` § Attendance by role.
  *
@@ -45,6 +47,8 @@ export interface EventAttendanceFields {
   excluded_role_ids?: readonly string[] | null;
   /** Absent on a row written before the column: read as `true`. */
   others_invited?: boolean | null;
+  /** On the calendar only (#6098): read back into the editor's draft. */
+  calendar_only?: boolean | null;
   /**
    * What the officer picked, tiers included (Paul, 2026-11-22: "THE MAIN
    * POINT IS TO BE ABLE TO ADD TIERS HERE"), or `null` when the event names
@@ -269,6 +273,7 @@ export function attendanceFieldsOf(
     others_invited:
       typeof event.others_invited === "boolean" ? event.others_invited : null,
     attendance_picks: readPicks(event.attendance_picks),
+    calendar_only: event.calendar_only === true,
   };
 }
 
@@ -285,6 +290,13 @@ export function eventRequiresAnyone(event: EventAttendanceFields): boolean {
  * it. The apps build it, {@link attendanceToWire} turns it into the columns.
  */
 export interface EventAttendanceDraft {
+  /**
+   * On the calendar only (#6098): everyone it reaches sees it, nobody attends.
+   * The whole event's or nothing, so while it is on `everyone` is `optional`
+   * (the invited default) and a role can only be left out (`not_invited`).
+   * Absent reads as false.
+   */
+  calendarOnly?: boolean;
   everyone: EventAttendanceStatus;
   /**
    * Role id, or tier entry ({@link attendanceTierEntry}), to its status. One
@@ -305,6 +317,19 @@ export interface EventAttendanceWire {
 export function attendanceToWire(
   draft: EventAttendanceDraft,
 ): EventAttendanceWire {
+  if (draft.calendarOnly) {
+    // Nobody attends: no default to require, no role Required or Optional
+    // (the API refuses one), and Not invited still hides it from a role.
+    return {
+      is_mandatory: false,
+      others_invited: true,
+      required_role_ids: [],
+      optional_role_ids: [],
+      excluded_role_ids: Object.entries(draft.roles)
+        .filter(([, status]) => status === "not_invited")
+        .map(([roleId]) => roleId),
+    };
+  }
   const byStatus: Record<EventAttendanceStatus, string[]> = {
     required: [],
     optional: [],
@@ -327,6 +352,14 @@ export function attendanceToWire(
 export function attendanceFromEvent(
   event: EventAttendanceFields,
 ): EventAttendanceDraft {
+  if (event.calendar_only) {
+    const picks = event.attendance_picks;
+    const roles: Record<string, EventAttendanceStatus> = {};
+    for (const id of picks?.not_invited ?? event.excluded_role_ids ?? []) {
+      roles[id] = "not_invited";
+    }
+    return { calendarOnly: true, everyone: "optional", roles };
+  }
   const everyone = eventDefaultAttendance(event);
   const roles: Record<string, EventAttendanceStatus> = {};
   // The picks, tiers and all, when the event names a tier; the role lists
@@ -365,6 +398,20 @@ export function describeAttendance(
   draft: EventAttendanceDraft,
   roleName: (roleId: string) => string | undefined,
 ): string {
+  if (draft.calendarOnly) {
+    const left = Object.entries(draft.roles)
+      .filter(([, status]) => status === "not_invited")
+      .map(([id]) => roleName(id) ?? "a role")
+      .sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
+      );
+    if (left.length === 0) return `${EVENT_CALENDAR_ONLY_LABEL} for everyone`;
+    const names =
+      left.length <= 2
+        ? left.join(" and ")
+        : `${left.slice(0, 2).join(", ")} +${left.length - 2}`;
+    return `${names} not invited, everyone else ${EVENT_CALENDAR_ONLY_LABEL.toLowerCase()}`;
+  }
   const entries = Object.entries(draft.roles).filter(
     ([, status]) => status !== draft.everyone,
   );
@@ -399,6 +446,133 @@ export function describeAttendance(
 }
 
 // The editors' moves, shared so web and mobile set a rule the same way.
+
+/**
+ * A row's answer in the Who's coming picker: the three statuses, plus On the
+ * calendar only (#6098), which is the whole event's rather than one role's.
+ * The picker offers it on Everyone else; while it is held, each role row
+ * offers only On the calendar only (it follows Everyone else) or Not invited,
+ * because nobody can be Required or Optional at an event nobody attends.
+ */
+export type EventAttendanceAnswer = EventAttendanceStatus | "calendar_only";
+
+/** Every answer, in the picker's order. */
+export const EVENT_ATTENDANCE_ANSWERS = [
+  "required",
+  "optional",
+  "calendar_only",
+  "not_invited",
+] as const satisfies readonly EventAttendanceAnswer[];
+
+/** The words a picker shows for each answer. */
+export const EVENT_ATTENDANCE_ANSWER_LABELS: Record<
+  EventAttendanceAnswer,
+  string
+> = {
+  ...EVENT_ATTENDANCE_LABELS,
+  calendar_only: EVENT_CALENDAR_ONLY_LABEL,
+};
+
+/** Everyone else's answer under a draft. */
+export function everyoneAnswer(
+  draft: EventAttendanceDraft,
+): EventAttendanceAnswer {
+  return draft.calendarOnly ? "calendar_only" : draft.everyone;
+}
+
+/** A role row's answer under a draft ({@link attendanceOfRole}, plus calendar only). */
+export function roleAnswer(
+  draft: EventAttendanceDraft,
+  roleId: string,
+  tierEntry?: string | null,
+): EventAttendanceAnswer {
+  if (draft.calendarOnly) {
+    return draft.roles[roleId] === "not_invited" ||
+      (tierEntry && draft.roles[tierEntry] === "not_invited")
+      ? "not_invited"
+      : "calendar_only";
+  }
+  return attendanceOfRole(draft, roleId, tierEntry);
+}
+
+/**
+ * The answers a row offers. Everyone else adds On the calendar only beside
+ * the three statuses unless `calendarOnlyAllowed` is false (one meeting of a
+ * series, which can't change it alone). While the draft is calendar-only, a
+ * role row offers On the calendar only and Not invited.
+ */
+export function attendanceAnswerChoices(
+  draft: EventAttendanceDraft,
+  row: { kind: "everyone" } | { kind: "role"; current: EventAttendanceAnswer },
+  options: {
+    allowRequired: boolean;
+    calendarOnlyAllowed: boolean;
+    floor?: EventAttendanceStatus;
+  },
+): EventAttendanceAnswer[] {
+  if (row.kind === "role" && draft.calendarOnly) {
+    return ["calendar_only", "not_invited"];
+  }
+  const current =
+    row.kind === "everyone" ? everyoneAnswer(draft) : row.current;
+  const statuses = attendanceChoices(
+    current === "calendar_only" ? "optional" : current,
+    options.allowRequired,
+    row.kind === "role" ? options.floor : undefined,
+  );
+  if (
+    row.kind === "role" ||
+    !(options.calendarOnlyAllowed || draft.calendarOnly)
+  ) {
+    return statuses;
+  }
+  return EVENT_ATTENDANCE_ANSWERS.filter(
+    (answer) =>
+      answer === "calendar_only" ||
+      (statuses as readonly string[]).includes(answer),
+  );
+}
+
+/**
+ * The draft after Everyone else's answer changes. On the calendar only keeps
+ * only the roles left out; leaving it starts from everyone optional with
+ * those roles still left out.
+ */
+export function withEveryoneAnswer(
+  draft: EventAttendanceDraft,
+  answer: EventAttendanceAnswer,
+): EventAttendanceDraft {
+  const leftOut = (): Record<string, EventAttendanceStatus> =>
+    Object.fromEntries(
+      Object.entries(draft.roles).filter(
+        ([, status]) => status === "not_invited",
+      ),
+    );
+  if (answer === "calendar_only") {
+    return { calendarOnly: true, everyone: "optional", roles: leftOut() };
+  }
+  if (draft.calendarOnly) {
+    return withEveryone({ everyone: "optional", roles: leftOut() }, answer);
+  }
+  return withEveryone(draft, answer);
+}
+
+/** The draft after one role row's answer changes ({@link withRole}, plus calendar only). */
+export function withRoleAnswer(
+  draft: EventAttendanceDraft,
+  roleId: string,
+  answer: EventAttendanceAnswer,
+  tierEntry?: string | null,
+): EventAttendanceDraft {
+  if (draft.calendarOnly) {
+    const roles = { ...draft.roles };
+    if (answer === "not_invited") roles[roleId] = "not_invited";
+    else delete roles[roleId];
+    return { ...draft, roles };
+  }
+  if (answer === "calendar_only") return draft;
+  return withRole(draft, roleId, answer, tierEntry);
+}
 
 /** Past this many roles an editor's list gets a search field. */
 export const ATTENDANCE_SEARCH_FROM = 8;
@@ -544,6 +718,7 @@ export function withEveryone(
   draft: EventAttendanceDraft,
   everyone: EventAttendanceStatus,
 ): EventAttendanceDraft {
+  if (draft.calendarOnly) return withEveryoneAnswer(draft, everyone);
   const roles: Record<string, EventAttendanceStatus> = {};
   for (const [id, status] of Object.entries(draft.roles)) {
     if (status !== everyone) roles[id] = status;

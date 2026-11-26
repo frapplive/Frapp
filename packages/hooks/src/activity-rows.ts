@@ -4,6 +4,7 @@ import {
   MEETING_LIST_COPY,
   MEETING_NOTE_TAKERS_COPY,
   eventOnAt,
+  eventTimingFieldsOf,
   minutesDraftState,
   minutesDraftStateLabel,
   signUpLinkKind,
@@ -1106,6 +1107,7 @@ export function activityToDos(
                 event.end_time,
                 event.check_in_opens_minutes,
                 now.getTime(),
+                eventTimingFieldsOf(event as Record<string, unknown>),
               ),
           },
         );

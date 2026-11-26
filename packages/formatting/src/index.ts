@@ -52,6 +52,14 @@ export {
   isDueOverdue,
 } from "./display";
 export {
+  type EventWhenFields,
+  eventDatedWord,
+  formatEventDayTime,
+  formatEventRelativeWhen,
+  formatEventRowTime,
+  formatEventWhen,
+} from "./event-when";
+export {
   type DateLean,
   dueEntryFields,
   dueEntryFromTask,

@@ -1,5 +1,9 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import { TASK_PROOF_KINDS, type TaskProofKind } from '@repo/validation';
+import {
+  EVENT_TIMINGS,
+  TASK_PROOF_KINDS,
+  type TaskProofKind,
+} from '@repo/validation';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -504,6 +508,40 @@ export class ActivityEventDto implements ActivityEvent {
 
   @ApiProperty({ format: 'date-time' })
   end_time: string;
+
+  @ApiProperty({
+    enum: EVENT_TIMINGS,
+    description:
+      'The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`.',
+  })
+  timing: ActivityEvent['timing'];
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event.',
+  })
+  start_date: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event.',
+  })
+  end_date: string | null;
+
+  @ApiProperty({ description: 'Whether the event might not happen.' })
+  is_tentative: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether the event is on the calendar only: nobody checks in, earns points or is marked absent.',
+  })
+  calendar_only: boolean;
 
   @ApiProperty({
     enum: ACTIVITY_EVENT_ATTENDANCE,

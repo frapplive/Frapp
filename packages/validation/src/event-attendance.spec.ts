@@ -20,6 +20,12 @@ import {
   eventOthersInvited,
   othersInvitedForCreate,
   eventRequiresAnyone,
+  attendanceAnswerChoices,
+  emptyAttendanceDraft,
+  everyoneAnswer,
+  roleAnswer,
+  withEveryoneAnswer,
+  withRoleAnswer,
 } from "./event-attendance";
 
 describe("eventAttendanceFor", () => {
@@ -467,5 +473,94 @@ describe("tiers in Who's coming (Paul, 2026-11-22)", () => {
         roles: { [cabinet]: "required" },
       }),
     ).toMatchObject({ others_invited: false, required_role_ids: [cabinet] });
+  });
+});
+
+describe("On the calendar only (#6098)", () => {
+  const base = {
+    everyone: "required" as const,
+    roles: { exec: "optional" as const, pledges: "not_invited" as const },
+  };
+
+  it("is an answer on Everyone else, keeping only the roles left out", () => {
+    const draft = withEveryoneAnswer(base, "calendar_only");
+    expect(draft).toEqual({
+      calendarOnly: true,
+      everyone: "optional",
+      roles: { pledges: "not_invited" },
+    });
+    expect(everyoneAnswer(draft)).toBe("calendar_only");
+    expect(roleAnswer(draft, "exec")).toBe("calendar_only");
+    expect(roleAnswer(draft, "pledges")).toBe("not_invited");
+  });
+
+  it("goes out as nobody required and nothing Required or Optional", () => {
+    const draft = withEveryoneAnswer(base, "calendar_only");
+    expect(attendanceToWire(draft)).toEqual({
+      is_mandatory: false,
+      others_invited: true,
+      required_role_ids: [],
+      optional_role_ids: [],
+      excluded_role_ids: ["pledges"],
+    });
+    expect(describeAttendance(draft, (id) => id)).toBe(
+      "pledges not invited, everyone else on the calendar only",
+    );
+    expect(
+      describeAttendance(withEveryoneAnswer(emptyAttendanceDraft(), "calendar_only"), () => undefined),
+    ).toBe("On the calendar only for everyone");
+  });
+
+  it("reads back from a stored event", () => {
+    expect(
+      attendanceFromEvent({
+        calendar_only: true,
+        others_invited: true,
+        excluded_role_ids: ["pledges"],
+      }),
+    ).toEqual({
+      calendarOnly: true,
+      everyone: "optional",
+      roles: { pledges: "not_invited" },
+    });
+  });
+
+  it("offers role rows only calendar only or Not invited while it holds", () => {
+    const draft = withEveryoneAnswer(base, "calendar_only");
+    const options = { allowRequired: true, calendarOnlyAllowed: true };
+    expect(attendanceAnswerChoices(draft, { kind: "everyone" }, options)).toEqual([
+      "required",
+      "optional",
+      "calendar_only",
+      "not_invited",
+    ]);
+    expect(
+      attendanceAnswerChoices(
+        draft,
+        { kind: "role", current: "calendar_only" },
+        options,
+      ),
+    ).toEqual(["calendar_only", "not_invited"]);
+    expect(
+      attendanceAnswerChoices(base, { kind: "everyone" }, {
+        ...options,
+        calendarOnlyAllowed: false,
+      }),
+    ).toEqual(["required", "optional", "not_invited"]);
+  });
+
+  it("leaves calendar only for an ordinary answer with the left-out roles kept", () => {
+    const draft = withEveryoneAnswer(
+      withEveryoneAnswer(base, "calendar_only"),
+      "optional",
+    );
+    expect(draft).toEqual({
+      everyone: "optional",
+      roles: { pledges: "not_invited" },
+    });
+    expect(
+      withRoleAnswer(withEveryoneAnswer(base, "calendar_only"), "exec", "not_invited")
+        .roles,
+    ).toEqual({ pledges: "not_invited", exec: "not_invited" });
   });
 });
