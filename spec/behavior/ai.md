@@ -21,7 +21,9 @@ How the pieces are meant to fit is [`spec/architecture/README.md`](../architectu
 ## Context over rules
 
 Ask's job is judgment, and the pipeline's job is to give the model rich, faithful context and the member's real permissions (Paul, 2026-11-16, [#5170](https://github.com/pdcarlson/Frapp/issues/5170)).
-A source tells the model what it is: a document's title and date, a meeting's minutes, a live record read just now, or a channel message with its author, the roles they hold, when it was sent, and whether it was posted as an announcement, is a reply in a thread, or was imported from Discord.
+A source tells the model what it is: a document's title, type, folder, who uploaded it and its date; a meeting's minutes and who posted them; a live record read just now; or a channel message with its author, the roles they hold, when it was sent, and whether it was posted as an announcement, is a reply in a thread, or was imported from Discord.
+Who uploaded or posted a record is read when it is retrieved, never indexed, and someone who has left the chapter isn't named ([#5180](https://github.com/frapplive/Frapp/issues/5180)).
+The event tools work the same way (#5180): when the name the model gave fits several different events, such as "Spring formal" and "Formal dinner" for "formal", `open_event` and `event_attendance` list them, each with its day, for the model to choose from or ask about, instead of code taking the nearest; one event repeating (one series, or names that differ only in their dates) still opens its nearest date and names the others. When the `events` tool's words match nothing in range, it lists the whole range with a note saying so.
 The prompt then says in a sentence or two how to weigh sources.
 Code doesn't decide that in advance with ranking weights, canned replies, or special cases for one kind of content.
 
@@ -763,6 +765,7 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
   The server checks every quote against that message, word for word, and drops a point that fails, or whose quote is under 10 characters when the message is longer.
   That proves where a line came from, not that its sentence is right: the sentence is the model's, which is why pressing it opens the message.
   Each message is sent as one line, so a message cannot be written to look like someone else's.
+  The line says how the message was written, in the words Ask's lines use: posted as an announcement, a reply in a thread, or imported from Discord (#5180).
   A summary left with no point is not shown, and one that lost some says part of it could not be matched.
   Pressing a line opens its message, in its thread when it is a reply.
 - **There is no overall paragraph.**

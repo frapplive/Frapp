@@ -34,6 +34,7 @@ import {
   type NotificationTarget,
 } from "@/lib/notifications/targets";
 import { findTargetRoute } from "@/lib/search/find-route";
+import { useIsCouncil } from "@/lib/tenant-kind";
 import {
   openSetting,
   usePhoneSettingsSearch,
@@ -166,6 +167,8 @@ export function SearchScreen() {
   const modules = useCurrentChapter().data?.enabled_modules;
   // Settings the member can change, by name or synonym (2026-11-19).
   const findSettings = usePhoneSettingsSearch();
+  // A council's Chapter tab settings open on the web (#5933).
+  const chapterFeatures = !useIsCouncil();
 
   // A DM's stored name is not what its row shows, so only channels match.
   const named = useMemo(
@@ -217,7 +220,7 @@ export function SearchScreen() {
       hiddenGroups,
       settings: findSettings(debounced),
     }).flatMap((result): SearchRow[] => {
-      const route = findTargetRoute(result.target);
+      const route = findTargetRoute(result.target, { chapterFeatures });
       if (route) return [{ ...result, route }];
       // A setting only web changes is still listed, and opens the dashboard.
       return result.target.type === "setting"
@@ -232,6 +235,7 @@ export function SearchScreen() {
     search.data,
     hiddenGroups,
     findSettings,
+    chapterFeatures,
   ]);
 
   // Web's rule (`find-dialog.tsx`): only a timeout in a group the member is
@@ -283,6 +287,7 @@ export function SearchScreen() {
       const entry = settingEntryById(row.target.settingId);
       if (entry) {
         openSetting(router, entry, {
+          chapterFeatures,
           onBrowserFailed: () => setBrowserFailed(true),
         });
       }

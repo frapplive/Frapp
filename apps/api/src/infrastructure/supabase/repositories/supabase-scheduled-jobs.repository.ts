@@ -132,6 +132,10 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
           .gte('end_time', endedAfter.toISOString())
           .lte('end_time', endedBefore.toISOString())
           .or('is_mandatory.eq.true,required_role_ids.not.is.null')
+          // Nobody is held to an event that takes no attendance: one on the
+          // calendar only, or one whose time isn't set (#6098).
+          .eq('calendar_only', false)
+          .neq('timing', 'time_tbd')
           // `id` breaks ties. Offset paging over a non-unique sort key has no
           // guaranteed total order between statements, so events sharing an
           // `end_time` across a page boundary could be returned twice or —
@@ -175,6 +179,10 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
           .gt('start_time', startAfter.toISOString())
           .lte('start_time', startOnOrBefore.toISOString())
           .or('is_mandatory.eq.true,required_role_ids.not.is.null')
+          // "Starts in 30 minutes" only means something with a real start
+          // time: a dated event's start is a midnight bound (#6098).
+          .eq('timing', 'timed')
+          .eq('calendar_only', false)
           // `id` breaks ties, for the same reason as the auto-absent sweep:
           // offset paging over a non-unique sort key has no guaranteed total
           // order between statements, so events sharing a `start_time` across

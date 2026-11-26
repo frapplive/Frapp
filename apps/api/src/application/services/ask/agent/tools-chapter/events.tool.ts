@@ -41,7 +41,7 @@ const input = z.object({
     'Last day to read, YYYY-MM-DD. Empty for four months ahead of today.',
   ),
   words: wordsArg(
-    'Only events whose name, description or place has every one of these words, for example formal or chapter meeting. Empty for every event.',
+    'Only events whose name, description or place has every one of these words, for example formal or chapter meeting. Empty for every event. When no event has them, every event in the range is listed instead.',
   ),
 });
 type Args = z.infer<typeof input>;
@@ -80,7 +80,7 @@ export class EventsAgentTool implements AgentReadTool<Args> {
       this.rbac.getAlumniRoleId(chapterId),
     ]);
     const words = plainName(args.words).split(' ').filter(Boolean);
-    const matching = calendar.filter((event) => {
+    const byWords = calendar.filter((event) => {
       const text = plainName(
         `${event.name} ${event.description ?? ''} ${event.location ?? ''}`,
       );
@@ -89,15 +89,17 @@ export class EventsAgentTool implements AgentReadTool<Args> {
     const notes = window.shortened
       ? [`A read covers at most ${MAX_DAYS} days, so the range was shortened.`]
       : [];
-    if (matching.length === 0) {
-      return nothing(
-        context,
-        [
-          words.length > 0
-            ? 'No event in that range has those words.'
-            : 'No events in that range.',
-          ...notes,
-        ].join(' '),
+    if (calendar.length === 0) {
+      return nothing(context, ['No events in that range.', ...notes].join(' '));
+    }
+    // The words are matched as they were typed, so "formals" misses
+    // "Formal". A miss is not "no events": the whole range is shown, with a
+    // note, and the model judges which one the member meant (#5180).
+    const missed = byWords.length === 0;
+    const matching = missed ? calendar : byWords;
+    if (missed) {
+      notes.unshift(
+        'No event in that range has all of those words, so every event in the range is listed; judge which one the member meant.',
       );
     }
 

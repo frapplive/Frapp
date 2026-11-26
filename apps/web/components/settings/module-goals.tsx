@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import {
   GOAL_ROLE_LIMIT,
   GOAL_TARGET_MAX,
+  GOALS_FOOTNOTE,
   type GoalMetric,
 } from "@repo/validation";
 import {
@@ -14,7 +15,10 @@ import {
   useSetChapterGoals,
   type GoalSet,
 } from "@repo/hooks";
+import { Target } from "lucide-react";
 import { ProfileSection } from "@/components/profile/profile-section";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import { goalSummary } from "@repo/hooks/module-settings";
 import {
   NumberRule,
   RulesList,
@@ -79,6 +83,51 @@ const maxDraft = (metric: GoalMetric) =>
   Math.floor(GOAL_TARGET_MAX[metric] / perUnit(metric));
 
 type RoleDraft = { role_id: string; draft: string };
+
+/** The page a Goals row opens (`?page=`, #6030). */
+export function goalPageId(metric: GoalMetric): string {
+  return `goal-${metric}`;
+}
+
+/** A goal's page title, the measure's own name. */
+export function goalPageTitle(metric: GoalMetric): string {
+  return METRIC_COPY[metric].label;
+}
+
+/**
+ * A module page's Goals group (#6030): a row per measure with the goal
+ * everyone is held to and how many roles differ, opening that measure's page,
+ * where the goal form and its role overrides are.
+ */
+export function ModuleGoalsGroup({
+  metrics,
+  pageHref,
+}: {
+  metrics: readonly GoalMetric[];
+  pageHref: (page: string) => string;
+}) {
+  const goals = useChapterGoals();
+  return (
+    <SettingsGroup heading="Goals" footnote={GOALS_FOOTNOTE}>
+      {metrics.map((metric) => (
+        <SettingsRow
+          key={metric}
+          id={`module-row-${goalPageId(metric)}`}
+          icon={Target}
+          label={METRIC_COPY[metric].label}
+          value={
+            goals.isPending
+              ? "Loading"
+              : goals.isError
+                ? "Couldn't load"
+                : goalSummary(metric, goals.data[metric])
+          }
+          href={pageHref(goalPageId(metric))}
+        />
+      ))}
+    </SettingsGroup>
+  );
+}
 
 export function ModuleGoals({
   metrics,

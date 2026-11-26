@@ -190,6 +190,10 @@ vi.mock("@/components/screen-shell", () => ({
 vi.mock("@/components/pull-to-refresh", () => ({
   useRefetchAll: () => undefined,
 }));
+// Each action item's long-press has its own spec (#6051).
+vi.mock("@/components/minutes/action-item-task", () => ({
+  useActionItemTaskMenu: () => ({ menuFor: () => null, sheet: null }),
+}));
 vi.mock("@/components/minutes/minutes-body", () => ({
   MinutesBody: () => React.createElement("MinutesBody"),
   MinutesJumpBar: () => null,

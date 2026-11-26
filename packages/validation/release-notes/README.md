@@ -29,8 +29,9 @@ or the notes, the What's new fold workflow
 ([`release-notes-fold.yml`](../../../.github/workflows/release-notes-fold.yml),
 using [`scripts/release-notes-fold.mjs`](../../../scripts/release-notes-fold.mjs))
 rebuilds one bot PR, `bot/whats-new`, that moves every waiting line into the
-notes under that day's date (into `changes`, `web` or `phone` by its folder)
-and deletes the files. It closes that PR if the
+notes under that day's date in America/New_York, the team's zone, not CI's
+UTC clock (into `changes`, `web` or `phone` by its folder) and deletes the
+files. It closes that PR if the
 lines are removed before it merges. Merging it before a production deploy puts
 the lines in that release; a line still waiting here at deploy time ships in
 the next one. The bot PR merges itself once its checks pass (squash

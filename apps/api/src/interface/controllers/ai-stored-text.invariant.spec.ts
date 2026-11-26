@@ -144,6 +144,7 @@ function passage(over: Partial<CorpusPassage>): CorpusPassage {
     messageId: null,
     authorIds: [],
     messageCount: null,
+    facts: null,
     ...over,
   };
 }

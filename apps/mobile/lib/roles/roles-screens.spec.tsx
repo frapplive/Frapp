@@ -53,7 +53,8 @@ const h = vi.hoisted(() => ({
   aiSaving: false,
   // Chapter config (#5801): whether members may rename themselves.
   config: { members_can_change_name: false } as Record<string, unknown>,
-  patchConfig: vi.fn(),
+  // The config PATCH's `mutateAsync`, which Chapter settings awaits (#6027).
+  patchConfig: vi.fn<(diff: unknown) => Promise<object>>(async () => ({})),
 }));
 
 vi.mock("react-native", async () => {
@@ -101,7 +102,14 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       ok(options?.enabled === false ? undefined : h.aiSettings),
     useOrgConfig: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.config),
-    usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
+    usePatchOrgConfig: () => ({
+      mutate: vi.fn(),
+      mutateAsync: h.patchConfig,
+      isPending: false,
+    }),
+    // The Chapter tab's profile and birthday posts (#6027).
+    useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannels: () => ok([]),
     useCategories: () => ok([]),
     // The Recruitment module is off here, so the interest form stays hidden.
     useInterestFormSettings: () => ok(undefined),
@@ -326,10 +334,9 @@ describe("Chapter settings (#4074)", () => {
     );
     expect(toggle.props.value).toBe(false);
     act(() => toggle.props.onValueChange(true));
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      { members_can_change_name: true },
-      expect.anything(),
-    );
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      members_can_change_name: true,
+    });
   });
 
   it("shows the member-names switch read-only to a viewer without :manage (#5801)", () => {

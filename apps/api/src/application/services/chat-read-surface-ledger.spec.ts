@@ -692,6 +692,26 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
   // Scheduled messages (#4956): tells the author their own message did not
   // post. It names the channel only when the failure isn't lost access, so
   // never one the author can no longer see; nothing another member wrote.
+  // Chat timeouts (#6006): tell a member an officer timed them out, lifted
+  // it, or that it ran out.
+  'application/services/chat-timeout.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Tells a member about their own timeout: who set or lifted it, how long, and the reason the officer wrote for them. It quotes no chat message.',
+      },
+    ],
+  },
+  'application/workers/chat-timeout-sweep.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Hands an ended timeout to `ChatTimeoutService.notifyEnded`, whose fixed sentence quotes nothing.',
+      },
+    ],
+  },
   'application/services/chat-scheduled-message.service.ts': {
     calls: 1,
     entries: [

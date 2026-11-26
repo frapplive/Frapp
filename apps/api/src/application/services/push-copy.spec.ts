@@ -1,5 +1,6 @@
 import {
   formatDueDate,
+  formatEventDays,
   formatEventWhen,
   joinFacts,
   taskSubmittedCopy,
@@ -231,5 +232,69 @@ describe('taskSubmittedCopy (a task marked done, to its officer)', () => {
     );
     expect(body.startsWith(`"${'x'.repeat(58)}👍…"`)).toBe(true);
     expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(body)).toBe(false);
+  });
+});
+
+describe('formatEventWhen, dated events (#6098)', () => {
+  const NEW_YEAR = new Date('2027-01-01T12:00:00Z');
+  // A New York request's midnight bounds: never read as clock times.
+  const start = '2027-01-11T05:00:00Z';
+  const end = '2027-01-12T05:00:00Z';
+
+  it('writes a one-day all-day event as its day, in any zone', () => {
+    const dates = {
+      timing: 'all_day',
+      start_date: '2027-01-11',
+      end_date: '2027-01-11',
+    };
+    for (const timeZone of ['America/Los_Angeles', 'Asia/Tokyo']) {
+      expect(
+        formatEventWhen(start, end, {
+          timeZone,
+          labelZone: true,
+          now: NEW_YEAR,
+          dates,
+        }),
+      ).toBe('Mon, Jan 11 · All day');
+    }
+  });
+
+  it('writes a multi-day all-day event as its first and last days', () => {
+    expect(
+      formatEventDays(
+        { timing: 'all_day', start_date: '2027-01-22', end_date: '2027-02-12' },
+        NEW_YEAR,
+      ),
+    ).toBe('Jan 22 – Feb 12 · All day');
+    expect(
+      formatEventDays(
+        { timing: 'all_day', start_date: '2026-12-28', end_date: '2027-01-03' },
+        NEW_YEAR,
+      ),
+    ).toBe('Dec 28, 2026 – Jan 3, 2027 · All day');
+  });
+
+  it('writes a time-TBD event as its day and Time TBD', () => {
+    expect(
+      formatEventWhen(start, end, {
+        timeZone: 'America/New_York',
+        now: NEW_YEAR,
+        dates: {
+          timing: 'time_tbd',
+          start_date: '2027-01-14',
+          end_date: '2027-01-14',
+        },
+      }),
+    ).toBe('Thu, Jan 14 · Time TBD');
+  });
+
+  it('leaves a timed event to its clock times', () => {
+    expect(formatEventDays({ timing: 'timed' })).toBeNull();
+    expect(
+      formatEventWhen('2026-11-10T01:00:00Z', '2026-11-10T02:00:00Z', {
+        ...NY,
+        dates: { timing: 'timed', start_date: null, end_date: null },
+      }),
+    ).toBe('Mon, Nov 9, 8–9 PM');
   });
 });

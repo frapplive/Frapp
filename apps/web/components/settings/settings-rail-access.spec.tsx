@@ -119,18 +119,9 @@ vi.mock("@/lib/hooks/use-toast", async () =>
 // The officer tools have their own specs; here they only have to be where
 // the page puts them (#3837).
 vi.mock("@/components/settings/settings-tool-views", () => ({
-  SettingsToolBody: (props: {
-    moduleKey: string;
-    holdsTool: (id: string) => boolean;
-  }) => {
-    const owns: Record<string, string> = {
-      chat: "chat-admin",
-      reports: "reports",
-      geofences: "study-zones",
-    };
-    const tool = owns[props.moduleKey];
-    return tool && props.holdsTool(tool) ? <p>{`${tool} body`}</p> : null;
-  },
+  SettingsToolPage: (props: { toolId: string }) => (
+    <p>{`${props.toolId} body`}</p>
+  ),
   SettingsToolSubpage: (props: {
     subpage: { kind: string; channelId?: string };
   }) => (
@@ -165,7 +156,7 @@ function tabNames() {
 
 /** The tool links on the open module page (#4073), label and href. */
 function tools() {
-  const section = document.querySelector('[id$="-tools"]');
+  const section = screen.queryByRole("list", { name: "Tools" });
   return section
     ? within(section as HTMLElement)
         .getAllByRole("link")
@@ -241,14 +232,34 @@ describe("Settings shows each viewer what they can use", () => {
     ]);
   });
 
-  it("draws Chat admin on the Chat page, with Discord import a row inside Settings (#3837)", () => {
+  it("lists Chat admin and Discord import as rows on the Chat page (#3837, #6030)", () => {
     permissions.current = ["*"];
     search.current = "tab=chat";
     render(<SettingsPage />);
-    expect(screen.getByText("chat-admin body")).toBeInTheDocument();
+    expect(screen.queryByText("chat-admin body")).toBeNull();
     expect(tools()).toEqual([
+      ["Chat admin", "/settings?tab=chat&page=chat-admin"],
       ["Discord import", "/settings?tab=chat&tool=discord-import"],
     ]);
+  });
+
+  it("opens a tool's page from a search link made before the pages existed", () => {
+    // A shipped phone build's search opens web results with no `page`.
+    permissions.current = ["*"];
+    search.current = "tab=geofences&setting=study-zones";
+    render(<SettingsPage />);
+    expect(screen.getByText("study-zones body")).toBeInTheDocument();
+  });
+
+  it("opens Chat admin in place of the Chat page, with a way back", () => {
+    permissions.current = ["*"];
+    search.current = "tab=chat&page=chat-admin";
+    render(<SettingsPage />);
+    expect(screen.getByText("chat-admin body")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/settings?tab=chat",
+    );
   });
 
   it("opens a channel's settings and Discord import in place of the Chat page", () => {
@@ -312,9 +323,11 @@ describe("Settings shows each viewer what they can use", () => {
     expect(
       screen.queryByText(/couldn't load chapter configuration/i),
     ).toBeNull();
-    // The export form is the page's body (#3837), not a link away.
-    expect(tools()).toEqual([]);
-    expect(screen.getByText("reports body")).toBeInTheDocument();
+    // The export form is a row on the page that opens it (#6030).
+    expect(tools()).toEqual([
+      ["Export a report", "/settings?tab=reports&page=reports"],
+    ]);
+    expect(screen.queryByText("reports body")).toBeNull();
   });
 
   it("gives a treasurer Plan and billing beside their tool's page (#3827)", () => {
@@ -393,7 +406,9 @@ describe("Settings shows each viewer what they can use", () => {
     render(<SettingsPage />);
     expect(tools()).toEqual([]);
     expect(screen.queryByText("reports body")).toBeNull();
-    expect(screen.getByText(/reports is off/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Off\. The Reports tool is hidden/),
+    ).toBeInTheDocument();
   });
 
   it("drops a tools-only viewer's page when its tool's module is off", () => {

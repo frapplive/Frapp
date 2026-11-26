@@ -167,6 +167,9 @@ These cause most of the iterations, so they come first.
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
+- **No made-up school logo.** A school is drawn by its name and short name: no initials on a colored
+  tile standing in for its logo, and no real logo either, which is the school's trademark. "Get rid of it
+  or make it real." (11-25, #6066)
 
 ## 4. Controls and forms
 

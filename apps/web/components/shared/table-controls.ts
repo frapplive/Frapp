@@ -115,6 +115,14 @@ export const compactControlClassName =
   "h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11";
 
 /**
+ * A list heading's small glyph control (20px, a 14px glyph): a channel
+ * category's +, its filter and its ⋯ (#6053), so the controls on one heading
+ * line share one size and hover.
+ */
+export const headingControlClassName =
+  "h-5 w-5 rounded text-muted-foreground hover:bg-card hover:text-foreground";
+
+/**
  * The `<ul>` that holds a **dense list** on a flattened greenfield route.
  *
  * Top-border dividers and nothing else: no card, no zebra, no per-row fill. The

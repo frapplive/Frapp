@@ -53,6 +53,8 @@ function makeChapterRepo(result: {
 function makeMemberRepo(): jest.Mocked<IMemberRepository> {
   return {
     completeOnboarding: jest.fn(),
+    clearChatTimeout: jest.fn(),
+    findEndedChatTimeouts: jest.fn(),
     findById: jest.fn(),
     findByUser: jest.fn(),
     findByUserAndChapter: jest.fn(),

@@ -214,17 +214,18 @@ function categoryAccessSummary(
 }
 
 /**
- * Chat admin, inside Chapter settings' Chat page (#3837). Two views, the way
+ * Chat admin, opened from the Chat page of Chapter settings (#3837, #6030:
+ * `?tab=chat&page=chat-admin`). Two views, the way
  * Discord splits channel settings from server settings (Paul, 2026-11-11:
  * "scope the chat admin panel to whatever channel you're editing"):
  *
  * - **`?channel=<id>`: that channel's settings, and nothing else**, drawn in
- *   place of the Chat page. The channel start's Edit channel shortcut
+ *   place of Chat admin. The channel start's Edit channel shortcut
  *   (`components/chat/channel-start.tsx`) and the chat rail's right-click
  *   Edit channel (`chat-shell.tsx`) open it, as Discord's Edit Channel opens
  *   its full-screen settings. Its settings first, then its pins, then the
  *   reports filed in it, and a way back to all chat settings.
- * - **No channel: the chapter's chat settings**, the body of the Chat page.
+ * - **No channel: the chapter's chat settings**, the Chat admin page itself.
  *   New channel, the categories with every channel under its own (#5727;
  *   a channel row opens that channel's settings), the chapter's chat
  *   background, and the whole report queue last (the only
@@ -833,12 +834,15 @@ function ChatAdminBody({
             <div className="@container">
               <section aria-labelledby="ca-edit-label" className="space-y-6">
                 {/*
-                  Drawn in place of the Chat page of Chapter settings, so it
+                  Drawn in place of Chat admin in Chapter settings, so it
                   heads itself the way that page does, with the way back to
                   it above (`SettingsSubpage`'s shape, plus the badges).
                 */}
                 <header className="space-y-1 border-b border-border pb-6">
-                  <SettingsBackLink href={CHAT_SETTINGS_PATH} label="Chat" />
+                  <SettingsBackLink
+                    href={CHAT_SETTINGS_PATH}
+                    label="Chat admin"
+                  />
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2
                       id="ca-edit-label"
@@ -1135,7 +1139,7 @@ function ChatAdminBody({
               <Button asChild variant="secondary" size="sm" className="gap-1.5">
                 <Link href={CHAT_SETTINGS_PATH}>
                   <ArrowLeft className="h-4 w-4" />
-                  All chat settings
+                  Chat admin
                 </Link>
               </Button>
             </div>
