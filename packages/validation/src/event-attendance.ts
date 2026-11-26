@@ -511,7 +511,11 @@ export function attendanceAnswerChoices(
   },
 ): EventAttendanceAnswer[] {
   if (row.kind === "role" && draft.calendarOnly) {
-    return ["calendar_only", "not_invited"];
+    // A role can't be let off a tier that is left out: with nobody attending
+    // there is no Optional list to raise it onto.
+    return options.floor === "not_invited"
+      ? ["not_invited"]
+      : ["calendar_only", "not_invited"];
   }
   const current =
     row.kind === "everyone" ? everyoneAnswer(draft) : row.current;

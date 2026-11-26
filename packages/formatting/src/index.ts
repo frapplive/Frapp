@@ -53,11 +53,13 @@ export {
 } from "./display";
 export {
   type EventWhenFields,
+  eventChipWords,
   eventDatedWord,
   formatEventDayTime,
   formatEventRelativeWhen,
   formatEventRowTime,
   formatEventWhen,
+  formatEventWhenOr,
 } from "./event-when";
 export {
   type DateLean,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  eventChipWords,
   formatEventDayTime,
   formatEventRelativeWhen,
   formatEventRowTime,
@@ -103,5 +104,17 @@ describe("formatEventRelativeWhen", () => {
     expect(formatEventRelativeWhen(allDay("2026-12-14"), now)).toBe(
       "December 14 · All day",
     );
+  });
+});
+
+describe("eventChipWords", () => {
+  it("says the name, when, required and tentative in one order", () => {
+    expect(
+      eventChipWords("Rush BBQ", "Time TBD", { required: true, tentative: true }),
+    ).toEqual({
+      label: "Open Rush BBQ, Time TBD, required, tentative",
+      visible: "Time TBD",
+    });
+    expect(eventChipWords("Chapter", null, {}).label).toBe("Open Chapter");
   });
 });

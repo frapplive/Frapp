@@ -829,6 +829,15 @@ describe("Running by kind (#4173, #5779)", () => {
     expect(todo!.now).toBe(false);
   });
 
+  it("says Tentative in the line when Required takes the badge (#6098)", () => {
+    const data = activity({
+      coming_up: [event({ start_time: "2026-11-12T17:00:00", is_tentative: true })],
+    });
+    const [todo] = activityToDos(data, NOW);
+    expect(todo!.dated.badge?.label).toBe("Required");
+    expect(todo!.dated.detail).toMatch(/· Great Room · Tentative$/);
+  });
+
   it("calls a warning badge an ask, and nothing else", () => {
     expect(
       activityBadgeIsAsk({ badge: { label: "Vote", variant: "warning" } }),

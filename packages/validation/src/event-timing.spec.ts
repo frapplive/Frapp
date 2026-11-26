@@ -3,6 +3,7 @@ import {
   EVENT_DATED_SPAN_MAX_DAYS,
   addEventDays,
   eventCoversDay,
+  eventDatedDays,
   eventDatedPhase,
   eventDaySpan,
   eventLastDay,
@@ -119,5 +120,17 @@ describe("dated days", () => {
     expect(eventDatedPhase(span, at("2027-02-12"))).toBe("during");
     expect(eventDatedPhase(span, at("2027-02-13"))).toBe("after");
     expect(eventDatedPhase({}, at("2027-02-13"))).toBeNull();
+  });
+});
+
+describe("eventDatedDays", () => {
+  it("lists a dated event's days and none for a timed one", () => {
+    expect(
+      eventDatedDays({ timing: "all_day", start_date: "2026-12-30", end_date: "2027-01-02" }),
+    ).toEqual(["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"]);
+    expect(eventDatedDays({ timing: "time_tbd", start_date: "2026-12-30" })).toEqual([
+      "2026-12-30",
+    ]);
+    expect(eventDatedDays({})).toEqual([]);
   });
 });

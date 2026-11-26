@@ -25,9 +25,11 @@ import {
  * don't parse read as `upcoming`, the phase that shows the least.
  *
  * An event that takes no attendance (on the calendar only, or time TBD) is
- * never `live`: there is no check-in to lead with. A dated one is upcoming
- * until its last day ends and past after it, by the viewer's own days (#6098).
- * Pass the event as `shape` for that.
+ * never `live`: there is no check-in to lead with. Such an event that is
+ * dated is upcoming until its last day ends and past after it, by the
+ * viewer's own days; a calendar-only timed one is past after its end. An
+ * all-day event that takes attendance follows its check-in window like any
+ * other, across its days (#6098). Pass the event as `shape` for that.
  */
 export type EventPagePhase = "upcoming" | "live" | "past";
 

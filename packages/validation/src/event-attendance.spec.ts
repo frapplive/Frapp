@@ -549,6 +549,20 @@ describe("On the calendar only (#6098)", () => {
     ).toEqual(["required", "optional", "not_invited"]);
   });
 
+  it("offers only Not invited under a tier that is left out", () => {
+    const draft = withEveryoneAnswer(
+      { everyone: "optional", roles: { "tier:cab": "not_invited" } },
+      "calendar_only",
+    );
+    expect(
+      attendanceAnswerChoices(
+        draft,
+        { kind: "role", current: "not_invited" },
+        { allowRequired: true, calendarOnlyAllowed: true, floor: "not_invited" },
+      ),
+    ).toEqual(["not_invited"]);
+  });
+
   it("leaves calendar only for an ordinary answer with the left-out roles kept", () => {
     const draft = withEveryoneAnswer(
       withEveryoneAnswer(base, "calendar_only"),

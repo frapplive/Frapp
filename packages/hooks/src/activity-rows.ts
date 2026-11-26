@@ -702,6 +702,14 @@ function eventRow(
           ? formatEventRelativeWhen(shape, now)
           : formatRelativeDayTime(event.start_time, now),
       event.location,
+      // Said in the line when the one badge is taken by something else, so
+      // a required meeting that might not happen still says so (#6098).
+      shape.is_tentative &&
+      (needsCheckIn ||
+        event.checked_in ||
+        (event.attendance === "required" && !shape.calendar_only))
+        ? EVENT_TENTATIVE_LABEL
+        : null,
     ]
       .filter(Boolean)
       .join(" · "),

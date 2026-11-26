@@ -1,5 +1,6 @@
 import {
   EVENT_ALL_DAY_LABEL,
+  EVENT_TENTATIVE_LABEL,
   EVENT_TIME_TBD_LABEL,
   eventDaySpan,
   eventLastDay,
@@ -157,4 +158,47 @@ export function formatEventRelativeWhen(
       : formatDay(first, now);
   const word = eventDatedWord(event);
   return `${day} · ${word}`;
+}
+
+/**
+ * An event's when on a surface that words a timed event its own way (a
+ * meeting picker's day and time, the welcome card's day, Up next): an
+ * all-day or time-TBD event reads by its days instead, "Friday · All day",
+ * never the midnight it is stored at. `timed` words a timed event from its
+ * start; `dated` overrides the words for a dated one.
+ */
+export function formatEventWhenOr(
+  event: EventWhenFields,
+  timed: (start: string) => string | null,
+  dated: (event: EventWhenFields) => string | null = (shape) =>
+    formatEventRelativeWhen(shape),
+): string {
+  if (eventTiming(event) !== "timed") return dated(event) ?? "";
+  return typeof event.start_time === "string"
+    ? (timed(event.start_time) ?? "")
+    : "";
+}
+
+/**
+ * What a calendar chip for an event says, on both apps' hour grids and
+ * all-day strips (#6098), so web and the phone read one product: the name,
+ * then `when` (the timed clock range, or "All day" or "Time TBD"), then
+ * "required" and "tentative". `visible` is the chip's muted second part
+ * beside the name; `label` is what a screen reader says when it opens.
+ */
+export function eventChipWords(
+  name: string,
+  when: string | null,
+  flags: { required?: boolean; tentative?: boolean },
+): { label: string; visible: string | null } {
+  const parts = [
+    name,
+    when,
+    flags.required ? "required" : null,
+    flags.tentative ? EVENT_TENTATIVE_LABEL.toLowerCase() : null,
+  ].filter((part): part is string => !!part);
+  return {
+    label: `Open ${parts.join(", ")}`,
+    visible: when,
+  };
 }

@@ -198,3 +198,20 @@ export function eventTimingFieldsOf(
     calendar_only: event.calendar_only === true,
   };
 }
+
+/**
+ * The days (`YYYY-MM-DD`) a dated event is on, first to last, or none for a
+ * timed event or one whose first day doesn't read. Both apps' list, month
+ * and week views place a dated event on each of these (`eventCoversDay`'s
+ * rule).
+ */
+export function eventDatedDays(event: EventTimingFields): string[] {
+  const span = eventDaySpan(event);
+  if (span === 0 || !event.start_date) return [];
+  const days: string[] = [];
+  for (let offset = 0; offset < span; offset += 1) {
+    const day = addEventDays(event.start_date, offset);
+    if (day) days.push(day);
+  }
+  return days;
+}

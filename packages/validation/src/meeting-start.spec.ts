@@ -3,6 +3,7 @@ import {
   likelyMeeting,
   looksLikeHearing,
   meetingInTheRoom,
+  meetingIsOn,
 } from "./meeting-start";
 
 const NOW = Date.parse("2026-11-17T19:20:00");
@@ -134,5 +135,28 @@ describe("looksLikeHearing", () => {
     expect(looksLikeHearing("J-Board hearing")).toBe(true);
     expect(looksLikeHearing("Chapter Meeting")).toBe(false);
     expect(looksLikeHearing("Standardized testing study")).toBe(false);
+  });
+});
+
+describe("dated and calendar-only events (#6098)", () => {
+  const allDay = {
+    ...event("d", "Philanthropy drive", "2026-11-17T00:00:00", "2026-11-18T00:00:00"),
+    timing: "all_day",
+    start_date: "2026-11-17",
+    end_date: "2026-11-17",
+  };
+  const calendarOnly = {
+    ...event("c", "Council deadline", "2026-11-17T19:00:00", "2026-11-17T20:00:00"),
+    calendar_only: true,
+  };
+
+  it("is never the meeting in the room", () => {
+    expect(meetingIsOn(allDay, NOW)).toBe(false);
+    expect(meetingIsOn(calendarOnly, NOW)).toBe(false);
+    expect(meetingInTheRoom([allDay, calendarOnly], NOW)).toBeNull();
+  });
+
+  it("is never the meeting New minutes opens on", () => {
+    expect(likelyMeeting([allDay, calendarOnly], new Set(), NOW)).toBeNull();
   });
 });

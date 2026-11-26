@@ -485,15 +485,43 @@ export function saveScopeFor(
   now: Date,
 ): EventEditScope | "ask" {
   if (patch.recurrence_rule !== undefined) return "series";
-  // On the calendar only is the whole series' or nothing; a meeting made
-  // all-day or TBD is made so on its own, since a series stays timed (#6098).
+  // On the calendar only is the whole series' or nothing (#6098), and only
+  // upcoming meetings take a series edit, so the forms offer the change only
+  // where {@link calendarOnlyEditable} holds.
   if (patch.calendar_only !== undefined && isInSeries(target.event)) {
     return "series";
   }
+  // A meeting made all-day or TBD is made so on its own: a series stays
+  // timed (`datedTimingEditable` keeps the head and a series-wide change
+  // out of it).
   if (patch.timing !== undefined && patch.timing !== "timed") {
     return "instance";
   }
   return offersSeriesChoice(target, now) ? "ask" : "instance";
+}
+
+/**
+ * Whether the form may change On the calendar only on this event: always on
+ * a one-time event; on a series only while a series edit can reach it (it
+ * hasn't started and its parent is known), since the API takes the change
+ * only for every upcoming meeting (#6098).
+ */
+export function calendarOnlyEditable(
+  target: EventEditTarget,
+  now: Date,
+): boolean {
+  return !isInSeries(target.event) || offersSeriesChoice(target, now);
+}
+
+/**
+ * Whether the form may make this event all-day or TBD: not the head of a
+ * series, which holds the repeat rule (a repeating event stays timed), so
+ * only a one-time event or one generated meeting of a series (#6098).
+ */
+export function datedTimingEditable(
+  event: Pick<SeriesEventFields, "parent_event_id" | "recurrence_rule">,
+): boolean {
+  return !!event.parent_event_id || !isRepeatRule(event.recurrence_rule);
 }
 
 /** The request one save makes. */

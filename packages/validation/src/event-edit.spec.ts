@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarOnlyEditable,
+  datedTimingEditable,
   deleteOffersSeriesChoice,
   eventEditPatch,
   isEmptyEventPatch,
@@ -452,5 +454,23 @@ describe("saveScopeFor, dates (#6098)", () => {
         NOW,
       ),
     ).toBe("instance");
+  });
+});
+
+describe("what a series edit may change (#6098)", () => {
+  it("offers calendar only on a series only while a series edit reaches it", () => {
+    expect(calendarOnlyEditable(single, NOW)).toBe(true);
+    expect(calendarOnlyEditable(occurrence, NOW)).toBe(true);
+    const started = new Date("2026-11-10T00:00:00Z");
+    expect(calendarOnlyEditable(occurrence, started)).toBe(false);
+    expect(calendarOnlyEditable(single, started)).toBe(true);
+  });
+
+  it("keeps a series head timed and lets one generated meeting go dated", () => {
+    expect(datedTimingEditable(EVENT)).toBe(true);
+    expect(datedTimingEditable(occurrence.event)).toBe(true);
+    expect(
+      datedTimingEditable({ parent_event_id: null, recurrence_rule: "WEEKLY" }),
+    ).toBe(false);
   });
 });
