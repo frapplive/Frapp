@@ -335,12 +335,12 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = Object.freeze([
     subFeatures: Object.freeze([]),
   },
   {
-    key: "audit-log", label: "Audit Log", icon: "shield", tier: "free", alwaysOn: true,
+    key: "audit-log", label: "Logs", icon: "shield", tier: "free", alwaysOn: true,
     description: "Member-visible record of all officer configuration changes.",
     subFeatures: Object.freeze([]),
   },
   {
-    key: "chapter-settings", label: "Chapter Settings", icon: "settings", tier: "free", alwaysOn: true,
+    key: "chapter-settings", label: "Chapter settings", icon: "settings", tier: "free", alwaysOn: true,
     description: "Archetype, branding, theme, modules, roles, workflows, dues.",
     subFeatures: Object.freeze([]),
   },
@@ -457,7 +457,7 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = Object.freeze([
     ]),
   },
   {
-    key: "geofences", label: "Geofences", icon: "map-pin", tier: "paid", alwaysOn: false,
+    key: "geofences", label: "Study zones", icon: "map-pin", tier: "paid", alwaysOn: false,
     description: "Geo-fenced check-in zones for events and chapter house.",
     subFeatures: Object.freeze([]),
   },
