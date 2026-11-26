@@ -51,6 +51,7 @@ import {
 import { WhoPickerSheet } from "@/components/tasks/who-picker-sheet";
 import { DueDateField } from "@/components/tasks/due-date-field";
 import { DueTimeField } from "@/components/tasks/due-time-field";
+import { FixedDeadlineRow } from "@/components/tasks/fixed-deadline-row";
 import { SubtaskDraftField } from "@/components/tasks/subtask-draft-field";
 import { TaskPhotoPicker } from "@/components/tasks/task-photos";
 import { TaskRepeatField } from "@/components/tasks/repeat-field";
@@ -239,6 +240,8 @@ type KeptTask = {
   repeat?: RepeatDraft;
   /** The tier, role or group it is from (#5473); absent before From. */
   followedBy?: string | null;
+  /** Fixed deadline (#6096); absent in a draft kept before it. */
+  fixedDeadline?: boolean;
 };
 
 /** Who a kept draft holds, read from a draft kept before `who` too. */
@@ -390,6 +393,10 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         prefill?.followedBy ??
         null,
     );
+    // Fixed deadline (#6096): no extensions, urgent to its assignee.
+    const [fixedDeadline, setFixedDeadline] = useState(
+      () => opening?.fixedDeadline ?? prefill?.fixedDeadline ?? false,
+    );
     const kept = useKeptSheetDraft<KeptTask>(
       keptName,
       {
@@ -404,6 +411,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         pickedPhotos,
         repeat,
         followedBy,
+        fixedDeadline,
       },
       JSON.stringify([
         title,
@@ -417,6 +425,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         pickedPhotos.map(({ image }) => image.uri),
         repeat,
         followedBy,
+        fixedDeadline,
       ]),
       opening,
     );
@@ -545,9 +554,17 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
         : null;
     const sentFollower =
       fromOffered && !upForGrabs && !repeating ? ownFollower : null;
-    const body = withFollower(
-      withRepeat(validateNewTask(draft, at), repeatRule),
-      sentFollower,
+    // Only from the Tasks screen's own create, on a dated task for someone:
+    // a chat card and a minutes suggestion send through routes that carry
+    // none, and a task up for grabs has none.
+    const fixedOffered =
+      !suggestion && !postToChannel && !upForGrabs && dueDate !== null;
+    const body = withFixedDeadline(
+      withFollower(
+        withRepeat(validateNewTask(draft, at), repeatRule),
+        sentFollower,
+      ),
+      fixedOffered && fixedDeadline,
     );
     const timePassed =
       dueDate !== null && dueTimePassed({ dueDate, dueTime }, at);
@@ -571,6 +588,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       setRepeat(noTaskRepeatDraft());
       setRepeatOpen(false);
       setFollowedBy(null);
+      setFixedDeadline(false);
     }, [clearKept]);
 
     /** Add photos from the library, several at once, up to the room left. */
@@ -963,6 +981,15 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               </View>
             ) : null}
 
+            {fixedOffered ? (
+              <FixedDeadlineRow
+                value={fixedDeadline}
+                onChange={setFixedDeadline}
+                disabled={pending}
+                style={styles.field}
+              />
+            ) : null}
+
             {showRepeat ? (
               <TaskRepeatField
                 draft={repeat}
@@ -1113,6 +1140,14 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     );
   },
 );
+
+/** The validated task with a fixed deadline (#6096), sent only when on. */
+function withFixedDeadline(
+  task: ValidatedNewTask | null,
+  fixed: boolean,
+): ValidatedNewTask | null {
+  return task && fixed ? { ...task, fixed_deadline: true } : task;
+}
 
 /** The validated task with its From (#5473), when it has one. */
 function withFollower(

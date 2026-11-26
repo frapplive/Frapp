@@ -50,7 +50,11 @@ describe("openTaskLine", () => {
   it("says points, the group it's narrowed to, and the due", () => {
     expect(
       openTaskLine(
-        posting({ scope: "group", scope_id: "g-1", scope_name: "Philanthropy" }),
+        posting({
+          scope: "group",
+          scope_id: "g-1",
+          scope_name: "Philanthropy",
+        }),
         NOW,
       ),
     ).toBe("10 points · Philanthropy · Due Friday");

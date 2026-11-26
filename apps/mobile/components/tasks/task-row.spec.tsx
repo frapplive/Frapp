@@ -68,6 +68,9 @@ function row(overrides: Partial<TaskRowModel> = {}): TaskRowModel {
     group: null,
     openTaskId: null,
     series: null,
+    fixedDeadline: false,
+    extension: null,
+    extensionRequestsBlocked: false,
     ...overrides,
   };
 }
@@ -146,6 +149,20 @@ describe("TaskRow — the overdue colour", () => {
 
     expect(styleOfText(tree, "Due September 30").color).toBe(
       signetDarkTokens.color.text.mutedForeground,
+    );
+  });
+
+  it("draws a fixed deadline's due in the red from the start (#6096)", () => {
+    const tree = render(
+      <TaskRow
+        row={row({ dueDate: "2026-09-30", fixedDeadline: true })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+
+    expect(styleOfText(tree, "Due September 30").color).toBe(
+      signetDarkTokens.color.semantic.destructiveText,
     );
   });
 });

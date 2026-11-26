@@ -322,10 +322,12 @@ export function stateOf(
 }
 
 /**
- * A member row without its timeout columns (#6006), for a response that
- * hands rows to other members: the Directory and a role save. The timeout is
- * the member's and the moderators' business, and the profile read serves it
- * to exactly them.
+ * A member row without its timeout columns (#6006), nor whether they may ask
+ * for more time on a task (#6096), for a response that hands rows to other
+ * members: the Directory and a role save. Each is the member's and the
+ * officers' business; the profile read serves the timeout to exactly them,
+ * and the extension block is read through `GET
+ * /v1/tasks/extension-requests/blocked` (`tasks:manage`).
  */
 export function withoutChatTimeout<T extends Partial<Member>>(
   member: T,
@@ -334,6 +336,8 @@ export function withoutChatTimeout<T extends Partial<Member>>(
   delete rest.chat_timeout_until;
   delete rest.chat_timeout_reason;
   delete rest.chat_timeout_by;
+  delete rest.extension_requests_blocked_at;
+  delete rest.extension_requests_restored_at;
   return rest as Omit<
     T,
     'chat_timeout_until' | 'chat_timeout_reason' | 'chat_timeout_by'

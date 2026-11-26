@@ -100,6 +100,7 @@ import {
   activityReviewQueue,
   activitySnoozedRows,
   activityWeekSummary,
+  findActivityExtensionRow,
   findActivityTaskRow,
   activityRowAction,
   activityArchiveKeys,
@@ -954,9 +955,16 @@ function SnoozedSection({ rows, kit }: { rows: ActivityRow[]; kit: RowKit }) {
  * Suspense boundary of its own (as in `chat-page.tsx`), and the page around
  * it must not wait on one.
  */
-function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
+function ReviewParam({
+  open,
+}: {
+  open: (taskId: string, view: "review" | "extension") => Promise<void>;
+}) {
   const searchParams = useSearchParams();
-  const taskId = searchParams.get("review");
+  // `?extension=<taskId>`: "asks for more time" (#6096), read the same way.
+  const extensionId = searchParams.get("extension");
+  const view = extensionId ? "extension" : "review";
+  const taskId = extensionId ?? searchParams.get("review");
   const handled = useRef<string | null>(null);
   // The page hands a new `open` each render; the link is acted on once.
   const latestOpen = useRef(open);
@@ -968,10 +976,10 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
       handled.current = null;
       return;
     }
-    if (handled.current === taskId) return;
-    handled.current = taskId;
-    void latestOpen.current(taskId);
-  }, [taskId]);
+    if (handled.current === `${view}:${taskId}`) return;
+    handled.current = `${view}:${taskId}`;
+    void latestOpen.current(taskId, view);
+  }, [taskId, view]);
   return null;
 }
 
@@ -1169,11 +1177,16 @@ export function ActivityPage() {
   // The copy a task for everyone's row names opens the group, as the row does.
   const router = useRouter();
   const pathname = usePathname();
-  const openReview = async (taskId: string) => {
+  const openReview = async (
+    taskId: string,
+    view: "review" | "extension" = "review",
+  ) => {
     const result = await activity.refetch();
-    const row = result.data
-      ? findActivityTaskRow(result.data, taskId, new Date())
-      : null;
+    // A request for more time opens its decision; one already answered opens
+    // the task, which says how it was answered (#6096).
+    const find =
+      view === "extension" ? findActivityExtensionRow : findActivityTaskRow;
+    const row = result.data ? find(result.data, taskId, new Date()) : null;
     if (row?.kind === "task-group") {
       router.replace(tasksGroupLink(row.group.id));
     } else if (row) {
@@ -1304,10 +1317,10 @@ export function ActivityPage() {
         onTaskLink={() => setShowArchive(false)}
       />
       <ReviewParam
-        open={async (taskId) => {
+        open={async (taskId, kind) => {
           // A review opens on Mine, where its panel is.
           setViewPick("mine");
-          await openReview(taskId);
+          await openReview(taskId, kind);
         }}
       />
     </Suspense>

@@ -50,6 +50,7 @@ import {
 } from "@/components/chat/timeout-member-sheet";
 import { BIRTHDAY_COPY, can } from "@repo/validation";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
+import { ExtensionRestore } from "@/components/directory/extension-restore";
 import { errorCopy } from "@repo/hooks/error-copy";
 import {
   memberMenuButtonLabel,
@@ -558,6 +559,8 @@ export function MemberProfile({
             // The member and whoever can time out see it (#6006), as on web.
             <Text style={styles.timeoutLine}>{timeoutLine}</Text>
           ) : null}
+          {/* Can't ask for more time (#6096), with Restore, to an officer. */}
+          <ExtensionRestore userId={detail.userId} />
 
           {messageRow.kind !== "hidden" ? (
             <View style={styles.messageBlock}>
