@@ -2182,6 +2182,8 @@ describe("EventEditorDialog event shapes (#6098)", () => {
     expect(body).toMatchObject({
       timing: "time_tbd",
       start_date: "2026-12-05",
+      // The hidden Points row's default is never sent.
+      point_value: 0,
     });
     expect(body).not.toHaveProperty("end_date");
     expect(body).not.toHaveProperty("start_time");
@@ -2366,5 +2368,39 @@ describe("EventEditorDialog event shapes (#6098)", () => {
     const body = await save();
     expect(body).toMatchObject({ is_tentative: false });
     expect(body).not.toHaveProperty("timing");
+  });
+
+  it("offers only Set time on a series head, which holds the repeat", () => {
+    renderEdit({
+      id: "s1",
+      name: "Chapter",
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+      recurrence_rule: "WEEKLY",
+    });
+    const timing = screen.getByRole("radiogroup", { name: "Timing" });
+    expect(
+      within(timing)
+        .getAllByRole("radio")
+        .map((each) => each.textContent),
+    ).toEqual(["Set time"]);
+  });
+
+  it("keeps On the calendar only off a started series, where a save can't reach the series", () => {
+    renderEdit({
+      id: "s2",
+      name: "Chapter",
+      start_time: "2020-07-01T18:00:00.000Z",
+      end_time: "2020-07-01T19:00:00.000Z",
+      recurrence_rule: "WEEKLY",
+    });
+    openRow("Who's coming");
+    expect(
+      within(
+        screen.getByRole("radiogroup", {
+          name: "Attendance for everyone else",
+        }),
+      ).queryByRole("radio", { name: "On the calendar only" }),
+    ).toBeNull();
   });
 });

@@ -82,6 +82,8 @@ import {
   EVENT_TIMING_CHOICE_LABELS,
   EVENT_WHEN_COPY,
   addEventDays,
+  calendarOnlyEditable,
+  datedTimingEditable,
   eventDatesProblem,
   eventDayNumber,
   eventFormShowsRow,
@@ -1377,7 +1379,7 @@ export function EventEditorDialog({
     // can't leave one, but a stored value seeded on edit could.
     const pointValueNumber =
       pointValue.trim() === "" ? 0 : parseGuardedInt(pointValue);
-    if (pointValueNumber === undefined && !calendarOnly) {
+    if (pointValueNumber === undefined && takesAttendance) {
       toast({
         title: "Valid point value required",
         description: "Use a whole number of 0 or more.",
@@ -1450,7 +1452,10 @@ export function EventEditorDialog({
     };
     // A member's event carries none. A calendar-only one sends none: the API
     // stores it with 0.
-    const points = canSetRequirements ? (pointValueNumber ?? 0) : 0;
+    // A time-TBD event sends 0 too, as the phone does: its Points row is
+    // hidden, so the default it holds was never chosen.
+    const points =
+      canSetRequirements && takesAttendance ? (pointValueNumber ?? 0) : 0;
     // The shape's own fields: a timed event's times, or a dated one's days
     // and never times (the API writes their bounds). Each new field only when
     // it says something, so a plain event still creates against an API from
@@ -1767,6 +1772,23 @@ export function EventEditorDialog({
       timing,
       calendarOnly: attendance.calendarOnly === true,
     });
+  // A series head stays timed (it holds the repeat rule), so it offers only
+  // Set time; one meeting of a series may still be made all-day (#6098).
+  const timingChoices =
+    mode === "edit" &&
+    event &&
+    !datedTimingEditable({
+      parent_event_id: textOf(event.parent_event_id),
+      recurrence_rule: textOf(event.recurrence_rule),
+    })
+      ? EVENT_TIMING_CHOICES.filter((choice) => choice === "timed")
+      : EVENT_TIMING_CHOICES;
+  // On the calendar only is the whole series' or nothing, so it is offered
+  // only where a save can reach the series (`calendarOnlyEditable`).
+  const calendarOnlyAllowed =
+    mode !== "edit" || !editTarget
+      ? true
+      : calendarOnlyEditable(editTarget, new Date());
   // A last day before the first, said under the days as it is typed.
   const datesProblem =
     timing === "all_day" && startDate && endDate
@@ -1929,7 +1951,7 @@ export function EventEditorDialog({
                 <SegmentedChoice
                   dense
                   label="Timing"
-                  options={EVENT_TIMING_CHOICES.map((choice) => ({
+                  options={timingChoices.map((choice) => ({
                     value: choice,
                     label: EVENT_TIMING_CHOICE_LABELS[choice],
                   }))}
@@ -2052,6 +2074,7 @@ export function EventEditorDialog({
                   className="max-h-[min(32rem,70vh)] w-[26rem] overflow-y-auto"
                 >
                   <AttendanceEditor
+                    calendarOnlyAllowed={calendarOnlyAllowed}
                     value={attendance}
                     onChange={setAttendance}
                     allowRequired={canSetRequirements}

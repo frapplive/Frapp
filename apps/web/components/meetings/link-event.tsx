@@ -1,6 +1,6 @@
 "use client";
 
-import { eventWhenOr } from "@/lib/events/event-when";
+import { formatEventWhenOr } from "@repo/formatting";
 import { useId, useMemo, useState } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useEvents, useLinkMeetingEvent, useMeetings } from "@repo/hooks";
@@ -75,7 +75,13 @@ export function LinkEventPanel({
       .filter((event) => {
         const at = Date.parse(event?.start_time ?? "");
         return (
-          !!event?.id && at >= from && at <= now && !withMinutes.has(event.id)
+          !!event?.id &&
+          // On the calendar only is never a meeting (#6098), as the
+          // phone's `meetingChoices` leaves it out.
+          event.calendar_only !== true &&
+          at >= from &&
+          at <= now &&
+          !withMinutes.has(event.id)
         );
       })
       .sort((a, b) => Date.parse(b.start_time) - Date.parse(a.start_time));
@@ -156,7 +162,7 @@ export function LinkEventPanel({
                   >
                     <span className="text-sm font-semibold">{event.name}</span>
                     <span className="text-caption text-muted-foreground">
-                      {eventWhenOr(event, meetingWhenLabel)}
+                      {formatEventWhenOr(event, meetingWhenLabel)}
                     </span>
                   </button>
                 </li>

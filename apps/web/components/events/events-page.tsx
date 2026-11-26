@@ -71,6 +71,7 @@ import {
   CHECK_IN_OPEN_LABEL,
   EVENT_CREATE_PERMISSIONS,
   EVENT_TENTATIVE_LABEL,
+  eventIsDated,
   eventSetsRolesApart,
   eventTakesAttendance,
   eventTimingFieldsOf,
@@ -198,8 +199,11 @@ const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
  * in another zone.
  */
 function startMsOf(event: EventRow): number | null {
-  const days = datedEventDays(event);
-  if (days) return parseBareDateLocalMidnight(days[0]!)?.getTime() ?? null;
+  if (eventIsDated(eventTimingFieldsOf(event))) {
+    return typeof event.start_date === "string"
+      ? (parseBareDateLocalMidnight(event.start_date)?.getTime() ?? null)
+      : null;
+  }
   return parseInstant(event.start_time)?.getTime() ?? null;
 }
 

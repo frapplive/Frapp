@@ -19,7 +19,7 @@ import {
 import type { MemberProfile } from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
 import { formatDayTime, formatEventDayTime } from "@repo/formatting";
-import { eventWhenOr } from "@/lib/events/event-when";
+import { formatEventWhenOr } from "@repo/formatting";
 import { can } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -101,7 +101,7 @@ function buildEventOptions(data: unknown): PickerOption[] {
         // date (a morning and an evening chapter meeting).
         label: [
           name,
-          eventWhenOr(
+          formatEventWhenOr(
             event,
             (start) => formatDayTime(start),
             (record) => formatEventDayTime(record),

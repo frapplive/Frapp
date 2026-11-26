@@ -120,10 +120,10 @@ describe("EventsTimeGrid", () => {
     renderGrid();
     const thursday = screen.getByTestId("time-grid-day-2026-11-12");
     const meeting = within(thursday).getByRole("button", {
-      name: /View Chapter Meeting/,
+      name: /Open Chapter Meeting/,
     });
     const dinner = within(thursday).getByRole("button", {
-      name: /View Alumni Dinner/,
+      name: /Open Alumni Dinner/,
     });
     expect(meeting.style.width).toBe("calc(50% - 4px)");
     expect(meeting.style.left).toBe("calc(0% + 2px)");
@@ -137,7 +137,7 @@ describe("EventsTimeGrid", () => {
     renderGrid();
     expect(screen.getByText("All day")).toBeInTheDocument();
     for (const chip of screen.getAllByRole("button", {
-      name: /View Retreat/,
+      name: /Open Retreat/,
     })) {
       expect(chip.style.top).toBe("");
     }
@@ -159,7 +159,7 @@ describe("EventsTimeGrid", () => {
     expect(marker.style.left).toBe("calc(50% + 2px)");
     expect(marker.style.width).toBe("calc(50% - 4px)");
     const meeting = within(thursday).getByRole("button", {
-      name: /View Chapter Meeting/,
+      name: /Open Chapter Meeting/,
     });
     expect(meeting.style.width).toBe("calc(50% - 4px)");
   });
@@ -168,7 +168,7 @@ describe("EventsTimeGrid", () => {
     renderGrid();
     // Retreat runs Tue Nov 10, 9 AM to Wed Nov 11, noon.
     expect(
-      screen.getAllByRole("button", { name: /View Retreat/ }),
+      screen.getAllByRole("button", { name: /Open Retreat/ }),
     ).toHaveLength(2);
   });
 
@@ -225,9 +225,9 @@ describe("EventsTimeGrid", () => {
   it("colours by kind: sky events, the loud required treatment, green tasks, rose birthdays", () => {
     renderGrid();
     const meeting = screen.getByRole("button", {
-      name: /View Chapter Meeting/,
+      name: /Open Chapter Meeting/,
     });
-    const dinner = screen.getByRole("button", { name: /View Alumni Dinner/ });
+    const dinner = screen.getByRole("button", { name: /Open Alumni Dinner/ });
     expect(meeting).toHaveAttribute("data-required", "true");
     expect(meeting.getAttribute("style")).toContain("22%");
     expect(dinner.getAttribute("style")).toContain("9%");
@@ -296,10 +296,14 @@ describe("EventsTimeGrid dated events (#6098)", () => {
     expect(bar.style.gridColumn).toBe("2 / 4");
     expect(
       within(bar).getByRole("button", {
-        name: /^View Formal recruitment, All day · November 10.* – November 11.*, tentative$/,
+        name: /^Open Formal recruitment, All day · November 10.* – November 11.*, tentative$/,
       }),
     ).toBeTruthy();
     expect(within(bar).getByText("Tentative")).toBeTruthy();
+    // A time-TBD chip says so beside its name, muted.
+    expect(
+      within(screen.getByTestId("time-grid-bar-council")).getByText("Time TBD"),
+    ).toBeTruthy();
     expect(screen.getByTestId("time-grid-bar-council").style.gridColumn).toBe(
       "4 / 5",
     );
@@ -315,6 +319,6 @@ describe("EventsTimeGrid dated events (#6098)", () => {
   it("names a time-TBD event's time as TBD, not midnight", () => {
     const facts = calendarEventFacts(dated[1]!, requiredOf);
     expect(facts.clockLabel).toBe("Time TBD");
-    expect(facts.viewLabel).toBe("View Council meeting, Time TBD");
+    expect(facts.viewLabel).toBe("Open Council meeting, Time TBD");
   });
 });

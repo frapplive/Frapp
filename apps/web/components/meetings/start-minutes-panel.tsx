@@ -1,6 +1,6 @@
 "use client";
 
-import { eventWhenOr } from "@/lib/events/event-when";
+import { formatEventWhenOr } from "@repo/formatting";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { codeOf } from "@repo/api-sdk";
@@ -141,6 +141,9 @@ function StartMinutesForm({ onDone }: { onDone: () => void }) {
     return asArray<EventRow>(eventsQuery.data)
       .filter((event) => {
         if (!event?.id) return false;
+        // On the calendar only is never a meeting (#6098), as the phone's
+        // `meetingChoices` leaves it out.
+        if (event.calendar_only === true) return false;
         const at = Date.parse(event.start_time ?? "");
         return at >= from && at <= to;
       })
@@ -342,7 +345,7 @@ function StartMinutesForm({ onDone }: { onDone: () => void }) {
                       disabled={isTaken}
                       onClick={() => pickEvent(event)}
                       title={event.name}
-                      detail={eventWhenOr(event, meetingWhenLabel)}
+                      detail={formatEventWhenOr(event, meetingWhenLabel)}
                       trailing={
                         existing
                           ? MEETING_ENTRY_COPY.open

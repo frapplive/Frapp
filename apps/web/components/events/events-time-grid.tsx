@@ -6,6 +6,7 @@ import { EventsGlyph } from "@/components/events/chapter-ops-glyphs";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 import {
+  eventChipWords,
   formatEventRowTime,
   formatTimeOfDay,
   localIsoDate,
@@ -19,6 +20,7 @@ import {
   EVENT_TENTATIVE_LABEL,
   eventCoversDay,
   eventIsDated,
+  eventTiming,
   eventTimingFieldsOf,
   type EventAttendanceFields,
 } from "@repo/validation";
@@ -52,8 +54,13 @@ export type CalendarEventFacts = {
   isSeriesHead: boolean;
   isSeriesInstance: boolean;
   clockLabel: string | null;
-  /** Might not happen (#6098): said in its name for assistive tech. */
+  /** Might not happen (#6098): a chip beside its name. */
   isTentative: boolean;
+  /**
+   * What a strip chip says after its name, muted: "Time TBD" for an event
+   * whose time isn't set (`eventChipWords`, the phone's words too).
+   */
+  chipWhen: string | null;
   viewLabel: string;
 };
 
@@ -76,6 +83,10 @@ export function calendarEventFacts(
     ? formatEventRowTime(event)
     : formatTimeOfDay(event.start_time);
   const isTentative = shape.is_tentative === true;
+  const words = eventChipWords(eventName, clockLabel, {
+    required: isMandatory,
+    tentative: isTentative,
+  });
   return {
     eventId: eventIdOf(event),
     eventName,
@@ -92,7 +103,8 @@ export function calendarEventFacts(
       event.parent_event_id.length > 0,
     clockLabel,
     isTentative,
-    viewLabel: `View ${eventName}${clockLabel ? `, ${clockLabel}` : ""}${isMandatory ? ", required" : ""}${isTentative ? `, ${EVENT_TENTATIVE_LABEL.toLowerCase()}` : ""}`,
+    chipWhen: eventTiming(shape) === "time_tbd" ? words.visible : null,
+    viewLabel: words.label,
   };
 }
 
@@ -563,6 +575,12 @@ export function EventChip({
     >
       <SeriesMark facts={facts} />
       <span className="truncate">{facts.eventName}</span>
+      {facts.chipWhen ? (
+        <span className="shrink-0 font-normal text-muted-foreground">
+          <span aria-hidden="true">{" · "}</span>
+          {facts.chipWhen}
+        </span>
+      ) : null}
       {facts.isTentative ? (
         <span className="shrink-0 font-normal text-muted-foreground">
           {EVENT_TENTATIVE_LABEL}
