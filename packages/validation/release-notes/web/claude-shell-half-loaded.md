@@ -1,1 +1,1 @@
-The sidebar loads faster and shows placeholders shaped like your name and menu while it does, instead of blank gaps.
+The dashboard opens faster when you come back to it, and while the sidebar loads it shows placeholder shapes instead of empty gaps or a stand-in name.

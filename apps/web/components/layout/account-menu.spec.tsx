@@ -164,38 +164,77 @@ describe("AccountMenu", () => {
     ).toBeInTheDocument();
   });
 
+  // `useCurrentUser` as TanStack reports a first read still out.
+  const READING = { data: undefined, isError: false, fetchStatus: "fetching" };
+
   it("draws the row's shape, not a stand-in identity, while the user is read (#6121)", () => {
-    useCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    useCurrentUser.mockReturnValue(READING);
     const { container } = render(
       <AccountMenu variant="foot" switcher={ONE_CHAPTER} />,
     );
-    const trigger = screen.getByRole("button", { name: "Account menu" });
-    expect(trigger).toBeInTheDocument();
+    // The status the dot shows is still spoken; only the name waits.
+    expect(
+      screen.getByRole("button", { name: "Account menu, Online" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Your account")).toBeNull();
-    // Neither "YA" nor any other initials stand in for the member.
     expect(screen.queryByText("YA")).toBeNull();
     expect(container.querySelectorAll(".skeleton-shimmer").length).toBe(2);
   });
 
   it("draws the rail's avatar as a disc while the user is read (#6121)", () => {
-    useCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    useCurrentUser.mockReturnValue(READING);
     const { container } = render(
       <AccountMenu variant="rail" switcher={ONE_CHAPTER} />,
     );
     expect(
-      screen.getByRole("button", { name: "Account menu" }),
+      screen.getByRole("button", { name: "Account menu, Online" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("YA")).toBeNull();
     expect(container.querySelectorAll(".skeleton-shimmer").length).toBe(1);
   });
 
-  it("names the menu in plain words when the user read failed or can't run", () => {
-    useCurrentUser.mockReturnValue({ data: undefined, isLoading: false });
+  it("heads the open menu with a name bar, not a stand-in, while the user is read", async () => {
+    useCurrentUser.mockReturnValue(READING);
+    const user = userEvent.setup();
     render(<AccountMenu variant="foot" switcher={ONE_CHAPTER} />);
+    await user.click(screen.getByRole("button", { name: /account menu/i }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.queryByText("Your account")).toBeNull();
     expect(
-      screen.getByRole("button", { name: /account menu for Your account/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("menu").querySelector(".skeleton-shimmer"),
+    ).not.toBeNull();
   });
+
+  it("keeps the shape through a retry paused in a hidden tab", () => {
+    useCurrentUser.mockReturnValue({ ...READING, fetchStatus: "paused" });
+    render(<AccountMenu variant="foot" switcher={ONE_CHAPTER} />);
+    expect(screen.queryByText("Your account")).toBeNull();
+  });
+
+  it.each([
+    ["failed", { data: undefined, isError: true, fetchStatus: "idle" }, false],
+    [
+      "can't run",
+      { data: undefined, isError: false, fetchStatus: "idle" },
+      false,
+    ],
+    ["offline", { ...READING, fetchStatus: "paused" }, true],
+  ] as const)(
+    "names the menu in plain words, with a person glyph, when the read %s",
+    (_state, query, offline) => {
+      network.isOffline = offline;
+      useCurrentUser.mockReturnValue(query);
+      const { container } = render(
+        <AccountMenu variant="foot" switcher={ONE_CHAPTER} />,
+      );
+      expect(
+        screen.getByRole("button", { name: /account menu for Your account/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("YA")).toBeNull();
+      expect(container.querySelector(".skeleton-shimmer")).toBeNull();
+      expect(container.querySelector("svg.lucide-user")).not.toBeNull();
+    },
+  );
 
   it("closes the mobile drawer behind a Profile tap", async () => {
     // The dropdown is a modal layer above the Sheet, so dismissing it is not an

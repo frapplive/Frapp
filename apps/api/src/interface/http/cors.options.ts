@@ -80,15 +80,22 @@ export const CORS_ALLOWED_ORIGINS: Readonly<
  * Every dashboard read carries `authorization` and `x-chapter-id`, so the
  * browser asks `OPTIONS` before each URL it hasn't asked about lately. With no
  * `Access-Control-Max-Age` Chrome keeps that answer five seconds, so an open
- * a few seconds after the last one paid a full extra round trip before the
- * bootstrap and every first-screen read: on Slow 4G the shell sat on its
- * placeholders about 1.1 s waiting for a bootstrap the API answered in
- * well under 100 ms. Two hours is Chrome's ceiling (Firefox allows 24).
+ * more than five seconds after the last one sent a preflight ahead of the
+ * bootstrap and every first-screen read. Measured on the local stack
+ * (2026-11-26): 23 to 24 `OPTIONS` per dashboard reload, soft or hard, and 1
+ * to 2 with this. Derived, not measured: over HTTP/2 each one is a round trip
+ * before its read, which is what the shell waited on. Two hours is Chrome's
+ * ceiling (Firefox allows 24, Safari about 10 minutes). A browser's first
+ * open, or one after the two hours, still pays the preflights.
  *
- * What a cached preflight allows is narrow: the method and the header names.
- * The real response still has to carry this origin in
- * `Access-Control-Allow-Origin`, so an origin taken off the list above is
- * refused on its next request, cache or no cache.
+ * What a cached preflight allows is the method and the header names, for up
+ * to two hours. Taking an origin off the list above stops that page reading
+ * any answer at once, since every real response must carry its origin in
+ * `Access-Control-Allow-Origin`, but a tab already open there could still
+ * send a request with its own bearer token until its cached preflight runs
+ * out. The API authenticates every request by that token, so this reaches
+ * nothing the token couldn't, but a removed origin is cut off from writing
+ * only once its cached preflights expire, not at once.
  */
 export const CORS_PREFLIGHT_MAX_AGE_SECONDS = 7200;
 

@@ -44,7 +44,6 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
 import { LiveMeetingCard } from "@/components/meetings/live-meeting-card";
 import { ConnectionPill } from "@/components/shared/connection-pill";
-import { Skeleton } from "@/components/shared/async-states";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -267,41 +266,13 @@ export function Sidebar({
           };
           const current = currentFor(item, pathname);
           // A gated row is hidden until the permission read answers (#3854),
-          // as is a row whose only open view is gated. It holds its place
-          // meanwhile, so More and the channel list don't move down a row
-          // when it arrives, and draws a row's shape there (a glyph and a
-          // label bar): an empty slot read as a gap in the nav (#6121;
-          // rulebook § States, loading draws the loaded layout's shape).
-          const gated = (
-            rule: Pick<
-              NavItem,
-              "requirePermission" | "requireAnyOf" | "requireAllOf"
-            >,
-          ) =>
-            rule.requirePermission !== undefined ||
-            rule.requireAnyOf !== undefined ||
-            rule.requireAllOf !== undefined;
-          if (
-            permissions === undefined &&
-            (gated(item) ||
-              (item.views?.some(gated) === true && !visible(item))) &&
-            (!tenantKind || (item.kinds ?? ["chapter"]).includes(tenantKind))
-          ) {
-            return (
-              <span
-                key={item.id}
-                aria-hidden="true"
-                data-nav-placeholder=""
-                className={cn(
-                  "flex min-h-touch shrink-0 items-center lg:h-[34px] lg:min-h-0",
-                  rail ? "w-[34px] justify-center" : "w-full gap-2.5 px-2.5",
-                )}
-              >
-                <Skeleton className={cn(ICON, "shrink-0 rounded-[5px]")} />
-                {rail ? null : <Skeleton className="h-[11px] w-20" />}
-              </span>
-            );
-          }
+          // as is a row whose only open view is gated, and nothing holds its
+          // place meanwhile (#6121, Paul 2026-11-26: the held slot read as a
+          // gap in the nav). The row arrives with the answer, which #5049's
+          // cache of the last answer makes the first paint on a revisit. A
+          // row-shaped placeholder isn't used either: components.md §10 keeps
+          // placeholders to what every member sees, since a gated row's
+          // shape would be drawn and taken back for a member it's not for.
           return (
             <ProtectedNavItem
               key={item.id}
