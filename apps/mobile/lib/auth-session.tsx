@@ -69,7 +69,7 @@ function chapterIdOf(token: string): string | null {
   return typeof claim === "string" && claim.length > 0 ? claim : null;
 }
 
-export type AuthMethod = "password" | "magic_link";
+export type AuthMethod = "password" | "email_code";
 
 type AuthStatus = "hydrating" | "authenticated" | "unauthenticated";
 
@@ -100,25 +100,36 @@ type AuthSessionContextValue = {
   isChapterResolving: boolean;
   /** False when `EXPO_PUBLIC_SUPABASE_*` are missing — sign-in cannot work. */
   isConfigured: boolean;
-  /** Why the last magic-link callback failed, if it did. Cleared on retry. */
+  /**
+   * Why the last email link or provider return failed, if it did. Cleared on
+   * retry. Email links are gone since #6134, bar the one production's
+   * transition-era template still prints beside the code.
+   */
   callbackError: string | null;
   signInWithPassword: (input: {
     email: string;
     password: string;
   }) => Promise<void>;
-  sendMagicLink: (input: { email: string }) => Promise<void>;
   /**
-   * Signs in with the six-digit code from the same email a magic link sends
-   * (#5625), so the invite card never has to leave the app. Needs the Auth
-   * email template to print `{{ .Token }}`; until it does, the link is the
-   * way in.
+   * Emails a 6-digit sign-in code (#6134). A new address gets the Confirm
+   * signup email instead, whose code makes the account.
    */
-  verifyEmailCode: (input: { email: string; code: string }) => Promise<void>;
+  sendEmailCode: (input: { email: string; screen?: string }) => Promise<void>;
   /**
-   * Sends the sign-up confirmation email again, for a password account that
-   * was never confirmed (`email_not_confirmed`, #3833). Its link opens the app
-   * through the same `frapp:///?` redirect as a magic link, so opening it on
-   * this phone signs the member in.
+   * Signs in with the six-digit code from any Auth email (#5625, #6134):
+   * GoTrue's `email` type checks a confirmation code and a sign-in code alike,
+   * so the same call confirms a new account and signs an old one in.
+   * `screen` names the route for the failure report.
+   */
+  verifyEmailCode: (input: {
+    email: string;
+    code: string;
+    screen?: string;
+  }) => Promise<void>;
+  /**
+   * Sends the sign-up confirmation code again, for a password account that
+   * was never confirmed (`email_not_confirmed`, #3833); the member types it
+   * on s01.
    */
   resendConfirmation: (input: { email: string }) => Promise<void>;
   /**
@@ -197,11 +208,13 @@ function readAuthParams(url: string): {
 }
 
 /**
- * Where an email link (magic link, the confirmation resend) or a provider
- * return sends the member back into the app. The hosted Magic Link template
- * appends `&token_hash=…&type=magiclink` onto `{{ .RedirectTo }}`. Web's
- * callback already has `?next=`; this URL must also carry `?` or the `&`
- * produces `frapp:///&token_hash=`.
+ * Where a provider return sends the member back into the app, and the link
+ * production's transition-era templates still print beside the code
+ * (#6134): those append `&token_hash=…&type=magiclink` onto
+ * `{{ .RedirectTo }}`, so this URL must carry `?` or the `&` produces
+ * `frapp:///&token_hash=`. Once production's templates are code-only, email
+ * sends need no redirect at all, and #6136, which deletes the link
+ * handling here, drops it from them.
  */
 function appRedirectTo(): string {
   const redirectTo = Linking.createURL("/");
@@ -486,8 +499,8 @@ export function AuthSessionProvider({
     [supabase],
   );
 
-  const sendMagicLink = useCallback(
-    async ({ email }: { email: string }) => {
+  const sendEmailCode = useCallback(
+    async ({ email, screen = "/sign-in" }: { email: string; screen?: string }) => {
       if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
       // A fresh request supersedes whatever the last dead link reported.
       setCallbackError(null);
@@ -496,9 +509,11 @@ export function AuthSessionProvider({
         options: { emailRedirectTo: appRedirectTo() },
       });
       if (error) {
+        // Named for the magic link this email carried until #6134, so one
+        // series spans the builds still installed.
         reportAuthFailure({
           flow: "magic_link_send",
-          screen: "/sign-in",
+          screen,
           error,
         });
         throw error;
@@ -508,7 +523,15 @@ export function AuthSessionProvider({
   );
 
   const verifyEmailCode = useCallback(
-    async ({ email, code }: { email: string; code: string }) => {
+    async ({
+      email,
+      code,
+      screen = "/join",
+    }: {
+      email: string;
+      code: string;
+      screen?: string;
+    }) => {
       if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
       setCallbackError(null);
       const { error } = await supabase.auth.verifyOtp({
@@ -521,7 +544,7 @@ export function AuthSessionProvider({
         if (!describeEmailCodeError(error).wrongCode) {
           reportAuthFailure({
             flow: "email_code_verify",
-            screen: "/join",
+            screen,
             error,
           });
         }
@@ -700,7 +723,7 @@ export function AuthSessionProvider({
       isConfigured: configured,
       callbackError,
       signInWithPassword,
-      sendMagicLink,
+      sendEmailCode,
       verifyEmailCode,
       resendConfirmation,
       signInWithOAuthProvider,
@@ -712,7 +735,7 @@ export function AuthSessionProvider({
       configured,
       isChapterResolving,
       resendConfirmation,
-      sendMagicLink,
+      sendEmailCode,
       session?.user?.email,
       signInWithPassword,
       signInWithOAuthProvider,

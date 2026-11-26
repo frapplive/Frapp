@@ -19,11 +19,11 @@ came with #2302 (PR #2611).
 | Sign in (`/(auth)/sign-in`) | First view | The phone's own account leads as the one filled button: Continue with Apple then Continue with Google on iOS; Continue with Google on Android, then Continue with email, then Other ways to sign in. No Apple button on Android until Other ways to sign in is tapped |
 | Sign in (`/(auth)/sign-in`) | Other ways to sign in (Android) | Reveals Continue with Apple and the Hide My Email hint; an account made with Apple on an iPhone signs in through Apple's web page |
 | Sign in (`/(auth)/sign-in`) | Continue with email, then back | Opens the email form titled "Sign in with email"; the gold ‹ Back row, and on Android the system back button, return to the first view without leaving the app |
-| Sign in (`/(auth)/sign-in`) | Password / Magic link mode chips (after Continue with email) | Toggles the gold selected-mode styling; password field shows in Password mode only |
+| Sign in (`/(auth)/sign-in`) | Password / Email code mode chips (after Continue with email) | Toggles the gold selected-mode styling; password field shows in Password mode only |
 | Sign in (`/(auth)/sign-in`) | Sign in (Password mode) | Authenticates against Supabase; the auth gate then routes to join (zero memberships), the Terms prompt (a member who hasn't accepted the current Terms, which every seeded account is after a reseed), welcome (`has_completed_onboarding === false`), or `/` |
 | Sign in (`/(auth)/sign-in`) | Sign in, wrong password | Shows the Supabase error inline; stays on the screen |
-| Sign in (`/(auth)/sign-in`) | Email me a link (Magic link mode) | Confirms "Link sent to …"; tapping the emailed link on this device signs in and the auth gate picks join / Terms / welcome / tabs |
-| Sign in (`/(auth)/sign-in`) | Tap an already-used or expired magic link | Opens the app and shows the reason inline — never a silent return to a blank sign-in form |
+| Sign in (`/(auth)/sign-in`) | Email me a code (Email code mode) | Opens "Check your email" with the code box; iOS offers the code from Mail above the keyboard; six digits sign in and the auth gate picks join / Terms / welcome / tabs. A wrong code reads "That code didn't work…" and clears; Send a new code counts down 60s |
+| Sign in (`/(auth)/sign-in`) | Sign in with the password of an account never confirmed | Opens "Confirm your email" with the code box and Send a new code; the code from the sign-up email signs in |
 | Settings → Account (`/(app)/preferences?page=account`) | Sign out | Clears the session + routes to sign-in; relaunching the app does not restore it |
 | Sign in (`/(auth)/sign-in`) | Fresh install after tapping Get Frapp on web `/join` (#5626) | "Joining a chapter?" strip above the ways in; one Paste tap (no "Allow Paste" prompt on iOS 16+) opens the invite card; a non-invite paste says "That isn't a Frapp invite" in the strip's line, nothing moves |
 | Join (`/(auth)/join`) | First view | Asks "Joining a chapter?" with Paste pinned and "Starting a chapter? Create a chapter" under it; no invite field; `Signed in as <email> · Sign out` under the header, and no Delete account until Account is tapped |
@@ -51,8 +51,7 @@ came with #2302 (PR #2611).
 | Create chapter (`/(auth)/create-chapter`) | Share invite (the gold primary), Skip for now / Go to chat (the quiet line under it) | Each Share invite press mints a link (`POST /v1/invites`) and opens the share sheet with it; once sent it lists under Shared as Link n. On iOS a sheet closed without sending keeps its link for the next press and lists nothing; Android's chooser can't report that, so a backed-out chooser lists its link too (expected). The quiet line replaces into `/` |
 | Invite members (`/invite`) | As a President: You › Invite members, Directory's +, the tab bar's + › Invite, Chat home's Invite members line | Each opens Invite members (back capsule reads You, Directory, the tab the + was opened over, Chat; the edge swipe and Android back pop to the same screen). Invite by email: typing an address and pressing Send invite (chapter accent) emails it web's invite and lists it under Invited as Pending. Share invite opens the share sheet with "Join <chapter> on Frapp" and a fresh link (a Mail target gets that line as its subject); the link lists under Invited as Invite link and turns Joined after it is redeemed. Tapping a pending row offers Share link, Send again (emailed only) and Revoke invite. As a Member none of the four doors is drawn |
 
-Magic-link rows additionally need `frapp://` allowlisted in Supabase Auth →
-URL Configuration (#765), or the link opens the web app instead.
+Email codes need no redirect (#6134), so they work under Expo Go too.
 
 ## 2) Primary tab routes
 
