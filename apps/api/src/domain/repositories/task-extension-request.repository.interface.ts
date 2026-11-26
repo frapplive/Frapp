@@ -52,6 +52,7 @@ export interface ITaskExtensionRequestRepository {
   listPending(
     chapterId: string,
     limit: number,
+    exceptRequester: string,
   ): Promise<TaskExtensionRequest[]>;
   /**
    * Moves a waiting request to its decision, as a compare-and-set on

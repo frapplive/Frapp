@@ -375,6 +375,93 @@ describe('TaskExtensionService (#6096)', () => {
     });
   });
 
+  describe('the checks the review asked for', () => {
+    it('refuses a day already over everywhere, and takes today until it is', async () => {
+      taskRepo.findById.mockResolvedValue(task({ due_date: day(-3) }));
+      await expect(ask({ dueDate: day(-2) })).rejects.toThrow(
+        'Ask for a due that is still to come',
+      );
+      // Today still counts while any zone is in it (an evening in the
+      // Americas is already tomorrow in UTC).
+      const result = await ask({ dueDate: day(0) });
+      expect(result.extension).toBeDefined();
+    });
+
+    it('counts only an approved previous copy as back to back', async () => {
+      taskRepo.findById.mockResolvedValue(
+        task({ series_id: 'series-1', occurrence_date: day(1) }),
+      );
+      requests.previousSeriesCopyId.mockResolvedValue('task-0');
+      requests.listForTask.mockImplementation((_c, taskId: string) =>
+        Promise.resolve(
+          taskId === 'task-0' ? [stored({ status: 'declined' })] : [],
+        ),
+      );
+
+      const result = await ask();
+
+      expect(result.extension.status).toBe('approved');
+    });
+
+    it("doesn't count a previous assignee's request as this member's first", async () => {
+      requests.listForTask.mockResolvedValue([
+        stored({ status: 'declined', requester_id: 'someone-before' }),
+      ]);
+
+      const result = await ask();
+
+      expect(result.extension.status).toBe('approved');
+    });
+
+    it('closes an ask an officer overtook while AI judged it', async () => {
+      taskRepo.findById
+        .mockResolvedValueOnce(task())
+        .mockResolvedValueOnce(task({ due_date: day(5) }));
+
+      await expect(ask()).rejects.toBeInstanceOf(ConflictException);
+      expect(requests.decide).toHaveBeenCalledWith(
+        CHAPTER,
+        'req-1',
+        expect.objectContaining({ status: 'withdrawn' }),
+      );
+      expect(taskService.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps an approval whose due moved before the edit failed', async () => {
+      taskService.update.mockRejectedValue(new Error('read back failed'));
+      taskRepo.findById
+        .mockResolvedValueOnce(task())
+        .mockResolvedValueOnce(task())
+        .mockResolvedValueOnce(task({ due_date: day(2) }));
+
+      const result = await ask();
+
+      expect(result.extension.status).toBe('approved');
+      expect(requests.reopen).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first error when putting the request back fails too', async () => {
+      taskService.update.mockRejectedValue(new BadRequestException('first'));
+      requests.reopen.mockRejectedValue(new Error('second'));
+
+      await expect(
+        service.approve(CHAPTER, 'task-1', 'req-1', OTHER_OFFICER),
+      ).rejects.toThrow('first');
+    });
+
+    it('blocks a member whose 3rd extension in 30 days an officer approves', async () => {
+      requests.countApprovedSince.mockResolvedValue(3);
+
+      await service.approve(CHAPTER, 'task-1', 'req-1', OTHER_OFFICER);
+
+      expect(requests.block).toHaveBeenCalledWith(
+        CHAPTER,
+        MEMBER,
+        expect.any(String),
+      );
+    });
+  });
+
   describe('who hears of a waiting request', () => {
     beforeEach(() => {
       reasons.judge.mockResolvedValue({ verdict: null });

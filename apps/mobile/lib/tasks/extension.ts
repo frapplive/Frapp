@@ -14,9 +14,9 @@ import {
   parseBareDateLocalNoon,
 } from "@repo/formatting";
 import {
+  extensionDecidedLine,
   extensionDueWords,
   type RequestTaskExtensionResult,
-  type TaskExtensionSummary,
 } from "@repo/hooks";
 import {
   cantAskForMoreTime,
@@ -67,22 +67,8 @@ export function rowDueUrgentForViewer(
   return rowCantAskForMoreTime(row, viewerId) === "fixed";
 }
 
-/** "Extended to Saturday · approved automatically", or "Not extended: …". */
-export function extensionDecidedLine(
-  extension: TaskExtensionSummary,
-  now: Date = new Date(),
-): string | null {
-  if (extension.status === "approved") {
-    const to = `Extended to ${extensionDueWords(extension, now)}`;
-    return extension.auto_approved ? `${to} · approved automatically` : to;
-  }
-  if (extension.status === "declined") {
-    return extension.decline_reason
-      ? `${TASK_EXTENSION_COPY.declined}: ${extension.decline_reason}`
-      : TASK_EXTENSION_COPY.declined;
-  }
-  return null;
-}
+/** Shared with web (`@repo/hooks`). */
+export { extensionDecidedLine };
 
 /** One line under the task's facts; `danger` draws in the red. */
 export interface ExtensionLine {

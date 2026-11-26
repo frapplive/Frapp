@@ -50,6 +50,7 @@ const activity = (extensions: ActivityTaskExtension[]) =>
 describe("requests for more time in Activity (#6096)", () => {
   it("lists each as a row that opens, naming who asks, the task and why", () => {
     const [row] = activityReviewRows(activity([extension()]), NOW);
+    if (!row) throw new Error("no row");
     expect(row).toMatchObject({
       kind: "extension",
       key: "needs:extension:req-1",

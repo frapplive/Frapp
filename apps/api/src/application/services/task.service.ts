@@ -691,7 +691,18 @@ export class TaskService {
       this.groupSummaries(chapterId, tasks),
       this.openTaskRepo.findClaimedFrom(chapterId, ids),
       this.followerNames(chapterId, tasks),
-      this.extensionRepo.latestForTasks(chapterId, ids),
+      // A failed read of the requests costs the line, never the task read.
+      this.extensionRepo
+        .latestForTasks(chapterId, ids)
+        .catch((error: unknown) => {
+          reportCaughtFailure(this.logger, {
+            level: 'warning',
+            site: 'task-read-extensions',
+            message: `could not read extension requests for ${ids.length} tasks`,
+            error,
+          });
+          return new Map<string, TaskExtensionRequest>();
+        }),
     ]);
     const byTask = new Map<string, TaskSubtask[]>();
     for (const subtask of subtasks) {
@@ -708,7 +719,13 @@ export class TaskService {
       followed_by_name: task.followed_by
         ? (followers.get(task.followed_by) ?? null)
         : null,
-      extension: extensionSummary(extensions.get(task.id)),
+      // Only the current assignee's own request (#6096): after a hand-over
+      // the old assignee's reason and its answer aren't the new one's.
+      extension: extensionSummary(
+        extensions.get(task.id)?.requester_id === task.assignee_id
+          ? extensions.get(task.id)
+          : null,
+      ),
     }));
   }
 
@@ -723,9 +740,13 @@ export class TaskService {
     viewerId: string,
     limit: number,
   ): Promise<{ request: TaskExtensionRequest; task: TaskView }[]> {
-    const pending = (
-      await this.extensionRepo.listPending(chapterId, limit)
-    ).filter((row) => row.requester_id !== viewerId);
+    // The viewer's own requests are left out by the read itself, so they
+    // never take one of the `limit` places.
+    const pending = await this.extensionRepo.listPending(
+      chapterId,
+      limit,
+      viewerId,
+    );
     if (pending.length === 0) return [];
     const tasks = await this.taskRepo.findByIds(
       chapterId,
@@ -751,7 +772,10 @@ export class TaskService {
     views: T[],
   ): Promise<T[]> {
     if (!views.some((view) => view.assignee_id === userId)) return views;
-    const standing = await this.extensionRepo.standing(chapterId, userId);
+    // Unknown counts as able to ask: the API still refuses a blocked ask.
+    const standing = await this.extensionRepo
+      .standing(chapterId, userId)
+      .catch(() => null);
     const blocked = !!standing?.blocked_at;
     return views.map((view) =>
       view.assignee_id === userId
@@ -2122,16 +2146,7 @@ export class TaskService {
       'due_at' in patch ||
       patch.fixed_deadline === true
     ) {
-      try {
-        await this.extensionRepo.withdrawPending(chapterId, id);
-      } catch (error) {
-        reportCaughtFailure(this.logger, {
-          level: 'warning',
-          site: 'task-edit-withdraw-extension',
-          message: `could not close the waiting extension on task ${id}`,
-          error,
-        });
-      }
+      await this.closeWaitingExtension(chapterId, id);
     }
 
     if (reassigned || 'due_date' in patch || 'due_at' in patch) {
@@ -2476,11 +2491,36 @@ export class TaskService {
       );
     }
 
+    // A request for more time waiting on it no longer fits a task marked
+    // done (#6096): it is closed, not left for an officer to find.
+    await this.closeWaitingExtension(chapterId, task.id);
     await this.notifyTaskCompleted(updated, userId, chapterId, {
       photoCount: photos.length,
       resubmitted: !!task.sent_back_at,
     });
     return this.viewWithPhotos(chapterId, updated);
+  }
+
+  /**
+   * Closes the task's waiting request for more time, as `withdrawn` (#6096,
+   * tasks.md § Asking for more time): the task was marked done, re-dated,
+   * given a fixed deadline or handed over first. The change stands if it
+   * fails; the request is then closed when an officer acts on it.
+   */
+  private async closeWaitingExtension(
+    chapterId: string,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      await this.extensionRepo.withdrawPending(chapterId, taskId);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'task-withdraw-extension',
+        message: `could not close the waiting extension on task ${taskId}`,
+        error,
+      });
+    }
   }
 
   /**

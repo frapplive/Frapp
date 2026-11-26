@@ -85,11 +85,13 @@ export class SupabaseTaskExtensionRequestRepository implements ITaskExtensionReq
   async listPending(
     chapterId: string,
     limit: number,
+    exceptRequester: string,
   ): Promise<TaskExtensionRequest[]> {
     const { data, error } = await this.supabase
       .from('task_extension_requests')
       .select('*')
       .eq('chapter_id', chapterId)
+      .neq('requester_id', exceptRequester)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
       .limit(limit);

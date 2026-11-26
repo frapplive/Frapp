@@ -151,6 +151,20 @@ describe("TaskRow — the overdue colour", () => {
       signetDarkTokens.color.text.mutedForeground,
     );
   });
+
+  it("draws a fixed deadline's due in the red from the start (#6096)", () => {
+    const tree = render(
+      <TaskRow
+        row={row({ dueDate: "2026-09-30", fixedDeadline: true })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
+    );
+
+    expect(styleOfText(tree, "Due September 30").color).toBe(
+      signetDarkTokens.color.semantic.destructiveText,
+    );
+  });
 });
 
 describe("TaskRow — a task a group follows (#5473)", () => {

@@ -333,19 +333,7 @@ export function taskSubmittedCopy(
       ? 'resubmitted'
       : 'submitted';
   const note = task.completion_note?.trim() || null;
-  // Cut by character, not UTF-16 unit, so the cut never splits an emoji
-  // (as `chat-push-preview.ts` cuts).
-  const chars = note ? Array.from(note) : [];
-  const quoted = note
-    ? `"${
-        chars.length > SUBMITTED_REPLY_MAX
-          ? `${chars
-              .slice(0, SUBMITTED_REPLY_MAX - 1)
-              .join('')
-              .trimEnd()}…`
-          : note
-      }"`
-    : null;
+  const quoted = note ? quotedLine(note, SUBMITTED_REPLY_MAX) : null;
   const points = task.point_reward ?? 0;
   return {
     title: `${name} ${verb}: ${task.title}`,
@@ -368,7 +356,11 @@ export const TASK_EXTENSION_PUSH_THREAD = 'tasks:extension';
 /** The longest reason an "asks for more time" push quotes before it is cut. */
 const EXTENSION_REASON_MAX = 60;
 
-/** Quotes a member's words for a push, cut by character, never mid-emoji. */
+/**
+ * Quotes a member's words for a push, cut at `max` characters. Cut by
+ * character, not UTF-16 unit, so the cut never splits an emoji (as
+ * `chat-push-preview.ts` cuts).
+ */
 function quotedLine(text: string, max: number): string {
   const chars = Array.from(text.trim());
   return `"${

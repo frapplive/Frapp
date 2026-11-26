@@ -5,6 +5,8 @@ import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { useChapterScope } from "./chapter-scope";
 import { invalidateTask } from "./use-tasks";
+import { TASK_EXTENSION_COPY } from "@repo/validation";
+import { extensionDueWords } from "./activity-rows";
 
 /**
  * Asking for more time on a task (#6096, `spec/behavior/tasks.md` § Asking
@@ -22,6 +24,31 @@ export type TaskExtensionSummary =
 
 export type RequestTaskExtensionResult =
   components["schemas"]["RequestTaskExtensionResponseDto"];
+
+/**
+ * What a task says about its latest decided request, the same on the web
+ * panel and the phone's task screen: "Extended to Saturday · approved
+ * automatically", or "Not extended: <the officer's reason>". Null while it
+ * waits, or when it was withdrawn.
+ */
+export function extensionDecidedLine(
+  extension: Pick<
+    TaskExtensionSummary,
+    "status" | "auto_approved" | "decline_reason" | "to_due_date" | "to_due_at"
+  >,
+  now: Date = new Date(),
+): string | null {
+  if (extension.status === "approved") {
+    const to = `Extended to ${extensionDueWords(extension, now)}`;
+    return extension.auto_approved ? `${to} · approved automatically` : to;
+  }
+  if (extension.status === "declined") {
+    return extension.decline_reason
+      ? `${TASK_EXTENSION_COPY.declined}: ${extension.decline_reason}`
+      : TASK_EXTENSION_COPY.declined;
+  }
+  return null;
+}
 
 export const taskExtensionKeys = {
   blocked: (chapterId: string | null) =>

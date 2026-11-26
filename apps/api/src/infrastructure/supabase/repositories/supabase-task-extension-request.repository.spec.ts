@@ -85,9 +85,14 @@ describe('SupabaseTaskExtensionRequestRepository — tenant scope', () => {
     expect(latest.get(TASK)?.id).toBe('req-b');
 
     const pending = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.listPending(CHAPTER_B, 25),
+      repo.listPending(CHAPTER_B, 25, 'officer-elsewhere'),
     );
     expect(pending.map((row) => row.id)).toEqual(['req-b']);
+    // The viewer's own requests take none of the places.
+    const own = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.listPending(CHAPTER_B, 25, USER_SHARED),
+    );
+    expect(own).toEqual([]);
   });
 
   it('decides only the caller chapter request', async () => {

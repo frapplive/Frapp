@@ -11862,7 +11862,7 @@ export interface components {
         };
         RequestTaskExtensionResponseDto: {
             extension: components["schemas"]["TaskExtensionSummaryDto"];
-            /** @description True when this extension was the 3rd in 30 days: the member can't ask again until an officer restores it. */
+            /** @description True when this extension made 3 in 30 days: the member can't ask again until an officer restores it. */
             now_blocked: boolean;
         };
         TaskExtensionRequestDto: {

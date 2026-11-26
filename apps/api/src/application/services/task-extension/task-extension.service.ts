@@ -61,6 +61,8 @@ export const TASK_EXTENSION_ERRORS = {
 } as const;
 
 const DAY_MS = 86_400_000;
+/** How far behind UTC the last zone's day ends (UTC-12). */
+const LAST_ZONE_MS = 12 * 3_600_000;
 
 export interface RequestExtensionInput {
   chapterId: string;
@@ -142,7 +144,11 @@ export class TaskExtensionService {
 
     const earlier = (
       await this.requests.listForTask(chapterId, task.id)
-    ).filter((row) => row.status !== 'withdrawn');
+    ).filter(
+      // This member's own: a previous assignee's request is theirs, not a
+      // first or second request of this one's.
+      (row) => row.status !== 'withdrawn' && row.requester_id === userId,
+    );
     if (earlier.some((row) => row.status === 'pending')) {
       throw new ConflictException({
         code: TASK_EXTENSION_ERRORS.waiting,
@@ -200,6 +206,23 @@ export class TaskExtensionService {
       return { extension: extensionSummary(created)!, now_blocked: false };
     }
 
+    // The AI call takes seconds: an officer may have moved the due, fixed
+    // it or handed the task over meanwhile, before this request existed for
+    // their edit to close. Only a task still as asked about is extended.
+    const fresh = await this.taskRepo.findById(task.id, chapterId);
+    if (!fresh || !stillFits(fresh, created)) {
+      await this.requests.decide(chapterId, created.id, {
+        status: 'withdrawn',
+        decided_by: null,
+        decided_at: new Date().toISOString(),
+      });
+      throw new ConflictException({
+        code: TASK_EXTENSION_ERRORS.stale,
+        message:
+          'The task changed while you were asking. Look again and retry.',
+      });
+    }
+
     const approved = await this.requests.decide(chapterId, created.id, {
       status: 'approved',
       decided_by: null,
@@ -218,7 +241,7 @@ export class TaskExtensionService {
       await this.moveDue(task, approved, task.created_by);
     } catch (error) {
       // The due didn't move: the request waits on an officer instead.
-      await this.requests.reopen(chapterId, created.id);
+      await this.reopenQuietly(chapterId, created.id);
       reportCaughtFailure(this.logger, {
         level: 'warning',
         site: 'task-extension-auto-approve',
@@ -253,7 +276,7 @@ export class TaskExtensionService {
     try {
       await this.moveDue(task, approved, officerId);
     } catch (error) {
-      await this.requests.reopen(chapterId, request.id);
+      await this.reopenQuietly(chapterId, request.id);
       throw error;
     }
     await this.blockIfOverLimit(chapterId, request.requester_id);
@@ -330,9 +353,12 @@ export class TaskExtensionService {
     if (hours === null || hours <= 0) {
       throw new BadRequestException('Ask for a due later than the one it has');
     }
+    // A day ends at the member's midnight, which the server doesn't know:
+    // the day still counts until it has ended everywhere (UTC-12), so an
+    // evening in the Americas can still ask for today.
     const endOf = dueAt
       ? Date.parse(dueAt)
-      : Date.parse(`${dueDate}T00:00:00.000Z`) + DAY_MS;
+      : Date.parse(`${dueDate}T00:00:00.000Z`) + DAY_MS + LAST_ZONE_MS;
     if (endOf <= Date.now()) {
       throw new BadRequestException('Ask for a due that is still to come');
     }
@@ -405,6 +431,24 @@ export class TaskExtensionService {
     return { task, request };
   }
 
+  /**
+   * Puts an approval whose due didn't move back to waiting. Its own failure
+   * is reported, never thrown, so the error that stopped the move is the
+   * one the caller sees.
+   */
+  private async reopenQuietly(chapterId: string, id: string): Promise<void> {
+    try {
+      await this.requests.reopen(chapterId, id);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'error',
+        site: 'task-extension-reopen',
+        message: `extension ${id} is approved but its due did not move`,
+        error,
+      });
+    }
+  }
+
   private alreadyDecided(): ConflictException {
     return new ConflictException('Someone already answered this request');
   }
@@ -415,10 +459,20 @@ export class TaskExtensionService {
     request: TaskExtensionRequest,
     actorId: string,
   ): Promise<void> {
-    await this.taskService.update(task.id, task.chapter_id, actorId, {
-      due_date: request.to_due_date,
-      due_at: request.to_due_at,
-    });
+    try {
+      await this.taskService.update(task.id, task.chapter_id, actorId, {
+        due_date: request.to_due_date,
+        due_at: request.to_due_at,
+      });
+    } catch (error) {
+      // The edit writes before it reads the task back, so a failure may
+      // come after the due already moved: only a due still unmoved fails.
+      const now = await this.taskRepo
+        .findById(task.id, task.chapter_id)
+        .catch(() => null);
+      if (now && dueIs(now, request.to_due_date, request.to_due_at)) return;
+      throw error;
+    }
   }
 
   /**
@@ -565,4 +619,14 @@ export class TaskExtensionService {
       about: `task ${task.id} (extension ${request.status})`,
     });
   }
+}
+
+/** Whether a task is due exactly as given. */
+function dueIs(task: Task, dueDate: string, dueAt: string | null): boolean {
+  const at = (value: string | null) =>
+    value ? new Date(value).toISOString() : null;
+  return (
+    (task.due_date?.slice(0, 10) ?? null) === dueDate &&
+    at(task.due_at) === at(dueAt)
+  );
 }

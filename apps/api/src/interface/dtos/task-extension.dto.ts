@@ -11,6 +11,8 @@ import {
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  TASK_EXTENSION_BLOCK_COUNT,
+  TASK_EXTENSION_BLOCK_DAYS,
   TASK_EXTENSION_DECLINE_MAX_LENGTH,
   TASK_EXTENSION_NEEDS_OFFICER,
   TASK_EXTENSION_REASON_MAX_LENGTH,
@@ -162,8 +164,7 @@ export class RequestTaskExtensionResponseDto {
   extension: TaskExtensionSummaryDto;
 
   @ApiProperty({
-    description:
-      "True when this extension was the 3rd in 30 days: the member can't ask again until an officer restores it.",
+    description: `True when this extension made ${TASK_EXTENSION_BLOCK_COUNT} in ${TASK_EXTENSION_BLOCK_DAYS} days: the member can't ask again until an officer restores it.`,
   })
   now_blocked: boolean;
 }

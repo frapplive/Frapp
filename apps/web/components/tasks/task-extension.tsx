@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import {
+  extensionDecidedLine,
   extensionDueWords,
   useRequestTaskExtension,
-  type TaskExtensionSummary,
 } from "@repo/hooks";
 import { dueEntryFields, dueEntryFromTask } from "@repo/formatting";
 import {
@@ -68,7 +68,7 @@ export function taskExtensionView(
   const lines: TaskExtensionView["lines"] = [];
   const latest = task.extension ?? null;
   if (latest && (isMine || canManage)) {
-    const decided = decidedLine(latest, now);
+    const decided = extensionDecidedLine(latest, now);
     if (decided) lines.push({ text: decided, tone: "muted" });
   }
   if (cant === "fixed") {
@@ -79,20 +79,6 @@ export function taskExtensionView(
     lines.push({ text: TASK_EXTENSION_COPY.blocked, tone: "muted" });
   }
   return { cant, urgent: cant === "fixed", lines };
-}
-
-/** "Extended to Saturday · approved automatically", or "Not extended: …". */
-function decidedLine(extension: TaskExtensionSummary, now: Date) {
-  if (extension.status === "approved") {
-    const to = `Extended to ${extensionDueWords(extension, now)}`;
-    return extension.auto_approved ? `${to} · approved automatically` : to;
-  }
-  if (extension.status === "declined") {
-    return extension.decline_reason
-      ? `${TASK_EXTENSION_COPY.declined}: ${extension.decline_reason}`
-      : TASK_EXTENSION_COPY.declined;
-  }
-  return null;
 }
 
 /**
@@ -191,7 +177,7 @@ export function AskForMoreTimeDialog({
       close();
     } catch (error) {
       setProblem(
-        getErrorMessage(error, "Couldn't send it. Try again.", {
+        getErrorMessage(error, TASK_EXTENSION_COPY.askFailed, {
           serverWritesForMembers: true,
         }),
       );

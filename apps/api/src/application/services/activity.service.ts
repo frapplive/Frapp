@@ -2115,8 +2115,19 @@ export class ActivityService {
         : Promise.resolve([]),
       // Requests for more time (#6096), for every officer as confirmations
       // are; the push goes to the task's creator and the group it is from.
+      // A failed read of them costs this list alone, not the task section.
       canManage && withExtensions
-        ? this.taskService.waitingExtensions(chapterId, userId, LIST_LIMIT)
+        ? this.taskService
+            .waitingExtensions(chapterId, userId, LIST_LIMIT)
+            .catch((error: unknown) => {
+              reportCaughtFailure(this.logger, {
+                level: 'warning',
+                site: 'activity-task-extensions',
+                message: `could not read requests for more time in ${chapterId}`,
+                error,
+              });
+              return [];
+            })
         : Promise.resolve([]),
     ]);
     const doneThisWeek = own.tasks.filter(

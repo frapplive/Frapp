@@ -71,7 +71,7 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
     key: "nudges",
     label: "Nudges on Activity",
     description:
-      "Frapp puts a short card on a member's Activity when one of their own tasks is coming due, late or sent back, with a place to start, and says thanks when they finish on time.",
+      "Frapp puts a short card on a member's Activity when one of their own tasks is coming due, late or sent back, with a place to start, and says thanks when they finish on time. It also judges a member's reason when they ask for a day more on a task; with this off, an officer decides every request.",
     short:
       "A short card on a member's Activity when one of their tasks could use a word.",
   },

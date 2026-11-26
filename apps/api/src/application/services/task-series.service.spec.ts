@@ -138,6 +138,24 @@ describe('TaskSeriesService (#5119)', () => {
       );
     });
 
+    it('fixes the deadline on the copies to come and the open one (#6096)', async () => {
+      await service.update('open', 'ch-1', 'admin-1', { fixed_deadline: true });
+
+      expect(repo.updateSeriesIfNext).toHaveBeenCalledWith(
+        'ch-1',
+        'series-1',
+        '2026-11-23',
+        { fixed_deadline: true },
+      );
+      expect(tasks.update).toHaveBeenCalledWith(
+        'open',
+        'ch-1',
+        'admin-1',
+        expect.objectContaining({ fixed_deadline: true }),
+        undefined,
+      );
+    });
+
     it('checks a new list once, and writes the open copy with it as checked', async () => {
       const checked = [
         { id: 'a', kind: 'document' as const, document_id: 'd1' },

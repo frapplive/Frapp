@@ -282,9 +282,17 @@ create table if not exists public.task_extension_requests (
                      constraint task_extension_requests_decline_len
                      check (decline_reason is null or char_length(btrim(decline_reason)) between 1 and 200),
   created_at         timestamptz not null default now(),
+  -- Later than the task's due: by the clock for a task due at a time (its
+  -- day is each reader's own, so the days may compare either way across
+  -- zones), by the day for one due by a day.
   constraint task_extension_requests_later
-    check (to_due_date >= from_due_date
-           and (to_due_at is null or from_due_at is null or to_due_at > from_due_at)),
+    check (
+      case
+        when to_due_at is not null and from_due_at is not null
+          then to_due_at > from_due_at
+        else to_due_date > from_due_date
+      end
+    ),
   constraint task_extension_requests_decided
     check ((status = 'pending') = (decided_at is null)),
   constraint task_extension_requests_decline_reason
@@ -314,6 +322,32 @@ alter table public.task_extension_requests enable row level security;
 
 comment on table public.task_extension_requests is
   'A member asking for more time on a task (#6096, tasks.md § Asking for more time). Approving moves the task''s due through the officer''s edit, so the reminders re-arm. One pending per task.';
+
+-- A member's requests go with their account (data-retention.md § AI data):
+-- the reason is their own words and `ai_note` is stored AI text about them.
+-- `anonymize_user` keeps the `users` row as a tombstone, so the foreign key's
+-- cascade never fires; this trigger on `users.deleted_at` deletes them.
+create or replace function public.task_extension_requests_drop_for_deleted_user()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+begin
+  delete from public.task_extension_requests where requester_id = new.id;
+  return new;
+end;
+$$;
+
+revoke execute on function public.task_extension_requests_drop_for_deleted_user()
+  from public, anon, authenticated;
+
+drop trigger if exists users_drop_task_extension_requests on public.users;
+create trigger users_drop_task_extension_requests
+  after update of deleted_at on public.users
+  for each row
+  when (new.deleted_at is not null and old.deleted_at is null)
+  execute function public.task_extension_requests_drop_for_deleted_user();
 
 -- 3. Losing the ability to ask -------------------------------------------------------
 

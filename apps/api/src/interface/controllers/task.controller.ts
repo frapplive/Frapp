@@ -77,7 +77,14 @@ import {
 import { TaskExtensionService } from '../../application/services/task-extension/task-extension.service';
 import { ThrottleFanOutWrite } from '../decorators/throttle-profiles.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
-import { TASK_FOLLOWER_COPY } from '@repo/validation';
+import {
+  TASK_EXTENSION_BLOCK_COUNT,
+  TASK_EXTENSION_BLOCK_DAYS,
+  TASK_FOLLOWER_COPY,
+} from '@repo/validation';
+
+/** "3 extensions in 30 days", from the limit itself (#6096). */
+const EXTENSION_LIMIT = `${TASK_EXTENSION_BLOCK_COUNT} extensions in ${TASK_EXTENSION_BLOCK_DAYS} days`;
 import { VerifySessionLocally } from '../decorators/session-check.decorator';
 
 @ApiTags('Tasks')
@@ -139,8 +146,7 @@ export class TaskController {
   @RequirePermissions(SystemPermissions.TASKS_MANAGE)
   @ApiOperation({
     summary: "Members who can't ask for more time (#6096)",
-    description:
-      'Each was granted 3 extensions in 30 days. An officer restores one with `POST /v1/tasks/extension-requests/restore`.',
+    description: `Each was granted ${EXTENSION_LIMIT}. An officer restores one with \`POST /v1/tasks/extension-requests/restore\`.`,
   })
   @ApiOkResponse({ type: [BlockedFromExtensionsDto] })
   listBlockedFromExtensions(
@@ -154,8 +160,7 @@ export class TaskController {
   @HttpCode(204)
   @ApiOperation({
     summary: 'Let a member ask for more time again (#6096)',
-    description:
-      'Clears the block 3 extensions in 30 days put on them; extensions granted before now stop counting. 404 when they could already ask.',
+    description: `Clears the block ${EXTENSION_LIMIT} put on them; extensions granted before now stop counting. 404 when they could already ask.`,
   })
   async restoreExtensions(
     @CurrentChapterId() chapterId: string,
@@ -440,8 +445,7 @@ export class TaskController {
   @Post(':id/extension-requests')
   @ApiOperation({
     summary: 'Ask for more time on a task (#6096)',
-    description:
-      "The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 `task.extension_fixed_deadline`), while they may ask (403 `task.extension_blocked` after 3 extensions in 30 days). One waiting request per task (409 `task.extension_waiting`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.",
+    description: `The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 \`task.extension_fixed_deadline\`), while they may ask (403 \`task.extension_blocked\` after ${EXTENSION_LIMIT}). One waiting request per task (409 \`task.extension_waiting\`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.`,
   })
   @ApiCreatedResponse({ type: RequestTaskExtensionResponseDto })
   @FeatureEvent(
