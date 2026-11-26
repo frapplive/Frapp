@@ -255,6 +255,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useRejectTask: () => ({ mutateAsync: rejectTaskMutate, isPending: false }),
   useDeleteTask: () => ({ mutateAsync: deleteTaskMutate, isPending: false }),
   useUpdateTask: () => ({ mutateAsync: updateTaskMutate, isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAddSubtask: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteSubtask: () => ({ mutate: vi.fn(), isPending: false }),
   useSetSubtaskDone: () => ({ mutate: vi.fn(), isPending: false }),
@@ -1601,6 +1602,59 @@ describe("TasksBoard editing a task (#4296)", () => {
         body: { due_date: null, due_at: null },
       }),
     );
+  });
+
+  it("saves Fixed deadline the moment it is switched (#6096)", async () => {
+    const user = userEvent.setup();
+    render(<TasksBoard part="everyone" />);
+
+    const panel = await openPanel(user, "Sweep the chapter room");
+    await user.click(
+      within(panel).getByRole("switch", { name: "Fixed deadline" }),
+    );
+    await waitFor(() =>
+      expect(updateTaskMutate).toHaveBeenCalledWith({
+        id: "task-todo",
+        body: { fixed_deadline: true },
+      }),
+    );
+    // An officer moves the due themselves: no Ask for more time.
+    expect(
+      within(panel).queryByRole("button", { name: "Ask for more time" }),
+    ).toBeNull();
+  });
+
+  it("offers its assignee Ask for more time, and a fixed deadline in red in its place (#6096)", async () => {
+    const user = userEvent.setup();
+    permissionsRef.current = ["members:view"];
+    tasksRef.current = TASKS.map((row) =>
+      row.id === "task-in-progress" ? { ...row, fixed_deadline: true } : row,
+    );
+    render(<TasksBoard part="everyone" />);
+
+    await user.click(screen.getAllByText("Sweep the chapter room")[0]!);
+    let panel = await screen.findByRole("dialog", {
+      name: "Sweep the chapter room",
+    });
+    expect(
+      within(panel).getByRole("button", { name: "Ask for more time" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("switch", { name: "Fixed deadline" }),
+    ).toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getAllByText("Draft the rush calendar")[0]!);
+    panel = await screen.findByRole("dialog", {
+      name: "Draft the rush calendar",
+    });
+    expect(
+      within(panel).queryByRole("button", { name: "Ask for more time" }),
+    ).toBeNull();
+    expect(
+      within(panel).getByText("Fixed deadline · no extensions"),
+    ).toHaveClass("text-destructive-text");
   });
 
   it("saves points on their own when the field loses focus", async () => {
