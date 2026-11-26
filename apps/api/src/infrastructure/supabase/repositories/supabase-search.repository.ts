@@ -172,7 +172,9 @@ export class SupabaseSearchRepository implements ISearchRepository {
    * column to restrict the parent rows; `users.display_name_search` then matches
    * through `idx_users_display_name_search`. The roster is never fetched, the
    * match happens in SQL, and `limit` is applied by the database instead of by
-   * the length of whatever the previous query happened to return.
+   * the length of whatever the previous query happened to return. The embed
+   * names `members_user_id_fkey` because `members.chat_timeout_by` also
+   * reaches `users` (#6079); a bare one is refused as ambiguous (#6121).
    *
    * Chapter scoping is the outer `.eq('chapter_id', …)`: the join filters
    * WITHIN the chapter's members, so a name that matches in another chapter
@@ -192,7 +194,9 @@ export class SupabaseSearchRepository implements ISearchRepository {
   ): Promise<SearchMemberHit[]> {
     const { data, error } = (await this.supabase
       .from('members')
-      .select('id, user_id, chapter_id, users!inner(id, display_name, email)')
+      .select(
+        'id, user_id, chapter_id, users!members_user_id_fkey!inner(id, display_name, email)',
+      )
       .eq('chapter_id', chapterId)
       .textSearch('users.display_name_search', query, TEXT_SEARCH)
       .limit(limit)) as QueryResult<{

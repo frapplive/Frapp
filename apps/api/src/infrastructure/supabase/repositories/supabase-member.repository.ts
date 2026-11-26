@@ -45,7 +45,7 @@ export function memberReadKey(userId: string, chapterId: string): string {
 }
 
 /**
- * The wire shape of the `users!inner(id, display_name)` embed, written out
+ * The wire shape of the `users!members_user_id_fkey!inner(id, display_name)` embed, written out
  * because the types shim cannot infer it. Every field is optional: this
  * describes what PostgREST *might* hand back, and
  * `findChapterMemberIdentities` narrows it before anything downstream sees it.
@@ -113,14 +113,18 @@ export class SupabaseMemberRepository implements IMemberRepository {
   async findChapterMemberIdentities(
     chapterId: string,
   ): Promise<ChapterMemberIdentity[]> {
-    // `users!inner(...)` rather than a second round trip through
+    // The `users` embed rather than a second round trip through
     // `userRepo.findByIds`: the inner join both drops members whose user row is
     // gone and keeps the chapter predicate in the same statement as the lookup,
     // which is this repo's multi-tenancy rule (same shape as the
-    // `chat_channels!inner(chapter_id)` embeds elsewhere).
+    // `chat_channels!inner(chapter_id)` embeds elsewhere). The FK is named
+    // because `members.chat_timeout_by` also reaches `users` (#6079), and a
+    // bare `users!inner(...)` is then refused as ambiguous (PGRST201, #6121).
     const { data, error } = await this.supabase
       .from('members')
-      .select('user_id, role_ids, users!inner(id, display_name)')
+      .select(
+        'user_id, role_ids, users!members_user_id_fkey!inner(id, display_name)',
+      )
       .eq('chapter_id', chapterId);
     if (error) throw new SupabaseQueryError(error);
 
