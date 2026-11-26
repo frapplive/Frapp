@@ -107,6 +107,9 @@ export const SUBSCRIPTION_REFUSAL_COPY = {
   /** `POST /v1/documents/upload-url` and `POST /v1/documents`, s21 (#3399). */
   document:
     "Your chapter's subscription isn't active, so documents can't be uploaded. An officer can sort this out for the chapter.",
+  /** `POST /v1/google-drive/sync`, the Drive folder's Sync now (#5583). */
+  drive:
+    "Your chapter's subscription isn't active, so Google Drive can't sync. An officer can sort this out for the chapter.",
   /**
    * Pause, resume, heartbeat and stop — a session that is ALREADY RUNNING.
    *

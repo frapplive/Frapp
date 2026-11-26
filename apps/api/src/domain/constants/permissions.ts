@@ -25,6 +25,10 @@ export const SystemPermissions = {
   MEMBERS_INVITE: 'members:invite',
   MEMBERS_REMOVE: 'members:remove',
   MEMBERS_VIEW: 'members:view',
+  // Chat timeouts (#6006): stop a member ranked below you from posting or
+  // reacting in the chapter's channels for a while. `ChatTimeoutService`
+  // applies the rank rule; `ChannelAccessService` enforces it.
+  MEMBERS_TIMEOUT: 'members:timeout',
 
   POINTS_ADJUST: 'points:adjust',
   POINTS_VIEW_ALL: 'points:view_all',
@@ -201,6 +205,10 @@ const OFFICER_DEFAULT_PERMISSIONS = [
   SystemPermissions.TASKS_MANAGE,
   SystemPermissions.CHANNELS_CREATE,
   SystemPermissions.CHANNELS_MANAGE,
+  // Chat timeouts (#6006): the officers who can already delete anyone's
+  // message. Migration `20261125014212_chat_timeouts.sql` gives it to every
+  // existing tier and role that manages channels.
+  SystemPermissions.MEMBERS_TIMEOUT,
   // Groups (#4076); migration `20261113040007_chapter_groups.sql` gives it
   // to every existing tier and role that manages roles or channels.
   SystemPermissions.GROUPS_MANAGE,

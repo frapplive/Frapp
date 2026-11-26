@@ -16,6 +16,11 @@ has no web manifest and no service worker.
 > **Updated 2026-11-24 ([#4841](https://github.com/pdcarlson/Frapp/issues/4841),
 > [#4842](https://github.com/pdcarlson/Frapp/issues/4842)).** Decisions 5 and 6 are built, each
 > with a dated note under it. Decisions 7 and 8 are not.
+>
+> **Updated 2026-11-25 ([#4843](https://github.com/frapplive/Frapp/issues/4843)).** Decisions 7
+> and 8 are built but have not run: no signed release exists until Paul adds the signing secrets
+> and the bucket ([`desktop-releases.md`](../../../docs/ops/deployment/desktop-releases.md)).
+> Decision 8 changed, with a dated note under it.
 
 **Decision.**
 
@@ -73,10 +78,26 @@ has no web manifest and no service worker.
 7. **Signed builds only.** macOS with an Apple Developer ID certificate and notarization (the
    Apple program is already paid for iOS). Windows with Azure Artifact Signing (about $9.99 a
    month), whose identity validation Paul started on 2026-11-13.
+   *Decided 2026-11-24:* Paul signs Windows builds under his own legal name (an individual
+   validation), not a company name. The name is written into each build, and an installed copy
+   refuses an update signed under another, so a later move to a company certificate needs one
+   bridging release that lists both names.
 8. **Updates come from GitHub Releases.** The repo is public, so `electron-updater` reads
    `desktop-v<version>` releases with no extra host. `beta` is a prerelease and `stable` a full
    release, and both point at production (ADR-24: channels are not environments). Promotion
    re-publishes the same signed files, and `stagingPercentage` stages a rollout.
+   *Changed 2026-11-25 by Paul ([#4843](https://github.com/frapplive/Frapp/issues/4843)):*
+   updates come from an address on frapp.live with the files in Google Cloud, not from GitHub
+   Releases. The original could not work: `electron-updater`'s GitHub provider reads the
+   repository's latest release, which here is always a web and API `v0.x` release, and with
+   prereleases on it takes the first tag that parses as a version, which `desktop-v0.2.0` does
+   not. As built: the app asks `https://api.frapp.live/v1/desktop/updates/`, and the API redirects
+   each file to a one-hour link into a private bucket in the production project. A public bucket
+   behind the load balancer was the first design and was dropped, because the organization
+   forbids public buckets and allows only frapp.live principals, and the redirect needs no
+   exception to either. Versions are plain (`0.2.0`); `beta` and `latest` are feed files, both
+   production (ADR-24 still holds), and promotion copies a kept feed onto a channel, so the same
+   signed files are promoted and `stagingPercentage` still stages a rollout.
 
 **The steps** are the sub-issues of [#2512](https://github.com/pdcarlson/Frapp/issues/2512), each its
 own PR: the shell ([#4840](https://github.com/pdcarlson/Frapp/issues/4840)), sign-in
@@ -107,6 +128,9 @@ channels that both use production, Developer ID plus Azure signing.
 - **R2 for the update feeds,** as #2512 first planned. It needs a Cloudflare account, a bucket and
   keys that GitHub Releases does not. It stays the fallback if GitHub Releases can't do something
   the rollout needs.
+  *Updated 2026-11-25 ([#4843](https://github.com/frapplive/Frapp/issues/4843)):* GitHub Releases
+  could not do it (decision 8's note), and the fallback Paul picked was a Google Cloud bucket
+  behind the API, not R2: Frapp already runs in Google Cloud, so it needs no new account or keys.
 
 **Consequences.**
 

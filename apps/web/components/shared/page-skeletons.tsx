@@ -239,7 +239,7 @@ function RowLeadBlock({ lead }: { lead: RowLead }) {
     case "rank":
       return <Skeleton className="h-[13px] w-6 shrink-0" />;
     case "tile":
-      // `CrestTile`'s 28px nav size: a chapter or council in a list (#5974).
+      // `CrestTile`'s 28px nav size: a chapter in a council's list (#5974).
       return <Skeleton className="h-7 w-7 shrink-0 rounded-[8px]" />;
     default:
       return null;

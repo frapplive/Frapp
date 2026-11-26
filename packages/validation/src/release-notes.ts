@@ -124,9 +124,26 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     title: "New in this update",
     changes: [
       "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+      "Recruitment has an interest form: open it from the Recruitment settings page, share its link or a QR code, and each person who fills it in lands in your pipeline's first stage.",
+      "When an unread channel is scrolled out of sight in your channel list, a New unreads pill at the top or bottom takes you to it, in red when someone mentioned you.",
+      "Frapp Intelligence gives shorter answers, says plainly when something isn't yours to see, and can tell whoever approves service hours which entries are waiting on them.",
+      "Folding a channel category no longer hides what's new: channels with unread messages stay in view under it until you read them, and a category's menu folds or unfolds them all at once.",
+      "A connected Google Drive folder now says how it's syncing right in Documents, with how many files and folders it left out and why, and officers can sync or disconnect it from there.",
+      "Officers can time out a member who's spamming, so they can't post or react in chapter channels for a few minutes up to a week, and they're told until when.",
+      "Officers can make a task straight from an action item in posted minutes and pick who it's for right there, without paging through the suggestions.",
+      "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
+      "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
+      "Frapp Intelligence now knows who uploaded a document and who posted minutes, finds replies in threads, and asks which event you mean when two different ones share a word.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+      "Rush fits beside chat: stages with nobody in them fold to their names so the full ones keep their room, and the views, search and New fold into icons when the page is narrow.",
+      "School and council shows your school by its name, without the made-up initials badge beside it.",
+      "Each module's page in Chapter settings shows who can do what and its goals at a glance, and opens each one, like the ledger or a permission, on a page of its own.",
+    ],
+    phone: [
+      "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
+      "Officers can now change the chapter's name, logo, short name, identity, organization type, words and birthday posts from Chapter settings, as on the web.",
     ],
   },
   {
@@ -1107,6 +1124,29 @@ const MONTHS = [
   "November",
   "December",
 ] as const;
+
+/**
+ * The zone an update's `date` is a day in: the team's, where members are. The
+ * fold bot runs on CI's UTC clock, which dated a US evening's update tomorrow
+ * (#6054), so it reads the day here instead, as does anything comparing a
+ * moment with an entry's date.
+ */
+export const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `at`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteDay(at: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(at)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 /**
  * `"2026-11-07"` → `"November 7, 2026"`. Written out per the product's date

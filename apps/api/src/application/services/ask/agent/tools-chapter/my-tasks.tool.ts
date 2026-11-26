@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { SystemPermissions } from '#domain/constants/permissions';
-import { TaskStatus, type TaskView } from '#domain/entities/task.entity';
+import { TaskStatus } from '#domain/entities/task.entity';
 import { MemberService } from '../../../member.service';
 import { TaskService } from '../../../task.service';
 import type {
@@ -22,6 +22,8 @@ import {
   todayLine,
 } from './chapter-tool-kit';
 import {
+  aboutPart,
+  assignedByPart,
   awaitsConfirm,
   dueFirst,
   isPastDue,
@@ -85,17 +87,13 @@ export class MyTasksAgentTool implements AgentReadTool<Args> {
       );
     }
     const people = new People(roster);
-    const assignedBy = (task: TaskView) =>
-      task.created_by && task.created_by !== userId
-        ? `Assigned by ${people.name(task.created_by)}`
-        : null;
 
     if (done) {
       // The read is newest created first; the list is latest finish first.
       const rows = [...mine].sort(latestFinishFirst).map((task) => {
         const parts = [
           `${quoted(task.title)}: finished${task.confirmed_at ? ` on ${longDay(task.confirmed_at, timeZone)}` : ''}`,
-          assignedBy(task),
+          assignedByPart(task, people),
           task.point_reward ? `Worth ${task.point_reward} points` : null,
         ];
         return `${parts.filter(Boolean).join('. ')}.`;
@@ -142,12 +140,12 @@ export class MyTasksAgentTool implements AgentReadTool<Args> {
         !awaitsConfirm(task) && task.sent_back_at
           ? `An officer sent it back${task.sent_back_reason ? `, saying ${quoted(task.sent_back_reason)}` : ''}`
           : null,
-        assignedBy(task),
+        assignedByPart(task, people),
         steps.length > 0
           ? `${steps.filter((step) => step.done_at).length} of ${steps.length} steps checked off`
           : null,
         task.point_reward ? `Worth ${task.point_reward} points` : null,
-        task.description ? `About: ${quoted(task.description)}` : null,
+        aboutPart(task),
       ];
       return `${parts.filter(Boolean).join('. ')}.`;
     });

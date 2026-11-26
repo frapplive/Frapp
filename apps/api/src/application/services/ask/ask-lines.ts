@@ -22,3 +22,31 @@ export function oneLine(text: string | null | undefined): string {
 export function nameInLine(name: string | null | undefined): string {
   return oneLine((name ?? '').replace(/[:;.,|()[\]]+/g, ' '));
 }
+
+/**
+ * What a document or minutes is, in the words beside its title (#5180):
+ * "Policy, in the Bylaws folder, uploaded by Jordan Lee". Every part is text
+ * an officer or a member chose, so each is written as a name is, with
+ * nothing that could read as a second fact. Null when there is nothing to
+ * say.
+ */
+export function recordFactsLine(
+  facts: {
+    type: string | null;
+    folder: string | null;
+    by: { verb: 'uploaded' | 'posted'; name: string } | null;
+    fromDrive: boolean;
+  } | null,
+): string | null {
+  if (!facts) return null;
+  const type = nameInLine(facts.type);
+  const folder = nameInLine(facts.folder);
+  const name = facts.by ? nameInLine(facts.by.name) : '';
+  const parts = [
+    type || null,
+    folder ? `in the ${folder} folder` : null,
+    facts.fromDrive ? 'copied from Google Drive' : null,
+    facts.by && name ? `${facts.by.verb} by ${name}` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(', ') : null;
+}

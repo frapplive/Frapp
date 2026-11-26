@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import * as WebBrowser from "expo-web-browser";
 import {
   searchSettings,
+  settingPhoneTarget,
   settingWebPath,
   aiAvailableFrom,
   useAiConsent,
@@ -13,6 +14,7 @@ import {
 } from "@repo/hooks";
 import { isModuleEnabled } from "@repo/validation";
 import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
+import { useIsCouncil } from "@/lib/tenant-kind";
 import {
   openNotificationTarget,
   type NotificationTarget,
@@ -29,28 +31,36 @@ export function usePhoneSettingsSearch(): (query: string) => SettingMatch[] {
   const permissions = usePermissionList();
   const aiAvailable = aiAvailableFrom(useAiConsent()) === true;
   const modules = useCurrentChapter().data?.enabled_modules;
+  // A council has no Chapter tab pages (#5933): those open on the web.
+  const chapterFeatures = !useIsCouncil();
   return useCallback(
     (query: string) =>
       searchSettings(query, {
         permissions,
         platform: "phone",
         aiAvailable,
+        chapterFeatures,
         isModuleEnabled: modules
           ? (key) => isModuleEnabled(modules, key)
           : undefined,
       }),
-    [permissions, aiAvailable, modules],
+    [permissions, aiAvailable, modules, chapterFeatures],
   );
 }
 
-/** Where a setting opens on the phone, or null for one only web changes. */
+/**
+ * Where a setting opens on the phone, or null for one only web changes there:
+ * on a council (`chapterFeatures: false`), the Chapter tab's config parts.
+ */
 export function settingPhoneRoute(
   entry: SettingEntry,
+  options: { chapterFeatures?: boolean } = {},
 ): NotificationTarget | null {
-  if (!entry.phone) return null;
-  return entry.phone.anchor
-    ? { pathname: entry.phone.screen, params: { setting: entry.id } }
-    : { pathname: entry.phone.screen };
+  const phone = settingPhoneTarget(entry, options);
+  if (!phone) return null;
+  return phone.anchor
+    ? { pathname: phone.screen, params: { setting: entry.id } }
+    : { pathname: phone.screen };
 }
 
 /** The dashboard address for a setting the phone has no screen for. */
@@ -73,9 +83,13 @@ export function openSetting(
     here?: SettingPhoneScreen;
     jumpHere?: (settingId: string) => void;
     onBrowserFailed?: () => void;
+    /** False on a council, whose Chapter tab parts open on the web. */
+    chapterFeatures?: boolean;
   } = {},
 ): void {
-  const route = settingPhoneRoute(entry);
+  const route = settingPhoneRoute(entry, {
+    chapterFeatures: options.chapterFeatures,
+  });
   if (route) {
     if (options.here === entry.phone?.screen && options.jumpHere) {
       options.jumpHere(entry.id);

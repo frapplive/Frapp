@@ -30,6 +30,7 @@ export { localClock, localIsoDate } from "./local-date";
 export {
   formatDay,
   formatDayHeading,
+  formatDayWords,
   formatDayRange,
   formatDayTime,
   formatDayTimeRange,

@@ -63,6 +63,7 @@ import {
   useRosterCatchUp,
   useMentionRoles,
   useMyPermissions,
+  useMyChatTimeout,
   useBookmarks,
   useBookmarkedMessageIds,
   useScheduleMessage,
@@ -263,6 +264,14 @@ import {
   type ReportTarget,
 } from "./report-message-dialog";
 import { ForwardMessageDialog } from "./forward-message-dialog";
+import {
+  TimeoutMemberDialog,
+  type TimeoutTarget,
+} from "@/components/members/timeout-member-dialog";
+import {
+  chatTimeoutNotice,
+  timeOutOfferedIn,
+} from "@repo/chat-core/chat-timeout";
 import { forwardTargetOf, type ForwardTarget } from "@repo/chat-core/forward";
 import { compactControlClassName } from "@/components/shared/table-controls";
 import { useIsDesktopShell } from "@/components/layout/shell-layout";
@@ -1688,6 +1697,34 @@ export function ChatShell({
   const canManageChannel = can(
     "channels:manage",
     permissionsPayload?.permissions,
+  );
+
+  // Chat timeouts (#6006): Time out on a message's sender, in a channel, for
+  // a viewer holding `members:timeout`; and the viewer's own timeout, which
+  // takes the composer's place in a channel.
+  const timeOutHere = timeOutOfferedIn(
+    can("members:timeout", permissionsPayload?.permissions),
+    activeChannel,
+  );
+  const [timeoutTarget, setTimeoutTarget] = useState<TimeoutTarget | null>(
+    null,
+  );
+  const handleTimeOut = useCallback(
+    (message: ChatMessage) => {
+      if (!message.sender_id) return;
+      setTimeoutTarget({
+        userId: message.sender_id,
+        name: resolveAuthorName(message, nameFor) ?? "this member",
+      });
+    },
+    [nameFor],
+  );
+  const myTimeout = useMyChatTimeout();
+  const timeoutNow = useNowDate();
+  const timeoutNotice = chatTimeoutNotice(
+    myTimeout.data,
+    activeChannel,
+    timeoutNow,
   );
 
   // Chat backgrounds (#3973): the open channel's, for the menu's picker.
@@ -3692,6 +3729,8 @@ export function ChatShell({
           canManageChannel={canManageChannel}
           onReport={handleReport}
           onBlock={handleBlock}
+          onTimeOut={timeOutHere ? handleTimeOut : undefined}
+          timeoutNotice={timeoutNotice}
           onForward={handleForward}
           onOpenProfile={openProfile}
           isMember={isMember}
@@ -4509,6 +4548,7 @@ export function ChatShell({
                   inAuditLog={activeChannel?.is_audit_log === true}
                   onReport={handleReport}
                   onBlock={handleBlock}
+                  onTimeOut={timeOutHere ? handleTimeOut : undefined}
                   onForward={handleForward}
                   onOpenProfile={openProfile}
                   isMember={isMember}
@@ -4565,6 +4605,7 @@ export function ChatShell({
             // `true` — the safe fallback for a read-only channel whose
             // `can_post` hasn't arrived yet.
             canPost={activeChannel.can_post}
+            timeoutNotice={timeoutNotice}
             draft={channel.draft}
             onChangeDraft={channel.setDraft}
             // `replyTo?.id`, not `replyToId`: the derived target is the one the
@@ -4806,6 +4847,10 @@ export function ChatShell({
         key={reportTarget?.messageId ?? "closed"}
         target={reportTarget}
         onClose={() => setReportTarget(null)}
+      />
+      <TimeoutMemberDialog
+        target={timeoutTarget}
+        onClose={() => setTimeoutTarget(null)}
       />
       {/* Mounted only while open: its channel and roster reads have no
           work to do for a closed dialog. */}

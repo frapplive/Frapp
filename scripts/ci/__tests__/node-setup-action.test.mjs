@@ -335,12 +335,23 @@ describe("node-setup call sites", () => {
     }
   });
 
+  // One install is hand-written on purpose: the desktop signing job's, of
+  // electron-builder alone from tools/desktop-release's own lockfile (#4843).
+  // node-setup installs the workspace and runs its lifecycle scripts, which a
+  // job holding certificates must not do (the rule below); this line runs no
+  // scripts, in a step with no secret, and is why that job needs no `npx`,
+  // which would pin one package and resolve the rest fresh. Matched whole, so
+  // dropping `--ignore-scripts` or installing anywhere else fails again.
+  const PINNED_TOOL_INSTALLS = [".github/workflows/desktop-release.yml: run: npm ci --ignore-scripts --no-audit --no-fund"];
+
   it("nothing outside the action and the exceptions hand-writes the install", () => {
-    const offenders = guardedFiles().flatMap((f) =>
-      shellLines(f.text)
-        .filter(runsInstall)
-        .map((l) => `${f.name}: ${l.trim()}`),
-    );
+    const offenders = guardedFiles()
+      .flatMap((f) =>
+        shellLines(f.text)
+          .filter(runsInstall)
+          .map((l) => `${f.name}: ${l.trim()}`),
+      )
+      .filter((offender) => !PINNED_TOOL_INSTALLS.includes(offender));
     assert.deepEqual(offenders, [], "install through ./.github/actions/node-setup's `install:` input");
   });
 

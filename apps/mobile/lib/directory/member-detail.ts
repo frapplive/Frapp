@@ -80,6 +80,17 @@ export interface MemberDetail {
    * this member's name and graduation year. `false` when the read doesn't say.
    */
   canEditProfile: boolean;
+  /**
+   * The API's `viewer_can_timeout` (#6006): whether this viewer may time
+   * this member out of chat, or lift it. `false` when the read doesn't say.
+   */
+  canTimeOut: boolean;
+  /**
+   * The member's chat timeout as the read serves it (to the member and to
+   * whoever can time out): until when and the reason, or nulls.
+   */
+  chatTimeoutUntil: string | null;
+  chatTimeoutReason: string | null;
 }
 
 export function selectMemberDetail(data: unknown): MemberDetail | null {
@@ -118,6 +129,9 @@ export function selectMemberDetail(data: unknown): MemberDetail | null {
     orderNumber: num(data, "order_number"),
     canRemove: data.viewer_can_remove === true,
     canEditProfile: data.viewer_can_edit_profile === true,
+    canTimeOut: data.viewer_can_timeout === true,
+    chatTimeoutUntil: str(data, "chat_timeout_until"),
+    chatTimeoutReason: str(data, "chat_timeout_reason"),
   };
 }
 

@@ -30,7 +30,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     ]),
 }));
 
-const { RushRecruitmentPicks, namesList } =
+const { RushBidExpiryRow, RushRecruitmentPicks, namesList } =
   await import("./rush-recruitment-picks");
 
 const BASE = {
@@ -59,14 +59,22 @@ describe("RushRecruitmentPicks (#5973)", () => {
   });
 
   it("shows how long bids last, typed by rush:manage and read by others", () => {
-    const { unmount } = render(<RushRecruitmentPicks canEdit canSeeRoles />);
+    const { unmount } = render(
+      <ul>
+        <RushBidExpiryRow canEdit />
+      </ul>,
+    );
     expect(
       screen.getByRole("textbox", {
         name: "Days a bid stays open before it expires",
       }),
     ).toHaveValue("7");
     unmount();
-    render(<RushRecruitmentPicks canEdit={false} canSeeRoles />);
+    render(
+      <ul>
+        <RushBidExpiryRow canEdit={false} />
+      </ul>,
+    );
     expect(screen.getByText("Bids expire after 7 days")).toBeInTheDocument();
   });
 

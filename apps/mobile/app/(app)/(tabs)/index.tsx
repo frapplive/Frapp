@@ -1,36 +1,36 @@
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
 import {
   Alert,
   Pressable,
+  type ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
 import {
   arrangeChannelSidebar,
   countsLookUnread,
-  foldedSectionAnnouncement,
+  FOLD_ALL_LABEL,
+  foldAllWrites,
+  foldSectionLabel,
   groupChannelsByCategory,
   NO_MATCHING_CHANNELS,
   SHOW_ALL_CHANNELS_LABEL,
   SIDEBAR_SAVE_FAILED_BODY,
   SIDEBAR_SAVE_FAILED_TITLE,
+  UNFOLD_ALL_LABEL,
   sidebarMutedChannelIds,
   sidebarSections,
   sidebarUnreadCounts,
   withUnreadThreadChannels,
   channelsWithUnreadThreads,
+  unreadJumpRowKey,
+  unreadJumpTargets,
   useCategories,
   useChannelLatestMessages,
   useChannelNotificationPreferences,
@@ -72,7 +72,7 @@ import {
   resolveAuthorName,
 } from "@repo/hooks";
 import { channelPreviewLine } from "@repo/chat-core/channel-preview";
-import { can } from "@repo/validation";
+import { can, type SidebarSectionKey } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ChapterMark } from "@/components/chapter-mark";
 import { useAnchoredMenu } from "@/components/anchored-menu";
@@ -109,11 +109,7 @@ import {
   ChannelFilterMenu,
   useChannelFilterMenu,
 } from "@/components/chat/channel-filter-menu";
-import {
-  ChannelListSkeleton,
-  ChannelRow,
-  UnreadBadge,
-} from "@/components/chat/channel-row";
+import { ChannelListSkeleton, ChannelRow } from "@/components/chat/channel-row";
 import { channelMarkFor } from "@repo/hooks/channel-start";
 import { gutterBleed, PressableRow } from "@/components/list-section";
 import { ErrorState, NoChapterState } from "@/components/state-block";
@@ -163,11 +159,18 @@ import {
 import { useConnection } from "@/lib/connection/use-connection";
 import { pressHaptic } from "@/lib/haptics";
 import { focusReturnOf } from "@/lib/overlay";
+import { openItemMenu } from "@/components/item-actions-menu";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { InlineNote } from "@/components/inline-note";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
 import { usePrefetchUnreadChannels } from "@/lib/chat/prefetch-channel";
 import { useServesChapterFeatures } from "@/lib/tenant-kind";
+import { UnreadJumpPill } from "@/components/chat/unread-jump-pill";
+import { useUnreadJump } from "@/lib/chat/use-unread-jump";
+import {
+  ScreenScrollWatchProvider,
+  useTabBarClearance,
+} from "@/lib/floating-chrome";
 
 /**
  * s04 — Chat home. Chat is home, so this is the tab bar's `index` route.
@@ -273,10 +276,24 @@ export default function ChatHomeScreen() {
   // A hook option, not `mutate`'s per-call `onError`, which fires only for the
   // latest write on the hook. The write has already put the list back on the
   // server's state; this says so.
+  // One alert at a time: Fold all sends a write per section (#6053), and a
+  // failed batch is one failure to the member, not one alert per section.
+  const saveFailedShowing = useRef(false);
   const sidebarWriteOptions = useMemo(
     () => ({
-      onError: () =>
-        Alert.alert(SIDEBAR_SAVE_FAILED_TITLE, SIDEBAR_SAVE_FAILED_BODY),
+      onError: () => {
+        if (saveFailedShowing.current) return;
+        saveFailedShowing.current = true;
+        const settle = () => {
+          saveFailedShowing.current = false;
+        };
+        Alert.alert(
+          SIDEBAR_SAVE_FAILED_TITLE,
+          SIDEBAR_SAVE_FAILED_BODY,
+          [{ text: "OK", onPress: settle }],
+          { onDismiss: settle },
+        );
+      },
     }),
     [],
   );
@@ -467,7 +484,7 @@ export default function ChatHomeScreen() {
   );
   // What the arrangement reads as unread: the server's counts, plus one for a
   // channel whose thread has new replies (#5277), so Unread only keeps that
-  // channel and its thread rows, and a folded section reads unread over it.
+  // channel and its thread rows, and a folded section keeps it in view.
   // The rows' own badges still read the server's counts alone.
   const arrangementUnread = useMemo(
     () => withUnreadThreadChannels(unreadByChannelId, unreadThreadChannelIds),
@@ -487,15 +504,20 @@ export default function ChatHomeScreen() {
       displayChannelName(channel, viewerId, memberNames),
     [viewerId, memberNames],
   );
-  const arranged = useMemo(() => {
-    return arrangeChannelSidebar({
-      // Labels per `spec/behavior/chat/README.md` § Channels (the "Channel
-      // categories" rule): the default group is "Channels", and it stays first
-      // below Pinned.
-      sections: sidebarSections(groupChannelsByCategory(channels, categories), {
+  // Labels per `spec/behavior/chat/README.md` § Channels (the "Channel
+  // categories" rule): the default group is "Channels", and it stays first
+  // below Pinned.
+  const inputSections = useMemo(
+    () =>
+      sidebarSections(groupChannelsByCategory(channels, categories), {
         channels: "Channels",
         direct: "Direct messages",
       }),
+    [channels, categories],
+  );
+  const arranged = useMemo(() => {
+    return arrangeChannelSidebar({
+      sections: inputSections,
       pinnedIds: preferences.pinnedIds,
       collapsed: preferences.collapsed,
       // Unread only hides nothing on counts that aren't the server's yet.
@@ -508,8 +530,7 @@ export default function ChatHomeScreen() {
       mutedChannelIds,
     });
   }, [
-    channels,
-    categories,
+    inputSections,
     preferences,
     unread.provisional,
     arrangementUnread,
@@ -518,6 +539,74 @@ export default function ChatHomeScreen() {
   ]);
   const filtersOn =
     preferences.filters.unreadOnly || preferences.filters.hideMuted;
+  // A heading's menu (#6053), web's heading menu on the phone's long-press:
+  // fold this section, or every section at once. Fold all folds the headings
+  // drawn; Unfold all unfolds every folded section; each writes only what it
+  // changes (`foldAllWrites`, one rule with web).
+  const setAllFolded = (fold: boolean) => {
+    for (const sectionKey of foldAllWrites({
+      drawn: arranged.sections,
+      all: inputSections,
+      collapsed: preferences.collapsed,
+      fold,
+    })) {
+      setSectionCollapsed({ sectionKey, collapsed: fold });
+    }
+  };
+  const headingMenuActions = (
+    sectionKey: SidebarSectionKey,
+    label: string,
+    collapsed: boolean,
+  ) => [
+    {
+      key: "fold",
+      label: foldSectionLabel(label, collapsed),
+      run: () => setSectionCollapsed({ sectionKey, collapsed: !collapsed }),
+    },
+    { key: "fold-all", label: FOLD_ALL_LABEL, run: () => setAllFolded(true) },
+    {
+      key: "unfold-all",
+      label: UNFOLD_ALL_LABEL,
+      run: () => setAllFolded(false),
+    },
+  ];
+
+  // New unreads (#6045): a pill over the list's top or bottom edge while an
+  // unread channel is scrolled out of view that way, as Discord and Slack
+  // draw theirs. What counts is the rows' and folded headings' own rule
+  // (`unreadJumpTargets`, web's too). The pinned heading covers the top of the
+  // body, and the floating bar its bottom.
+  const scrollRef = useRef<ScrollView>(null);
+  const safeArea = useSafeAreaInsets();
+  const tabBarClearance = useTabBarClearance();
+  const jumpInsets = useMemo(
+    () => ({ top: tokens.touch.minimum, bottom: tabBarClearance }),
+    [tokens.touch.minimum, tabBarClearance],
+  );
+  const jumpTargets = useMemo(
+    () =>
+      unreadJumpTargets(arranged, {
+        // Not on counts the phone saved: only the server's answer is news.
+        unreadByChannelId: unread.provisional ? undefined : unreadByChannelId,
+        mutedChannelIds,
+        unreadThreadChannelIds,
+        activeChannelId: null,
+      }),
+    [
+      arranged,
+      unread.provisional,
+      unreadByChannelId,
+      mutedChannelIds,
+      unreadThreadChannelIds,
+    ],
+  );
+  const unreadJump = useUnreadJump({
+    targets: jumpTargets,
+    scrollRef,
+    insets: jumpInsets,
+    // A pin or a fold moves rows without changing the content's height.
+    layout: arranged,
+  });
 
   /*
     Launch opens the last channel the member was in, the way Discord does
@@ -719,8 +808,19 @@ export default function ChatHomeScreen() {
     const pinned = preferences.pinnedIds.has(channel.id);
     const togglePin = () =>
       setChannelPinned({ channelId: channel.id, pinned: !pinned });
+    const jumpKey = unreadJumpRowKey(channel.id);
     return (
-      <Fragment key={channel.id}>
+      // Measured for the New unreads pills, and lit for a moment where one
+      // landed (#6045).
+      <View
+        key={channel.id}
+        ref={unreadJump.refFor(jumpKey)}
+        collapsable={false}
+        style={[
+          styles.rowGroup,
+          unreadJump.litKey === jumpKey ? styles.jumpLit : null,
+        ]}
+      >
         <ChannelRow
           name={name}
           mark={channelMarkFor(channel)}
@@ -771,7 +871,7 @@ export default function ChatHomeScreen() {
           nameFor={threadAuthorName}
           viewerId={viewerId}
         />
-      </Fragment>
+      </View>
     );
   }
 
@@ -819,404 +919,462 @@ export default function ChatHomeScreen() {
     </View>
   );
 
+  // Drawn over the screen, outside its scroll view, so no row moves under
+  // them; never over an open menu.
+  const listShown =
+    chapterScope !== "none" &&
+    !channelsQuery.isPending &&
+    !holdingForLaunch &&
+    channels.length > 0;
+  const jumpPills =
+    listShown && !filterMenu.visible && !chapterMenu.visible ? (
+      <>
+        {unreadJump.state.above ? (
+          <UnreadJumpPill
+            direction="above"
+            side={unreadJump.state.above}
+            onPress={() => unreadJump.jump("above")}
+            style={{
+              top: safeArea.top + tokens.touch.minimum + tokens.spacing.xs,
+            }}
+          />
+        ) : null}
+        {unreadJump.state.below ? (
+          <UnreadJumpPill
+            direction="below"
+            side={unreadJump.state.below}
+            onPress={() => unreadJump.jump("below")}
+            style={{ bottom: safeArea.bottom + tabBarClearance }}
+          />
+        ) : null}
+      </>
+    ) : null;
+
   return (
-    <ScreenShell
-      title={chapterName ?? "Frapp"}
-      titleMark={<ChapterMark />}
-      // Always a menu, even before the chapter's name is known: with no
-      // chapter claim, or a chapter the API now refuses, Switch chapter in
-      // it is the member's way out (the picker's empty state offers joining).
-      titleMenu={{
-        open: chapterMenu.visible,
-        accessibilityLabel: chapterName
-          ? `Chapter menu (currently ${chapterName})`
-          : "Chapter menu",
-        onOpen: (frame) => chapterMenu.open(chapterMenuAnchor(tokens, frame)),
-        onClose: chapterMenu.close,
-      }}
-      refresh={refresh}
-      overlay={{
-        open: filterMenu.visible || chapterMenu.visible,
-        content: chapterMenu.visible ? (
-          <ChapterMenu
-            menu={chapterMenu}
-            showChapterSettings={showChapterSettings}
-          />
-        ) : (
-          <ChannelFilterMenu
-            menu={filterMenu}
-            unreadOnly={preferences.filters.unreadOnly}
-            hideMuted={preferences.filters.hideMuted}
-            onChange={setSidebarFilter}
-          />
-        ),
-      }}
-      headerAction={
-        <View style={styles.headerActions}>
-          {/* Search (#5139), then the inbox's bell (#3362). The member's
+    <ScreenScrollWatchProvider value={unreadJump.onScroll}>
+      <ScreenShell
+        title={chapterName ?? "Frapp"}
+        scrollRef={scrollRef}
+        titleMark={<ChapterMark />}
+        // Always a menu, even before the chapter's name is known: with no
+        // chapter claim, or a chapter the API now refuses, Switch chapter in
+        // it is the member's way out (the picker's empty state offers joining).
+        titleMenu={{
+          open: chapterMenu.visible,
+          accessibilityLabel: chapterName
+            ? `Chapter menu (currently ${chapterName})`
+            : "Chapter menu",
+          onOpen: (frame) => chapterMenu.open(chapterMenuAnchor(tokens, frame)),
+          onClose: chapterMenu.close,
+        }}
+        refresh={refresh}
+        overlay={{
+          open: filterMenu.visible || chapterMenu.visible,
+          content: (
+            <>
+              {jumpPills}
+              {chapterMenu.visible ? (
+                <ChapterMenu
+                  menu={chapterMenu}
+                  showChapterSettings={showChapterSettings}
+                />
+              ) : (
+                <ChannelFilterMenu
+                  menu={filterMenu}
+                  unreadOnly={preferences.filters.unreadOnly}
+                  hideMuted={preferences.filters.hideMuted}
+                  onChange={setSidebarFilter}
+                />
+              )}
+            </>
+          ),
+        }}
+        headerAction={
+          <View style={styles.headerActions}>
+            {/* Search (#5139), then the inbox's bell (#3362). The member's
               avatar is the You tab since #3839, threads sit under their
               channels since #5277, and the Messages door became the
               Messages tab in #5310. Not in a council: `GET /v1/search`
               is a chapter route and refuses it (#5933). */}
-          {chapterFeatures ? <SearchButton /> : null}
-          <NotificationsButton />
-        </View>
-      }
-    >
-      {/* What's on right now, above everything else (#5777): Up next only
+            {chapterFeatures ? <SearchButton /> : null}
+            <NotificationsButton />
+          </View>
+        }
+      >
+        {/* What's on right now, above everything else (#5777): Up next only
           ever looks ahead, so a meeting in progress lives here. */}
-      <NowCard />
-      {awayCard}
-      <UpNextStrip
-        events={eventsQuery.data}
-        tasks={tasksQuery.data}
-        viewerUserId={viewerId}
-      />
+        <NowCard />
+        {awayCard}
+        <UpNextStrip
+          events={eventsQuery.data}
+          tasks={tasksQuery.data}
+          viewerUserId={viewerId}
+        />
 
-      {/*
+        {/*
         The officer setup checklist (spec/product/modules.md § Setup
         checklist), under UP NEXT and above the channels, as the web rail
         draws it above its channel list. Only once channels have loaded, so it
         never sits on top of the skeleton or the error. Not in a council,
         whose home on the Activity tab holds its first steps (#5933).
       */}
-      {setup.checklist &&
-      chapterFeatures &&
-      !channelsQuery.isPending &&
-      !holdingForLaunch &&
-      !(channelsQuery.isError && channelsQuery.data === undefined) ? (
-        <SetupChecklistView
-          checklist={setup.checklist}
-          onHide={setup.hide}
-          onReturnFromWeb={() => void setup.refetch()}
-        />
-      ) : null}
+        {setup.checklist &&
+        chapterFeatures &&
+        !channelsQuery.isPending &&
+        !holdingForLaunch &&
+        !(channelsQuery.isError && channelsQuery.data === undefined) ? (
+          <SetupChecklistView
+            checklist={setup.checklist}
+            onHide={setup.hide}
+            onReturnFromWeb={() => void setup.refetch()}
+          />
+        ) : null}
 
-      {/*
+        {/*
         The one reminder to turn push on, the come-back for onboarding's
         "Not now" (`shouldOfferReminder`). Under the checklist, and only once
         channels have loaded, for the same reason the checklist waits.
       */}
-      {!channelsQuery.isPending &&
-      !holdingForLaunch &&
-      !(channelsQuery.isError && channelsQuery.data === undefined) ? (
-        <PushReminder />
-      ) : null}
+        {!channelsQuery.isPending &&
+        !holdingForLaunch &&
+        !(channelsQuery.isError && channelsQuery.data === undefined) ? (
+          <PushReminder />
+        ) : null}
 
-      {/*
+        {/*
         A failed unread fetch must not read as "everything is read". The counts
         are the only mention signal on this screen, so failing open would tell a
         member they have no @-mentions when they do — the precise failure the
         "never re-derive unread" rule exists to prevent. Say it instead.
       */}
-      {unread.isError ? (
-        <Text style={styles.unreadWarning}>
-          Unread counts are unavailable right now, so badges may be missing.
-        </Text>
-      ) : null}
-      {/* The same for the threads read (#5277): no rows must not read as
+        {unread.isError ? (
+          <Text style={styles.unreadWarning}>
+            Unread counts are unavailable right now, so badges may be missing.
+          </Text>
+        ) : null}
+        {/* The same for the threads read (#5277): no rows must not read as
           "no threads". */}
-      {memberThreadsQuery.isError && memberThreadsQuery.data === undefined ? (
-        <Text style={styles.unreadWarning}>
-          Threads couldn&apos;t load. Pull down to try again.
-        </Text>
-      ) : null}
+        {memberThreadsQuery.isError && memberThreadsQuery.data === undefined ? (
+          <Text style={styles.unreadWarning}>
+            Threads couldn&apos;t load. Pull down to try again.
+          </Text>
+        ) : null}
 
-      <ScreenReady
-        ready={
-          chapterScope === "none" ||
-          (!channelsQuery.isPending && !holdingForLaunch)
-        }
-      />
-      {chapterScope === "none" ? (
-        // A member with no membership is on their way to `/join`
-        // (`useOnboardingRedirect`); this is what a member of several
-        // chapters with no chapter claim sees.
-        <NoChapterState noun="its channels" />
-      ) : channelsQuery.isPending || holdingForLaunch ? (
-        <ChannelListSkeleton />
-      ) : channelsQuery.isError && channelsQuery.data === undefined ? (
-        // An explicit retry as well as the pull (#3385): this tab stays
-        // mounted for the session, and a button is the recovery a member
-        // sees without knowing the gesture. A *connectivity* blip
-        // recovers on its own since C8 (#998) wired `onlineManager` and
-        // `focusManager` (`lib/connection/query-connectivity.ts`).
-        <ErrorState
-          title={channelsError.title}
-          body={channelsError.body}
-          onRetry={() => void channelsQuery.refetch()}
-          // Names what it retries, so the button still makes sense heard on
-          // its own (a screen reader's list of buttons) and not only under
-          // the card's title.
-          retryLabel="Try loading channels again"
-          isRetrying={channelsQuery.isFetching}
+        <ScreenReady
+          ready={
+            chapterScope === "none" ||
+            (!channelsQuery.isPending && !holdingForLaunch)
+          }
         />
-      ) : channels.length === 0 ? (
-        // No line saying channels appear here, which would only restate what
-        // Chat is for; the one line says what to do (writing.md §4, as
-        // amended 2026-11-05): an officer starts one here (#3838), and
-        // anyone else asks.
-        canCreateChannels ? (
-          <InlineNote
-            action={{
-              label: "New channel",
-              onPress: () =>
-                openChannelForm({ kind: "create", categoryId: null }),
-            }}
-          >
-            No channels yet.
-          </InlineNote>
+        {chapterScope === "none" ? (
+          // A member with no membership is on their way to `/join`
+          // (`useOnboardingRedirect`); this is what a member of several
+          // chapters with no chapter claim sees.
+          <NoChapterState noun="its channels" />
+        ) : channelsQuery.isPending || holdingForLaunch ? (
+          <ChannelListSkeleton />
+        ) : channelsQuery.isError && channelsQuery.data === undefined ? (
+          // An explicit retry as well as the pull (#3385): this tab stays
+          // mounted for the session, and a button is the recovery a member
+          // sees without knowing the gesture. A *connectivity* blip
+          // recovers on its own since C8 (#998) wired `onlineManager` and
+          // `focusManager` (`lib/connection/query-connectivity.ts`).
+          <ErrorState
+            title={channelsError.title}
+            body={channelsError.body}
+            onRetry={() => void channelsQuery.refetch()}
+            // Names what it retries, so the button still makes sense heard on
+            // its own (a screen reader's list of buttons) and not only under
+            // the card's title.
+            retryLabel="Try loading channels again"
+            isRetrying={channelsQuery.isFetching}
+          />
+        ) : channels.length === 0 ? (
+          // No line saying channels appear here, which would only restate what
+          // Chat is for; the one line says what to do (writing.md §4, as
+          // amended 2026-11-05): an officer starts one here (#3838), and
+          // anyone else asks.
+          canCreateChannels ? (
+            <InlineNote
+              action={{
+                label: "New channel",
+                onPress: () =>
+                  openChannelForm({ kind: "create", categoryId: null }),
+              }}
+            >
+              No channels yet.
+            </InlineNote>
+          ) : (
+            <InlineNote>No channels yet. Ask an admin to add one.</InlineNote>
+          )
         ) : (
-          <InlineNote>No channels yet. Ask an admin to add one.</InlineNote>
-        )
-      ) : (
-        <>
-          {/*
+          <>
+            {/*
             The list (2026-11-06 redesign): the member's sections, each row
             with its latest message and time. The filters sit behind the
             button on the first heading (before its +, #4679), as web's rail
             keeps them behind its Channels header; they used to be two chips above the
             list.
           */}
-          {arranged.sections.length === 0
-            ? emptiedHeading
-            : arranged.sections.flatMap((section, index) => {
-                // The heading pins while its rows scroll under it (owner
-                // 2026-11-07), so it is the shell's own child, with the rows
-                // after it, not inside a section view (`StickyHeader`).
-                const line = index === 0 ? filterLine : null;
-                return [
-                  <StickyHeader key={`${section.key}:heading`}>
-                    <View style={styles.headingRow}>
-                      {/*
-                      A header that folds (#2877). Folded, it keeps the
-                      section's unread total, red when anything inside
-                      addresses the member, so folding never hides a mention.
+            {arranged.sections.length === 0
+              ? emptiedHeading
+              : arranged.sections.flatMap((section, index) => {
+                  // The heading pins while its rows scroll under it (owner
+                  // 2026-11-07), so it is the shell's own child, with the rows
+                  // after it, not inside a section view (`StickyHeader`).
+                  const line = index === 0 ? filterLine : null;
+                  return [
+                    <StickyHeader key={`${section.key}:heading`}>
+                      <View style={styles.headingRow}>
+                        {/*
+                      A header that folds (#2877). Folded, it keeps every
+                      channel with something new in view under it (#6053),
+                      so it carries no count of its own. A long press opens
+                      its menu: fold it, or every section at once.
                       The header role keeps each section on the screen
                       reader's headings rotor. A header has no button trait,
                       and iOS never announces "collapsed", so the label says
                       whether the section is folded and the hint says what a
                       double-tap does.
                     */}
-                      <PressableRow
-                        accessibilityRole="header"
-                        accessibilityState={{ expanded: !section.collapsed }}
-                        accessibilityLabel={
-                          section.collapsed
-                            ? section.unreadCount > 0 || section.addressed
-                              ? `${section.label}, folded, ${foldedSectionAnnouncement(section)}`
-                              : `${section.label}, folded`
-                            : section.label
-                        }
-                        accessibilityHint={
-                          section.collapsed
-                            ? "Double-tap to show its channels."
-                            : "Double-tap to fold this section."
-                        }
-                        onPress={() =>
-                          setSectionCollapsed({
-                            sectionKey: section.key,
-                            collapsed: !section.collapsed,
-                          })
-                        }
-                        style={[styles.sectionHeader, styles.headingGrow]}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.heading,
-                            styles.headingInHeader,
-                            // Folded over something unread: reads as an
-                            // unread row does, since only a mention or DM
-                            // carries a number (2026-11-07).
-                            section.collapsed && section.unreadCount > 0
-                              ? styles.headingUnread
-                              : null,
-                          ]}
+                        <PressableRow
+                          accessibilityRole="header"
+                          accessibilityState={{ expanded: !section.collapsed }}
+                          accessibilityLabel={
+                            section.collapsed
+                              ? `${section.label}, folded`
+                              : section.label
+                          }
+                          accessibilityHint={
+                            section.collapsed
+                              ? "Double-tap to show all its channels."
+                              : "Double-tap to fold this section."
+                          }
+                          accessibilityActions={headingMenuActions(
+                            section.key,
+                            section.label,
+                            section.collapsed,
+                          )
+                            .slice(1)
+                            .map(({ key, label }) => ({ name: key, label }))}
+                          onAccessibilityAction={(event) =>
+                            headingMenuActions(
+                              section.key,
+                              section.label,
+                              section.collapsed,
+                            )
+                              .find(
+                                (action) =>
+                                  action.key === event.nativeEvent.actionName,
+                              )
+                              ?.run()
+                          }
+                          onPress={() =>
+                            setSectionCollapsed({
+                              sectionKey: section.key,
+                              collapsed: !section.collapsed,
+                            })
+                          }
+                          onLongPress={(event) =>
+                            openItemMenu(
+                              {
+                                title: section.label,
+                                actions: headingMenuActions(
+                                  section.key,
+                                  section.label,
+                                  section.collapsed,
+                                ),
+                              },
+                              {
+                                pageY: event?.nativeEvent?.pageY,
+                                trigger: focusReturnOf(event),
+                              },
+                            )
+                          }
+                          style={[styles.sectionHeader, styles.headingGrow]}
                         >
-                          {section.label}
-                        </Text>
-                        {/* Drawn (the typed ▸ ▾ sat low and read as noise),
+                          <Text
+                            numberOfLines={1}
+                            style={[styles.heading, styles.headingInHeader]}
+                          >
+                            {section.label}
+                          </Text>
+                          {/* Drawn (the typed ▸ ▾ sat low and read as noise),
                             and beside the name, as Slack and Discord draw a
                             section's fold, so the heading's right side is
                             one column of controls down the list (owner pick
                             2026-11-13, #4679; it sat at the right edge
                             until then). The whole heading still folds. */}
-                        <DisclosureGlyph
-                          color={tokens.color.text.mutedForeground}
-                          size={18}
-                          direction={section.collapsed ? "right" : "down"}
-                        />
-                        {section.collapsed && section.addressed ? (
-                          <View style={styles.headingBadge}>
-                            <UnreadBadge
-                              unreadCount={section.addressedCount}
-                              mentionCount={section.mentionCount}
-                            />
-                          </View>
-                        ) : null}
-                      </PressableRow>
-                      {/* Outside the fold control, so a screen reader
+                          <DisclosureGlyph
+                            color={tokens.color.text.mutedForeground}
+                            size={18}
+                            direction={section.collapsed ? "right" : "down"}
+                          />
+                        </PressableRow>
+                        {/* Outside the fold control, so a screen reader
                           reaches each as its own button. The filter comes
                           first, so the + is the last thing on every heading
                           and runs in one column down the list (#4679). */}
-                      {index === 0 ? (
-                        <ChannelFilterButton
-                          menu={filterMenu}
-                          active={filtersOn}
-                          atEdge={!sectionHasNewChannel(section.key)}
-                        />
-                      ) : null}
-                      {/* New channel (#3838): beside the Channels heading
+                        {index === 0 ? (
+                          <ChannelFilterButton
+                            menu={filterMenu}
+                            active={filtersOn}
+                            atEdge={!sectionHasNewChannel(section.key)}
+                          />
+                        ) : null}
+                        {/* New channel (#3838): beside the Channels heading
                           and each category's, for `channels:manage`, as
                           Discord and Slack draw it. Never on Pinned. */}
-                      {sectionHasNewChannel(section.key) ? (
-                        <View style={styles.headingAction}>
-                          <IconButton
-                            label={
-                              section.key === "channels"
-                                ? "New channel"
-                                : `New channel in ${section.label}`
-                            }
-                            onPress={() =>
-                              openChannelForm({
-                                kind: "create",
-                                // The section key lowercases the id
-                                // (`categorySectionKey`); send the server's.
-                                categoryId: section.key.startsWith("category:")
-                                  ? (categories.find(
-                                      (c) =>
-                                        `category:${c.id.toLowerCase()}` ===
-                                        section.key,
-                                    )?.id ?? null)
-                                  : null,
-                              })
-                            }
-                          >
-                            <PlusGlyph
-                              color={tokens.color.text.mutedForeground}
-                              size={HEADING_PLUS_SIZE}
-                            />
-                          </IconButton>
-                        </View>
-                      ) : null}
-                    </View>
-                  </StickyHeader>,
-                  line || section.rows.length > 0 ? (
-                    <View
-                      key={`${section.key}:rows`}
-                      style={[styles.section, styles.sectionRows]}
-                    >
-                      {line}
-                      {section.rows.map(renderChannel)}
-                    </View>
-                  ) : null,
-                ];
-              })}
+                        {sectionHasNewChannel(section.key) ? (
+                          <View style={styles.headingAction}>
+                            <IconButton
+                              label={
+                                section.key === "channels"
+                                  ? "New channel"
+                                  : `New channel in ${section.label}`
+                              }
+                              onPress={() =>
+                                openChannelForm({
+                                  kind: "create",
+                                  // The section key lowercases the id
+                                  // (`categorySectionKey`); send the server's.
+                                  categoryId: section.key.startsWith(
+                                    "category:",
+                                  )
+                                    ? (categories.find(
+                                        (c) =>
+                                          `category:${c.id.toLowerCase()}` ===
+                                          section.key,
+                                      )?.id ?? null)
+                                    : null,
+                                })
+                              }
+                            >
+                              <PlusGlyph
+                                color={tokens.color.text.mutedForeground}
+                                size={HEADING_PLUS_SIZE}
+                              />
+                            </IconButton>
+                          </View>
+                        ) : null}
+                      </View>
+                    </StickyHeader>,
+                    line || section.rows.length > 0 ? (
+                      <View
+                        key={`${section.key}:rows`}
+                        style={[styles.section, styles.sectionRows]}
+                      >
+                        {line}
+                        {section.rows.map(renderChannel)}
+                      </View>
+                    ) : null,
+                  ];
+                })}
 
-          {arranged.emptiedByFilters ? (
-            <InlineNote
-              action={{
-                label: SHOW_ALL_CHANNELS_LABEL,
-                onPress: () =>
-                  setSidebarFilter({ unread_only: false, hide_muted: false }),
-              }}
-            >
-              {NO_MATCHING_CHANNELS}
-            </InlineNote>
-          ) : null}
-        </>
-      )}
+            {arranged.emptiedByFilters ? (
+              <InlineNote
+                action={{
+                  label: SHOW_ALL_CHANNELS_LABEL,
+                  onPress: () =>
+                    setSidebarFilter({ unread_only: false, hide_muted: false }),
+                }}
+              >
+                {NO_MATCHING_CHANNELS}
+              </InlineNote>
+            ) : null}
+          </>
+        )}
 
-      {channelForm ? (
-        <ChannelFormSheet
-          key={channelForm.key}
-          ref={channelFormRef}
-          mode={channelForm.mode}
-          categories={categories}
-          onSubmit={submitChannelForm}
-          accessOptions={accessOptions}
-          accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
-          onDelete={
-            channelForm.mode.kind === "edit"
-              ? () => {
-                  const { id, name } = (
-                    channelForm.mode as Extract<
-                      ChannelFormMode,
-                      { kind: "edit" }
-                    >
-                  ).channel;
-                  setDeleteTarget({ id, name });
-                  // Stacks over the form (`push`), so Cancel goes back to it.
-                  deleteSheetRef.current?.present?.();
-                }
-              : undefined
-          }
-        />
-      ) : null}
-      {/* Only an officer can delete, so only theirs carries the sheet. */}
-      {canManageChannels ? (
-        <DeleteChannelSheet
-          ref={deleteSheetRef}
-          channel={deleteTarget}
-          onDelete={async (channelId) => {
-            await deleteChannel.mutateAsync(channelId);
-            // The form it may have come from is about a channel that's gone.
-            channelFormRef.current?.dismiss?.();
+        {channelForm ? (
+          <ChannelFormSheet
+            key={channelForm.key}
+            ref={channelFormRef}
+            mode={channelForm.mode}
+            categories={categories}
+            onSubmit={submitChannelForm}
+            accessOptions={accessOptions}
+            accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
+            onDelete={
+              channelForm.mode.kind === "edit"
+                ? () => {
+                    const { id, name } = (
+                      channelForm.mode as Extract<
+                        ChannelFormMode,
+                        { kind: "edit" }
+                      >
+                    ).channel;
+                    setDeleteTarget({ id, name });
+                    // Stacks over the form (`push`), so Cancel goes back to it.
+                    deleteSheetRef.current?.present?.();
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+        {/* Only an officer can delete, so only theirs carries the sheet. */}
+        {canManageChannels ? (
+          <DeleteChannelSheet
+            ref={deleteSheetRef}
+            channel={deleteTarget}
+            onDelete={async (channelId) => {
+              await deleteChannel.mutateAsync(channelId);
+              // The form it may have come from is about a channel that's gone.
+              channelFormRef.current?.dismiss?.();
+            }}
+          />
+        ) : null}
+        <ChannelActionsMenu
+          target={menuTarget}
+          onClose={closeMenu}
+          onAction={(key) => runMenuAction(key)}
+          writeBlockedReason={writeBlockedReason}
+          onSetDisplayLock={(channelId, locked) => {
+            setDisplayLock
+              .mutateAsync({ id: channelId, locked })
+              .then(() => setChannelLocked(channelId, locked))
+              .catch(() =>
+                Alert.alert(
+                  "Couldn't change Always formal",
+                  "Nothing changed. Check your connection and try again.",
+                ),
+              );
+          }}
+          onSetBackground={(channelId, pick) => {
+            void saveChatBackgroundPick(pick, {
+              requestPhotoUrl: ({ filename, contentType }) =>
+                requestBackgroundPhotoUrl.mutateAsync({
+                  scope: "channel",
+                  filename,
+                  contentType,
+                }),
+              save: ({ background, storagePath }) =>
+                setChannelBackground.mutateAsync({
+                  channelId,
+                  background,
+                  storagePath,
+                }),
+            }).then((result) => {
+              if (result.status === "refused") {
+                Alert.alert("Couldn't change the background", result.reason);
+              }
+            });
+          }}
+          onSetLevel={(channelId, level) => {
+            // Per call, not `mutate`'s per-call `onError`: TanStack runs that
+            // only for the latest call, so a quick second change would swallow
+            // the first one's failure.
+            setNotificationLevel
+              .mutateAsync({ channelId, level })
+              .catch(() =>
+                Alert.alert(
+                  "Couldn't change notifications",
+                  "Nothing changed. Check your connection and try again.",
+                ),
+              );
           }}
         />
-      ) : null}
-      <ChannelActionsMenu
-        target={menuTarget}
-        onClose={closeMenu}
-        onAction={(key) => runMenuAction(key)}
-        writeBlockedReason={writeBlockedReason}
-        onSetDisplayLock={(channelId, locked) => {
-          setDisplayLock
-            .mutateAsync({ id: channelId, locked })
-            .then(() => setChannelLocked(channelId, locked))
-            .catch(() =>
-              Alert.alert(
-                "Couldn't change Always formal",
-                "Nothing changed. Check your connection and try again.",
-              ),
-            );
-        }}
-        onSetBackground={(channelId, pick) => {
-          void saveChatBackgroundPick(pick, {
-            requestPhotoUrl: ({ filename, contentType }) =>
-              requestBackgroundPhotoUrl.mutateAsync({
-                scope: "channel",
-                filename,
-                contentType,
-              }),
-            save: ({ background, storagePath }) =>
-              setChannelBackground.mutateAsync({
-                channelId,
-                background,
-                storagePath,
-              }),
-          }).then((result) => {
-            if (result.status === "refused") {
-              Alert.alert("Couldn't change the background", result.reason);
-            }
-          });
-        }}
-        onSetLevel={(channelId, level) => {
-          // Per call, not `mutate`'s per-call `onError`: TanStack runs that
-          // only for the latest call, so a quick second change would swallow
-          // the first one's failure.
-          setNotificationLevel
-            .mutateAsync({ channelId, level })
-            .catch(() =>
-              Alert.alert(
-                "Couldn't change notifications",
-                "Nothing changed. Check your connection and try again.",
-              ),
-            );
-        }}
-      />
-    </ScreenShell>
+      </ScreenShell>
+    </ScreenScrollWatchProvider>
   );
 }
 
@@ -1234,11 +1392,6 @@ function createStyles(tokens: SignetTokens) {
       justifyContent: "center",
       marginRight: -(tokens.touch.minimum - HEADING_PLUS_SIZE) / 2,
     },
-    // A folded section's count, at the fold control's right end, where the
-    // rows' badges sit.
-    headingBadge: {
-      marginLeft: "auto",
-    },
     headerActions: {
       flexDirection: "row",
       alignItems: "center",
@@ -1246,6 +1399,16 @@ function createStyles(tokens: SignetTokens) {
     },
     section: {
       gap: tokens.spacing.xs,
+    },
+    // A channel row and its thread rows, spaced as the section spaces rows.
+    rowGroup: {
+      gap: tokens.spacing.xs,
+    },
+    // Where a New unreads pill landed, for a moment (#6045): the raised step
+    // a pressed row takes, no motion.
+    jumpLit: {
+      backgroundColor: tokens.color.surface.card,
+      borderRadius: tokens.radius.chip,
     },
     // The rows under a pinned heading: the shell spaces its children by `md`,
     // and a heading sits `xs` above its own rows, as it did inside a section.
@@ -1259,13 +1422,6 @@ function createStyles(tokens: SignetTokens) {
     heading: {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.text.mutedForeground,
-    },
-    headingUnread: {
-      ...typeRole({
-        ...tokens.typography.role.label,
-        weight: tokens.typography.weight.bold,
-      }),
-      color: tokens.color.text.foreground,
     },
     // The fold header takes the rows' `gutterBleed`, so its name lines up
     // with the rows' sigils.

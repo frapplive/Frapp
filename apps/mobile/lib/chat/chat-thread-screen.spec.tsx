@@ -497,11 +497,22 @@ vi.mock("@/components/activity/activity-sheet", () => ({
 /** The unread counts' fetch, stood in for `GET /v1/channels/unread`. */
 const unreadCountsFetch = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
 
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeout: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   const { useQuery } = await import("@tanstack/react-query");
   return {
     ...actual,
+  // Chat timeouts (#6006): the viewer's own, read through
+  // `chatTimeout`, and the sheet's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeout.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
     // Dictation's cleanup needs the API client; nothing here dictates.
     useCleanDictation: () => async () => null,
     // The real hook's shape, minus the API client this spec doesn't provide:
@@ -866,6 +877,26 @@ describe("chat thread in the audit log", () => {
       tree.root.findAllByProps({ testID: "chat-audit-log-note" }),
     ).toHaveLength(0);
     act(() => tree.unmount());
+  });
+
+  it("holds the composer, saying until when, while the viewer is timed out (#6006)", () => {
+    chatTimeout.current = {
+      until: new Date(Date.now() + 60 * 60_000).toISOString(),
+      reason: "spamming",
+    };
+    try {
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(false);
+      expect(composer.props.plusDisabled).toBe(true);
+      expect(composer.props.onSchedule).toBeUndefined();
+      expect(composer.props.disabledHint).toMatch(
+        /^You're timed out until .+ · Reason: spamming$/,
+      );
+      act(() => tree.unmount());
+    } finally {
+      chatTimeout.current = { until: null, reason: null };
+    }
   });
 
   it("offers Schedule message from the composer, with its sheets mounted (#4956)", () => {

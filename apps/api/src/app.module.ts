@@ -23,6 +23,7 @@ import { InviteModule } from './modules/invite/invite.module';
 import { EventModule } from './modules/event/event.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
 import { FrappLinkModule } from './modules/frapp-link/frapp-link.module';
+import { DesktopUpdateModule } from './modules/desktop-update/desktop-update.module';
 import { MeetingDraftModule } from './modules/meeting/meeting-draft.module';
 import { MeetingRecordingModule } from './modules/meeting/meeting-recording.module';
 import { MeetingMinutesRequestModule } from './modules/meeting/meeting-minutes-request.module';
@@ -43,6 +44,7 @@ import { AiSuggestionModule } from './modules/ai-suggestion/ai-suggestion.module
 import { PledgeClassModule } from './modules/pledge-class/pledge-class.module';
 import { ChapterGroupModule } from './modules/chapter-group/chapter-group.module';
 import { InterestFormModule } from './modules/interest-form/interest-form.module';
+import { ChatTimeoutModule } from './modules/chat-timeout/chat-timeout.module';
 import { RushModule } from './modules/rush/rush.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { StudyModule } from './modules/study/study.module';
@@ -127,6 +129,8 @@ import { validateEnv } from './config/env.validation';
     AiSuggestionModule,
     PledgeClassModule,
     ChapterGroupModule,
+    // Chat timeouts (#6006).
+    ChatTimeoutModule,
     RushModule,
     InterestFormModule,
     NotificationModule,
@@ -134,6 +138,8 @@ import { validateEnv } from './config/env.validation';
     ChapterDocumentModule,
     // Names the records tasks' and events' attachments point at.
     FrappLinkModule,
+    // Where the desktop app looks for updates.
+    DesktopUpdateModule,
     PollModule,
     PredictionModule,
     SemesterRolloverModule,

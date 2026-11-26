@@ -10,6 +10,10 @@ import {
   type ICorpusRepository,
 } from '#domain/repositories/corpus.repository.interface';
 import {
+  MEMBER_REPOSITORY,
+  type IMemberRepository,
+} from '#domain/repositories/member.repository.interface';
+import {
   reciprocalRankFusion,
   recencyWeight,
 } from '#domain/utils/corpus-ranking';
@@ -23,6 +27,8 @@ import {
   CORPUS_SOURCE_ADAPTERS,
   corpusAdapterFor,
   type CorpusSourceAdapter,
+  type CorpusSourceDescription,
+  type CorpusSourceFacts,
 } from './corpus-source';
 
 function byScore(a: CorpusPassage, b: CorpusPassage): number {
@@ -112,7 +118,18 @@ export interface CorpusPassage {
   authorIds: string[];
   /** Chat: how many messages it holds. Null elsewhere. */
   messageCount: number | null;
+  /**
+   * What a document or minutes is beside its title: its type, folder and
+   * who added it (`CorpusSourceAdapter.describe`, #5180). Null for chat, and
+   * when the source could not be described.
+   */
+  facts: CorpusSourceFacts | null;
 }
+
+/** {@link CorpusRetrievalService.readSource}'s answer: the chunks, and what the source is. */
+export type CorpusSourceChunksRead = CorpusSourceChunks & {
+  facts: CorpusSourceFacts | null;
+};
 
 export type CorpusRetrievalResult =
   | {
@@ -174,6 +191,7 @@ export class CorpusRetrievalService {
     @Inject(CORPUS_SOURCE_ADAPTERS)
     private readonly adapters: readonly CorpusSourceAdapter[],
     private readonly gateway: AiGatewayService,
+    @Inject(MEMBER_REPOSITORY) private readonly members: IMemberRepository,
   ) {}
 
   /**
@@ -204,7 +222,7 @@ export class CorpusRetrievalService {
    */
   async readSource(
     request: CorpusSourceReadRequest,
-  ): Promise<CorpusSourceChunks | null> {
+  ): Promise<CorpusSourceChunksRead | null> {
     if (request.sourceType === CHAT_SOURCE_TYPE) return null;
     const adapter = corpusAdapterFor(this.adapters, request.sourceType);
     if (!adapter) return null;
@@ -214,14 +232,20 @@ export class CorpusRetrievalService {
       [request.sourceId],
     );
     if (!readable.has(request.sourceId)) return null;
-    return this.corpus.readSourceChunks({
-      chapterId: request.chapterId,
-      userId: request.actingUserId,
-      sourceType: request.sourceType,
-      sourceId: request.sourceId,
-      offset: request.offset,
-      limit: Math.min(Math.max(Math.trunc(request.limit), 1), MAX_LIMIT),
-    });
+    const [chunks, described] = await Promise.all([
+      this.corpus.readSourceChunks({
+        chapterId: request.chapterId,
+        userId: request.actingUserId,
+        sourceType: request.sourceType,
+        sourceId: request.sourceId,
+        offset: request.offset,
+        limit: Math.min(Math.max(Math.trunc(request.limit), 1), MAX_LIMIT),
+      }),
+      this.describe(request.chapterId, request.sourceType, [request.sourceId]),
+    ]);
+    return chunks
+      ? { ...chunks, facts: described.get(request.sourceId) ?? null }
+      : null;
   }
 
   async retrieve(
@@ -270,10 +294,11 @@ export class CorpusRetrievalService {
       readable,
     );
 
-    const passages = admitted
+    const ranked = admitted
       .map((candidate) => this.passage(candidate, now))
       .sort(byScore)
       .slice(0, limit);
+    const passages = await this.withFacts(request.chapterId, ranked);
     return {
       status: 'ok',
       passages,
@@ -427,6 +452,124 @@ export class CorpusRetrievalService {
     );
   }
 
+  /**
+   * Each passage with what its source is (`CorpusSourceAdapter.describe`),
+   * read for the passages kept, after every access check, so nothing is
+   * read about a source the asker cannot open. The chapter's members are
+   * read once for every source type.
+   */
+  private async withFacts(
+    chapterId: string,
+    passages: CorpusPassage[],
+  ): Promise<CorpusPassage[]> {
+    const idsByType = new Map<string, Set<string>>();
+    for (const passage of passages) {
+      const ids = idsByType.get(passage.sourceType) ?? new Set<string>();
+      ids.add(passage.sourceId);
+      idsByType.set(passage.sourceType, ids);
+    }
+    const byType = new Map(
+      await Promise.all(
+        [...idsByType].map(
+          async ([type, ids]) =>
+            [type, await this.descriptions(chapterId, type, [...ids])] as const,
+        ),
+      ),
+    );
+    const named = await this.named(chapterId, [...byType.values()]);
+    return passages.map((passage) => ({
+      ...passage,
+      facts:
+        named.get(byType.get(passage.sourceType)?.get(passage.sourceId)) ??
+        null,
+    }));
+  }
+
+  /**
+   * What these sources are ({@link CorpusSourceFacts}), by source id, or
+   * nothing when the adapter has none to give. It only adds words beside a
+   * title, so a failed read costs those words, never the answer. The caller
+   * must already know the reader may open every id (`readableBy`, or the
+   * source's own read check, as `read_minutes` makes).
+   */
+  async describe(
+    chapterId: string,
+    sourceType: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceFacts>> {
+    const described = await this.descriptions(chapterId, sourceType, sourceIds);
+    const named = await this.named(chapterId, [described]);
+    const facts = new Map<string, CorpusSourceFacts>();
+    for (const [id, description] of described) {
+      const fact = named.get(description);
+      if (fact) facts.set(id, fact);
+    }
+    return facts;
+  }
+
+  /** The adapter's descriptions, or none when it has none or its read fails. */
+  private async descriptions(
+    chapterId: string,
+    sourceType: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceDescription>> {
+    const adapter = corpusAdapterFor(this.adapters, sourceType);
+    if (!adapter?.describe || sourceIds.length === 0) return new Map();
+    try {
+      return await adapter.describe(chapterId, sourceIds);
+    } catch (error) {
+      this.describeFailed(sourceType, error);
+      return new Map();
+    }
+  }
+
+  /**
+   * The descriptions with whoever added each source named, from one read of
+   * the chapter's members. Someone no longer a member is not named. A failed
+   * read names nobody and keeps the rest.
+   */
+  private async named(
+    chapterId: string,
+    described: readonly Map<string, CorpusSourceDescription>[],
+  ): Promise<Map<CorpusSourceDescription | undefined, CorpusSourceFacts>> {
+    const all = described.flatMap((map) => [...map.values()]);
+    let nameOf = new Map<string, string>();
+    if (all.some((description) => description.by)) {
+      try {
+        nameOf = new Map(
+          (await this.members.findChapterMemberIdentities(chapterId)).map(
+            (person) => [person.user_id, person.display_name],
+          ),
+        );
+      } catch (error) {
+        this.describeFailed('member', error);
+      }
+    }
+    const facts = new Map<
+      CorpusSourceDescription | undefined,
+      CorpusSourceFacts
+    >();
+    for (const description of all) {
+      const name = description.by
+        ? nameOf.get(description.by.userId)
+        : undefined;
+      facts.set(description, {
+        ...description,
+        by: description.by && name ? { verb: description.by.verb, name } : null,
+      });
+    }
+    return facts;
+  }
+
+  private describeFailed(what: string, error: unknown): void {
+    reportCaughtFailure(this.logger, {
+      level: 'warning',
+      site: 'corpus-describe-sources',
+      message: `Corpus: ${what} facts for sources could not be read`,
+      error,
+    });
+  }
+
   private passage(candidate: CorpusCandidate, now: Date): CorpusPassage {
     const fused = reciprocalRankFusion([
       candidate.dense_rank,
@@ -459,6 +602,7 @@ export class CorpusRetrievalService {
       messageId: chat ? candidate.anchor_id : null,
       authorIds: chat ? (candidate.author_ids ?? []) : [],
       messageCount: chat ? candidate.message_count : null,
+      facts: null,
     };
   }
 }

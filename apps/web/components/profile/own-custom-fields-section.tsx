@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   type OwnCustomField,
+  ownCustomFieldDraft,
   ownCustomFieldFormChanges,
   ownCustomFieldOffersNotSet,
-  ownCustomFieldShownValue,
+  ownCustomFieldTidied,
   useOwnCustomFields,
   useUpdateOwnCustomFields,
+  withoutField,
 } from "@repo/hooks";
-import { formatPhone } from "@repo/formatting";
 import {
   CUSTOM_FIELD_AUDIENCE_LINE,
   customFieldTextMaxLength,
@@ -70,9 +71,7 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
   const seededFrom = useRef<Record<string, string> | null>(null);
   useEffect(() => {
     if (!fields) return;
-    const next = Object.fromEntries(
-      fields.map((field) => [field.field_id, ownCustomFieldShownValue(field)]),
-    );
+    const next = ownCustomFieldDraft(fields);
     const previous = seededFrom.current;
     seededFrom.current = next;
     setDraft((current) => {
@@ -101,12 +100,7 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
   if (!fields || fields.length === 0) return null;
 
   const set = (fieldId: string, value: string) => {
-    setProblems((prev) => {
-      if (!(fieldId in prev)) return prev;
-      const rest = { ...prev };
-      delete rest[fieldId];
-      return rest;
-    });
+    setProblems((prev) => withoutField(prev, fieldId));
     setDraft((prev) => ({ ...prev, [fieldId]: value }));
   };
 
@@ -161,18 +155,26 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
   );
 }
 
-function OwnCustomFieldControl({
+/**
+ * One of your fields as its control, with who else sees it (or the refusal)
+ * under it. Controlled: the host holds the draft and saves it. `/profile`'s
+ * More details and About you after a join (#5926) both draw these.
+ */
+export function OwnCustomFieldControl({
   field,
   value,
   problem,
   disabled,
   onChange,
+  fullWidth = false,
 }: {
   field: OwnCustomField;
   value: string;
   problem: string | null;
   disabled: boolean;
   onChange: (value: string) => void;
+  /** Every control as wide as its column, as in a single-column form. */
+  fullWidth?: boolean;
 }) {
   const id = `custom-field-${field.field_id}`;
   const lineId = `${id}-line`;
@@ -220,7 +222,7 @@ function OwnCustomFieldControl({
         >
           <SelectTrigger
             id={id}
-            className="w-full sm:w-60"
+            className={fullWidth ? "w-full" : "w-full sm:w-60"}
             aria-describedby={lineId}
             aria-invalid={problem ? true : undefined}
           >
@@ -250,7 +252,7 @@ function OwnCustomFieldControl({
         id={id}
         value={value}
         disabled={disabled}
-        className={numeric ? "sm:w-40" : undefined}
+        className={numeric && !fullWidth ? "sm:w-40" : undefined}
         type={field.type === "phone" ? "tel" : "text"}
         inputMode={
           field.type === "phone"
@@ -273,7 +275,7 @@ function OwnCustomFieldControl({
         // the profile's own Phone does.
         onBlur={
           field.type === "phone"
-            ? () => value && onChange(formatPhone(value))
+            ? () => value && onChange(ownCustomFieldTidied(field, value))
             : undefined
         }
       />

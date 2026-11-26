@@ -8,6 +8,7 @@ import {
   type MinutesNoteLine,
 } from "./meetings";
 import { meetingSectionLabel } from "./meeting-copy";
+import { TASK_AUDIENCE_COPY, taskGroupLabel } from "./task-audience";
 
 /**
  * Minutes as both apps lay them out to read (#5562; Paul, 2026-11-19:
@@ -34,6 +35,11 @@ export const MINUTES_READ_COPY = {
   done: (count: number) => `${count} done`,
   points: (count: number) => (count === 1 ? "1 point" : `${count} points`),
   nobodyNamed: "Nobody named yet",
+  /**
+   * An action item's way to the task it became (#6051); its Create task is
+   * the suggested-task card's own (`AI_SUGGESTION_COPY.accept`).
+   */
+  openTask: "Open task",
   due: (day: string) => `Due ${day}`,
   yours: "Yours",
   attendance: "Attendance",
@@ -317,6 +323,87 @@ export function minutesActionRows(
   return rows.sort(
     (a, b) => rank(a) - rank(b) || byDue(a, b) || a.index - b.index,
   );
+}
+
+/**
+ * An action item's words as Frapp matches them, the way the server keys its
+ * suggestion (`actionItemKey` in `minutes-task-proposals.ts`, before the
+ * hash): case, spacing and punctuation don't count, so a tidied item is
+ * still the same item.
+ */
+export function minutesActionItemMatchKey(text: string): string {
+  return text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Each action item's waiting suggested task, by the item's place in the
+ * list (#6051): the row's Create task decides that suggestion, so the task
+ * is the one the card would make and the card stops offering it. Two items
+ * that read the same were one suggestion, so only the first gets it. A
+ * suggestion carries the item's words as its quote.
+ */
+export function minutesActionSuggestions<
+  T extends { quote: string | null; task: { title: string } | null },
+>(
+  items: readonly MeetingActionItem[],
+  suggestions: readonly T[],
+): Map<number, T> {
+  const byKey = new Map<string, T>();
+  for (const suggestion of suggestions) {
+    if (!suggestion.task) continue;
+    const key = minutesActionItemMatchKey(
+      suggestion.quote ?? suggestion.task.title,
+    );
+    if (key && !byKey.has(key)) byKey.set(key, suggestion);
+  }
+  const result = new Map<number, T>();
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    const key = minutesActionItemMatchKey(item.text);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    const suggestion = byKey.get(key);
+    if (suggestion) result.set(index, suggestion);
+  });
+  return result;
+}
+
+/**
+ * Who an action item is for, for its line (#6051): once it is a task an
+ * officer can read, who the task went to ("Jake", "Sam and Alex", "Everyone
+ * in Cabinet"); before that, whoever the minutes named, else "Nobody named
+ * yet". `nameOf` gives a member's name as the app writes it.
+ */
+export function minutesActionOwner(parts: {
+  ownerId: string | null;
+  task: {
+    who: {
+      audience: string | null;
+      audience_name: string | null;
+      assignee_ids: readonly string[];
+    };
+  } | null;
+  group: { total: number } | null;
+  nameOf: (userId: string) => string;
+}): string {
+  const who = parts.task?.who;
+  if (who?.audience && who.audience !== "people") {
+    return taskGroupLabel({
+      audience: who.audience,
+      target_name: who.audience_name,
+      total: parts.group?.total ?? 0,
+    });
+  }
+  if (who && who.assignee_ids.length > 0) {
+    return TASK_AUDIENCE_COPY.peopleNames(who.assignee_ids.map(parts.nameOf));
+  }
+  return parts.ownerId
+    ? parts.nameOf(parts.ownerId)
+    : MINUTES_READ_COPY.nobodyNamed;
 }
 
 /** Past this many characters, notes read as a pasted transcript. */

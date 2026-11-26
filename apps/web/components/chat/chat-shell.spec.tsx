@@ -627,6 +627,11 @@ vi.mock("@/components/onboarding/welcome-card", () => ({
 const chatEventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
 }));
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeoutState: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async () => ({
   // The Now card's read (#5777): nothing on unless a test says so.
   useEventsOnNow: () => chatEventsNow.value,
@@ -767,6 +772,12 @@ vi.mock("@repo/hooks", async () => ({
   }),
   // The rows' clock (#5519): a fixed instant, so times read the same each run.
   useNowDate: () => FIXED_NOW,
+  // Chat timeouts (#6006): the viewer's own (`chatTimeoutState`), and the
+  // Time out dialog's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeoutState.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useLiftChatTimeout: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // Direct messages' order and last lines (#3774).
   useChannelLatestMessages: (options?: { enabled?: boolean }) => {
     latestReads.enabled.push(options?.enabled ?? true);
@@ -1263,6 +1274,7 @@ vi.mock("./composer", () => ({
     renderPlusForm,
     plusDrafts,
     isAuditLog,
+    timeoutNotice,
     dropAttachRef,
     onSendGif,
     ask,
@@ -1286,6 +1298,7 @@ vi.mock("./composer", () => ({
     ) => ReactNode;
     plusDrafts?: ReadonlySet<string>;
     isAuditLog?: boolean;
+    timeoutNotice?: { title: string; detail: string | null } | null;
     commandForms?: readonly { command: string; roleAllows: unknown }[];
     onOpenCommandForm?: (
       command: { name: string; implemented: boolean },
@@ -1341,6 +1354,7 @@ vi.mock("./composer", () => ({
       <div
         data-testid="composer"
         data-audit-log={String(isAuditLog ?? false)}
+        data-timeout={timeoutNotice?.title ?? ""}
         data-gif={onSendGif ? "on" : "off"}
         data-ask={ask ? (ask.busy ? "busy" : "ready") : "none"}
         data-ask-unknown={String(askUnknown ?? false)}
@@ -3084,6 +3098,32 @@ describe("ChatShell audit log (#3909)", () => {
   });
 });
 
+// Chat timeouts (#6006): the shell hands the composer the viewer's own
+// timeout in a channel, which the composer draws in the editor's place.
+describe("ChatShell chat timeout", () => {
+  afterEach(() => {
+    chatTimeoutState.current = { until: null, reason: null };
+  });
+
+  it("hands the composer the timeout while it runs", async () => {
+    chatTimeoutState.current = {
+      until: new Date(FIXED_NOW.getTime() + 60 * 60_000).toISOString(),
+      reason: "spamming",
+    };
+    render(<ChatShell initialChannelId="chan-general" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("composer").dataset.timeout).toMatch(
+        /^You're timed out until /,
+      );
+    });
+  });
+
+  it("hands it nothing without one", async () => {
+    render(<ChatShell initialChannelId="chan-general" />);
+    expect((await screen.findByTestId("composer")).dataset.timeout).toBe("");
+  });
+});
+
 describe("ChatShell GIF button (#4631)", () => {
   afterEach(() => {
     gifState.value = { available: false, provider: "" };
@@ -3470,7 +3510,7 @@ describe("ChatShell channel description and start", () => {
     const start = await screen.findByTestId("channel-start");
     expect(
       within(start).getByRole("link", { name: "Edit channel", hidden: true }),
-    ).toHaveAttribute("href", "/settings?tab=chat&channel=chan-general");
+    ).toHaveAttribute("href", "/settings?tab=chat&page=chat-admin&channel=chan-general");
     unmount();
 
     mockUseMyPermissions.mockReturnValue({ data: { permissions: [] } });
@@ -6385,7 +6425,7 @@ describe("ChatShell rail row menu (owner, 2026-11-06)", () => {
     render(<ChatShell initialChannelId="chan-general" />);
     railRowActions.value!.onEdit("chan-random");
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/settings?tab=chat&channel=chan-random",
+      "/settings?tab=chat&page=chat-admin&channel=chan-random",
     );
   });
 

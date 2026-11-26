@@ -169,6 +169,32 @@ describe('drafting a long meeting in parts', () => {
       ].join('\n'),
     );
   });
+
+  it('ends notes past the section’s limit at a whole line (#6058)', () => {
+    const point = `- ${'A point about the house. '.repeat(20).trim()}`;
+    const block = ['Housing', ...Array.from({ length: 30 }, () => point)].join(
+      '\n',
+    );
+    const merged = mergeParts([
+      { ...empty, discussion_log: block },
+      { ...empty, discussion_log: block },
+    ]);
+    expect(merged.discussion_log.length).toBeLessThanOrEqual(20_000);
+    expect(merged.discussion_log.length).toBeGreaterThan(19_000);
+    // Every line it keeps is a whole one.
+    expect(
+      merged.discussion_log
+        .split('\n')
+        .every((line) => line === '' || line === 'Housing' || line === point),
+    ).toBe(true);
+    // Notes that fit are joined untouched, a blank line between parts.
+    expect(
+      mergeParts([
+        { ...empty, discussion_log: 'Formal\n- DJ approved.' },
+        { ...empty, discussion_log: 'Dues\n- Six owe.' },
+      ]).discussion_log,
+    ).toBe('Formal\n- DJ approved.\n\nDues\n- Six owe.');
+  });
 });
 
 describe('recovering a quote that misses its line only in how it is written', () => {

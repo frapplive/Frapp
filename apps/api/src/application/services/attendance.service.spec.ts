@@ -74,6 +74,11 @@ describe('AttendanceService', () => {
     location: null,
     start_time: '2026-02-26T18:00:00.000Z',
     end_time: '2026-02-26T19:00:00.000Z',
+    timing: 'timed',
+    start_date: null,
+    end_date: null,
+    is_tentative: false,
+    calendar_only: false,
     point_value: 10,
     is_mandatory: false,
     recurrence_rule: null,
@@ -133,6 +138,8 @@ describe('AttendanceService', () => {
 
     mockMemberRepo = {
       completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -676,6 +683,64 @@ describe('AttendanceService', () => {
         await refusalCode(service.checkIn('evt-1', 'user-1', 'ch-1')),
       ).toBe('attendance.check_in.window_closed');
 
+      expect(mockAttendanceRepo.checkInAtomic).not.toHaveBeenCalled();
+    });
+
+    it('refuses check-in at an event on the calendar only (#6098)', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        calendar_only: true,
+        point_value: 0,
+        start_time: new Date(Date.now() - 60_000).toISOString(),
+        end_time: new Date(Date.now() + 3_600_000).toISOString(),
+      });
+
+      expect(
+        await refusalCode(service.checkIn('evt-1', 'user-1', 'ch-1')),
+      ).toBe('attendance.calendar_only');
+      await expect(
+        service.markByHand('evt-1', 'ch-1', ['user-1'], 'PRESENT', 'officer'),
+      ).rejects.toThrow(ConflictException);
+      await expect(service.mintCheckInToken('evt-1', 'ch-1')).rejects.toThrow(
+        ConflictException,
+      );
+      await expect(
+        service.reportCheckInScreen('evt-1', 'ch-1', 'officer-1', {
+          lat: 1,
+          lng: 1,
+          accuracy: 5,
+        } as never),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.updateStatus(
+          'evt-1',
+          'user-1',
+          'ch-1',
+          'PRESENT',
+          null,
+          'officer',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(mockAttendanceRepo.checkInAtomic).not.toHaveBeenCalled();
+    });
+
+    it('refuses check-in while the time is TBD, and marks nobody absent (#6098)', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        timing: 'time_tbd',
+        start_date: '2026-02-26',
+        end_date: '2026-02-26',
+        is_mandatory: true,
+        start_time: '2026-02-26T05:00:00.000Z',
+        end_time: '2026-02-27T05:00:00.000Z',
+      });
+
+      expect(
+        await refusalCode(service.checkIn('evt-1', 'user-1', 'ch-1')),
+      ).toBe('attendance.time_tbd');
+      await expect(service.markAutoAbsent('evt-1', 'ch-1')).resolves.toEqual({
+        marked: 0,
+      });
       expect(mockAttendanceRepo.checkInAtomic).not.toHaveBeenCalled();
     });
 
