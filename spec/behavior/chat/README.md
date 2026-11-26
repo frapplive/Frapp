@@ -1865,6 +1865,37 @@ This follows WhatsApp's ticks; iMessage says the same in words under the bubble.
   It does not flip the moment the other member reads, since nothing pings the sender then; that, and "Read" under the viewer's own message inside the open conversation, are [#5532](https://github.com/pdcarlson/Frapp/issues/5532).
   A message still queued in the outbox is not on the row at all yet (the row is the server's latest), so there is no "sending" mark ([#5533](https://github.com/pdcarlson/Frapp/issues/5533)).
 
+### Where the unread start
+
+_(Added in [#6052](https://github.com/pdcarlson/Frapp/issues/6052), asked by Paul (`pdcarlson`) on 2026-11-25 from Winston's feedback: "like discord a new messages and a direction to indicate where the new messages are".)_
+
+A channel or DM opened with unread messages shows where they start, as Discord and Slack do, on web and the phone alike.
+The look is [`components.md` § New messages divider](../../ui/design-system/components.md#11-signature-surfaces) and the words [`writing.md`](../../ui/design-system/writing.md); the rules are `new-messages.ts` and the per-visit state `useNewMessages`, both in `@repo/hooks`, which both threads use.
+
+- **Taken once a visit, as the channel opens.**
+  Opening stamps the cursor to `now()` (above), and so does every message that lands while the member looks, so the thread does not read the live cursor.
+  It takes the count and the cursor from what `GET /v1/channels/unread` said as the channel opened (`last_read_at` on each row since `20261126001026`, the cursor the count was taken from), the answer the app already holds for the channel list, and keeps both for the visit.
+  No stamp after that moves the divider or changes the pill's count while the member reads.
+  A visit is an open of the channel: switching to it, and on web also the thread coming back on screen (below `lg`, back from the channel list; the panel shown again), since leaving stamped it read.
+  The phone's thread coming back from a screen pushed over it is the same visit.
+  A channel opened before the counts first answer takes the first answer, which may already include the open's own stamp, and then shows nothing; so does a phone launched cold from a push, and one resumed from a push takes the counts it held before going to the background ([#6081](https://github.com/pdcarlson/Frapp/issues/6081) closes this).
+- **The divider** goes above the first message after that cursor that is someone else's and has something to read: the viewer's own messages, deleted messages and a blocked member's tombstones are skipped, as they never count.
+  It starts a run, as the day divider does, so the first unread message names its author ([`components.md`](../../ui/design-system/components.md) § Grouping).
+  Nothing is drawn when the count was zero, or for a channel the member never opened (no cursor): the server counts a never-opened channel's whole history, and a line above its first message would send a new member to the start of the channel, so it opens at its newest message as Slack does for a channel just joined.
+- **Opening** lands with the divider at the top of the screen, so a long stretch of unread starts where it starts, and a stretch shorter than a screen sits at the newest message as before (the list cannot scroll past its end).
+  When the unread start further back than the loaded history, the thread reads older pages for the first one (up to ten pages of 100) and lands there, as Discord and Slack open on the first unread however far back.
+  It lands as soon as the divider's row is loaded, also when the counts or the unread rows arrive after the first rows drew (a reconnect backfill under a cached page), as long as the member is still at the newest message where the thread opened them: once they have scrolled, nothing moves them, and a pill points the way instead.
+  A jump to one message (a search hit, a bookmark, a link, a push naming a message) owns where its open lands; the divider is still drawn.
+- **The pill** shows while the divider is off screen: `12 new messages` with an arrow toward it (up when it is above the screen or in history not loaded yet, down when the member scrolled back above it), and `Mark as read` beside it.
+  The count is the server's `unread_count` as the channel opened, never re-counted on the client, `99+` past 99.
+  Tapping it scrolls the divider to the top of the screen, reading older pages for it first when it is not loaded yet (up to ten pages of 100, then as far as it got).
+  It goes away for the rest of the visit once the member has seen the divider and then reached the newest message, since nothing new is left to point at.
+- **Mark as read** stamps the cursor again (opening already did) and takes the pill and the divider away for the visit, as Discord's does.
+- **With Jump to latest.**
+  Jump to latest keeps its corner and its job, the newest message and anything that lands below the reader ([`components.md`](../../ui/design-system/components.md) § New messages pill).
+  The pill sits at the top and goes to where the unread started.
+  Messages arriving while the member reads never move the divider or join the pill's count; they are Jump to latest's.
+
 ### Before the counts arrive (mobile)
 
 On open and on resume the counts request is one of several sent at once and can take seconds (#3728).

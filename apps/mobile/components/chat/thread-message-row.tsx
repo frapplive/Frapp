@@ -24,6 +24,7 @@ import {
   type ThreadRow,
 } from "@repo/chat-core/blocks";
 import { dayDividerLabel } from "@repo/chat-core/grouping";
+import { NEW_MESSAGES_DIVIDER_LABEL } from "@repo/hooks";
 import { StyleSheet, Text, View } from "react-native";
 import { SignetTokens } from "@repo/theme/signet";
 import { canOpenMessageActions } from "@repo/chat-core/message-actions";
@@ -82,6 +83,12 @@ export interface ThreadMessageRowProps {
   /** The run's last row (Bubbles draws the avatar under it). Defaults to `true`. */
   endsRun?: boolean;
   startsDay: boolean;
+  /**
+   * The channel's first unread message as it opened (#6052): the "New
+   * messages" divider goes above it, carrying the date when it also starts a
+   * day.
+   */
+  newMessagesAbove?: boolean;
   /**
    * Resolved before any row mounts (#2250): `chat-thread.tsx` withholds the
    * list while `/v1/users/me` is in flight, because a null viewer would paint
@@ -142,7 +149,15 @@ export function ThreadMessageRow(props: ThreadMessageRowProps) {
   // and the divider reads above the row.
   return (
     <View>
-      {props.startsDay ? (
+      {props.newMessagesAbove ? (
+        <NewMessagesDivider
+          dayLabel={
+            props.startsDay
+              ? dayDividerLabel(props.row.message.created_at)
+              : undefined
+          }
+        />
+      ) : props.startsDay ? (
         <DayDivider createdAt={props.row.message.created_at} />
       ) : null}
       <ThreadMessageRowBody {...props} />
@@ -477,6 +492,42 @@ function DayDivider({ createdAt }: { createdAt: string }) {
   );
 }
 
+/**
+ * The line above a channel's first unread message (#6052): a rule in
+ * `--foreground` with "New messages" at its end, where Discord and Slack put
+ * their "New" tag. Neutral, as unread is everywhere else (the channel row's
+ * pip is `--foreground` too), and brighter than the day divider's hairline so
+ * the two never read as one; the day divider's row, so they sit at the same
+ * height. When the first unread message also starts a day, the one line
+ * carries the date in the middle, as Discord's does, rather than stacking two
+ * rules. Web's is `NewMessagesDivider` in `components/chat/new-messages-pill.tsx`.
+ */
+function NewMessagesDivider({ dayLabel }: { dayLabel?: string }) {
+  const { tokens } = useFrappTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
+  return (
+    <View
+      testID="new-messages-divider"
+      style={styles.divider}
+      accessible
+      accessibilityLabel={
+        dayLabel
+          ? `${NEW_MESSAGES_DIVIDER_LABEL}, ${dayLabel}`
+          : NEW_MESSAGES_DIVIDER_LABEL
+      }
+    >
+      <View style={styles.newRule} />
+      {dayLabel ? (
+        <>
+          <Text style={styles.dividerLabel}>{dayLabel}</Text>
+          <View style={styles.newRule} />
+        </>
+      ) : null}
+      <Text style={styles.newLabel}>{NEW_MESSAGES_DIVIDER_LABEL}</Text>
+    </View>
+  );
+}
+
 function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     divider: {
@@ -498,6 +549,19 @@ function createStyles(tokens: SignetTokens) {
         weight: tokens.typography.weight.semibold,
       }),
       color: tokens.color.text.mutedForeground,
+    },
+    // A full point in `--foreground`, not the day divider's hairline.
+    newRule: {
+      flex: 1,
+      height: 1,
+      backgroundColor: tokens.color.text.foreground,
+    },
+    newLabel: {
+      ...typeRole({
+        ...tokens.typography.role.caption,
+        weight: tokens.typography.weight.semibold,
+      }),
+      color: tokens.color.text.foreground,
     },
   });
 }
