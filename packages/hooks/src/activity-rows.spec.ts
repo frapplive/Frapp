@@ -804,6 +804,31 @@ describe("Running by kind (#4173, #5779)", () => {
     expect([mine!.dateBlock, waiting!.dateBlock]).toEqual([null, null]);
   });
 
+  it("draws an all-day event by its day, never its stored midnight (#6098)", () => {
+    const data = activity({
+      coming_up: [
+        event({
+          // The saver's midnight in another zone.
+          start_time: "2026-11-12T05:00:00.000Z",
+          end_time: "2026-11-13T05:00:00.000Z",
+          timing: "all_day",
+          start_date: "2026-11-12",
+          end_date: "2026-11-12",
+          is_tentative: true,
+          calendar_only: true,
+          attendance: "optional",
+        }),
+      ],
+    });
+    const [todo] = activityToDos(data, NOW);
+    expect(todo!.dated.dateBlock).toEqual({ month: "NOV", day: "12" });
+    expect(todo!.dated.detail).toBe("Tomorrow · All day · Great Room");
+    expect(todo!.timed.detail).toBe("All day · Great Room");
+    expect(todo!.dated.badge).toEqual({ label: "Tentative", variant: "outline" });
+    expect(todo!.at?.getHours()).toBe(0);
+    expect(todo!.now).toBe(false);
+  });
+
   it("calls a warning badge an ask, and nothing else", () => {
     expect(
       activityBadgeIsAsk({ badge: { label: "Vote", variant: "warning" } }),

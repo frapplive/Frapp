@@ -3,6 +3,9 @@ import type { NavGlyphName } from "@repo/theme/nav-glyphs";
 import {
   MEETING_LIST_COPY,
   MEETING_NOTE_TAKERS_COPY,
+  EVENT_TENTATIVE_LABEL,
+  eventDatedPhase,
+  eventIsDated,
   eventOnAt,
   eventTimingFieldsOf,
   minutesDraftState,
@@ -15,9 +18,12 @@ import {
   closesAtHasPassed,
   formatDayHeading,
   formatDueLabel,
+  formatEventRelativeWhen,
+  formatEventRowTime,
   formatMinutesRounded,
   formatRelativeDayTime,
   formatTimeOfDay,
+  parseBareDateLocalMidnight,
   parseInstant,
   parseInstantOrBareLocalNoon,
 } from "@repo/formatting";
@@ -644,8 +650,26 @@ function hoursRow(entry: ActivityHours): ActivityRow {
   };
 }
 
-function dateBlock(event: ActivityEvent): ActivityDateBlock | null {
-  const at = parseInstant(event.start_time);
+/**
+ * When an Activity event row sits in time (#6098): a timed event at its
+ * start; a dated one at the viewer's own midnight of its first day, or of
+ * today while a span is under way, so it leads its day as an all-day event
+ * leads Google Calendar's. Its stored start is the saver's midnight, never
+ * read here.
+ */
+function eventAt(event: ActivityEvent, now: Date): Date | null {
+  const shape = eventTimingFieldsOf(event as unknown as Record<string, unknown>);
+  if (!eventIsDated(shape)) return parseInstant(event.start_time);
+  const first = shape.start_date
+    ? parseBareDateLocalMidnight(shape.start_date)
+    : null;
+  if (!first) return null;
+  if (eventDatedPhase(shape, now) !== "during") return first;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function dateBlock(event: ActivityEvent, now: Date): ActivityDateBlock | null {
+  const at = eventAt(event, now);
   if (!at) return null;
   return {
     month: at.toLocaleDateString(undefined, { month: "short" }).toUpperCase(),
@@ -660,15 +684,23 @@ function eventRow(
   when: RowWhen = "dated",
 ): ActivityRow {
   const needsCheckIn = activityEventNeedsCheckIn(event);
+  const shape = eventTimingFieldsOf(event as unknown as Record<string, unknown>);
+  const dated = eventIsDated(shape);
   return {
     kind: "event",
     key: `${group}:event:${event.id}`,
     event,
     title: event.name,
     detail: [
+      // A dated event says "All day" or "Time TBD" where a time would go,
+      // never its stored midnight (#6098).
       when === "timed"
-        ? formatTimeOfDay(event.start_time)
-        : formatRelativeDayTime(event.start_time, now),
+        ? dated
+          ? formatEventRowTime(shape, now)
+          : formatTimeOfDay(event.start_time)
+        : dated
+          ? formatEventRelativeWhen(shape, now)
+          : formatRelativeDayTime(event.start_time, now),
       event.location,
     ]
       .filter(Boolean)
@@ -679,13 +711,15 @@ function eventRow(
       ? { label: "Check in", variant: "warning" }
       : event.checked_in
         ? { label: "Checked in", variant: "success" }
-        : event.attendance === "required"
+        : event.attendance === "required" && !shape.calendar_only
           ? { label: "Required", variant: "outline" }
-          : null,
+          : shape.is_tentative
+            ? { label: EVENT_TENTATIVE_LABEL, variant: "outline" }
+            : null,
     glyph: "event",
     // Under a day's heading the date is already said: the row leads with
     // the events glyph instead.
-    dateBlock: when === "timed" ? null : dateBlock(event),
+    dateBlock: when === "timed" ? null : dateBlock(event, now),
     unread: group !== "made" && event.unread,
     readRef: { kind: "event", item_id: event.id },
     progress:
@@ -1095,7 +1129,7 @@ export function activityToDos(
         return both(
           (when) =>
             eventRow(event, needsCheckIn ? "needs" : "coming", now, when),
-          parseInstant(event.start_time),
+          eventAt(event, now),
           // Happening now only until its end, as the Now card and the
           // event's pill say (#5777); check-in's grace after it still
           // offers Check in under its day.
