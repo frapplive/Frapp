@@ -94,7 +94,8 @@ The session can't run `/compact` on itself, so it hands off instead. After each 
    session id and state, the decisions and preferences heard so far, and what you were about to do.
    Keep the coordinator's overall goal, say what was done recently, and carry Paul's latest message
    over nearly verbatim, not paraphrased (Paul, 2026-11-10).
-3. Start the successor with `create_session`: the same title plus a number, `source_url` the repo,
+3. Start the successor with `create_session`, without asking: this self-handoff is the one exception
+   to the handoff skill's wait for the user's go. The same title plus a number, `source_url` the repo,
    and a first message that says to run this skill as the successor of this session, followed by
    the handoff.
 4. The successor watches the board's comments with `ArtifactComments`. It doesn't republish.

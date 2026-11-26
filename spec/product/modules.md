@@ -2,7 +2,7 @@
 
 ## Identity & Access (IAM)
 
-**Auth provider:** Supabase Auth (email/password, magic link, Google, Apple).
+**Auth provider:** Supabase Auth (email/password, email code, Google, Apple).
 
 - **Multi-tenancy:** Every user belongs to one or more chapters (tenants). All data access is strictly scoped by `chapter_id`.
 - **RBAC:** Permissions are open-ended strings. Frapp publishes a system permissions catalog that the API enforces; chapters can define additional custom permission strings for channel gating and organizational use. **Custom permission strings are chapter-scoped — they cannot grant system-level or cross-chapter capabilities.** A chapter's custom `admin:all` (or any other string) applies only inside that chapter; the API never consults a chapter's custom permissions when authorizing platform or cross-chapter operations. Roles are chapter-scoped and fully customizable. System roles are seeded on chapter creation with sensible defaults; [`spec/behavior/rbac.md` § Role Lifecycle](../behavior/rbac.md#role-lifecycle) names them and their exact seeded permission sets. Full permission catalog and check algorithm: [`spec/behavior/rbac.md`](../behavior/rbac.md).
@@ -213,8 +213,8 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Chat | `chat` | Channels, DMs, reactions, pins, threads |
 | Members | `members` | Roster, profiles, custom fields, alumni status |
 | Announcements | `announcements` | Exec-write, member-read broadcast channel |
-| Audit Log | `audit-log` | Member-visible officer action history |
-| Chapter Settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
+| Logs | `audit-log` | Member-visible officer action history |
+| Chapter settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
 
 ## Paid integrations (gated by subscription)
 
@@ -231,7 +231,7 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
-| Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
+| Study zones | `geofences` | The places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
 | Meetings | `meetings` | Minutes written by hand, or drafted from notes or a recording, with suggested tasks and one template per chapter ([`spec/behavior/meetings.md`](../behavior/meetings.md)) |
 | AI Q&A | `ai` | Ask-anything over meeting minutes, documents, structured data, announcements, and channel messages from members who agreed ([`spec/behavior/ai.md`](../behavior/ai.md)) |
 

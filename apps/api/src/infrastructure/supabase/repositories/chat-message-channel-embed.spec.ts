@@ -6,7 +6,7 @@ import {
 } from '#test/helpers/repository-corpus';
 
 /**
- * Static guard for the PGRST201 class of bug (#4087, and #746 before it).
+ * Static guard for the PGRST201 class of bug (#4087, #6121, and #746 before it).
  *
  * PostgREST refuses an embed named by table alone when more than one
  * relationship links the two tables. #4042 created exactly that between
@@ -29,7 +29,9 @@ import {
  * built from a constant elsewhere slips past it, as does a `;` inside a string
  * mid-chain (comments are stripped first).
  * `test/integration/chat-message-channel-embed.integration-spec.ts` runs the
- * real queries against a local stack.
+ * chat_messages/chat_channels queries against a local stack; the members/users
+ * pairs have no live-stack spec (checked by hand against local PostgREST,
+ * #6121).
  */
 interface AmbiguousPair {
   parent: string;
@@ -53,6 +55,21 @@ const AMBIGUOUS_PAIRS: readonly AmbiguousPair[] = [
       'chat_messages_channel_id_fkey',
       'chat_channels_background_message_id_fkey',
     ],
+  },
+  // #6079 added `members.chat_timeout_by → users(id)` (the officer who set a
+  // chat timeout) beside `members.user_id`, so `users` from `members` became
+  // ambiguous and the mention reads, member search and meeting notes failed
+  // with PGRST201 on staging (#6121). From a membership, `users` is its member.
+  {
+    parent: 'members',
+    embed: 'users',
+    allowed: ['members_user_id_fkey'],
+  },
+  // From a user both are real: their memberships, or the timeouts they set.
+  {
+    parent: 'users',
+    embed: 'members',
+    allowed: ['members_user_id_fkey', 'members_chat_timeout_by_fkey'],
   },
 ];
 
@@ -156,6 +173,25 @@ describe('embeds between tables with more than one relationship', () => {
     expect(
       check(
         `this.supabase.from('chat_message_attachments').select('*, chat_channels!inner(chapter_id)');`,
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a bare users embed from members, which #6079 made ambiguous', () => {
+    const memberToUser = AMBIGUOUS_PAIRS.find(
+      (pair) => pair.parent === 'members' && pair.embed === 'users',
+    );
+    if (!memberToUser) throw new Error('members → users pair missing');
+    expect(
+      findUnhintedEmbeds(
+        `this.supabase.from('members').select('user_id, users!inner(id, display_name)');`,
+        memberToUser,
+      ),
+    ).toEqual(['users!inner(']);
+    expect(
+      findUnhintedEmbeds(
+        `this.supabase.from('members').select('user_id, users!members_user_id_fkey!inner(id, display_name)');`,
+        memberToUser,
       ),
     ).toEqual([]);
   });

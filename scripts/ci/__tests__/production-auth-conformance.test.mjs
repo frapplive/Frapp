@@ -43,8 +43,11 @@ const STAGING_REF = getEnvironment("staging").supabaseProjectRef;
 
 const FRAPP_MAGIC_LINK = {
   mailer_subjects_magic_link: "Sign in to Frapp",
+  // Production's transition shape (#6134): the code, and a token_hash link beside it.
   mailer_templates_magic_link_content:
-    '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+    '<p>Your code is {{ .Token }}.</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+  mailer_templates_confirmation_content:
+    '<p>Your code is {{ .Token }}.</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a>',
 };
 
 const HEALTHY_AUTH = {

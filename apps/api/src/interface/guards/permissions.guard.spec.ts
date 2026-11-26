@@ -214,6 +214,27 @@ describe('PermissionsGuard', () => {
     await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
   });
 
+  it('denies on the class-level any-of group when the handler group is met', async () => {
+    mockPermissionMetadata({
+      classAny: ['roles:manage', 'billing:manage'],
+      handlerAny: ['events:create', 'events:update'],
+    });
+    mockRoles([role('role-1', ['events:create'])]);
+
+    const ctx = mockExecutionContext({ role_ids: ['role-1'] });
+    await expect(guard.canActivate(ctx)).rejects.toThrow(
+      'Missing one of required permissions: roles:manage, billing:manage',
+    );
+  });
+
+  it('enforces a class-level any-of group on its own', async () => {
+    mockPermissionMetadata({ classAny: ['roles:manage', 'billing:manage'] });
+    mockRoles([role('role-1', ['events:create'])]);
+
+    const ctx = mockExecutionContext({ role_ids: ['role-1'] });
+    await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
+  });
+
   describe('chapter scoping', () => {
     it('ignores a role id belonging to another chapter', async () => {
       // `members.role_ids` can carry a stale or cross-chapter id. Resolving it

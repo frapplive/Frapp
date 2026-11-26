@@ -193,27 +193,26 @@ export type ModuleSettings = {
   tier: "free" | "paid";
 };
 
-type ModuleCopy = Pick<
-  ModuleSettings,
-  "key" | "label" | "description" | "offNote"
->;
+/**
+ * A module page's own words. Its name is the catalog's (`MODULE_CATALOG`),
+ * the one the plan table, the composer and the plus menu also show, so the
+ * two can't drift apart (#6031).
+ */
+type ModuleCopy = Pick<ModuleSettings, "key" | "description" | "offNote">;
 
 const MODULE_COPY: readonly ModuleCopy[] = [
   {
     key: "chat",
-    label: "Chat",
     description: "Channels and direct messages for the whole chapter.",
     offNote: "",
   },
   {
     key: "announcements",
-    label: "Announcements",
     description: "Officer posts that reach every member, with a push.",
     offNote: "",
   },
   {
     key: "events",
-    label: "Events",
     description:
       "The chapter calendar, RSVPs, required attendance and check-in.",
     offNote:
@@ -221,7 +220,6 @@ const MODULE_COPY: readonly ModuleCopy[] = [
   },
   {
     key: "points",
-    label: "Points",
     description:
       "The points ledger and standings: points from events, service and officers.",
     offNote:
@@ -229,7 +227,6 @@ const MODULE_COPY: readonly ModuleCopy[] = [
   },
   {
     key: "hours",
-    label: "Service hours",
     description:
       "Members log service and study hours; officers approve service for points.",
     offNote:
@@ -237,27 +234,23 @@ const MODULE_COPY: readonly ModuleCopy[] = [
   },
   {
     key: "geofences",
-    label: "Study zones",
     description:
       "Places on the map where a study session counts, and what it earns.",
     offNote: "Study sessions can't start, and the Study zones tool is hidden.",
   },
   {
     key: "tasks",
-    label: "Tasks",
     description: "Assign work to members and confirm it's done.",
     offNote:
       "Members don't see Tasks in the sidebar or as a card in chat, and no new tasks can be made.",
   },
   {
     key: "polls",
-    label: "Polls",
     description: "Quick votes posted in a channel.",
     offNote: "No one can post a new poll in chat.",
   },
   {
     key: "meetings",
-    label: "Meetings",
     description:
       "Minutes for chapter, exec and committee meetings, posted to the members each meeting invites.",
     offNote:
@@ -265,31 +258,26 @@ const MODULE_COPY: readonly ModuleCopy[] = [
   },
   {
     key: "documents",
-    label: "Documents",
     description: "The chapter's files: bylaws, minutes, forms.",
     offNote: "Members don't see Documents in the sidebar.",
   },
   {
     key: "backwork",
-    label: "Backwork",
     description: "The chapter's library of past coursework.",
     offNote: "Members don't see Backwork in the sidebar.",
   },
   {
     key: "reports",
-    label: "Reports",
     description: "Exports of attendance, points, roster and service.",
     offNote: "The Reports tool is hidden and nothing can be exported.",
   },
   {
     key: "rush",
-    label: "Recruitment",
     description: "Prospects, notes, votes and bids during recruitment.",
     offNote: "Members don't see Recruitment, and no prospect can be added.",
   },
   {
     key: "dues",
-    label: "Dues",
     description: "Dues amounts, payment plans and late fees.",
     offNote: "Members aren't invoiced for dues.",
   },
@@ -303,6 +291,7 @@ export const MODULE_SETTINGS: readonly ModuleSettings[] = MODULE_COPY.flatMap(
     return [
       {
         ...copy,
+        label: entry.label,
         alwaysOn: entry.alwaysOn,
         tier: entry.tier === "paid" ? "paid" : "free",
       },

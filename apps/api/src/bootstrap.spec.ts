@@ -19,6 +19,7 @@ import {
 import { enqueueSanitizedLog } from './infrastructure/analytics/posthog-runtime';
 import { getRequestId } from './infrastructure/observability/request-als';
 import type { DeploymentEnvironment } from './interface/http/deployment-environment';
+import { CORS_ALLOWED_ORIGINS } from './interface/http/cors.options';
 import { createProxyChainTripwire } from './interface/middleware/proxy-chain-tripwire.middleware';
 
 jest.mock('./infrastructure/analytics/posthog-runtime', () => ({
@@ -535,6 +536,22 @@ describe('configureApp', () => {
     ] as const)('%s refuses %s', async (environment, origin) => {
       expect(await allowOrigin(environment, origin)).toBeUndefined();
     });
+
+    // Without it Chrome reuses a preflight for five seconds, and an open
+    // after that paid an extra round trip before every first read (#6121).
+    it.each(['production', 'staging', 'local'] as const)(
+      '%s lets a browser keep a preflight answer for two hours',
+      async (environment) => {
+        const configured = apps.get(environment) as INestApplication;
+        const res = await request(configured.getHttpServer())
+          .options('/v1/echo')
+          .set('Origin', CORS_ALLOWED_ORIGINS[environment][0])
+          .set('Access-Control-Request-Method', 'GET')
+          .set('Access-Control-Request-Headers', 'authorization,x-chapter-id')
+          .expect(204);
+        expect(res.headers['access-control-max-age']).toBe('7200');
+      },
+    );
   });
 
   describe('security headers (#483)', () => {

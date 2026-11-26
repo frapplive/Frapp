@@ -58,10 +58,11 @@ export function settingPhoneRoute(
 ): NotificationTarget | null {
   const phone = settingPhoneTarget(entry, options);
   if (!phone) return null;
-  const params = {
-    ...phone.params,
-    ...(phone.anchor ? { setting: entry.id } : {}),
-  };
+  const params: Record<string, string> = { ...phone.params };
+  // A page pushed inside the screen (Settings' `?page=`, #6032) opens as its
+  // own stack entry, so back returns to the screen's first page.
+  if (phone.page) params.page = phone.page;
+  if (phone.anchor) params.setting = entry.id;
   return Object.keys(params).length > 0
     ? { pathname: phone.screen, params }
     : { pathname: phone.screen };
@@ -95,7 +96,13 @@ export function openSetting(
     chapterFeatures: options.chapterFeatures,
   });
   if (route) {
-    if (options.here === entry.phone?.screen && options.jumpHere) {
+    // Only the first page carries a search field, so a match on one of its
+    // pushed pages opens that page rather than lighting it in place.
+    if (
+      options.here === entry.phone?.screen &&
+      !entry.phone?.page &&
+      options.jumpHere
+    ) {
       options.jumpHere(entry.id);
       return;
     }

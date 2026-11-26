@@ -369,7 +369,8 @@ export class CalendarFeedService implements OnApplicationBootstrap {
   }
 
   private taskItem(task: TaskView & { due_date: string }): IcsItem {
-    const url = `${this.appOrigin}/tasks`;
+    // The task in its panel on the web app's Activity (#5948).
+    const url = `${this.appOrigin}/activity?task=${encodeURIComponent(task.id)}`;
     return {
       uid: `task-${task.id}@frapp.live`,
       // A task with a time sits at that moment, as a calendar shows a
