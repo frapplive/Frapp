@@ -1,4 +1,4 @@
-import { formatEventRelativeWhen } from "@repo/formatting";
+import { formatEventRelativeWhen, formatEventWhenOr } from "@repo/formatting";
 import { useCallback } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useStartMeeting, type MeetingSummary } from "@repo/hooks";
@@ -13,7 +13,6 @@ import {
   meetingInTheRoom,
   meetingIsOn,
   meetingWhenLabel,
-  eventIsDated,
 } from "@repo/validation";
 import { selectAllEventRows, type EventRow } from "@/lib/events/select";
 
@@ -166,10 +165,12 @@ export function meetingChoices(
         detail: [
           event.id === inRoom?.id
             ? MEETING_START_COPY.onNow
-            : eventIsDated(event)
-              ? // By its day, never its stored midnight (#6098).
-                (formatEventRelativeWhen(event, now) ?? "")
-              : meetingWhenLabel(event.start_time, now),
+            : // By its day, never its stored midnight (#6098).
+              formatEventWhenOr(
+                event,
+                (start) => meetingWhenLabel(start, now),
+                (shape) => formatEventRelativeWhen(shape, now),
+              ),
           ownDraftFor.has(event.id) ? MEETING_START_COPY.yours : null,
           opens
             ? MEETING_START_COPY.openMinutes

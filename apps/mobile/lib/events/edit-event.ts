@@ -125,9 +125,17 @@ export function duplicateEventTemplate(
 ): NewEventDraft {
   const draft = draftFromEvent({ event, seriesRule: null, parent: null });
   const { start, end } = draft;
-  if (!start || !end || Number.isNaN(start.getTime()) || start > now) {
-    return draft;
-  }
+  if (!start || !end || Number.isNaN(start.getTime())) return draft;
+  // An all-day or time-TBD event is judged by its first day against the
+  // viewer's today, not by the form's 7 PM placeholder: today's all-day
+  // event duplicated at 9 PM stays today (#6098).
+  const dated = draft.timing !== undefined && draft.timing !== "timed";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const ahead = (at: Date) =>
+    dated
+      ? new Date(at.getFullYear(), at.getMonth(), at.getDate()) >= today
+      : at > now;
+  if (ahead(start)) return draft;
   const length = end.getTime() - start.getTime();
   // Whole weeks by the calendar, so a clock change between keeps the hour,
   // the jump first and then a week at a time until it is ahead: a jump
@@ -137,7 +145,7 @@ export function duplicateEventTemplate(
   );
   const moved = new Date(start);
   moved.setDate(moved.getDate() + 7 * weeks);
-  while (moved <= now) moved.setDate(moved.getDate() + 7);
+  while (!ahead(moved)) moved.setDate(moved.getDate() + 7);
   // An all-day event's last day moves with its first, so it keeps its days.
   const daysMoved = Math.round(
     (Date.UTC(moved.getFullYear(), moved.getMonth(), moved.getDate()) -

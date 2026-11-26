@@ -114,8 +114,9 @@ export function EventCard({
   const now = useNowDate();
   // An event that takes no attendance (on the calendar only, or time TBD,
   // #6098) never offers a check-in, whatever its stored times say.
+  const takesAttendance = eventTakesAttendance(payload);
   const open =
-    eventTakesAttendance(payload) &&
+    takesAttendance &&
     resolveCheckInWindow(
       payload.start_time,
       payload.end_time,
@@ -234,7 +235,8 @@ export function EventCard({
     });
   };
   const excuseButton =
-    excuse.kind === "offer" && !eventsOff ? (
+    // Nothing to be excused from at an event that takes no attendance.
+    excuse.kind === "offer" && !eventsOff && takesAttendance ? (
       <CardButton
         label="Can't make it?"
         variant="link"
@@ -284,7 +286,7 @@ export function EventCard({
           />
           <CardMeta
             items={[
-              payload.point_value ? (
+              takesAttendance && payload.point_value ? (
                 <PointsChip points={payload.point_value} />
               ) : null,
               canViewAttendance && checkedIn !== null

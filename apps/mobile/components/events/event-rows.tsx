@@ -5,6 +5,7 @@ import {
   CHECK_IN_OPEN_LABEL,
   EVENT_PAGE_COPY,
   EVENT_TENTATIVE_LABEL,
+  eventTakesAttendance,
 } from "@repo/validation";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
@@ -125,7 +126,10 @@ export function EventRowFlat({
   const meta = [
     clockOf(event, now),
     event.location,
-    event.point_value ? formatPoints(event.point_value) : null,
+    // Points only where there is something to attend (#6098), as web's row.
+    eventTakesAttendance(event) && event.point_value
+      ? formatPoints(event.point_value)
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
