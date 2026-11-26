@@ -10,13 +10,24 @@ import {
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from "@react-native-community/datetimepicker";
-import { formatWeekdayDay } from "@repo/formatting";
+import {
+  formatWeekdayDay,
+  localIsoDate,
+  parseBareDateLocalNoon,
+} from "@repo/formatting";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
+  addEventDays,
   EVENT_LENGTH_CHOICES,
+  EVENT_TIMING_CHOICE_LABELS,
+  EVENT_TIMING_CHOICES,
+  EVENT_WHEN_COPY,
   eventLengthLabel,
+  type EventTiming,
 } from "@repo/validation";
 import { TextAction } from "@/components/events/event-excuses";
+import { Segmented } from "@/components/segmented";
+import { Toggle } from "@/components/toggle";
 import { formatEventClock } from "@/lib/events/format";
 import { MINUTE_INTERVAL, withDay } from "@/lib/events/create-event";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -190,7 +201,10 @@ export function WhenTimes({
               style={({ pressed }) => [
                 styles.chip,
                 held
-                  ? { backgroundColor: brand.accentSubtle, borderColor: brand.accentBorder }
+                  ? {
+                      backgroundColor: brand.accentSubtle,
+                      borderColor: brand.accentBorder,
+                    }
                   : null,
                 pressed ? styles.pressed : null,
               ]}
@@ -207,7 +221,7 @@ export function WhenTimes({
       {!spans ? (
         <View style={styles.endDay}>
           <TextAction
-            label="Ends another day"
+            label={EVENT_WHEN_COPY.endsAnotherDay}
             compact
             disabled={disabled}
             onPress={() => setAskedForEndDay(true)}
@@ -215,6 +229,201 @@ export function WhenTimes({
         </View>
       ) : null}
     </View>
+  );
+}
+
+const TIMING_OPTIONS = EVENT_TIMING_CHOICES.map((timing) => ({
+  value: timing,
+  label: EVENT_TIMING_CHOICE_LABELS[timing],
+}));
+
+/** Clears an all-day event's last day, back to one day. */
+const ONE_DAY_LABEL = "One day only";
+
+/**
+ * The When row, opened (#6098): what shape the event takes, as one
+ * three-way pick (Set time, All day, Time TBD; `EVENT_TIMING_CHOICES`, the
+ * words web's form shows), then that shape's fields, then Tentative. Set time
+ * is {@link WhenTimes}. All day is the first day and, behind "Ends another
+ * day", a last day, with no times and no lengths, as Google Calendar and
+ * Apple Calendar set an all-day event out. Time TBD is the day alone
+ * (Eventbrite's "time TBA"). Switching keeps the day, since the day is the
+ * start's either way.
+ */
+export function WhenFields({
+  timing,
+  start,
+  end,
+  lastDay,
+  tentative,
+  now,
+  minimumDate,
+  disabled,
+  onTiming,
+  onStart,
+  onEnd,
+  onLastDay,
+  onTentative,
+  platform = Platform.OS,
+}: {
+  timing: EventTiming;
+  start: Date;
+  end: Date;
+  /** An all-day event's last day, `YYYY-MM-DD`, or `null` for one day. */
+  lastDay: string | null;
+  tentative: boolean;
+  now: Date;
+  minimumDate: Date;
+  disabled: boolean;
+  onTiming: (next: EventTiming) => void;
+  onStart: (next: Date) => void;
+  onEnd: (next: Date) => void;
+  onLastDay: (next: string | null) => void;
+  onTentative: (next: boolean) => void;
+  platform?: string;
+}) {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  return (
+    <View style={styles.stack}>
+      <Segmented
+        accessibilityLabel="When it happens"
+        options={TIMING_OPTIONS}
+        value={timing}
+        onChange={onTiming}
+        disabled={disabled}
+      />
+      {timing === "timed" ? (
+        <WhenTimes
+          start={start}
+          end={end}
+          now={now}
+          minimumDate={minimumDate}
+          disabled={disabled}
+          onStart={onStart}
+          onEnd={onEnd}
+          platform={platform}
+        />
+      ) : (
+        <WhenDays
+          allDay={timing === "all_day"}
+          start={start}
+          lastDay={lastDay}
+          now={now}
+          minimumDate={minimumDate}
+          disabled={disabled}
+          onStart={onStart}
+          onLastDay={onLastDay}
+          platform={platform}
+        />
+      )}
+      <View style={styles.line}>
+        <Text style={styles.lineLabel}>{EVENT_WHEN_COPY.tentative}</Text>
+        <Toggle
+          value={tentative}
+          onValueChange={onTentative}
+          disabled={disabled}
+          accessibilityLabel={`${EVENT_WHEN_COPY.tentative}: ${EVENT_WHEN_COPY.tentativeHint.toLowerCase()}`}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * An all-day or time-TBD event's days: the day it's on, and for an all-day
+ * event an optional last day. The last day opens from "Ends another day" on
+ * the day after the first, and "One day only" folds it away. A last day
+ * before the first is the form's to refuse on Create, in the API's words
+ * (`eventDatesProblem`).
+ */
+function WhenDays({
+  allDay,
+  start,
+  lastDay,
+  now,
+  minimumDate,
+  disabled,
+  onStart,
+  onLastDay,
+  platform,
+}: {
+  allDay: boolean;
+  start: Date;
+  lastDay: string | null;
+  now: Date;
+  minimumDate: Date;
+  disabled: boolean;
+  onStart: (next: Date) => void;
+  onLastDay: (next: string | null) => void;
+  platform: string;
+}) {
+  const { tokens } = useFrappTheme();
+  const brand = useChapterBranding();
+  const styles = createStyles(tokens);
+  const floor = start < minimumDate ? start : minimumDate;
+  const minimumDay = new Date(
+    floor.getFullYear(),
+    floor.getMonth(),
+    floor.getDate(),
+  );
+  const startDay = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate(),
+  );
+  const day = (value: Date) => formatWeekdayDay(value.toISOString(), now) ?? "";
+  const last = allDay && lastDay ? parseBareDateLocalNoon(lastDay) : null;
+  return (
+    <>
+      <Line label="Day">
+        <Picker
+          mode="date"
+          value={start}
+          text={day(start)}
+          label={`Day, ${day(start)}`}
+          minimumDate={minimumDay}
+          disabled={disabled}
+          platform={platform}
+          accent={brand.accent}
+          onPick={(picked) => onStart(withDay(start, picked))}
+        />
+      </Line>
+      {last ? (
+        <>
+          <Line label={EVENT_WHEN_COPY.lastDay}>
+            <Picker
+              mode="date"
+              value={last}
+              text={day(last)}
+              label={`${EVENT_WHEN_COPY.lastDay}, ${day(last)}`}
+              minimumDate={startDay}
+              disabled={disabled}
+              platform={platform}
+              accent={brand.accent}
+              onPick={(picked) => onLastDay(localIsoDate(picked))}
+            />
+          </Line>
+          <View style={styles.endDay}>
+            <TextAction
+              label={ONE_DAY_LABEL}
+              compact
+              disabled={disabled}
+              onPress={() => onLastDay(null)}
+            />
+          </View>
+        </>
+      ) : allDay ? (
+        <View style={styles.endDay}>
+          <TextAction
+            label={EVENT_WHEN_COPY.endsAnotherDay}
+            compact
+            disabled={disabled}
+            onPress={() => onLastDay(addEventDays(localIsoDate(start), 1))}
+          />
+        </View>
+      ) : null}
+    </>
   );
 }
 

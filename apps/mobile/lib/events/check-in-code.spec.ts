@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CHECK_IN_TOKEN_WINDOW_MS, isPlausibleManualCode } from "./check-in-code";
+import {
+  CHECK_IN_TOKEN_WINDOW_MS,
+  isPlausibleManualCode,
+} from "./check-in-code";
 
 describe("CHECK_IN_TOKEN_WINDOW_MS", () => {
   /**

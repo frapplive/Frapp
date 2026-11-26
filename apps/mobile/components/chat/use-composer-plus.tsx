@@ -90,7 +90,9 @@ export function presentEventOutcome(
   outcome: EventCreatedOutcome,
   alert: typeof Alert.alert = Alert.alert,
 ): void {
-  const copy = eventCardOutcomeCopy(outcome.name, outcome);
+  const copy = outcome.cardNotPostable
+    ? `${outcome.name} is on the calendar. All-day, time-TBD and calendar-only events aren't posted in chat yet.`
+    : eventCardOutcomeCopy(outcome.name, outcome);
   if (copy) alert("Event created", copy);
 }
 
