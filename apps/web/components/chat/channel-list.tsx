@@ -55,6 +55,8 @@ import {
   type SidebarFilterChange,
   type SidebarPreferences,
   type SidebarUnreadCounts,
+  badgeLabel,
+  unreadAnnouncement,
 } from "@repo/hooks";
 import type { SidebarSectionKey } from "@repo/validation";
 import { isDirectChannel } from "@repo/validation";
@@ -329,46 +331,6 @@ function ReadStatusMark({ status }: { status: ConversationReadStatus }) {
       <span className="sr-only">{CONVERSATION_READ_STATUS_LABEL[status]}:</span>
     </>
   );
-}
-
-/**
- * Badge text. A mention badge leads with `@` and shows the **mention** count,
- * not the total — s04 draws `@ 2` on a row whose unread total is higher. Same
- * rule mobile's `channel-row.tsx` ships, and the same 99+ cap.
- *
- * Duplicated from mobile rather than shared, for this slice only: moving it is
- * a cross-app change that does not belong in a web repaint. Consolidation into
- * `@repo/formatting` is #1194.
- */
-
-export function badgeLabel(unreadCount: number, mentionCount: number): string {
-  const count = mentionCount > 0 ? mentionCount : unreadCount;
-  const capped = count > 99 ? "99+" : String(count);
-  return mentionCount > 0 ? `@ ${capped}` : capped;
-}
-
-/**
- * What a screen reader hears instead of `@ 2`.
- *
- * Names **both** numbers when there is a mention, because the badge only shows
- * one: a row reading "@ 2" over twelve unread messages tells a sighted reader
- * "two of these are for you", and an announcement of "2 mentions" alone loses
- * the twelve. Pluralised, which the first cut of this was not — it announced
- * "1 mentions".
- */
-export function unreadAnnouncement(
-  { unreadCount, mentionCount }: ChannelUnread,
-  isDirect = false,
-): string {
-  const plural = (n: number, word: string) =>
-    `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (mentionCount > 0) {
-    return `${plural(mentionCount, "mention")}, ${unreadCount} unread`;
-  }
-  // A DM badge is red for the same reason a mention badge is, so it says the
-  // same thing: this one is addressed to you.
-  if (isDirect) return `${plural(unreadCount, "unread direct message")}`;
-  return plural(unreadCount, "unread message");
 }
 
 /** What a Direct messages row draws beside its name and last line (#5519). */

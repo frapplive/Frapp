@@ -92,8 +92,9 @@ function isGranted(
  * (#3854). It used to fail open, so on
  * every reload a member saw officer doors (Chapter settings, Billing before
  * #3827) appear, take a click, and vanish, which read as broken and as "I can
- * get in there". The sidebar holds a gated row's place while the read is out
- * (`sidebar.tsx`), so its arriving a beat late moves nothing already drawn.
+ * get in there". The sidebar no longer holds a gated row's place while the read
+ * is out (#6121: the held slot read as a gap), so the row arrives with the
+ * answer; #5049's cached answer makes that the first paint on a revisit.
  * Rows with no permission rule render at once. `null` is the
  * other unknown: the read cannot run because the dashboard is offline with
  * nothing cached (`useNavPermissions`). That is not a denial, so gated rows

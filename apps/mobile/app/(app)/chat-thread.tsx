@@ -190,7 +190,10 @@ import { AUDIT_LOG_COMPOSER_NOTE } from "@repo/chat-core/audit-log-copy";
 import { useMaskedRefresh } from "@/lib/chat/masked-refresh";
 import { useChatChannel } from "@/lib/chat/use-chat-channel";
 import { useThreadUnread } from "@/lib/chat/use-thread-unread";
-import { writeLastChannel } from "@/lib/chat/last-channel";
+import {
+  rememberRecentChannel,
+  writeLastChannel,
+} from "@/lib/chat/last-channel";
 import { useThreadBlockList } from "@/lib/chat/use-thread-block-list";
 import {
   postRefusalHint,
@@ -625,6 +628,16 @@ function ChannelThreadScreen() {
         writeLastChannel(viewerId, chapterId, channelId);
       }
     }, [channelId, viewerId, chapterId]),
+  );
+  // A channel opened is a recently opened one, for Search (#6053). Once the
+  // channel is known, since a direct message is never listed there.
+  const openIsChannel = !!openChannel && !isDirectChannel(openChannel.channel);
+  useFocusEffect(
+    useCallback(() => {
+      if (channelId && viewerId && openIsChannel) {
+        rememberRecentChannel(viewerId, chapterId, channelId);
+      }
+    }, [channelId, viewerId, chapterId, openIsChannel]),
   );
 
   /**

@@ -3,6 +3,7 @@ import {
   CHAPTER_LOGS_PERMISSIONS,
   canAll,
   isBetaOffModule,
+  type PhoneSettingsPage,
 } from "@repo/validation";
 
 /**
@@ -74,8 +75,14 @@ export type SettingEntry = {
     /** More params the row needs, such as `tool=discord-import`. */
     params?: Readonly<Record<string, string>>;
   };
+  /**
+   * `page` is a page pushed inside the screen (the phone Settings screen's
+   * `?page=`, the same address as web's `?section=`); without one the row is
+   * on the screen's first page.
+   */
   phone?: {
     screen: SettingPhoneScreen;
+    page?: PhoneSettingsPage;
     anchor?: string;
     /**
      * Drawn only for a chapter: the phone's Chapter tab parts that read the
@@ -924,7 +931,7 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     area: "personal",
     section: "Notifications",
     keywords: ["notifications", "alerts", "notify", "sounds"],
-    phone: { screen: "/preferences", anchor: "push" },
+    phone: { screen: "/preferences", page: "notifications", anchor: "push" },
   },
   {
     id: "quiet-hours",
@@ -933,13 +940,17 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     section: "Notifications",
     keywords: ["do not disturb", "dnd", "sleep", "mute", "silence", "night"],
     web: { page: "notifications", anchor: "quiet-hours" },
-    phone: { screen: "/preferences", anchor: "quiet-hours" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "quiet-hours",
+    },
   },
   {
     id: "chat-notifications",
     label: "Chat messages",
     area: "personal",
-    section: "Chapter alerts",
+    section: "Notifications",
     keywords: [
       "chat notifications",
       "mentions only",
@@ -947,49 +958,60 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
       "notify",
       "notification level",
     ],
-    web: { page: "alerts", anchor: "chat-level-legend" },
-    phone: { screen: "/preferences", anchor: "chat-messages" },
+    web: { page: "notifications", anchor: "chat-level-legend" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "chat-messages",
+    },
   },
   {
     id: "chapter-alerts",
-    label: "Chapter alerts",
+    label: "Chapter notifications",
     area: "personal",
-    section: "Chapter alerts",
+    section: "Notifications",
     keywords: [
       "notifications",
+      "alerts",
       "event reminders",
       "task reminders",
+      "points",
+      "weekly recap",
       "alert types",
     ],
-    web: { page: "alerts", anchor: "chapter-alerts" },
-    phone: { screen: "/preferences", anchor: "chapter-alerts" },
+    web: { page: "notifications", anchor: "chapter-alerts" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "chapter-alerts",
+    },
+  },
+  {
+    // The Activity card's switch is phone only: web's Activity has no nudge card.
+    id: "nudges",
+    label: "Nudges on Activity",
+    area: "personal",
+    section: "Notifications",
+    keywords: ["nudges", "reminders", "activity card"],
+    phone: { screen: "/preferences", page: "notifications", anchor: "nudges" },
   },
   {
     id: "chat-density",
     label: "Chat density",
     area: "personal",
-    section: "Appearance and chat",
+    section: "Chat",
     keywords: ["compact", "cozy", "spacing", "layout", "dense", "appearance"],
-    web: { page: "appearance", anchor: "chat-density" },
-    phone: { screen: "/preferences", anchor: "chat-density" },
+    web: { page: "chat", anchor: "chat-density" },
+    phone: { screen: "/preferences", page: "chat", anchor: "chat-density" },
   },
   {
     id: "read-receipts",
     label: "Read receipts",
     area: "personal",
-    section: "Appearance and chat",
+    section: "Chat",
     keywords: ["seen", "read status", "privacy"],
-    web: { page: "appearance", anchor: "read-receipts" },
-    phone: { screen: "/preferences", anchor: "read-receipts" },
-  },
-  {
-    // The Activity card's switch sits only in the phone's Settings.
-    id: "nudges",
-    label: "Nudges on Activity",
-    area: "personal",
-    section: "Activity",
-    keywords: ["nudges", "reminders", "activity card"],
-    phone: { screen: "/preferences", anchor: "nudges" },
+    web: { page: "chat", anchor: "read-receipts" },
+    phone: { screen: "/preferences", page: "chat", anchor: "read-receipts" },
   },
   {
     id: "linked-apps",
@@ -998,14 +1020,15 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     section: "Linked apps",
     keywords: ["discord", "google", "connect", "integrations", "link account"],
     web: { page: "apps", anchor: "linked-apps" },
-    phone: { screen: "/preferences", anchor: "linked-apps" },
+    phone: { screen: "/preferences", page: "apps", anchor: "linked-apps" },
   },
   {
     id: "calendar",
-    label: "Calendar",
+    label: "Calendar apps",
     area: "personal",
-    section: "Calendar",
+    section: "Linked apps",
     keywords: [
+      "calendar",
       "google calendar",
       "subscribe",
       "ical",
@@ -1014,19 +1037,49 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
       "outlook",
       "apple calendar",
     ],
-    web: { page: "calendar", anchor: "calendar" },
-    // On the phone, Google Calendar and Calendar apps are Linked apps rows.
-    phone: { screen: "/preferences", anchor: "linked-apps" },
+    web: { page: "apps", anchor: "linked-apps" },
+    phone: { screen: "/preferences", page: "apps", anchor: "linked-apps" },
   },
   {
     id: "frapp-ai",
     label: "Frapp Intelligence",
     area: "personal",
-    section: "AI",
+    section: "Frapp Intelligence",
     keywords: ["ai", "ask frapp", "assistant", "consent"],
     needsAi: true,
     web: { page: "ai", anchor: "ai" },
-    phone: { screen: "/preferences", anchor: "ai" },
+    phone: { screen: "/preferences", page: "ai", anchor: "ai" },
+  },
+  {
+    id: "sign-in",
+    label: "Sign in",
+    area: "personal",
+    section: "Account",
+    keywords: ["password", "email", "google sign in", "apple sign in", "login"],
+    web: { page: "account", anchor: "account" },
+    phone: { screen: "/preferences", page: "account", anchor: "sign-in" },
+  },
+  {
+    id: "sign-out",
+    label: "Sign out",
+    area: "personal",
+    section: "Account",
+    keywords: ["log out", "logout", "sign off"],
+    web: { page: "account", anchor: "account" },
+    phone: { screen: "/preferences", page: "account", anchor: "sign-out" },
+  },
+  {
+    id: "delete-account",
+    label: "Delete account",
+    area: "personal",
+    section: "Account",
+    keywords: ["remove account", "close account", "deactivate", "erase data"],
+    web: { page: "account", anchor: "account" },
+    phone: {
+      screen: "/preferences",
+      page: "account",
+      anchor: "delete-account",
+    },
   },
   {
     id: "blocked-members",
@@ -1045,24 +1098,6 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     keywords: ["dues", "pay", "payments", "bills", "receipts"],
     betaModule: "dues",
     web: { page: "invoices", anchor: "my-invoices" },
-  },
-  {
-    id: "sign-out",
-    label: "Sign out",
-    area: "personal",
-    section: "Account",
-    keywords: ["log out", "logout", "sign off"],
-    web: { page: "account", anchor: "account" },
-    phone: { screen: "/preferences", anchor: "sign-out" },
-  },
-  {
-    id: "delete-account",
-    label: "Delete account",
-    area: "personal",
-    section: "Account",
-    keywords: ["remove account", "close account", "deactivate", "erase data"],
-    web: { page: "account", anchor: "account" },
-    phone: { screen: "/preferences", anchor: "delete-account" },
   },
 ];
 

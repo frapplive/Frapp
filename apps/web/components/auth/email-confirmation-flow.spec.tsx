@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthApiError, AuthWeakPasswordError } from "@supabase/supabase-js";
 
 /**
@@ -8,6 +8,7 @@ import { AuthApiError, AuthWeakPasswordError } from "@supabase/supabase-js";
  * confirmation (#3776), so no session comes back. Before this, the sign-up
  * screen toasted and bounced to the sign-in form, where every attempt read
  * "Something went wrong" and the magic link hit GoTrue's email cooldown.
+ * Since #6134 the email carries a 6-digit code, typed on the same screen.
  */
 
 const { replace, refresh, searchParams, toast, auth } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const { replace, refresh, searchParams, toast, auth } = vi.hoisted(() => ({
     signInWithPassword: vi.fn(),
     signInWithOtp: vi.fn(),
     resend: vi.fn(async () => ({ data: {}, error: null })),
+    verifyOtp: vi.fn(async () => ({ data: {}, error: null })),
     getSession: vi.fn(async () => ({ data: { session: null } })),
     onAuthStateChange: vi.fn(() => ({
       data: { subscription: { unsubscribe: vi.fn() } },
@@ -76,9 +78,19 @@ describe("sign-up on a project that confirms email", () => {
     await submit(/create account/i);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Check your email");
-    expect(screen.getByText(EMAIL)).toBeInTheDocument();
+    expect(screen.getByText(`Enter the 6-digit code we sent to ${EMAIL}.`)).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(/password/i)).toBeNull();
+  });
+
+  it("confirms the account with the emailed code and carries the invite on", async () => {
+    render(<SignUpPage />);
+    fill(/email/i, EMAIL);
+    fill(/password/i, "correct horse");
+    await submit(/create account/i);
+    fireEvent.change(screen.getByLabelText("6-digit code"), { target: { value: "654321" } });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(INVITE));
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ email: EMAIL, token: "654321", type: "email" });
   });
 
   it("asks for the confirmation link to come back with intent=confirm and the invite", async () => {
@@ -96,21 +108,12 @@ describe("sign-up on a project that confirms email", () => {
     expect(link.searchParams.get("intent")).toBe("confirm");
   });
 
-  it("holds Resend for the minute after the first email", async () => {
+  it("holds Send a new code for the minute after the first email", async () => {
     render(<SignUpPage />);
     fill(/email/i, EMAIL);
     fill(/password/i, "correct horse");
     await submit(/create account/i);
-    expect(screen.getByRole("button", { name: /resend email in 60s/i })).toBeDisabled();
-  });
-
-  it("keeps the invite on the way to sign-in from another device", async () => {
-    render(<SignUpPage />);
-    fill(/email/i, EMAIL);
-    fill(/password/i, "correct horse");
-    await submit(/create account/i);
-    const link = screen.getByRole("link", { name: /sign in here/i });
-    expect(link.getAttribute("href")).toBe(`/sign-in?redirectTo=${encodeURIComponent(INVITE)}`);
+    expect(screen.getByRole("button", { name: "Send again in 60s" })).toBeDisabled();
   });
 
   it("goes back to 'Check your email' when the same address is resubmitted inside the minute", async () => {
@@ -128,11 +131,11 @@ describe("sign-up on a project that confirms email", () => {
     await submit(/create account/i);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Check your email");
-    expect(screen.getByRole("button", { name: /resend email in 37s/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send again in 37s" })).toBeDisabled();
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
   });
 
-  it("holds Resend for at least a second when GoTrue says 'after 0 seconds'", async () => {
+  it("holds Send a new code for at least a second when GoTrue says 'after 0 seconds'", async () => {
     auth.signUp.mockResolvedValue({
       data: { session: null, user: null },
       error: new AuthApiError(
@@ -145,7 +148,7 @@ describe("sign-up on a project that confirms email", () => {
     fill(/email/i, EMAIL);
     fill(/password/i, "correct horse");
     await submit(/create account/i);
-    expect(screen.getByRole("button", { name: /resend email in 1s/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send again in 1s" })).toBeDisabled();
   });
 
   it("names a breached password through the page, not GoTrue's sentence", async () => {
@@ -191,18 +194,28 @@ describe("password sign-in before the email is confirmed", () => {
     });
   });
 
-  it("swaps the form for 'Confirm your email' with that address and Resend", async () => {
+  it("swaps the form for 'Confirm your email': that address, the code box and Send a new code", async () => {
     render(<SignInScreen />);
     fill(/email/i, EMAIL);
     fill(/password/i, "correct horse");
     await submit(/^continue$/i);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Confirm your email");
-    expect(screen.getByText(EMAIL)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^resend email$/i })).toBeEnabled();
+    expect(screen.getByText(new RegExp(`^Confirm ${EMAIL} first\\.`))).toBeInTheDocument();
+    expect(screen.getByLabelText("6-digit code")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send a new code" })).toBeEnabled();
     expect(toast).not.toHaveBeenCalledWith(
       expect.objectContaining({ description: "Something went wrong. Please try again." }),
     );
+  });
+
+  it("signs in with the code from the sign-up email", async () => {
+    render(<SignInScreen />);
+    fill(/email/i, EMAIL);
+    fill(/password/i, "correct horse");
+    await submit(/^continue$/i);
+    fireEvent.change(screen.getByLabelText("6-digit code"), { target: { value: "135790" } });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(INVITE));
   });
 
   it("goes back to the form on request", async () => {
@@ -234,7 +247,18 @@ describe("other sign-in refusals", () => {
     );
   });
 
-  it("reads a magic link asked for inside the email minute as 'check your inbox'", async () => {
+  it("asks for the emailed code in place, and signs in with it", async () => {
+    auth.signInWithOtp.mockResolvedValue({ data: { session: null, user: null }, error: null });
+    render(<SignInScreen />);
+    fill(/email/i, EMAIL);
+    await submit(/email me a code/i);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Check your email");
+    fireEvent.change(screen.getByLabelText("6-digit code"), { target: { value: "246810" } });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(INVITE));
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ email: EMAIL, token: "246810", type: "email" });
+  });
+
+  it("reads a code asked for inside the email minute as already sent, on the code box", async () => {
     auth.signInWithOtp.mockResolvedValue({
       data: { session: null, user: null },
       error: new AuthApiError(
@@ -245,18 +269,17 @@ describe("other sign-in refusals", () => {
     });
     render(<SignInScreen />);
     fill(/email/i, EMAIL);
-    await submit(/magic link/i);
-    const call = toast.mock.calls.at(-1)?.[0] as { title: string; description: string; variant?: string };
-    expect(call.title).toBe("Check your inbox");
-    expect(call.description).toContain("44 seconds");
-    expect(call.variant).toBeUndefined();
+    await submit(/email me a code/i);
+    expect(screen.getByRole("status")).toHaveTextContent("44 seconds");
+    expect(screen.getByRole("button", { name: "Send again in 44s" })).toBeDisabled();
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
   });
 
-  it("asks for the magic link with intent=sign-in-link, so a confirmation stays good news (#3801)", async () => {
+  it("keeps intent=sign-in-link on the transition-era link beside the code (#3801)", async () => {
     auth.signInWithOtp.mockResolvedValue({ data: { session: null, user: null }, error: null });
     render(<SignInScreen />);
     fill(/email/i, EMAIL);
-    await submit(/magic link/i);
+    await submit(/email me a code/i);
     const [args] = auth.signInWithOtp.mock.calls[0] as unknown as [
       { options: { emailRedirectTo: string } },
     ];
@@ -272,10 +295,10 @@ describe("other sign-in refusals", () => {
     });
     render(<SignInScreen />);
     fill(/email/i, EMAIL);
-    await submit(/magic link/i);
+    await submit(/email me a code/i);
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: "Unable to send magic link",
+        title: "Unable to send code",
         description: EMAIL_SEND_CAPPED_COPY,
         variant: "destructive",
       }),

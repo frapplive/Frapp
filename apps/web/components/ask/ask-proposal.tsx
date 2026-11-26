@@ -166,7 +166,8 @@ const EventEditorDialog = deferredPanel(
 );
 
 const RESULT_LINKS: Record<string, { href: string; label: string }> = {
-  tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
+  // The Tasks page folded into Activity (#5948).
+  tasks: { href: "/activity", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
 

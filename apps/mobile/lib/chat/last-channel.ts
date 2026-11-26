@@ -1,5 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { lastChannelStorageKey } from "@repo/hooks";
+import {
+  lastChannelStorageKey,
+  parseRecentChannels,
+  recentChannelsStorageKey,
+  withRecentChannel,
+} from "@repo/hooks";
 import { hasLaunchNotificationTap } from "@/lib/notifications/push";
 
 /**
@@ -37,6 +42,59 @@ export function writeLastChannel(
   AsyncStorage.setItem(key(userId, chapterId), channelId).catch(() => {
     /* Best-effort: the next launch opens on the channel list instead. */
   });
+}
+
+function recentKey(userId: string, chapterId: string | null): string {
+  return recentChannelsStorageKey(userId, chapterId ?? "sole");
+}
+
+/*
+  Writes run one after another, so two channels opened in quick succession
+  can't both read the old list and the second drop the first.
+*/
+let recentWrites: Promise<void> = Promise.resolve();
+
+/**
+ * A channel opened is also a recently opened one, for Search's Recently
+ * opened group (#6053; `@repo/hooks` `channel-jump.ts` owns the rule). The
+ * thread calls it once the channel is known not to be a direct message, which
+ * Search never lists. Best-effort: a failed read or write leaves the list as
+ * it was.
+ */
+export function rememberRecentChannel(
+  userId: string,
+  chapterId: string | null,
+  channelId: string,
+): void {
+  const storageKey = recentKey(userId, chapterId);
+  recentWrites = recentWrites
+    .then(async () => {
+      const stored = parseRecentChannels(
+        await AsyncStorage.getItem(storageKey),
+      );
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify(withRecentChannel(stored, channelId)),
+      );
+    })
+    .catch(() => {
+      /* Best-effort: Search then lists fewer recently opened channels. */
+    });
+}
+
+/** The channels this phone opened lately, newest first. */
+export async function readRecentChannels(
+  userId: string,
+  chapterId: string | null,
+): Promise<string[]> {
+  try {
+    await recentWrites;
+    return parseRecentChannels(
+      await AsyncStorage.getItem(recentKey(userId, chapterId)),
+    );
+  } catch {
+    return [];
+  }
 }
 
 /*

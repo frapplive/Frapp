@@ -41,6 +41,8 @@ const SHIPPED = new Set<string>([
   // Polls live in chat since #3871 retired the nav row, as dues lives on
   // /billing: still paid, still shipped, with no row for the nav to read.
   "polls",
+  // Tasks live in Activity since #5948 retired the Tasks row, the same way.
+  "tasks",
 ]);
 const PAID = MODULE_CATALOG.filter(
   (entry) => entry.tier === "paid" && SHIPPED.has(entry.key),

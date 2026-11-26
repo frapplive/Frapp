@@ -292,7 +292,7 @@ export function OpenTaskPanel({
       open={posting !== null}
       onOpenChange={(open) => !open && onClose()}
       docked
-      backLabel="Back to tasks"
+      backLabel="Back to Activity"
     >
       {posting ? (
         <PanelContent aria-describedby={undefined}>

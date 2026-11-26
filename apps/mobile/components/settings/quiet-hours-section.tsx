@@ -88,6 +88,8 @@ type QuietHoursSectionProps = {
    * kept only locally and overwritten by the window the read returns (#2938).
    */
   windowEditable: boolean;
+  /** The muted line under the group (`ListSection`'s `footnote`). */
+  footnote?: string;
 };
 
 export function QuietHoursSection({
@@ -98,6 +100,7 @@ export function QuietHoursSection({
   deviceTimeZone,
   storedZoneMissing = false,
   windowEditable,
+  footnote,
 }: QuietHoursSectionProps) {
   const zoneInForce = storedZoneMissing ? "UTC" : quietHoursWindow.tz;
   const zoneDiffers = zoneInForce !== deviceTimeZone;
@@ -119,7 +122,7 @@ export function QuietHoursSection({
   }
 
   return (
-    <ListSection>
+    <ListSection footnote={footnote}>
       <ListRow
         label="Quiet hours"
         trailing={

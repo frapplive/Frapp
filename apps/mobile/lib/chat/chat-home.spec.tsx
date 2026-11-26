@@ -257,6 +257,8 @@ vi.mock("@repo/hooks", async () => {
     sidebarSections: actual.sidebarSections,
     countsAddressMember: actual.countsAddressMember,
     countsLookUnread: actual.countsLookUnread,
+    // #6053: the row's badge text, for real.
+    badgeLabel: actual.badgeLabel,
     // #6053: a heading's menu, for real.
     foldAllWrites: actual.foldAllWrites,
     foldSectionLabel: actual.foldSectionLabel,

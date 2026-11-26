@@ -69,6 +69,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { standingHref } from "@/components/standing/standing-doors";
+import { everyonesTasksLink, tasksTaskLink } from "@/lib/tasks/task-links";
 import { asArray, cn } from "@/lib/utils";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
@@ -186,20 +187,23 @@ export function deepLinkFor(notification: Notification): string {
     case "billing":
       return "/billing";
     // "Shawn Klein submitted: Clean his room" opens that review in
-    // Activity's panel; the board lists the viewer's own tasks, and an
-    // officer's review was never one of them.
+    // Activity's panel; any other task row opens its task in the task panel
+    // on Activity, where the Tasks page folded in (#5948).
     case "tasks":
       return target.view === "review" && target.taskId
         ? `/activity?review=${encodeURIComponent(target.taskId)}`
-        : "/tasks";
+        : target.taskId
+          ? tasksTaskLink(target.taskId)
+          : "/activity";
     // Suggested tasks to review (#4313): on the minutes they came from, where
-    // the action items are; from any other source, the board's Suggested list.
+    // the action items are; from any other source, the suggestions strip on
+    // Activity's Everyone's (#5948).
     // One drawn from last year's event (#3930) is reviewed on Events.
     case AI_SUGGESTIONS_NOTIFICATION_SCREEN:
       if (target.sourceType === "event") return "/events";
       return target.sourceType === "meeting" && target.sourceId
         ? `/meetings/${target.sourceId}`
-        : "/tasks";
+        : everyonesTasksLink();
     // "Service hours approved" and "rejected" go to whoever logged the
     // entry: their own log, on their Profile (#5950).
     case "service":

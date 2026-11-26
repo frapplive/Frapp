@@ -109,14 +109,14 @@ describe("signed-out auth failures reach Sentry", () => {
     expectNoMemberInput(captured);
   });
 
-  it("reports a GoTrue outage on the magic link at error", async () => {
+  it("reports a GoTrue outage on the sign-in code at error", async () => {
     auth.signInWithOtp.mockResolvedValue({
       data: { session: null, user: null },
       error: new AuthApiError("upstream connect error", 502, "unexpected_failure"),
     });
     render(<SignInScreen />);
     fill(/email/i, EMAIL);
-    await submit(/magic link/i);
+    await submit(/email me a code/i);
 
     const captured = lastCapture();
     expect(captured[1].level).toBe("error");
@@ -201,7 +201,7 @@ describe("signed-out auth failures reach Sentry", () => {
     });
   });
 
-  it("reports a refused confirmation Resend, without the address", async () => {
+  it("reports a refused confirmation resend, without the address", async () => {
     auth.signInWithPassword.mockResolvedValue({
       data: { session: null, user: null },
       error: new AuthApiError("Email not confirmed", 400, "email_not_confirmed"),
@@ -214,7 +214,7 @@ describe("signed-out auth failures reach Sentry", () => {
     fill(/email/i, EMAIL);
     fill(/password/i, PASSWORD);
     await submit(/^continue$/i);
-    await submit(/^resend email$/i);
+    await submit(/^send a new code$/i);
 
     const captured = lastCapture();
     expect(captured[1].tags).toMatchObject({

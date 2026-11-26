@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -22,9 +23,6 @@ const {
   currentUserRef,
   createTaskMutate,
   permissionsRef,
-  eventsRef,
-  eventsEnabled,
-  eventsModuleOn,
   permissionsFailed,
   chapterScopeRef,
   tasksPending,
@@ -48,7 +46,10 @@ const {
   searchRef,
   routerReplace,
   tasksRefetch,
+  tasksEnabled,
 } = vi.hoisted(() => ({
+  // Every `enabled` the board passed to `useTasks`: Mine reads only for a link.
+  tasksEnabled: [] as boolean[],
   // The address's query (`?group=<id>`, `?task=<id>`, #5538).
   searchRef: { current: new URLSearchParams() },
   routerReplace: vi.fn(),
@@ -88,10 +89,6 @@ const {
   currentUserRef: { current: undefined as { id?: string } | undefined },
   // `undefined` is the permissions read still in flight.
   permissionsRef: { current: ["tasks:manage"] as string[] | undefined },
-  eventsRef: { current: [] as unknown[] },
-  // Every `enabled` the board passed to `useEvents`, to prove when it reads.
-  eventsEnabled: [] as boolean[],
-  eventsModuleOn: { current: true },
   // The permissions read failed (or can't run) rather than still loading.
   permissionsFailed: { current: false },
   // `useChapterScope` (#4094): `none` is a user the server can't scope, whose
@@ -199,13 +196,17 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useTaskPhotoUrl: () => ({ data: undefined }),
   useCurrentChapter: () => mockCurrentChapter(),
   useChapterScope: () => chapterScopeRef.current,
-  useTasks: () => ({
-    data: tasksPending.current ? undefined : tasksRef.current,
-    isPending: tasksPending.current,
-    isFetching: false,
-    isError: false,
-    refetch: tasksRefetch,
-  }),
+  useTasks: (options?: { enabled?: boolean }) => {
+    const enabled = options?.enabled ?? true;
+    tasksEnabled.push(enabled);
+    return {
+      data: tasksPending.current || !enabled ? undefined : tasksRef.current,
+      isPending: tasksPending.current || !enabled,
+      isFetching: false,
+      isError: false,
+      refetch: tasksRefetch,
+    };
+  },
   useMembers: () => ({
     data:
       membersFailed.current && !failedReadsKeepData.current
@@ -235,10 +236,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
         : "idle",
     isError: permissionsFailed.current,
   }),
-  useEvents: (options?: { enabled?: boolean }) => {
-    eventsEnabled.push(options?.enabled ?? true);
-    return { data: options?.enabled ? eventsRef.current : undefined };
-  },
   useCurrentUser: () => ({
     data:
       currentUserFailed.current && !failedReadsKeepData.current
@@ -295,11 +292,21 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: routerReplace }),
 }));
 
+// Everyone's marks suggested-task notifications seen while it shows them
+// (#5948); which screens it names is pinned here, the read itself elsewhere.
+const { markedScreens } = vi.hoisted(() => ({
+  markedScreens: [] as (readonly string[])[],
+}));
+vi.mock("@/lib/notifications/mark-screens-seen", () => ({
+  MarkScreensSeen: ({ screens }: { screens: readonly string[] }) => {
+    markedScreens.push(screens);
+    return null;
+  },
+}));
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   useChapterModuleGateState: () => ({
     status: "ready",
-    isModuleEnabled: (key: string) =>
-      key !== "events" || eventsModuleOn.current,
+    isModuleEnabled: () => true,
     retry: vi.fn(),
     fetchStatus: "idle",
   }),
@@ -383,6 +390,7 @@ const deleteButtons = () =>
 
 beforeEach(() => {
   searchRef.current = new URLSearchParams();
+  tasksEnabled.length = 0;
   routerReplace.mockClear();
   tasksRefetch.mockReset();
   tasksRefetch.mockImplementation(() => Promise.resolve());
@@ -395,9 +403,6 @@ beforeEach(() => {
   toastSpy.mockClear();
   permissionsRef.current = ["tasks:manage"];
   permissionsFailed.current = false;
-  eventsRef.current = [];
-  eventsEnabled.length = 0;
-  eventsModuleOn.current = true;
   currentUserFailed.current = false;
   membersFailed.current = false;
   failedReadsKeepData.current = false;
@@ -425,30 +430,6 @@ function liveStatus(): HTMLElement | null {
 /** The header's one Filter button (`FilterMenu`), named for its count. */
 const filterButton = () =>
   screen.getByRole("button", { name: /^Filter tasks/ });
-
-/**
- * The header's My tasks / Everyone's views, plain words beside the title
- * (`ViewLabels`, #5947), or null without them.
- */
-const viewSwitch = () => screen.queryByRole("tablist", { name: "Whose tasks" });
-
-/** Which view the header is on. */
-const viewOn = (name: "My tasks" | "Everyone's") =>
-  within(viewSwitch()!)
-    .getByRole("tab", { name })
-    .getAttribute("aria-selected") === "true";
-
-/**
- * An officer opens on My tasks (#5578); the chapter's board is Everyone's,
- * picked in the header's views. Does nothing where the page has none.
- */
-async function showEveryones() {
-  const tab = viewSwitch()
-    ? within(viewSwitch()!).getByRole("tab", { name: "Everyone's" })
-    : null;
-  if (!tab || tab.getAttribute("aria-selected") === "true") return;
-  await userEvent.click(tab);
-}
 
 /** The Filter menu row a Group or Layout pick sits under. */
 const rowOf = (name: string) =>
@@ -482,7 +463,7 @@ async function viewChecked(name: string): Promise<boolean> {
 describe("TasksBoard suggested tasks (#4313)", () => {
   it("folds an officer's suggestions to one line over the board, and shows none to a member", async () => {
     chapter.active();
-    const { unmount } = render(<TasksBoard />);
+    const { unmount } = render(<TasksBoard part="everyone" />);
     const strip = screen.getByRole("region", { name: "Suggested tasks" });
     expect(strip).toHaveTextContent("1 suggested task from the minutes");
     // The list waits for Review, so it pushes nothing down (Paul, 2026-11-18).
@@ -493,15 +474,19 @@ describe("TasksBoard suggested tasks (#4313)", () => {
     expect(screen.getByTestId("suggested-tasks")).toBeInTheDocument();
     await userEvent.click(within(strip).getByRole("button", { name: "Hide" }));
     expect(screen.queryByTestId("suggested-tasks")).toBeNull();
+    // Where they are drawn, their notifications are read (#5948).
+    expect(markedScreens).toContainEqual(["ai_suggestions"]);
     unmount();
 
+    markedScreens.length = 0;
     permissionsRef.current = ["members:view"];
     tasksRef.current = TASKS;
     try {
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       expect(
         screen.queryByRole("region", { name: "Suggested tasks" }),
       ).toBeNull();
+      expect(markedScreens).toEqual([]);
     } finally {
       tasksRef.current = [];
     }
@@ -511,7 +496,7 @@ describe("TasksBoard suggested tasks (#4313)", () => {
     chapter.active();
     suggestionsPending.current = true;
     try {
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       expect(
         screen.queryByRole("region", { name: "Suggested tasks" }),
       ).toBeNull();
@@ -529,8 +514,7 @@ describe("TasksBoard suggested tasks (#4313)", () => {
     suggestionsPending.current = true;
     suggestionsFailures.current = 1;
     try {
-      render(<TasksBoard />);
-      await showEveryones();
+      render(<TasksBoard part="everyone" />);
       expect(addForm()).toBeInTheDocument();
     } finally {
       suggestionsPending.current = false;
@@ -544,7 +528,7 @@ describe("TasksBoard suggested tasks (#4313)", () => {
     suggestionsPending.current = true;
     tasksRef.current = TASKS;
     try {
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0);
     } finally {
       suggestionsPending.current = false;
@@ -559,7 +543,7 @@ describe("TasksBoard with no chapter the server can scope (#4094)", () => {
     chapterScopeRef.current = "none";
     tasksPending.current = true;
     try {
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       expect(
         screen.getByText("Pick an active chapter to load its tasks."),
       ).toBeInTheDocument();
@@ -579,8 +563,7 @@ describe("TasksBoard subscription gating", () => {
 
   it("leaves every task write alone on an active chapter", async () => {
     chapter.active();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     expect(trigger()).toBeEnabled();
     expect(startButton()).toBeEnabled();
@@ -597,7 +580,7 @@ describe("TasksBoard subscription gating", () => {
     // back.
     chapter.active();
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(
       screen.queryByRole("button", { name: /^confirm$/i }),
@@ -629,8 +612,7 @@ describe("TasksBoard subscription gating", () => {
         confirmed_at: new Date().toISOString(),
       },
     ];
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     const waiting = screen.getByRole("region", {
       name: "Waiting on an officer",
@@ -645,7 +627,7 @@ describe("TasksBoard subscription gating", () => {
   it("lets the assignee take back their own unconfirmed completion", () => {
     chapter.active();
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(
       screen.getByRole("button", { name: /mark not done/i }),
@@ -659,10 +641,9 @@ describe("TasksBoard subscription gating", () => {
     chapter.active();
     currentUserRef.current = undefined;
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     // Opens on My tasks, which waits on the account; the rows are on
     // Everyone's, where the gate has to hold.
-    await showEveryones();
     expect(screen.getByText(TASKS[2]!.title)).toBeInTheDocument();
 
     expect(
@@ -679,7 +660,7 @@ describe("TasksBoard subscription gating", () => {
     chapter.active();
     currentUserFailed.current = true;
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     // The chapter's board stays, with its rows, so the gate is tested on them.
     expect(screen.getByText(TASKS[2]!.title)).toBeInTheDocument();
 
@@ -701,7 +682,7 @@ describe("TasksBoard subscription gating", () => {
     permissionsRef.current = [];
     currentUserFailed.current = true;
     tasksRef.current = [{ ...TASKS[0] }];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.queryByRole("button", { name: /start/i })).toBeNull();
     expect(liveStatus()).toHaveTextContent(
@@ -718,7 +699,7 @@ describe("TasksBoard subscription gating", () => {
     membersFailed.current = true;
     failedReadsKeepData.current = true;
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(liveStatus()).toBeNull();
     // The cached viewer still lets Confirm through on someone else's task.
@@ -730,7 +711,7 @@ describe("TasksBoard subscription gating", () => {
     permissionsRef.current = ["tasks:manage", "members:view"];
     membersFailed.current = true;
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     // The rows still render, named by the fallback.
     expect(screen.getByText("Book the philanthropy venue")).toBeInTheDocument();
@@ -745,7 +726,7 @@ describe("TasksBoard subscription gating", () => {
     chapter.active();
     membersFailed.current = true;
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.queryByText(/couldn't load member names/i)).toBeNull();
   });
@@ -756,7 +737,7 @@ describe("TasksBoard subscription gating", () => {
     permissionsFailed.current = true;
     membersFailed.current = true;
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(liveStatus()).toHaveTextContent(/couldn't load member names/i);
   });
@@ -766,15 +747,14 @@ describe("TasksBoard subscription gating", () => {
     // ordinary two-party path must stay open.
     chapter.active();
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(confirmButton()).toBeEnabled();
   });
 
   it("disables the trigger and names blocker plus recovery when incomplete", async () => {
     chapter.incomplete();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     // §5 rule 1: gate the trigger, never the submit.
     expect(trigger()).toBeDisabled();
@@ -797,8 +777,7 @@ describe("TasksBoard subscription gating", () => {
     // so leaving them live would have the board claim writes are blocked while
     // still offering four of them.
     chapter.incomplete();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     expect(startButton()).toBeDisabled();
     expect(completeButton()).toBeDisabled();
@@ -809,7 +788,7 @@ describe("TasksBoard subscription gating", () => {
 
   it("ties every disabled control to the one explanation", () => {
     chapter.incomplete();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const describedBy = trigger().getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
@@ -822,7 +801,7 @@ describe("TasksBoard subscription gating", () => {
 
   it("blocks paid-ops task writes immediately on past_due, grace or not", () => {
     chapter.pastDue();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(trigger()).toBeDisabled();
     expect(startButton()).toBeDisabled();
@@ -833,7 +812,7 @@ describe("TasksBoard subscription gating", () => {
 
   it("points a canceled chapter at the portal rather than checkout", () => {
     chapter.canceled();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(trigger()).toBeDisabled();
     expect(liveStatus()).toHaveTextContent(/read-only/i);
@@ -847,7 +826,7 @@ describe("TasksBoard subscription gating", () => {
     // path to the very 403 this gate prevents: a trigger that paints enabled
     // for that round trip still lets a fast click reach a doomed form.
     chapter.loading();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(trigger()).toBeDisabled();
     expect(screen.getByText(/checking this chapter/i)).toBeInTheDocument();
@@ -861,13 +840,12 @@ describe("TasksBoard subscription gating", () => {
     // A background refetch can revoke the write while a title is typed. The
     // line keeps what was typed, and its submit says why it can't run.
     chapter.active();
-    const { rerender } = render(<TasksBoard />);
-    await showEveryones();
+    const { rerender } = render(<TasksBoard part="everyone" />);
     await userEvent.type(titleField(), "Order the jerseys");
     expect(addSubmit()).toBeEnabled();
 
     chapter.incomplete();
-    rerender(<TasksBoard />);
+    rerender(<TasksBoard part="everyone" />);
 
     expect(addSubmit()).toBeDisabled();
     expect(titleField()).toHaveValue("Order the jerseys");
@@ -877,7 +855,7 @@ describe("TasksBoard subscription gating", () => {
     // `enforceSubscription` returns early for GET, so a lapsed chapter still
     // reads everything it owns — only the write affordances change.
     chapter.incomplete();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.getByText(/draft the rush calendar/i)).toBeInTheDocument();
     expect(screen.getByText(/waiting on an officer/i)).toBeInTheDocument();
@@ -887,8 +865,7 @@ describe("TasksBoard subscription gating", () => {
     // A failed chapter fetch must not lock a paying chapter out of its board;
     // the server guard is still the enforcement.
     chapter.unreadable();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     expect(trigger()).toBeEnabled();
     expect(startButton()).toBeEnabled();
@@ -901,8 +878,7 @@ describe("TasksBoard subscription gating", () => {
     // `points_awarded` already disabled Confirm before the gate existed;
     // spreading controlProps must not drop that.
     chapter.active();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     expect(confirmButton()).toBeEnabled();
   });
@@ -940,7 +916,7 @@ describe("TasksBoard overdue affordances", () => {
 
   it("offers Start when the stored status is TODO", () => {
     tasksRef.current = [overdueTask({ stored_status: "TODO" })];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(startButton()).toBeEnabled();
     expect(
@@ -950,7 +926,7 @@ describe("TasksBoard overdue affordances", () => {
 
   it("offers Mark done when the stored status is IN_PROGRESS", () => {
     tasksRef.current = [overdueTask({ stored_status: "IN_PROGRESS" })];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(completeButton()).toBeEnabled();
     expect(
@@ -961,14 +937,14 @@ describe("TasksBoard overdue affordances", () => {
   it("offers Start when the stored status is literally OVERDUE", () => {
     // The transition table accepts OVERDUE → IN_PROGRESS, which Start makes.
     tasksRef.current = [overdueTask({ stored_status: "OVERDUE" })];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(startButton()).toBeEnabled();
   });
 
   it("offers no lifecycle action when a pre-#1051 API sends no stored_status", () => {
     tasksRef.current = [overdueTask({})];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(
       screen.queryByRole("button", { name: /^start$/i }),
@@ -1013,8 +989,7 @@ describe("TasksBoard List / Grid", () => {
   it("opens as a compact List until the person picks (Paul, 2026-11-18)", async () => {
     window.localStorage.clear();
     resetListLayoutForTests();
-    const { container } = render(<TasksBoard />);
-    await showEveryones();
+    const { container } = render(<TasksBoard part="everyone" />);
     expect(await viewChecked("List")).toBe(true);
     const todo = todoRegion();
     // Groups stacked, not lanes; each task a flush 40px row; Confirmed too.
@@ -1045,7 +1020,7 @@ describe("TasksBoard List / Grid", () => {
         status: "OVERDUE",
       },
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     const names = screen
       .getAllByRole("region")
       .map((region) => region.getAttribute("aria-labelledby"))
@@ -1058,8 +1033,7 @@ describe("TasksBoard List / Grid", () => {
     window.localStorage.clear();
     resetListLayoutForTests();
     const user = userEvent.setup();
-    const { unmount } = render(<TasksBoard />);
-    await showEveryones();
+    const { unmount } = render(<TasksBoard part="everyone" />);
     await pickView("Grid");
 
     expect(await viewChecked("Grid")).toBe(true);
@@ -1082,7 +1056,7 @@ describe("TasksBoard List / Grid", () => {
     ).toBeInTheDocument();
 
     unmount();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     expect(await viewChecked("Grid")).toBe(true);
   });
 });
@@ -1103,7 +1077,7 @@ describe("TasksBoard assignee label", () => {
         assignee_id: "2f4a1c9d-0000-4000-8000-000000000000",
       },
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.getByText(/Member 2f4a1c\b/)).toBeInTheDocument();
     expect(screen.queryByText(/2f4a1c9d-0000/)).toBeNull();
@@ -1120,7 +1094,7 @@ describe("TasksBoard point reward guard (#2206)", () => {
 
   // The row needs a title, an assignee and a due date before it submits.
   async function openCreate() {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     fireEvent.change(titleField(), {
       target: { value: "Order the composites" },
     });
@@ -1170,8 +1144,7 @@ describe("TasksBoard flush layout", () => {
   });
 
   it("draws each column as a labelled section on the page surface", async () => {
-    const { container } = render(<TasksBoard />);
-    await showEveryones();
+    const { container } = render(<TasksBoard part="everyone" />);
 
     for (const [name, count] of [
       ["To do", "1"],
@@ -1191,7 +1164,7 @@ describe("TasksBoard flush layout", () => {
   });
 
   it("drops the narration the board used to carry", () => {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.queryByText(/admins create and confirm/i)).toBeNull();
     expect(screen.queryByText(/assignee is working on it/i)).toBeNull();
@@ -1202,7 +1175,7 @@ describe("TasksBoard flush layout", () => {
     tasksRef.current = [
       { ...TASKS[0], due_date: "2020-01-01", status: "OVERDUE" as const },
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const due = screen.getByText(/^Overdue by \d+ days$/);
     expect(due).toHaveClass("text-destructive-text");
@@ -1211,8 +1184,7 @@ describe("TasksBoard flush layout", () => {
 
   it("keeps the Grid columns at zero for an officer, on the page surface", async () => {
     tasksRef.current = [];
-    const { container } = render(<TasksBoard />);
-    await showEveryones();
+    const { container } = render(<TasksBoard part="everyone" />);
 
     for (const name of [
       "To do",
@@ -1244,8 +1216,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("shows only once New task is pressed, with its More open, and puts itself away (#5578)", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     // At rest the first task is the first thing under the header.
     expect(screen.queryByRole("form", { name: /add a task/i })).toBeNull();
@@ -1275,8 +1246,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("flags who on Enter, and sends nothing", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     await userEvent.type(titleField(), "Order pizza{Enter}");
 
@@ -1291,8 +1261,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("flags nothing while typing", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     await userEvent.type(titleField(), "Order pizza");
 
@@ -1300,8 +1269,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("creates for one person on Enter, then clears for the next one", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickWho(/Cole Martin/);
     expect(
       within(addForm()).getByRole("button", { name: "Who: Cole Martin" }),
@@ -1328,10 +1296,11 @@ describe("TasksBoard quick add (2026-11-18)", () => {
     expect(screen.getByLabelText("Due date")).toHaveValue("");
   });
 
-  it("offers Everyone's from the toast when a task made on My tasks is someone else's (#5578)", async () => {
+  it("offers Everyone's from the toast when a task made on Mine is someone else's (#5578, #5948)", async () => {
     tasksRef.current = [{ ...TASKS[0], id: "own", assignee_id: ME }];
-    render(<TasksBoard />);
-    expect(viewOn("My tasks")).toBe(true);
+    const showEveryone = vi.fn();
+    render(<TasksBoard part="mine" onShowEveryone={showEveryone} />);
+    await userEvent.click(screen.getByRole("button", { name: /^new task$/i }));
     await pickWho(/Cole Martin/);
     fireEvent.change(screen.getByLabelText("Due date"), {
       target: { value: "2026-12-01" },
@@ -1341,15 +1310,15 @@ describe("TasksBoard quick add (2026-11-18)", () => {
     const created = toastSpy.mock.calls.find(
       ([arg]) => (arg as { title?: string }).title === "Task created",
     )![0] as { action?: React.ReactElement<{ onClick: () => void }> };
-    // It went where My tasks doesn't show, so the toast offers the board.
+    // It went where Mine doesn't show, so the toast offers Everyone's.
     expect(created.action).toBeDefined();
     act(() => created.action!.props.onClick());
-    expect(viewOn("Everyone's")).toBe(true);
+    expect(showEveryone).toHaveBeenCalledTimes(1);
   });
 
   it("offers nothing from the toast for a task the viewer gave themselves", async () => {
     tasksRef.current = [{ ...TASKS[0], id: "own", assignee_id: ME }];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     await pickWho(/Paul Carlson/);
     fireEvent.change(screen.getByLabelText("Due date"), {
       target: { value: "2026-12-01" },
@@ -1363,8 +1332,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("gives a role's members a copy each through the tasks endpoint", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await userEvent.click(
       within(addForm()).getByRole("button", { name: /^who/i }),
     );
@@ -1391,8 +1359,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("posts One claims it to Up for grabs", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await userEvent.click(
       within(addForm()).getByRole("button", { name: /^who/i }),
     );
@@ -1426,8 +1393,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("takes the due date as a typed month and day, with no year to set (#3928)", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickWho(/Cole Martin/);
     const due = screen.getByLabelText("Due date");
     // Not the browser's date input, which shows and asks for MM/DD/YYYY.
@@ -1442,8 +1408,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("creates a task with no due date when Due is left empty (#5761)", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickWho(/Cole Martin/);
     await userEvent.type(titleField(), "Order pizza{Enter}");
 
@@ -1476,8 +1441,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("closes only the picker on Escape inside it", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await userEvent.type(titleField(), "Order pizza");
     await userEvent.click(
       within(addForm()).getByRole("button", { name: /^who/i }),
@@ -1497,8 +1461,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   });
 
   it("clears the line on Escape", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await userEvent.type(titleField(), "Order{Escape}");
 
     expect(titleField()).toHaveValue("");
@@ -1507,8 +1470,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
 
   it("sits above the first lane once the board has tasks", async () => {
     tasksRef.current = TASKS;
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     const tile = screen.getByText("Sweep the chapter room");
     expect(
@@ -1520,17 +1482,24 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   it("isn't offered without tasks:manage", () => {
     permissionsRef.current = ["members:view"];
     tasksRef.current = TASKS.slice(0, 2);
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.queryByRole("form", { name: /add a task/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^new task$/i })).toBeNull();
-    // A member sees My tasks, which has no To do lane.
+  });
+
+  it("puts New task and its line on Mine, with none of the board (#5948)", async () => {
+    tasksRef.current = TASKS.slice(0, 2);
+    render(<TasksBoard part="mine" />);
+
     expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Filter tasks/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /^new task$/i }));
+    expect(addForm()).toBeVisible();
   });
 
   async function fillLine() {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     fireEvent.change(titleField(), { target: { value: "Order pizza" } });
     await pickWho(/Cole Martin/);
     fireEvent.change(screen.getByLabelText("Due date"), {
@@ -1539,7 +1508,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
   }
 });
 
-describe("TasksBoard member with nothing assigned", () => {
+describe("TasksBoard while permissions are unknown", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tasksRef.current = [];
@@ -1548,76 +1517,23 @@ describe("TasksBoard member with nothing assigned", () => {
     chapter.active();
   });
 
-  const inDays = (days: number, hour = 19) => {
-    const at = new Date();
-    at.setDate(at.getDate() + days);
-    at.setHours(hour, 0, 0, 0);
-    return at.toISOString();
-  };
-
-  it("sees one line naming the next event instead of four empty columns", () => {
-    eventsRef.current = [
-      { id: "e-later", name: "Formal", start_time: inDays(20) },
-      { id: "e-past", name: "Last week's meeting", start_time: inDays(-7) },
-      { id: "e-next", name: "Chapter meeting", start_time: inDays(1) },
-    ];
-    render(<TasksBoard />);
-
-    expect(
-      screen.getByText(
-        /^Nothing on your plate\. Next up: Chapter meeting, Tomorrow · 7:00\sPM\.$/,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
-  });
-
-  it("stops at the first sentence with nothing ahead", () => {
-    eventsRef.current = [
-      { id: "e-past", name: "Last week's meeting", start_time: inDays(-7) },
-    ];
-    render(<TasksBoard />);
-
-    expect(screen.getByText("Nothing on your plate.")).toBeInTheDocument();
-  });
-
-  it("doesn't read events when the chapter turned Events off", () => {
-    eventsModuleOn.current = false;
-    eventsRef.current = [
-      { id: "e-next", name: "Chapter meeting", start_time: inDays(1) },
-    ];
-    render(<TasksBoard />);
-
-    expect(screen.getByText("Nothing on your plate.")).toBeInTheDocument();
-    expect(eventsEnabled.every((enabled) => !enabled)).toBe(true);
-  });
-
-  it("keeps the board for a member who has tasks, and doesn't read events", () => {
-    tasksRef.current = TASKS.slice(0, 2);
-    render(<TasksBoard />);
-
-    expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
-    expect(screen.queryByText(/nothing on your plate/i)).toBeNull();
-    expect(eventsEnabled.every((enabled) => !enabled)).toBe(true);
-  });
-
   it("keeps the columns, and says why, when the permissions read failed", () => {
     // Not the loading window: nothing would ever answer it, so a blank page
     // here would stay blank (#1211's pattern).
     permissionsRef.current = undefined;
     permissionsFailed.current = true;
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.getByRole("region", { name: "To do" })).toBeInTheDocument();
     // Where the add line would be.
     expect(screen.getByText("Permissions unavailable")).toBeInTheDocument();
-    expect(screen.queryByText(/nothing on your plate/i)).toBeNull();
   });
 
-  it("never flashes the line at an officer while permissions load", () => {
+  it("draws nothing while permissions load, rather than a board that jumps", () => {
     permissionsRef.current = undefined;
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
-    expect(screen.queryByText(/nothing on your plate/i)).toBeNull();
+    expect(screen.queryByText(/no tasks yet/i)).toBeNull();
     expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
   });
 });
@@ -1642,7 +1558,7 @@ describe("TasksBoard editing a task (#4296)", () => {
 
   it("opens the panel and saves only the field that changed, with no Save button", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Sweep the chapter room");
     expect(within(panel).queryByRole("button", { name: "Save" })).toBeNull();
@@ -1670,7 +1586,7 @@ describe("TasksBoard editing a task (#4296)", () => {
 
   it("takes the due date off when the Due field is emptied (#5761)", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Sweep the chapter room");
     await user.click(within(panel).getByRole("button", { name: /^Due: / }));
@@ -1689,7 +1605,7 @@ describe("TasksBoard editing a task (#4296)", () => {
 
   it("saves points on their own when the field loses focus", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Sweep the chapter room");
     await user.click(within(panel).getByRole("button", { name: "Points: 5" }));
@@ -1709,7 +1625,7 @@ describe("TasksBoard editing a task (#4296)", () => {
 
   it("sends nothing when nothing changed", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Sweep the chapter room");
     await user.click(
@@ -1726,7 +1642,7 @@ describe("TasksBoard editing a task (#4296)", () => {
   it("keeps what was typed when the save fails", async () => {
     updateTaskMutate.mockRejectedValue(new Error("down"));
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Sweep the chapter room");
     await user.click(
@@ -1744,7 +1660,7 @@ describe("TasksBoard editing a task (#4296)", () => {
 
   it("puts the value back on Escape without saving, and keeps the panel open", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const panel = await openPanel(user, "Draft the rush calendar");
     await user.click(
@@ -1765,7 +1681,7 @@ describe("TasksBoard editing a task (#4296)", () => {
     window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
     resetListLayoutForTests();
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     const row = screen
       .getAllByRole("listitem")
@@ -1790,14 +1706,14 @@ describe("TasksBoard editing a task (#4296)", () => {
         confirmed_at: "2026-08-11T00:00:00Z",
       },
     ];
-    const { unmount } = render(<TasksBoard />);
+    const { unmount } = render(<TasksBoard part="everyone" />);
     expect(
       screen.queryByRole("button", { name: "Edit Order the composites" }),
     ).not.toBeInTheDocument();
     unmount();
 
     permissionsRef.current = [];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     expect(
       screen.queryByRole("button", { name: /^edit /i }),
     ).not.toBeInTheDocument();
@@ -1841,7 +1757,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
 
   it("sends back only with a reason, and posts it with Ask for a photo", async () => {
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     fireEvent.click(sendBackButton());
     const dialog = await screen.findByRole("dialog", { name: "Send back" });
@@ -1875,7 +1791,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
 
   it("leaves require_photo off when the switch is not turned on", async () => {
     tasksRef.current = [TASKS[2]];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     fireEvent.click(sendBackButton());
     const dialog = await screen.findByRole("dialog", { name: "Send back" });
@@ -1893,7 +1809,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
 
   it("opens Mark done's sheet on a Photo task and refuses it without a photo", async () => {
     tasksRef.current = [inProgress({ proof_kind: "photo" })];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Mark done with a photo" }),
@@ -1916,7 +1832,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
         sent_back_reason: "The floor is still sticky",
       }),
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     // Needs changes, with the officer's reason on the tile.
     expect(screen.getByText("Needs changes")).toBeInTheDocument();
@@ -1947,7 +1863,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
 
   it("marks a None task done at once, with no sheet", async () => {
     tasksRef.current = [inProgress({ proof_kind: "none" })];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     await waitFor(() =>
@@ -1971,7 +1887,7 @@ describe("TasksBoard proof and send back (#4635)", () => {
         confirmed_at: "2026-08-10T00:00:00Z",
       },
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^confirm/i })).toBeNull();
@@ -2027,45 +1943,6 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     tasksRef.current = ROWS;
   });
 
-  it("groups a member's tasks as Overdue, Today, This week and Later, then what waits on an officer (#5906)", async () => {
-    permissionsRef.current = ["members:view"];
-    // A member's read holds only their own rows.
-    tasksRef.current = ROWS.filter((row) => row.assignee_id === ME);
-    render(<TasksBoard />);
-
-    expect(titlesIn("Overdue")).toEqual(["Return the projector"]);
-    expect(titlesIn("Today")).toEqual(["Sweep the chapter room"]);
-    expect(titlesIn("This week")).toEqual(["Draft the rush calendar"]);
-    expect(titlesIn("Later")).toEqual(["Plan formal"]);
-    expect(titlesIn("Waiting on an officer")).toEqual(["Book the venue"]);
-    // The heading says it; the tile doesn't repeat it.
-    expect(
-      within(region("Waiting on an officer")).getAllByText(
-        "Waiting on an officer",
-      ),
-    ).toHaveLength(1);
-    // No status lane says it, so the tile does.
-    expect(within(region("This week")).getByText("In progress")).toBeVisible();
-    // A member has nothing to switch, and Filter holds only Layout.
-    expect(viewSwitch()).toBeNull();
-    await userEvent.click(filterButton());
-    expect(screen.queryByRole("menuitem", { name: /^Assignee/ })).toBeNull();
-    expect(
-      screen.getByRole("menuitem", { name: /^Layout/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("draws no Overdue heading when nothing is overdue (#5906)", () => {
-    permissionsRef.current = ["members:view"];
-    tasksRef.current = ROWS.filter(
-      (row) => row.assignee_id === ME && row.status !== "OVERDUE",
-    );
-    render(<TasksBoard />);
-
-    expect(screen.queryByRole("region", { name: "Overdue" })).toBeNull();
-    expect(titlesIn("Today")).toEqual(["Sweep the chapter room"]);
-  });
-
   /** Picks a filter's value in the Filter menu (#5578). */
   async function pickFilter(label: string, value: string) {
     await userEvent.click(filterButton());
@@ -2090,81 +1967,9 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     return values;
   }
 
-  it("puts a task with no due date under No due date, after Later (#5761)", () => {
-    permissionsRef.current = ["members:view"];
-    tasksRef.current = [
-      ...ROWS.filter((row) => row.assignee_id === ME),
-      task("someday", "Write the chapter history", ME, 0, "TODO", {
-        due_date: null,
-      }),
-    ];
-    render(<TasksBoard />);
-
-    expect(titlesIn("No due date")).toEqual(["Write the chapter history"]);
-    expect(titlesIn("Later")).toEqual(["Plan formal"]);
-    const headings = screen
-      .getAllByRole("region")
-      .map((section) => section.getAttribute("aria-labelledby"));
-    expect(headings.indexOf("tasks-column-none")).toBeGreaterThan(
-      headings.indexOf("tasks-column-later"),
-    );
-  });
-
-  it("draws no No due date group when every task has a date (#5761)", () => {
-    permissionsRef.current = ["members:view"];
-    tasksRef.current = ROWS.filter((row) => row.assignee_id === ME);
-    render(<TasksBoard />);
-
-    expect(screen.queryByRole("region", { name: "No due date" })).toBeNull();
-  });
-
-  it("opens an officer on My tasks, with no switch or chips over it, and Everyone's is the chapter's board (#5578)", async () => {
-    render(<TasksBoard />);
-    // Their own first; the switch in the header says so.
-    expect(viewOn("My tasks")).toBe(true);
-    expect(titlesIn("This week")).toEqual(["Draft the rush calendar"]);
-    expect(screen.queryByText("Order shirts")).toBeNull();
-    expect(screen.queryByRole("form", { name: /add a task/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
-
-    await showEveryones();
-    expect(viewOn("Everyone's")).toBe(true);
-    expect(region("To do")).toBeInTheDocument();
-    expect(screen.getByText("Order shirts")).toBeInTheDocument();
-    // Still nothing between the header and the first group at rest.
-    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
-  });
-
-  it("opens an officer with nothing of their own on Everyone's", () => {
-    tasksRef.current = ROWS.filter((row) => row.assignee_id !== ME);
-    render(<TasksBoard />);
-    expect(viewOn("Everyone's")).toBe(true);
-    expect(screen.getByText("Order shirts")).toBeInTheDocument();
-  });
-
-  it("keeps the opening view when the viewer's own tasks change, until they pick", async () => {
-    tasksRef.current = ROWS.filter((row) => row.assignee_id !== ME);
-    const { rerender } = render(<TasksBoard />);
-    expect(viewOn("Everyone's")).toBe(true);
-    // A task given to them later doesn't move the page under them.
-    tasksRef.current = ROWS;
-    rerender(<TasksBoard />);
-    expect(viewOn("Everyone's")).toBe(true);
-    expect(region("To do")).toBeInTheDocument();
-  });
-
-  it("opens an officer on the chapter's board when their account can't be read (#1346)", () => {
-    currentUserRef.current = undefined;
-    currentUserFailed.current = true;
-    render(<TasksBoard />);
-    expect(viewOn("Everyone's")).toBe(true);
-    expect(screen.getByText("Order shirts")).toBeInTheDocument();
-  });
-
   it("filters the chapter's board by assignee, status and due date from Filter, and clears them", async () => {
     const user = userEvent.setup();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     await pickFilter("Assignee", "Cole Martin");
     expect(titlesIn("To do")).toEqual(["Order shirts"]);
@@ -2197,15 +2002,13 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
 
   it("offers only values some task has", async () => {
     tasksRef.current = [ROWS[1]!];
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     expect(await filterValues("Status")).not.toContain("Overdue");
     expect(await filterValues("Due")).not.toContain("Due later");
   });
 
   it("says when no task matches", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickFilter("Assignee", "Cole Martin");
     await pickFilter("Due", "Overdue");
     expect(
@@ -2215,84 +2018,16 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
   });
 
   it("keeps a picked value named after its last task leaves", async () => {
-    const { rerender } = render(<TasksBoard />);
-    await showEveryones();
+    const { rerender } = render(<TasksBoard part="everyone" />);
     await pickFilter("Status", "Overdue");
     tasksRef.current = ROWS.filter((row) => row.status !== "OVERDUE");
-    rerender(<TasksBoard />);
+    rerender(<TasksBoard part="everyone" />);
     expect(
       screen.getByRole("button", { name: "Remove filter Status: Overdue" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("No tasks match these filters."),
     ).toBeInTheDocument();
-  });
-
-  it("keeps My tasks to the viewer's own when the read holds others' (View as a role)", () => {
-    // A previewed role without tasks:manage, while the read is still the
-    // officer's whole chapter.
-    permissionsRef.current = ["members:view"];
-    render(<TasksBoard />);
-    expect(screen.queryByText("Order shirts")).toBeNull();
-    expect(titlesIn("This week")).toEqual(["Draft the rush calendar"]);
-  });
-
-  it("gives a member who follows a task My tasks and Everyone's (#5473)", async () => {
-    const user = userEvent.setup();
-    permissionsRef.current = ["members:view"];
-    // A member's read: their own, and what their tier follows.
-    tasksRef.current = [
-      ...ROWS.filter((row) => row.assignee_id === ME),
-      {
-        ...ROWS[1]!,
-        id: "followed-1",
-        title: "Book the retreat",
-        assignee_id: "u-someone-else",
-        followed_by: "tier:0f000000-0000-4000-8000-000000000001",
-        followed_by_name: "Exec board",
-      },
-    ];
-    render(<TasksBoard />);
-    // My tasks first: the followed task isn't theirs.
-    expect(screen.queryByText("Book the retreat")).toBeNull();
-
-    await showEveryones();
-    expect(screen.getByText("Book the retreat")).toBeInTheDocument();
-    expect(screen.getAllByText("From Exec board").length).toBeGreaterThan(0);
-    // The chapter's filters and grouping stay an officer's.
-    await user.click(filterButton());
-    expect(screen.queryByRole("menuitem", { name: /^Assignee/ })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: /^Group/ })).toBeNull();
-  });
-
-  it("opens a follower with nothing of their own on Everyone's, and keeps a role preview on My tasks (#5473)", () => {
-    permissionsRef.current = ["members:view"];
-    const followed = {
-      ...ROWS[1]!,
-      id: "followed-2",
-      title: "Book the retreat",
-      assignee_id: "u-someone-else",
-      followed_by: "tier:0f000000-0000-4000-8000-000000000001",
-      followed_by_name: "Exec board",
-    };
-    tasksRef.current = [followed];
-    const { unmount } = render(<TasksBoard />);
-    expect(screen.getByText("Book the retreat")).toBeInTheDocument();
-    unmount();
-
-    // View as a role keeps the officer's whole read: no follower switch.
-    tasksRef.current = [...ROWS, followed];
-    render(<TasksBoard />);
-    expect(viewSwitch()).toBeNull();
-    expect(screen.queryByText("Book the retreat")).toBeNull();
-  });
-
-  it("says My tasks is loading while an officer's account is unknown", async () => {
-    currentUserRef.current = undefined;
-    render(<TasksBoard />);
-    // It waits on My tasks rather than flash the chapter's board.
-    expect(viewOn("My tasks")).toBe(true);
-    expect(screen.getByText("Loading your tasks…")).toBeInTheDocument();
   });
 
   it("lists a confirmed task once, under Confirmed, not under Waiting on an officer", () => {
@@ -2305,14 +2040,13 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
         confirmed_at: "2026-08-11T00:00:00Z",
       }),
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     expect(titlesIn("Waiting on an officer")).toEqual(["Book the venue"]);
     expect(screen.getAllByText("Fold the flyers")).toHaveLength(1);
   });
 
   it("groups the chapter's board by person, with each tile's status", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickView("By person");
 
     expect(titlesIn("Cole Martin")).toEqual(["Order shirts"]);
@@ -2360,7 +2094,7 @@ describe("TasksBoard repeating tasks (#5119)", () => {
   });
 
   it("says on the tile how it repeats and when it comes next", () => {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     expect(
       screen.getByText("Every Monday · next November 23"),
     ).toBeInTheDocument();
@@ -2370,12 +2104,12 @@ describe("TasksBoard repeating tasks (#5119)", () => {
     tasksRef.current = [
       { ...REPEATING, series: { ...REPEATING.series, ended: true } },
     ];
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     expect(screen.queryByText(/Every Monday/)).toBeNull();
   });
 
   it("asks whether to delete this task or stop it repeating", async () => {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     fireEvent.click(deleteButtons()[0]!);
     expect(
       await screen.findByText("Delete a repeating task"),
@@ -2390,7 +2124,7 @@ describe("TasksBoard repeating tasks (#5119)", () => {
   });
 
   it("deletes the one copy with This task only", async () => {
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
     fireEvent.click(deleteButtons()[0]!);
     fireEvent.click(
       await screen.findByRole("button", { name: "This task only" }),
@@ -2432,8 +2166,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
   });
 
   it("draws the open copies as one tile with how many are done", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     const tile = screen.getByRole("listitem", {
       name: "Fill out the tabling form, for everyone",
     });
@@ -2448,8 +2181,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
   });
 
   it("lists who's left and where each stands", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     const tile = screen.getByRole("listitem", {
       name: "Fill out the tabling form, for everyone",
     });
@@ -2462,8 +2194,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
   });
 
   it("deletes everyone's copy after asking", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Delete Fill out the tabling form for everyone",
@@ -2483,8 +2214,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
   it("edits everyone's copy in the panel, sending the change with the group scope", async () => {
     updateTaskMutate.mockReset().mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await user.click(
       screen.getByRole("button", {
         name: "Edit Fill out the tabling form for everyone",
@@ -2521,8 +2251,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
     resetListLayoutForTests();
     const user = userEvent.setup();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     const row = screen.getByRole("listitem", {
       name: "Fill out the tabling form, for everyone",
     });
@@ -2539,121 +2268,24 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     ).toBeInTheDocument();
   });
 
-  it("says under My tasks who a copy went to, not only the viewer, and finishes only theirs (#5699)", async () => {
-    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
-    resetListLayoutForTests();
-    const user = userEvent.setup();
-    tasksRef.current = [
-      ...GROUP.map((task) => ({
-        ...task,
-        group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
-      })),
-      copy("tier-copy", ME, {
-        id: "tier-copy",
-        title: "Plan the retreat",
-        group_id: "group-2",
-        group: {
-          audience: "tier",
-          target_name: "Exec board",
-          total: 4,
-          done: 1,
-          confirmed: 0,
-        },
-      }),
-      copy("own", ME, { title: "Return the projector", group_id: null }),
-    ];
-    render(<TasksBoard />);
-    expect(viewOn("My tasks")).toBe(true);
-
-    const everyone = screen
-      .getAllByRole("listitem")
-      .find((item) => item.textContent?.includes("Fill out the tabling form"))!;
-    expect(within(everyone).getByText("Everyone")).toBeInTheDocument();
-    expect(within(everyone).getByText("14 of 20")).toBeInTheDocument();
-    const tier = screen
-      .getAllByRole("listitem")
-      .find((item) => item.textContent?.includes("Plan the retreat"))!;
-    expect(
-      within(tier).getByText("Everyone in Exec board"),
-    ).toBeInTheDocument();
-    // A task of their own alone is unchanged: their face, no audience.
-    const own = screen
-      .getAllByRole("listitem")
-      .find((item) => item.textContent?.includes("Return the projector"))!;
-    expect(within(own).queryByText(/^Everyone/)).toBeNull();
-
-    // Its circle is the viewer's own part: Start moves only their copy.
-    await user.click(
-      within(everyone).getByRole("button", {
-        name: "Start: Fill out the tabling form",
-      }),
-    );
-    expect(updateStatusMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "copy-me" }),
-    );
-
-    // Its panel keeps Who as the viewer and says who it's for.
-    await user.click(
-      within(everyone).getByRole("button", {
-        name: "Fill out the tabling form",
-      }),
-    );
-    const panel = await screen.findByRole("dialog", {
-      name: "Fill out the tabling form",
-    });
-    expect(
-      within(panel).getByText("Everyone · 14 of 20 done"),
-    ).toBeInTheDocument();
-    // An officer can add people from a copy's For (#5905), and the picker
-    // marks the group's other members, not only this copy's, as having it.
-    await user.click(within(panel).getByRole("button", { name: "Add people" }));
-    expect(
-      await screen.findByRole("checkbox", { name: /Cole Martin\s*has it/ }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("checkbox", { name: /Paul Carlson\s*has it/ }),
-    ).toBeDisabled();
-  });
-
   it("offers no Add people on a copy without tasks:manage (#5905)", async () => {
     window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
     resetListLayoutForTests();
     permissionsRef.current = [];
-    const user = userEvent.setup();
     tasksRef.current = GROUP.map((task) => ({
       ...task,
       group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
     }));
-    render(<TasksBoard />);
-    const everyone = screen
-      .getAllByRole("listitem")
-      .find((item) => item.textContent?.includes("Fill out the tabling form"))!;
-    await user.click(
-      within(everyone).getByRole("button", {
-        name: "Fill out the tabling form",
-      }),
-    );
+    // A member's read holds their own copy; its link (a notification's)
+    // opens the group, whose Who row an officer adds people from.
+    searchRef.current = new URLSearchParams(`task=${GROUP[0]!.id}`);
+    render(<TasksBoard part="everyone" />);
     const panel = await screen.findByRole("dialog", {
       name: "Fill out the tabling form",
     });
     expect(
-      within(panel).getByText("Everyone · 14 of 20 done"),
-    ).toBeInTheDocument();
-    expect(
       within(panel).queryByRole("button", { name: "Add people" }),
     ).toBeNull();
-  });
-
-  it("says who a copy went to on a My tasks Grid card too (#5699)", () => {
-    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "grid");
-    resetListLayoutForTests();
-    tasksRef.current = GROUP.map((task) => ({
-      ...task,
-      group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
-    }));
-    render(<TasksBoard />);
-    expect(viewOn("My tasks")).toBe(true);
-    expect(screen.getByText("Everyone · 14 of 20 done")).toBeInTheDocument();
   });
 
   it("keeps each copy's person on Everyone's By person, where the group heading names them (#5699)", async () => {
@@ -2663,8 +2295,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       ...task,
       group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
     }));
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickView("By person");
     const cole = screen.getByRole("region", { name: "Cole Martin" });
     expect(within(cole).getAllByText("Cole Martin").length).toBeGreaterThan(1);
@@ -2676,8 +2307,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       ...task,
       group: { total: 20, done: 14, confirmed: 9 },
     }));
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     const tile = screen.getByRole("listitem", {
       name: "Fill out the tabling form, for everyone",
     });
@@ -2685,8 +2315,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
   });
 
   it("shows each copy on its own once a filter asks about members", async () => {
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
     await pickView("By person");
     expect(
       screen.queryByRole("listitem", {
@@ -2705,7 +2334,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     it("opens the group in the task panel and drops the param", async () => {
       const replaceState = dropsParam();
       searchRef.current = new URLSearchParams("group=group-1");
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       const panel = await screen.findByRole("dialog", {
         name: "Fill out the tabling form",
       });
@@ -2718,9 +2347,39 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       expect(toastSpy).not.toHaveBeenCalled();
     });
 
+    it("opens a link on Mine too, reading the tasks only once one asks (#5948)", async () => {
+      render(<TasksBoard part="mine" />);
+      // No link: Mine draws no board, so it reads none.
+      expect(tasksEnabled.at(-1)).toBe(false);
+      cleanup();
+
+      const replaceState = dropsParam();
+      searchRef.current = new URLSearchParams("view=everyone&group=group-1");
+      window.history.pushState(
+        null,
+        "",
+        "/activity?view=everyone&group=group-1",
+      );
+      render(<TasksBoard part="mine" />);
+      expect(
+        await screen.findByRole("dialog", {
+          name: "Fill out the tabling form",
+        }),
+      ).toBeInTheDocument();
+      expect(tasksEnabled.at(-1)).toBe(true);
+      // Only the link's own param leaves the address: Activity's `?view=`
+      // stays.
+      expect(replaceState).toHaveBeenCalledWith(
+        null,
+        "",
+        "/activity?view=everyone",
+      );
+      window.history.pushState(null, "", "/");
+    });
+
     it("opens a copy's link as its group", async () => {
       searchRef.current = new URLSearchParams("task=copy-other");
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       const panel = await screen.findByRole("dialog", {
         name: "Fill out the tabling form",
       });
@@ -2735,7 +2394,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       tasksRefetch.mockImplementation(
         () => new Promise<void>((resolve) => (land = resolve)),
       );
-      const { rerender } = render(<TasksBoard />);
+      const { rerender } = render(<TasksBoard part="everyone" />);
       await waitFor(() => expect(tasksRefetch).toHaveBeenCalledTimes(1));
       expect(toastSpy).not.toHaveBeenCalled();
 
@@ -2744,7 +2403,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
         ...task,
         group_id: "group-new",
       }));
-      rerender(<TasksBoard />);
+      rerender(<TasksBoard part="everyone" />);
       await act(async () => land());
       expect(
         await screen.findByRole("dialog", {
@@ -2757,7 +2416,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     it("says a group the re-read doesn't hold is gone, and leaves the board", async () => {
       const replaceState = dropsParam();
       searchRef.current = new URLSearchParams("group=gone");
-      render(<TasksBoard />);
+      render(<TasksBoard part="everyone" />);
       await waitFor(() =>
         expect(toastSpy).toHaveBeenCalledWith(
           expect.objectContaining({ title: "Couldn't find that task" }),
@@ -2808,7 +2467,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
 
   it("shows a member who may claim it, with points, and nothing an officer has", () => {
     permissionsRef.current = ["members:view"];
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
 
     const row = within(section()).getByText(POSTING.title).closest("li")!;
     // Who may claim it and when, under the title.
@@ -2826,16 +2485,16 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
     ).toBeNull();
   });
 
-  it("still leads a member's board when nothing is on their plate", () => {
+  it("shows on Mine for a member with nothing of their own", () => {
     permissionsRef.current = ["members:view"];
     tasksRef.current = [];
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
     expect(section()).toBeInTheDocument();
   });
 
   it("says it's yours, and when it's due, with Give it back", async () => {
     claimMutate.mockResolvedValue({ id: "task-claimed" });
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
 
     await userEvent.click(
       within(section()).getByRole("button", {
@@ -2854,7 +2513,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
 
   it("says someone got there first on a 409", async () => {
     claimMutate.mockRejectedValue({ status: 409 });
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
 
     await userEvent.click(
       within(section()).getByRole("button", {
@@ -2871,7 +2530,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
 
   it("lets an officer assign it to one person", async () => {
     assignMutate.mockResolvedValue({});
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
 
     await userEvent.click(
       within(section()).getByRole("button", {
@@ -2879,9 +2538,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
       }),
     );
     // A person only: no roles tab, no mode switch.
-    expect(
-      screen.queryByRole("tab", { name: "Roles and groups" }),
-    ).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Roles and groups" })).toBeNull();
     await userEvent.click(
       await screen.findByRole("radio", { name: /Cole Martin/ }),
     );
@@ -2895,7 +2552,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
   });
 
   it("opens the posting in a panel for an officer", async () => {
-    render(<TasksBoard />);
+    render(<TasksBoard part="mine" />);
     await userEvent.click(
       within(section()).getByRole("button", { name: POSTING.title }),
     );
@@ -2910,7 +2567,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
     tasksRef.current = [{ ...TASKS[0]!, open_task_id: "posting-1" }];
     openTasksRef.current = [];
     const user = userEvent.setup();
-    render(<TasksBoard />);
+    render(<TasksBoard part="everyone" />);
 
     await user.click(
       screen.getByRole("button", { name: "Edit Sweep the chapter room" }),
@@ -2940,8 +2597,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
     ];
     openTasksRef.current = [];
     const user = userEvent.setup();
-    render(<TasksBoard />);
-    await showEveryones();
+    render(<TasksBoard part="everyone" />);
 
     await user.click(screen.getByRole("button", { name: "Edit Wash the van" }));
     const done = await screen.findByRole("dialog", { name: "Wash the van" });

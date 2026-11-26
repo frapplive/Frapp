@@ -3,19 +3,27 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/lib/hooks/use-toast";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { PERSONAL_SETTINGS_COPY } from "@repo/validation";
+import { LinkedGroup } from "@/components/linked-apps/linked-apps-section";
+import { SignInMethodRows } from "@/components/linked-apps/sign-in-methods";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   DELETE_ACCOUNT_FAILED,
   useDeleteAccountFlow,
 } from "@/components/profile/use-delete-account-flow";
-import { denseListClassName } from "@/components/shared/table-controls";
 import { signOutCurrentSession } from "@/lib/auth/session";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { getErrorMessage } from "@/lib/utils";
 
 /**
- * Settings → Account: sign out, delete the account.
- * Moved here from `/profile` (#3856), which keeps the profile itself.
+ * Settings → Account: the ways the account signs in, then sign out and delete
+ * the account. Moved here from `/profile` (#3856), which keeps the profile
+ * itself; the sign-in methods came over from Linked apps with #6032, as
+ * Google Account and Discord keep them with the account. The phone's Account
+ * page holds the same two groups.
+ *
+ * Delete account's words, its confirm and what it does are unchanged: a
+ * change there is raised with Paul first (`AGENTS.md` § ADR discipline).
  */
 export function AccountSection() {
   const { toast } = useToast();
@@ -50,50 +58,41 @@ export function AccountSection() {
 
   return (
     <>
-      {/*
-        Session and deletion were cards with a paragraph each.
-        They are one list of rows now: what the row does on the left, its one
-        control on the right, the way the notification switches above read.
-      */}
-      <ProfileSection id="account" title="Account">
-        <ul className={denseListClassName}>
-          <li className="flex items-center justify-between gap-4 py-3">
-            <div className="grid min-w-0 gap-1">
-              <p className="text-sm font-semibold">Session</p>
-              <p className="text-sm text-muted-foreground">
-                Signing in again refreshes your permissions.
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="toolbar"
-              className="shrink-0"
-              onClick={handleSignOut}
-              disabled={isSigningOut || isDeletingAccount}
-            >
-              {isSigningOut ? "Signing out..." : "Sign out"}
-            </Button>
-          </li>
-          <li className="flex items-center justify-between gap-4 py-3">
-            <div className="grid min-w-0 gap-1">
-              <p className="text-sm font-semibold">Delete account</p>
-              <p className="text-sm text-muted-foreground">
-                Permanently deletes your account. You&apos;ll be asked to
-                confirm.
-              </p>
-            </div>
-            <Button
-              variant="destructive"
-              size="toolbar"
-              className="shrink-0"
-              onClick={() => void deleteFlow.start()}
-              disabled={isDeletingAccount || isSigningOut}
-            >
-              {isDeletingAccount ? "Deleting account…" : "Delete account…"}
-            </Button>
-          </li>
-        </ul>
-      </ProfileSection>
+      <div id="account" className="flex scroll-mt-16 flex-col gap-8">
+        <LinkedGroup heading={PERSONAL_SETTINGS_COPY.signIn}>
+          <SignInMethodRows />
+        </LinkedGroup>
+        <SettingsGroup heading={PERSONAL_SETTINGS_COPY.session}>
+          <SettingsRow
+            label="Sign out"
+            description="Signing in again refreshes your permissions."
+            control={
+              <Button
+                variant="secondary"
+                size="toolbar"
+                onClick={handleSignOut}
+                disabled={isSigningOut || isDeletingAccount}
+              >
+                {isSigningOut ? "Signing out..." : "Sign out"}
+              </Button>
+            }
+          />
+          <SettingsRow
+            label="Delete account"
+            description="Permanently deletes your account. You'll be asked to confirm."
+            control={
+              <Button
+                variant="destructive"
+                size="toolbar"
+                onClick={() => void deleteFlow.start()}
+                disabled={isDeletingAccount || isSigningOut}
+              >
+                {isDeletingAccount ? "Deleting account…" : "Delete account…"}
+              </Button>
+            }
+          />
+        </SettingsGroup>
+      </div>
       {deleteFlow.confirmDialog}
       {confirmDropDialog}
     </>

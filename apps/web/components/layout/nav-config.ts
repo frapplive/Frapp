@@ -6,7 +6,6 @@ import {
   DocumentsGlyph,
   EventsGlyph,
   RecruitmentGlyph,
-  TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
 import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
@@ -33,8 +32,8 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  * There are no section headings: five rows need none, and a heading over
  * each pair spent 37px the channel list wants.
  *
- * **`MORE_ROWS` is temporary.** Tasks folds into Activity in a later step of
- * #5943. Meetings and Backwork folded into Resources in #5949: posted minutes
+ * **`MORE_ROWS` is temporary.** Tasks folded into Activity in #5948 (Mine and
+ * Everyone's; `/tasks` redirects there). Meetings and Backwork folded into Resources in #5949: posted minutes
  * are filed in Documents, and Backwork is Resources' second view. Points, Study hours and Service
  * hours left with #5950, onto the person: Profile and the Directory. Recruitment (#5924) landed after
  * the series was planned and has no home in it yet. Until its step lands a page stays
@@ -291,14 +290,6 @@ export const SIDEBAR_ROWS: NavItem[] = [
  * More row until then (see the header). A step deletes its own rows.
  */
 export const MORE_ROWS: NavItem[] = [
-  {
-    id: "tasks",
-    label: "Tasks",
-    icon: TasksGlyph,
-    href: "/tasks",
-    description: "Assign, track, and confirm chapter tasks.",
-    module: "tasks",
-  },
   {
     // The recruitment pipeline (#5924): a board and a list of prospects.
     // Its routes need `members:view` and `rush:view` with the module on

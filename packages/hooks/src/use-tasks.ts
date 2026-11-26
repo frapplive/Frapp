@@ -349,6 +349,11 @@ function invalidateTask(
 ): void {
   queryClient.invalidateQueries({ queryKey: taskKeys.detail(chapterId, id) });
   queryClient.invalidateQueries({ queryKey: taskKeys.lists(chapterId) });
+  // Activity lists the same tasks from its own read (To do, Running), and on
+  // web the task panel and New task sit on Activity itself since #5948.
+  queryClient.invalidateQueries({
+    queryKey: chapterId ? activityKeys.chapter(chapterId) : activityKeys.all,
+  });
 }
 
 /**
@@ -502,6 +507,8 @@ export function useCreateTask() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: taskKeys.all });
+      // A task made for the member, or by them, is in Activity's read too.
+      queryClient.invalidateQueries({ queryKey: activityKeys.all });
     },
   });
 }

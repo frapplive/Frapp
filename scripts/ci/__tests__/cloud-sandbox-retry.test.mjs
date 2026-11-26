@@ -826,6 +826,23 @@ test("bringup never writes to node_modules, and checks it only after the stack i
     NPM_WRITES,
     "the node-deps helpers must detect only, never install",
   );
+  // cs_node_deps_ok's turbo half lives in scripts/lib/node-deps.sh, shared with the
+  // session-start hook (which does install, before any bringup starts). The check itself
+  // must stay detect-only, or bringup would install through it.
+  const deps = readFileSync(
+    fileURLToPath(new URL("../../lib/node-deps.sh", import.meta.url)),
+    "utf8",
+  );
+  const turboCheck = deps.slice(
+    deps.indexOf("node_deps_turbo_runs()"),
+    deps.indexOf("\n}\n", deps.indexOf("node_deps_turbo_runs()")),
+  );
+  assert.match(turboCheck, /turbo" --version/, "could not locate node_deps_turbo_runs");
+  assert.doesNotMatch(
+    shellCommandsOnly(turboCheck),
+    NPM_WRITES,
+    "the turbo check bringup runs must detect only, never install",
+  );
 
   // Ordering, over commands rather than raw text: an `indexOf` on the whole file matches the
   // header comment block too, so a comment-only edit naming the function would fail this while
@@ -875,7 +892,7 @@ test("bringup never writes to node_modules, and checks it only after the stack i
   );
   assert.match(
     buildBlock,
-    /turbo" --version/,
+    /node_deps_turbo_runs "\$ROOT"/,
     "the build is skipped, not failed, when turbo does not run",
   );
   assert.match(

@@ -107,7 +107,8 @@ These cause most of the iterations, so they come first.
   drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
   The widths to capture are in [`review-checklist.md`](review-checklist.md) § 1. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
-  its tools inside itself, not in drawers. (11-11, 11-12)
+  its tools inside itself, not in drawers. (11-11, 11-12) *Changed 11-25 by Paul (#6032): both Settings
+  pages, Chapter settings and the member's own, take the full width, so a rail stands as a column.*
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a
   form docks in place (`Panel docked`); a short question is a centred dialog; a quick list is a dropdown
   under its button; a name opens a profile popout; the bell is a popover; Catch me up is inline in the
@@ -166,6 +167,12 @@ These cause most of the iterations, so they come first.
 - **Real scale:** 150 members, 109 roles with 28-character names, 38 channels, 4,000 messages in one
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
+- **Find a channel without scrolling.** A folded category keeps its unread and mentioned channels in view,
+  and a heading's menu folds or unfolds every category; Find (Cmd/Ctrl+K or Cmd/Ctrl+F) and the phone's
+  Search open on Unread, then Recently opened, and match a channel from the first letter. Nothing sits over
+  the channel list to do it ([`search.md` § Jump to a channel](../../../spec/behavior/search.md#jump-to-a-channel),
+  [`chat/README.md` § Sidebar arrangement](../../../spec/behavior/chat/README.md#sidebar-arrangement)).
+  (11-25, #6053)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
 - **No made-up school logo.** A school is drawn by its name and short name: no initials on a colored
   tile standing in for its logo, and no real logo either, which is the school's trademark. "Get rid of it

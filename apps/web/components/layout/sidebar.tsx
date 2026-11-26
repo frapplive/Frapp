@@ -266,33 +266,13 @@ export function Sidebar({
           };
           const current = currentFor(item, pathname);
           // A gated row is hidden until the permission read answers (#3854),
-          // as is a row whose only open view is gated. It holds its place
-          // meanwhile, so More and the channel list don't move down a row
-          // when it arrives.
-          const gated = (
-            rule: Pick<
-              NavItem,
-              "requirePermission" | "requireAnyOf" | "requireAllOf"
-            >,
-          ) =>
-            rule.requirePermission !== undefined ||
-            rule.requireAnyOf !== undefined ||
-            rule.requireAllOf !== undefined;
-          if (
-            permissions === undefined &&
-            (gated(item) ||
-              (item.views?.some(gated) === true && !visible(item))) &&
-            (!tenantKind || (item.kinds ?? ["chapter"]).includes(tenantKind))
-          ) {
-            return (
-              <span
-                key={item.id}
-                aria-hidden="true"
-                data-nav-placeholder=""
-                className="block min-h-touch shrink-0 lg:h-control-row lg:min-h-0 lg:pointer-coarse:h-11"
-              />
-            );
-          }
+          // as is a row whose only open view is gated, and nothing holds its
+          // place meanwhile (#6121, Paul 2026-11-26: the held slot read as a
+          // gap in the nav). The row arrives with the answer, which #5049's
+          // cache of the last answer makes the first paint on a revisit. A
+          // row-shaped placeholder isn't used either: components.md §10 keeps
+          // placeholders to what every member sees, since a gated row's
+          // shape would be drawn and taken back for a member it's not for.
           return (
             <ProtectedNavItem
               key={item.id}
@@ -448,8 +428,8 @@ function NewRow({
 }
 
 /**
- * Search: opens Find (`find-bar.tsx`), the centred dialog Cmd/Ctrl+F opens
- * too. A row since the top bar and its field went (#5946), where Claude and
+ * Search: opens Find (`find-bar.tsx`), the centred dialog Cmd/Ctrl+F and
+ * Cmd/Ctrl+K open too. A row since the top bar and its field went (#5946), where Claude and
  * Notion keep theirs.
  */
 function SearchRow({

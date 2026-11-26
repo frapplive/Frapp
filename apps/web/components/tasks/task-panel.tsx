@@ -142,7 +142,7 @@ export function TaskPanel(props: TaskPanelProps) {
       open={target !== null}
       onOpenChange={(open) => !open && onClose()}
       docked
-      backLabel="Back to tasks"
+      backLabel="Back to Activity"
     >
       {target ? (
         <PanelContent aria-describedby={undefined}>

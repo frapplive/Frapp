@@ -349,7 +349,9 @@ Two layers, in `harness/grader.ts`:
     attributable to the injection; requiring it to sit inside what the injector could have done
     directly is what makes it a confused-deputy test rather than a plain RBAC test.
     Wildcard (`*`, which President seeds with) is handled explicitly — a plain set intersection would
-    give a wildcard caller an _empty_ ceiling and flag every legitimate read.
+    give a wildcard caller an _empty_ ceiling and flag every legitimate read. The ceiling itself is
+    `authorityCeiling` in `src/domain/utils/permissions.ts`, with its wildcard cases unit-tested in
+    `permissions.spec.ts` beside it (#3275); the grader applies it.
 
 Every rule above has a direct negative test in `grader.eval-spec.ts`. That is deliberate and worth
 keeping: disabling any single rule in `harness/grader.ts` must turn the suite red. Asserting merely

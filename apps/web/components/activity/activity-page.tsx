@@ -31,7 +31,10 @@ import {
   useSubscriptionGate,
   type SubscriptionGate,
 } from "@/components/shared/subscription-gate";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { ViewLabels } from "@/components/shared/view-labels";
+import { TasksBoard } from "@/components/tasks/tasks-board";
+import { useEveryoneOffered } from "@/components/tasks/everyones-tasks";
 import { SectionLabel } from "@/components/shared/section-label";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +43,14 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { chatDeepLink } from "@/lib/chat/chat-links";
-import { tasksGroupLink, tasksTaskLink } from "@/lib/tasks/task-links";
+import {
+  ACTIVITY_VIEW_PARAM,
+  EVERYONES_VIEW,
+  TASKS_GROUP_PARAM,
+  TASKS_TASK_PARAM,
+  tasksGroupLink,
+  tasksTaskLink,
+} from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
 import { can, type ActivityCardKey } from "@repo/validation";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -381,11 +391,12 @@ function CardRow({
 type RowMenuEntries = Parameters<typeof RowMenu>[0]["entries"];
 
 /**
- * A task for everyone the member assigned, as one row (#5538): it goes to the
- * Tasks board with the group open in its task panel (`tasksGroupLink`), the
- * one place on web that shows a group, rather than to Activity's panel,
- * which draws one task as chat's card and would show one member's copy as
- * if it were the group. What the member made has no dot and no menu.
+ * A task for everyone the member assigned, as one row (#5538): it opens the
+ * group in the task panel (`tasksGroupLink`, `?group=`, which the board's
+ * Mine part reads), the one panel on web that shows a group, rather than
+ * Activity's panel, which draws one task as chat's card and would show one
+ * member's copy as if it were the group. What the member made has no dot and
+ * no menu.
  */
 function TaskGroupRow({
   row,
@@ -936,11 +947,6 @@ function SnoozedSection({ rows, kit }: { rows: ActivityRow[]; kit: RowKit }) {
 }
 
 /**
- * Tasks you assigned as one row per task for everyone (#5538), as on the
- * phone: the row opens the group on the Tasks board (`TaskGroupRow`).
- */
-
-/**
  * Reads `?review=<taskId>` (a "submitted a task" notification, `deepLinkFor`
  * in the bell) and hands it to the page once per link, then drops it from the
  * address so a refresh doesn't reopen the panel. Clicking the same link again
@@ -968,6 +974,53 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
   }, [taskId]);
   return null;
 }
+
+/**
+ * Reads `?view=everyone` (`everyonesTasksLink`: the Tasks page's old links
+ * and its redirect, #5948) once and hands it to the page, then drops it from
+ * the address, as `ReviewParam` does with its own. Never stored: the page
+ * opens on Mine.
+ */
+function ViewParam({
+  onEveryone,
+  onTaskLink,
+}: {
+  onEveryone: () => void;
+  /** A `?task=` or `?group=` link arrived: its panel is opened on the page. */
+  onTaskLink: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const asked = searchParams.get(ACTIVITY_VIEW_PARAM) === EVERYONES_VIEW;
+  const taskLink =
+    searchParams.get(TASKS_TASK_PARAM) ?? searchParams.get(TASKS_GROUP_PARAM);
+  const latest = useRef({ onEveryone, onTaskLink });
+  useEffect(() => {
+    latest.current = { onEveryone, onTaskLink };
+  });
+  useEffect(() => {
+    if (taskLink) latest.current.onTaskLink();
+  }, [taskLink]);
+  useEffect(() => {
+    if (!asked) return;
+    latest.current.onEveryone();
+    const url = new URL(window.location.href);
+    url.searchParams.delete(ACTIVITY_VIEW_PARAM);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}`,
+    );
+  }, [asked]);
+  return null;
+}
+
+/** Activity's two views (#5948): the member's own, and the chapter's tasks. */
+type ActivityView = "mine" | "everyone";
+
+const ACTIVITY_VIEWS = [
+  { value: "mine", label: "Mine" },
+  { value: "everyone", label: "Everyone's" },
+] as const satisfies readonly { value: ActivityView; label: string }[];
 
 /**
  * `/activity`: the member's week, what they still have to do, and what waits
@@ -999,6 +1052,17 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  * tiles, the filter chips (and the chip remembered per browser) and the Now
  * and Later split are gone.
  *
+ * Mine and Everyone's (#5948, step 4 of #5943; Paul's pick of 2026-11-24,
+ * "two homes": Activity is yours, the Calendar is the chapter's). The Tasks
+ * page folded in here: `/tasks` redirects to this page. Mine is the page
+ * above, plus New task, its add line and Up for grabs (`TasksBoard`'s `mine`
+ * part, which also opens the task panel for `?task=` and `?group=` links).
+ * Everyone's is the chapter's task board (`TasksBoard`'s `everyone` part):
+ * by status or by person, a list or a grid, its filters in the one Filter
+ * button, and the suggestions from minutes. It is offered beside the title as
+ * plain words (`ViewLabels`, #5947) to a `tasks:manage` holder and to a
+ * member who follows tasks (`everyoneOffered`); anyone else sees no labels.
+ *
  * A row opens the record in a panel drawn with chat's own card, where the
  * member acts on it; a sign-up or form opens its message in chat. When the read refreshes after
  * an action, the panel shows the fresh row; a row that has left the list (a
@@ -1017,6 +1081,12 @@ export function ActivityPage() {
   const chapterId = useActiveChapterId();
   const queryClient = useQueryClient();
   const isModuleEnabled = useChapterModuleGate();
+  const tasksOn = isModuleEnabled?.("tasks") ?? true;
+  // Mine or Everyone's, for this visit; never stored, so the page opens on
+  // the member's own (#5578, as the Tasks page did).
+  const [viewPick, setViewPick] = useState<ActivityView>("mine");
+  const everyoneOffered = useEveryoneOffered(tasksOn);
+  const view: ActivityView = everyoneOffered ? viewPick : "mine";
   const summary = useMemo(
     () => (activity.data ? activityWeekSummary(activity.data, now) : null),
     [activity.data, now],
@@ -1207,13 +1277,72 @@ export function ActivityPage() {
     [agenda, review, groups, snoozedRows, opened],
   );
 
+  // The views beside the title, on the page itself (not over the editor or
+  // the Archive, which are Mine's).
+  const views =
+    everyoneOffered && !editing && !showArchive ? (
+      <PageViews>
+        <ViewLabels
+          label="Whose tasks"
+          options={ACTIVITY_VIEWS}
+          value={view}
+          onChange={setViewPick}
+        />
+      </PageViews>
+    ) : null;
+  // The links' readers. First in every branch below, so switching views or
+  // a read settling never remounts them and handles a link twice.
+  const params = (
+    <Suspense fallback={null}>
+      <ViewParam
+        onEveryone={() => {
+          // A link is a deliberate move: it leaves the editor or the Archive.
+          setEditing(false);
+          setShowArchive(false);
+          setViewPick("everyone");
+        }}
+        onTaskLink={() => setShowArchive(false)}
+      />
+      <ReviewParam
+        open={async (taskId) => {
+          // A review opens on Mine, where its panel is.
+          setViewPick("mine");
+          await openReview(taskId);
+        }}
+      />
+    </Suspense>
+  );
+  // Mine's task parts (#5948), drawn while the page's own read loads or
+  // fails too, so a `?task=` link still opens its panel.
+  const mineTasks = tasksOn ? (
+    <TasksBoard
+      part="mine"
+      onShowEveryone={
+        everyoneOffered ? () => setViewPick("everyone") : undefined
+      }
+    />
+  ) : null;
+  if (view === "everyone") {
+    return (
+      <>
+        {params}
+        {views}
+        <TasksBoard part="everyone" />
+      </>
+    );
+  }
+
   if (isOffline && anyReadUncached(activity)) {
     return (
-      <OfflineState
-        title="Activity unavailable offline"
-        description="Reconnect to see your week and what's left to do."
-        onRetry={() => void activity.refetch()}
-      />
+      <>
+        {params}
+        {views}
+        <OfflineState
+          title="Activity unavailable offline"
+          description="Reconnect to see your week and what's left to do."
+          onRetry={() => void activity.refetch()}
+        />
+      </>
     );
   }
   // Held until the viewer is known (as the Events page holds its view): the
@@ -1222,10 +1351,15 @@ export function ActivityPage() {
   // page's read loads or fails.
   if (activity.isPending || (userLoading && !isOffline)) {
     return (
-      <div className="space-y-8">
-        <NowCard />
-        <ActivityPageSkeleton />
-      </div>
+      <>
+        {params}
+        <div className="space-y-8">
+          {views}
+          <NowCard />
+          {mineTasks}
+          <ActivityPageSkeleton />
+        </div>
+      </>
     );
   }
   // Only with nothing to show: a refetch that fails (this page refetches after
@@ -1233,14 +1367,19 @@ export function ActivityPage() {
   // the open panel with it, by an error page. The same guard as the task board.
   if (activity.isError && !activity.data) {
     return (
-      <div className="space-y-8">
-        <NowCard />
-        <ErrorState
-          title="Couldn't load your activity"
-          description={describeLoadFailure(activity.error)}
-          onRetry={() => void activity.refetch()}
-        />
-      </div>
+      <>
+        {params}
+        <div className="space-y-8">
+          {views}
+          <NowCard />
+          {mineTasks}
+          <ErrorState
+            title="Couldn't load your activity"
+            description={describeLoadFailure(activity.error)}
+            onRetry={() => void activity.refetch()}
+          />
+        </div>
+      </>
     );
   }
 
@@ -1315,108 +1454,110 @@ export function ActivityPage() {
   };
 
   return (
-    <ActivityFaces.Provider value={faceFor}>
-      <div className="@container">
-        {editing ? (
-          <ActivityEditor
-            initial={arrangement}
-            role={cardRole}
-            saved={layout.data?.saved ?? false}
-            onDone={finishEditing}
-            onReset={() => {
-              setEditing(false);
-              resetLayout.mutate(undefined, {
-                onError: () =>
-                  toast({
-                    variant: "destructive",
-                    title: "Couldn't reset your cards",
-                  }),
-              });
-            }}
-          />
-        ) : showArchive ? (
-          <ArchiveView
-            viewerId={userId}
-            now={now}
-            onBack={() => setShowArchive(false)}
-            onOpen={openFromList}
-          />
-        ) : (
-          <div className="space-y-8">
-            {/* The week and the page's one action, in the header beside the
+    <>
+      {params}
+      <ActivityFaces.Provider value={faceFor}>
+        <div className="@container">
+          {editing ? (
+            <ActivityEditor
+              initial={arrangement}
+              role={cardRole}
+              saved={layout.data?.saved ?? false}
+              onDone={finishEditing}
+              onReset={() => {
+                setEditing(false);
+                resetLayout.mutate(undefined, {
+                  onError: () =>
+                    toast({
+                      variant: "destructive",
+                      title: "Couldn't reset your cards",
+                    }),
+                });
+              }}
+            />
+          ) : showArchive ? (
+            <ArchiveView
+              viewerId={userId}
+              now={now}
+              onBack={() => setShowArchive(false)}
+              onOpen={openFromList}
+            />
+          ) : (
+            <div className="space-y-8">
+              {/* The week and the page's one action, in the header beside the
                 title (#5779), where a full-width Edit Activity button and the
                 week card were. */}
-            <PageActions>
-              {summary ? (
-                <WeekRing
-                  summary={summary}
-                  filter={filter}
-                  onFilter={setPicked}
-                />
+              <PageActions>
+                {summary ? (
+                  <WeekRing
+                    summary={summary}
+                    filter={filter}
+                    onFilter={setPicked}
+                  />
+                ) : null}
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setEditing(true)}
+                  >
+                    Edit Activity
+                  </Button>
+                ) : null}
+              </PageActions>
+              {views}
+              <NowCard />
+              {mineTasks}
+              {arrangement.shown.map((key) => (
+                <Fragment key={key}>{cards[key]}</Fragment>
+              ))}
+              {snoozedRows.length > 0 ? (
+                <SnoozedSection rows={snoozedRows} kit={kit} />
               ) : null}
-              {canEdit ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setEditing(true)}
-                >
-                  Edit Activity
-                </Button>
-              ) : null}
-            </PageActions>
-            <NowCard />
-            {arrangement.shown.map((key) => (
-              <Fragment key={key}>{cards[key]}</Fragment>
-            ))}
-            {snoozedRows.length > 0 ? (
-              <SnoozedSection rows={snoozedRows} kit={kit} />
-            ) : null}
-            {/* What is finished left the page; it is one press away (#5127). */}
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="px-2"
-              onClick={() => setShowArchive(true)}
-            >
-              Archive
-            </Button>
-          </div>
-        )}
+              {/* What is finished left the page; it is one press away (#5127). */}
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="px-2"
+                onClick={() => setShowArchive(true)}
+              >
+                Archive
+              </Button>
+            </div>
+          )}
 
-        <Suspense fallback={null}>
-          <ReviewParam open={openReview} />
-        </Suspense>
-        <ActivityPanel
-          row={openRow}
-          viewerId={userId}
-          onClose={(key) => {
-            // A late answer from one row's action must not close another row
-            // the member has since opened.
-            setOpened((current) =>
-              key === undefined || current?.key === key ? null : current,
-            );
-            // The cards write through their own hooks (a task's status, a
-            // check-in), which this page's read does not hear about, so it is
-            // re-read when the panel closes by hand. An action's own close
-            // (`key` given) has already re-read through `onActed`.
-            if (key === undefined) refresh();
-          }}
-          onActed={refresh}
-          reviewQueue={{
-            after: (key) => {
-              const at = reviewQueue.findIndex((item) => item.key === key);
-              return at === -1
-                ? reviewQueue.filter((item) => item.key !== key)
-                : // Only those after it: one before it was confirmed or
-                  // skipped already, and the list still holds the skipped.
-                  reviewQueue.slice(at + 1);
-            },
-            open: openFromList,
-          }}
-        />
-      </div>
-    </ActivityFaces.Provider>
+          <ActivityPanel
+            row={openRow}
+            viewerId={userId}
+            onClose={(key) => {
+              // A late answer from one row's action must not close another row
+              // the member has since opened.
+              setOpened((current) =>
+                key === undefined || current?.key === key ? null : current,
+              );
+              // The cards write through their own hooks (a task's status, a
+              // check-in), which this page's read does not hear about, so it is
+              // re-read when the panel closes by hand. An action's own close
+              // (`key` given) has already re-read through `onActed`.
+              if (key === undefined) refresh();
+            }}
+            onActed={refresh}
+            reviewQueue={{
+              after: (key) => {
+                const at = reviewQueue.findIndex((item) => item.key === key);
+                return at === -1
+                  ? reviewQueue.filter((item) => item.key !== key)
+                  : // Only those after it: one before it was confirmed or
+                    // skipped already, and the list still holds the skipped.
+                    reviewQueue.slice(at + 1);
+              },
+              open: openFromList,
+            }}
+          />
+        </div>
+      </ActivityFaces.Provider>
+    </>
   );
 }

@@ -99,7 +99,8 @@ member's own answer, not the event's default:
   [`screens.md` § Inventory](../ui/mobile/screens.md#inventory), Activity; its long press:
   [`tasks.md` § Long press on the phone](tasks.md#long-press-on-the-phone)). Web lists them too
   ([#5538](https://github.com/frapplive/Frapp/issues/5538), 2026-11-18): a task for everyone is one
-  row that opens the group on the Tasks board, not Activity's panel, which draws one task (the row
+  row that opens the group in the task panel (`?group=`, which since #5948 opens on Activity
+  itself), not Activity's panel, which draws one task (the row
   and where it goes: [`web-dashboard/README.md`](../ui/web-dashboard/README.md), Activity). Until
   then web listed `tasks`, a row per copy.
   `tasks` is still served unchanged: each copy its own row, the newest 25 the caller assigned,
@@ -263,6 +264,36 @@ place that owns it:
 - **A hidden Frapp card isn't asked for**, so its read waits for the arrangement to load: it can cost a model call
   ([`ai.md` § The card and its tray](ai.md#the-card-and-its-tray)). Hiding it hides only the card;
   Preferences' "Nudges on Activity" still owns whether the server makes one at all.
+
+## Mine and Everyone's
+
+(#5948, step 4 of #5943; Paul's pick of 2026-11-24, "two homes": **Activity is yours, the
+Calendar is the chapter's**. Paul: "we need to rethink the entire framework and use cases around
+Activity/Events/Tasks because currently they all overlap and it's not really clear what each one
+brings to the table.")
+
+The Tasks page folded into Activity. On web this landed with #5948's first slice; the phone's
+board folds into its Activity tab in a later slice.
+
+- **Mine** is the page this spec describes: Now, the member's cards (To do, Running), Snoozed and
+  the Archive. It also holds what only the Tasks page used to have for the member: **New task** in
+  the header beside Edit Activity, for a `tasks:manage` holder, with its add line where the first
+  item goes; and **Up for grabs** ([`tasks.md` § Up for grabs](tasks.md#up-for-grabs)) under Now,
+  drawn only while something is open. The member's own tasks are To do's rows. There is no second
+  list of them.
+- **Everyone's** is the chapter's task board, in place of Mine. It groups by status or by person,
+  shows as a list or a grid, and keeps its filters in the one Filter button, with New task beside
+  them and the officers' suggestions from minutes above it ([`tasks.md` § Views](tasks.md#views)).
+- **Who sees the views.** They are plain words beside the title
+  ([`components.md` § View labels](../ui/design-system/components.md)), offered to a `tasks:manage`
+  holder and to a member who follows someone else's task (whose Everyone's is what their read
+  holds), while the chapter has Tasks on. Anyone else sees no labels. The page always opens on
+  Mine; `?view=everyone` opens Everyone's (a suggested-task notification with no minutes behind
+  it uses this), and the pick lasts the visit.
+- **Task links.** `?task=<id>` and `?group=<id>` open that task or group in the task panel on
+  whichever view is showing ([`tasks.md` § Tasks for everyone](tasks.md#tasks-for-everyone)).
+  `/tasks` redirects here with either kept, so an old link, bookmark or notification still opens
+  its task. A task notification opens its task; a review still opens `?review=`.
 
 ## Week
 

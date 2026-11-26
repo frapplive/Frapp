@@ -38,7 +38,7 @@ export function SignInMethodRows() {
   if (identities.isPending) return null;
   if (identities.isError) {
     return (
-      <li className="py-3">
+      <li className="px-4 py-3">
         <NestedError
           title="Couldn't load how you sign in"
           description="Check your connection and try again."
