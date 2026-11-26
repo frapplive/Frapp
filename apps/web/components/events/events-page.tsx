@@ -1613,6 +1613,7 @@ export function EventsPage() {
         initialStartAt={eventPlan?.startAt ?? calendarCreateDefaults?.startAt}
         initialEndAt={eventPlan?.endAt ?? calendarCreateDefaults?.endAt}
         template={eventPlan?.template}
+        initialDated={eventPlan?.dated}
         keptDraft={editorDraftName}
         onCreated={async (eventId) => {
           if (eventPlan) {

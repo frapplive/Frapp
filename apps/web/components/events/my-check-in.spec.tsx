@@ -353,4 +353,41 @@ describe("<MyCheckIn />", () => {
     expect(screen.getByText(/^Opens 6:50\sPM$/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /check in/i })).toBeNull();
   });
+
+  describe("an all-day event (#6144)", () => {
+    // Stored around the saver's midnights; the row says its day instead.
+    const dayStart = new Date(2026, 10, 10);
+    const dayEnd = new Date(2026, 10, 11);
+    function renderAllDay() {
+      return render(
+        <MyCheckIn
+          eventId="e1"
+          start={dayStart.toISOString()}
+          end={dayEnd.toISOString()}
+          opensMinutes={undefined}
+          pointValue={5}
+          zone="none"
+          shape={{ timing: "all_day", start_date: "2026-11-10" }}
+        />,
+      );
+    }
+
+    it("says it is open all day, never a midnight clock", () => {
+      clock.now = new Date(2026, 10, 10, 15).getTime();
+      renderAllDay();
+
+      expect(screen.getByText("Check-in is open all day")).toBeInTheDocument();
+      expect(screen.queryByText(/Closes/)).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /check in/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("says the day check-in opens, not 11:50 PM the night before", () => {
+      clock.now = new Date(2026, 10, 9, 12).getTime();
+      renderAllDay();
+
+      expect(screen.getByText("Opens tomorrow")).toBeInTheDocument();
+    });
+  });
 });

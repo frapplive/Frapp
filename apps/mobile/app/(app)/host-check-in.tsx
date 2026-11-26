@@ -18,7 +18,11 @@ import {
   type DeviceInstant,
 } from "@repo/hooks";
 import { SignetTokens } from "@repo/theme/signet";
-import { can } from "@repo/validation";
+import {
+  can,
+  EVENT_NO_ATTENDANCE_COPY,
+  eventNoAttendanceReason,
+} from "@repo/validation";
 import {
   ErrorState,
   SkeletonBlock,
@@ -261,9 +265,17 @@ export default function HostCheckInScreen() {
     [eventQuery.data],
   );
 
+  // A time-TBD or calendar-only event takes no check-in (#6144): the screen
+  // says so in the API's words rather than drawing a code nobody can redeem.
+  // The event page never links here for one; a stale link still can.
+  const noCheckIn = event ? eventNoAttendanceReason(event) : null;
+
   // Both requests are officer-gated, so neither is fired for a member who would
-  // only get a 403 back.
-  const tokenQuery = useMintCheckInToken(eventId, canHost && focused);
+  // only get a 403 back, nor for an event that takes no check-in.
+  const tokenQuery = useMintCheckInToken(
+    eventId,
+    canHost && focused && !noCheckIn,
+  );
   const { data: attendance } = useAttendance(canHost ? eventId : "", {
     refetchInterval: focused ? ATTENDANCE_POLL_MS : false,
   });
@@ -297,7 +309,7 @@ export default function HostCheckInScreen() {
   const checkedIn = countCheckedIn(attendance);
   const presence = useCheckInScreenReport(
     eventId,
-    canHost && focused && minted !== null,
+    canHost && focused && minted !== null && !noCheckIn,
   );
   const line = presenceLine(presence);
   const { accent } = useChapterBranding();
@@ -372,6 +384,10 @@ export default function HostCheckInScreen() {
           <InlineNote>
             Hosting check-in is for officers who manage events.
           </InlineNote>
+        </View>
+      ) : noCheckIn ? (
+        <View style={styles.stateWrap}>
+          <InlineNote>{EVENT_NO_ATTENDANCE_COPY[noCheckIn]}</InlineNote>
         </View>
       ) : !minted &&
         (tokenQuery.isError || (!tokenQuery.isPending && !cached)) ? (

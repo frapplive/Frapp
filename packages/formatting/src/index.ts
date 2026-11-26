@@ -52,6 +52,8 @@ export {
   isDueOverdue,
 } from "./display";
 export {
+  ALL_DAY_CHECK_IN_OPEN,
+  allDayCheckInOpensWords,
   type EventWhenFields,
   eventChipWords,
   eventDatedWord,
@@ -74,6 +76,7 @@ export {
 } from "./date-entry";
 export { nextUpLine } from "./next-up";
 export {
+  datedDaysThisYear,
   lastYearBareDay,
   lastYearDay,
   nameForThisYear,

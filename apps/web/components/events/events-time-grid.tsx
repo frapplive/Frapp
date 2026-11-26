@@ -168,24 +168,14 @@ export function EventsTimeGrid({
   // column on every minute's render.
   const hourLabels = useMemo(() => HOURS.map(hourLabel), []);
 
-  // An all-day or time-TBD event is placed by its days, never its stored
-  // midnights (#6098): it spans its days in the strip over the hours, as
-  // Google Calendar draws an all-day event, and never takes the 12 AM slot.
-  const dated = useMemo(
-    () => events.filter((event) => eventIsDated(eventTimingFieldsOf(event))),
-    [events],
-  );
+  // The columns keep an all-day or time-TBD event out of the hours (#6144);
+  // here it spans its days as one bar in the strip over them, as Google
+  // Calendar draws an all-day event, read by its days (`datedBars`).
   const columns = useMemo(
-    () =>
-      timeGridColumns(
-        days,
-        events.filter((event) => !dated.includes(event)),
-        tasksByDay,
-        calendarItemDueMinute,
-      ),
-    [days, events, dated, tasksByDay],
+    () => timeGridColumns(days, events, tasksByDay, calendarItemDueMinute),
+    [days, events, tasksByDay],
   );
-  const bars = useMemo(() => datedBars(days, dated), [days, dated]);
+  const bars = useMemo(() => datedBars(days, events), [days, events]);
   const barLanes = bars.reduce((most, bar) => Math.max(most, bar.lane + 1), 0);
 
   const hasStrip =
@@ -519,7 +509,8 @@ function SeriesMark({ facts }: { facts: CalendarEventFacts }) {
 type DatedBar = { event: EventRow; from: number; to: number; lane: number };
 
 /**
- * Where each dated event's bar goes in the strip over `days`: from the first
+ * Where each dated event's bar goes in the strip over `days` (a timed event in
+ * `events` covers no day by this rule and is skipped): from the first
  * column it covers to the last, each in the first row free across those
  * columns, the longest first, as Google Calendar stacks its all-day bars.
  */

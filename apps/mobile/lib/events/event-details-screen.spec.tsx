@@ -828,6 +828,35 @@ describe("Event details layout", () => {
     expect(screenText(tree)).not.toContain("window has ended");
     expect(textNode(tree, "Scan code")).toBeUndefined();
   });
+
+  describe("on an all-day event (#6144)", () => {
+    // Stored around the saver's midnights; the card says the day instead.
+    const ALL_DAY = {
+      ...EVENT,
+      timing: "all_day",
+      start_date: "2026-09-25",
+      end_date: "2026-09-25",
+      start_time: new Date(2026, 8, 25).toISOString(),
+      end_time: new Date(2026, 8, 26).toISOString(),
+    };
+
+    it("says check-in is open all day, with no midnight closing clock", () => {
+      vi.setSystemTime(new Date(2026, 8, 25, 15));
+      event = ALL_DAY;
+      const tree = render();
+
+      expect(textNode(tree, "Check-in is open all day")).toBeDefined();
+      expect(screenText(tree)).not.toMatch(/closes /);
+    });
+
+    it("says the day check-in opens, never 11:50 PM the night before", () => {
+      vi.setSystemTime(new Date(2026, 8, 24, 12));
+      event = ALL_DAY;
+      const tree = render();
+
+      expect(textNode(tree, "Check-in opens tomorrow")).toBeDefined();
+    });
+  });
 });
 
 describe("Event details editing", () => {

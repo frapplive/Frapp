@@ -65,6 +65,32 @@ export function eventDatedWord(event: EventTimingFields): string | null {
   return null;
 }
 
+/**
+ * An all-day event's check-in, by its days (#6144). Its window is stored
+ * around the saver's midnights, so a clock would say "opens 11:50 PM" or
+ * "closes 12:15 AM"; both apps say these instead.
+ */
+export const ALL_DAY_CHECK_IN_OPEN = "Check-in is open all day";
+
+/**
+ * When an all-day event's check-in opens, mid-sentence, by its first day:
+ * "today", "tomorrow", the weekday within the week, else "Saturday, March 14"
+ * ("Check-in opens tomorrow"). Null for any other shape, or a first day that
+ * doesn't read.
+ */
+export function allDayCheckInOpensWords(
+  event: EventTimingFields,
+  now: Date = new Date(),
+): string | null {
+  if (eventTiming(event) !== "all_day") return null;
+  const first = dayOf(event.start_date);
+  if (!first) return null;
+  return relativeDay(first, now).replace(
+    /^(Today|Tomorrow|Yesterday)\b/,
+    (word) => word.toLowerCase(),
+  );
+}
+
 /** The dated event's first and last day, or null for a timed one. */
 function datedDays(event: EventTimingFields): [Date, Date] | null {
   if (eventTiming(event) === "timed") return null;

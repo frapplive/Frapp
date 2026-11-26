@@ -11,8 +11,11 @@ import {
   CHECK_IN_NEEDS_CODE_COPY,
   checkInWindowBounds,
   isValidZoneOutline,
+  type EventTimingFields,
 } from "@repo/validation";
 import {
+  ALL_DAY_CHECK_IN_OPEN,
+  allDayCheckInOpensWords,
   formatRelativeDayTime,
   formatTimeOfDay,
   localIsoDate,
@@ -177,10 +180,16 @@ export function MyCheckIn({
   zone,
   eventUnavailable = false,
   eventPending = false,
+  shape,
 }: {
   eventId: string;
   start: unknown;
   end: unknown;
+  /**
+   * The event's shape: an all-day event's window says its days, never the
+   * saver's midnights it is stored around (#6144).
+   */
+  shape?: EventTimingFields;
   opensMinutes: unknown;
   pointValue: unknown;
   zone: ZoneState;
@@ -214,6 +223,8 @@ export function MyCheckIn({
     now,
   });
   const points = pointsLabel(pointValue);
+  // "Opens tomorrow" for an all-day event; null for a timed one.
+  const allDayOpens = shape ? allDayCheckInOpensWords(shape, now) : null;
 
   if (view.kind === "loading") {
     return (
@@ -234,14 +245,17 @@ export function MyCheckIn({
       title = view.label;
       break;
     case "open":
-      title = "Open now";
+      // An all-day event says its day, in the phone card's words.
+      title = allDayOpens ? ALL_DAY_CHECK_IN_OPEN : "Open now";
       detail =
-        view.zone === "none"
-          ? `Closes ${clockLabel(view.closesAt, now)}`
-          : ZONE_CHECK_IN_LINE[view.zone];
+        view.zone !== "none"
+          ? ZONE_CHECK_IN_LINE[view.zone]
+          : allDayOpens
+            ? null
+            : `Closes ${clockLabel(view.closesAt, now)}`;
       break;
     case "upcoming":
-      title = `Opens ${clockLabel(view.opensAt, now)}`;
+      title = `Opens ${allDayOpens ?? clockLabel(view.opensAt, now)}`;
       break;
     case "closed":
       title = "Closed";

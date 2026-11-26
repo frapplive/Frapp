@@ -1,4 +1,8 @@
-import { formatEventRelativeWhen, formatEventWhenOr } from "@repo/formatting";
+import {
+  type EventWhenFields,
+  formatEventRelativeWhen,
+  formatEventWhenOr,
+} from "@repo/formatting";
 import { useCallback } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useStartMeeting, type MeetingSummary } from "@repo/hooks";
@@ -25,7 +29,23 @@ import { selectAllEventRows, type EventRow } from "@/lib/events/select";
  */
 
 /** The event a set of minutes is for: its id and name are all a start needs. */
-type MeetingEventRef = { id: string; name: string; start_time?: string };
+type MeetingEventRef = EventWhenFields & {
+  id: string;
+  name: string;
+  start_time?: string;
+};
+
+/**
+ * When a meeting the sheet offers is: "Today at 7 PM", or a dated event by
+ * its day, never its stored midnight (#6098, #6144).
+ */
+function meetingWhen(event: MeetingEventRef, now: Date): string {
+  return formatEventWhenOr(
+    event,
+    (start) => meetingWhenLabel(start, now),
+    (shape) => formatEventRelativeWhen(shape, now),
+  );
+}
 
 /** What the officer is starting minutes on. */
 export type MeetingChoice =
@@ -165,12 +185,7 @@ export function meetingChoices(
         detail: [
           event.id === inRoom?.id
             ? MEETING_START_COPY.onNow
-            : // By its day, never its stored midnight (#6098).
-              formatEventWhenOr(
-                event,
-                (start) => meetingWhenLabel(start, now),
-                (shape) => formatEventRelativeWhen(shape, now),
-              ),
+            : meetingWhen(event, now),
           ownDraftFor.has(event.id) ? MEETING_START_COPY.yours : null,
           opens
             ? MEETING_START_COPY.openMinutes
@@ -214,7 +229,7 @@ export function choiceLabel(
     detail:
       choice.event.id === inRoomId
         ? MEETING_START_COPY.onNow
-        : meetingWhenLabel(choice.event.start_time, now),
+        : meetingWhen(choice.event, now),
   };
 }
 

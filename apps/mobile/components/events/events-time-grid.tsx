@@ -43,7 +43,6 @@ import {
 } from "@/components/item-actions-menu";
 import { HairlineChip } from "@/components/status-chip";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { splitForTimeGrid } from "@/lib/events/event-days";
 import { formatEventClock } from "@/lib/events/format";
 import type { EventRow } from "@/lib/events/select";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -119,18 +118,16 @@ export function EventsTimeGrid({
   const hourLabels = useMemo(() => HOURS.map(hourLabel), []);
 
   // The shared layout lays out a range of days; this grid asks for one. An
-  // all-day or time-TBD event goes in the All day strip on each day it
-  // covers, by its own days, and never into the hours: its stored times are
-  // midnights (#6098), which the layout would draw at 12 AM.
+  // all-day or time-TBD event comes back in `dated` for each day it covers,
+  // never in the hours (#6144), and leads the All day strip.
   const { key, allDay, tasks, placed, placedTasks } = useMemo(() => {
-    const { dated, timed } = splitForTimeGrid(events, localIsoDate(day));
     const column = timeGridColumns(
       [day],
-      timed,
+      events,
       tasksByDay,
       calendarItemDueMinute,
     )[0]!;
-    return { ...column, allDay: [...dated, ...column.allDay] };
+    return { ...column, allDay: [...column.dated, ...column.allDay] };
   }, [day, events, tasksByDay]);
   const isToday = key === todayKey;
   const dayLabel = longDay(day);

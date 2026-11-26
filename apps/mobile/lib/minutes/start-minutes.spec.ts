@@ -5,7 +5,11 @@ vi.mock("@repo/hooks", () => ({
   useStartMeeting: vi.fn(),
 }));
 
-import { MEETING_START_COPY, meetingChoices } from "./start-minutes";
+import {
+  MEETING_START_COPY,
+  choiceLabel,
+  meetingChoices,
+} from "./start-minutes";
 
 const NOW = new Date("2026-11-17T19:20:00");
 const ME = "user-me";
@@ -166,5 +170,29 @@ describe("meetingChoices", () => {
     expect(choices.options.map((option) => option.title)).toEqual([
       MEETING_START_COPY.noneTitle,
     ]);
+  });
+});
+
+describe("choiceLabel (#6144)", () => {
+  it("says a dated meeting's day, never its stored midnight", () => {
+    const now = new Date(2026, 10, 12, 15);
+    const label = choiceLabel(
+      {
+        kind: "event",
+        event: {
+          id: "e",
+          name: "Retreat",
+          timing: "all_day",
+          start_date: "2026-11-13",
+          end_date: "2026-11-13",
+          start_time: new Date(2026, 10, 13).toISOString(),
+        },
+      },
+      now,
+      null,
+    );
+    expect(label.title).toBe("Retreat");
+    expect(label.detail).toBe("Tomorrow · All day");
+    expect(label.detail).not.toMatch(/12:00/);
   });
 });

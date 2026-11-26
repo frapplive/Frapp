@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  allDayCheckInOpensWords,
   eventChipWords,
   formatEventDayTime,
   formatEventRelativeWhen,
@@ -119,5 +120,35 @@ describe("eventChipWords", () => {
       visible: "Time TBD",
     });
     expect(eventChipWords("Chapter", null, {}).label).toBe("Open Chapter");
+  });
+});
+
+describe("allDayCheckInOpensWords (#6144)", () => {
+  const thursday = new Date(2026, 10, 12, 15); // Thursday, November 12
+  const firstDay = (start_date: string) => ({
+    timing: "all_day",
+    start_date,
+  });
+
+  it("says the first day, never the window's midnight clock", () => {
+    expect(allDayCheckInOpensWords(firstDay("2026-11-13"), thursday)).toBe(
+      "tomorrow",
+    );
+    expect(allDayCheckInOpensWords(firstDay("2026-11-15"), thursday)).toBe(
+      "Sunday",
+    );
+    expect(allDayCheckInOpensWords(firstDay("2026-11-12"), thursday)).toBe(
+      "today",
+    );
+  });
+
+  it("is only for an all-day event", () => {
+    expect(
+      allDayCheckInOpensWords(
+        { timing: "time_tbd", start_date: "2026-11-13" },
+        thursday,
+      ),
+    ).toBe(null);
+    expect(allDayCheckInOpensWords({}, thursday)).toBe(null);
   });
 });
