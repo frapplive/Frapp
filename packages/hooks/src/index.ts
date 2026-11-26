@@ -174,9 +174,9 @@ export * from "./use-semesters";
 export * from "./use-service-entries";
 export * from "./use-smooth-text";
 export * from "./use-study";
-export * from "./use-tasks";
 // Asking for more time on a task (#6096).
 export * from "./use-task-extensions";
+export * from "./use-tasks";
 export * from "./use-type-editor";
 export * from "./use-user";
 export * from "./whats-new-seen";
