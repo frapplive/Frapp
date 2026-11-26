@@ -1,18 +1,29 @@
 import {
+  addEventDays,
   attendanceInvitesNobody,
   attendanceFromEvent,
   CHECK_IN_OPENS_ERROR,
   parseCheckInOpens,
   attendanceToWire,
   eventEditPatch,
+  eventIsDated,
+  eventLastDay,
+  eventTiming,
   repeatDraftFromRule,
   repeatEditSeriesOf,
   repeatRuleForEdit,
   type EventEditPatch,
   type EventEditTarget as SharedEventEditTarget,
+  type EventEditValues,
 } from "@repo/validation";
 import { parsePointReward } from "@/lib/tasks/create-task";
+import { parseCalendarDayParam } from "./calendar-day";
 import {
+  draftCalendarOnly,
+  draftDays,
+  draftDaysProblems,
+  draftTakesAttendance,
+  draftTiming,
   type NewEventDraft,
   type NewEventErrors,
 } from "./create-event";
@@ -49,15 +60,46 @@ export const DELETE_EVENT_PERMISSIONS = [
 /** The event being edited, and what the form needs to know about its series. */
 export type EventEditTarget = SharedEventEditTarget<EventDetail>;
 
+/** The hour a dated event's form holds, should it be made timed: 7:00 PM. */
+const DATED_FORM_HOUR = 19;
+
+/**
+ * Where the form's start and end sit for the stored event: its own times
+ * when timed; for an all-day or time-TBD event, its first day at 7 PM for an
+ * hour, never its stored midnights (#6098). The form shows only the day
+ * then, and the hour is what it offers if the officer sets a time.
+ */
+function formTimesOf(event: EventDetail): { start: Date; end: Date } {
+  const day = eventIsDated(event)
+    ? parseCalendarDayParam(event.start_date)
+    : null;
+  if (!day) {
+    return { start: new Date(event.start_time), end: new Date(event.end_time) };
+  }
+  const start = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate(),
+    DATED_FORM_HOUR,
+  );
+  return { start, end: new Date(start.getTime() + 60 * 60_000) };
+}
+
 /** The stored event as the form's draft. */
 export function draftFromEvent(target: EventEditTarget): NewEventDraft {
   const { event, seriesRule } = target;
+  const { start, end } = formTimesOf(event);
+  const timing = eventTiming(event);
+  const last = timing === "all_day" ? eventLastDay(event) : null;
   return {
     eventTypeId: event.event_type_id,
     typeFilledName: null,
     name: event.name,
-    start: new Date(event.start_time),
-    end: new Date(event.end_time),
+    start,
+    end,
+    timing,
+    lastDay: last && last !== event.start_date ? last : null,
+    tentative: event.is_tentative === true,
     location: event.location ?? "",
     pointsInput: String(event.point_value ?? 0),
     checkInOpensInput: String(event.check_in_opens_minutes),
@@ -96,10 +138,17 @@ export function duplicateEventTemplate(
   const moved = new Date(start);
   moved.setDate(moved.getDate() + 7 * weeks);
   while (moved <= now) moved.setDate(moved.getDate() + 7);
+  // An all-day event's last day moves with its first, so it keeps its days.
+  const daysMoved = Math.round(
+    (Date.UTC(moved.getFullYear(), moved.getMonth(), moved.getDate()) -
+      Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) /
+      86_400_000,
+  );
   return {
     ...draft,
     start: moved,
     end: new Date(moved.getTime() + Math.max(length, 0)),
+    lastDay: draft.lastDay ? addEventDays(draft.lastDay, daysMoved) : null,
   };
 }
 
@@ -120,19 +169,35 @@ export function validateEventEdit(
   const name = draft.name.trim();
   if (name.length === 0) errors.name = "Give the event a name.";
 
+  const timing = draftTiming(draft);
+  const dated = timing !== "timed";
+  const takes = draftTakesAttendance(draft);
   const start = draft.start ?? new Date(event.start_time);
   const end = draft.end ?? new Date(event.end_time);
-  const startMoved = start.getTime() !== new Date(event.start_time).getTime();
-  if (startMoved && start < now) {
-    errors.start = "That start time has already passed.";
+  if (dated) {
+    // Its first day may already be under way, or past, if it didn't move.
+    const days = draftDays(draft, start);
+    const dayKept = eventIsDated(event) && days.start_date === event.start_date;
+    Object.assign(errors, draftDaysProblems(draft, start, now, dayKept));
+  } else {
+    // A dated event made timed is given its times now, so they are checked
+    // as a new start would be.
+    const startMoved =
+      eventIsDated(event) ||
+      start.getTime() !== new Date(event.start_time).getTime();
+    if (startMoved && start < now) {
+      errors.start = "That start time has already passed.";
+    }
+    if (end <= start) errors.end = "The event has to end after it starts.";
   }
-  if (end <= start) errors.end = "The event has to end after it starts.";
 
-  const points = parsePointReward(draft.pointsInput);
+  const points = takes
+    ? parsePointReward(draft.pointsInput)
+    : ({ kind: "omit" } as const);
   if (points.kind === "invalid") {
     errors.points = "Points must be a whole number, up to 100,000.";
   }
-  const opens = parseCheckInOpens(draft.checkInOpensInput);
+  const opens = takes ? parseCheckInOpens(draft.checkInOpensInput) : 0;
   if (opens === null) errors.checkInOpens = CHECK_IN_OPENS_ERROR;
 
   const wire = attendanceToWire(draft.attendance);
@@ -141,30 +206,46 @@ export function validateEventEdit(
   }
 
   // A changed rule steps from the meeting that is the series' first once
-  // this save lands (`repeatEditAnchor`).
-  const repeat = repeatRuleForEdit(
-    draft.repeat,
-    repeatEditSeriesOf(target, start, now),
-  );
-  if (!repeat.ok) errors.repeat = repeat.error;
+  // this save lands (`repeatEditAnchor`). A dated event has no Repeat row
+  // (a series stays timed, #6098), so its rule is left as it is.
+  const repeat = dated
+    ? null
+    : repeatRuleForEdit(draft.repeat, repeatEditSeriesOf(target, start, now));
+  if (repeat && !repeat.ok) errors.repeat = repeat.error;
 
-  if (Object.keys(errors).length > 0 || opens === null || !repeat.ok) {
+  if (
+    Object.keys(errors).length > 0 ||
+    opens === null ||
+    (repeat !== null && !repeat.ok)
+  ) {
     return { ok: false, errors };
   }
 
-  const patch = eventEditPatch(event, seriesRule, {
+  const values: EventEditValues = {
     name,
-    start,
-    end,
+    timing,
+    is_tentative: draft.tentative === true,
+    calendar_only: draftCalendarOnly(draft),
     location: draft.location,
     description: draft.description,
     notes: draft.notes,
-    point_value: points.kind === "value" ? points.points : 0,
-    check_in_opens_minutes: opens,
     attendance: wire,
     event_type_id: draft.eventTypeId,
-    // An untouched draft gives back the stored string itself.
-    recurrence_rule: repeat.rule,
-  });
+  };
+  if (dated) {
+    const days = draftDays(draft, start);
+    values.start_date = days.start_date;
+    values.end_date = days.end_date;
+  } else {
+    values.start = start;
+    values.end = end;
+  }
+  if (takes) {
+    values.point_value = points.kind === "value" ? points.points : 0;
+    values.check_in_opens_minutes = opens;
+  }
+  // An untouched draft gives back the stored string itself.
+  if (repeat?.ok) values.recurrence_rule = repeat.rule;
+  const patch = eventEditPatch(event, seriesRule, values);
   return { ok: true, patch };
 }

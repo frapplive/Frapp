@@ -272,6 +272,7 @@ describe("Who's coming", () => {
         .map((each) => each.props.accessibilityLabel);
     expect(radios(list(tree).header, "Attendance for everyone else")).toEqual([
       "Optional",
+      "On the calendar only",
       "Not invited",
     ]);
     expect(
@@ -333,6 +334,49 @@ describe("Who's coming by tier", () => {
       tierEntry: entry,
     });
     expect(screenText(officers)).toContain("Follows Cabinet");
+    act(() => tree.unmount());
+  });
+
+  it("puts the event on the calendar only from Everyone else, leaving roles on it or not invited (#6098)", () => {
+    const tree = render({
+      everyone: "required",
+      roles: { "role-new": "not_invited", "role-officers": "optional" },
+    });
+    pressIn(
+      list(tree).header,
+      "Attendance for everyone else",
+      "On the calendar only",
+    );
+    // Only the roles left out stay set apart: nobody attends.
+    expect(latest).toEqual({
+      calendarOnly: true,
+      everyone: "optional",
+      roles: { "role-new": "not_invited" },
+    });
+    expect(screenText(list(tree).header)).toContain(
+      "New Members not invited, everyone else on the calendar only",
+    );
+    const radios = (drawn: ReactTestRenderer, group: string) =>
+      drawn.root
+        .findAll((each) => each.props.accessibilityLabel === group)[0]!
+        .findAll((each) => each.props.accessibilityRole === "radio")
+        .map((each) => each.props.accessibilityLabel);
+    expect(
+      radios(row(tree, "role-officers", "Officers"), "Attendance for Officers"),
+    ).toEqual(["On the calendar only", "Not invited"]);
+    pressIn(
+      row(tree, "role-officers", "Officers"),
+      "Attendance for Officers",
+      "Not invited",
+    );
+    expect(latest.roles).toEqual({
+      "role-new": "not_invited",
+      "role-officers": "not_invited",
+    });
+    // Back to a normal answer: those roles stay left out.
+    pressIn(list(tree).header, "Attendance for everyone else", "Optional");
+    expect(latest.calendarOnly).toBeFalsy();
+    expect(latest.everyone).toBe("optional");
     act(() => tree.unmount());
   });
 });

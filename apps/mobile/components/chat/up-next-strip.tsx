@@ -5,11 +5,18 @@ import {
   dayDelta,
   formatClockShort,
   formatDayHeading,
+  formatEventRelativeWhen,
   parseInstant,
   parseInstantOrBareLocalNoon,
   isDueOverdue,
 } from "@repo/formatting";
 import { useNowDate } from "@repo/hooks";
+import {
+  eventDatedPhase,
+  eventIsDated,
+  eventTimingFieldsOf,
+  type EventTimingFields,
+} from "@repo/validation";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -64,7 +71,7 @@ import { NavGlyph } from "@/components/nav-glyph";
  * Minimal shapes. `GET /v1/tasks` has no response schema; `GET /v1/events`
  * has had one since #4867, and moving this onto it is #4952.
  */
-interface UpNextEvent {
+interface UpNextEvent extends EventTimingFields {
   id: string;
   name: string;
   location: string | null;
@@ -111,7 +118,13 @@ export function selectNextEvent(
       const start = parseInstant(startTime);
       if (!start) return null;
       const at = start.getTime();
-      if (at < now.getTime()) return null;
+      const shape = eventTimingFieldsOf(row);
+      // An all-day or time-TBD event is next by its own days, not its
+      // stored midnight (#6098): still ahead until its first day, then it's
+      // under way rather than next.
+      if (eventIsDated(shape)) {
+        if (eventDatedPhase(shape, now) !== "before") return null;
+      } else if (at < now.getTime()) return null;
       return {
         at,
         event: {
@@ -119,6 +132,7 @@ export function selectNextEvent(
           name,
           location: str(row, "location"),
           start_time: startTime,
+          ...shape,
         },
       };
     })
@@ -268,7 +282,12 @@ export function UpNextStrip({
 
   if (!event && !task) return null;
 
-  const eventTime = event ? formatEventTime(event.start_time, at) : "";
+  // A dated event by its day ("Tomorrow · All day"), never a midnight.
+  const eventTime = event
+    ? eventIsDated(event)
+      ? (formatEventRelativeWhen(event, at) ?? "")
+      : formatEventTime(event.start_time, at)
+    : "";
   const taskDue = task ? formatDueDate(task.due_date, at) : "";
 
   return (

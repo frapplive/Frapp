@@ -392,3 +392,140 @@ describe("pickedDayStart", () => {
     expect(pickedDayStart(local(5, 0), AFTERNOON)).toBeNull();
   });
 });
+
+describe("validateNewEvent: all-day, time TBD, tentative and calendar only (#6098)", () => {
+  it("sends an all-day event of several days by its days, with no times", () => {
+    const result = validateNewEvent(
+      draft({
+        name: "Formal recruitment",
+        timing: "all_day",
+        start: local(22, 19),
+        end: local(22, 20),
+        lastDay: "2026-11-25",
+      }),
+      AFTERNOON,
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.body).toMatchObject({
+      name: "Formal recruitment",
+      timing: "all_day",
+      start_date: "2026-11-22",
+      end_date: "2026-11-25",
+    });
+    expect(result.body).not.toHaveProperty("start_time");
+    expect(result.body).not.toHaveProperty("end_time");
+    expect(result.body).not.toHaveProperty("recurrence_rule");
+    expect(result.body).not.toHaveProperty("is_tentative");
+    expect(result.body).not.toHaveProperty("calendar_only");
+  });
+
+  it("sends one day with no end_date, and a time-TBD event as its day alone", () => {
+    const oneDay = validateNewEvent(
+      draft({ timing: "all_day", start: local(9, 19), lastDay: "2026-11-09" }),
+      AFTERNOON,
+    );
+    if (!oneDay.ok) throw new Error(JSON.stringify(oneDay.errors));
+    expect(oneDay.body).toMatchObject({
+      timing: "all_day",
+      start_date: "2026-11-09",
+    });
+    expect(oneDay.body).not.toHaveProperty("end_date");
+
+    const tbd = validateNewEvent(
+      draft({
+        timing: "time_tbd",
+        start: local(10, 19),
+        // A last day held from All day goes nowhere on a TBD event.
+        lastDay: "2026-11-12",
+        pointsInput: "25",
+        checkInOpensInput: "30",
+      }),
+      AFTERNOON,
+    );
+    if (!tbd.ok) throw new Error(JSON.stringify(tbd.errors));
+    expect(tbd.body).toMatchObject({
+      timing: "time_tbd",
+      start_date: "2026-11-10",
+      // No attendance until its time is set: no points, no check-in lead.
+      point_value: 0,
+    });
+    expect(tbd.body).not.toHaveProperty("end_date");
+    expect(tbd.body).not.toHaveProperty("check_in_opens_minutes");
+  });
+
+  it("refuses a last day before the first, in the API's words", () => {
+    const result = validateNewEvent(
+      draft({ timing: "all_day", start: local(12, 19), lastDay: "2026-11-10" }),
+      AFTERNOON,
+    );
+    expect(result).toEqual({
+      ok: false,
+      errors: { end: "The last day can't be before the first." },
+    });
+  });
+
+  it("refuses a day already gone, but takes today", () => {
+    const gone = validateNewEvent(
+      draft({ timing: "all_day", start: local(5, 19) }),
+      AFTERNOON,
+    );
+    expect(gone.ok).toBe(false);
+    const today = validateNewEvent(
+      // Today's 7 PM may have passed; an all-day event today still counts.
+      draft({ timing: "all_day", start: local(6, 9) }),
+      EVENING,
+    );
+    expect(today.ok).toBe(true);
+  });
+
+  it("sends is_tentative only when it is", () => {
+    const result = validateNewEvent(
+      draft({ tentative: true, start: local(9, 19), end: local(9, 20) }),
+      AFTERNOON,
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.body.is_tentative).toBe(true);
+    expect(result.body.start_time).toBe(local(9, 19).toISOString());
+  });
+
+  it("sends a calendar-only event with no points, check-in or roles to attend", () => {
+    const result = validateNewEvent(
+      draft({
+        name: "First day of classes",
+        timing: "all_day",
+        start: local(9, 19),
+        pointsInput: "not a number",
+        checkInOpensInput: "",
+        attendance: {
+          calendarOnly: true,
+          everyone: "optional",
+          roles: { "role-new": "not_invited" },
+        },
+      }),
+      AFTERNOON,
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.body).toMatchObject({
+      calendar_only: true,
+      point_value: 0,
+      is_mandatory: false,
+      excluded_role_ids: ["role-new"],
+    });
+    expect(result.body).not.toHaveProperty("required_role_ids");
+    expect(result.body).not.toHaveProperty("optional_role_ids");
+    expect(result.body).not.toHaveProperty("check_in_opens_minutes");
+  });
+
+  it("leaves a calendar-only draft's answer alone when a type is picked", () => {
+    const calendarOnly = draft({
+      attendance: { calendarOnly: true, everyone: "optional", roles: {} },
+    });
+    const patch = applyEventType(calendarOnly, {
+      id: "t-1",
+      name: "Chapter",
+      point_value: 10,
+      is_mandatory: true,
+    });
+    expect(patch.attendance).toBe(calendarOnly.attendance);
+  });
+});

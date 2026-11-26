@@ -299,3 +299,76 @@ describe("duplicateEventTemplate (#5492)", () => {
     }
   });
 });
+
+describe("editing an all-day, time-TBD or tentative event (#6098)", () => {
+  // Stored with the saver's midnights; the form reads only its days.
+  const ALL_DAY: EventDetail = {
+    ...EVENT,
+    start_time: "2026-11-20T05:00:00.000Z",
+    end_time: "2026-11-23T05:00:00.000Z",
+    timing: "all_day",
+    start_date: "2026-11-20",
+    end_date: "2026-11-22",
+    is_tentative: false,
+    calendar_only: false,
+  };
+  const allDay: EventEditTarget = {
+    event: ALL_DAY,
+    seriesRule: null,
+    parent: null,
+  };
+
+  it("reads the days back into the form, and sends nothing untouched", () => {
+    const draft = draftFromEvent(allDay);
+    expect(draft.timing).toBe("all_day");
+    expect(draft.lastDay).toBe("2026-11-22");
+    expect(draft.start?.getDate()).toBe(20);
+    expect(isEmptyEventPatch(patchOf(allDay, () => {}))).toBe(true);
+  });
+
+  it("sends the shape and both days, never times, when a day moves", () => {
+    const patch = patchOf(allDay, (d) => {
+      d.lastDay = "2026-11-24";
+    });
+    expect(patch).toEqual({
+      timing: "all_day",
+      start_date: "2026-11-20",
+      end_date: "2026-11-24",
+    });
+  });
+
+  it("makes a timed event all day on its own day, one day long", () => {
+    const patch = patchOf(single, (d) => {
+      d.timing = "all_day";
+    });
+    expect(patch).toMatchObject({ timing: "all_day", end_date: null });
+    expect(patch.start_date).toMatch(/^2026-11-(09|10)$/);
+    expect(patch).not.toHaveProperty("start_time");
+    expect(patch).not.toHaveProperty("recurrence_rule");
+  });
+
+  it("leaves a series' rule alone when one meeting is made time TBD", () => {
+    const patch = patchOf(occurrence, (d) => {
+      d.timing = "time_tbd";
+    });
+    expect(patch.timing).toBe("time_tbd");
+    expect(patch).not.toHaveProperty("recurrence_rule");
+    expect(patch).not.toHaveProperty("point_value");
+  });
+
+  it("sends is_tentative and calendar_only only when they change", () => {
+    expect(patchOf(allDay, (d) => (d.tentative = true))).toEqual({
+      is_tentative: true,
+    });
+    const patch = patchOf(allDay, (d) => {
+      d.attendance = { calendarOnly: true, everyone: "optional", roles: {} };
+    });
+    expect(patch).toMatchObject({
+      calendar_only: true,
+      is_mandatory: false,
+      required_role_ids: [],
+      optional_role_ids: [],
+    });
+    expect(patch).not.toHaveProperty("point_value");
+  });
+});

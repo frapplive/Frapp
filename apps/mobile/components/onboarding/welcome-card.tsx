@@ -8,9 +8,12 @@ import {
   useCurrentUser,
   useEvents,
 } from "@repo/hooks";
+import { formatEventRelativeWhen } from "@repo/formatting";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
   WELCOME_CARD_COPY,
+  eventIsDated,
+  eventTimingFieldsOf,
   welcomeCardEventWhen,
   welcomeCardEvents,
   welcomeCardTitle,
@@ -28,6 +31,21 @@ type EventRow = {
   start_time: string;
   end_time?: string | null;
 };
+
+/**
+ * When the card says an event is: by its day for an all-day or time-TBD
+ * event ("Friday · All day", #6098), never its stored midnight; a timed one
+ * as the card has always said it.
+ */
+function eventWhen(event: EventRow, now: Date): string {
+  const shape = eventTimingFieldsOf(
+    event as unknown as Record<string, unknown>,
+  );
+  if (eventIsDated(shape)) {
+    return formatEventRelativeWhen(shape, now) ?? "";
+  }
+  return welcomeCardEventWhen(event.start_time, now);
+}
 
 /**
  * The welcome card (#5627; Paul's pick 2026-11-19, "welcome card, no tour"):
@@ -114,7 +132,7 @@ export function WelcomeCard({ channelId }: { channelId: string }) {
         <Pressable
           key={event.id}
           accessibilityRole="button"
-          accessibilityLabel={`${event.name}, ${welcomeCardEventWhen(event.start_time, new Date())}`}
+          accessibilityLabel={`${event.name}, ${eventWhen(event, new Date())}`}
           onPress={() =>
             router.push({
               pathname: "/event-details",
@@ -126,9 +144,7 @@ export function WelcomeCard({ channelId }: { channelId: string }) {
           <Text numberOfLines={1} style={styles.rowName}>
             {event.name}
           </Text>
-          <Text style={styles.rowWhen}>
-            {welcomeCardEventWhen(event.start_time, new Date())}
-          </Text>
+          <Text style={styles.rowWhen}>{eventWhen(event, new Date())}</Text>
         </Pressable>
       ))}
       <Pressable

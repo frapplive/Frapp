@@ -10,16 +10,17 @@ import {
 import {
   ALUMNI_FOLLOWING_NOTE,
   ATTENDANCE_SEARCH_FROM,
-  EVENT_ATTENDANCE_LABELS,
+  EVENT_ATTENDANCE_ANSWER_LABELS,
   alumniRoleIdOf,
-  attendanceChoices,
+  attendanceAnswerChoices,
   attendanceFloorOf,
-  attendanceOfRole,
   describeAttendance,
-  withEveryone,
-  withRole,
+  everyoneAnswer,
+  roleAnswer,
+  withEveryoneAnswer,
+  withRoleAnswer,
+  type EventAttendanceAnswer,
   type EventAttendanceDraft,
-  type EventAttendanceStatus,
 } from "@repo/validation";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -45,7 +46,9 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
  * "Everyone else" first (the answer for anyone whose roles aren't set
  * apart), then one row per tier (Paul, 2026-11-22: a tier like Cabinet is
  * picked whole, and stays current as roles join it), then one per role, each
- * with the same three answers, in the order web's editor lists them
+ * with the same three answers, in the order web's editor lists them. Everyone
+ * else adds a fourth, On the calendar only (#6098): the event is there for
+ * information, nobody attends, and each role is then on it or Not invited
  * (`attendanceTargets`). A role in a tier that is set apart follows the
  * tier's answer. A role that only
  * follows Everyone else holds its answer in neutral ink; a role set apart is
@@ -152,14 +155,15 @@ function AttendanceBody({
   );
   const alumniId = alumniRoleIdOf(rolesQuery.data);
   const searchable = total > ATTENDANCE_SEARCH_FROM;
-  const choices = (
-    current: EventAttendanceStatus,
-    floor?: EventAttendanceStatus,
-  ) =>
-    attendanceChoices(current, allowRequired, floor).map((status) => ({
-      value: status,
-      label: EVENT_ATTENDANCE_LABELS[status],
+  // Four answers on Everyone else since #6098: On the calendar only sits
+  // beside Required, Optional and Not invited, and while it is held each
+  // role offers only it or Not invited (`attendanceAnswerChoices`).
+  const options = (answers: readonly EventAttendanceAnswer[]) =>
+    answers.map((answer) => ({
+      value: answer,
+      label: EVENT_ATTENDANCE_ANSWER_LABELS[answer],
     }));
+  const everyone = everyoneAnswer(value);
 
   const header = (
     <View style={styles.header}>
@@ -175,21 +179,27 @@ function AttendanceBody({
       >
         {describeAttendance(value, nameOf)}
       </Text>
-      <View style={[styles.row, styles.everyoneRow]}>
+      {/* The name over its answers: four answers, one of them "On the
+          calendar only", need the sheet's whole width. */}
+      <View style={styles.everyoneRow}>
         <Text style={styles.everyoneName} numberOfLines={1}>
           Everyone else
         </Text>
-        <View style={styles.choice}>
-          <Segmented
-            options={choices(value.everyone)}
-            value={value.everyone}
-            onChange={(everyone: EventAttendanceStatus) =>
-              onChange(withEveryone(value, everyone))
-            }
-            accessibilityLabel="Attendance for everyone else"
-            dense
-          />
-        </View>
+        <Segmented
+          options={options(
+            attendanceAnswerChoices(
+              value,
+              { kind: "everyone" },
+              { allowRequired, calendarOnlyAllowed: true },
+            ),
+          )}
+          value={everyone}
+          onChange={(answer: EventAttendanceAnswer) =>
+            onChange(withEveryoneAnswer(value, answer))
+          }
+          accessibilityLabel="Attendance for everyone else"
+          dense
+        />
       </View>
       {rolesQuery.isError && rows.length > 0 ? (
         <Text style={styles.note}>
@@ -237,7 +247,7 @@ function AttendanceBody({
         const setApart = item.id in value.roles;
         const followsTier =
           !setApart && !!item.tierEntry && item.tierEntry in value.roles;
-        const current = attendanceOfRole(value, item.id, item.tierEntry);
+        const current = roleAnswer(value, item.id, item.tierEntry);
         const note =
           item.detail ??
           (followsTier && item.tierEntry
@@ -264,13 +274,20 @@ function AttendanceBody({
             </View>
             <View style={styles.choice}>
               <Segmented
-                options={choices(
-                  current,
-                  attendanceFloorOf(value, item.tierEntry),
+                options={options(
+                  attendanceAnswerChoices(
+                    value,
+                    { kind: "role", current },
+                    {
+                      allowRequired,
+                      calendarOnlyAllowed: true,
+                      floor: attendanceFloorOf(value, item.tierEntry),
+                    },
+                  ),
                 )}
                 value={current}
-                onChange={(next: EventAttendanceStatus) =>
-                  onChange(withRole(value, item.id, next, item.tierEntry))
+                onChange={(next: EventAttendanceAnswer) =>
+                  onChange(withRoleAnswer(value, item.id, next, item.tierEntry))
                 }
                 quiet={!setApart}
                 dense
@@ -320,11 +337,12 @@ function createStyles(tokens: SignetTokens, accent: string) {
       minHeight: tokens.touch.minimum + tokens.spacing.xs,
     },
     everyoneRow: {
+      gap: tokens.spacing.xs,
+      paddingVertical: tokens.spacing.xs,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: tokens.color.border.hairline,
     },
     everyoneName: {
-      flex: 1,
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.text.foreground,
     },
@@ -347,7 +365,8 @@ function createStyles(tokens: SignetTokens, accent: string) {
     following: {
       color: tokens.color.text.mutedForeground,
     },
-    // Wide enough for "Not invited" in full at the caption size.
+    // Wide enough for "Not invited" in full at the caption size, and for
+    // "On the calendar only" beside it while the event is calendar-only.
     choice: {
       width: 228,
     },
