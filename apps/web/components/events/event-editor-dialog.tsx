@@ -19,6 +19,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { SegmentedChoice } from "@/components/ui/segmented";
+import { Switch } from "@/components/ui/switch";
 import {
   EVENT_CREATE_UNCONFIRMED,
   useCreateEvent,
@@ -76,6 +78,17 @@ import {
   EVENT_LENGTH_CHOICES,
   eventLengthLabel,
   eventTypeFromForm,
+  EVENT_TIMING_CHOICES,
+  EVENT_TIMING_CHOICE_LABELS,
+  EVENT_WHEN_COPY,
+  addEventDays,
+  eventDatesProblem,
+  eventDayNumber,
+  eventFormShowsRow,
+  eventTakesAttendance,
+  eventTiming,
+  eventTimingFieldsOf,
+  type EventTiming,
   type EventAgendaItem,
   type EventAttendanceDraft,
   type EventEditScope,
@@ -327,6 +340,65 @@ function WhenFields({
 }
 
 /**
+ * The When row of an all-day or time-TBD event (#6098,
+ * `spec/behavior/events.md` § Dates, tentative and on the calendar only),
+ * the way Google Calendar's editor turns into days once All day is ticked:
+ * the first day, then for an all-day event an optional last day (left empty,
+ * it is one day). A time-TBD event is one day. No times and no length
+ * chips: the event isn't held to an hour.
+ */
+function DatedWhenFields({
+  timing,
+  startDate,
+  endDate,
+  onStartDate,
+  onEndDate,
+  invalid,
+}: {
+  timing: Exclude<EventTiming, "timed">;
+  startDate: string;
+  endDate: string;
+  onStartDate: (next: string) => void;
+  onEndDate: (next: string) => void;
+  invalid: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
+      <div className="min-w-[9.5rem] flex-1">
+        <DateField
+          id="event-start"
+          aria-label={timing === "all_day" ? "First day" : "Day"}
+          placeholder="Pick a day"
+          lean="ahead"
+          value={startDate}
+          className={INLINE_FIELD}
+          onChange={onStartDate}
+        />
+      </div>
+      {timing === "all_day" ? (
+        <>
+          <span aria-hidden="true" className="text-muted-foreground">
+            –
+          </span>
+          <div className="min-w-[9.5rem] flex-1">
+            <DateField
+              id="event-end"
+              aria-label="Last day"
+              placeholder={EVENT_WHEN_COPY.lastDay}
+              lean="ahead"
+              value={endDate}
+              className={cn(INLINE_FIELD, invalid && "text-destructive-text")}
+              aria-invalid={invalid || undefined}
+              onChange={onEndDate}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * One editable polygon corner.
  *
  * `lat`/`lng` stay strings so a half-typed value ("-", "42.") survives a
@@ -349,6 +421,17 @@ type EventFields = {
   location: string;
   startAt: string;
   endAt: string;
+  /**
+   * The event's shape (#6098). A timed event reads `startAt`/`endAt`; an
+   * all-day or time-TBD one reads `startDate` and, all-day, `endDate` (the
+   * last day, `""` for one day). The other half is kept while the shape
+   * changes, so switching back restores it.
+   */
+  timing: EventTiming;
+  startDate: string;
+  endDate: string;
+  /** Might not happen (`is_tentative`). */
+  tentative: boolean;
   pointValue: string;
   attendance: EventAttendanceDraft;
   repeat: RepeatDraft;
@@ -378,6 +461,10 @@ const EVENT_FIELD_KEYS = [
   "location",
   "startAt",
   "endAt",
+  "timing",
+  "startDate",
+  "endDate",
+  "tentative",
   "pointValue",
   "attendance",
   "repeat",
@@ -401,7 +488,8 @@ function keepEditsOver(
     base,
     now,
     EVENT_FIELD_KEYS,
-    [["startAt", "endAt"]],
+    // The schedule is one choice: a shape, its days and its times.
+    [["startAt", "endAt", "timing", "startDate", "endDate"]],
   );
   return {
     ...now,
@@ -441,12 +529,25 @@ function openingDraft({
     String(typeof value === "number" ? value : 10);
   if (mode === "edit" && event) {
     const zone = zoneToDrafts(event.check_in_zone);
+    const shape = eventTimingFieldsOf(event);
+    const timing = eventTiming(shape);
     const fields: EventFields = {
       name: text(event.name),
       description: text(event.description),
       location: text(event.location),
-      startAt: isoToLocalInput(event.start_time),
-      endAt: isoToLocalInput(event.end_time),
+      // A dated event's stored times are the saver's midnights, never shown:
+      // made timed, it starts from a default time on its day.
+      startAt: timing === "timed" ? isoToLocalInput(event.start_time) : "",
+      endAt: timing === "timed" ? isoToLocalInput(event.end_time) : "",
+      timing,
+      startDate: timing === "timed" ? "" : (shape.start_date ?? ""),
+      endDate:
+        timing === "all_day" &&
+        shape.end_date &&
+        shape.end_date !== shape.start_date
+          ? shape.end_date
+          : "",
+      tentative: shape.is_tentative === true,
       pointValue: points(event.point_value),
       attendance: attendanceFromEvent(attendanceFieldsOf(event)),
       // A generated meeting's rule arrives with its parent (the effect
@@ -472,6 +573,11 @@ function openingDraft({
       location: text(template.location),
       startAt: initialStartAt ?? "",
       endAt: initialEndAt ?? "",
+      // Its schedule is never copied, its shape with it.
+      timing: "timed",
+      startDate: "",
+      endDate: "",
+      tentative: false,
       pointValue: points(template.point_value),
       attendance: attendanceFromEvent(attendanceFieldsOf(template)),
       repeat: openingRepeat,
@@ -497,6 +603,10 @@ function openingDraft({
     location: initialLocation ?? "",
     startAt: initialStartAt ?? "",
     endAt: initialEndAt ?? "",
+    timing: "timed",
+    startDate: "",
+    endDate: "",
+    tentative: false,
     pointValue: String(initialPointValue ?? 10),
     attendance: emptyAttendanceDraft(),
     repeat: openingRepeat,
@@ -612,15 +722,37 @@ function parseZoneDrafts(drafts: ZoneVertexDraft[]): ZoneParseResult {
  */
 function createdToast(
   name: string,
-  card: { cardKeptOut: boolean; cardLost: boolean },
+  card: { cardKeptOut: boolean; cardLost: boolean; cardUnsupported: boolean },
 ): { title: string; description: string } {
   return {
     title: "Event created",
-    description:
-      eventCardOutcomeCopy(name, card) ??
-      `${name} was added to the chapter calendar.`,
+    description: card.cardUnsupported
+      ? `${name} is on the calendar. Its card isn't posted in chat yet.`
+      : (eventCardOutcomeCopy(name, card) ??
+        `${name} was added to the chapter calendar.`),
   };
 }
+
+/** A timed event's times, or a dated one's days (#6098). */
+type CreateShapeFields =
+  | { start_time: string; end_time: string }
+  | { timing: EventTiming; start_date: string; end_date?: string };
+
+/**
+ * `POST /v1/events` as this form sends it: `useCreateEvent`'s body, which
+ * still requires a time and points, widened to the dated shape and the
+ * tentative and calendar-only flags the API takes since #6098.
+ */
+type CreateEventBody = Omit<
+  Parameters<ReturnType<typeof useCreateEvent>["mutateAsync"]>[0],
+  "start_time" | "end_time" | "point_value"
+> &
+  CreateShapeFields & {
+    point_value?: number;
+    is_tentative?: boolean;
+    calendar_only?: boolean;
+    agenda?: EventAgendaItem[];
+  };
 
 type EventEditorDialogProps = {
   open: boolean;
@@ -785,6 +917,49 @@ export function EventEditorDialog({
       );
     }
   };
+  // The event's shape and its days (#6098); `startAt`/`endAt` stay held
+  // while it is dated, so going back to a time restores them.
+  const [timing, setTiming] = useState<EventTiming>("timed");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [tentative, setTentative] = useState(false);
+  /**
+   * A new shape keeps the day, as Google Calendar's All day box does: a
+   * timed event made all-day stays on its start's day, and a dated one made
+   * timed goes back to its time on its (maybe moved) first day, or 9 AM
+   * there when it never had one.
+   */
+  const changeTiming = (next: EventTiming) => {
+    if (next === timing) return;
+    if (next === "timed") {
+      const [, startTime = ""] = startAt.split("T");
+      if (startDate) moveStart(`${startDate}T${startTime || "09:00"}`);
+    } else if (timing === "timed") {
+      const [startDay = ""] = startAt.split("T");
+      if (startDay) {
+        setStartDate(startDay);
+        lastWholeStartDate.current = startDay;
+        // A last day before the new first one would be refused.
+        if (endDate && endDate <= startDay) setEndDate("");
+      }
+    }
+    setTiming(next);
+  };
+  // A new first day carries a set last day with it, keeping the span, the
+  // way a moved start carries the end. Measured from the last whole day, as
+  // `moveStart` is, so the field's partial readings add up to the real move.
+  const lastWholeStartDate = useRef<string | null>(null);
+  const moveStartDate = (next: string) => {
+    const before = lastWholeStartDate.current;
+    const at = eventDayNumber(next);
+    const was = eventDayNumber(before);
+    if (at !== null) lastWholeStartDate.current = next;
+    if (at !== null && was !== null && endDate) {
+      const moved = addEventDays(endDate, at - was);
+      if (moved) setEndDate(moved);
+    }
+    setStartDate(next);
+  };
   // Held as text so a cleared field stays cleared while the officer types,
   // rather than React writing 0 back into it. An empty field still saves as 0.
   const [pointValue, setPointValue] = useState("10");
@@ -825,6 +1000,10 @@ export function EventEditorDialog({
     location,
     startAt,
     endAt,
+    timing,
+    startDate,
+    endDate,
+    tentative,
     pointValue,
     attendance,
     repeat,
@@ -923,7 +1102,12 @@ export function EventEditorDialog({
         rolesLoaded: rolesQuery.isSuccess,
         tiersLoaded: tiersQuery.isSuccess,
       }),
-    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess, tiersQuery.isSuccess],
+    [
+      rolesQuery.data,
+      tiersQuery.data,
+      rolesQuery.isSuccess,
+      tiersQuery.isSuccess,
+    ],
   );
 
   const takeKept = kept.take;
@@ -955,6 +1139,12 @@ export function EventEditorDialog({
     // from whatever the dialog last held (#4473).
     lastWholeStart.current = parseInstant(localInputToIso(fill.startAt));
     setEndAt(fill.endAt);
+    // A draft kept before #6098 has no shape: it was timed.
+    setTiming(fill.timing ?? "timed");
+    setStartDate(fill.startDate ?? "");
+    lastWholeStartDate.current = fill.startDate || null;
+    setEndDate(fill.endDate ?? "");
+    setTentative(fill.tentative ?? false);
     setPointValue(fill.pointValue);
     setAttendance(fill.attendance);
     setRepeat(fill.repeat);
@@ -1047,7 +1237,8 @@ export function EventEditorDialog({
     if (canSetRequirements) {
       setPointValue(String(type.point_value));
       setAttendance((previous) =>
-        previous.everyone === "not_invited"
+        // Nobody attends a calendar-only event, whatever the type says.
+        previous.everyone === "not_invited" || previous.calendarOnly
           ? previous
           : withEveryone(previous, type.is_mandatory ? "required" : "optional"),
       );
@@ -1123,7 +1314,25 @@ export function EventEditorDialog({
         )
         ?.focus();
     };
-    if (!startIso || !endIso) {
+    const dated = timing !== "timed";
+    // An all-day event's last day, or null for one day.
+    const lastDay = timing === "all_day" && endDate ? endDate : null;
+    if (dated) {
+      const problem = !startDate
+        ? "Pick the day it's on."
+        : eventDatesProblem(timing, startDate, lastDay);
+      if (problem) {
+        toast({
+          title: "Valid schedule required",
+          description: problem,
+          variant: "destructive",
+        });
+        document
+          .getElementById(startDate ? "event-end" : "event-start")
+          ?.focus();
+        return;
+      }
+    } else if (!startIso || !endIso) {
       toast({
         title: "Valid schedule required",
         description: "Provide both start and end times.",
@@ -1131,8 +1340,7 @@ export function EventEditorDialog({
       });
       focusScheduleProblem();
       return;
-    }
-    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+    } else if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
       toast({
         title: "Valid schedule required",
         description: "End must be after start.",
@@ -1142,7 +1350,16 @@ export function EventEditorDialog({
       return;
     }
 
-    const parsedZone = parseZoneDrafts(checkInZone);
+    // Calendar-only and time-TBD events take no attendance: their check-in
+    // and points rows are hidden, so nothing there is checked or sent.
+    const calendarOnly = attendance.calendarOnly === true;
+    const takesAttendance = eventTakesAttendance({
+      timing,
+      calendar_only: calendarOnly,
+    });
+    const parsedZone: ZoneParseResult = takesAttendance
+      ? parseZoneDrafts(checkInZone)
+      : { ok: true, zone: [] };
     if (!parsedZone.ok) {
       toast({
         title: "Check-in zone is incomplete",
@@ -1160,7 +1377,7 @@ export function EventEditorDialog({
     // can't leave one, but a stored value seeded on edit could.
     const pointValueNumber =
       pointValue.trim() === "" ? 0 : parseGuardedInt(pointValue);
-    if (pointValueNumber === undefined) {
+    if (pointValueNumber === undefined && !calendarOnly) {
       toast({
         title: "Valid point value required",
         description: "Use a whole number of 0 or more.",
@@ -1170,7 +1387,7 @@ export function EventEditorDialog({
     }
 
     const opensMinutes = parseCheckInOpens(checkInOpens);
-    if (opensMinutes === null) {
+    if (opensMinutes === null && takesAttendance) {
       setMenu("checkIn");
       toast({
         title: "Check when check-in opens",
@@ -1203,12 +1420,17 @@ export function EventEditorDialog({
     // On create the rule steps from the event's start. On an edit it steps
     // from the meeting that is the series' first once the save lands
     // (`repeatEditAnchor`); an untouched draft gives back the stored rule.
-    const editRepeatSeries = repeatSeriesAt(new Date(startIso), new Date());
-    const repeatResult = repeatLocked
-      ? ({ ok: true, rule: null } as const)
-      : editRepeatSeries
-        ? repeatRuleForEdit(repeat, editRepeatSeries)
-        : repeatRuleOf(repeat, new Date(startIso));
+    // A dated event doesn't repeat (#6098): its Repeat row is hidden and no
+    // rule is sent, so an edit leaves the series' rule as it is.
+    const editRepeatSeries = dated
+      ? undefined
+      : repeatSeriesAt(new Date(startIso), new Date());
+    const repeatResult =
+      repeatLocked || dated
+        ? ({ ok: true, rule: null } as const)
+        : editRepeatSeries
+          ? repeatRuleForEdit(repeat, editRepeatSeries)
+          : repeatRuleOf(repeat, new Date(startIso));
     if (!repeatResult.ok) {
       setMenu("repeat");
       toast({
@@ -1223,13 +1445,23 @@ export function EventEditorDialog({
       name: name.trim(),
       description: description.trim() || undefined,
       location: location.trim() || undefined,
-      start_time: startIso,
-      end_time: endIso,
-      point_value: canSetRequirements ? pointValueNumber : 0,
       is_mandatory: wire.is_mandatory,
       notes: notes.trim() || undefined,
-      check_in_opens_minutes: opensMinutes,
     };
+    // A member's event carries none. A calendar-only one sends none: the API
+    // stores it with 0.
+    const points = canSetRequirements ? (pointValueNumber ?? 0) : 0;
+    // The shape's own fields: a timed event's times, or a dated one's days
+    // and never times (the API writes their bounds). Each new field only when
+    // it says something, so a plain event still creates against an API from
+    // before #6098, whose strict body refuses keys it doesn't know.
+    const shapeBody: CreateShapeFields = dated
+      ? {
+          timing,
+          start_date: startDate,
+          ...(lastDay && lastDay !== startDate ? { end_date: lastDay } : {}),
+        }
+      : { start_time: startIso, end_time: endIso };
     // Out of the store while the save runs: an officer who leaves and comes
     // back before it lands mustn't be offered the same form to send twice.
     kept.hold();
@@ -1249,10 +1481,16 @@ export function EventEditorDialog({
         // so [] can clear — see the update branch below.
         // A card is broadcast to everyone in the channel, so the API refuses
         // one for an event that keeps anyone out (`EventService.create`).
+        // Nor, yet, for an all-day, time-TBD or calendar-only one, whose card
+        // would show a time it doesn't have.
+        const cardUnsupported =
+          postToChannelId !== undefined && (dated || calendarOnly);
         const cardKeptOut =
-          postToChannelId !== undefined && eventLimitsAudience(wire);
+          postToChannelId !== undefined &&
+          !cardUnsupported &&
+          eventLimitsAudience(wire);
         const card =
-          postToChannelId !== undefined && !cardKeptOut
+          postToChannelId !== undefined && !cardKeptOut && !cardUnsupported
             ? (trackChatCard?.(postToChannelId, payload.name) ?? {
                 clientMessageId: randomClientId(),
                 failed: () => undefined,
@@ -1261,8 +1499,17 @@ export function EventEditorDialog({
             : null;
         let created: { id?: string; card_posted?: boolean } | undefined;
         try {
-          created = await createEventMutation.mutateAsync({
+          const body: CreateEventBody = {
             ...payload,
+            ...shapeBody,
+            ...(tentative ? { is_tentative: true } : {}),
+            ...(calendarOnly
+              ? { calendar_only: true }
+              : { point_value: points }),
+            // Only where the event takes attendance: the rows are hidden.
+            ...(takesAttendance && opensMinutes !== null
+              ? { check_in_opens_minutes: opensMinutes }
+              : {}),
             ...(repeatResult.rule
               ? { recurrence_rule: repeatResult.rule }
               : {}),
@@ -1296,14 +1543,25 @@ export function EventEditorDialog({
             // The first meeting's own (a series' later meetings start with
             // none, `spec/behavior/events.md` § Agenda and attachments).
             ...(sentAgenda.length > 0 ? { agenda: sentAgenda } : {}),
-          });
+          };
+          created = await createEventMutation.mutateAsync(
+            // `useCreateEvent`'s body still names every event timed; the API
+            // takes the dated shape (#6098).
+            body as Parameters<typeof createEventMutation.mutateAsync>[0],
+          );
         } catch (error) {
           card?.failed();
           throw error;
         }
         const cardLost = card !== null && created?.card_posted === false;
         if (cardLost) card.lost();
-        toast(createdToast(payload.name, { cardKeptOut, cardLost }));
+        toast(
+          createdToast(payload.name, {
+            cardKeptOut,
+            cardLost,
+            cardUnsupported,
+          }),
+        );
         if (created?.id && onCreated) {
           // The event exists whatever this does, so it never fails the save.
           try {
@@ -1322,6 +1580,8 @@ export function EventEditorDialog({
         // meeting must not carry them.
         const patch = eventEditPatch(
           {
+            // Its shape, so an untouched dated event doesn't send it back.
+            ...eventTimingFieldsOf(event),
             name: textOf(event.name) ?? "",
             start_time: editTarget.event.start_time,
             end_time: editTarget.event.end_time,
@@ -1343,21 +1603,36 @@ export function EventEditorDialog({
           editTarget.seriesRule,
           {
             name: payload.name,
-            start: new Date(startIso),
-            end: new Date(endIso),
+            timing,
+            // A dated event sends its days, never times.
+            ...(dated
+              ? { start_date: startDate, end_date: lastDay }
+              : { start: new Date(startIso), end: new Date(endIso) }),
+            is_tentative: tentative,
+            calendar_only: calendarOnly,
             location: location,
             description: description,
             notes: notes,
-            point_value: payload.point_value,
-            check_in_opens_minutes: opensMinutes,
             attendance: wire,
             event_type_id: eventTypeId,
             // Locked while a generated meeting's parent is unread, and then
-            // not sent: the series' rule isn't known.
-            ...(repeatLocked ? {} : { recurrence_rule: repeatResult.rule }),
-            check_in_zone: zone,
-            // A leftover name on a zone-less event is inert but misleading.
-            check_in_zone_name: zone.length > 0 ? zoneName : "",
+            // not sent: the series' rule isn't known. Not sent for a dated
+            // event either, whose Repeat is hidden: the rule stays.
+            ...(repeatLocked || dated
+              ? {}
+              : { recurrence_rule: repeatResult.rule }),
+            // Points and check-in only where the event takes attendance:
+            // their rows are hidden otherwise, and what they hold stays.
+            ...(takesAttendance
+              ? {
+                  point_value: points,
+                  check_in_opens_minutes: opensMinutes ?? undefined,
+                  check_in_zone: zone,
+                  // A leftover name on a zone-less event is inert but
+                  // misleading.
+                  check_in_zone_name: zone.length > 0 ? zoneName : "",
+                }
+              : {}),
           },
         );
         // Nothing changed: nothing to send, and nobody to notify.
@@ -1471,6 +1746,7 @@ export function EventEditorDialog({
   const startIso = localInputToIso(startAt);
   const endIso = localInputToIso(endAt);
   const endsBeforeStart =
+    timing === "timed" &&
     !!startIso &&
     !!endIso &&
     new Date(endIso).getTime() <= new Date(startIso).getTime();
@@ -1484,6 +1760,18 @@ export function EventEditorDialog({
     onOpenChange: (next: boolean) => setMenu(next ? row : null),
   });
   const notesLabel = meetingsOn ? "Notes" : "Meeting minutes";
+  // Which rows the shape shows (#6098): Points and Check-in only where the
+  // event takes attendance, Repeat only on a timed event.
+  const showsRow = (row: "repeat" | "points" | "checkIn") =>
+    eventFormShowsRow(row, {
+      timing,
+      calendarOnly: attendance.calendarOnly === true,
+    });
+  // A last day before the first, said under the days as it is typed.
+  const datesProblem =
+    timing === "all_day" && startDate && endDate
+      ? eventDatesProblem(timing, startDate, endDate)
+      : null;
   const checkInValue = describeCheckIn(
     parseCheckInOpens(checkInOpens),
     checkInZone.some((row) => row.lat.trim() !== "" || row.lng.trim() !== ""),
@@ -1635,56 +1923,101 @@ export function EventEditorDialog({
               label={EVENT_FORM_ROW_LABELS.when}
               align="start"
             >
-              <WhenFields
-                startAt={startAt}
-                endAt={endAt}
-                onStart={moveStart}
-                onEnd={setEndAt}
-                invalid={endsBeforeStart}
-              />
-              {endsBeforeStart ? (
-                <p className="px-2 text-caption text-destructive-text">
-                  Ends before it starts.
-                </p>
-              ) : null}
+              <div className="grid gap-1.5">
+                {/* The shape first, one pick of three, as Google Calendar
+                    puts All day beside the times (#6098). */}
+                <SegmentedChoice
+                  dense
+                  label="Timing"
+                  options={EVENT_TIMING_CHOICES.map((choice) => ({
+                    value: choice,
+                    label: EVENT_TIMING_CHOICE_LABELS[choice],
+                  }))}
+                  value={timing}
+                  onChange={changeTiming}
+                  disabled={usingPreviewData}
+                  className="w-fit"
+                />
+                {timing === "timed" ? (
+                  <WhenFields
+                    startAt={startAt}
+                    endAt={endAt}
+                    onStart={moveStart}
+                    onEnd={setEndAt}
+                    invalid={endsBeforeStart}
+                  />
+                ) : (
+                  <DatedWhenFields
+                    timing={timing}
+                    startDate={startDate}
+                    endDate={endDate}
+                    onStartDate={moveStartDate}
+                    onEndDate={setEndDate}
+                    invalid={!!datesProblem}
+                  />
+                )}
+                {endsBeforeStart ? (
+                  <p className="px-2 text-caption text-destructive-text">
+                    Ends before it starts.
+                  </p>
+                ) : datesProblem ? (
+                  <p className="px-2 text-caption text-destructive-text">
+                    {datesProblem}
+                  </p>
+                ) : null}
+                {/* Whether it might not happen: a status beside the name
+                    wherever the event shows, as Outlook marks a tentative
+                    meeting, never a word typed into the name. */}
+                <label className="flex w-fit cursor-pointer items-center gap-2 px-1 py-0.5 text-sm text-foreground pointer-coarse:min-h-11">
+                  <Switch
+                    checked={tentative}
+                    onCheckedChange={setTentative}
+                    disabled={usingPreviewData}
+                    aria-description={EVENT_WHEN_COPY.tentativeHint}
+                  />
+                  {EVENT_WHEN_COPY.tentative}
+                </label>
+              </div>
             </PropertyRow>
 
-            <PropertyRow glyph="repeat" label={EVENT_FORM_ROW_LABELS.repeat}>
-              <Popover {...menuProps("repeat")}>
-                <PopoverTrigger asChild>
-                  <RowValueButton
-                    aria-label={`Repeat: ${repeatValue}`}
-                    empty={!repeatLocked && repeat.preset === "NONE"}
-                  >
-                    {repeatValue}
-                  </RowValueButton>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-[24rem]">
-                  {repeatLocked ? (
-                    <p className="text-caption text-muted-foreground">
-                      {parentLoading
-                        ? "Loading the series…"
-                        : "Part of a repeating series. Its first meeting couldn't be loaded, so how it repeats can't be changed here."}
-                    </p>
-                  ) : (
-                    <RepeatOptions
-                      draft={
-                        repeatSeries
-                          ? repeatEditDraft(repeat, repeatSeries)
-                          : repeat
-                      }
-                      start={repeatAnchorStart}
-                      onChange={setRepeat}
-                      disabled={usingPreviewData}
-                      // An existing series' length was set when it was made;
-                      // the line comes back once the officer changes Repeat.
-                      showLength={!(mode === "edit" && repeat.pristine)}
-                      series={repeatSeries}
-                    />
-                  )}
-                </PopoverContent>
-              </Popover>
-            </PropertyRow>
+            {showsRow("repeat") ? (
+              <PropertyRow glyph="repeat" label={EVENT_FORM_ROW_LABELS.repeat}>
+                <Popover {...menuProps("repeat")}>
+                  <PopoverTrigger asChild>
+                    <RowValueButton
+                      aria-label={`Repeat: ${repeatValue}`}
+                      empty={!repeatLocked && repeat.preset === "NONE"}
+                    >
+                      {repeatValue}
+                    </RowValueButton>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[24rem]">
+                    {repeatLocked ? (
+                      <p className="text-caption text-muted-foreground">
+                        {parentLoading
+                          ? "Loading the series…"
+                          : "Part of a repeating series. Its first meeting couldn't be loaded, so how it repeats can't be changed here."}
+                      </p>
+                    ) : (
+                      <RepeatOptions
+                        draft={
+                          repeatSeries
+                            ? repeatEditDraft(repeat, repeatSeries)
+                            : repeat
+                        }
+                        start={repeatAnchorStart}
+                        onChange={setRepeat}
+                        disabled={usingPreviewData}
+                        // An existing series' length was set when it was made;
+                        // the line comes back once the officer changes Repeat.
+                        showLength={!(mode === "edit" && repeat.pristine)}
+                        series={repeatSeries}
+                      />
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </PropertyRow>
+            ) : null}
 
             <PropertyRow
               glyph="location"
@@ -1738,7 +2071,7 @@ export function EventEditorDialog({
               </Popover>
             </PropertyRow>
 
-            {canSetRequirements ? (
+            {canSetRequirements && showsRow("points") ? (
               <PropertyRow
                 glyph="points"
                 label={EVENT_FORM_ROW_LABELS.points}
@@ -1783,7 +2116,9 @@ export function EventEditorDialog({
                   onDraftChange={setAgendaDraft}
                   disabled={usingPreviewData}
                 />
-                {repeat.preset !== "NONE" && agenda.length > 0 ? (
+                {showsRow("repeat") &&
+                repeat.preset !== "NONE" &&
+                agenda.length > 0 ? (
                   <p className="px-2 text-caption text-muted-foreground">
                     {EVENT_FORM_AGENDA_REPEAT_NOTE}
                   </p>
@@ -1826,161 +2161,168 @@ export function EventEditorDialog({
               />
             </PropertyRow>
 
-            <PropertyRow glyph="checkIn" label={EVENT_FORM_ROW_LABELS.checkIn}>
-              <Popover {...menuProps("checkIn")}>
-                <PopoverTrigger asChild>
-                  <RowValueButton
-                    aria-label={`Check-in: ${checkInValue}`}
-                    invalid={parseCheckInOpens(checkInOpens) === null}
+            {showsRow("checkIn") ? (
+              <PropertyRow
+                glyph="checkIn"
+                label={EVENT_FORM_ROW_LABELS.checkIn}
+              >
+                <Popover {...menuProps("checkIn")}>
+                  <PopoverTrigger asChild>
+                    <RowValueButton
+                      aria-label={`Check-in: ${checkInValue}`}
+                      invalid={parseCheckInOpens(checkInOpens) === null}
+                    >
+                      {checkInValue}
+                    </RowValueButton>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="grid max-h-[min(36rem,75vh)] w-[26rem] gap-4 overflow-y-auto"
                   >
-                    {checkInValue}
-                  </RowValueButton>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="grid max-h-[min(36rem,75vh)] w-[26rem] gap-4 overflow-y-auto"
-                >
-                  {/* #3703: members arrive early, so check-in opens ahead of
+                    {/* #3703: members arrive early, so check-in opens ahead of
                       the start; 10 minutes unless the officer says. The
                       phone's sheet sets the same field. */}
-                  <div className="grid gap-1">
-                    <Label htmlFor="event-check-in-opens">
-                      Opens how many minutes early
-                    </Label>
-                    <Input
-                      id="event-check-in-opens"
-                      inputMode="numeric"
-                      className="max-w-[8rem]"
-                      value={checkInOpens}
-                      disabled={usingPreviewData}
-                      onChange={(eventValue) => {
-                        const next = guardIntDraft(eventValue.target.value);
-                        if (next !== undefined) setCheckInOpens(next);
-                      }}
-                      aria-invalid={parseCheckInOpens(checkInOpens) === null}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <span className="text-sm font-semibold">Check-in zone</span>
-                    <p className="text-caption text-muted-foreground">
-                      Optional. Members must be inside it to check in. At least
-                      3 points; don&apos;t repeat the first.
-                    </p>
                     <div className="grid gap-1">
-                      <Label htmlFor="event-zone-name">Zone name</Label>
+                      <Label htmlFor="event-check-in-opens">
+                        Opens how many minutes early
+                      </Label>
                       <Input
-                        id="event-zone-name"
-                        value={checkInZoneName}
-                        maxLength={120}
+                        id="event-check-in-opens"
+                        inputMode="numeric"
+                        className="max-w-[8rem]"
+                        value={checkInOpens}
                         disabled={usingPreviewData}
-                        onChange={(eventValue) =>
-                          setCheckInZoneName(eventValue.target.value)
-                        }
-                        placeholder="Great Hall"
+                        onChange={(eventValue) => {
+                          const next = guardIntDraft(eventValue.target.value);
+                          if (next !== undefined) setCheckInOpens(next);
+                        }}
+                        aria-invalid={parseCheckInOpens(checkInOpens) === null}
                       />
                     </div>
-                    {checkInZone.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-border p-3 text-caption text-muted-foreground">
-                        No check-in zone. Members can check in from anywhere.
+                    <div className="grid gap-2">
+                      <span className="text-sm font-semibold">
+                        Check-in zone
+                      </span>
+                      <p className="text-caption text-muted-foreground">
+                        Optional. Members must be inside it to check in. At
+                        least 3 points; don&apos;t repeat the first.
+                      </p>
+                      <div className="grid gap-1">
+                        <Label htmlFor="event-zone-name">Zone name</Label>
+                        <Input
+                          id="event-zone-name"
+                          value={checkInZoneName}
+                          maxLength={120}
+                          disabled={usingPreviewData}
+                          onChange={(eventValue) =>
+                            setCheckInZoneName(eventValue.target.value)
+                          }
+                          placeholder="Great Hall"
+                        />
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {checkInZone.map((vertex, index) => (
-                          <div
-                            key={vertex.id}
-                            className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3"
-                          >
-                            <div className="grid min-w-[9rem] flex-1 gap-1">
-                              <Label htmlFor={`${vertex.id}-lat`}>
-                                Point {index + 1} latitude
-                              </Label>
-                              <Input
-                                id={`${vertex.id}-lat`}
-                                value={vertex.lat}
-                                inputMode="decimal"
-                                disabled={usingPreviewData}
-                                onChange={(eventValue) =>
-                                  handleVertexChange(
-                                    vertex.id,
-                                    "lat",
-                                    eventValue.target.value,
-                                  )
-                                }
-                                placeholder="42.7298"
-                              />
+                      {checkInZone.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border p-3 text-caption text-muted-foreground">
+                          No check-in zone. Members can check in from anywhere.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {checkInZone.map((vertex, index) => (
+                            <div
+                              key={vertex.id}
+                              className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3"
+                            >
+                              <div className="grid min-w-[9rem] flex-1 gap-1">
+                                <Label htmlFor={`${vertex.id}-lat`}>
+                                  Point {index + 1} latitude
+                                </Label>
+                                <Input
+                                  id={`${vertex.id}-lat`}
+                                  value={vertex.lat}
+                                  inputMode="decimal"
+                                  disabled={usingPreviewData}
+                                  onChange={(eventValue) =>
+                                    handleVertexChange(
+                                      vertex.id,
+                                      "lat",
+                                      eventValue.target.value,
+                                    )
+                                  }
+                                  placeholder="42.7298"
+                                />
+                              </div>
+                              <div className="grid min-w-[9rem] flex-1 gap-1">
+                                <Label htmlFor={`${vertex.id}-lng`}>
+                                  Point {index + 1} longitude
+                                </Label>
+                                <Input
+                                  id={`${vertex.id}-lng`}
+                                  value={vertex.lng}
+                                  inputMode="decimal"
+                                  disabled={usingPreviewData}
+                                  onChange={(eventValue) =>
+                                    handleVertexChange(
+                                      vertex.id,
+                                      "lng",
+                                      eventValue.target.value,
+                                    )
+                                  }
+                                  placeholder="-73.6789"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Move point ${index + 1} up`}
+                                  disabled={usingPreviewData || index === 0}
+                                  onClick={() => handleMoveVertex(index, -1)}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Move point ${index + 1} down`}
+                                  disabled={
+                                    usingPreviewData ||
+                                    index === checkInZone.length - 1
+                                  }
+                                  onClick={() => handleMoveVertex(index, 1)}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Remove point ${index + 1}`}
+                                  disabled={usingPreviewData}
+                                  onClick={() => handleRemoveVertex(vertex.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="grid min-w-[9rem] flex-1 gap-1">
-                              <Label htmlFor={`${vertex.id}-lng`}>
-                                Point {index + 1} longitude
-                              </Label>
-                              <Input
-                                id={`${vertex.id}-lng`}
-                                value={vertex.lng}
-                                inputMode="decimal"
-                                disabled={usingPreviewData}
-                                onChange={(eventValue) =>
-                                  handleVertexChange(
-                                    vertex.id,
-                                    "lng",
-                                    eventValue.target.value,
-                                  )
-                                }
-                                placeholder="-73.6789"
-                              />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Move point ${index + 1} up`}
-                                disabled={usingPreviewData || index === 0}
-                                onClick={() => handleMoveVertex(index, -1)}
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Move point ${index + 1} down`}
-                                disabled={
-                                  usingPreviewData ||
-                                  index === checkInZone.length - 1
-                                }
-                                onClick={() => handleMoveVertex(index, 1)}
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Remove point ${index + 1}`}
-                                disabled={usingPreviewData}
-                                onClick={() => handleRemoveVertex(vertex.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
 
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={usingPreviewData}
-                      onClick={handleAddVertex}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add point
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </PropertyRow>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={usingPreviewData}
+                        onClick={handleAddVertex}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add point
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </PropertyRow>
+            ) : null}
           </PropertyGroup>
 
           {canSetRequirements ? null : (
