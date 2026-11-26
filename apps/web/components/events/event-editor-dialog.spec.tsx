@@ -904,6 +904,45 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("evt-new"));
   });
 
+  it("opens last year's all-day event as one, on this year's days (#6144)", async () => {
+    createMutate.mockResolvedValue({ id: "evt-new" });
+    render(
+      <EventEditorDialog
+        open
+        mode="create"
+        event={null}
+        template={{
+          id: "evt-old",
+          name: "Retreat 2026",
+          timing: "all_day",
+          start_date: "2025-12-05",
+          end_date: "2025-12-06",
+        }}
+        initialDated={{
+          timing: "all_day",
+          startDate: "2026-12-04",
+          endDate: "2026-12-05",
+          tentative: true,
+        }}
+        usingPreviewData={false}
+        onOpenChange={() => {}}
+        onSaved={async () => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    const body = createMutate.mock.calls[0]![0];
+    expect(body).toMatchObject({
+      name: "Retreat 2026",
+      timing: "all_day",
+      start_date: "2026-12-04",
+      end_date: "2026-12-05",
+      is_tentative: true,
+    });
+    expect(body).not.toHaveProperty("start_time");
+  });
+
   it("sends no role list on create when nothing differs", async () => {
     renderCreate();
     fillRequiredFields();

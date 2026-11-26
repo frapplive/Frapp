@@ -8,6 +8,7 @@ import {
   layoutDay,
   MIN_BLOCK_MINUTES,
   spanWithinDay,
+  stripEvents,
   taskSpan,
   timeGridColumns,
   type TimedSpan,
@@ -204,6 +205,12 @@ describe("timeGridColumns (#4825)", () => {
     expect(sat!.dated).toEqual([formal, tbd]);
     expect(sun!.dated).toEqual([]);
     for (const column of [fri!, sat!, sun!]) expect(column.allDay).toEqual([]);
+    // The phone's strip lists them, ahead of any day-long timed event.
+    expect(stripEvents(sat!)).toEqual([formal, tbd]);
+    expect(stripEvents({ dated: [formal], allDay: [meeting] })).toEqual([
+      formal,
+      meeting,
+    ]);
     expect(fri!.placed).toEqual([]);
     expect(sat!.placed.map((p) => p.item.id)).toEqual(["m"]);
     expect(sun!.placed).toEqual([]);

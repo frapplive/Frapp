@@ -21,6 +21,7 @@ import {
 import {
   attendanceFieldsOf,
   checkInOpensMinutes,
+  eventTakesAttendance,
   eventTimingFieldsOf,
   readEventAgenda,
   readFrappLinks,
@@ -144,6 +145,18 @@ function toRow(row: Record<string, unknown>): EventRow | null {
 export function selectEventRows(data: unknown, now: Date): EventRow[] {
   return selectAllEventRows(data).filter((row) =>
     isCurrentOrUpcoming(row.start_time, row.end_time, now, row),
+  );
+}
+
+/**
+ * The event an officer would host check-in for, for You's Host check-in row
+ * and the quick-actions host: the soonest of {@link selectEventRows} that
+ * takes attendance. A time-TBD or calendar-only event takes none (#6144), so
+ * a TBD retreat tomorrow never stands in for tonight's meeting.
+ */
+export function selectHostableEvent(data: unknown, now: Date): EventRow | null {
+  return (
+    selectEventRows(data, now).find((row) => eventTakesAttendance(row)) ?? null
   );
 }
 

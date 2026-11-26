@@ -21,6 +21,7 @@ import {
   hourLabel,
   minuteOfDay,
   OPEN_AT_HOUR,
+  stripEvents,
   timeGridColumns,
   TWO_LINE_MIN_HEIGHT,
 } from "@repo/hooks/calendar-time-grid";
@@ -127,7 +128,7 @@ export function EventsTimeGrid({
       tasksByDay,
       calendarItemDueMinute,
     )[0]!;
-    return { ...column, allDay: [...column.dated, ...column.allDay] };
+    return { ...column, allDay: stripEvents(column) };
   }, [day, events, tasksByDay]);
   const isToday = key === todayKey;
   const dayLabel = longDay(day);

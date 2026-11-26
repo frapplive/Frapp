@@ -14,8 +14,7 @@ import {
   type EventTimingFields,
 } from "@repo/validation";
 import {
-  ALL_DAY_CHECK_IN_OPEN,
-  allDayCheckInOpensWords,
+  allDayCheckInWords,
   formatRelativeDayTime,
   formatTimeOfDay,
   localIsoDate,
@@ -223,8 +222,18 @@ export function MyCheckIn({
     now,
   });
   const points = pointsLabel(pointValue);
-  // "Opens tomorrow" for an all-day event; null for a timed one.
-  const allDayOpens = shape ? allDayCheckInOpensWords(shape, now) : null;
+  // An all-day event says its day where that is true for this viewer
+  // ("Opens tomorrow", "Open all day"); null for any other shape.
+  const allDay = shape
+    ? allDayCheckInWords(
+        shape,
+        {
+          opensAt: view.kind === "upcoming" ? view.opensAt : null,
+          closesAt: view.kind === "open" ? view.closesAt : null,
+        },
+        now,
+      )
+    : null;
 
   if (view.kind === "loading") {
     return (
@@ -245,17 +254,18 @@ export function MyCheckIn({
       title = view.label;
       break;
     case "open":
-      // An all-day event says its day, in the phone card's words.
-      title = allDayOpens ? ALL_DAY_CHECK_IN_OPEN : "Open now";
+      // The row is named Check-in, so web's form of the phone card's
+      // `ALL_DAY_CHECK_IN_OPEN`, as "Open now" is of its "Check-in is open".
+      title = allDay?.openAllDay ? "Open all day" : "Open now";
       detail =
         view.zone !== "none"
           ? ZONE_CHECK_IN_LINE[view.zone]
-          : allDayOpens
+          : allDay?.openAllDay
             ? null
             : `Closes ${clockLabel(view.closesAt, now)}`;
       break;
     case "upcoming":
-      title = `Opens ${allDayOpens ?? clockLabel(view.opensAt, now)}`;
+      title = `Opens ${allDay?.opens ?? clockLabel(view.opensAt, now)}`;
       break;
     case "closed":
       title = "Closed";

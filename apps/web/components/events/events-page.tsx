@@ -124,6 +124,7 @@ import { stateMicrocopy } from "@/lib/state-microcopy";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import {
+  allDayCheckInWords,
   formatDayHeading,
   formatEventRowTime,
   formatRelativeDayTime,
@@ -782,18 +783,26 @@ export function EventsPage() {
     // #3905).
     const now = new Date();
     const notClosed = ids.flatMap((eventId) => {
-      const closesAt = checkInClosesAt(
-        eventsById.get(eventId)?.end_time,
-        now.getTime(),
-      );
-      return closesAt
-        ? [
-            {
-              eventId,
-              message: `Check-in hasn't closed yet; it closes ${formatRelativeDayTime(closesAt, now)}.`,
-            },
-          ]
-        : [];
+      const event = eventsById.get(eventId);
+      const closesAt = checkInClosesAt(event?.end_time, now.getTime());
+      if (!closesAt) return [];
+      // An all-day event closes around the saver's midnight: said by its
+      // days where that is true for this officer, never "12:15 AM" (#6144).
+      const allDay = event
+        ? allDayCheckInWords(
+            eventTimingFieldsOf(event),
+            { opensAt: null, closesAt },
+            now,
+          )
+        : null;
+      return [
+        {
+          eventId,
+          message: allDay?.openAllDay
+            ? "Check-in hasn't closed yet; it stays open through the event's last day."
+            : `Check-in hasn't closed yet; it closes ${formatRelativeDayTime(closesAt, now)}.`,
+        },
+      ];
     });
     const toSend = ids.filter(
       (eventId) => !notClosed.some((pending) => pending.eventId === eventId),

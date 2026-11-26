@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  allDayCheckInOpensWords,
+  allDayCheckInWords,
   eventChipWords,
   formatEventDayTime,
   formatEventRelativeWhen,
@@ -123,32 +123,64 @@ describe("eventChipWords", () => {
   });
 });
 
-describe("allDayCheckInOpensWords (#6144)", () => {
-  const thursday = new Date(2026, 10, 12, 15); // Thursday, November 12
+describe("allDayCheckInWords (#6144)", () => {
+  // Package tests run in America/Los_Angeles. Thursday, November 12.
+  const thursday = new Date(2026, 10, 12, 15);
   const firstDay = (start_date: string) => ({
     timing: "all_day",
     start_date,
   });
+  // A window as the API bounds it, around the saver's midnights.
+  const around = (from: Date, to: Date) => ({ opensAt: from, closesAt: to });
 
-  it("says the first day, never the window's midnight clock", () => {
-    expect(allDayCheckInOpensWords(firstDay("2026-11-13"), thursday)).toBe(
-      "tomorrow",
+  it("says the day, not a midnight clock, when the window covers the viewer's day", () => {
+    // Saved here: it opens 10 minutes before the 13th and closes 15 after.
+    const window = around(
+      new Date(2026, 10, 12, 23, 50),
+      new Date(2026, 10, 14, 0, 15),
     );
-    expect(allDayCheckInOpensWords(firstDay("2026-11-15"), thursday)).toBe(
-      "Sunday",
+    expect(
+      allDayCheckInWords(firstDay("2026-11-13"), window, thursday),
+    ).toEqual({ opens: "tomorrow", openAllDay: true });
+    expect(
+      allDayCheckInWords(
+        firstDay("2026-11-15"),
+        around(new Date(2026, 10, 14, 23, 50), new Date(2026, 10, 16, 0, 15)),
+        thursday,
+      )?.opens,
+    ).toBe("Sunday");
+  });
+
+  it("keeps the clocks for a viewer west of the saver, whose day outlasts the window", () => {
+    // Saved in New York: midnight there is 9 PM here.
+    const window = around(
+      new Date(2026, 10, 12, 20, 50),
+      new Date(2026, 10, 13, 21, 15),
     );
-    expect(allDayCheckInOpensWords(firstDay("2026-11-12"), thursday)).toBe(
-      "today",
+    expect(
+      allDayCheckInWords(firstDay("2026-11-13"), window, thursday)?.openAllDay,
+    ).toBe(false);
+  });
+
+  it("keeps the opening clock for a viewer east of the saver, where it opens mid-morning", () => {
+    const window = around(
+      new Date(2026, 10, 13, 2, 50),
+      new Date(2026, 10, 14, 3, 15),
     );
+    expect(
+      allDayCheckInWords(firstDay("2026-11-13"), window, thursday)?.opens,
+    ).toBe(null);
   });
 
   it("is only for an all-day event", () => {
+    const window = around(thursday, thursday);
     expect(
-      allDayCheckInOpensWords(
+      allDayCheckInWords(
         { timing: "time_tbd", start_date: "2026-11-13" },
+        window,
         thursday,
       ),
     ).toBe(null);
-    expect(allDayCheckInOpensWords({}, thursday)).toBe(null);
+    expect(allDayCheckInWords({}, window, thursday)).toBe(null);
   });
 });

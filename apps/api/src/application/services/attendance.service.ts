@@ -1004,8 +1004,16 @@ export class AttendanceService {
 export function assertTakesAttendance(event: EventTimingFields): void {
   const reason = eventNoAttendanceReason(event);
   if (!reason) return;
+  // Each code written out in its own exception, so the error-code scan
+  // (`api-error-codes.spec.ts`) finds it thrown.
+  if (reason === 'calendar_only') {
+    throw new ConflictException({
+      code: 'attendance.calendar_only',
+      message: EVENT_NO_ATTENDANCE_COPY.calendar_only,
+    });
+  }
   throw new ConflictException({
-    code: `attendance.${reason}`,
-    message: EVENT_NO_ATTENDANCE_COPY[reason],
+    code: 'attendance.time_tbd',
+    message: EVENT_NO_ATTENDANCE_COPY.time_tbd,
   });
 }

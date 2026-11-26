@@ -1,4 +1,6 @@
+import { addEventDays, eventDayNumber } from "@repo/validation";
 import { parseBareDateLocalNoon } from "./bare-date";
+import { localIsoDate } from "./local-date";
 import { parseInstant } from "./instant";
 
 /** 52 weeks: last year's Saturday lands on a Saturday (#3930). */
@@ -49,23 +51,6 @@ export function sameWeekdayThisYear(
   return moved;
 }
 
-const DAY_MS = 86_400_000;
-const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** A `YYYY-MM-DD` day as a whole UTC day number, or null when it isn't one. */
-function dayNumber(day: string | null | undefined): number | null {
-  const match = day ? ISO_DAY.exec(day) : null;
-  if (!match) return null;
-  const time = Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-  );
-  return new Date(time).toISOString().slice(0, 10) === day
-    ? Math.round(time / DAY_MS)
-    : null;
-}
-
 /**
  * An all-day or time-TBD event's days this year (#6144), the dated twin of
  * {@link sameWeekdayThisYear}: its first day 52 weeks on, then a week at a
@@ -80,19 +65,19 @@ export function datedDaysThisYear(
   lastDay: string | null | undefined,
   now: Date = new Date(),
 ): { startDate: string; lastDay: string | null } | null {
-  const first = dayNumber(startDate);
-  if (first === null) return null;
-  const today = Math.round(
-    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / DAY_MS,
-  );
+  const first = eventDayNumber(startDate);
+  if (first === null || !startDate) return null;
+  const today = eventDayNumber(localIsoDate(now))!;
   let moved = first + SHIFT_DAYS;
   while (moved < today) moved += 7;
   const offset = moved - first;
-  const last = dayNumber(lastDay);
-  const iso = (n: number) => new Date(n * DAY_MS).toISOString().slice(0, 10);
+  const last = eventDayNumber(lastDay);
   return {
-    startDate: iso(moved),
-    lastDay: last !== null && last > first ? iso(last + offset) : null,
+    startDate: addEventDays(startDate, offset)!,
+    lastDay:
+      lastDay && last !== null && last > first
+        ? addEventDays(lastDay, offset)
+        : null,
   };
 }
 

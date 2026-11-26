@@ -295,6 +295,19 @@ export function timeGridColumns<E extends GridEvent, Task>(
 }
 
 /**
+ * Every event a column's all-day strip lists, one under another, as the
+ * phone's Day view draws it: the dated ones first (each on every day it
+ * covers, #6144), then timed events lasting a whole day or more. Web's week
+ * view draws the dated ones as bars across their columns instead.
+ */
+export function stripEvents<E>(column: {
+  dated: readonly E[];
+  allDay: readonly E[];
+}): E[] {
+  return [...column.dated, ...column.allDay];
+}
+
+/**
  * Where a placed block draws in its column, in the grid's units: its top at
  * its start, and as tall as it lasts but never shorter than
  * {@link MIN_BLOCK_MINUTES}, the height `layoutDay` judged its overlaps on.

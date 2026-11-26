@@ -53,7 +53,7 @@ export {
 } from "./display";
 export {
   ALL_DAY_CHECK_IN_OPEN,
-  allDayCheckInOpensWords,
+  allDayCheckInWords,
   type EventWhenFields,
   eventChipWords,
   eventDatedWord,

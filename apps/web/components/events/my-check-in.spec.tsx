@@ -376,11 +376,30 @@ describe("<MyCheckIn />", () => {
       clock.now = new Date(2026, 10, 10, 15).getTime();
       renderAllDay();
 
-      expect(screen.getByText("Check-in is open all day")).toBeInTheDocument();
+      expect(screen.getByText("Open all day")).toBeInTheDocument();
       expect(screen.queryByText(/Closes/)).toBeNull();
       expect(
         screen.getByRole("button", { name: /check in/i }),
       ).toBeInTheDocument();
+    });
+
+    it("keeps the closing clock for a viewer whose day outlasts the window", () => {
+      // Saved six hours east: the window closes this evening here.
+      clock.now = new Date(2026, 10, 10, 15).getTime();
+      render(
+        <MyCheckIn
+          eventId="e1"
+          start={new Date(2026, 10, 9, 18).toISOString()}
+          end={new Date(2026, 10, 10, 18).toISOString()}
+          opensMinutes={undefined}
+          pointValue={5}
+          zone="none"
+          shape={{ timing: "all_day", start_date: "2026-11-10" }}
+        />,
+      );
+
+      expect(screen.getByText("Open now")).toBeInTheDocument();
+      expect(screen.getByText(/^Closes 6:15\sPM$/)).toBeInTheDocument();
     });
 
     it("says the day check-in opens, not 11:50 PM the night before", () => {

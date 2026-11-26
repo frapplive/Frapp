@@ -18,7 +18,6 @@ import {
 import {
   attendanceFieldsOf,
   EVENT_TENTATIVE_LABEL,
-  eventCoversDay,
   eventIsDated,
   eventTiming,
   eventTimingFieldsOf,
@@ -175,7 +174,7 @@ export function EventsTimeGrid({
     () => timeGridColumns(days, events, tasksByDay, calendarItemDueMinute),
     [days, events, tasksByDay],
   );
-  const bars = useMemo(() => datedBars(days, events), [days, events]);
+  const bars = useMemo(() => datedBars(columns), [columns]);
   const barLanes = bars.reduce((most, bar) => Math.max(most, bar.lane + 1), 0);
 
   const hasStrip =
@@ -509,24 +508,27 @@ function SeriesMark({ facts }: { facts: CalendarEventFacts }) {
 type DatedBar = { event: EventRow; from: number; to: number; lane: number };
 
 /**
- * Where each dated event's bar goes in the strip over `days` (a timed event in
- * `events` covers no day by this rule and is skipped): from the first
- * column it covers to the last, each in the first row free across those
- * columns, the longest first, as Google Calendar stacks its all-day bars.
+ * Where each dated event's bar goes in the strip over the columns: from the
+ * first column whose `dated` holds it (`timeGridColumns` files it by its own
+ * days) to the last, each in the first row free across those columns, the
+ * longest first, as Google Calendar stacks its all-day bars.
  */
 export function datedBars(
-  days: readonly Date[],
-  events: readonly EventRow[],
+  columns: readonly { dated: readonly EventRow[] }[],
 ): DatedBar[] {
-  const keys = days.map((day) => localIsoDate(day));
-  const spans = events.flatMap((event) => {
-    const shape = eventTimingFieldsOf(event);
-    const covered = keys.flatMap((key, index) =>
-      eventCoversDay(shape, key) ? [index] : [],
-    );
-    if (covered.length === 0) return [];
-    return [{ event, from: covered[0]!, to: covered.at(-1)! }];
+  const covered = new Map<EventRow, number[]>();
+  columns.forEach((column, index) => {
+    for (const event of column.dated) {
+      const at = covered.get(event);
+      if (at) at.push(index);
+      else covered.set(event, [index]);
+    }
   });
+  const spans = [...covered].map(([event, at]) => ({
+    event,
+    from: at[0]!,
+    to: at.at(-1)!,
+  }));
   spans.sort((a, b) => a.from - b.from || b.to - b.from - (a.to - a.from));
   const lanesEnd: number[] = [];
   return spans.map((span) => {

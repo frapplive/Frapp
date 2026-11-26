@@ -9,7 +9,6 @@ import {
   useHiddenUnsetFeatures,
   useInvoices,
   useListChapters,
-
   useMyPermissions,
   useMyProfileStats,
   useNowDate,
@@ -60,7 +59,7 @@ import {
   destinationHue,
   type YouDestination,
 } from "@/lib/more/destination-hue";
-import { selectEventRows } from "@/lib/events/select";
+import { selectHostableEvent } from "@/lib/events/select";
 import { useRushEntry } from "@/lib/rush/rush-entry";
 import { selectViewerProfile } from "@/lib/more/profile";
 import {
@@ -68,9 +67,7 @@ import {
   selectInvoiceRows,
   selectNextDueInvoice,
 } from "@/lib/dues/invoices";
-import {
-
-} from "@/lib/study/format";
+import {} from "@/lib/study/format";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -223,8 +220,8 @@ function YouScreen() {
     !hiddenFeatures.has("documents") || !!moduleGate?.("meetings");
 
   // s22 takes an `eventId`, so the row resolves one rather than leading
-  // nowhere. `selectEventRows` already returns upcoming-plus-still-checkable-in,
-  // soonest first, so the head of that list is the event an officer would host.
+  // nowhere: the soonest upcoming or still checkable-in event that takes
+  // attendance (`selectHostableEvent`).
   const eventsQuery = useEvents();
   // `now` ticks rather than being read once inside the memo below: React
   // Query's structural sharing keeps `data` referentially stable across a
@@ -234,7 +231,7 @@ function YouScreen() {
 
   const nextEvent = useMemo(() => {
     if (!canHost) return null;
-    return selectEventRows(eventsQuery.data, now)[0] ?? null;
+    return selectHostableEvent(eventsQuery.data, now);
   }, [canHost, eventsQuery.data, now]);
 
   // The Dues row's trailing status reads the viewer's own invoices.

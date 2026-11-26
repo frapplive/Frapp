@@ -267,14 +267,16 @@ export default function HostCheckInScreen() {
 
   // A time-TBD or calendar-only event takes no check-in (#6144): the screen
   // says so in the API's words rather than drawing a code nobody can redeem.
-  // The event page never links here for one; a stale link still can.
+  // Neither the event page nor the pickers that open this screen
+  // (`selectHostableEvent`) send one here; an older link can.
   const noCheckIn = event ? eventNoAttendanceReason(event) : null;
 
   // Both requests are officer-gated, so neither is fired for a member who would
-  // only get a 403 back, nor for an event that takes no check-in.
+  // only get a 403 back. The code waits for the event's read, so an event that
+  // takes no check-in never flashes "Code unavailable" from the API's 409.
   const tokenQuery = useMintCheckInToken(
     eventId,
-    canHost && focused && !noCheckIn,
+    canHost && focused && event !== null && !noCheckIn,
   );
   const { data: attendance } = useAttendance(canHost ? eventId : "", {
     refetchInterval: focused ? ATTENDANCE_POLL_MS : false,
