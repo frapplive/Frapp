@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({ redirect }));
 const { default: ChatAdmin } = await import("./chat-admin/page");
 const { default: DiscordImport } = await import("./discord-import/page");
 const { default: Reports } = await import("./reports/page");
+const { default: Tasks } = await import("./tasks/page");
 
 type Route = (props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -42,5 +43,25 @@ describe("old officer tool routes", () => {
     await expect(
       open(Reports, { tab: "roles", extra: ["a", "b"] }),
     ).rejects.toThrow("redirect:/settings?tab=reports&page=reports");
+  });
+});
+
+// The Tasks page folded into Activity (#5948): Mine and Everyone's.
+describe("the old Tasks route", () => {
+  it("sends /tasks to Activity", async () => {
+    await expect(open(Tasks)).rejects.toThrow("redirect:/activity");
+  });
+
+  it("keeps a task or group link, so its panel still opens, and drops the rest", async () => {
+    await expect(open(Tasks, { task: "t-1", released: "1" })).rejects.toThrow(
+      "redirect:/activity?task=t-1",
+    );
+    await expect(open(Tasks, { group: ["g-1", "g-2"] })).rejects.toThrow(
+      "redirect:/activity?group=g-1",
+    );
+    // New's New task from a page loaded before the fold.
+    await expect(open(Tasks, { new: "1" })).rejects.toThrow(
+      "redirect:/activity?new=1",
+    );
   });
 });
