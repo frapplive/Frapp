@@ -123,8 +123,9 @@ cs_node_deps_ok() {
 #
 # The session owns its node_modules; bringup only reports on it. The one repair that IS safe
 # runs before bringup and before the agent's first command, in .claude/hooks/session-start.sh:
-# only when turbo does not run (nothing left to destroy), only when no bringup is running, `npm
-# ci` alone (no `npm install` fallback), under its own flock. This check stays as the backstop
+# only when turbo does not run (nothing left to destroy), only when that hook is about to launch
+# a bringup, `npm ci` alone (no `npm install` fallback), one install at a time. This check stays
+# as the backstop
 # for when that repair fails: #1631's acceptance criterion is met either way ("either repairs
 # the install or writes .cloud-sandbox-up.failed"), and the sentinel names `npm ci`, so the
 # agent runs it deliberately, in the foreground, once.
