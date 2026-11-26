@@ -41,7 +41,21 @@ export function moduleSwitchLine(module: {
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
-/** A module's tier as a person reads it: "Free", or "Chapter Pro" (not "Paid"). */
+/**
+ * A module's tier as a person reads it, on web's module page and the phone's
+ * module screen (#6030).
+ *
+ * `writing.md` §5 fixes the vocabulary for the six states it names and none of
+ * these is among them, so `invoice-status.ts`'s disposition for Stripe's
+ * tokens applies: a vocabulary with no §5 row maps to plain language **once**,
+ * here, rather than being re-cased at each call site. These are the two strings
+ * the modules tab already shipped from its ternary; a repaint must not quietly
+ * change user-visible copy.
+ *
+ * `paid` reads as "Chapter Pro" rather than "Paid" deliberately — `PAID` is one
+ * of the six tokens §5 *does* fix, and it means a settled invoice. The same
+ * word on a module would state the opposite of what it states on `/billing`.
+ */
 export function moduleTierLabel(tier: string): string {
   return tier === "paid" ? "Chapter Pro" : "Free";
 }

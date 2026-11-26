@@ -1,20 +1,15 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
 import { useSaveRushStages, type RushStage } from "@repo/hooks";
-import {
-  draftsOf,
-  stagesBody,
-  withSavedIds,
-  type StageDraft,
-} from "@repo/hooks/rush-stage-drafts";
+import type { StageDraft } from "@repo/hooks/rush-stage-drafts";
+import { useRushStageEditor } from "@repo/hooks/use-rush-stage-editor";
 import {
   RUSH_STAGE_CATEGORIES,
   RUSH_STAGE_CATEGORY_LABELS,
   RUSH_SETTINGS_COPY,
   RUSH_STAGE_LABEL_MAX,
-  rushStagesProblem,
   type RushStageCategory,
 } from "@repo/validation";
 import { ProfileSection } from "@/components/profile/profile-section";
@@ -50,63 +45,18 @@ export function RushStageEditor({
   stages: readonly RushStage[];
   canEdit: boolean;
 }) {
-  const save = useSaveRushStages();
   const problemId = useId();
-  // The edit in hand and the server list it was made against: once the
-  // server's list moves on (the save landed and refreshed) and nothing is
-  // still being saved, the server's list is the truth.
-  const [edit, setEdit] = useState<{
-    basis: readonly RushStage[];
-    drafts: StageDraft[];
-  } | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  // One save at a time. A change made while one is out waits here, newest
-  // wins, and goes once that save returns, with the ids it gave any stage
-  // just added: sent again without its id, a new stage would be added twice,
-  // or the API would refuse the list for missing it.
-  const [saving, setSaving] = useState(false);
-  const queued = useRef<StageDraft[] | null>(null);
-  const drafts =
-    edit && (edit.basis === stages || saving) ? edit.drafts : draftsOf(stages);
-
-  function send(next: StageDraft[]) {
-    setSaving(true);
-    save.mutate(stagesBody(next), {
-      onSuccess: (saved) => {
-        const waiting = queued.current;
-        queued.current = null;
-        if (!waiting) {
-          setSaving(false);
-          return;
-        }
-        const withIds = withSavedIds(waiting, next, saved);
-        setEdit({ basis: stages, drafts: withIds });
-        send(withIds);
-      },
-      onError: (error) => {
-        queued.current = null;
-        setSaving(false);
-        setEdit(null);
-        toastFailure({
-          title: RUSH_SETTINGS_COPY.stages.failed,
-          error,
-          fallback: "Retry in a moment.",
-        });
-      },
-    });
-  }
-
-  function change(next: StageDraft[]) {
-    setEdit({ basis: stages, drafts: next });
-    const refused = rushStagesProblem(next);
-    setProblem(refused);
-    if (refused) return;
-    if (saving) {
-      queued.current = next;
-      return;
-    }
-    send(next);
-  }
+  const save = useSaveRushStages();
+  const { drafts, problem, change } = useRushStageEditor(
+    stages,
+    save,
+    (error) =>
+      toastFailure({
+        title: RUSH_SETTINGS_COPY.stages.failed,
+        error,
+        fallback: "Retry in a moment.",
+      }),
+  );
 
   return (
     <ProfileSection

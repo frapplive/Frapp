@@ -22,18 +22,13 @@ import {
   type RushStage,
 } from "@repo/hooks";
 import { errorCopy } from "@repo/hooks/error-copy";
-import {
-  draftsOf,
-  stagesBody,
-  withSavedIds,
-  type StageDraft,
-} from "@repo/hooks/rush-stage-drafts";
+import type { StageDraft } from "@repo/hooks/rush-stage-drafts";
+import { useRushStageEditor } from "@repo/hooks/use-rush-stage-editor";
 import {
   RUSH_SETTINGS_COPY,
   RUSH_STAGE_CATEGORIES,
   RUSH_STAGE_CATEGORY_LABELS,
   RUSH_STAGE_LABEL_MAX,
-  rushStagesProblem,
   type RushStageCategory,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -72,13 +67,11 @@ let newRow = 0;
  * Move down for a screen reader). A stage never leaves its category, because
  * automatic moves go by category, not by name.
  *
- * It saves on its own (rulebook § 9): every change sends the whole list
- * (`PUT /v1/rush/stages`, through `@repo/hooks/rush-stage-drafts`, which web
- * shares), once `rushStagesProblem`, the API's own check, passes; a change it
- * refuses stays on screen with the reason under the list. One save at a time:
- * a change made while one is out waits, newest wins, and goes with the ids
- * the first gave any stage just added. `rush:manage` edits; anyone else who
- * can open the pipeline reads.
+ * It saves on its own (rulebook § 9), through `useRushStageEditor`, which
+ * web's editor shares: the whole list once the API's own check passes, one
+ * save at a time; a change it refuses stays on screen with the reason under
+ * the list, and a failed save says why there too. `rush:manage` edits;
+ * anyone else who can open the pipeline reads.
  */
 export function RushStagesPage({
   onDragging,
@@ -122,54 +115,15 @@ function StageEditor({
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
-  const save = useSaveRushStages();
-  // The edit in hand and the server list it was made against: once the
-  // server's list moves on and nothing is still saving, it is the truth.
-  const [edit, setEdit] = useState<{
-    basis: readonly RushStage[];
-    drafts: StageDraft[];
-  } | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const queued = useRef<StageDraft[] | null>(null);
-  const drafts =
-    edit && (edit.basis === stages || saving) ? edit.drafts : draftsOf(stages);
-
-  function send(next: StageDraft[]) {
-    setSaving(true);
-    save.mutate(stagesBody(next), {
-      onSuccess: (saved) => {
-        const waiting = queued.current;
-        queued.current = null;
-        if (!waiting) {
-          setSaving(false);
-          return;
-        }
-        const withIds = withSavedIds(waiting, next, saved);
-        setEdit({ basis: stages, drafts: withIds });
-        send(withIds);
-      },
-      onError: (error) => {
-        queued.current = null;
-        setSaving(false);
-        setEdit(null);
-        setFailure(`${COPY.failed}. ${errorCopy(error, "Retry in a moment.")}`);
-      },
-    });
-  }
-
+  const save = useSaveRushStages();
+  const editor = useRushStageEditor(stages, save, (error) =>
+    setFailure(`${COPY.failed}. ${errorCopy(error, "Retry in a moment.")}`),
+  );
+  const { drafts, problem } = editor;
   function change(next: StageDraft[]) {
     setFailure(null);
-    setEdit({ basis: stages, drafts: next });
-    const refused = rushStagesProblem(next);
-    setProblem(refused);
-    if (refused) return;
-    if (saving) {
-      queued.current = next;
-      return;
-    }
-    send(next);
+    editor.change(next);
   }
 
   return (
@@ -500,7 +454,9 @@ function StageRow({
 
 /**
  * A name typed in place, saved on Done or leaving the field; an empty or
- * unchanged one puts the old name back (web's `InlineNameField`).
+ * unchanged one puts the old name back (web's `InlineNameField`). Done and
+ * the blur that follows it send once; a save the server refused can be sent
+ * again from the field, since the name it keeps is still the officer's edit.
  */
 export function NameField({
   label,
@@ -520,24 +476,29 @@ export function NameField({
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const [text, setText] = useState(label);
-  const done = useRef(false);
+  // What this visit to the field already sent, so Done's blur doesn't send
+  // it twice; a new visit (focus) or a new edit clears it.
+  const sent = useRef<string | null>(null);
   function commit() {
-    if (done.current) return;
     const next = text.trim();
     if (!next || next === label) {
       setText(label);
       onCancel?.();
       return;
     }
-    done.current = true;
+    if (sent.current === next) return;
+    sent.current = next;
     onCommit(next);
   }
   return (
     <TextInput
       value={text}
       onChangeText={(next) => {
-        done.current = false;
+        sent.current = null;
         setText(next);
+      }}
+      onFocus={() => {
+        sent.current = null;
       }}
       onBlur={commit}
       onSubmitEditing={commit}

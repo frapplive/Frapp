@@ -66,11 +66,15 @@ export function NumberRow({
   const [line, setLine] = useState<
     { kind: "saved" } | { kind: "error"; message: string } | null
   >(null);
+  // While a save is out the field keeps the number just typed: the stored
+  // one may not move until the save lands (or the read after it), and
+  // following it then would show the old number until it did.
+  const [saving, setSaving] = useState(false);
   // A number saved elsewhere (another officer, web) replaces what the field
-  // shows, unless the officer is typing in it; set during render, React's
-  // pattern for state that follows a prop.
+  // shows, unless the officer is typing in it or saving it; set during
+  // render, React's pattern for state that follows a prop.
   const [shownFor, setShownFor] = useState(stored);
-  if (shownFor !== stored && !focused) {
+  if (shownFor !== stored && !focused && !saving) {
     setShownFor(stored);
     setText(stored);
   }
@@ -90,12 +94,15 @@ export function NumberRow({
       next = read.value;
     }
     setLine(null);
-    setShownFor(next === null ? "" : String(next));
+    setSaving(true);
     onSave(next).then(
-      () => setLine({ kind: "saved" }),
+      () => {
+        setSaving(false);
+        setLine({ kind: "saved" });
+      },
       (error: unknown) => {
+        setSaving(false);
         setText(stored);
-        setShownFor(stored);
         setLine({
           kind: "error",
           message: errorCopy(error, "It wasn't saved. Try again."),

@@ -35,6 +35,14 @@ const h = vi.hoisted(() => ({
   pipeline: undefined as unknown,
   rushSettings: undefined as unknown,
   rushPipelineEnabled: [] as (boolean | undefined)[],
+  rushSettingsEnabled: [] as (boolean | undefined)[],
+  formEnabled: [] as (boolean | undefined)[],
+  form: { offered: false, form: null } as unknown,
+  templateReads: 0,
+  council: false,
+  updateForm: vi.fn(),
+  replaceForm: vi.fn(),
+  renameTag: vi.fn(),
   patchConfig: vi.fn<(diff: unknown) => Promise<unknown>>(),
   updateTier: vi.fn<(body: unknown) => Promise<unknown>>(),
   updateRole: vi.fn<(body: unknown) => Promise<unknown>>(),
@@ -87,7 +95,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateRole: () => ({ mutateAsync: h.updateRole }),
   useChapterGoals: () => ok(h.goals),
   useSetChapterGoals: () => ({ mutateAsync: h.setGoals }),
-  useMeetingTemplate: () => ok(h.template),
+  useMeetingTemplate: () => {
+    h.templateReads += 1;
+    return ok(h.template);
+  },
   useSetMeetingTemplate: () => ({
     mutateAsync: h.setTemplate,
     isPending: false,
@@ -96,8 +107,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     h.rushPipelineEnabled.push(options?.enabled);
     return ok(options?.enabled === false ? undefined : h.pipeline);
   },
-  useRushSettings: (options?: { enabled?: boolean }) =>
-    ok(options?.enabled === false ? undefined : h.rushSettings),
+  useRushSettings: (options?: { enabled?: boolean }) => {
+    h.rushSettingsEnabled.push(options?.enabled);
+    return ok(options?.enabled === false ? undefined : h.rushSettings);
+  },
   useSaveRushSettings: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn().mockResolvedValue({}),
@@ -105,10 +118,16 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
   useSaveRushStages: () => ({ mutate: h.saveStages }),
   useCreateRushTag: () => ({ mutate: vi.fn() }),
-  useRenameRushTag: () => ({ mutate: vi.fn() }),
+  useRenameRushTag: () => ({ mutate: h.renameTag }),
   useDeleteRushTag: () => ({ mutate: h.removeTag }),
-  useInterestFormSettings: (options?: { enabled?: boolean }) =>
-    ok(options?.enabled === false ? undefined : { offered: false, form: null }),
+  useInterestFormSettings: (options?: { enabled?: boolean }) => {
+    h.formEnabled.push(options?.enabled);
+    return ok(options?.enabled === false ? undefined : h.form);
+  },
+  useUpdateInterestForm: () => ({ mutate: h.updateForm, isPending: false }),
+  useReplaceInterestForm: () => ({ mutate: h.replaceForm, isPending: false }),
+  useAddInterestFormLabel: () => ({ mutate: vi.fn(), isPending: false }),
+  useRemoveInterestFormLabel: () => ({ mutate: vi.fn(), isPending: false }),
   useGroups: () => ok([]),
   useChannels: () => ok([]),
   useGeofences: () => ok([{ id: "z1" }, { id: "z2" }]),
@@ -158,6 +177,14 @@ vi.mock("@/components/option-sheet", async () => {
   };
 });
 vi.mock("react-native-qrcode-svg", () => ({ default: () => null }));
+vi.mock("expo-clipboard", () => ({
+  setStringAsync: vi.fn().mockResolvedValue(true),
+}));
+vi.mock("@/lib/tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tenant-kind")>()),
+  useIsCouncil: () => h.council,
+  useServesChapterFeatures: () => !h.council,
+}));
 vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => ({
     accent: "#CB9FFF",
@@ -269,6 +296,11 @@ beforeEach(() => {
   h.pipeline = undefined;
   h.rushSettings = undefined;
   h.rushPipelineEnabled = [];
+  h.rushSettingsEnabled = [];
+  h.formEnabled = [];
+  h.form = { offered: false, form: null };
+  h.templateReads = 0;
+  h.council = false;
   h.sheets.clear();
 });
 
@@ -437,22 +469,22 @@ describe("a permission's screen (#6030)", () => {
 });
 
 describe("a goal's screen (#6030)", () => {
-  it("types hours and saves minutes, keeping the roles set apart", () => {
+  it("types hours and saves minutes, keeping the roles set apart", async () => {
     const tree = screen("hours", "goal-service");
     const everyone = () => field(tree, "Service hours goal, hours");
     expect(everyone().props.value).toBe("20");
     act(() => everyone().props.onFocus());
     act(() => everyone().props.onChangeText("25"));
-    act(() => everyone().props.onBlur());
+    await act(async () => everyone().props.onBlur());
     expect(h.setGoals).toHaveBeenCalledWith({
       everyone: 1500,
       roles: [{ role_id: "r-social", target: 600 }],
     });
   });
 
-  it("takes a role's own goal off", () => {
+  it("takes a role's own goal off", async () => {
     const tree = screen("hours", "goal-service");
-    act(() =>
+    await act(async () =>
       pressable(
         tree,
         "Remove Social chair's own service hours goal",
@@ -621,5 +653,344 @@ describe("Study zones (#6030)", () => {
     const text = screenText(screen("geofences"));
     expect(text).toContain("Zones\n2 zones");
     expect(text).toContain(MODULE_TOOLS_ON_WEB.geofences!.line);
+  });
+});
+
+describe("who reaches a module's screen (#6030 review)", () => {
+  it("draws no Modules group for a council, whose config route refuses it", () => {
+    h.council = true;
+    h.permissions = ["chapter-config:view", "chapter-config:manage"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({});
+    expect(screenText(render(<ChapterSettingsScreen />))).not.toContain(
+      "Modules",
+    );
+  });
+
+  it("keeps the interest form for a recruitment chair without the config key", () => {
+    h.permissions = [
+      "members:view",
+      "rush:view",
+      "rush:manage",
+      "roles:manage",
+    ];
+    h.chapter = { name: "Sig Ep", enabled_modules: { rush: true } };
+    h.form = {
+      offered: true,
+      form: {
+        id: "f1",
+        slug: "sigep-rush",
+        path: "/f/sigep-rush",
+        is_open: true,
+        ask_referrer: false,
+        blurb: null,
+        questions: [],
+      },
+      labels: [],
+    };
+    vi.mocked(useLocalSearchParams).mockReturnValue({});
+    const settings = screenText(render(<ChapterSettingsScreen />));
+    const modules = settings.slice(at(settings, "\nModules"));
+    expect(modules).toContain("Recruitment");
+    expect(modules).not.toContain("Points");
+
+    const text = screenText(screen("rush"));
+    expect(text).toContain("Interest form\nOpen");
+    expect(text).toContain("Your role can't switch modules on or off.");
+    expect(screenText(screen("rush", "interest-form"))).toContain(
+      "Taking interest",
+    );
+    // Any other module is still closed to them.
+    expect(screenText(screen("points"))).toContain(
+      "Your role can't open this page.",
+    );
+  });
+
+  it("sends no Recruitment read to a viewer without rush:view, the module on", () => {
+    h.permissions = ["chapter-config:view", "chapter-config:manage"];
+    h.config = { ...h.config, enabled_modules: { rush: true } };
+    const text = screenText(screen("rush"));
+    expect(text).not.toContain("Interest form");
+    for (const reads of [
+      h.rushPipelineEnabled,
+      h.rushSettingsEnabled,
+      h.formEnabled,
+    ]) {
+      expect(reads.length).toBeGreaterThan(0);
+      expect(reads.every((enabled) => enabled === false)).toBe(true);
+    }
+    expect(screenText(screen("rush", "stages"))).toContain("Recruitment");
+  });
+
+  it("sends no settings or form read with Recruitment off", () => {
+    screen("rush");
+    expect(h.rushSettingsEnabled.every((enabled) => enabled === false)).toBe(
+      true,
+    );
+    expect(h.formEnabled.every((enabled) => enabled === false)).toBe(true);
+  });
+
+  it("leaves out Meetings' sections without members:view, sending no read", () => {
+    h.permissions = ["chapter-config:view", "chapter-config:manage"];
+    expect(screenText(screen("meetings"))).not.toContain(
+      "Sections in the minutes",
+    );
+    expect(screenText(screen("meetings", "sections"))).not.toContain("TL;DR");
+    expect(h.templateReads).toBe(0);
+  });
+
+  it("sets the goal for everyone without members:view, keeping roles set apart", async () => {
+    h.permissions = ["chapter-config:view", "chapter-config:manage"];
+    const tree = screen("hours", "goal-service");
+    expect(screenText(tree)).not.toContain("Social chair");
+    const everyone = () => field(tree, "Service hours goal, hours");
+    act(() => everyone().props.onFocus());
+    act(() => everyone().props.onChangeText("30"));
+    await act(async () => everyone().props.onBlur());
+    expect(h.setGoals).toHaveBeenCalledWith({
+      everyone: 1800,
+      roles: [{ role_id: "r-social", target: 600 }],
+    });
+  });
+
+  it("tells only a tool's holder that it's on the web, and only while the module is on", () => {
+    h.permissions = READER;
+    expect(screenText(screen("points"))).not.toContain(
+      MODULE_TOOLS_ON_WEB.points!.line,
+    );
+    h.permissions = [...READER, "points:view_all"];
+    expect(screenText(screen("points"))).toContain(
+      MODULE_TOOLS_ON_WEB.points!.line,
+    );
+    h.config = { ...h.config, enabled_modules: { points: false } };
+    expect(screenText(screen("points"))).not.toContain(
+      MODULE_TOOLS_ON_WEB.points!.line,
+    );
+    h.config = { ...h.config, enabled_modules: { geofences: true } };
+    expect(screenText(screen("geofences"))).not.toContain(
+      MODULE_TOOLS_ON_WEB.geofences!.line,
+    );
+  });
+});
+
+describe("saving on its own (#6030 review)", () => {
+  it("builds a second goal save on the first, so quick removes don't undo each other", async () => {
+    h.goals = {
+      ...h.goals,
+      service: {
+        everyone: 1200,
+        roles: [
+          { role_id: "r-social", target: 600 },
+          { role_id: "r-member", target: 300 },
+        ],
+      },
+    };
+    let land!: () => void;
+    h.setGoals.mockImplementationOnce(
+      () => new Promise((resolve) => (land = () => resolve({}))),
+    );
+    const tree = screen("hours", "goal-service");
+    await act(async () => {
+      pressable(
+        tree,
+        "Remove Social chair's own service hours goal",
+      ).props.onPress();
+      pressable(tree, "Remove Member's own service hours goal").props.onPress();
+    });
+    expect(h.setGoals).toHaveBeenCalledTimes(1);
+    await act(async () => land());
+    expect(h.setGoals).toHaveBeenLastCalledWith({ everyone: 1200, roles: [] });
+  });
+
+  it("keeps the number just typed while its save is out", async () => {
+    let land!: () => void;
+    h.setGoals.mockImplementationOnce(
+      () => new Promise((resolve) => (land = () => resolve({}))),
+    );
+    const tree = screen("points", "goal-points");
+    const goal = () => field(tree, "Points goal, points");
+    act(() => goal().props.onFocus());
+    act(() => goal().props.onChangeText("150"));
+    await act(async () => goal().props.onBlur());
+    expect(goal().props.value).toBe("150");
+    h.goals = { ...h.goals, points: { everyone: 150, roles: [] } };
+    await act(async () => land());
+    expect(goal().props.value).toBe("150");
+    expect(screenText(tree)).toContain("Saved");
+  });
+
+  it("sends a refused tag rename again from the field", async () => {
+    h.config = { ...h.config, enabled_modules: { rush: true } };
+    h.pipeline = {
+      stale_days: 7,
+      stages: [],
+      tags: [{ id: "g1", label: "legacy" }],
+    };
+    h.renameTag.mockImplementation((_input, options) =>
+      options?.onError?.(new Error("taken")),
+    );
+    const tree = screen("rush", "tags");
+    const name = () => field(tree, "Name of legacy");
+    act(() => name().props.onChangeText("athlete"));
+    act(() => name().props.onSubmitEditing());
+    act(() => name().props.onBlur());
+    expect(h.renameTag).toHaveBeenCalledTimes(1);
+    act(() => name().props.onFocus());
+    act(() => name().props.onSubmitEditing());
+    expect(h.renameTag).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Recruitment's editors (#6030 review)", () => {
+  const STAGES = [
+    { id: "s0", label: "New", category: "new", hidden: false, position: 0 },
+    {
+      id: "s1",
+      label: "Met",
+      category: "contacted",
+      hidden: false,
+      position: 0,
+    },
+    {
+      id: "s2",
+      label: "Called",
+      category: "contacted",
+      hidden: false,
+      position: 1,
+    },
+    {
+      id: "s9",
+      label: "Closed",
+      category: "closed",
+      hidden: false,
+      position: 0,
+    },
+  ];
+  const body = (rows: typeof STAGES) =>
+    rows.map(({ id, label, category, hidden }) => ({
+      id,
+      label,
+      category,
+      hidden,
+    }));
+
+  beforeEach(() => {
+    h.config = { ...h.config, enabled_modules: { rush: true } };
+    h.pipeline = { stale_days: 7, stages: STAGES, tags: [] };
+  });
+
+  it("hides a stage from the board", () => {
+    const tree = screen("rush", "stages");
+    act(() =>
+      toggle(tree, "Show Called on the board").props.onValueChange(false),
+    );
+    expect(h.saveStages).toHaveBeenCalledWith(
+      body([
+        STAGES[0]!,
+        STAGES[1]!,
+        { ...STAGES[2]!, hidden: true },
+        STAGES[3]!,
+      ]),
+      expect.anything(),
+    );
+  });
+
+  it("moves a stage within its group for a screen reader", () => {
+    const tree = screen("rush", "stages");
+    const row = tree.root.find(
+      (node) =>
+        Array.isArray(node.props.accessibilityActions) &&
+        node.props.accessibilityActions.some(
+          (action: { name: string }) => action.name === "moveDown",
+        ),
+    );
+    act(() =>
+      row.props.onAccessibilityAction({
+        nativeEvent: { actionName: "moveDown" },
+      }),
+    );
+    expect(h.saveStages).toHaveBeenCalledWith(
+      body([STAGES[0]!, STAGES[2]!, STAGES[1]!, STAGES[3]!]),
+      expect.anything(),
+    );
+  });
+
+  const FORM = {
+    offered: true,
+    form: {
+      id: "f1",
+      slug: "sigep-rush",
+      path: "/f/sigep-rush",
+      is_open: false,
+      ask_referrer: true,
+      blurb: "Come meet us",
+      questions: [
+        { id: "q1", type: "short_answer", title: "Hometown", required: false },
+      ],
+    },
+    labels: [
+      { id: "l1", label: "tabling-quad", path: "/f/sigep-rush?l=tabling-quad" },
+    ],
+  };
+
+  it("opens the form, and replaces it only after asking", async () => {
+    h.form = FORM;
+    const alert = vi
+      .spyOn(Alert, "alert")
+      .mockImplementation((_title, _body, buttons) =>
+        buttons?.[1]?.onPress?.(),
+      );
+    const tree = screen("rush", "interest-form");
+    const text = screenText(tree);
+    for (const part of [
+      "Your questions",
+      "Hometown",
+      "tabling-quad",
+      "Replace form",
+    ]) {
+      expect(text).toContain(part);
+    }
+    act(() => toggle(tree, "Taking interest").props.onValueChange(true));
+    expect(h.updateForm).toHaveBeenCalledWith(
+      { is_open: true },
+      expect.anything(),
+    );
+    await act(async () => pressable(tree, "Replace form").props.onPress());
+    expect(alert).toHaveBeenCalled();
+    expect(h.replaceForm).toHaveBeenCalled();
+  });
+
+  it("saves a question's new title as the whole list", () => {
+    h.form = FORM;
+    const tree = screen("rush", "question-q1");
+    const title = () => field(tree, "Question");
+    act(() => title().props.onChangeText("Where are you from?"));
+    act(() => title().props.onBlur());
+    expect(h.updateForm).toHaveBeenCalledWith(
+      {
+        questions: [
+          {
+            id: "q1",
+            type: "short_answer",
+            title: "Where are you from?",
+            required: false,
+          },
+        ],
+      },
+      expect.anything(),
+    );
+  });
+
+  it("adds a new question to the end once it has a title", () => {
+    h.form = FORM;
+    const tree = screen("rush", "question-new");
+    act(() => field(tree, "Question").props.onChangeText("Sport"));
+    act(() => field(tree, "Question").props.onBlur());
+    const sent = h.updateForm.mock.calls.at(-1)![0] as {
+      questions: { title: string }[];
+    };
+    expect(sent.questions.map((question) => question.title)).toEqual([
+      "Hometown",
+      "Sport",
+    ]);
   });
 });

@@ -8,12 +8,16 @@ import {
 } from "@repo/hooks";
 import { toRoleOptions } from "@repo/hooks/chapter-roles";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { goalPerUnit, goalSummary } from "@repo/hooks/module-settings";
+import {
+  goalSummary,
+  goalToStored,
+  goalToTyped,
+  goalTypedMax,
+} from "@repo/hooks/module-settings";
 import {
   GOAL_METRIC_COPY,
   GOAL_PAGE_COPY,
   GOAL_ROLE_LIMIT,
-  GOAL_TARGET_MAX,
   GOALS_FOOTNOTE,
   ROLE_CANT_CHANGE_THESE,
   goalRoleHint,
@@ -78,31 +82,38 @@ export function ModuleGoalsSection({
   );
 }
 
-/** The goal as typed, in the unit its row shows. */
-const shown = (metric: GoalMetric, stored: number | null) =>
-  stored === null ? null : Math.round(stored / goalPerUnit(metric));
-const toStored = (metric: GoalMetric, typed: number | null) =>
-  typed === null ? null : typed * goalPerUnit(metric);
-
-/** One measure's screen, pushed from its Goals row. */
+/**
+ * One measure's screen, pushed from its Goals row. A role's own goal needs
+ * the chapter's roles, which `GET /v1/roles` reads for `members:view`; a
+ * viewer without it sets the goal for everyone, and the roles set apart are
+ * kept as they are.
+ */
 export function GoalPage({
   metric,
   canManage,
+  canSeeRoles,
 }: {
   metric: GoalMetric;
   canManage: boolean;
+  canSeeRoles: boolean;
 }) {
   const { tokens } = useFrappTheme();
   const goals = useChapterGoals();
-  const roles = useRoles();
+  const roles = useRoles({ enabled: canSeeRoles });
   const save = useSetChapterGoals(metric);
+  // One save at a time, each built on the one before it: every row sends the
+  // whole goal, so two saves built on the same read would undo each other.
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const lastSent = useRef<GoalSet | null>(null);
+  const pending = useRef(0);
   const addSheet = useRef<BottomSheetModal>(null);
   // Roles added here and not yet given a number: they show as empty rows and
   // save once one is typed. One left empty was never sent.
   const [added, setAdded] = useState<readonly string[]>([]);
   const copy = GOAL_METRIC_COPY[metric];
 
-  if (goals.isError || roles.isError) {
+  const rolesFailed = canSeeRoles && roles.isError;
+  if (goals.isError || rolesFailed) {
     return (
       <ErrorState
         title="Couldn't load the goals"
@@ -115,7 +126,7 @@ export function GoalPage({
       />
     );
   }
-  if (!goals.data || !roles.data) {
+  if (!goals.data || (canSeeRoles && !roles.data)) {
     return (
       <SkeletonRegion label="Loading the goals">
         <ListSection>
@@ -128,37 +139,51 @@ export function GoalPage({
   }
 
   const saved: GoalSet = goals.data[metric];
-  const roleOptions = toRoleOptions(roles.data);
+  const roleOptions = canSeeRoles ? toRoleOptions(roles.data) : [];
   const nameOf = new Map(roleOptions.map((role) => [role.id, role.name]));
-  const max = Math.floor(GOAL_TARGET_MAX[metric] / goalPerUnit(metric));
+  const max = goalTypedMax(metric);
   const savedRoleIds = saved.roles.map((goal) => goal.role_id);
   const pendingIds = added.filter((id) => !savedRoleIds.includes(id));
-  const rowIds = [...savedRoleIds, ...pendingIds];
+  const rowIds = canSeeRoles ? [...savedRoleIds, ...pendingIds] : [];
   const unset = roleOptions.filter((role) => !rowIds.includes(role.id));
 
-  /** The whole goal with one change, as the route takes it. */
-  function send(next: GoalSet) {
-    return save.mutateAsync(next);
+  /**
+   * Saves the whole goal with one change, after any save still out, on top
+   * of what that one sent; with none out, on top of the goal as read.
+   */
+  function update(change: (current: GoalSet) => GoalSet): Promise<unknown> {
+    const read = saved;
+    pending.current += 1;
+    const run = chain.current.then(async () => {
+      const next = change(lastSent.current ?? read);
+      await save.mutateAsync(next);
+      lastSent.current = next;
+    });
+    const settled = run.finally(() => {
+      pending.current -= 1;
+      if (pending.current === 0) lastSent.current = null;
+    });
+    chain.current = settled.catch(() => undefined);
+    return settled;
   }
-  function withRole(roleId: string, typed: number | null): GoalSet {
-    const target = toStored(metric, typed);
-    const has = saved.roles.some((goal) => goal.role_id === roleId);
-    return {
-      everyone: saved.everyone,
-      roles: has
-        ? saved.roles.map((goal) =>
+  function withRole(roleId: string, typed: number | null) {
+    const target = goalToStored(metric, typed);
+    return (current: GoalSet): GoalSet => ({
+      everyone: current.everyone,
+      roles: current.roles.some((goal) => goal.role_id === roleId)
+        ? current.roles.map((goal) =>
             goal.role_id === roleId ? { role_id: roleId, target } : goal,
           )
-        : [...saved.roles, { role_id: roleId, target }],
-    };
+        : [...current.roles, { role_id: roleId, target }],
+    });
   }
   function remove(roleId: string): Promise<unknown> {
     setAdded((prev) => prev.filter((id) => id !== roleId));
     if (!savedRoleIds.includes(roleId)) return Promise.resolve();
-    return send({
-      everyone: saved.everyone,
-      roles: saved.roles.filter((goal) => goal.role_id !== roleId),
-    });
+    return update((current) => ({
+      everyone: current.everyone,
+      roles: current.roles.filter((goal) => goal.role_id !== roleId),
+    }));
   }
 
   return (
@@ -169,13 +194,16 @@ export function GoalPage({
           label={copy.label}
           hint={copy.hint}
           suffix={copy.suffix}
-          value={shown(metric, saved.everyone)}
+          value={goalToTyped(metric, saved.everyone)}
           min={1}
           max={max}
           allowEmpty
           editable={canManage}
           onSave={(typed) =>
-            send({ everyone: toStored(metric, typed), roles: saved.roles })
+            update((current) => ({
+              everyone: goalToStored(metric, typed),
+              roles: current.roles,
+            }))
           }
         />
         {rowIds.map((roleId) => {
@@ -188,12 +216,12 @@ export function GoalPage({
               label={name}
               hint={goalRoleHint(name)}
               suffix={copy.suffix}
-              value={shown(metric, target)}
+              value={goalToTyped(metric, target)}
               min={1}
               max={max}
               allowEmpty
               editable={canManage}
-              onSave={(typed) => send(withRole(roleId, typed))}
+              onSave={(typed) => update(withRole(roleId, typed))}
               onRemove={
                 canManage
                   ? {

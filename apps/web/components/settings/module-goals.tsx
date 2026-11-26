@@ -7,7 +7,6 @@ import {
   GOAL_PAGE_COPY,
   goalRoleHint,
   GOAL_ROLE_LIMIT,
-  GOAL_TARGET_MAX,
   GOALS_FOOTNOTE,
   type GoalMetric,
 } from "@repo/validation";
@@ -23,8 +22,10 @@ import { ProfileSection } from "@/components/profile/profile-section";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   goalPageId,
-  goalPerUnit,
   goalSummary,
+  goalToStored,
+  goalToTyped,
+  goalTypedMax,
 } from "@repo/hooks/module-settings";
 import {
   NumberRule,
@@ -66,16 +67,12 @@ const METRIC_COPY: Record<
 };
 
 /** Points are stored as points; hours as minutes and typed as whole hours. */
-const perUnit = goalPerUnit;
-const toDraft = (metric: GoalMetric, stored: number | null) =>
-  stored === null ? "" : String(Math.round(stored / perUnit(metric)));
-const maxDraft = (metric: GoalMetric) =>
-  Math.floor(GOAL_TARGET_MAX[metric] / perUnit(metric));
+const toDraft = (metric: GoalMetric, stored: number | null) => {
+  const typed = goalToTyped(metric, stored);
+  return typed === null ? "" : String(typed);
+};
 
 type RoleDraft = { role_id: string; draft: string };
-
-/** The page a Goals row opens (`?page=`, #6030), shared with the phone. */
-export { goalPageId };
 
 /** A goal's page title, the measure's own name. */
 export function goalPageTitle(metric: GoalMetric): string {
@@ -191,7 +188,7 @@ function GoalForm({
   }, [metric, savedKey]);
 
   const nameOf = new Map(roleOptions.map((role) => [role.id, role.name]));
-  const max = maxDraft(metric);
+  const max = goalTypedMax(metric);
 
   /**
    * A target as typed. Empty is "no goal": for everyone, or for a role set
@@ -218,9 +215,7 @@ function GoalForm({
       checked: check(row.role_id, row.draft),
     }));
     if (!all || roleTargets.some((row) => !row.checked)) return;
-    const unit = perUnit(metric);
-    const stored = (value: number | null) =>
-      value === null ? null : value * unit;
+    const stored = (value: number | null) => goalToStored(metric, value);
     const body: GoalSet = {
       everyone: stored(all.value),
       roles: roleTargets.map((row) => ({

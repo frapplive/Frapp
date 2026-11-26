@@ -23,7 +23,6 @@ import {
   RUSH_BID_EXPIRY_DAYS_MAX,
   RUSH_BID_EXPIRY_DAYS_MIN,
   RUSH_SETTINGS_COPY,
-  joinNames,
   rushContactsSkippedLine,
 } from "@repo/validation";
 
@@ -42,9 +41,6 @@ type ChannelOption = {
 };
 
 const TRIGGER = "w-56 max-w-[50vw]";
-
-/** "Ana", "Ana and Ben", "Ana, Ben and Cal". */
-export const namesList = joinNames;
 
 /**
  * The rest of the Recruitment module page (#5973,

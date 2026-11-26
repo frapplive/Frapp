@@ -6,7 +6,11 @@ import {
   goalPageId,
   goalPerUnit,
   goalSummary,
+  goalToStored,
+  goalToTyped,
+  goalTypedMax,
   modulePermissions,
+  moduleScreenTitle,
   permissionOfWhoCanPage,
   whoCanHolders,
   whoCanPageId,
@@ -142,5 +146,32 @@ describe("goal pages (#6030)", () => {
   it("types points as points and hours as minutes", () => {
     expect(goalPerUnit("points")).toBe(1);
     expect(goalPerUnit("service")).toBe(60);
+  });
+});
+
+describe("goal arithmetic and module screen titles (#6030)", () => {
+  it("never reads an inherited key as a goal page", () => {
+    expect(goalMetricOfPage("goal-toString")).toBeNull();
+    expect(goalMetricOfPage("goal-constructor")).toBeNull();
+  });
+
+  it("types hours as whole hours and stores them as minutes", () => {
+    expect(goalToTyped("service", 1230)).toBe(21);
+    expect(goalToStored("service", 21)).toBe(1260);
+    expect(goalToTyped("points", null)).toBeNull();
+    expect(goalTypedMax("points")).toBeGreaterThan(goalTypedMax("study"));
+  });
+
+  it("titles a module's screen and each of its own screens", () => {
+    expect(moduleScreenTitle("points")).toBe("Points");
+    expect(moduleScreenTitle("points", "goal-points")).toBe("Points goal");
+    expect(moduleScreenTitle("points", "goal-service")).toBe("Points");
+    expect(moduleScreenTitle("meetings", "sections")).toBe(
+      "Sections in the minutes",
+    );
+    expect(moduleScreenTitle("rush", "question-q1")).toBe("Question");
+    expect(moduleScreenTitle("rush", "nowhere")).toBe("Recruitment");
+    expect(moduleScreenTitle("dues")).toBeNull();
+    expect(moduleScreenTitle("nope")).toBeNull();
   });
 });

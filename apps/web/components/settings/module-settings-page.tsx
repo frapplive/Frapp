@@ -7,7 +7,11 @@ import {
   permissionOfWhoCanPage,
   type ModuleSettings,
 } from "@repo/hooks/module-settings";
-import { MODULE_ALWAYS_ON, moduleSwitchLine } from "@repo/validation";
+import {
+  MODULE_ALWAYS_ON,
+  moduleSwitchLine,
+  moduleTierLabel,
+} from "@repo/validation";
 import { Badge } from "@/components/ui/badge";
 import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
@@ -15,10 +19,7 @@ import {
   ModuleWhoCanGroup,
   WhoCanPermissionPage,
 } from "@/components/settings/module-who-can";
-import {
-  moduleTierKind,
-  moduleTierLabel,
-} from "@/components/settings/settings-status";
+import { moduleTierKind } from "@/components/settings/settings-status";
 
 /** A page one of the module page's rows opens (`?page=<id>`). */
 export type ModulePage = {

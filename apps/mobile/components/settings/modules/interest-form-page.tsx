@@ -1,4 +1,4 @@
-import { forwardRef, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { Share, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
@@ -58,6 +58,9 @@ import {
   typeRole,
   useFrappTheme,
 } from "@/lib/theme";
+
+/** How long "Copied" stands in for a link's address. */
+const COPIED_HOLD_MS = 1500;
 
 /** The public form lives on the web app (`/f/<slug>`, ADR-27). */
 const formUrl = (path: string) => `${webAppOrigin()}${path}`;
@@ -129,7 +132,15 @@ function FormSettings({
   const qrSheet = useRef<BottomSheetModal>(null);
   const [qr, setQr] = useState<{ title: string; path: string } | null>(null);
   const [failed, setFailed] = useState<Failure>(null);
+  // The link just copied reads "Copied" for a moment, then its address again.
   const [copied, setCopied] = useState<string | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
   const muted = tokens.color.text.mutedForeground;
   const questions = form.questions as InterestFormQuestion[];
 
@@ -161,13 +172,27 @@ function FormSettings({
           {
             key: "share",
             label: "Share link",
-            run: () => void Share.share({ message: url, url }),
+            run: () =>
+              void Share.share({ message: url, url }).catch(() =>
+                setFailed({ part: key, message: "Couldn't share the link." }),
+              ),
           },
           {
             key: "copy",
             label: COPY.copyLink,
             run: () =>
-              void Clipboard.setStringAsync(url).then(() => setCopied(key)),
+              void Clipboard.setStringAsync(url)
+                .then(() => {
+                  setCopied(key);
+                  if (copyTimer.current) clearTimeout(copyTimer.current);
+                  copyTimer.current = setTimeout(
+                    () => setCopied(null),
+                    COPIED_HOLD_MS,
+                  );
+                })
+                .catch(() =>
+                  setFailed({ part: key, message: "Couldn't copy the link." }),
+                ),
           },
           {
             key: "qr",
@@ -216,6 +241,8 @@ function FormSettings({
         <ListRow
           label={COPY.link}
           value={copied === "main" ? COPY.copied : shownUrl(form.path)}
+          description={lineFor("main")}
+          descriptionTone={toneFor("main")}
           accessibilityHint="Opens share, copy and the QR code."
           onPress={(event) =>
             linkMenu("main", COPY.defaultQr, form.path, event)
@@ -283,6 +310,8 @@ function FormSettings({
             key={row.id}
             label={row.label}
             value={copied === row.id ? COPY.copied : null}
+            description={lineFor(row.id)}
+            descriptionTone={toneFor(row.id)}
             accessibilityHint="Opens share, copy and the QR code."
             onPress={(event) =>
               linkMenu(

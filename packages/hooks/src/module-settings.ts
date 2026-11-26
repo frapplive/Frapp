@@ -1,6 +1,11 @@
 import { MODULE_CATALOG } from "@repo/org-archetypes";
 import {
+  GOAL_METRIC_COPY,
+  GOAL_TARGET_MAX,
+  INTEREST_FORM_SETTINGS_COPY,
+  MEETING_SECTIONS_COPY,
   PERMISSION_REGISTRY,
+  RUSH_SETTINGS_COPY,
   RETIRED_PERMISSIONS,
   isBetaOffModule,
   type GoalMetric,
@@ -87,6 +92,35 @@ export function goalPerUnit(metric: GoalMetric): number {
   return GOAL_UNIT[metric].per;
 }
 
+/** A goal as typed: points as points, hours as whole hours; `null` is none. */
+export function goalToTyped(
+  metric: GoalMetric,
+  stored: number | null,
+): number | null {
+  return stored === null ? null : Math.round(stored / goalPerUnit(metric));
+}
+
+/** A typed goal as the API stores it: hours go back to minutes. */
+export function goalToStored(
+  metric: GoalMetric,
+  typed: number | null,
+): number | null {
+  return typed === null ? null : typed * goalPerUnit(metric);
+}
+
+/** The largest goal that can be typed, in the unit its row is typed in. */
+export function goalTypedMax(metric: GoalMetric): number {
+  return Math.floor(GOAL_TARGET_MAX[metric] / goalPerUnit(metric));
+}
+
+/** The measures each module's Goals group holds, in its rows' order. */
+export const MODULE_GOAL_METRICS: Readonly<
+  Record<string, readonly GoalMetric[]>
+> = {
+  points: ["points"],
+  hours: ["service", "study"],
+};
+
 /** The page a Goals row opens: `goal-points`. */
 export function goalPageId(metric: GoalMetric): string {
   return `goal-${metric}`;
@@ -98,7 +132,7 @@ export function goalMetricOfPage(
 ): GoalMetric | null {
   if (!page?.startsWith("goal-")) return null;
   const metric = page.slice("goal-".length);
-  return metric in GOAL_UNIT ? (metric as GoalMetric) : null;
+  return Object.hasOwn(GOAL_UNIT, metric) ? (metric as GoalMetric) : null;
 }
 
 /**
@@ -310,4 +344,46 @@ export function modulePermissions(
     (entry) =>
       entry.module === moduleKey && !RETIRED_PERMISSIONS.has(entry.permission),
   );
+}
+
+/** A question's own screen under Recruitment's interest form: `question-<id>`. */
+export const INTEREST_QUESTION_PAGE = "question-";
+
+/**
+ * What a module's screen is titled on the phone (#6030): the module's name,
+ * or the name of one of its screens (`page`), the same words web titles its
+ * pages with. The phone's back control over one of these screens reads it
+ * too. `null` for a module there is no page for; a page it doesn't know is
+ * the module itself, as the screen shows it.
+ */
+export function moduleScreenTitle(
+  key: string,
+  page?: string | null,
+): string | null {
+  const module = isBetaOffModule(key) ? undefined : moduleSettingsFor(key);
+  if (!module) return null;
+  if (!page) return module.label;
+  const permission = permissionOfWhoCanPage(page);
+  if (permission) {
+    return (
+      modulePermissions(key).find((entry) => entry.permission === permission)
+        ?.label ?? module.label
+    );
+  }
+  const metric = goalMetricOfPage(page);
+  if (metric) {
+    return MODULE_GOAL_METRICS[key]?.includes(metric)
+      ? GOAL_METRIC_COPY[metric].label
+      : module.label;
+  }
+  if (key === "meetings" && page === "sections") {
+    return MEETING_SECTIONS_COPY.title;
+  }
+  if (key === "rush") {
+    if (page === "interest-form") return INTEREST_FORM_SETTINGS_COPY.title;
+    if (page.startsWith(INTEREST_QUESTION_PAGE)) return "Question";
+    if (page === "stages") return RUSH_SETTINGS_COPY.stages.title;
+    if (page === "tags") return RUSH_SETTINGS_COPY.tags.title;
+  }
+  return module.label;
 }

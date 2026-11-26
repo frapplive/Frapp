@@ -60,6 +60,8 @@ import {
   resolveSettingsTabParam,
 } from "@/components/settings/settings-rail";
 import {
+  MODULE_GOAL_METRICS,
+  goalPageId,
   isModuleSettingsTab,
   shownModuleSettings,
 } from "@repo/hooks/module-settings";
@@ -109,7 +111,6 @@ import {
 import {
   ModuleGoals,
   ModuleGoalsGroup,
-  goalPageId,
   goalPageTitle,
 } from "@/components/settings/module-goals";
 import {
@@ -621,7 +622,7 @@ function SettingsPageContent() {
           onPatch={patchRules}
         />,
       );
-      goalsFor(["service", "study"]);
+      goalsFor(MODULE_GOAL_METRICS.hours!);
     } else if (key === "points" && canViewConfig) {
       rules = renderConfigGated(
         <PointsRules
@@ -631,7 +632,7 @@ function SettingsPageContent() {
           onPatch={patchRules}
         />,
       );
-      goalsFor(["points"]);
+      goalsFor(MODULE_GOAL_METRICS.points!);
     } else if (key === "dues" && canViewConfig) {
       rules = renderConfigGated(
         <div className="space-y-4">

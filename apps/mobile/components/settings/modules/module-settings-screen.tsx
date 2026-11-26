@@ -7,9 +7,12 @@ import {
   useMyPermissions,
 } from "@repo/hooks";
 import {
+  INTEREST_QUESTION_PAGE,
+  MODULE_GOAL_METRICS,
   goalMetricOfPage,
   goalPageId,
   modulePermissions,
+  moduleScreenTitle,
   moduleSettingsFor,
   permissionOfWhoCanPage,
   whoCanPageId,
@@ -18,18 +21,14 @@ import {
 import { RUSH_READ_NOTES } from "@repo/hooks/rush-notes-access";
 import { errorCopy } from "@repo/hooks/error-copy";
 import {
-  GOAL_METRIC_COPY,
   INTEREST_FORM_SETTINGS_COPY,
-  MEETING_SECTIONS_COPY,
   MODULE_ALWAYS_ON,
   MODULE_TOOLS_ON_WEB,
-  RUSH_SETTINGS_COPY,
   can,
   isBetaOffModule,
   isModuleEnabled,
   moduleSwitchLine,
   moduleTierLabel,
-  type GoalMetric,
   type PatchChapterConfig,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -71,15 +70,6 @@ import { Toggle } from "@/components/toggle";
 import { firstParam } from "@/lib/route-params";
 import { useChapterTab } from "@/lib/settings/chapter-tab";
 import { typeRole, useFrappTheme } from "@/lib/theme";
-
-/** The measures each module's Goals group holds. */
-const GOAL_METRICS: Readonly<Record<string, readonly GoalMetric[]>> = {
-  points: ["points"],
-  hours: ["service", "study"],
-};
-
-/** A question's own screen under the Interest form: `question-<id>`. */
-const QUESTION_PAGE = "question-";
 
 /**
  * One module's screen in the phone's Chapter settings (#6030), web's module
@@ -126,14 +116,6 @@ export function ModuleSettingsScreen() {
       </ScreenShell>
     );
   }
-  if (permissionsQuery.data && !tab.access.chapter) {
-    return (
-      <ScreenShell back={BACK_TO_CHAPTER_SETTINGS} title={module.label}>
-        <InlineNote>Your role can&apos;t open this page.</InlineNote>
-      </ScreenShell>
-    );
-  }
-
   const permissions = tab.permissions;
   const config = tab.orgConfig.data;
   const on = config?.enabled_modules
@@ -141,6 +123,18 @@ export function ModuleSettingsScreen() {
     : isModuleEnabled(tab.chapterQuery.data?.enabled_modules, key);
   const canSeeWhoCan = can("members:view", permissions);
   const rushReads = on && rushPipelineAccess(permissions).view;
+  // A recruitment chair without `chapter-config:view` still runs the
+  // interest form, stages and tags from the phone (#5977): Recruitment's
+  // screen opens for them with its own rows, its switch read-only, and none
+  // of what reads the chapter's config.
+  const rushOnly = !tab.access.chapter && key === "rush" && rushReads;
+  if (permissionsQuery.data && !tab.access.chapter && !rushOnly) {
+    return (
+      <ScreenShell back={BACK_TO_CHAPTER_SETTINGS} title={module.label}>
+        <InlineNote>Your role can&apos;t open this page.</InlineNote>
+      </ScreenShell>
+    );
+  }
   const open = (next: string) =>
     router.push({
       pathname: "/module-settings",
@@ -152,8 +146,10 @@ export function ModuleSettingsScreen() {
   };
   const patch = (diff: PatchChapterConfig) => tab.patchConfig.mutateAsync(diff);
 
-  // A screen of the module's, where this viewer may open it.
-  const subpage = ((): { title: string; body: ReactNode } | null => {
+  // A screen of the module's, where this viewer may open it, titled as the
+  // back control over it names it (`moduleScreenTitle`).
+  const title = moduleScreenTitle(key, page) ?? module.label;
+  const subpageBody = ((): ReactNode | null => {
     if (!page) return null;
     const permission = permissionOfWhoCanPage(page);
     if (permission) {
@@ -161,76 +157,72 @@ export function ModuleSettingsScreen() {
         ? modulePermissions(key).find((each) => each.permission === permission)
         : undefined;
       if (!entry) return null;
-      return {
-        title: entry.label,
-        body: (
-          <WhoCanPermissionPage
-            permission={entry.permission}
-            canEdit={can("roles:manage", permissions)}
-            note={
-              entry.permission === RUSH_READ_NOTES ? (
-                <RushNotesAccess
-                  canEditRoles={can("roles:manage", permissions)}
-                />
-              ) : undefined
-            }
-          />
-        ),
-      };
+      return (
+        <WhoCanPermissionPage
+          permission={entry.permission}
+          canEdit={can("roles:manage", permissions)}
+          note={
+            entry.permission === RUSH_READ_NOTES ? (
+              <RushNotesAccess
+                canEditRoles={can("roles:manage", permissions)}
+              />
+            ) : undefined
+          }
+        />
+      );
     }
     const metric = goalMetricOfPage(page);
     if (metric) {
-      if (!GOAL_METRICS[key]?.includes(metric)) return null;
-      return {
-        title: GOAL_METRIC_COPY[metric].label,
-        body: <GoalPage metric={metric} canManage={tab.canManage} />,
-      };
+      if (rushOnly || !MODULE_GOAL_METRICS[key]?.includes(metric)) return null;
+      return (
+        <GoalPage
+          metric={metric}
+          canManage={tab.canManage}
+          canSeeRoles={canSeeWhoCan}
+        />
+      );
     }
+    // The template's read needs `members:view` (`MeetingController`).
     if (key === "meetings" && page === "sections") {
-      return {
-        title: MEETING_SECTIONS_COPY.title,
-        body: <MeetingSectionsPage canManage={tab.canManage} />,
-      };
+      return canSeeWhoCan ? (
+        <MeetingSectionsPage canManage={tab.canManage} />
+      ) : null;
     }
     // Recruitment's reads are refused with the module off or without
     // `rush:view`, so its screens exist only where their rows do.
     if (key !== "rush" || !rushReads) return null;
     if (page === "interest-form") {
-      return {
-        title: INTEREST_FORM_SETTINGS_COPY.title,
-        body: (
-          <InterestFormPage
-            onOpenQuestion={(id) => open(`${QUESTION_PAGE}${id}`)}
-          />
-        ),
-      };
+      return (
+        <InterestFormPage
+          onOpenQuestion={(id) => open(`${INTEREST_QUESTION_PAGE}${id}`)}
+        />
+      );
     }
-    if (page.startsWith(QUESTION_PAGE)) {
-      return {
-        title: "Question",
-        body: (
-          <InterestQuestionPage
-            questionId={page.slice(QUESTION_PAGE.length)}
-            onGone={() => router.back()}
-          />
-        ),
-      };
+    if (page.startsWith(INTEREST_QUESTION_PAGE)) {
+      return (
+        <InterestQuestionPage
+          questionId={page.slice(INTEREST_QUESTION_PAGE.length)}
+          onGone={() => router.back()}
+        />
+      );
     }
-    if (page === "stages") {
-      return {
-        title: RUSH_SETTINGS_COPY.stages.title,
-        body: <RushStagesPage onDragging={setDragging} />,
-      };
-    }
-    if (page === "tags") {
-      return { title: RUSH_SETTINGS_COPY.tags.title, body: <RushTagsPage /> };
-    }
+    if (page === "stages") return <RushStagesPage onDragging={setDragging} />;
+    if (page === "tags") return <RushTagsPage />;
     return null;
   })();
 
-  if (subpage) {
+  // The module's own rows wait on the chapter's config; a recruitment chair's
+  // read none of it.
+  const wrap = (body: ReactNode) =>
+    rushOnly ? (
+      body
+    ) : (
+      <ChapterPageState query={tab.orgConfig}>{body}</ChapterPageState>
+    );
+
+  if (subpageBody) {
     // A question's screen goes back to the Interest form under it.
-    const under: BackTarget = page?.startsWith(QUESTION_PAGE)
+    const under: BackTarget = page?.startsWith(INTEREST_QUESTION_PAGE)
       ? {
           label: INTEREST_FORM_SETTINGS_COPY.title,
           href: {
@@ -242,12 +234,12 @@ export function ModuleSettingsScreen() {
     return (
       <ScreenShell
         back={under}
-        title={subpage.title}
+        title={title}
         scrollEnabled={!dragging}
         keyboardShouldPersistTaps="handled"
         avoidKeyboard
       >
-        {subpage.body}
+        {subpageBody}
       </ScreenShell>
     );
   }
@@ -255,65 +247,70 @@ export function ModuleSettingsScreen() {
   return (
     <ScreenShell
       back={BACK_TO_CHAPTER_SETTINGS}
-      title={module.label}
+      title={title}
       subtitle={moduleTierLabel(module.tier)}
       keyboardShouldPersistTaps="handled"
       avoidKeyboard
     >
-      <ChapterPageState query={tab.orgConfig}>
-        <ModuleSwitch
-          module={module}
-          on={on}
-          canManage={tab.canManage}
-          patch={patch}
-        />
-        {key === "points" ? (
-          <PointsRules
-            config={config}
+      {wrap(
+        <>
+          <ModuleSwitch
+            module={module}
+            on={on}
             canManage={tab.canManage}
             patch={patch}
           />
-        ) : null}
-        {key === "hours" ? (
-          <ServiceHoursRules
-            config={config}
-            canManage={tab.canManage}
-            patch={patch}
-          />
-        ) : null}
-        {key === "meetings" ? (
-          <MeetingSectionsRow onOpen={() => open("sections")} />
-        ) : null}
-        {key === "rush" ? (
-          <RushModuleSettings
-            permissions={permissions}
-            moduleOn={on}
-            canSeeRoles={canSeeWhoCan}
-            onOpen={open}
-          />
-        ) : null}
-        {key === "announcements" ? (
-          <AnnouncementsChannelSection
-            canOpen={can("channels:manage", permissions)}
-          />
-        ) : null}
-        {key === "geofences" ? (
-          <StudyZonesRow show={on && canSeeWhoCan} />
-        ) : null}
-        {GOAL_METRICS[key] ? (
-          <ModuleGoalsSection
-            metrics={GOAL_METRICS[key]!}
-            onOpen={(metric) => open(goalPageId(metric))}
-          />
-        ) : null}
-        {canSeeWhoCan ? (
-          <ModuleWhoCanSection
-            moduleKey={key}
-            onOpen={(permission) => open(whoCanPageId(permission))}
-          />
-        ) : null}
-        <ToolsOnWeb moduleKey={key} on={on} permissions={permissions} />
-      </ChapterPageState>
+          {key === "points" ? (
+            <PointsRules
+              config={config}
+              canManage={tab.canManage}
+              patch={patch}
+            />
+          ) : null}
+          {key === "hours" ? (
+            <ServiceHoursRules
+              config={config}
+              canManage={tab.canManage}
+              patch={patch}
+            />
+          ) : null}
+          {key === "meetings" && canSeeWhoCan ? (
+            <MeetingSectionsRow onOpen={() => open("sections")} />
+          ) : null}
+          {key === "rush" ? (
+            <RushModuleSettings
+              permissions={permissions}
+              moduleOn={on}
+              canSeeRoles={canSeeWhoCan}
+              onOpen={open}
+            />
+          ) : null}
+          {key === "announcements" ? (
+            <AnnouncementsChannelSection
+              canOpen={can("channels:manage", permissions)}
+            />
+          ) : null}
+          {key === "geofences" ? (
+            <StudyZonesRow
+              show={on && canSeeWhoCan}
+              drawsZones={can("geofences:manage", permissions)}
+            />
+          ) : null}
+          {MODULE_GOAL_METRICS[key] ? (
+            <ModuleGoalsSection
+              metrics={MODULE_GOAL_METRICS[key]!}
+              onOpen={(metric) => open(goalPageId(metric))}
+            />
+          ) : null}
+          {canSeeWhoCan ? (
+            <ModuleWhoCanSection
+              moduleKey={key}
+              onOpen={(permission) => open(whoCanPageId(permission))}
+            />
+          ) : null}
+          <ToolsOnWeb moduleKey={key} on={on} permissions={permissions} />
+        </>,
+      )}
     </ScreenShell>
   );
 }
@@ -385,13 +382,22 @@ function ModuleSwitch({
  * on, so it isn't asked otherwise. Moved here from Chapter settings' Chapter
  * group, where it sat before the phone had module screens.
  */
-function StudyZonesRow({ show }: { show: boolean }) {
+function StudyZonesRow({
+  show,
+  drawsZones,
+}: {
+  show: boolean;
+  /** Holds `geofences:manage`, the web tool's gate: told where zones are drawn. */
+  drawsZones: boolean;
+}) {
   const zonesQuery = useGeofences({ enabled: show });
   if (!show) return null;
   const zones = zonesQuery.data as unknown;
   const count = Array.isArray(zones) ? zones.length : null;
   return (
-    <ListSection footnote={MODULE_TOOLS_ON_WEB.geofences!.line}>
+    <ListSection
+      footnote={drawsZones ? MODULE_TOOLS_ON_WEB.geofences!.line : null}
+    >
       <ListRow
         label="Zones"
         variant="detail"

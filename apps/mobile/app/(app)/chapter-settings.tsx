@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, type ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
+  rushPipelineAccess,
   useAiChapterSettings,
   useAiConsent,
   useCategories,
@@ -184,6 +185,11 @@ export default function ChapterSettingsScreen() {
   );
 
   const readOnlyLine = canEditProfile ? null : CHAPTER_TAB_COPY.rowReadOnly;
+  // Recruitment's screen reads only what `rush:view` opens, with the module
+  // on, so a chair without the config key still reaches its interest form.
+  const recruitmentChair =
+    rushPipelineAccess(tab.permissions).view &&
+    isModuleEnabled(chapterQuery.data?.enabled_modules, "rush");
 
   return (
     <ScreenShell
@@ -466,14 +472,18 @@ export default function ChapterSettingsScreen() {
             <PeopleSection searching={search.searching} placements={[]} />
           )
         ) : null}
-        {access.chapter && !search.searching ? (
+        {search.searching || !tab.chapterFeatures ? null : (
           <ModulesSection
             enabledModules={
               orgConfig.data?.enabled_modules ??
               chapterQuery.data?.enabled_modules
             }
+            // A council's config route refuses it (#5933), so it has none.
+            // A recruitment chair without `chapter-config:view` gets
+            // Recruitment alone, for the interest form (#5977).
+            only={access.chapter ? null : recruitmentChair ? ["rush"] : []}
           />
-        ) : null}
+        )}
         {/* Where the phone stops (Shawn, 2026-11-22): Plan and billing, the
             semester, privacy, pledge classes, member fields and the officer
             tools are web's Settings, which an officer sets up once, at a
@@ -501,15 +511,22 @@ export default function ChapterSettingsScreen() {
  */
 function ModulesSection({
   enabledModules,
+  only,
 }: {
   enabledModules: Record<string, boolean> | null | undefined;
+  /** The modules this viewer may open, or `null` for every one. */
+  only: readonly string[] | null;
 }) {
   const router = useRouter();
+  const modules = shownModuleSettings().filter(
+    (module) => only === null || only.includes(module.key),
+  );
+  if (modules.length === 0) return null;
   return (
     <>
       <SectionHeader>Modules</SectionHeader>
       <ListSection>
-        {shownModuleSettings().map((module) => (
+        {modules.map((module) => (
           <SettingAnchor key={module.key} id={`module-${module.key}`}>
             <ListRow
               label={module.label}
