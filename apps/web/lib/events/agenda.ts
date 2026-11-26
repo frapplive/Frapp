@@ -13,12 +13,7 @@ import {
 } from "@repo/hooks/calendar-tasks";
 import { addDays } from "@repo/hooks/calendar-time-grid";
 import type { EventListEntry } from "@repo/hooks/event-series";
-import {
-  addEventDays,
-  eventDaySpan,
-  eventIsDated,
-  eventTimingFieldsOf,
-} from "@repo/validation";
+import { eventDatedDays, eventTimingFieldsOf } from "@repo/validation";
 
 /**
  * The days (`YYYY-MM-DD`) an all-day or time-TBD event is on, first to last
@@ -28,16 +23,10 @@ import {
  */
 export function datedEventDays(event: unknown): string[] | null {
   if (!event || typeof event !== "object") return null;
-  const shape = eventTimingFieldsOf(event as Record<string, unknown>);
-  if (!eventIsDated(shape) || !shape.start_date) return null;
-  const span = eventDaySpan(shape);
-  if (span < 1) return null;
-  const days: string[] = [];
-  for (let offset = 0; offset < span; offset += 1) {
-    const day = addEventDays(shape.start_date, offset);
-    if (day) days.push(day);
-  }
-  return days;
+  const days = eventDatedDays(
+    eventTimingFieldsOf(event as Record<string, unknown>),
+  );
+  return days.length > 0 ? days : null;
 }
 
 /**
