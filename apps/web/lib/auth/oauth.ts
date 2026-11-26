@@ -23,10 +23,10 @@ export type OAuthProvider = "apple" | "google";
  * method that already owns that email.
  */
 export const IDENTITY_COLLISION_COPY =
-  "An account with this email already exists. Sign in with your password or a magic link. Google or Apple can attach to that same account on later visits.";
+  "An account with this email already exists. Sign in with your password or an email code. Google or Apple can attach to that same account on later visits.";
 
 export const OAUTH_UNAVAILABLE_COPY =
-  "This sign-in method isn't available yet. Use your password or a magic link.";
+  "This sign-in method isn't available yet. Use your password or an email code.";
 
 /**
  * A refused Google or Apple start, in the shared auth map's words

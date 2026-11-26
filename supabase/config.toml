@@ -30,13 +30,18 @@ enable_signup = true
 double_confirm_changes = false
 enable_confirmations = false
 
-# Prints the 6-digit code beside the link, as the hosted templates do
-# (docs/ops/deployment/supabase.md § Both templates print the 6-digit code), so
-# the invite card's email code works on the local stack. Local confirmations are
-# off, so Magic Link is the only template a sign-in sends here.
+# Every Auth email carries only the 6-digit code (#6134), as the hosted
+# templates do (docs/ops/deployment/supabase.md § Auth email templates: a
+# 6-digit code, no link). Local confirmations are off, so Magic Link is the
+# template a sign-in sends here; Confirm signup is set too, for a local run
+# with `enable_confirmations = true`.
 [auth.email.template.magic_link]
 subject = "Sign in to Frapp"
 content_path = "./supabase/templates/magic-link.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your Frapp account"
+content_path = "./supabase/templates/confirmation.html"
 
 # Stamps the active chapter into every issued access token as the
 # `active_chapter_id` claim, which ChapterGuard treats as authoritative per
