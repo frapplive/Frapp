@@ -2,20 +2,23 @@
 name: handoff
 description: >
   Draft the prompt that hands work to a fresh Claude Code session — queued as a suggested task where
-  the session has that tool, otherwise a copy-pasteable block — for when this session's context is
+  the session has that tool, started as its own cloud session where it has `create_session`,
+  otherwise a copy-pasteable block — for when this session's context is
   filling up, when a task is finishing and the next one should start clean, when a parallel
   workstream should run in its own chat, or when an idea or bug needs researching and defining before
   anyone builds it. Offer this proactively; do not wait to be asked.
 argument-hint: "[continue|next|parallel|walkthrough|research] [<what the new session should pick up>]"
-allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *)
+allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *), mcp__claude-code-remote__create_session
 ---
 
 # Hand this work to a fresh session
 
 A fresh session is often more capable on the same task than a long one whose context is full of
 dead ends and superseded plans; it only needs orientation. This skill produces that orientation as
-a suggested task the user starts with one click, or, where the session lacks that tool, as one fenced
-block the user pastes into a new chat.
+a suggested task the user starts with one click; where the session lacks that tool but has
+`create_session`, as a cloud session this one starts itself once the user says go; otherwise as one
+fenced block the user pastes into a new chat (Paul, 2026-11-25: start those chats yourself rather
+than handing over a block to paste).
 
 ## Write orientation, not instructions
 
@@ -46,14 +49,16 @@ Offer it in one sentence, without stopping work, when:
   this chat investigating inline or letting it drop. Don't file it first; the research session files.
 
 For example: *"This is a good handoff point — want me to draft a prompt for a fresh session?"* Run
-the skill if they say yes, and don't repeat the offer.
+the skill if they say yes, and don't repeat the offer. Where the session would start the chat itself
+(§ Start it yourself), offer that instead: *"want me to start a fresh session for this?"*
 
 Where the session has the suggested-task tool, the card can be the offer: the user starts or
 dismisses it. Queue it once and say so in one line, and don't queue it again after a dismissal.
 Whether a card is worth queuing at all is the judgment in
 [`AGENTS.md` § Operating mindset](../../../AGENTS.md#operating-mindset). A `continue` card hands
 this task over, so queue it when this session stops working the task, not while it carries on; two
-sessions on one branch collide.
+sessions on one branch collide. A `continue` session started with `create_session` holds to the same
+rule (§ Start it yourself).
 
 ## Modes
 
@@ -121,7 +126,48 @@ because the user does the work.
 When a card goes stale (the work landed here, or a better-scoped card replaces it), withdraw it with
 `dismiss_task`. A card the user already started or dismissed stays as they left it.
 
-Without the tool, emit the block below.
+## Start it yourself where you can't queue a card
+
+A cloud session without `spawn_task` usually has `create_session` (the `claude-code-remote` MCP
+server), which starts a new Claude Code session at once. Use it in place of the block:
+
+- **Only on the user's go to start one.** A card waits for a click; a session starts working the
+  moment it's created and spends the user's budget. So the offer says what happens ("want me to
+  start a fresh session for this?"), and only a yes to that is the go: the user picking a fresh
+  session on an AskUserQuestion card, or saying "hand it off". A yes to drafting a prompt isn't one.
+  An unattended run starts none, and never two for one piece of work. The coordinator's 50%-context
+  self-handoff is its own rule and starts its successor without asking
+  ([`coordinator`](../coordinator/SKILL.md) § Context: hand off at 50%).
+- **A `continue` handoff ends this session's work on the task**, as a `continue` card does: two
+  sessions on one branch collide. Stop working the task, `unsubscribe_pr_activity` from its PR so
+  its events wake the successor's subscription instead, then start the session. The successor
+  subscribes itself.
+- `prompt`: the seven items below, in the same order, without the outer fence. It is all the new
+  session gets.
+- `title`: a short imperative phrase, under 60 characters, as a card's.
+- `source_url`: the repository's URL as `git remote get-url origin` gives it. `source_revision`: the
+  pushed branch the work builds on, or `main` when it starts clean. Work this session hasn't pushed
+  can't reach it. Unfinished work pushed only to hand it over is a parking push, so it goes up with
+  `--no-verify` rather than spending the branch's one review on half the change
+  ([`AGENTS.md` § Claude Code web sandbox](../../../AGENTS.md#claude-code-web-sandbox)); then item 3
+  says the branch's first push bypassed the gate, so the successor runs `/diff-review` before its PR
+  opens.
+- `tags`: the issue it carries, such as `issue:6030`.
+- `model` and `permission_mode` default to this session's, so leave them unset unless the user named
+  them. `effort` isn't inherited: unset, the new session runs at the default level
+  ([`agent-infra.md`](../../../docs/ci-cd/agent-infra.md) measured this 2026-11-09), so set it only
+  when the user named one.
+
+It starts now, so a handoff that must wait says so in its prompt rather than in its timing. For
+example, a phone PR that builds on a web PR still open builds on that PR's head branch and opens its
+own PR only once the first merges, as [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)'s
+one-open-PR-per-screen rule says.
+
+Then tell the user in one line that it's started, with the session's title, and don't also emit the
+block. The new session reports in its own chat; don't poll it. Archive it (`archive_session`) only
+when the user asks.
+
+Without either tool, emit the block below.
 
 ## Emit exactly one fenced block
 
