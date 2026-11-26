@@ -454,14 +454,15 @@ describe("DashboardShell", () => {
       expect(popover.querySelector("[data-channel-list-slot]")).not.toBeNull();
     });
 
-    it("holds a gated row's place while permissions are read, so nothing below it moves (#3854)", () => {
+    it("leaves no gap where a gated row will go while permissions are read (#6121)", () => {
       setWindowWidth(1440);
       mockPermissions.value = undefined;
       shell();
       expect(
         within(primary()).queryByRole("link", { name: "Directory" }),
       ).toBeNull();
-      expect(primary().querySelector("[data-nav-placeholder]")).not.toBeNull();
+      expect(primary().querySelector("[data-nav-placeholder]")).toBeNull();
+      expect(primary().querySelector(".skeleton-shimmer")).toBeNull();
     });
 
     it("draws the chapter as a label at the head, with the bell and the collapse control, and no chapter menu", () => {
