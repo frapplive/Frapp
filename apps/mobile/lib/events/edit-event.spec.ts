@@ -372,3 +372,33 @@ describe("editing an all-day, time-TBD or tentative event (#6098)", () => {
     expect(patch).not.toHaveProperty("point_value");
   });
 });
+
+describe("duplicating an all-day event (#6098)", () => {
+  const allDayOn = (start_date: string, end_date: string | null = null) =>
+    ({
+      ...EVENT,
+      start_time: `${start_date}T05:00:00.000Z`,
+      end_time: `${start_date}T05:00:00.000Z`,
+      timing: "all_day",
+      start_date,
+      end_date,
+    }) as EventDetail;
+
+  it("keeps today's all-day event on today, even after 7 PM", () => {
+    const late = new Date(2026, 10, 20, 21, 30);
+    const draft = duplicateEventTemplate(allDayOn("2026-11-20"), late);
+    expect(draft.start?.getDate()).toBe(20);
+    expect(draft.start?.getMonth()).toBe(10);
+  });
+
+  it("moves a past one on by whole weeks, its last day with it", () => {
+    const now = new Date(2026, 10, 20, 9, 0);
+    const draft = duplicateEventTemplate(
+      allDayOn("2026-11-12", "2026-11-14"),
+      now,
+    );
+    // Thursday the 12th → Thursday the 26th, the first week on not reaching today.
+    expect(draft.start?.getDate()).toBe(26);
+    expect(draft.lastDay).toBe("2026-11-28");
+  });
+});

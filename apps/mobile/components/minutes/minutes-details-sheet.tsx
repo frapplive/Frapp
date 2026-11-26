@@ -19,9 +19,12 @@ import {
   MINUTES_READ_COPY,
   STANDARDS_MEETING_NOTE,
   eventInvitedRoleNames,
+  eventIsDated,
+  eventTimingFieldsOf,
   type MeetingType,
 } from "@repo/validation";
 import { WhenRow } from "@/components/events/when-times";
+import { minutesEventPatch } from "@/lib/minutes/minutes-event-edit";
 import { Segmented } from "@/components/segmented";
 import {
   SHEET_STACK_BEHAVIOR,
@@ -150,15 +153,22 @@ function DetailsForm({
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const now = new Date();
+  // An all-day or time-TBD event keeps its days here: no time fields, and a
+  // rename sends the name alone (#6098). The minutes carry no timing, so
+  // it is read off the event.
+  const dated =
+    !!event.data &&
+    eventIsDated(eventTimingFieldsOf(event.data as Record<string, unknown>));
+  const eventPatch = minutesEventPatch(
+    { name, start, end },
+    { name: meeting.event_name, start: startAt, end: endAt },
+    dated,
+  );
 
   const nameMissing = canEditEvent && name.trim().length === 0;
   const endBeforeStart =
-    canEditEvent && !!end && end.getTime() <= start.getTime();
-  const eventChanged =
-    canEditEvent &&
-    (name.trim() !== meeting.event_name ||
-      start.getTime() !== startAt.getTime() ||
-      (!!end && end.getTime() !== endAt?.getTime()));
+    canEditEvent && !dated && !!end && end.getTime() <= start.getTime();
+  const eventChanged = canEditEvent && Object.keys(eventPatch).length > 0;
   const typeChanged =
     type !== meeting.meeting_type ||
     (type === "other" && otherLabel.trim() !== (meeting.other_label ?? ""));
@@ -190,11 +200,7 @@ function DetailsForm({
       if (eventChanged && meeting.event_id) {
         await updateEvent.mutateAsync({
           id: meeting.event_id,
-          body: {
-            name: name.trim(),
-            start_time: start.toISOString(),
-            ...(end ? { end_time: end.toISOString() } : {}),
-          },
+          body: eventPatch,
         });
       }
       if (typeChanged) {
@@ -239,35 +245,39 @@ function DetailsForm({
               ]}
             />
           </View>
-          <View style={styles.group}>
-            <Text style={styles.label}>{copy.when}</Text>
-            <WhenRow
-              label={copy.starts}
-              value={start}
-              now={now}
-              minimumDate={EARLIEST}
-              disabled={saving}
-              onChange={(next) => {
-                // The meeting keeps its length when its start moves.
-                if (end) {
-                  setEnd(
-                    new Date(end.getTime() + next.getTime() - start.getTime()),
-                  );
-                }
-                setStart(next);
-              }}
-            />
-            {end ? (
+          {dated ? null : (
+            <View style={styles.group}>
+              <Text style={styles.label}>{copy.when}</Text>
               <WhenRow
-                label={copy.ends}
-                value={end}
+                label={copy.starts}
+                value={start}
                 now={now}
                 minimumDate={EARLIEST}
                 disabled={saving}
-                onChange={setEnd}
+                onChange={(next) => {
+                  // The meeting keeps its length when its start moves.
+                  if (end) {
+                    setEnd(
+                      new Date(
+                        end.getTime() + next.getTime() - start.getTime(),
+                      ),
+                    );
+                  }
+                  setStart(next);
+                }}
               />
-            ) : null}
-          </View>
+              {end ? (
+                <WhenRow
+                  label={copy.ends}
+                  value={end}
+                  now={now}
+                  minimumDate={EARLIEST}
+                  disabled={saving}
+                  onChange={setEnd}
+                />
+              ) : null}
+            </View>
+          )}
         </>
       ) : null}
       <View style={styles.group}>

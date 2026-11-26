@@ -7,7 +7,8 @@ import { eventTakesAttendance, type EventTimingFields } from "@repo/validation";
  * - **On the calendar only:** it's there for information, so nothing about
  *   attending: no check-in, no points, no roster to mark and no excuses.
  *   Who's coming reads "On the calendar only for everyone".
- * - **Time TBD:** no check-in until its time is set (the API refuses one).
+ * - **Time TBD:** the same until its time is set: no check-in, points,
+ *   roster or excuses (the API refuses each with a 409).
  * - **Tentative:** a neutral chip beside the name.
  */
 export interface EventPageShows {
@@ -19,12 +20,15 @@ export interface EventPageShows {
 }
 
 export function eventPageShows(event: EventTimingFields): EventPageShows {
-  const calendarOnly = event.calendar_only === true;
+  // One rule for all four: an event that takes no attendance (on the
+  // calendar only, or time TBD) has nothing to check in to, earn, mark or
+  // be excused from; the API answers 409 to each.
+  const takes = eventTakesAttendance(event);
   return {
-    checkIn: eventTakesAttendance(event),
-    points: !calendarOnly,
-    roster: !calendarOnly,
-    excuses: !calendarOnly,
+    checkIn: takes,
+    points: takes,
+    roster: takes,
+    excuses: takes,
     tentative: event.is_tentative === true,
   };
 }

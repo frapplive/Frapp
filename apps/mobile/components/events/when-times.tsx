@@ -264,6 +264,7 @@ export function WhenFields({
   onEnd,
   onLastDay,
   onTentative,
+  datedAllowed = true,
   platform = Platform.OS,
 }: {
   timing: EventTiming;
@@ -280,15 +281,25 @@ export function WhenFields({
   onEnd: (next: Date) => void;
   onLastDay: (next: string | null) => void;
   onTentative: (next: boolean) => void;
+  /**
+   * Whether All day and Time TBD are offered (`datedTimingEditable`): not on
+   * a series' head, which holds the repeat rule, since a repeating event
+   * stays timed. A shape already held stays offered so it reads true.
+   */
+  datedAllowed?: boolean;
   platform?: string;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
+  const options = TIMING_OPTIONS.filter(
+    (option) =>
+      datedAllowed || option.value === "timed" || option.value === timing,
+  );
   return (
     <View style={styles.stack}>
       <Segmented
         accessibilityLabel="When it happens"
-        options={TIMING_OPTIONS}
+        options={options}
         value={timing}
         onChange={onTiming}
         disabled={disabled}

@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { localIsoDate, parseInstant } from "@repo/formatting";
+import { eventChipWords, localIsoDate, parseInstant } from "@repo/formatting";
 import { useRequiredOfViewer } from "@repo/hooks";
 import {
   calendarItemDueMinute,
@@ -41,6 +41,7 @@ import {
   longPressOf,
   type ItemMenuHandle,
 } from "@/components/item-actions-menu";
+import { HairlineChip } from "@/components/status-chip";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { splitForTimeGrid } from "@/lib/events/event-days";
 import { formatEventClock } from "@/lib/events/format";
@@ -49,11 +50,11 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const GUTTER = 44;
 
-/** What the strip says an event's when is, spoken: "all day", "time TBD". */
+/** What the strip says an event's when is: "All day" or "Time TBD". */
 function allDayWhen(event: EventRow): string {
   return eventTiming(event) === "time_tbd"
     ? EVENT_TIME_TBD_LABEL
-    : EVENT_ALL_DAY_LABEL.toLowerCase();
+    : EVENT_ALL_DAY_LABEL;
 }
 
 function longDay(day: Date): string {
@@ -152,11 +153,12 @@ export function EventsTimeGrid({
   const blockBorder = (event: EventRow) =>
     requiredOf(event.attendance) ? accent : tokens.color.border.control;
   // The accent edge is what marks a required event to the eye; a screen
-  // reader hears it, as web's grid says it.
-  const required = (event: EventRow) =>
-    requiredOf(event.attendance) ? ", required" : "";
-  const tentative = (event: EventRow) =>
-    event.is_tentative ? `, ${EVENT_TENTATIVE_LABEL.toLowerCase()}` : "";
+  // reader hears it, in the words web's grid says (`eventChipWords`).
+  const chipWords = (event: EventRow, when: string | null) =>
+    eventChipWords(event.name, when, {
+      required: requiredOf(event.attendance),
+      tentative: event.is_tentative === true,
+    });
 
   return (
     <View style={styles.root}>
@@ -198,7 +200,7 @@ export function EventsTimeGrid({
               <Pressable
                 key={event.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${event.name}, ${allDayWhen(event)}${tentative(event)}${required(event)}`}
+                accessibilityLabel={chipWords(event, allDayWhen(event)).label}
                 onPress={() => onOpen(event.id)}
                 {...eventLongPress(event)}
                 style={({ pressed }) => [
@@ -207,15 +209,20 @@ export function EventsTimeGrid({
                   pressed ? styles.pressed : null,
                 ]}
               >
-                <Text numberOfLines={1} style={styles.blockName}>
+                <Text numberOfLines={1} style={styles.allDayName}>
                   {event.name}
-                  {/* A time not set yet says so in the strip (#6098). */}
+                  {/* A time not set yet says so in the strip (#6098); the
+                      strip already says All day. */}
                   {eventTiming(event) === "time_tbd" ? (
                     <Text style={styles.blockTime}>
                       {` · ${EVENT_TIME_TBD_LABEL}`}
                     </Text>
                   ) : null}
                 </Text>
+                {/* It might not happen: neutral, as web's strip. */}
+                {event.is_tentative ? (
+                  <HairlineChip label={EVENT_TENTATIVE_LABEL} />
+                ) : null}
               </Pressable>
             ))}
             {tasks.map((item) => (
@@ -314,7 +321,7 @@ export function EventsTimeGrid({
                   key={event.id}
                   testID={`time-grid-block-${event.id}-${key}`}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${event.name}, ${clock}${tentative(event)}${required(event)}`}
+                  accessibilityLabel={chipWords(event, clock || null).label}
                   onPress={() => onOpen(event.id)}
                   {...eventLongPress(event)}
                   style={({ pressed }) => [
@@ -458,6 +465,9 @@ function createStyles(tokens: SignetTokens) {
       paddingTop: 3,
     },
     allDayChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing.xs,
       paddingHorizontal: 4,
       paddingVertical: 3,
       borderRadius: 4,
@@ -497,6 +507,11 @@ function createStyles(tokens: SignetTokens) {
       borderColor: tokens.color.surface.background,
       backgroundColor: tokens.color.surface.surface1,
       overflow: "hidden",
+    },
+    allDayName: {
+      flex: 1,
+      ...typeRole({ ...caption, weight: tokens.typography.weight.semibold }),
+      color: tokens.color.text.foreground,
     },
     blockName: {
       ...typeRole({ ...caption, weight: tokens.typography.weight.semibold }),

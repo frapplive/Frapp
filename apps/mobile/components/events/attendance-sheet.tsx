@@ -78,12 +78,21 @@ export interface AttendanceSheetProps {
    * stays visible (`attendanceChoices`).
    */
   allowRequired?: boolean;
+  /**
+   * Whether Everyone else offers On the calendar only (`calendarOnlyEditable`):
+   * not on a meeting of a series the form can't change as a whole. An event
+   * already on the calendar only keeps the answer so it reads true.
+   */
+  calendarOnlyAllowed?: boolean;
 }
 
 export const AttendanceSheet = forwardRef<
   BottomSheetModal,
   AttendanceSheetProps
->(function AttendanceSheet({ value, onChange, allowRequired = true }, ref) {
+>(function AttendanceSheet(
+  { value, onChange, allowRequired = true, calendarOnlyAllowed = true },
+  ref,
+) {
   const backgroundStyle = useSheetBackgroundStyle();
   const tall = useTallSheetProps();
   const close = useSheetClose(ref);
@@ -105,6 +114,7 @@ export const AttendanceSheet = forwardRef<
         value={value}
         onChange={onChange}
         allowRequired={allowRequired}
+        calendarOnlyAllowed={calendarOnlyAllowed}
         onDone={close}
       />
     </BottomSheetModal>
@@ -117,6 +127,7 @@ interface AttendanceBodyProps {
   value: EventAttendanceDraft;
   onChange: (next: EventAttendanceDraft) => void;
   allowRequired: boolean;
+  calendarOnlyAllowed: boolean;
   onDone: () => void;
 }
 
@@ -124,6 +135,7 @@ function AttendanceBody({
   value,
   onChange,
   allowRequired,
+  calendarOnlyAllowed,
   onDone,
 }: AttendanceBodyProps) {
   const { tokens } = useFrappTheme();
@@ -190,7 +202,7 @@ function AttendanceBody({
             attendanceAnswerChoices(
               value,
               { kind: "everyone" },
-              { allowRequired, calendarOnlyAllowed: true },
+              { allowRequired, calendarOnlyAllowed },
             ),
           )}
           value={everyone}
@@ -280,7 +292,7 @@ function AttendanceBody({
                     { kind: "role", current },
                     {
                       allowRequired,
-                      calendarOnlyAllowed: true,
+                      calendarOnlyAllowed,
                       floor: attendanceFloorOf(value, item.tierEntry),
                     },
                   ),

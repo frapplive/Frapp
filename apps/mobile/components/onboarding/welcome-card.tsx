@@ -8,12 +8,11 @@ import {
   useCurrentUser,
   useEvents,
 } from "@repo/hooks";
-import { formatEventRelativeWhen } from "@repo/formatting";
+import { formatEventRelativeWhen, formatEventWhenOr } from "@repo/formatting";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
   WELCOME_CARD_COPY,
-  eventIsDated,
-  eventTimingFieldsOf,
+  type EventTimingFields,
   welcomeCardEventWhen,
   welcomeCardEvents,
   welcomeCardTitle,
@@ -25,7 +24,7 @@ import { selectViewerProfile } from "@/lib/more/profile";
 import { clearWelcomeDue, isWelcomeDue } from "@/lib/onboarding/welcome-due";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
-type EventRow = {
+type EventRow = EventTimingFields & {
   id: string;
   name: string;
   start_time: string;
@@ -38,13 +37,11 @@ type EventRow = {
  * as the card has always said it.
  */
 function eventWhen(event: EventRow, now: Date): string {
-  const shape = eventTimingFieldsOf(
-    event as unknown as Record<string, unknown>,
+  return formatEventWhenOr(
+    event,
+    (start) => welcomeCardEventWhen(start, now),
+    (shape) => formatEventRelativeWhen(shape, now),
   );
-  if (eventIsDated(shape)) {
-    return formatEventRelativeWhen(shape, now) ?? "";
-  }
-  return welcomeCardEventWhen(event.start_time, now);
 }
 
 /**

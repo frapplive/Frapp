@@ -23,10 +23,12 @@ describe("what Event details draws for an event's shape (#6098)", () => {
     });
   });
 
-  it("offers no check-in until a time-TBD event has a time", () => {
+  it("offers nothing to attend until a time-TBD event has a time", () => {
     expect(eventPageShows({ timing: "time_tbd" })).toMatchObject({
       checkIn: false,
-      roster: true,
+      points: false,
+      roster: false,
+      excuses: false,
     });
   });
 

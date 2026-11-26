@@ -32,7 +32,9 @@ import {
 } from "@repo/hooks";
 import {
   addEventDays,
+  calendarOnlyEditable,
   canAll,
+  datedTimingEditable,
   EVENT_CREATE_PERMISSIONS,
   deleteOffersSeriesChoice,
   describeAttendance,
@@ -920,6 +922,8 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
               onEnd={setEnd}
               onLastDay={(lastDay) => update({ lastDay }, ["end"])}
               onTentative={(tentative) => update({ tentative }, [])}
+              // A series' head stays timed; a new event may be anything.
+              datedAllowed={editing ? datedTimingEditable(editing.event) : true}
             />
           </View>
           {errors.start ? (
@@ -1274,6 +1278,10 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
           value={draft.attendance}
           onChange={(attendance) => update({ attendance }, ["attendance"])}
           allowRequired={setsRequirements}
+          // On the calendar only is the whole series' or nothing.
+          calendarOnlyAllowed={
+            editing ? calendarOnlyEditable(editing, at) : true
+          }
         />
       </>
     );

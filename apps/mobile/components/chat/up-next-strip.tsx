@@ -6,6 +6,7 @@ import {
   formatClockShort,
   formatDayHeading,
   formatEventRelativeWhen,
+  formatEventWhenOr,
   parseInstant,
   parseInstantOrBareLocalNoon,
   isDueOverdue,
@@ -284,9 +285,11 @@ export function UpNextStrip({
 
   // A dated event by its day ("Tomorrow · All day"), never a midnight.
   const eventTime = event
-    ? eventIsDated(event)
-      ? (formatEventRelativeWhen(event, at) ?? "")
-      : formatEventTime(event.start_time, at)
+    ? formatEventWhenOr(
+        event,
+        (start) => formatEventTime(start, at),
+        (shape) => formatEventRelativeWhen(shape, at),
+      )
     : "";
   const taskDue = task ? formatDueDate(task.due_date, at) : "";
 

@@ -1,8 +1,7 @@
 import { localIsoDate, parseInstant } from "@repo/formatting";
 import {
-  addEventDays,
   eventCoversDay,
-  eventDaySpan,
+  eventDatedDays,
   eventIsDated,
   type EventTimingFields,
 } from "@repo/validation";
@@ -24,17 +23,7 @@ import {
 export function eventDayKeys(
   event: EventTimingFields & { start_time?: unknown },
 ): string[] {
-  if (eventIsDated(event)) {
-    const first = event.start_date;
-    const span = eventDaySpan(event);
-    if (!first || span === 0) return [];
-    const keys: string[] = [];
-    for (let offset = 0; offset < span; offset += 1) {
-      const day = addEventDays(first, offset);
-      if (day) keys.push(day);
-    }
-    return keys;
-  }
+  if (eventIsDated(event)) return eventDatedDays(event);
   const start = parseInstant(event.start_time);
   return start ? [localIsoDate(start)] : [];
 }

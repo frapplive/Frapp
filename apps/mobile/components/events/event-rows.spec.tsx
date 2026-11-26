@@ -64,14 +64,16 @@ describe("an event's row under its day (#6098)", () => {
     act(() => tree.unmount());
   });
 
-  it("says a time-TBD event's time is TBD", () => {
+  it("says a time-TBD event's time is TBD, with no points to earn", () => {
     const tree = renderRow({
       ...BASE,
+      point_value: 10,
       timing: "time_tbd",
       start_date: "2026-11-09",
       end_date: null,
     });
     expect(screenText(tree)).toContain("Time TBD");
+    expect(screenText(tree)).not.toContain("10 points");
     act(() => tree.unmount());
   });
 
@@ -87,7 +89,8 @@ describe("an event's row under its day (#6098)", () => {
   });
 
   it("reads a timed event start to end, with no chip", () => {
-    const tree = renderRow(BASE);
+    const tree = renderRow({ ...BASE, point_value: 10 });
+    expect(screenText(tree)).toContain("10 points");
     expect(screenText(tree)).not.toContain("Tentative");
     expect(screenText(tree)).toMatch(/7:00/);
     act(() => tree.unmount());
