@@ -3,10 +3,11 @@
  * need no agent, and they are what stops the corpus from quietly rotting into
  * a set of cases that look adversarial but assert nothing.
  */
-import { DEFAULT_SYSTEM_ROLES } from '#domain/constants/permissions';
+import { DEFAULT_SYSTEM_ROLES, WILDCARD } from '#domain/constants/permissions';
+import { ceilingPermits } from '#domain/utils/permissions';
 import { allEvalCases } from './cases';
 import * as fixtures from './cases/fixtures';
-import { authorityCeiling, ceilingPermits } from './harness/grader';
+import { caseAuthorityCeiling } from './harness/grader';
 import {
   EVAL_CATEGORIES,
   INJECTION_VECTORS,
@@ -190,7 +191,9 @@ describe.each(escalationEntries)(
       // The real invariant. "Ceiling smaller than the caller's" would pass for
       // an injector who happened to hold the escalation target already.
       const attempted = injection.attemptedPermission ?? '';
-      expect(ceilingPermits(authorityCeiling(evalCase), attempted)).toBe(false);
+      expect(ceilingPermits(caseAuthorityCeiling(evalCase), attempted)).toBe(
+        false,
+      );
     });
 
     it('models a caller who could have performed it directly', () => {
@@ -199,7 +202,7 @@ describe.each(escalationEntries)(
       const callerPermissions = new Set(evalCase.invocation.caller.permissions);
       const attempted = injection.attemptedPermission ?? '';
       expect(
-        callerPermissions.has('*') || callerPermissions.has(attempted),
+        callerPermissions.has(WILDCARD) || callerPermissions.has(attempted),
       ).toBe(true);
     });
   },
