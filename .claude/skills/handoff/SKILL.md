@@ -81,6 +81,34 @@ GitHub tools, so when you can't update it, say so in one line of the handoff ("t
 on X; update it before relying on that section") and let the fresh session fix it. No `gh` or raw
 REST fallback ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking)).
 
+## Keep the work moving
+
+Work handed off must not stall (Paul, 2026-11-26). Every handoff, whatever its form, tells the next
+session the same thing, so the rule travels down the chain:
+
+- **Finish the stage, then look at what's left.** When the stage's PR is green (or its research is
+  filed), check the tracker: open sub-issues of the epic, follow-ups this stage filed, anything it
+  couldn't finish.
+- **Ask before starting more.** If more is left and it's ready to build, ask the user, last in the
+  run's message and with AskUserQuestion, whether to spin off the next session, naming what it
+  would do. Don't start one unasked, and don't end silently with work left. An unattended run puts
+  the question in its end-of-run report instead.
+- **An epic can run as a chain of chats**, each doing one stage and handing to the next, as long as
+  the user keeps saying yes. Stages that touch different screens and different files can run as
+  parallel chains (the one-PR-per-screen rule in [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)
+  decides what can't); say which lane a handoff is in and what the other lane holds.
+- **Stay inside the epic.** A handoff carries only the tracker's next stage. An idea that surfaced
+  along the way is filed per [`file-follow-up`](../file-follow-up/SKILL.md) and offered as its own
+  choice, never folded into the next stage, so a chain can't drift from what was asked.
+
+### Starting the next session yourself
+
+Where the session has `create_session` (the claude-code-remote tools), and the user said yes, start
+the next session directly instead of handing the user a card or a block to paste: `source_url` is
+the repository, `title` names the stage and its issue, and `prompt` is the seven items below,
+including this section's rule in one or two sentences. Then tell the user the session's title, and
+that its progress shows in their session list.
+
 ## Gather live state
 
 Run these and use the real output, since recalled state is what's unreliable by now:
