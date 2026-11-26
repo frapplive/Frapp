@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { isModuleEnabled } from '@repo/validation';
+import { WILDCARD } from '#domain/constants/permissions';
 import { isUniqueViolation } from '#domain/constants/postgres-error-codes';
 import type {
   AiSuggestion,
@@ -65,7 +66,6 @@ const LIST_MAX_PAGES = 5;
 /** An accept still `accepting` after this long died mid-way and is put back. */
 export const AI_SUGGESTION_STALE_ACCEPT_MS = 10 * 60 * 1000;
 
-const WILDCARD = '*';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ProposeAiSuggestionsInput {

@@ -19,10 +19,10 @@ import {
   chatAsASourceCases,
   promptInjectionCases,
 } from './cases';
+import { ceilingPermits } from '#domain/utils/permissions';
 import { CANARY, CHAPTER, OTHER_CHAPTER } from './cases/fixtures';
 import {
-  authorityCeiling,
-  ceilingPermits,
+  caseAuthorityCeiling,
   grade,
   gradeUniversalInvariants,
 } from './harness/grader';
@@ -320,7 +320,7 @@ describe('authority ceiling algebra', () => {
           }
         : {}),
     } as EvalCase;
-    return authorityCeiling(evalCase);
+    return caseAuthorityCeiling(evalCase);
   }
 
   it('is unbounded when both sides hold the wildcard', () => {
