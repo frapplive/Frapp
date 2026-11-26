@@ -385,7 +385,103 @@ test("expectedAdminEmail is the From this check compares", async () => {
   assert.doesNotMatch(right.detail, /must-never-appear-in-detail/);
 });
 
-// ── Magic Link template — token_hash on the app host, not ConfirmationURL ──
+// ── Auth emails, staging's default (#6134): a 6-digit code and no link ──
+
+const MAGIC_LINK_CODE_ONLY =
+  "<h2>Sign in to Frapp</h2><p>Your code is <strong>{{ .Token }}</strong>. Enter it where you asked for it. It expires soon.</p><p>If you did not ask to sign in, you can ignore this email.</p>";
+const CONFIRMATION_CODE_ONLY =
+  "<h2>Confirm your email</h2><p>Your code is <strong>{{ .Token }}</strong>. Enter it where you created your account to finish setting it up. It expires soon.</p><p>If you did not create a Frapp account, you can ignore this email.</p>";
+
+const codeOnlyConfig = (overrides = {}) =>
+  ok({
+    smtp_host: "smtp.resend.com",
+    mailer_subjects_magic_link: "Sign in to Frapp",
+    mailer_templates_magic_link_content: MAGIC_LINK_CODE_ONLY,
+    mailer_subjects_confirmation: "Confirm your Frapp account",
+    mailer_templates_confirmation_content: CONFIRMATION_CODE_ONLY,
+    smtp_pass: "must-never-appear-in-detail",
+    ...overrides,
+  });
+
+const codeOnly = (overrides) =>
+  checkAuthMagicLink({
+    accessToken: "t",
+    projectRef: "ref",
+    fetchImpl: async () => codeOnlyConfig(overrides),
+  });
+
+test("code-only Magic Link and Confirm signup pass without leaking smtp_pass or a body", async () => {
+  const result = await codeOnly();
+  assert.equal(result.status, PASS);
+  assert.equal(result.label, "Auth emails carry a 6-digit code and no link");
+  assert.match(result.detail, /code only/);
+  assert.doesNotMatch(result.detail, /must-never-appear-in-detail/);
+  assert.doesNotMatch(result.detail, /Token/);
+});
+
+test("today's token_hash link fails staging, which is code only", async () => {
+  const result = await codeOnly({
+    mailer_templates_magic_link_content:
+      '<p>Your code is {{ .Token }}.</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+  });
+  assert.equal(result.status, FAIL);
+  assert.match(result.detail, /mailer_templates_magic_link_content still builds an auth link/);
+});
+
+test("a Confirm signup body that still links fails, whichever link it is", async () => {
+  for (const link of [
+    '<a href="{{ .ConfirmationURL }}">Confirm</a>',
+    '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm</a>',
+  ]) {
+    const result = await codeOnly({
+      mailer_templates_confirmation_content: `<p>Your code is {{ .Token }}.</p>${link}`,
+    });
+    assert.equal(result.status, FAIL, link);
+    assert.match(result.detail, /mailer_templates_confirmation_content still builds an auth link/);
+  }
+});
+
+test("a template that prints no code fails, and so does an empty one", async () => {
+  const noCode = await codeOnly({ mailer_templates_magic_link_content: "<h2>Sign in to Frapp</h2>" });
+  assert.equal(noCode.status, FAIL);
+  assert.match(noCode.detail, /does not print the 6-digit code/);
+  const empty = await codeOnly({ mailer_templates_confirmation_content: "  " });
+  assert.equal(empty.status, FAIL);
+  assert.match(empty.detail, /mailer_templates_confirmation_content is empty/);
+});
+
+test("the code may be written {{.Token}} without spaces", async () => {
+  const result = await codeOnly({
+    mailer_templates_confirmation_content: "<p>Your code is {{.Token}}.</p>",
+  });
+  assert.equal(result.status, PASS);
+});
+
+test("the Confirm signup subject is pinned, and a body saying Signet fails", async () => {
+  const subject = await codeOnly({ mailer_subjects_confirmation: "Confirm Your Signup" });
+  assert.equal(subject.status, FAIL);
+  assert.match(subject.detail, /mailer_subjects_confirmation is "Confirm Your Signup"/);
+  const signet = await codeOnly({
+    mailer_templates_confirmation_content: "<h2>Welcome to Signet</h2><p>{{ .Token }}</p>",
+  });
+  assert.equal(signet.status, FAIL);
+  assert.match(signet.detail, /still says Signet/);
+  assert.doesNotMatch(signet.detail, /<h2>/);
+});
+
+test("production's transition mode accepts the code-only template too, so the switch stays green", async () => {
+  const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
+    accessToken: "t",
+    projectRef: "ref",
+    fetchImpl: async () => codeOnlyConfig({ mailer_templates_confirmation_content: "" }),
+  });
+  assert.equal(result.status, PASS);
+  assert.match(result.detail, /code only/);
+});
+
+// ── Magic Link template, production's transition shape (#6134): the code-only
+// template, or a token_hash link on the app host, never ConfirmationURL ──
 
 const magicLinkConfig = (overrides = {}) =>
   ok({
@@ -399,6 +495,7 @@ const magicLinkConfig = (overrides = {}) =>
 
 test("Magic Link subject + token_hash href pass without leaking smtp_pass or the body", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () => magicLinkConfig(),
@@ -425,6 +522,7 @@ test("leftoverSignetMailerSubjectKeys names only the Signet inbox titles", () =>
 
 test("a sibling Auth subject that says Signet fails without leaking smtp_pass", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -439,6 +537,7 @@ test("a sibling Auth subject that says Signet fails without leaking smtp_pass", 
 
 test("a Magic Link body still saying Signet fails, even with the Frapp subject and token_hash href", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -455,6 +554,7 @@ test("a Magic Link body still saying Signet fails, even with the Frapp subject a
 
 test("a crest image served under its design-system file name is not a Signet leftover", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -491,6 +591,7 @@ test("the body check fails closed on the product name: comments, Outlook blocks,
     "<h1>SIGNET</h1>",
   ]) {
     const result = await checkAuthMagicLink({
+      allowTransitionLink: true,
       accessToken: "t",
       projectRef: "ref",
       fetchImpl: async () => magicLinkConfig({ mailer_templates_magic_link_content: `${leftover}<h2>Sign in to Frapp</h2>${link}` }),
@@ -504,6 +605,7 @@ test("a Magic Link image whose alt or title says Signet fails; a style block nam
   const link = '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>';
   for (const img of ['<img src="/brand/crest.png" alt="Signet">', '<img src="/brand/crest.png" title="Signet crest">']) {
     const result = await checkAuthMagicLink({
+      allowTransitionLink: true,
       accessToken: "t",
       projectRef: "ref",
       fetchImpl: async () => magicLinkConfig({ mailer_templates_magic_link_content: `${img}<h2>Sign in to Frapp</h2>${link}` }),
@@ -512,6 +614,7 @@ test("a Magic Link image whose alt or title says Signet fails; a style block nam
     assert.match(result.detail, /still says Signet/);
   }
   const styled = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -524,6 +627,7 @@ test("a Magic Link image whose alt or title says Signet fails; a style block nam
 
 test("hosted Magic Link subject fails", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () => magicLinkConfig({ mailer_subjects_magic_link: "Your Magic Link" }),
@@ -534,6 +638,7 @@ test("hosted Magic Link subject fails", async () => {
 
 test("empty Magic Link body fails and names ConfirmationURL", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () => magicLinkConfig({ mailer_templates_magic_link_content: "   " }),
@@ -544,6 +649,7 @@ test("empty Magic Link body fails and names ConfirmationURL", async () => {
 
 test("ConfirmationURL in the Magic Link body fails", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -559,6 +665,7 @@ test("ConfirmationURL in the Magic Link body fails", async () => {
 
 test("type=magiclink without TokenHash fails", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -573,6 +680,7 @@ test("type=magiclink without TokenHash fails", async () => {
 
 test("token_hash without type=magiclink fails", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>
@@ -601,6 +709,7 @@ test("Magic Link check skips without credentials and fails on a non-200", async 
 
 test("the template is asserted when smtp_host is empty", async () => {
   const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
     fetchImpl: async () =>

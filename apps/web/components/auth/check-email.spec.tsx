@@ -1,56 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthApiError } from "@supabase/supabase-js";
 
-const { resend, getSession, onAuthStateChange, authListener, unsubscribe } = vi.hoisted(() => {
-  const authListener: { current: ((event: string, session: unknown) => void) | null } = {
-    current: null,
-  };
-  const unsubscribe = vi.fn();
-  return {
-    resend: vi.fn(async () => ({ data: {}, error: null as unknown })),
-    getSession: vi.fn(async () => ({ data: { session: null as unknown } })),
-    onAuthStateChange: vi.fn((callback: (event: string, session: unknown) => void) => {
-      authListener.current = callback;
-      return { data: { subscription: { unsubscribe } } };
-    }),
-    authListener,
-    unsubscribe,
-  };
-});
+const { resend, verifyOtp, captureException } = vi.hoisted(() => ({
+  resend: vi.fn(async () => ({ data: {}, error: null as unknown })),
+  verifyOtp: vi.fn(async () => ({ data: {}, error: null as unknown })),
+  captureException: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/client", () => ({
   createSupabaseBrowserClient: () => ({
-    auth: { resend, getSession, onAuthStateChange },
+    auth: { resend, verifyOtp },
   }),
 }));
 
+vi.mock("@sentry/nextjs", () => ({ captureException }));
+
 import { CheckEmail, RESEND_COOLDOWN_SECONDS } from "./check-email";
 
-const assign = vi.fn();
+const EMAIL = "new.member@example.com";
 
-function renderPanel(initialCooldownSeconds = 0, onBack = vi.fn()) {
+function renderPanel(
+  options: { cooldown?: number; lead?: string } = {},
+): { onBack: ReturnType<typeof vi.fn>; onConfirmed: ReturnType<typeof vi.fn> } {
+  const onBack = vi.fn();
+  const onConfirmed = vi.fn();
   render(
     <CheckEmail
-      email="new.member@example.com"
+      email={EMAIL}
       redirectTo="/join?token=inv-1"
-      initialCooldownSeconds={initialCooldownSeconds}
+      screen="/sign-up"
+      lead={options.lead}
+      initialCooldownSeconds={options.cooldown ?? 0}
       backLabel="Use a different email"
       onBack={onBack}
+      onConfirmed={onConfirmed}
     />,
   );
-  return { onBack };
+  return { onBack, onConfirmed };
 }
 
-describe("CheckEmail", () => {
+function codeField(): HTMLInputElement {
+  return screen.getByLabelText("6-digit code");
+}
+
+describe("CheckEmail: the confirmation code (#6134)", () => {
   beforeEach(() => {
     resend.mockReset().mockResolvedValue({ data: {}, error: null });
-    getSession.mockReset().mockResolvedValue({ data: { session: null } });
-    onAuthStateChange.mockClear();
-    unsubscribe.mockClear();
-    authListener.current = null;
-    assign.mockReset();
-    vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.frapp.live" });
+    verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+    captureException.mockReset();
+    vi.stubGlobal("location", { ...window.location, origin: "https://app.frapp.live" });
   });
 
   afterEach(() => {
@@ -58,66 +57,87 @@ describe("CheckEmail", () => {
     vi.unstubAllGlobals();
   });
 
-  it("names the address the link went to", () => {
+  it("asks for the code sent to the address, in a field iOS and Android can fill", () => {
     renderPanel();
-    expect(screen.getByText("new.member@example.com")).toBeInTheDocument();
+    expect(screen.getByText(`Enter the 6-digit code we sent to ${EMAIL}.`)).toBeInTheDocument();
+    const field = codeField();
+    expect(field).toHaveAttribute("autocomplete", "one-time-code");
+    expect(field).toHaveAttribute("inputmode", "numeric");
+    expect(field).toHaveFocus();
   });
 
-  it("holds Resend for the minute GoTrue would refuse it, counting down", () => {
-    vi.useFakeTimers();
-    renderPanel(RESEND_COOLDOWN_SECONDS);
-    const button = screen.getByRole("button", { name: /resend email in 60s/i });
-    expect(button).toBeDisabled();
-    act(() => {
-      vi.advanceTimersByTime(1000);
+  it("confirms with the code as soon as six digits are pasted, and carries on", async () => {
+    const { onConfirmed } = renderPanel();
+    fireEvent.change(codeField(), { target: { value: "123 456" } });
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    expect(verifyOtp).toHaveBeenCalledWith({ email: EMAIL, token: "123456", type: "email" });
+  });
+
+  it("clears a wrong code and says so in plain words, without reporting it", async () => {
+    verifyOtp.mockResolvedValue({
+      data: {},
+      error: new AuthApiError("Token has expired or is invalid", 403, "otp_expired"),
     });
-    expect(screen.getByRole("button", { name: /resend email in 59s/i })).toBeDisabled();
-    for (let tick = 0; tick < 59; tick += 1) {
+    const { onConfirmed } = renderPanel();
+    fireEvent.change(codeField(), { target: { value: "111111" } });
+    expect(
+      await screen.findByText("That code didn't work. Use the newest email, or send a new code."),
+    ).toBeInTheDocument();
+    expect(codeField()).toHaveValue("");
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("keeps the code and reports an Auth outage, which isn't the member's code", async () => {
+    verifyOtp.mockResolvedValue({
+      data: {},
+      error: new AuthApiError("upstream", 500, "unexpected_failure"),
+    });
+    renderPanel();
+    fireEvent.change(codeField(), { target: { value: "222222" } });
+    await waitFor(() => expect(captureException).toHaveBeenCalledTimes(1));
+    expect(codeField()).toHaveValue("222222");
+  });
+
+  it("holds Send a new code for the minute GoTrue would refuse it, counting down", () => {
+    vi.useFakeTimers();
+    renderPanel({ cooldown: RESEND_COOLDOWN_SECONDS });
+    expect(screen.getByRole("button", { name: "Send again in 60s" })).toBeDisabled();
+    for (let tick = 0; tick < 60; tick += 1) {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
     }
-    expect(screen.getByRole("button", { name: /^resend email$/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send a new code" })).toBeEnabled();
   });
 
-  it("resends the confirmation to the callback with intent=confirm and `next` kept", async () => {
+  it("resends the confirmation as a signup email and says it went", async () => {
     renderPanel();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^resend email$/i }));
-    });
-    expect(resend).toHaveBeenCalledTimes(1);
-    const [args] = resend.mock.calls[0] as unknown as [
-      { type: string; email: string; options: { emailRedirectTo: string } },
-    ];
-    expect(args.type).toBe("signup");
-    expect(args.email).toBe("new.member@example.com");
-    const link = new URL(args.options.emailRedirectTo);
-    expect(link.pathname).toBe("/auth/callback");
-    expect(link.searchParams.get("next")).toBe("/join?token=inv-1");
-    expect(link.searchParams.get("intent")).toBe("confirm");
-    expect(screen.getByRole("status")).toHaveTextContent(/sent a new link/i);
-    expect(screen.getByRole("button", { name: /resend email in \d+s/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(await screen.findByText(`We sent a new code to ${EMAIL}.`)).toBeInTheDocument();
+    expect(resend).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "signup", email: EMAIL }),
+    );
+    expect(screen.getByRole("button", { name: /Send again in \d+s/ })).toBeDisabled();
   });
 
   it("reads a refused resend inside the minute as 'already sent', not as a failure", async () => {
     resend.mockResolvedValue({
       data: {},
       error: new AuthApiError(
-        "For security purposes, you can only request this after 23 seconds.",
+        "For security purposes, you can only request this after 42 seconds.",
         429,
         "over_email_send_rate_limit",
       ),
     });
     renderPanel();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^resend email$/i }));
-    });
-    expect(screen.getByRole("status")).toHaveTextContent(/just sent you an email/i);
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("We just sent you an email.");
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: /resend email in 23s/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send again in 42s" })).toBeDisabled();
   });
 
-  it("never offers Resend while GoTrue says 'after 0 seconds'", async () => {
+  it("never offers Send a new code while GoTrue says 'after 0 seconds'", async () => {
     resend.mockResolvedValue({
       data: {},
       error: new AuthApiError(
@@ -127,61 +147,8 @@ describe("CheckEmail", () => {
       ),
     });
     renderPanel();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^resend email$/i }));
-    });
-    expect(screen.getByRole("button", { name: /resend email in 1s/i })).toBeDisabled();
-  });
-
-  it("carries on to `redirectTo` when the member comes back signed in", async () => {
-    renderPanel();
-    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
-    await act(async () => {
-      window.dispatchEvent(new Event("focus"));
-    });
-    expect(assign).toHaveBeenCalledWith("/join?token=inv-1");
-  });
-
-  it("carries on when the tab becomes visible again signed in", async () => {
-    renderPanel();
-    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
-    await act(async () => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    expect(assign).toHaveBeenCalledWith("/join?token=inv-1");
-  });
-
-  it("doesn't read the session while the tab is hidden", async () => {
-    renderPanel();
-    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
-    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    await act(async () => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    visibility.mockRestore();
-    expect(getSession).not.toHaveBeenCalled();
-    expect(assign).not.toHaveBeenCalled();
-  });
-
-  it("stops listening once it's gone, so the restored form isn't sent anywhere", async () => {
-    const { unmount } = render(
-      <CheckEmail
-        email="new.member@example.com"
-        redirectTo="/join?token=inv-1"
-        initialCooldownSeconds={0}
-        backLabel="Back"
-        onBack={vi.fn()}
-      />,
-    );
-    unmount();
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
-    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
-    await act(async () => {
-      window.dispatchEvent(new Event("focus"));
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    expect(getSession).not.toHaveBeenCalled();
-    expect(assign).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(await screen.findByRole("button", { name: "Send again in 1s" })).toBeDisabled();
   });
 
   it("says plainly when the hourly email cap refused the resend", async () => {
@@ -190,34 +157,20 @@ describe("CheckEmail", () => {
       error: new AuthApiError("Email rate limit exceeded", 429, "over_email_send_rate_limit"),
     });
     renderPanel();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^resend email$/i }));
-    });
-    expect(screen.getByRole("alert")).toHaveTextContent(/can't send email right now/i);
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByRole("button", { name: /^resend email$/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We can't send email right now. Too many went out in the last hour.",
+    );
   });
 
-  it("stays put when the member comes back still signed out", async () => {
-    renderPanel();
-    await act(async () => {
-      window.dispatchEvent(new Event("focus"));
-    });
-    expect(getSession).toHaveBeenCalled();
-    expect(assign).not.toHaveBeenCalled();
+  it("says where the code came from when the sign-in form found the address unconfirmed", () => {
+    renderPanel({ lead: "Confirm it first." });
+    expect(screen.getByText("Confirm it first.")).toBeInTheDocument();
   });
 
-  it("carries on when the client reports a sign-in", () => {
-    renderPanel();
-    act(() => {
-      authListener.current?.("SIGNED_IN", { access_token: "t" });
-    });
-    expect(assign).toHaveBeenCalledWith("/join?token=inv-1");
-  });
-
-  it("offers the way back", () => {
+  it("goes back with the back label", () => {
     const { onBack } = renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Use a different email" }));
-    expect(onBack).toHaveBeenCalled();
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

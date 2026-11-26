@@ -207,28 +207,28 @@ export const EMAIL_CONFIRMED_AUTH_ERROR = "email_confirmed";
 export function describeAuthError(code: string): string {
   switch (code) {
     case "otp_expired":
-      return "The link has expired. Request a new one below.";
+      return "The link has expired. Email yourself a code below, or sign in with your password.";
     case "access_denied":
-      return "The link was already used or is no longer valid. Request a new one below.";
+      return "The link was already used or is no longer valid. Email yourself a code below, or sign in with your password.";
     case "otp_disabled":
-      return "Email links are switched off for this project. Sign in with your password.";
+      return "Email sign-in is switched off right now. Sign in with your password.";
     case "exchange_failed":
-      return "The link has to be opened in the browser you requested it from. Request a new one here, or sign in with your password.";
+      return "The link has to be opened in the browser you requested it from. Email yourself a code here, or sign in with your password.";
     case "verify_failed":
-      return "The link could not be used. Request a new one below, or sign in with your password.";
+      return "The link could not be used. Email yourself a code below, or sign in with your password.";
     case "missing_code":
-      return "The link was incomplete. Request a new one below.";
+      return "The link was incomplete. Email yourself a code below, or sign in with your password.";
     case EMAIL_CONFIRMED_AUTH_ERROR:
       // Under the toast title "Email confirmed". Says the link didn't sign
       // this browser in, because the same lands for an address confirmed long
       // ago (a magic link on a `ConfirmationURL` template opened elsewhere).
       // Not "with your password" alone: a magic-link account has none.
-      return "This link couldn't sign this browser in. Sign in with your password, or ask for a new magic link.";
+      return "This link couldn't sign this browser in. Sign in with your password, or email yourself a code.";
     case "identity_already_exists":
     case "user_already_exists":
     case "email_exists":
-      return "An account with this email already exists. Sign in with your password or a magic link. Google or Apple can attach to that same account on later visits.";
+      return "An account with this email already exists. Sign in with your password or an email code. Google or Apple can attach to that same account on later visits.";
     default:
-      return "Request a new link below, or sign in with your password.";
+      return "Email yourself a code below, or sign in with your password.";
   }
 }

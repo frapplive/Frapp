@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -22,6 +21,7 @@ import { reportAuthFailure } from "@/lib/sentry/auth-failures";
 import { resolveRedirectPath } from "@/lib/auth/redirect";
 import {
   describeSignUpError,
+  EMAIL_CODE_COPY,
   emailCooldownSeconds,
   isExistingAccountSignUp,
 } from "@repo/hooks/auth-error-copy";
@@ -58,16 +58,14 @@ import {
  * that already has an account: no email goes out, so the member is told to
  * sign in instead. Otherwise the form gives way to "Check your email"
  * (`check-email.tsx`) for that address, which is what every hosted sign-up
- * sees (#3776). Until 2026-11-09 that branch was a toast and a bounce to
- * `/sign-in`, where the member typed the new password into a form that could
- * only refuse it. A refusal inside GoTrue's email minute (the same address
- * resubmitted) returns to "Check your email" too, counting down GoTrue's
- * seconds.
- *
- * The confirmation email's link lands on
- * `/auth/callback?next=<redirectTo>&intent=confirm`
- * (`confirmationRedirectUrl`), which signs the member in and delivers them to
- * `redirectTo` (for an invited member, `/join?token=…`, token intact).
+ * sees (#3776): the 6-digit code from the Confirm signup email, typed here,
+ * confirms the account and signs this tab in, and the member goes on to
+ * `redirectTo` (for an invited member, `/join?token=…`, token intact). Until
+ * #6134 the email carried a link instead, and until 2026-11-09 this branch
+ * was a toast and a bounce to `/sign-in`, where the member typed the new
+ * password into a form that could only refuse it. A refusal inside GoTrue's
+ * email minute (the same address resubmitted) returns to "Check your email"
+ * too, counting down GoTrue's seconds.
  */
 function SignUpPageContent() {
   const router = useRouter();
@@ -167,26 +165,22 @@ function SignUpPageContent() {
 
   if (sent) {
     return (
-      <AuthScreen
-        title="Check your email"
-        footer={
-          <p>
-            Opened it on another device?{" "}
-            <Link
-              href={`/sign-in?redirectTo=${encodeURIComponent(redirectTo)}`}
-              className="font-semibold text-accent-text hover:underline"
-            >
-              Sign in here
-            </Link>
-          </p>
-        }
-      >
+      <AuthScreen title={EMAIL_CODE_COPY.sentTitle}>
         <CheckEmail
           email={sent.email}
           redirectTo={redirectTo}
+          screen="/sign-up"
           initialCooldownSeconds={sent.cooldown}
-          backLabel="Use a different email"
+          backLabel={EMAIL_CODE_COPY.differentEmail}
           onBack={() => setSent(null)}
+          onConfirmed={() => {
+            toast({
+              title: "Account created",
+              description: "You are signed in and ready to continue.",
+            });
+            router.replace(redirectTo);
+            router.refresh();
+          }}
         />
       </AuthScreen>
     );

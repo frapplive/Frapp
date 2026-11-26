@@ -16,6 +16,7 @@ import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { SkeletonText } from "@/components/shared/async-states";
 import { CheckEmail } from "@/components/auth/check-email";
+import { EmailCodeStep } from "@/components/auth/email-code-step";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/hooks/use-toast";
 import { reportAuthFailure } from "@/lib/sentry/auth-failures";
@@ -29,6 +30,8 @@ import {
   cooldownCopy,
   describeEmailSendError,
   describePasswordSignInError,
+  EMAIL_CODE_COPY,
+  EMAIL_RESEND_COOLDOWN_SECONDS,
   emailCooldownSeconds,
   isEmailNotConfirmed,
 } from "@repo/hooks/auth-error-copy";
@@ -61,24 +64,31 @@ import {
  * laptop: the labels float inside the fields (`floating-field.tsx`), the
  * subtitle and the "New here?" sentence gave way to the mode toggle above the
  * title (`auth-mode-toggle.tsx`), Apple and Google sit side by side, and the
- * magic link is a text link under Continue instead of a third full-width
+ * emailed sign-in is a text link under Continue instead of a third full-width
  * button.
+ *
+ * **The emailed sign-in is a 6-digit code** (#6134, Paul 2026-11-26): Email me
+ * a code instead swaps the form for "Check your email" and the code box
+ * (`email-code-step.tsx`), and the code signs this tab in. Until then it
+ * emailed a magic link, which signed in whichever browser opened it.
  *
  * The redirect plumbing is a data contract
  * (`spec/ui/web-dashboard/README.md` §Gating & routing semantics):
  * `resolveRedirectPath` applies the open-redirect guard the proxy applies, the
- * value survives the sign-in ↔ sign-up hop, and the magic link carries it as
- * the `next` of `/auth/callback` (`buildAuthCallbackUrl`) — the route that
- * exchanges the PKCE code the link comes back with. `/auth/callback` sends a
- * failed link back here with `authError` set; the toast below is the only
- * place that code is read.
+ * value survives the sign-in ↔ sign-up hop, and a code typed here goes to it
+ * directly. Google and Apple carry it as the `next` of `/auth/callback`
+ * (`buildAuthCallbackUrl`), the route that exchanges the PKCE code a provider
+ * comes back with, as does the link production's emails keep beside the code
+ * until Paul pastes the code-only templates. `/auth/callback` sends a failed
+ * return back here with `authError` set; the toast below is the only place
+ * that code is read.
  *
  * **Refusals are told by GoTrue's code** (`@repo/hooks/auth-error-copy`),
  * never through the API's error map, which knows none of them and printed
  * "Something went wrong" for a wrong password and an unconfirmed address
  * alike until 2026-11-09. An unconfirmed address swaps the form for "Confirm
- * your email" (`check-email.tsx`), with Resend, because no password typed
- * here can get past it.
+ * your email" (`check-email.tsx`), the code box with Send a new code, because
+ * no password typed here can get past it.
  */
 const SIGN_IN_TITLE = "Welcome back";
 
@@ -89,7 +99,13 @@ function SignInPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMagicLinkPending, setIsMagicLinkPending] = useState(false);
+  const [isCodePending, setIsCodePending] = useState(false);
+  /** The address a sign-in code went to: the form gives way to the code box. */
+  const [codeSent, setCodeSent] = useState<{
+    email: string;
+    cooldown: number;
+    notice: string | null;
+  } | null>(null);
   const [pendingOAuth, setPendingOAuth] = useState<OAuthProvider | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const redirectTo = resolveRedirectPath(searchParams.get("redirectTo"));
@@ -128,6 +144,29 @@ function SignInPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- arrival only
   }, [sessionEnded]);
 
+  function signedIn() {
+    toast({
+      title: "Signed in",
+      description: "Welcome back.",
+    });
+    router.replace(redirectTo);
+    router.refresh();
+  }
+
+  async function requestCode(address: string): Promise<void> {
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: address,
+      options: {
+        // Only production's transition-era template still prints a link
+        // beside the code; `intent=sign-in-link` keeps its Confirm-signup
+        // good-news path ({@link isEmailLinkIntent}).
+        emailRedirectTo: magicLinkRedirectUrl(window.location.origin, redirectTo),
+      },
+    });
+    if (error) throw error;
+  }
+
   async function handlePasswordSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -139,12 +178,7 @@ function SignInPageContent() {
       });
       if (error) throw error;
 
-      toast({
-        title: "Signed in",
-        description: "Welcome back.",
-      });
-      router.replace(redirectTo);
-      router.refresh();
+      signedIn();
     } catch (error) {
       reportAuthFailure({ flow: "password_sign_in", screen: "/sign-in", error });
       if (isEmailNotConfirmed(error)) {
@@ -162,51 +196,44 @@ function SignInPageContent() {
     }
   }
 
-  async function handleMagicLink() {
-    if (!email) {
+  async function handleEmailCode() {
+    const address = email.trim();
+    if (!address) {
       toast({
         title: "Email required",
-        description: "Enter your email address to request a magic link.",
+        description: "Enter your email address to get a sign-in code.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsMagicLinkPending(true);
+    setIsCodePending(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          // `intent=sign-in-link` carries the Confirm-signup good-news path for an address that isn't confirmed yet, whose
-          // `?code=` link can confirm and still fail to sign this browser in
-          // ({@link isEmailLinkIntent}).
-          emailRedirectTo: magicLinkRedirectUrl(window.location.origin, redirectTo),
-        },
-      });
-      if (error) throw error;
-
-      toast({
-        title: "Magic link sent",
-        description: "Check your inbox to continue signing in.",
-      });
+      await requestCode(address);
+      setPassword("");
+      setCodeSent({ email: address, cooldown: EMAIL_RESEND_COOLDOWN_SECONDS, notice: null });
     } catch (error) {
-      reportAuthFailure({ flow: "magic_link_send", screen: "/sign-in", error });
       const cooldown = emailCooldownSeconds(error);
       if (cooldown !== undefined) {
         // An email went out under a minute ago (the confirmation, or the
-        // last link), so this one wasn't sent. Not a failure: that email's
-        // link still works (a confirmation lands as "Email confirmed").
-        toast({ title: "Check your inbox", description: cooldownCopy(cooldown) });
+        // last code), so this one wasn't sent. Not a failure: that email's
+        // code still works.
+        setPassword("");
+        setCodeSent({
+          email: address,
+          cooldown: Math.max(1, cooldown),
+          notice: cooldownCopy(cooldown),
+        });
         return;
       }
+      reportAuthFailure({ flow: "magic_link_send", screen: "/sign-in", error });
       toast({
-        title: "Unable to send magic link",
+        title: "Unable to send code",
         description: describeEmailSendError(error),
         variant: "destructive",
       });
     } finally {
-      setIsMagicLinkPending(false);
+      setIsCodePending(false);
     }
   }
 
@@ -239,13 +266,35 @@ function SignInPageContent() {
 
   if (unconfirmedEmail) {
     return (
-      <AuthScreen title="Confirm your email">
+      <AuthScreen title={EMAIL_CODE_COPY.confirmTitle}>
         <CheckEmail
           email={unconfirmedEmail}
           redirectTo={redirectTo}
+          screen="/sign-in"
+          lead={EMAIL_CODE_COPY.unconfirmed(unconfirmedEmail)}
           initialCooldownSeconds={0}
           backLabel="Back to sign in"
           onBack={() => setUnconfirmedEmail(null)}
+          onConfirmed={signedIn}
+        />
+      </AuthScreen>
+    );
+  }
+
+  if (codeSent) {
+    return (
+      <AuthScreen title={EMAIL_CODE_COPY.sentTitle}>
+        <EmailCodeStep
+          email={codeSent.email}
+          idPrefix="sign-in"
+          screen="/sign-in"
+          initialCooldownSeconds={codeSent.cooldown}
+          initialNotice={codeSent.notice}
+          resend={() => requestCode(codeSent.email)}
+          resendFlow="magic_link_send"
+          onVerified={signedIn}
+          backLabel="Back to sign in"
+          onBack={() => setCodeSent(null)}
         />
       </AuthScreen>
     );
@@ -282,7 +331,7 @@ function SignInPageContent() {
         </Button>
         {/*
           After Continue, so Tab from the password reaches the submit first and
-          a keyboard user can't send a link by accident.
+          a keyboard user can't send a code by accident.
         */}
         <Button
           type="button"
@@ -290,11 +339,11 @@ function SignInPageContent() {
           size="sm"
           // 36 to a mouse, 44 to a finger: components.md §2's compact carve-out.
           className="mx-auto h-9 pointer-coarse:h-11"
-          onClick={handleMagicLink}
-          disabled={isMagicLinkPending || oauthBusy}
+          onClick={handleEmailCode}
+          disabled={isCodePending || oauthBusy}
         >
-          {isMagicLinkPending ? <Loader2 className="animate-spin" /> : null}
-          Email me a magic link instead
+          {isCodePending ? <Loader2 className="animate-spin" /> : null}
+          Email me a code instead
         </Button>
       </form>
 
@@ -305,7 +354,7 @@ function SignInPageContent() {
           void handleOAuth(provider);
         }}
         pending={pendingOAuth}
-        disabled={isSubmitting || isMagicLinkPending}
+        disabled={isSubmitting || isCodePending}
       />
     </AuthScreen>
   );

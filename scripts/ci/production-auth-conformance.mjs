@@ -13,7 +13,8 @@
 // Production SMTP is on (#1824), so an empty host FAILs, as on staging: the
 // check requires `Frapp <no-reply@mail.frapp.live>` at >=300/hour and FAILs a
 // burned apex From (`invites@frapp.live`). Magic Link FAILs a hosted default
-// (ConfirmationURL) href. Both used to SKIP while SMTP was unset, which left a
+// (ConfirmationURL) href, and passes the code-only template staging requires
+// (#6134) or, until Paul pastes it here, today's token_hash link. Both used to SKIP while SMTP was unset, which left a
 // switched-off mailer reading as a healthy run (#2349).
 //
 // ── Why this job does NOT say `environment: production` ─────────────────────
@@ -192,12 +193,15 @@ function defaultChecks({ accessToken, projectRef, fetchImpl }) {
     },
     {
       id: "auth-magic-link",
-      label: "Magic Link template uses token_hash",
+      label: "Magic Link prints the code, or a token_hash link on the app host until the switch",
       run: () =>
         checkAuthMagicLink({
           accessToken,
           projectRef,
           fetchImpl,
+          // Until Paul pastes the code-only templates on production (#6134):
+          // shipped phone builds that can only follow a link still sign in.
+          allowTransitionLink: true,
         }),
     },
     {

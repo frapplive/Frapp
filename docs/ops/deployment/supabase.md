@@ -176,7 +176,7 @@ personal token that can write; no stored CI token can.
 | Leaked password protection ("Prevent use of leaked passwords", Authentication → Sign In / Providers → Email; Pro plan and up) | **on** (owner 2026-09-29; security advisor clear at 21:14Z; asserted daily as `auth-leaked-password`) | **on** (owner 2026-09-29; security advisor clear at 21:31Z; asserted daily as `auth-leaked-password`) |
 | Custom access-token hook | `public.custom_access_token_hook` (enabled) | same |
 
-**The per-IP Auth limits were raised on `frapp-prod` on 2026-11-06 ([#925](https://github.com/pdcarlson/Frapp/issues/925)).** About 100 members sign in at once on migration day ([#2776](https://github.com/pdcarlson/Frapp/issues/2776)), many from one campus IP, and at the default 30 per 5 minutes the sign-in and verification buckets would refuse part of the chapter. The web magic-link `verifyOtp` and the PKCE `exchangeCodeForSession` run server-side in `apps/web/app/auth/callback/route.ts`, so GoTrue counts those against the web host's egress IPs, shared by every web member, not the member's own IP. The values were set in the dashboard, not read through the Management API (agent sandboxes can't reach `api.supabase.com`), and nothing asserts them daily yet. Staging still has whatever it had; match it before the migration-day rehearsal.
+**The per-IP Auth limits were raised on `frapp-prod` on 2026-11-06 ([#925](https://github.com/pdcarlson/Frapp/issues/925)).** About 100 members sign in at once on migration day ([#2776](https://github.com/pdcarlson/Frapp/issues/2776)), many from one campus IP, and at the default 30 per 5 minutes the sign-in and verification buckets would refuse part of the chapter. The web magic-link `verifyOtp` and the PKCE `exchangeCodeForSession` run server-side in `apps/web/app/auth/callback/route.ts`, so GoTrue counts those against the web host's egress IPs, shared by every web member, not the member's own IP. *2026-11-26: a code typed on web is verified from the member's browser (#6134), so it counts against the member's own IP; only transition-era links and Google and Apple returns still go through the callback.* The values were set in the dashboard, not read through the Management API (agent sandboxes can't reach `api.supabase.com`), and nothing asserts them daily yet. Staging still has whatever it had; match it before the migration-day rehearsal.
 
 **`frapp://**` was added to both allow lists on 2026-09-06.** The mobile app's magic-link
 `emailRedirectTo` is `Linking.createURL("/")` with a trailing `?` (`frapp:///?` in a build that
@@ -239,8 +239,8 @@ at ≥300/hour and fails a burned apex From. The Magic Link href must carry
 Both used to be skipped while the host was empty (#2349). The
 Magic Link body is now on prod; confirm and invite were intentionally left uncopied.
 
-The Magic Link *href* on staging is `app.staging.frapp.live/auth/callback`
-(`token_hash`, #1916). Gmail trained the apex From `invites@frapp.live` on the first
+The Magic Link *href* on staging was `app.staging.frapp.live/auth/callback`
+(`token_hash`, #1916) until the code-only templates (#6134), which print no link. Gmail trained the apex From `invites@frapp.live` on the first
 generic hosted templates, so sending now uses mail subdomains (Resend domains
 `mail.staging.frapp.live` and `mail.frapp.live`, created 2026-09-08, tracking off)
 so staging tests cannot burn production reputation. Staging invite mail doesn't follow
@@ -276,6 +276,10 @@ mail subdomain From above, then 300/hour — dashboard-only; do not put the key 
 or git. Auth SMTP itself is proven on staging and production.
 
 #### Confirm signup template: the link signs in on any device
+
+*Superseded on 2026-11-26: the Confirm signup email carries only a code
+([§ Auth email templates](#auth-email-templates-a-6-digit-code-no-link-6134)), which
+removes this case wherever it is pasted. Kept for production until its switch.*
 
 *2026-11-09, launch day.* The hosted **Confirm signup** template still links
 `{{ .ConfirmationURL }}`. Production's auth log shows the cost: an invited member signed up
@@ -316,14 +320,11 @@ dashboard reset to `{{ .ConfirmationURL }}` would sit green.
 #### Both templates print the 6-digit code (#5625)
 
 *2026-11-19.* The invite card's Continue with email (web `/join` and the phone's join
-screen) sends this email and asks for the code in it, so a member signs in without
-leaving the card or switching devices (`EMAIL_CODE_COPY` in
-`packages/hooks/src/auth-error-copy.ts`). GoTrue sends **Magic Link** to a confirmed
-address and **Confirm signup** to a new one, so both print `{{ .Token }}` (6 digits, the
-hosted default `mailer_otp_length`). The link stays: it still signs in on another device,
-and until these are pasted it is the only way in from the email. Paste on staging, sign in
-there with a new address and an old one, then production. These replace the two bodies
-above; subjects and the `type` in each link are unchanged.
+screen) sent this email and asked for the code in it. GoTrue sends **Magic Link** to a
+confirmed address and **Confirm signup** to a new one, so both printed `{{ .Token }}` (6
+digits, the hosted default `mailer_otp_length`) beside the link. *Superseded on 2026-11-26
+by the code-only templates below (#6134); these bodies are what production keeps until its
+switch.*
 
 Magic Link:
 
@@ -333,7 +334,75 @@ Confirm signup:
 
 `<h2>Confirm your email</h2><p>Your code is <strong>{{ .Token }}</strong>. Enter it where you asked for it, or open this link to finish creating your Frapp account.</p><p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a></p><p>If you did not create a Frapp account, you can ignore this email.</p>`
 
-The local stack prints it too, from `supabase/templates/magic-link.html` (`supabase/config.toml`; confirmations are off locally, so only Magic Link is sent). The CLI's own default prints only the link. Restart the local stack to pick it up.
+#### Auth email templates: a 6-digit code, no link (#6134)
+
+*2026-11-26, Paul's decision ("codes are the new standard"; asked to pick code-first with a
+link as backup or code only, he chose code only).* Every Auth email the apps send carries a
+6-digit code and no link, and the member types it where they asked for it: web, the desktop
+app (which loads the web pages), and the phone. The code boxes are
+`apps/web/components/auth/email-code-step.tsx` and
+`apps/mobile/components/onboarding/email-code-step.tsx`.
+
+**Which emails.** The apps send two: **Magic Link** (Email me a code on sign-in, and the
+invite card's Continue with email, to a confirmed address) and **Confirm signup** (web
+sign-up, its Send a new code, and GoTrue's answer to a sign-in code for an address that isn't
+confirmed). Both clients check either code with one call, `verifyOtp({ email, token,
+type: "email" })`: GoTrue's `email` type checks the address's confirmation token and then its
+sign-in token, so the same call confirms a new account and signs an old one in. Proven on the
+local stack with confirmations on, 2026-11-26.
+
+**Password reset and email change send nothing today.** Neither app has a password reset or
+an email change (`spec/behavior/observability.md` § Signed-out auth failures), and invites
+are the API's own Resend mail, not GoTrue's Invite template. So the Reset Password, Change
+Email Address and Invite templates are left as they are; none is reachable from the product.
+When either flow is built it uses a code too: the Reset Password template prints `{{ .Token }}`
+only, and the screen calls `verifyOtp({ email, token, type: "recovery" })`, then
+`updateUser({ password })`; email change verifies the new address's code with
+`type: "email_change"`. That PR pastes its template and adds it to `auth-magic-link`.
+
+**The templates.** Subjects are unchanged. `mailer_otp_exp` (the code's lifetime) is left at
+its value, so the copy says only that it expires soon.
+
+Magic Link, subject `Sign in to Frapp`:
+
+`<h2>Sign in to Frapp</h2><p>Your code is <strong>{{ .Token }}</strong>. Enter it where you asked for it. It expires soon.</p><p>If you did not ask to sign in, you can ignore this email.</p>`
+
+Confirm signup, subject `Confirm your Frapp account`:
+
+`<h2>Confirm your email</h2><p>Your code is <strong>{{ .Token }}</strong>. Enter it where you created your account to finish setting it up. It expires soon.</p><p>If you did not create a Frapp account, you can ignore this email.</p>`
+
+The local stack sends the same two, from `supabase/templates/` (`supabase/config.toml`;
+confirmations are off locally, so only Magic Link goes out unless a run turns them on).
+Restart the local stack to pick them up.
+
+**Who pastes them.** No session can: the Management API (`api.supabase.com`) is unreachable
+from agent sandboxes, and no stored token can write Auth config. Staging is pasted in the
+dashboard by Paul (frapp-staging → Authentication → Emails → Templates: Magic Link, then
+Confirm signup) once #6134's merge is live on staging and before the next 07:30 UTC Staging
+conformance run, which requires the code-only pair from that merge on. Production is Paul's
+alone, in the order below.
+
+**Production waits for the last phone build that can only follow a link.** Phone builds
+before the one that carries #6134 have a code box only on the invite card; their s01
+"Magic link" and "Resend email" wait for a link. Mobile JavaScript reaches an installed build
+only as an update for its own `expo.version` (`docs/ops/deployment/mobile.md`), and #6134
+lands on 0.15.0, so no update reaches 0.14.x. Production therefore keeps the code-and-link
+pair above, and the apps keep the link's handling (web `/auth/callback`'s `token_hash`
+branch and email intents, mobile `createSessionFromUrl`), until:
+
+1. Deploy production ships #6134's merge (web and desktop ask for the code from then; the
+   link beside it still works).
+2. The first phone build with #6134 is recorded in `apps/mobile/store/shipped-builds.json` on
+   both platforms.
+3. `MOBILE_MIN_VERSION_IOS` and `MOBILE_MIN_VERSION_ANDROID` in Infisical `prod` name that
+   build, and a Deploy production carries them, so an older build shows the update screen
+   (`ENV_REFERENCE.md`).
+4. Paul pastes the two code-only templates on `frapp-prod`.
+
+Then the follow-up deletes the link handling from both apps, drops `emailRedirectTo` from
+the email sends, and drops production conformance's `allowTransitionLink`. Until step 4,
+Production Auth conformance passes either shape (`checkAuthMagicLink` in
+`scripts/ci/staging-conformance.mjs`).
 
 #### ADR-25 step 3: the sender becomes Frapp
 
