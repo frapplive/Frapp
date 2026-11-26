@@ -466,7 +466,7 @@ export function PermissionsOffline({
   return (
     <div
       className={cn(
-        "inline-flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground pointer-coarse:min-h-11",
+        "inline-flex min-h-control-list-row flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground pointer-coarse:min-h-11",
         className,
       )}
     >

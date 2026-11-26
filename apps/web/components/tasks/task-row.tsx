@@ -211,7 +211,7 @@ export function TaskRow({
           type="button"
           size="toolbar"
           variant="secondary"
-          className="h-8 shrink-0"
+          className="h-control-row shrink-0"
           {...controls}
           onClick={onConfirm}
         >
@@ -495,7 +495,7 @@ function CircleButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
+        "flex h-control-row w-control-row shrink-0 items-center justify-center rounded-full hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
         FOCUS_RING,
       )}
     >

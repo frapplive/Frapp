@@ -390,19 +390,23 @@ Canonical map (locked; supersedes panel 4h — see deviation note):
 
 | Step | Mouse (web, fine pointer) | Touch (web coarse pointer, and mobile) | Takes it |
 |------|------|------|------|
-| Chip | 24 | 24 drawn, 44 hit area through padding or `hitSlop` | badges, status chips, counts. Mobile's filter chips draw 32 |
-| Row | 32 | 44 | menu, select and command rows; a checkbox row inside a form |
-| Small | 36 | 44 | toolbar controls, Inline (`sm`) and icon buttons, tabs, a table header, a dense list row, a sheet's fields and footer buttons |
-| Field | 40 | 44 | text fields, select triggers, Default buttons, the color picker |
+| Chip | 20 | 20 drawn, 44 hit area through padding or `hitSlop` | badges, status chips, counts. Mobile's filter chips draw 32 |
+| Row | 28 | 44 | menu, select and command rows; a checkbox row inside a form; the web sidebar's rows (New, the homes, More), its channel rows and the settings rail |
+| Small | 28 | 44 | toolbar controls (a page header's search, filters and actions), Inline (`sm`) and icon buttons, tabs, a table header, a sheet's fields and footer buttons |
+| Field | 32 | 44 | text fields, select triggers, Default buttons, the color picker |
+| List row | 32 | 44 | a dense list's one-line row (Directory, Documents, the chat member list) |
+| Settings row | 36 | 44 | `SettingsRow` ([components.md § Settings rows](components.md#settings-rows)) |
 | Primary | (web: Field) | 48 | mobile only: a full-width button that ends a sheet or a flow step (the sheet CTA, the dues Pay button, onboarding's buttons). A property-row form commits from its header instead ([components.md § Property rows](components.md#property-rows)). A web full-width primary is a Default button, 44 on touch |
 
-- **Mouse and touch are one rule, not two designs.** Web reads `pointer-coarse` for the touch column (Tailwind's `pointer-coarse:` variant), so a laptop gets the dense column and a phone or tablet browser the 44 floor. Mobile is touch-only and reads the touch column alone. The web sidebar (34) and app bar (34) are older pointer-only geometry and stay as [components.md](components.md) §7 draws them.
+*Changed 2026-11-26 by Paul ([#6115](https://github.com/pdcarlson/Frapp/issues/6115)): "buttons in general have been too big for too long." The mouse column moved one step denser, after Claude's, Discord's, Slack's and Linear's sidebars: Chip 24 → 20, Row 32 → 28 (the sidebar's own 34 folded into it), Small 36 → 28, Field 40 → 32, and the dense list row (36) and settings row (44) became steps of their own at 32 and 36. Labels stay 14 and typed values 16, so the density is in the box, not the type. The touch column did not move.*
+
+- **Mouse and touch are one rule, not two designs.** Web reads `pointer-coarse` for the touch column (Tailwind's `pointer-coarse:` variant), so a laptop gets the dense column and a phone or tablet browser the 44 floor. Mobile is touch-only and reads the touch column alone. The web sidebar's rows are the Row step since #6115; until then they were 34, older pointer-only geometry from the framework board.
 - **Labels stay 14, values stay 16.** Button, tab and table-header labels are 14px at every height. A menu or select row's label is 14px on a mouse and 16px on touch. A typed value is 16px at every height, because §7's body floor binds on text a member types.
 - **Padding does not split by pointer.** Field padding-x is 12, a Default button's 16, a Small one's 12, on every pointer. Only heights split: on web a `pointer-coarse:` padding class survives a caller's plain `pl-9` or `px-0` (tailwind-merge merges only classes with the same variant), which put search glyphs on top of typed text.
 - **Two lines grow a row, not the scale.** A row whose meta line wraps under its name takes the Row floor as a `min-height` and grows with its content.
 - **The toggle has its own two sizes**: a 36×22 track with an 18px thumb on a mouse, and 50×30 with a 24px thumb on touch ([components.md](components.md) §4).
 
-Tokens: `touch.minimum` (44) is every touch step's floor, `touch.button` (44) the touch Default, and `touch.buttonLarge` (48) the touch Primary.
+Tokens: `touch.minimum` (44) is every touch step's floor, `touch.button` (44) the touch Default, and `touch.buttonLarge` (48) the touch Primary. The mouse column is `control.*` in `signet.ts`, the `--control-*` properties below, bound by the shared preset as `h-control-row`, `min-h-control-list-row`, `size-control-small` and the rest, so a web control names its step and a change to the scale is one number.
 
 ### Spacing tokens
 
@@ -419,6 +423,12 @@ The grid as CSS custom properties. Every value is 4 × an integer; that is the w
 | `--space-3xl` | `48px` | page-level separation |
 | `--touch-min` | `44px` | the touch floor, honored on web as well as mobile |
 | `--touch-button` | `44px` | standard button height on touch (46 until 2026-11-05) |
+| `--control-chip` | `20px` | the Chip step on a mouse |
+| `--control-row` | `28px` | the Row step on a mouse |
+| `--control-small` | `28px` | the Small step on a mouse |
+| `--control-field` | `32px` | the Field step on a mouse |
+| `--control-list-row` | `32px` | the List row step on a mouse |
+| `--control-settings-row` | `36px` | the Settings row step on a mouse |
 
 ---
 

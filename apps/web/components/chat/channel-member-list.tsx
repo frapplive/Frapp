@@ -162,7 +162,7 @@ export function ChannelMemberList({
             }}
             placeholder={`Search ${rows.length} members`}
             aria-label="Search members"
-            className="h-8 px-2.5 pointer-coarse:h-11"
+            className="h-control-field px-2.5 pointer-coarse:h-11"
           />
         </div>
       ) : null}
@@ -214,10 +214,7 @@ function MemberGroup({
   const labelId = useId();
   return (
     <div className="pb-3">
-      <p
-        id={labelId}
-        className={cn("px-2 pb-1 text-muted-foreground", EYEBROW)}
-      >
+      <p id={labelId} className={cn("px-2 pb-1 text-muted", EYEBROW)}>
         {group.label}
         <span className="ml-1.5 tabular-nums">{group.rows.length}</span>
       </p>

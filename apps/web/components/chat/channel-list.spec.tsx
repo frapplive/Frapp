@@ -64,7 +64,7 @@ function renderList(
  * per header would pass on a rail that rendered them backwards.
  */
 function sectionLabels(container: HTMLElement): string[] {
-  return Array.from(container.querySelectorAll("p.uppercase")).map(
+  return Array.from(container.querySelectorAll('p[data-flip^="head:"]')).map(
     (node) => node.textContent ?? "",
   );
 }
@@ -95,9 +95,9 @@ async function menuFor(title: string): Promise<string[]> {
 
 /** Row titles under one section header, in DOM order. */
 function channelsUnder(container: HTMLElement, label: string): string[] {
-  const header = Array.from(container.querySelectorAll("p.uppercase")).find(
-    (node) => node.textContent === label,
-  );
+  const header = Array.from(
+    container.querySelectorAll('p[data-flip^="head:"]'),
+  ).find((node) => node.textContent === label);
   if (!header) return [];
   const list = header.parentElement?.querySelector("ul");
   return Array.from(list?.querySelectorAll("li") ?? []).map(
@@ -1537,7 +1537,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
     );
     const hidden = screen.getByRole("list", { name: "Hidden conversations" });
     const hiddenButton = hidden.querySelector("button")!;
-    expect(hiddenButton).toHaveClass("h-8");
+    expect(hiddenButton).toHaveClass("h-control-row");
     expect(hiddenButton.querySelector("[data-preview]")).toBeNull();
   });
 });

@@ -33,7 +33,7 @@ export const FILTER_CHIP_CLASS = "gap-1 rounded-full font-semibold";
 const CHIP = FILTER_CHIP_CLASS;
 /** A cmdk row drawn at the menu row's size, so both lists read as one menu. */
 const SEARCH_ROW =
-  "min-h-8 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base";
+  "min-h-control-row text-sm pointer-coarse:min-h-11 pointer-coarse:text-base";
 /** The "any" row's cmdk value; an option's own value can't collide with it. */
 const ANY = "\u0000any";
 

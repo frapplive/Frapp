@@ -320,7 +320,7 @@ export function TypeMenu<T extends TypeMenuItem>({
   );
 }
 
-const ROW = "min-h-9 gap-2 text-sm pointer-coarse:min-h-11";
+const ROW = "min-h-control-list-row gap-2 text-sm pointer-coarse:min-h-11";
 
 function HeldMark({ held }: { held: boolean }) {
   return (

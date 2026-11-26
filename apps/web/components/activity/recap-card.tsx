@@ -107,7 +107,7 @@ export function RecapCard({ recap, now }: { recap: ActivityRecap; now: Date }) {
           onClick={() => dismissRecap(key)}
           aria-label="Dismiss last week's recap"
           className={cn(
-            "-my-2 inline-flex h-9 w-9 items-center justify-center rounded-md pointer-coarse:h-11 pointer-coarse:w-11",
+            "-my-2 inline-flex h-control-small w-control-small items-center justify-center rounded-md pointer-coarse:h-11 pointer-coarse:w-11",
             "text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground",
             FOCUS_RING,
           )}

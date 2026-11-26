@@ -144,7 +144,7 @@ export function InterestFormQuestionsEditor({
                   >
                     <SelectTrigger
                       aria-label={`Kind of question ${index + 1}`}
-                      className="h-10 w-44 shrink-0"
+                      className="h-control-field w-44 shrink-0"
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -182,7 +182,7 @@ export function InterestFormQuestionsEditor({
                       <li key={option.id} className="flex items-center gap-2">
                         <Input
                           aria-label={`Question ${index + 1}, option ${at + 1}`}
-                          className="h-8"
+                          className="h-control-row"
                           value={option.label}
                           maxLength={FORM_OPTION_LABEL_MAX_LENGTH}
                           placeholder={`Option ${at + 1}`}

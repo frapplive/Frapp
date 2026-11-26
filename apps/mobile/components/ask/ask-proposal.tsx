@@ -1732,7 +1732,7 @@ function createStyles(tokens: SignetTokens) {
     },
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     choice: {
       minHeight: tokens.touch.minimum,

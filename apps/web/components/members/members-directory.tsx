@@ -235,9 +235,10 @@ function formatJoined(value: string): string | null {
  *
  * **The rows are the board's member row, not its table row.** `4a` draws the
  * only member row in the file at 34px with a 24px avatar, a 10px gap and the
- * name on one truncating line; `4d`'s 40px data row is a plan matrix. 34 is not
- * a Tailwind step and `min-h-9` (36) is the adjacent one, so the row is
- * `min-h-9` with `pointer-coarse:min-h-11` restoring §2's 44px floor on touch —
+ * name on one truncating line; `4d`'s 40px data row is a plan matrix. Since
+ * #6115 the row is foundations §9's List row step (32 on a mouse; 36 until
+ * then), `min-h-control-list-row` with `pointer-coarse:min-h-11` restoring
+ * §2's 44px floor on touch —
  * the same carve-out `compactControlClassName` and lane 4's folder rail take,
  * and the reading §2 spells out ("compact 34px controls are web/pointer-only").
  * It is deliberately *not* lane 4's flat `min-h-11` document row: that row is
@@ -1343,7 +1344,7 @@ export function MembersDirectory() {
             emptied the selection, which unmounted the bar around the checkbox
             that had focus. Here it behaves exactly as the `<th>` checkbox did.
           */}
-          <label className="flex w-fit min-h-9 cursor-pointer items-center gap-2 text-caption text-muted pointer-coarse:min-h-11">
+          <label className="flex w-fit min-h-control-list-row cursor-pointer items-center gap-2 text-caption text-muted pointer-coarse:min-h-11">
             <span className={dashboardCheckboxHitAreaClassName}>
               <input
                 type="checkbox"
@@ -1400,7 +1401,7 @@ export function MembersDirectory() {
                   <li
                     key={id}
                     className={cn(
-                      "flex min-h-9 items-center gap-1 pointer-coarse:min-h-11",
+                      "flex min-h-control-list-row items-center gap-1 pointer-coarse:min-h-11",
                       // Fill means state, never striping. `--popover` is what
                       // `TableRow` paints for `data-state="selected"`: neutral
                       // since 2026-11-05 (`foundations.md` §6), a step under the
@@ -1452,7 +1453,7 @@ export function MembersDirectory() {
                       }
                       aria-label={label}
                       className={cn(
-                        "flex min-h-9 min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
+                        "flex min-h-control-list-row min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
                         "pointer-coarse:min-h-11",
                         /*
                         Hover only while NOT selected. The selected fill lives

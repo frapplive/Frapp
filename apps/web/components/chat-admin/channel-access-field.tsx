@@ -349,7 +349,7 @@ function AddEntry({
             : undefined
       }
       emptyText="Everything is already on the list."
-      itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+      itemClassName="min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
       renderItem={(option) => (
         <>
           <EntryMark option={option} />

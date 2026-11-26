@@ -58,6 +58,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { UnreadDot } from "@/components/shared/unread-dot";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { EYEBROW } from "@/components/ui/typography";
 import {
   ROLE_NAME_CLASS,
   roleNameStyle,
@@ -486,7 +487,7 @@ export function NotificationsPopover({
             <div className="-mx-3 grid gap-2">
               {groups.map((group) => (
                 <section key={group.heading} aria-label={group.heading}>
-                  <h3 className="px-3 pb-1 text-caption font-semibold uppercase tracking-[0.08em] text-muted">
+                  <h3 className={`${EYEBROW} px-3 pb-1 text-muted`}>
                     {group.heading}
                   </h3>
                   <ul className="divide-y divide-border">

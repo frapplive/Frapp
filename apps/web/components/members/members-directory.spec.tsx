@@ -344,10 +344,10 @@ describe("Directory on the greenfield shell", () => {
     ).toBeNull();
   });
 
-  it("keeps the row at 36px on a pointer and 44px on touch", () => {
+  it("keeps the row at the List row step on a pointer and 44px on touch", () => {
     const { container } = render(<MembersDirectory />);
     const row = container.querySelector("li");
-    expect(row?.className).toContain("min-h-9");
+    expect(row?.className).toContain("min-h-control-list-row");
     // §2's touch floor, via the carve-out `compactControlClassName` uses.
     expect(row?.className).toContain("pointer-coarse:min-h-11");
   });

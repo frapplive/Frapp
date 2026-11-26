@@ -9,7 +9,7 @@ import { FOCUS_RING } from "@/components/ui/focus"
  * (`components/shared/member-search-field.tsx`).
  */
 const INPUT_CLASSES = cn(
-  "flex h-10 w-full rounded-md border border-control-edge bg-surface-1 px-3 py-1 text-base pointer-coarse:h-11 text-foreground caret-primary transition-colors",
+  "flex h-control-field w-full rounded-md border border-control-edge bg-surface-1 px-3 py-1 text-base pointer-coarse:h-11 text-foreground caret-primary transition-colors",
   "file:border-0 file:bg-transparent file:text-sm file:font-semibold file:text-foreground",
   "placeholder:text-muted",
   FOCUS_RING,
@@ -20,9 +20,10 @@ const INPUT_CLASSES = cn(
 /*
  * Text input, `spec/ui/design-system/components.md` §4.
  *
- * Height 40 to a mouse and 44 to a finger, the Field step of foundations.md
+ * Height 32 to a mouse and 44 to a finger, the Field step of foundations.md
  * §9's control size scale (corrected 2026-11-05: it was 48 everywhere, which
- * stood taller than the 34px sidebar rows and every list row beside it), radius 12, padding-x 12 at both heights (a pointer-split padding would be
+ * stood taller than the sidebar rows and every list row beside it; 40 until
+ * #6115), radius 12, padding-x 12 at both heights (a pointer-split padding would be
  * a `pointer-coarse:` class, which no caller's `pl-9` can cancel), the `--surface-1` fill sitting one layer
  * below the card or sheet that contains it, and the shared focus recipe.
  *

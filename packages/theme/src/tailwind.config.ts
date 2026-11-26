@@ -4,6 +4,16 @@ import { motionTokens } from "./motion";
 const motionDuration = motionTokens.duration;
 const motionEasing = motionTokens.easing;
 
+/** foundations.md §9's control steps, read from `signet.css`'s `--control-*`. */
+const CONTROL_STEPS = {
+  "control-chip": "var(--control-chip)",
+  "control-row": "var(--control-row)",
+  "control-small": "var(--control-small)",
+  "control-field": "var(--control-field)",
+  "control-list-row": "var(--control-list-row)",
+  "control-settings-row": "var(--control-settings-row)",
+} as const;
+
 /**
  * Reads a color token straight out of its custom property, whatever format the
  * property holds.
@@ -328,10 +338,22 @@ const config: Partial<Config> = {
       minHeight: {
         touch: "var(--touch-min)",
         button: "var(--touch-button)",
+        ...CONTROL_STEPS,
       },
       minWidth: {
         touch: "var(--touch-min)",
+        ...CONTROL_STEPS,
       },
+      /*
+       * The control size scale's pointer column (foundations.md §9) by step
+       * name: `h-control-row` is a sidebar or menu row on a mouse, and the
+       * same element takes `pointer-coarse:h-11` for the touch floor. Named
+       * so a size change is one number in `signet.ts`, not a sweep of `h-9`
+       * and `h-[34px]` literals (#6115).
+       */
+      height: CONTROL_STEPS,
+      width: CONTROL_STEPS,
+      size: CONTROL_STEPS,
       /*
        * Figtree since #2366 took the last surface off Geist. Both consuming
        * apps used to re-declare `sans` in their own config; #2371 deleted those

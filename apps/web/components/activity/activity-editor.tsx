@@ -1,5 +1,6 @@
 "use client";
 
+import { EYEBROW } from "@/components/ui/typography";
 import { useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronUp, Minus, Plus } from "lucide-react";
 import {
@@ -69,9 +70,7 @@ export function ActivityEditor({
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-          Shown
-        </h3>
+        <h3 className={`${EYEBROW} text-muted`}>Shown</h3>
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           <li className="px-4 py-3">
             <p className="text-sm font-semibold">
@@ -129,9 +128,7 @@ export function ActivityEditor({
 
       {draft.hidden.length > 0 ? (
         <div className="space-y-2">
-          <h3 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-            Hidden
-          </h3>
+          <h3 className={`${EYEBROW} text-muted`}>Hidden</h3>
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
             {draft.hidden.map((key) => (
               <li key={key} className="flex items-center gap-1 px-2 py-1.5">

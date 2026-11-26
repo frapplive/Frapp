@@ -152,7 +152,7 @@ export function AttendanceBackfill({
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
-          <label className="flex min-h-9 cursor-pointer items-center gap-2 px-2 text-sm font-semibold pointer-coarse:min-h-11">
+          <label className="flex min-h-control-list-row cursor-pointer items-center gap-2 px-2 text-sm font-semibold pointer-coarse:min-h-11">
             <input
               type="checkbox"
               checked={allShownPicked}
@@ -173,7 +173,7 @@ export function AttendanceBackfill({
               <li key={member.id}>
                 <label
                   htmlFor={`${ids}-${member.id}`}
-                  className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-card-hover pointer-coarse:min-h-11"
+                  className="flex min-h-control-list-row cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-card-hover pointer-coarse:min-h-11"
                 >
                   <input
                     id={`${ids}-${member.id}`}

@@ -560,7 +560,7 @@ function RoleRow({
           <Input
             id={`${id}-new-name`}
             aria-label={`New role name for ${role.roleName}`}
-            className="h-9 max-w-xs text-sm"
+            className="h-control-small max-w-xs text-sm"
             value={choice.name}
             disabled={disabled}
             onChange={(event) =>

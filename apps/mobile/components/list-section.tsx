@@ -22,7 +22,7 @@ import { eyebrowStyle } from "@/components/eyebrow";
 
 /**
  * The grouped-list chrome the reference draws on s09, s12, s14, s15 and s16: an
- * uppercase section caption over a rounded container whose rows are separated
+ * sentence-case section caption over a rounded container whose rows are separated
  * by inset hairlines.
  *
  * Shared because five screens draw it and `components/screen-shell.tsx` — which
@@ -76,7 +76,7 @@ export function SectionHeader({
  * "Sunday", `formatDayHeading`): sentence case in the caption role at 600, in
  * the foreground tone, as web's Events list draws its day headings and as
  * iOS Calendar's and Google Calendar's lists set their days. A day is the
- * content's own label, not a category, so it doesn't take the uppercase
+ * content's own label, not a category, so it doesn't take the muted
  * section eyebrow ({@link SectionHeader}; #4138).
  */
 export function DayHeading({ children }: { children: string }) {
@@ -642,7 +642,7 @@ function createStyles(tokens: SignetTokens) {
     // The eyebrow web's section labels draw (`EYEBROW`), in the secondary tone.
     sectionHeader: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
       marginTop: sectionHeaderMarginTop,
     },
     // Web's Events day heading: caption / 600 in `--foreground`, sentence case.
@@ -666,8 +666,7 @@ function createStyles(tokens: SignetTokens) {
       color: tokens.color.text.muted,
       fontVariant: ["tabular-nums"],
     },
-    // The caption's line box with its top margin; the uppercase tracking
-    // doesn't change its height.
+    // The caption's line box with its top margin.
     sectionHeaderSkeleton: {
       marginTop: sectionHeaderMarginTop,
     },

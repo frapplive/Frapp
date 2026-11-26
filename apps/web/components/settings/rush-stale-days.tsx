@@ -154,7 +154,7 @@ export function RushDaysRow({
                 setProblem(null);
               }
             }}
-            className="h-9 w-16 text-center tabular-nums"
+            className="h-control-small w-16 text-center tabular-nums"
           />
           <span className="text-sm text-muted-foreground">days</span>
         </span>

@@ -416,7 +416,7 @@ function OlderHistoryRow({ context }: { context?: TimelineHeaderContext }) {
           <Button
             variant="secondary"
             size="sm"
-            className="h-8"
+            className="h-control-row"
             onClick={context.onRetryOlder}
           >
             Retry

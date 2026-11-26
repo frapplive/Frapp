@@ -81,8 +81,11 @@ export function NotificationsBell({
   );
 }
 
-/** The shell's 34px icon control, radius 10: the bell, the collapse toggle. */
+/**
+ * The shell's icon control, radius 10: the bell, the collapse toggle. The
+ * Small step on a mouse (foundations §9; 34px until #6115).
+ */
 export const SHELL_ICON_BUTTON = cn(
-  "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] text-muted-foreground transition hover:bg-card hover:text-foreground",
+  "grid size-control-small shrink-0 place-items-center rounded-[10px] text-muted-foreground transition hover:bg-card hover:text-foreground",
   FOCUS_RING_SHELL,
 );

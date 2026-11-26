@@ -113,7 +113,7 @@ export function DmSearch({
           onOpenChange(true);
         }}
         className={cn(
-          "flex h-[34px] w-full items-center gap-2.5 rounded-[10px] border border-control-edge bg-surface-1 px-3 text-left text-sm text-muted-foreground transition hover:text-foreground",
+          "flex h-control-field w-full items-center gap-2.5 rounded-[10px] border border-control-edge bg-surface-1 px-3 text-left text-sm text-muted-foreground transition hover:text-foreground",
           FOCUS_RING_SHELL,
         )}
       >
@@ -472,7 +472,7 @@ function DmSearchPanel({
                 onPointerEnter={() => setActiveIndex(index)}
                 onClick={() => pick(option)}
                 className={cn(
-                  "flex min-h-8 w-full items-center gap-3 rounded-[10px] px-2.5 py-1.5 text-left text-sm transition pointer-coarse:min-h-11 pointer-coarse:text-base",
+                  "flex min-h-control-row w-full items-center gap-3 rounded-[10px] px-2.5 py-1 text-left text-sm transition pointer-coarse:min-h-11 pointer-coarse:text-base",
                   active
                     ? "bg-card-hover text-foreground"
                     : "text-foreground hover:bg-card-hover",

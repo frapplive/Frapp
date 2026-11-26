@@ -289,7 +289,7 @@ function SignInPageContent() {
           variant="link"
           size="sm"
           // 36 to a mouse, 44 to a finger: components.md §2's compact carve-out.
-          className="mx-auto h-9 pointer-coarse:h-11"
+          className="mx-auto h-control-small pointer-coarse:h-11"
           onClick={handleMagicLink}
           disabled={isMagicLinkPending || oauthBusy}
         >

@@ -148,7 +148,7 @@ function addDays(day: string, days: number): string {
 
 /** A day or time in the When row, drawn as the rows' quiet chip (#5742). */
 const INLINE_FIELD = cn(
-  "h-9 px-2 text-sm shadow-none pointer-coarse:h-11",
+  "h-control-small px-2 text-sm shadow-none pointer-coarse:h-11",
   QUIET_FIELD,
 );
 

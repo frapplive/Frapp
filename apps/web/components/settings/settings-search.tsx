@@ -95,7 +95,7 @@ export function SettingsSearch({ className }: { className?: string }) {
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
         className={cn(
-          "h-[34px] w-full rounded-[10px] border border-control-edge bg-surface-1 pl-8 pr-8 text-sm text-foreground placeholder:text-muted pointer-coarse:h-11 pointer-coarse:text-base",
+          "h-control-field w-full rounded-[10px] border border-control-edge bg-surface-1 pl-8 pr-8 text-sm text-foreground placeholder:text-muted pointer-coarse:h-11 pointer-coarse:text-base",
           FOCUS_RING,
         )}
       />
@@ -216,7 +216,7 @@ const SettingsSearchResults = forwardRef<
               onPointerEnter={() => setMoved({ query, index })}
               onClick={onPicked}
               className={cn(
-                "flex min-h-8 w-full flex-col items-start rounded-[10px] px-2.5 py-1.5 text-left pointer-coarse:min-h-11",
+                "flex min-h-control-row w-full flex-col items-start rounded-[10px] px-2.5 py-1.5 text-left pointer-coarse:min-h-11",
                 index === active ? "bg-card-hover" : "hover:bg-card-hover",
               )}
             >

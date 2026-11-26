@@ -112,7 +112,7 @@ export function ChannelThreadRows({
               })}
               onClick={() => onOpen(thread.channel_id, thread.thread_root_id)}
               className={cn(
-                "relative flex h-8 w-full items-center rounded-xs pr-2 text-left text-sm transition-colors",
+                "relative flex h-control-row w-full items-center rounded-xs pr-2 text-left text-sm transition-colors",
                 FOCUS_RING,
                 railRowTone({ active, unread, muted }),
               )}

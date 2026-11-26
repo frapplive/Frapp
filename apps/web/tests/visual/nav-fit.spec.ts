@@ -21,7 +21,8 @@ const test = base.extend({
  * sidebar holds the fixed rows (New, Search, the five homes, More), then the
  * chapter's channels in whatever height is left, then the member at the
  * foot. Paul asked for channels "always visible"; every fixed row added is
- * 36px taken from the list, and this test is what stops the rows growing
+ * 30px taken from the list (the 28px Row step and its 2px gap; 36 until
+ * #6115), and this test is what stops the rows growing
  * back into it one "just one more row" at a time. It replaced #2946's test
  * that the twelve-row nav fit without scrolling.
  *
@@ -34,9 +35,10 @@ const test = base.extend({
  *
  * It measures the room the list is given rather than counting drawn rows:
  * the list needs a signed-in chat, which this sessionless harness has none
- * of. A row is 32px (`channel-list.tsx`) and a category heading about 28px,
+ * of. A row is the 28px Row step (`channel-list.tsx`; 32 until #6115) and a
+ * category heading about 28px at most,
  * and the list keeps 12px of gutter above its first heading (the column's
- * `pt-1` and the list's `p-2`), so eight rows under one heading need 296px.
+ * `pt-1` and the list's `p-2`), so eight rows under one heading need 264px.
  *
  * Deliberately NOT a screenshot: it compares two integers, so it cannot drift
  * with a Chromium revision.
@@ -44,7 +46,7 @@ const test = base.extend({
 
 const WIDTH = 1024;
 const HEIGHT = 768;
-const CHANNEL_ROW = 32;
+const CHANNEL_ROW = 28;
 const CATEGORY_HEADING = 28;
 const MIN_ROWS = 8;
 /** The column's `pt-1` and the list's own `p-2` above its first heading. */
@@ -93,7 +95,7 @@ test("the sidebar keeps eight channel rows in view at 1024×768 with every row s
   expect(
     room,
     `The channel list gets ${Math.round(room)}px at ${WIDTH}×${HEIGHT}, under ` +
-      `the ${need}px eight rows need. Each fixed row costs 36px of the list. ` +
+      `the ${need}px eight rows need. Each fixed row costs 30px of the list. ` +
       "Find the new row a home inside an existing one (a page, or the " +
       "member's menu) — spec/ui/web-dashboard/README.md § Navigation map.",
   ).toBeGreaterThanOrEqual(need);

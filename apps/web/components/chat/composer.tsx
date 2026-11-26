@@ -1915,7 +1915,7 @@ export function Composer({
           <EditorContent editor={editor} />
           {/*
           No `COMPOSER_TOOLBAR_CLASS` here, and that is deliberate: this row's
-          height is intrinsic — `compactControlClassName` is `h-8` and
+          height is intrinsic — `compactControlClassName` is `h-control-row` and
           `pointer-coarse:h-11`, and the Send button matches. Pinning it to the
           shell's reserved height would cap the coarse-pointer row at 32px and
           overflow every touch target on it. The constant reserves what this row
@@ -2036,7 +2036,7 @@ export function Composer({
               <Button
                 type="button"
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
+                className="h-control-row w-control-row shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
                 onClick={submit}
                 aria-label="Send message"
                 title="Send (Enter)"

@@ -966,7 +966,7 @@ export function MessageItem({
   // The run's first row draws the author's 32px photo in the cozy gutter.
   const authorAvatar = (
     <Avatar
-      className="h-8 w-8"
+      className="size-control-row"
       aria-hidden="true"
       data-system-avatar={isSystemPost || undefined}
       style={isSystemPost ? { backgroundColor: CREST_FIELD } : undefined}

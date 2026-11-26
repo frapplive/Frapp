@@ -330,9 +330,7 @@ export function ChapterWizard({ onComplete }: { onComplete: () => void }) {
                 reserves mono for numeric, status and code-like strings, and 12
                 is off the type scale — the recipe is 12.5/600 tracked out.
               */}
-              <p className={cn(EYEBROW, "text-muted-foreground")}>
-                Set up your chapter
-              </p>
+              <p className={cn(EYEBROW, "text-muted")}>Set up your chapter</p>
               <DialogPrimitive.Title asChild>
                 <h1
                   id="chapter-wizard-title"
@@ -683,7 +681,7 @@ function ArchetypeStep({
                 locked scale, on a council abbreviation that is a label rather
                 than a machine value. `EYEBROW` is the recipe.
               */}
-              <span className={cn(EYEBROW, "text-muted-foreground")}>
+              <span className={cn(EYEBROW, "text-muted")}>
                 {archetype.short}
               </span>
               <span className="text-sm font-semibold">{archetype.label}</span>
@@ -834,7 +832,7 @@ function IdentityStep({
               // control that is nothing but a tap target). `rounded` already maps to `--radius` (12) via the
               // preset's `DEFAULT`; spelled `rounded-md` so the radius step is
               // named rather than inherited.
-              className="h-10 w-14 cursor-pointer pointer-coarse:h-11 rounded-md border border-border bg-background"
+              className="h-control-field w-14 cursor-pointer pointer-coarse:h-11 rounded-md border border-border bg-background"
               aria-label="Accent color"
             />
             <span className="font-mono text-caption text-muted-foreground">

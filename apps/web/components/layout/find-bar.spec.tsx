@@ -461,7 +461,7 @@ describe("FindBar", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("draws result rows on the Row step: 32 on a mouse, 44 on touch", async () => {
+  it("draws result rows on the Row step: 28 on a mouse, 44 on touch", async () => {
     // foundations.md §9 (#3515). The row is hand-rolled, so the primitives'
     // touch-floor spec does not cover it.
     channelsQuery.current = { data: [{ id: "c1", name: "announcements" }] };
@@ -475,7 +475,7 @@ describe("FindBar", () => {
       const classes = option.className.split(/\s+/);
       expect(classes).toEqual(
         expect.arrayContaining([
-          "min-h-8",
+          "min-h-control-row",
           "text-sm",
           "pointer-coarse:min-h-11",
           "pointer-coarse:text-base",

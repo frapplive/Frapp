@@ -165,7 +165,8 @@ Five structural facts the table alone does not carry:
   `/`, `/dashboard` and the route-group index land on `/chat`, the open conversation ([§ Gating & routing semantics](#gating--routing-semantics)), and the chapter's channels are the sidebar's own list, always in view, so a pick opens one.
   Below `lg`, where the sidebar is a drawer, a Channels row links to `/chat` where the column holds the list.
 - **The channel list keeps room for eight rows at 1024×768, with every row showing.**
-  Each fixed row costs 36px (34px plus the 2px gap) taken from the list; a channel row is 32px and a category heading about 28px, so eight rows under one heading need 284px.
+  Each fixed row costs 30px (the 28px Row step plus the 2px gap) taken from the list; a channel row is 28px and a category heading about 28px at most, so eight rows under one heading need 264px.
+  _(Changed 2026-11-26 by Paul, [#6115](https://github.com/pdcarlson/Frapp/issues/6115): rows were 34px and channel rows 32 until the control size scale moved one step denser; the room went from about 348px to about 396px, twelve channel rows for the demo president.)_
   [`apps/web/tests/visual/nav-fit.spec.ts`](../../../apps/web/tests/visual/nav-fit.spec.ts) fails the required `web-responsive-floor` job when the list is given less.
   The harness runs sessionless with an owner's `*` permissions stubbed and the chapter read held open, so every permission and module row shows, More included: more rows than any seeded role sees.
   It measures the room the list is given rather than drawn rows, because the list needs a signed-in chat; the room was about 348px when #5946 added the test.
@@ -466,7 +467,7 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
   | Row is itself a control | No: text plus trailing controls                                                                                                                                                                                                               | **Yes**: the row opens the member                                          |
   | Height                  | `min-h-11` (44; on the Small step's 36 / 44 once [#3511](https://github.com/pdcarlson/Frapp/issues/3511) lands). `/backwork` is the exception: a seven-column grid at `@4xl:min-h-12` (48), stacking to two lines below a 896px page (`@4xl`) | `min-h-9`, and `pointer-coarse:min-h-11` (36, 44 on touch: the Small step) |
 
-  `pointer-coarse` is [`components.md`](../design-system/components.md) §2's "compact 34px controls are web/pointer-only" carve-out in CSS: a mouse gets the board's density (`4a` draws a 34px member row), a finger the full 44.
+  `pointer-coarse` is [`components.md`](../design-system/components.md) §2's pointer-only carve-out in CSS: a mouse gets the List row step (32 since #6115; `4a` drew a 34px member row), a finger the full 44.
   Trailing 32px row controls take `compactControlClassName` on the same rule.
   Rows **stack** on a narrow page (`flex-col`, becoming a row at a breakpoint: `sm` or `md` on pages not yet converted, the page's or list's own `@xl` or `@md` on those that are, § Responsive contract) rather than hide fields, because `display:none` removes text from the accessibility tree too, and at the 375px floor a hidden meta line exists nowhere in the product.
 
@@ -1138,7 +1139,7 @@ What needs stating is where the board describes a product this codebase does not
 
 ### Settings
 
-- **One page, a left rail** (`4d`): 200px, 34px rows at radius 10, a filled accent chip for the active tab, grouped Chapter, People and Modules.
+- **One page, a left rail** (`4d`): 200px, rows at the sidebar's Row step (28 on a mouse since #6115; the board drew 34) at radius 10, a filled accent chip for the active tab, grouped Chapter, People and Modules.
   _Changed in #3827, 2026-11-11:_ Danger zone is no longer a row; its content is the last section of Plan and billing.
   The tabs are `SETTINGS_TABS` in `settings-rail.tsx`, and who sees which is owned by [`../../behavior/settings/README.md`](../../behavior/settings/README.md#who-sees-what); neither is restated here.
   The board's rail is a simplified chapter's, not an inventory: this product's live tabs it does not draw are kept.

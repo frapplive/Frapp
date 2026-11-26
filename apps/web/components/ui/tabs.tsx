@@ -66,7 +66,7 @@ const TabsTrigger = React.forwardRef<
     className={cn(
       // `-mb-px` pulls the item's own bottom border over the list's hairline so
       // the active underline replaces the rule rather than stacking under it.
-      "-mb-px inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-t-xs border-b-2 border-transparent px-1 py-1.5 text-sm pointer-coarse:min-h-11 font-normal transition-colors",
+      "-mb-px inline-flex min-h-control-small items-center justify-center whitespace-nowrap rounded-t-xs border-b-2 border-transparent px-1 py-1 text-sm pointer-coarse:min-h-11 font-normal transition-colors",
       "enabled:hover:text-muted-foreground",
       // `enabled:`-scoped so `disabled:text-disabled` below is not competing
       // with an equal-specificity `data-[state]` rule that Tailwind emits later.

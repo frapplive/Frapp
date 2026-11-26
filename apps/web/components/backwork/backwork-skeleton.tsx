@@ -20,7 +20,7 @@ function ResourceRows() {
       <SkeletonRows
         rows={8}
         trailing={["w-8", "w-8"]}
-        trailingHeight="h-8 pointer-coarse:h-11"
+        trailingHeight="h-control-row pointer-coarse:h-11"
         rowClassName="px-2 py-2 @4xl:min-h-12"
       />
     </div>

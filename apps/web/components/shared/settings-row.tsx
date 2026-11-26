@@ -111,8 +111,12 @@ type Trailing =
       href?: never;
     };
 
+/**
+ * foundations §9's Settings row step: 36 to a mouse (44 until #6115), 44 to a
+ * finger. A row with its muted line grows past it.
+ */
 const ROW =
-  "flex min-h-11 items-center gap-4 px-4 py-2.5 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
+  "flex min-h-control-settings-row items-center gap-4 px-4 py-1.5 pointer-coarse:min-h-11 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
 
 export function SettingsRow(
   props: {

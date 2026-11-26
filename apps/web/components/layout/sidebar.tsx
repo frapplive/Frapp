@@ -289,7 +289,7 @@ export function Sidebar({
                 key={item.id}
                 aria-hidden="true"
                 data-nav-placeholder=""
-                className="block min-h-touch shrink-0 lg:h-[34px] lg:min-h-0"
+                className="block min-h-touch shrink-0 lg:h-control-row lg:min-h-0"
               />
             );
           }
@@ -434,9 +434,9 @@ function NewRow({
       data-nav-new=""
       className={cn(
         // The row's geometry with the action button's edge: 1px of border
-        // inside the same 34px, so its glyph lines up with the rows under it.
-        "relative mb-1 flex min-h-touch items-center rounded-[10px] border border-primary/35 text-left text-sm font-semibold text-primary transition hover:bg-primary/10 lg:h-[34px] lg:min-h-0",
-        collapsed ? "w-[34px] justify-center" : "w-full gap-2.5 px-[9px]",
+        // inside the same Row step, so its glyph lines up with the rows under it.
+        "relative mb-1 flex min-h-touch items-center rounded-[10px] border border-primary/35 text-left text-sm font-semibold text-primary transition hover:bg-primary/10 lg:h-control-row lg:min-h-0",
+        collapsed ? "w-control-row justify-center" : "w-full gap-2.5 px-[9px]",
         open && "border-accent-border bg-accent-subtle text-accent-text",
         FOCUS_RING_SHELL,
       )}

@@ -47,7 +47,7 @@ export function LoadingCard({ message }: LoadingCardProps) {
       aria-live={isTerminal ? undefined : "polite"}
       aria-busy={isTerminal ? undefined : "true"}
     >
-      <p className={cn(EYEBROW, "text-muted-foreground")}>
+      <p className={cn(EYEBROW, "text-muted")}>
         {isRecorded
           ? `${message.content || "That command"}: recorded, chat card missing`
           : isUnconfirmed

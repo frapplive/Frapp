@@ -108,7 +108,7 @@ export function SubtaskListEditor({
             commit();
             if (items.length === 0 && !text.trim()) setOpen(false);
           }}
-          className={cn("h-9")}
+          className={cn("h-control-small")}
         />
       )}
     </div>

@@ -102,7 +102,7 @@ export function ChannelStart({
       >
         <ChannelMark
           channel={channel}
-          className="h-8 w-8"
+          className="size-control-row"
           hashClassName="text-display font-bold leading-none"
         />
       </div>

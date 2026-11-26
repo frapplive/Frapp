@@ -283,12 +283,12 @@ function TaxonomyRow({
           }}
           autoFocus
           disabled={saving}
-          className="h-8"
+          className="h-control-row"
         />
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8 shrink-0"
+          className="size-control-row shrink-0"
           onClick={() => void save()}
           disabled={saving}
           aria-label="Save"
@@ -302,7 +302,7 @@ function TaxonomyRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8 shrink-0"
+          className="size-control-row shrink-0"
           onClick={() => {
             setDraft(row.name);
             setEditing(false);
@@ -323,7 +323,7 @@ function TaxonomyRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="size-control-row"
           onClick={() => {
             // Resync rather than trusting whatever `draft` held from a
             // previous, possibly-abandoned edit — `row.name` may have moved
@@ -340,7 +340,7 @@ function TaxonomyRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="size-control-row"
           onClick={() => onMerge(entity, row.id, row.name)}
           aria-label={`Merge ${row.name}`}
         >
@@ -349,7 +349,7 @@ function TaxonomyRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="size-control-row"
           onClick={async () => {
             // The spinner covers only the actual delete request — not
             // whatever time the person spends deciding on the confirmation

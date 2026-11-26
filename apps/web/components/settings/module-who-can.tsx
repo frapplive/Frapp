@@ -262,7 +262,7 @@ export function WhoCanPermissionPage({
                 items={addable}
                 nameOf={(role) => role.name}
                 keyOf={(role) => role.id}
-                itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+                itemClassName="min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
                 renderItem={(role) => (
                   <>
                     <RoleDot color={role.color} />

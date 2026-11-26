@@ -316,7 +316,7 @@ export function AddTaskRow({
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, title: event.target.value }))
               }
-              className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+              className="h-control-small min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
             />
           </div>
           {hasTitle ? (
@@ -352,7 +352,7 @@ export function AddTaskRow({
             value={draft.due}
             aria-invalid={missing.due || missing.passed || undefined}
             disabled={controls.disabled}
-            className="h-9"
+            className="h-control-small"
             onChange={(due) => {
               // No due date can't repeat (#5761), so clearing it drops the
               // repeat; the Repeat control then says why it is off.
@@ -374,7 +374,7 @@ export function AddTaskRow({
           min={0}
           aria-label="Points (optional)"
           placeholder="Pts"
-          className="h-9 w-20 shrink-0"
+          className="h-control-small w-20 shrink-0"
           value={draft.points}
           disabled={controls.disabled}
           onChange={(event) => {
@@ -491,7 +491,7 @@ export function AddTaskRow({
                   onChange={(followedBy) =>
                     setDraft((prev) => ({ ...prev, followedBy }))
                   }
-                  className="h-8 w-fit min-w-[10rem]"
+                  className="h-control-row w-fit min-w-[10rem]"
                 />
               </div>
               <p className="text-caption text-muted-foreground">

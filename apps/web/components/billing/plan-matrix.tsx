@@ -160,10 +160,7 @@ const ROW_CLASS =
 export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
   return (
     <section aria-labelledby="plan-matrix-heading" className="space-y-2">
-      <h2
-        id="plan-matrix-heading"
-        className={`${EYEBROW} text-muted-foreground`}
-      >
+      <h2 id="plan-matrix-heading" className={`${EYEBROW} text-muted`}>
         {onPaidPlan
           ? "What your plan includes"
           : "What the subscription unlocks"}

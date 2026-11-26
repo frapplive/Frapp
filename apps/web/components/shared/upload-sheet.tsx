@@ -72,7 +72,7 @@ export const UPLOAD_FIELD_CLASS = dashboardToolbarHeightClassName;
  * where `text-sm` is Tailwind's own 14px.
  */
 export const UPLOAD_SHEET_BUTTON_CLASS =
-  "h-9 px-4 text-label pointer-coarse:h-11";
+  "h-control-small px-4 text-label pointer-coarse:h-11";
 
 /**
  * Label and control. The plain field of the sheet.
@@ -230,7 +230,7 @@ export function UploadFileField({
         aria-hidden
         htmlFor={id}
         className={cn(
-          "inline-flex h-9 shrink-0 cursor-pointer items-center rounded-md border border-control-edge px-3 text-sm font-semibold text-foreground transition-colors",
+          "inline-flex h-control-small shrink-0 cursor-pointer items-center rounded-md border border-control-edge px-3 text-sm font-semibold text-foreground transition-colors",
           "pointer-coarse:h-11",
           disabled && "pointer-events-none opacity-60",
         )}

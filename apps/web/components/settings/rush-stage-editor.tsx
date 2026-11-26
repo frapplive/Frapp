@@ -243,7 +243,7 @@ function CategoryStages({
   const label = RUSH_STAGE_CATEGORY_LABELS[category];
   return (
     <section aria-labelledby={headingId} className="grid gap-2">
-      <h3 id={headingId} className={cn(EYEBROW, "text-muted-foreground")}>
+      <h3 id={headingId} className={cn(EYEBROW, "text-muted")}>
         {label}
       </h3>
       <ul className="divide-y divide-border rounded-[14px] border border-border bg-card">
@@ -262,7 +262,7 @@ function CategoryStages({
                 type="button"
                 {...sortable.handleProps(index, draft.label)}
                 className={cn(
-                  "flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground active:cursor-grabbing pointer-coarse:h-11",
+                  "flex h-control-row w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground active:cursor-grabbing pointer-coarse:h-11",
                   FOCUS_RING_OFFSET,
                 )}
               >

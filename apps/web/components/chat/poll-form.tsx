@@ -188,7 +188,7 @@ export function PollForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0"
+                  className="size-control-row shrink-0"
                   aria-label={`Move option ${index + 1} up`}
                   disabled={posting || index === 0}
                   onClick={() =>
@@ -201,7 +201,7 @@ export function PollForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0"
+                  className="size-control-row shrink-0"
                   aria-label={`Move option ${index + 1} down`}
                   disabled={posting || index === draft.options.length - 1}
                   onClick={() =>
@@ -214,7 +214,7 @@ export function PollForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0"
+                  className="size-control-row shrink-0"
                   aria-label={`Remove option ${index + 1}`}
                   disabled={posting || !canRemovePollOption(draft)}
                   onClick={() =>

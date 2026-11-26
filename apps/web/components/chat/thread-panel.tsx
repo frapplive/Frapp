@@ -778,7 +778,7 @@ export function ThreadPanel({
                 <Button
                   type="button"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
+                  className="h-control-row w-control-row shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
                   onClick={() => void submit()}
                   aria-label="Send reply"
                   title="Send (Enter)"
