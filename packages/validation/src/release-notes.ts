@@ -134,12 +134,14 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
       "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
       "Frapp Intelligence now knows who uploaded a document and who posted minutes, finds replies in threads, and asks which event you mean when two different ones share a word.",
+      "Opening a channel or direct message with unread messages now takes you to the first one, under a \"New messages\" line, and a button at the top shows how many are new and takes you back to them, with Mark as read beside it.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
       "Rush fits beside chat: stages with nobody in them fold to their names so the full ones keep their room, and the views, search and New fold into icons when the page is narrow.",
       "School and council shows your school by its name, without the made-up initials badge beside it.",
       "Each module's page in Chapter settings shows who can do what and its goals at a glance, and opens each one, like the ledger or a permission, on a page of its own.",
+      "Plan and billing now shows your plan as one row, with what it includes and your member invoices each on a page of their own.",
     ],
     phone: [
       "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
