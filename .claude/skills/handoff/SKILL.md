@@ -83,31 +83,43 @@ REST fallback ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking))
 
 ## Keep the work moving
 
-Work handed off must not stall (Paul, 2026-11-26). Every handoff, whatever its form, tells the next
-session the same thing, so the rule travels down the chain:
+Work handed off must not stall, and must not drift (Paul, 2026-11-26). A handoff of tracked work
+(a `next`, `continue` or `parallel` handoff of an issue or an epic's stage) carries one standing rule
+to the next session as its item 8, so the rule travels down the chain. It is the one rule a handoff
+states as a rule rather than orientation, because the next session can't rediscover it:
 
-- **Finish the stage, then look at what's left.** When the stage's PR is green (or its research is
-  filed), check the tracker: open sub-issues of the epic, follow-ups this stage filed, anything it
-  couldn't finish.
-- **Ask before starting more.** If more is left and it's ready to build, ask the user, last in the
-  run's message and with AskUserQuestion, whether to spin off the next session, naming what it
-  would do. Don't start one unasked, and don't end silently with work left. An unattended run puts
-  the question in its end-of-run report instead.
-- **An epic can run as a chain of chats**, each doing one stage and handing to the next, as long as
-  the user keeps saying yes. Stages that touch different screens and different files can run as
-  parallel chains (the one-PR-per-screen rule in [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)
-  decides what can't); say which lane a handoff is in and what the other lane holds.
-- **Stay inside the epic.** A handoff carries only the tracker's next stage. An idea that surfaced
-  along the way is filed per [`file-follow-up`](../file-follow-up/SKILL.md) and offered as its own
-  choice, never folded into the next stage, so a chain can't drift from what was asked.
+- **When its work is done** (its PR green, or a `continue` handoff's stage finished), the session
+  looks at what's left: the epic's open sub-issues, and what its own stage left unfinished.
+- **It offers the next session, once, instead of ending silently.** Where it has the suggested-task
+  tool, the card is the offer (§ When to offer this unprompted). Where it has `create_session`, it
+  asks the user with AskUserQuestion, last in its message, naming what the next session would do,
+  and starts it only on a yes. Without either, it offers `/handoff`. An unattended run puts the offer
+  in its end-of-run report.
+- **The epic is the boundary.** The next session is the epic's next stage, or, for a `continue`
+  handoff, the same stage. A stand-alone issue's chain ends when that issue is done. An idea that
+  surfaced along the way goes on the board the usual way (filed per
+  [`file-follow-up`](../file-follow-up/SKILL.md), or a `research` card, which files its own issue)
+  and waits for the user to choose it; it never rides into the next stage. A new-feature idea stays
+  in the Backlog unless Paul asks for it ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking)).
+- **Stages on the same screen wait their turn.** The one-PR-per-screen rule
+  ([`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)) holds between stages:
+  a next stage on the screen the last one changed opens its PR only after that one merges. Stages on
+  different screens and files can run as parallel lanes; a handoff says which lane it is and what
+  the other lane holds.
+
+A coordinator's handoff to its successor is its own procedure and starts the successor without
+asking ([`coordinator`](../coordinator/SKILL.md)); this rule doesn't apply to it. A `research` or
+`walkthrough` handoff carries no item 8: research ends by queuing its issue's card, and a
+walkthrough by recording the result.
 
 ### Starting the next session yourself
 
-Where the session has `create_session` (the claude-code-remote tools), and the user said yes, start
-the next session directly instead of handing the user a card or a block to paste: `source_url` is
-the repository, `title` names the stage and its issue, and `prompt` is the seven items below,
-including this section's rule in one or two sentences. Then tell the user the session's title, and
-that its progress shows in their session list.
+Where the session has `create_session` (the claude-code-remote tools) and the user said yes, it
+starts the next session directly instead of a card or a block to paste: `source_url` is
+`https://github.com/frapplive/Frapp`, `title` names the stage and its issue, and `prompt` is the
+items below in plain words (it can't open with `/`, so item 1 says "Claim and build #N the way
+`/next` does"). Then it tells the user the session's title, and that its progress shows in their
+session list.
 
 ## Gather live state
 
@@ -130,7 +142,7 @@ When the session has the suggested-task tool (`spawn_task`), deliver the handoff
 
 - `title`: a short imperative phrase, under 60 characters, that makes sense on its own.
 - `tldr`: one or two plain sentences on what the new session does and why it's worth doing.
-- `prompt`: the seven items below, in the same order, without the outer fence.
+- `prompt`: the items below, in the same order, without the outer fence.
 
 Only `prompt` reaches the new session. `title` and `tldr` are what the user reads on the card, so
 nothing the session needs lives only there.
@@ -180,6 +192,9 @@ In order:
 7. **A closing instruction to verify independently**, such as: *"Treat all of the above as a
    starting point that may be stale. Verify it against the repo before relying on it, and if your
    own reading disagrees, trust your reading and say so."*
+8. **Keep the work moving**, for tracked work only (§ Keep the work moving), in two or three
+   sentences: when this work is done, offer the next stage of the epic once (named), within the
+   epic and no further, and pass this rule on.
 
 Every factual claim comes from a command you just ran or a file you just read; mark anything
 uncertain as uncertain. Aim for roughly 40–70 lines. If it runs long, hand off less scope rather than
