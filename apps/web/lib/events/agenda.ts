@@ -13,6 +13,32 @@ import {
 } from "@repo/hooks/calendar-tasks";
 import { addDays } from "@repo/hooks/calendar-time-grid";
 import type { EventListEntry } from "@repo/hooks/event-series";
+import {
+  addEventDays,
+  eventDaySpan,
+  eventIsDated,
+  eventTimingFieldsOf,
+} from "@repo/validation";
+
+/**
+ * The days (`YYYY-MM-DD`) an all-day or time-TBD event is on, first to last
+ * (#6098), or null for a timed event. The calendar views place a dated event
+ * on each of these by its zone-free dates, never by its stored instants,
+ * which are the saver's midnights (`eventCoversDay`).
+ */
+export function datedEventDays(event: unknown): string[] | null {
+  if (!event || typeof event !== "object") return null;
+  const shape = eventTimingFieldsOf(event as Record<string, unknown>);
+  if (!eventIsDated(shape) || !shape.start_date) return null;
+  const span = eventDaySpan(shape);
+  if (span < 1) return null;
+  const days: string[] = [];
+  for (let offset = 0; offset < span; offset += 1) {
+    const day = addEventDays(shape.start_date, offset);
+    if (day) days.push(day);
+  }
+  return days;
+}
 
 /**
  * The Events agenda (#5560): one list of days, each day's events, tasks and
@@ -80,6 +106,12 @@ export interface AgendaInput<E> {
   /** Tasks and birthdays, in the order a day lists each kind. */
   items: readonly CalendarItem[];
   startOf: (event: E) => unknown;
+  /**
+   * The days a dated event is on (#6098), listed on each; null for a timed
+   * one, which is listed on its start's day. A day lists its dated events
+   * first, as Google Calendar's schedule puts all-day events over the hours.
+   */
+  daysOf?: (event: E) => readonly string[] | null;
   keyOf: (event: E) => string;
   /** Local midnight of the day the agenda starts on. */
   anchor: Date;
@@ -138,14 +170,26 @@ export function buildAgenda<E>(input: AgendaInput<E>): Agenda<E> {
     }
     return bucket;
   };
+  // Each event's row key, so one on several days counts once.
+  const eventKeysByDay = new Map<string, string[]>();
+  const datedRows = new Set<AgendaRow<E>>();
   for (const entry of input.entries) {
-    const start = parseInstant(input.startOf(entry.event));
-    const key = start ? localIsoDate(start) : UNDATED_KEY;
-    bucketOf(key).events.push({
-      kind: "events",
-      key: `event:${input.keyOf(entry.event)}`,
-      entry,
-    });
+    const days = input.daysOf?.(entry.event) ?? null;
+    const start = days ? null : parseInstant(input.startOf(entry.event));
+    const keys = days ?? [start ? localIsoDate(start) : UNDATED_KEY];
+    const rowKey = `event:${input.keyOf(entry.event)}`;
+    for (const key of keys) {
+      const row: AgendaRow<E> = { kind: "events", key: rowKey, entry };
+      if (days) datedRows.add(row);
+      bucketOf(key).events.push(row);
+      eventKeysByDay.set(key, [...(eventKeysByDay.get(key) ?? []), rowKey]);
+    }
+  }
+  // Dated events lead their day (a stable sort keeps the rest in order).
+  for (const bucket of byDay.values()) {
+    bucket.events.sort(
+      (a, b) => Number(datedRows.has(b)) - Number(datedRows.has(a)),
+    );
   }
   const overdue: AgendaRow<E>[] = [];
   for (const item of input.items) {
@@ -251,11 +295,19 @@ export function buildAgenda<E>(input: AgendaInput<E>): Agenda<E> {
       lastShown !== undefined && (forward ? key <= lastShown : key >= lastShown)
     );
   };
+  const countedEvents = new Set<string>();
   for (const key of dated) {
     if (!inRange(key)) continue;
     const bucket = byDay.get(key)!;
-    for (const kind of KIND_ORDER) counts[kind] += bucket[kind].length;
+    for (const kind of KIND_ORDER) {
+      if (kind === "events") continue;
+      counts[kind] += bucket[kind].length;
+    }
+    for (const rowKey of eventKeysByDay.get(key) ?? []) {
+      countedEvents.add(rowKey);
+    }
   }
+  counts.events = countedEvents.size;
   counts.tasks += overdue.length;
   if (forward) counts.events += byDay.get(UNDATED_KEY)?.events.length ?? 0;
 
@@ -279,6 +331,7 @@ export function kindsByDay<E>(
   startOf: (event: E) => unknown,
   items: readonly CalendarItem[],
   hidden: ReadonlySet<CalendarKind>,
+  daysOf?: (event: E) => readonly string[] | null,
 ): Map<string, Set<CalendarKind>> {
   const map = new Map<string, Set<CalendarKind>>();
   const add = (key: string, kind: CalendarKind) => {
@@ -288,6 +341,11 @@ export function kindsByDay<E>(
     else map.set(key, new Set([kind]));
   };
   for (const event of events) {
+    const days = daysOf?.(event) ?? null;
+    if (days) {
+      for (const day of days) add(day, "events");
+      continue;
+    }
     const start = parseInstant(startOf(event));
     if (start) add(localIsoDate(start), "events");
   }

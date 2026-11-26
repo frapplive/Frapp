@@ -4,7 +4,11 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { formatClockShort } from "@repo/formatting";
 import { eventNowPill, eventNowState, useEventsOnNow } from "@repo/hooks";
-import { EVENT_NOW_COPY } from "@repo/validation";
+import {
+  EVENT_NOW_COPY,
+  eventIsDated,
+  eventTimingFieldsOf,
+} from "@repo/validation";
 import { cn } from "@/lib/utils";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 
@@ -80,6 +84,10 @@ export function EventNowPill({
   event: Parameters<typeof eventNowPill>[0];
   now: number;
 }) {
+  // An all-day, time-TBD or calendar-only event is never on (#6098): its
+  // stored times are midnights, which would read "until 12:00 AM".
+  const shape = eventTimingFieldsOf(event as Record<string, unknown>);
+  if (eventIsDated(shape) || shape.calendar_only) return null;
   const pill = eventNowPill(event, new Date(now));
   if (!pill) return null;
   return (

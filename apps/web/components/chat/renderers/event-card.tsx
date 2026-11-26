@@ -26,11 +26,13 @@ import {
   can,
   CHECK_IN_MODULE_OFF_LINE,
   EVENT_PAGE_COPY,
+  EVENT_TENTATIVE_LABEL,
   checkInOpenAt,
+  eventTakesAttendance,
   isModuleEnabled,
 } from "@repo/validation";
 import {
-  formatEventWindow,
+  formatEventWhen,
   formatPointsChip,
   parseInstant,
 } from "@repo/formatting";
@@ -117,7 +119,11 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
   // past event cards reads nothing for them.
   const start = parseInstant(payload?.start_time);
   const end = parseInstant(payload?.end_time);
+  // A calendar-only or time-TBD event takes no attendance (#6098): no
+  // check-in window, so no check-in, points or excuse on its card.
+  const takesAttendance = !!payload && eventTakesAttendance(payload);
   const windowOpen =
+    takesAttendance &&
     !!payload &&
     !!start &&
     !!end &&
@@ -172,7 +178,7 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
   // says it; the excuse's own note would repeat it (the phone's rule).
   const markedExcused =
     markedLine !== null && selectOwnAttendance(mine.data)?.status === "EXCUSED";
-  const offerExcuse = !eventsOff && excuse.kind === "offer";
+  const offerExcuse = !eventsOff && takesAttendance && excuse.kind === "offer";
   const actionsDisabled = !isConfirmed || checkIn.isPending;
 
   return (
@@ -192,14 +198,18 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
           <Badge variant="outline">{EVENT_PAGE_COPY.required}</Badge>
         ) : null}
       </div>
-      <p className="mt-2 text-base font-bold">{payload.name}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-base font-bold">
+        <span>{payload.name}</span>
+        {payload.is_tentative ? (
+          // A status beside the name, not an alarm (#6098).
+          <Badge variant="outline">{EVENT_TENTATIVE_LABEL}</Badge>
+        ) : null}
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <span>
-          {formatEventWindow(
-            payload.start_time,
-            payload.end_time,
-            new Date(now),
-          ) ?? payload.start_time}
+          {/* By its days for an all-day or time-TBD event, never its
+              stored midnights. */}
+          {formatEventWhen(payload, new Date(now)) ?? payload.start_time}
         </span>
         {payload.location ? (
           <>
@@ -210,7 +220,7 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
             </span>
           </>
         ) : null}
-        {payload.point_value ? (
+        {payload.point_value && takesAttendance ? (
           <Badge variant="outline">
             {formatPointsChip(payload.point_value)}
           </Badge>

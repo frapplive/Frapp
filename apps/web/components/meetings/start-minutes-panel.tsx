@@ -1,5 +1,6 @@
 "use client";
 
+import { eventWhenOr } from "@/lib/events/event-when";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { codeOf } from "@repo/api-sdk";
@@ -62,7 +63,7 @@ type EventRow = {
   start_time: string;
   end_time?: string | null;
   check_in_opens_minutes?: number | null;
-};
+} & Record<string, unknown>;
 type Source = { kind: "event"; id: string } | { kind: "none" };
 
 /** The kept draft's name (`@repo/hooks/kept-drafts`, #4593). */
@@ -341,7 +342,7 @@ function StartMinutesForm({ onDone }: { onDone: () => void }) {
                       disabled={isTaken}
                       onClick={() => pickEvent(event)}
                       title={event.name}
-                      detail={meetingWhenLabel(event.start_time)}
+                      detail={eventWhenOr(event, meetingWhenLabel)}
                       trailing={
                         existing
                           ? MEETING_ENTRY_COPY.open
