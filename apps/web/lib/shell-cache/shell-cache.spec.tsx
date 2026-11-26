@@ -1,5 +1,11 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  closeShellCache,
+  pruneOtherMembers,
+  reopenShellCache,
+} from "./shell-cache-clear";
 import {
   clearShellCache,
   readShellRows,
@@ -9,7 +15,12 @@ import {
   shellIdentityFrom,
   writeShellRow,
 } from "./shell-cache";
-import { keepShellAnswers, seedShellCache } from "./shell-cache-sync";
+import {
+  keepShellAnswers,
+  ShellCacheSync,
+  useShellCached,
+  useShellIdentity,
+} from "./shell-cache-sync";
 
 const A = { authUserId: "auth-a", chapterId: "chapter-1" };
 const ROSTER = [{ user_id: "u-1", display_name: "Winston", avatar_url: null }];
@@ -20,7 +31,10 @@ function ownKeys(): string[] {
   );
 }
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  reopenShellCache();
+});
 afterEach(() => localStorage.clear());
 
 describe("shell cache rows", () => {
@@ -84,55 +98,7 @@ describe("shell cache rows", () => {
   });
 });
 
-describe("seeding and keeping (#5049)", () => {
-  it("paints the last answers where a query has none, marked stale", () => {
-    const now = Date.now();
-    writeShellRow(A, "roster", ROSTER, now - 1000);
-    writeShellRow(A, "permissions", { permissions: ["members:view"] }, now);
-    const client = new QueryClient();
-
-    seedShellCache(client, A, now);
-
-    const roster = client.getQueryState(["members", "chapter-1", "roster"]);
-    expect(roster?.data).toEqual(ROSTER);
-    expect(roster?.dataUpdatedAt).toBe(now - 1000);
-    expect(roster?.isInvalidated).toBe(true);
-    expect(
-      client.getQueryData(["user", "me", "permissions", "chapter-1"]),
-    ).toEqual({ permissions: ["members:view"] });
-  });
-
-  it("never covers a live answer or a failed read", () => {
-    writeShellRow(A, "roster", ROSTER);
-    writeShellRow(A, "events", [{ id: "old" }]);
-    const client = new QueryClient();
-    client.setQueryData(["members", "chapter-1", "roster"], []);
-    void client
-      .fetchQuery({
-        queryKey: ["events", "chapter-1"],
-        queryFn: () => Promise.reject(new Error("down")),
-        retry: false,
-      })
-      .catch(() => {});
-    return new Promise<void>((resolve) => setTimeout(resolve, 0)).then(() => {
-      seedShellCache(client, A);
-      expect(client.getQueryData(["members", "chapter-1", "roster"])).toEqual(
-        [],
-      );
-      expect(client.getQueryData(["events", "chapter-1"])).toBeUndefined();
-    });
-  });
-
-  it("returns the cached name and photo, and never seeds the user record", () => {
-    writeShellRow(A, "me", { display_name: "Paul", avatar_url: null });
-    const client = new QueryClient();
-    expect(seedShellCache(client, A)).toEqual({
-      display_name: "Paul",
-      avatar_url: null,
-    });
-    expect(client.getQueryData(["user", "me"])).toBeUndefined();
-  });
-
+describe("keeping and offering (#5049)", () => {
   it("keeps a fetched answer for this chapter, and never a manual write", async () => {
     const client = new QueryClient();
     const stop = keepShellAnswers(client, A);
@@ -145,6 +111,15 @@ describe("seeding and keeping (#5049)", () => {
       queryKey: ["user", "me"],
       queryFn: () => ({ display_name: "Paul", email: "p@example.test" }),
     });
+    await client.fetchQuery({
+      queryKey: ["chapters", "current", "chapter-1"],
+      queryFn: () => ({
+        name: "Beta Theta Omega",
+        logo_url: null,
+        subscription_status: "past_due",
+        past_due_since: "2026-11-01",
+      }),
+    });
     // Another chapter's key, an optimistic write, and a key not kept.
     await client.fetchQuery({
       queryKey: ["members", "chapter-2", "roster"],
@@ -155,29 +130,87 @@ describe("seeding and keeping (#5049)", () => {
     stop();
 
     const rows = readShellRows(A);
-    expect([...rows.keys()].sort()).toEqual(["me", "roster"]);
+    expect([...rows.keys()].sort()).toEqual(["chapter", "me", "roster"]);
     expect(rows.get("me")?.data).toEqual({
       display_name: "Paul",
       avatar_url: null,
     });
+    // The chapter head only: no billing state on disk.
+    expect(rows.get("chapter")?.data).toEqual({
+      name: "Beta Theta Omega",
+      logo_url: null,
+      branding: null,
+    });
   });
 
-  it("drops an answer that lands after the cache was cleared", async () => {
+  it("drops an answer from a query no longer in the cache", async () => {
     const client = new QueryClient();
     const stop = keepShellAnswers(client, A);
-    let answer: (value: unknown) => void = () => {};
-    const pending = client.fetchQuery({
+    const cache = client.getQueryCache();
+    const query = cache.build(client, {
       queryKey: ["members", "chapter-1", "roster"],
-      queryFn: () =>
-        new Promise((resolve) => {
-          answer = resolve;
-        }),
+      queryFn: () => Promise.resolve(ROSTER),
     });
-    // An identity change clears the query cache before the read answers.
-    client.clear();
-    answer(ROSTER);
-    await pending.catch(() => {});
+    // An identity change cleared the cache; the read still answers.
+    cache.remove(query);
+    await query.fetch();
     stop();
     expect(readShellRows(A).size).toBe(0);
+  });
+
+  it("writes nothing once sign-out has closed the store, until a scope starts", () => {
+    closeShellCache();
+    writeShellRow(A, "roster", ROSTER);
+    expect(ownKeys()).toEqual([]);
+    reopenShellCache();
+    writeShellRow(A, "roster", ROSTER);
+    expect(ownKeys()).toHaveLength(1);
+  });
+
+  it("deletes every other member's rows once the member is known", () => {
+    writeShellRow(A, "roster", ROSTER);
+    writeShellRow({ ...A, chapterId: "chapter-2" }, "roster", ROSTER);
+    writeShellRow(
+      { authUserId: "auth-b", chapterId: "chapter-9" },
+      "roster",
+      ROSTER,
+    );
+    pruneOtherMembers("auth-a");
+    expect(ownKeys().sort()).toEqual([
+      `${SHELL_CACHE_PREFIX}auth-a|chapter-1|roster`,
+      `${SHELL_CACHE_PREFIX}auth-a|chapter-2|roster`,
+    ]);
+  });
+
+  it("offers this scope's rows, never the query cache, and disowns them when the scope moves", async () => {
+    writeShellRow(A, "me", { display_name: "Paul", avatar_url: null });
+    writeShellRow(A, "events", [{ id: "e-1" }]);
+    const client = new QueryClient();
+    function Probe() {
+      const me = useShellIdentity();
+      const events = useShellCached<unknown[]>("events");
+      return (
+        <span data-testid="probe">
+          {me?.display_name ?? "none"}|{events?.length ?? 0}
+        </span>
+      );
+    }
+    const tree = (authUserId: string | null) => (
+      <QueryClientProvider client={client}>
+        <ShellCacheSync authUserId={authUserId} chapterId="chapter-1">
+          <Probe />
+        </ShellCacheSync>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree("auth-a"));
+    await waitFor(() =>
+      expect(screen.getByTestId("probe").textContent).toBe("Paul|1"),
+    );
+    expect(client.getQueryData(["events", "chapter-1"])).toBeUndefined();
+    expect(client.getQueryData(["user", "me"])).toBeUndefined();
+
+    // Another account in this tab: the first render under it shows none of A's.
+    rerender(tree("auth-b"));
+    expect(screen.getByTestId("probe").textContent).toBe("none|0");
   });
 });

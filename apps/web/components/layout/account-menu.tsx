@@ -145,9 +145,10 @@ export function AccountMenu({
   // never initials made from it: offline is the connection pill's to say.
   const reading = !data && !isError && fetchStatus !== "idle" && !isOffline;
   // On a revisit the row paints the name and photo this browser last saw for
-  // this member and chapter (#5049), and the live answer replaces them.
+  // this member and chapter (#5049), offline included, and the live answer
+  // replaces them. A failed read doesn't: that is the plain-words label.
   const cached = useShellIdentity();
-  const fromCache = reading && !!cached?.display_name;
+  const fromCache = !data && !isError && !!cached?.display_name;
   const identityLoading = reading && !fromCache;
   const ownName =
     user.display_name?.trim() || (fromCache ? cached.display_name : null);

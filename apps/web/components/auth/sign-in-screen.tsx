@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { SkeletonText } from "@/components/shared/async-states";
 import { CheckEmail } from "@/components/auth/check-email";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { clearShellCache } from "@/lib/shell-cache/shell-cache-clear";
 import { useToast } from "@/lib/hooks/use-toast";
 import { reportAuthFailure } from "@/lib/sentry/auth-failures";
 import {
@@ -93,6 +94,9 @@ function SignInPageContent() {
   const [pendingOAuth, setPendingOAuth] = useState<OAuthProvider | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const redirectTo = resolveRedirectPath(searchParams.get("redirectTo"));
+  // Whoever signs in next starts with no kept shell (#5049): a session that
+  // ended with no tab open (an expired refresh token) never cleared it.
+  useEffect(() => clearShellCache(), []);
   const authError = searchParams.get("authError");
   const sessionEnded =
     searchParams.get(SESSION_ENDED_PARAM) === SESSION_ENDED_VALUE;
@@ -103,7 +107,10 @@ function SignInPageContent() {
     if (!authError) return;
     // Reported by `/auth/callback` itself, with GoTrue's own error (#3832).
     if (authError === EMAIL_CONFIRMED_AUTH_ERROR) {
-      toast({ title: "Email confirmed", description: describeAuthError(authError) });
+      toast({
+        title: "Email confirmed",
+        description: describeAuthError(authError),
+      });
       return;
     }
     toast({
@@ -146,7 +153,11 @@ function SignInPageContent() {
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {
-      reportAuthFailure({ flow: "password_sign_in", screen: "/sign-in", error });
+      reportAuthFailure({
+        flow: "password_sign_in",
+        screen: "/sign-in",
+        error,
+      });
       if (isEmailNotConfirmed(error)) {
         setPassword("");
         setUnconfirmedEmail(email);
@@ -181,7 +192,10 @@ function SignInPageContent() {
           // `intent=sign-in-link` carries the Confirm-signup good-news path for an address that isn't confirmed yet, whose
           // `?code=` link can confirm and still fail to sign this browser in
           // ({@link isEmailLinkIntent}).
-          emailRedirectTo: magicLinkRedirectUrl(window.location.origin, redirectTo),
+          emailRedirectTo: magicLinkRedirectUrl(
+            window.location.origin,
+            redirectTo,
+          ),
         },
       });
       if (error) throw error;
@@ -197,7 +211,10 @@ function SignInPageContent() {
         // An email went out under a minute ago (the confirmation, or the
         // last link), so this one wasn't sent. Not a failure: that email's
         // link still works (a confirmation lands as "Email confirmed").
-        toast({ title: "Check your inbox", description: cooldownCopy(cooldown) });
+        toast({
+          title: "Check your inbox",
+          description: cooldownCopy(cooldown),
+        });
         return;
       }
       toast({
@@ -276,7 +293,11 @@ function SignInPageContent() {
           onChange={(event) => setPassword(event.target.value)}
           required
         />
-        <Button type="submit" className="w-full" disabled={isSubmitting || oauthBusy}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isSubmitting || oauthBusy}
+        >
           {isSubmitting ? <Loader2 className="animate-spin" /> : null}
           Continue
         </Button>

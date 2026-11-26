@@ -123,7 +123,7 @@ export function useCreateEvent() {
     // member is told to check the calendar instead.
     retry: false,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
     onError: (error) => {
       // The event may exist, and the copy says to check for it: refetch the
@@ -132,7 +132,9 @@ export function useCreateEvent() {
         error instanceof Error &&
         error.message === EVENT_CREATE_UNCONFIRMED
       ) {
-        void queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+        void queryClient.invalidateQueries({
+          queryKey: eventsQueryKey(chapterId),
+        });
       }
     },
   });
@@ -185,7 +187,7 @@ export function useUpdateEvent() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
   });
 }
@@ -210,7 +212,7 @@ export function useDeleteEvent() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
   });
 }

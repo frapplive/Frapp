@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { CachedRosterProvider } from "@repo/hooks";
+import { pruneOtherMembers, reopenShellCache } from "./shell-cache-clear";
 import {
   IDENTITY_PART,
   readShellRows,
@@ -18,48 +20,35 @@ import {
   type ShellScope,
 } from "./shell-cache";
 
-const ShellIdentityContext = createContext<ShellIdentity | null>(null);
+/** The rows read for one scope, by part, and the scope they belong to. */
+interface ShellSnapshot {
+  scope: string;
+  rows: ReadonlyMap<string, unknown>;
+}
+
+const ShellSnapshotContext = createContext<ShellSnapshot | null>(null);
+
+/**
+ * The last answer this browser kept for `part` (a {@link SHELL_QUERY_PARTS}
+ * name, or `"me"`), for the signed-in member's chapter, or null.
+ *
+ * For drawing only, and only while the live read is out: the caller shows it
+ * in place of a skeleton and drops it the moment its own query has data or
+ * has failed. It never enters the query cache, so nothing that decides (a
+ * redirect, a gate, a one-time reopen) can act on it (#5049).
+ */
+export function useShellCached<T = unknown>(part: string): T | null {
+  const snapshot = useContext(ShellSnapshotContext);
+  return (snapshot?.rows.get(part) as T | undefined) ?? null;
+}
 
 /**
  * The member's name and photo as this browser last saw them, for this auth
  * uid and chapter, or null. The account row reads it only while
- * `/v1/users/me` hasn't answered (#5049); the live answer always wins.
+ * `/v1/users/me` has no answer; the live answer always wins.
  */
 export function useShellIdentity(): ShellIdentity | null {
-  return useContext(ShellIdentityContext);
-}
-
-/**
- * Paints the last answers into the query cache, layer by layer, wherever a
- * query has nothing yet. Each is marked stale, so its readers fetch it again
- * as they mount; a query already fetching just replaces it when it answers.
- * A query that has failed is left alone: a cached answer never covers an
- * error.
- */
-export function seedShellCache(
-  queryClient: QueryClient,
-  scope: ShellScope,
-  now: number = Date.now(),
-): ShellIdentity | null {
-  const rows = readShellRows(scope, now);
-  for (const layer of [1, 2] as const) {
-    for (const part of SHELL_QUERY_PARTS) {
-      if (part.layer !== layer) continue;
-      const row = rows.get(part.name);
-      if (!row) continue;
-      const key = part.key(scope.chapterId);
-      const state = queryClient.getQueryState(key);
-      if (state?.data !== undefined || state?.status === "error") continue;
-      queryClient.setQueryData(key, row.data, { updatedAt: row.at });
-      void queryClient.invalidateQueries({
-        queryKey: key,
-        exact: true,
-        refetchType: "none",
-      });
-    }
-  }
-  const identity = rows.get(IDENTITY_PART);
-  return identity ? shellIdentityFrom(identity.data) : null;
+  return shellIdentityFrom(useShellCached(IDENTITY_PART));
 }
 
 /** Same key, element by element (query keys here are flat strings and nulls). */
@@ -69,10 +58,12 @@ function sameKey(a: readonly unknown[], b: readonly unknown[]): boolean {
 
 /**
  * Keeps each fetched answer for the next visit. Only a fetch's own answer is
- * kept (`manual` writes, optimistic updates and this cache's own seeds are
- * not), only for a key built for the current chapter, and only while that
- * query is still in the cache: an identity change clears the cache first, so
- * a fetch that lands after it belongs to nobody here and is dropped.
+ * kept (`manual` writes and optimistic updates are not), only for a key built
+ * for the current chapter, and only while that query is still in the cache:
+ * an identity change clears the cache first, so a fetch that lands after it
+ * belongs to nobody here and is dropped. Sign-out closes the store
+ * (`closeShellCache`), so an answer landing during the sign-out round trip
+ * isn't written back either.
  */
 export function keepShellAnswers(
   queryClient: QueryClient,
@@ -94,12 +85,15 @@ export function keepShellAnswers(
     const part = SHELL_QUERY_PARTS.find((p) =>
       sameKey(key, p.key(scope.chapterId)),
     );
-    if (part) writeShellRow(scope, part.name, query.state.data);
+    if (!part) return;
+    const kept = part.keep ? part.keep(query.state.data) : query.state.data;
+    if (kept !== undefined) writeShellRow(scope, part.name, kept);
   });
 }
 
 /**
- * Seeds and keeps the shell cache for the signed-in member's chapter.
+ * Reads the shell cache for the signed-in member's chapter once, offers it to
+ * the screens that draw from it, and keeps fetched answers for next time.
  * Mounted inside `FrappProvider`, which owns both halves of the scope and
  * clears every row when either changes.
  */
@@ -113,28 +107,33 @@ export function ShellCacheSync({
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const [identity, setIdentity] = useState<{
-    scope: string;
-    value: ShellIdentity | null;
-  } | null>(null);
+  const [snapshot, setSnapshot] = useState<ShellSnapshot | null>(null);
   const scopeKey =
     authUserId && chapterId ? `${authUserId}|${chapterId}` : null;
 
   useEffect(() => {
+    if (authUserId) pruneOtherMembers(authUserId);
+  }, [authUserId]);
+
+  useEffect(() => {
     if (!authUserId || !chapterId) return;
     const scope = { authUserId, chapterId };
-    setIdentity({
-      scope: `${authUserId}|${chapterId}`,
-      value: seedShellCache(queryClient, scope),
-    });
+    // A member signed in again in this tab: writes resume for them.
+    reopenShellCache();
+    const rows = new Map<string, unknown>();
+    for (const [part, row] of readShellRows(scope)) rows.set(part, row.data);
+    setSnapshot({ scope: `${authUserId}|${chapterId}`, rows });
     return keepShellAnswers(queryClient, scope);
   }, [authUserId, chapterId, queryClient]);
 
-  // Disowned the moment the scope moves, before the next seed runs.
-  const value = identity && identity.scope === scopeKey ? identity.value : null;
+  // Disowned the moment the scope moves, before the next read runs.
+  const value = snapshot && snapshot.scope === scopeKey ? snapshot : null;
+  const roster = value?.rows.get("roster");
   return (
-    <ShellIdentityContext.Provider value={value}>
-      {children}
-    </ShellIdentityContext.Provider>
+    <ShellSnapshotContext.Provider value={value}>
+      <CachedRosterProvider value={Array.isArray(roster) ? roster : null}>
+        {children}
+      </CachedRosterProvider>
+    </ShellSnapshotContext.Provider>
   );
 }
