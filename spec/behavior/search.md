@@ -23,7 +23,7 @@ A single search bar accessible from the top of the mobile and web app:
 
   **`users.display_name_search` covers `display_name` alone, deliberately.** `users` also holds `email`, `bio`, `current_city` and `current_company`. `email` in particular must not become searchable by this path — the member source returns rows across the chapter and the directory's own rules, not search's, govern who may see an address. A row-wide `search_vector` on `users` would be a standing invitation to widen that without noticing.
 
-- Member results are one query, not two: `members` with a `users!inner(…)` embed, filtered by `users.display_name_search` and scoped by the outer `chapter_id`. `users` is a **global** table, so that outer `.eq('chapter_id', …)` is the only thing keeping this source chapter-local — the embed filters within the chapter's members rather than searching users at large. It previously loaded the entire chapter roster before filtering.
+- Member results are one query, not two: `members` with a `users!members_user_id_fkey!inner(…)` embed (the FK is named because `members.chat_timeout_by` also references `users`, and a bare embed is refused as ambiguous, #6121), filtered by `users.display_name_search` and scoped by the outer `chapter_id`. `users` is a **global** table, so that outer `.eq('chapter_id', …)` is the only thing keeping this source chapter-local — the embed filters within the chapter's members rather than searching users at large. It previously loaded the entire chapter roster before filtering.
 
 ## Single-channel scope
 

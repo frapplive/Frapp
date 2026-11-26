@@ -45,7 +45,7 @@ export function memberReadKey(userId: string, chapterId: string): string {
 }
 
 /**
- * The wire shape of the `users!inner(id, display_name)` embed, written out
+ * The wire shape of the `users!members_user_id_fkey!inner(id, display_name)` embed, written out
  * because the types shim cannot infer it. Every field is optional: this
  * describes what PostgREST *might* hand back, and
  * `findChapterMemberIdentities` narrows it before anything downstream sees it.
@@ -113,7 +113,7 @@ export class SupabaseMemberRepository implements IMemberRepository {
   async findChapterMemberIdentities(
     chapterId: string,
   ): Promise<ChapterMemberIdentity[]> {
-    // `users!inner(...)` rather than a second round trip through
+    // The `users` embed rather than a second round trip through
     // `userRepo.findByIds`: the inner join both drops members whose user row is
     // gone and keeps the chapter predicate in the same statement as the lookup,
     // which is this repo's multi-tenancy rule (same shape as the

@@ -29,7 +29,9 @@ import {
  * built from a constant elsewhere slips past it, as does a `;` inside a string
  * mid-chain (comments are stripped first).
  * `test/integration/chat-message-channel-embed.integration-spec.ts` runs the
- * real queries against a local stack.
+ * chat_messages/chat_channels queries against a local stack; the members/users
+ * pairs have no live-stack spec (checked by hand against local PostgREST,
+ * #6121).
  */
 interface AmbiguousPair {
   parent: string;
