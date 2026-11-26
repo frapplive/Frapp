@@ -246,3 +246,75 @@ describe("EventsTimeGrid", () => {
     );
   });
 });
+
+describe("EventsTimeGrid dated events (#6098)", () => {
+  const dated = [
+    {
+      id: "recruitment",
+      name: "Formal recruitment",
+      timing: "all_day",
+      start_date: "2026-11-10",
+      end_date: "2026-11-11",
+      // The saver's midnights, in another zone: never placed by these.
+      start_time: "2026-11-10T08:00:00.000Z",
+      end_time: "2026-11-12T08:00:00.000Z",
+      is_tentative: true,
+    },
+    {
+      id: "council",
+      name: "Council meeting",
+      timing: "time_tbd",
+      start_date: "2026-11-12",
+      end_date: null,
+      start_time: "2026-11-12T08:00:00.000Z",
+      end_time: "2026-11-13T08:00:00.000Z",
+    },
+  ];
+
+  function renderDated() {
+    render(
+      <EventsTimeGrid
+        days={consecutiveDays(tuesday, 3)}
+        events={dated}
+        tasksByDay={new Map()}
+        nameOf={() => "A member"}
+        factsOf={(event) => calendarEventFacts(event, requiredOf)}
+        canCreate={false}
+        createDisabled={false}
+        onSelectEvent={vi.fn()}
+        onCreateAt={vi.fn()}
+      />,
+    );
+  }
+
+  it("draws a dated event as one bar across its days in the all-day strip, never in the hours", () => {
+    renderDated();
+    const strip = screen.getByTestId("time-grid-all-day");
+    const bar = screen.getByTestId("time-grid-bar-recruitment");
+    expect(strip.contains(bar)).toBe(true);
+    // Tuesday and Wednesday: the first two day columns.
+    expect(bar.style.gridColumn).toBe("2 / 4");
+    expect(
+      within(bar).getByRole("button", {
+        name: /^View Formal recruitment, All day · November 10.* – November 11.*, tentative$/,
+      }),
+    ).toBeTruthy();
+    expect(within(bar).getByText("Tentative")).toBeTruthy();
+    expect(screen.getByTestId("time-grid-bar-council").style.gridColumn).toBe(
+      "4 / 5",
+    );
+    for (const day of ["10", "11", "12"]) {
+      expect(
+        within(
+          screen.getByTestId(`time-grid-day-2026-11-${day}`),
+        ).queryAllByRole("button"),
+      ).toHaveLength(0);
+    }
+  });
+
+  it("names a time-TBD event's time as TBD, not midnight", () => {
+    const facts = calendarEventFacts(dated[1]!, requiredOf);
+    expect(facts.clockLabel).toBe("Time TBD");
+    expect(facts.viewLabel).toBe("View Council meeting, Time TBD");
+  });
+});

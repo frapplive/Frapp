@@ -1,5 +1,6 @@
 "use client";
 
+import { eventWhenOr } from "@/lib/events/event-when";
 import { useId, useMemo, useState } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useEvents, useLinkMeetingEvent, useMeetings } from "@repo/hooks";
@@ -22,7 +23,10 @@ import {
 /** How far back the picker looks for the meeting's event. */
 const RECENT_DAYS = 60;
 
-type EventRow = { id: string; name: string; start_time: string };
+type EventRow = { id: string; name: string; start_time: string } & Record<
+  string,
+  unknown
+>;
 
 /**
  * Minutes with no meeting (`spec/behavior/meetings.md` § Linking a meeting
@@ -152,7 +156,7 @@ export function LinkEventPanel({
                   >
                     <span className="text-sm font-semibold">{event.name}</span>
                     <span className="text-caption text-muted-foreground">
-                      {meetingWhenLabel(event.start_time)}
+                      {eventWhenOr(event, meetingWhenLabel)}
                     </span>
                   </button>
                 </li>

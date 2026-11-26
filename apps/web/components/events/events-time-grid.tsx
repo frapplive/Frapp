@@ -5,13 +5,21 @@ import { Repeat } from "lucide-react";
 import { EventsGlyph } from "@/components/events/chapter-ops-glyphs";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
-import { formatTimeOfDay, localIsoDate } from "@repo/formatting";
+import {
+  formatEventRowTime,
+  formatTimeOfDay,
+  localIsoDate,
+} from "@repo/formatting";
 import {
   calendarItemDueMinute,
   type CalendarItem,
 } from "@repo/hooks/calendar-tasks";
 import {
   attendanceFieldsOf,
+  EVENT_TENTATIVE_LABEL,
+  eventCoversDay,
+  eventIsDated,
+  eventTimingFieldsOf,
   type EventAttendanceFields,
 } from "@repo/validation";
 import {
@@ -44,6 +52,8 @@ export type CalendarEventFacts = {
   isSeriesHead: boolean;
   isSeriesInstance: boolean;
   clockLabel: string | null;
+  /** Might not happen (#6098): said in its name for assistive tech. */
+  isTentative: boolean;
   viewLabel: string;
 };
 
@@ -58,8 +68,14 @@ export function calendarEventFacts(
   const eventName = String(event.name ?? "Untitled event");
   // Required of this viewer, by default or by a role of theirs (#4132).
   const isMandatory = requiredOf(attendanceFieldsOf(event));
-  // The time of day only: the day is the column's own.
-  const clockLabel = formatTimeOfDay(event.start_time);
+  // The time of day only: the day is the column's own. An all-day or
+  // time-TBD event has none: "All day", "Time TBD" (#6098), never the
+  // midnight it is stored at.
+  const shape = eventTimingFieldsOf(event);
+  const clockLabel = eventIsDated(shape)
+    ? formatEventRowTime(event)
+    : formatTimeOfDay(event.start_time);
+  const isTentative = shape.is_tentative === true;
   return {
     eventId: eventIdOf(event),
     eventName,
@@ -75,7 +91,8 @@ export function calendarEventFacts(
       typeof event.parent_event_id === "string" &&
       event.parent_event_id.length > 0,
     clockLabel,
-    viewLabel: `View ${eventName}${clockLabel ? `, ${clockLabel}` : ""}${isMandatory ? ", required" : ""}`,
+    isTentative,
+    viewLabel: `View ${eventName}${clockLabel ? `, ${clockLabel}` : ""}${isMandatory ? ", required" : ""}${isTentative ? `, ${EVENT_TENTATIVE_LABEL.toLowerCase()}` : ""}`,
   };
 }
 
@@ -139,14 +156,31 @@ export function EventsTimeGrid({
   // column on every minute's render.
   const hourLabels = useMemo(() => HOURS.map(hourLabel), []);
 
+  // An all-day or time-TBD event is placed by its days, never its stored
+  // midnights (#6098): it spans its days in the strip over the hours, as
+  // Google Calendar draws an all-day event, and never takes the 12 AM slot.
+  const dated = useMemo(
+    () => events.filter((event) => eventIsDated(eventTimingFieldsOf(event))),
+    [events],
+  );
   const columns = useMemo(
-    () => timeGridColumns(days, events, tasksByDay, calendarItemDueMinute),
-    [days, events, tasksByDay],
+    () =>
+      timeGridColumns(
+        days,
+        events.filter((event) => !dated.includes(event)),
+        tasksByDay,
+        calendarItemDueMinute,
+      ),
+    [days, events, dated, tasksByDay],
   );
+  const bars = useMemo(() => datedBars(days, dated), [days, dated]);
+  const barLanes = bars.reduce((most, bar) => Math.max(most, bar.lane + 1), 0);
 
-  const hasStrip = columns.some(
-    (column) => column.allDay.length > 0 || column.tasks.length > 0,
-  );
+  const hasStrip =
+    bars.length > 0 ||
+    columns.some(
+      (column) => column.allDay.length > 0 || column.tasks.length > 0,
+    );
   const gridColumns = {
     gridTemplateColumns: `3.5rem repeat(${days.length}, minmax(0, 1fr))`,
   };
@@ -230,16 +264,56 @@ export function EventsTimeGrid({
       {/* What has no time of day: tasks due by a day, and day-long events */}
       {hasStrip ? (
         <div
-          className="grid gap-px border-b border-border bg-border"
-          style={gridColumns}
+          data-testid="time-grid-all-day"
+          className="grid border-b border-border bg-background"
+          style={{
+            ...gridColumns,
+            gridTemplateRows: `repeat(${barLanes + 1}, auto)`,
+          }}
         >
-          <div className="flex items-start justify-end bg-background px-1.5 py-1.5 text-caption font-semibold uppercase text-muted-foreground">
+          <div
+            className="flex items-start justify-end px-1.5 py-1.5 text-caption font-semibold uppercase text-muted-foreground"
+            style={{ gridColumn: 1, gridRow: `1 / span ${barLanes + 1}` }}
+          >
             All day
           </div>
-          {columns.map(({ key, allDay, tasks }) => (
+          {columns.map(({ key }, index) => (
+            <div
+              key={`rule-${key}`}
+              aria-hidden="true"
+              className="border-l border-border"
+              style={{
+                gridColumn: index + 2,
+                gridRow: `1 / span ${barLanes + 1}`,
+              }}
+            />
+          ))}
+          {/* Dated events, each one bar across the days it covers here. */}
+          {bars.map((bar) => {
+            const facts = factsOf(bar.event);
+            return (
+              <div
+                key={`bar-${facts.eventId}`}
+                data-testid={`time-grid-bar-${facts.eventId}`}
+                className="flex min-w-0 px-1 pt-1"
+                style={{
+                  gridColumn: `${bar.from + 2} / ${bar.to + 3}`,
+                  gridRow: bar.lane + 1,
+                }}
+              >
+                <EventChip
+                  facts={facts}
+                  onSelect={() => onSelectEvent(bar.event)}
+                  className="w-full"
+                />
+              </div>
+            );
+          })}
+          {columns.map(({ key, allDay, tasks }, index) => (
             <div
               key={key}
-              className="flex min-w-0 flex-col gap-1 bg-background p-1"
+              className="flex min-w-0 flex-col gap-1 p-1"
+              style={{ gridColumn: index + 2, gridRow: barLanes + 1 }}
             >
               {allDay.map((event) => (
                 <EventChip
@@ -429,12 +503,45 @@ function SeriesMark({ facts }: { facts: CalendarEventFacts }) {
   return null;
 }
 
+/** A dated event's bar in the strip: its first and last column, and its row. */
+type DatedBar = { event: EventRow; from: number; to: number; lane: number };
+
+/**
+ * Where each dated event's bar goes in the strip over `days`: from the first
+ * column it covers to the last, each in the first row free across those
+ * columns, the longest first, as Google Calendar stacks its all-day bars.
+ */
+export function datedBars(
+  days: readonly Date[],
+  events: readonly EventRow[],
+): DatedBar[] {
+  const keys = days.map((day) => localIsoDate(day));
+  const spans = events.flatMap((event) => {
+    const shape = eventTimingFieldsOf(event);
+    const covered = keys.flatMap((key, index) =>
+      eventCoversDay(shape, key) ? [index] : [],
+    );
+    if (covered.length === 0) return [];
+    return [{ event, from: covered[0]!, to: covered.at(-1)! }];
+  });
+  spans.sort((a, b) => a.from - b.from || b.to - b.from - (a.to - a.from));
+  const lanesEnd: number[] = [];
+  return spans.map((span) => {
+    let lane = lanesEnd.findIndex((end) => end < span.from);
+    if (lane === -1) lane = lanesEnd.length;
+    lanesEnd[lane] = span.to;
+    return { ...span, lane };
+  });
+}
+
 export function EventChip({
   facts,
   onSelect,
+  className,
 }: {
   facts: CalendarEventFacts;
   onSelect: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -446,6 +553,7 @@ export function EventChip({
       className={cn(
         "flex items-center gap-1 truncate rounded-xs border border-transparent px-1.5 py-1 text-left text-[11px] font-semibold text-foreground transition-[filter] hover:brightness-125",
         FOCUS_RING,
+        className,
       )}
       style={{
         ...eventKindStyle(facts.isMandatory),
@@ -455,6 +563,11 @@ export function EventChip({
     >
       <SeriesMark facts={facts} />
       <span className="truncate">{facts.eventName}</span>
+      {facts.isTentative ? (
+        <span className="shrink-0 font-normal text-muted-foreground">
+          {EVENT_TENTATIVE_LABEL}
+        </span>
+      ) : null}
     </button>
   );
 }

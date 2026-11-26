@@ -11,7 +11,13 @@ import {
   useViewerUserId,
 } from "@repo/hooks";
 import { formatDueTimeLabel, localClock } from "@repo/formatting";
-import { MEETING_ENTRY_COPY, can, checkInOpenAt } from "@repo/validation";
+import {
+  MEETING_ENTRY_COPY,
+  can,
+  checkInOpenAt,
+  eventIsDated,
+  eventTimingFieldsOf,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { useMeetingsModuleOn } from "@/components/meetings/event-minutes";
 import {
@@ -28,7 +34,7 @@ type LiveEvent = {
   end_time: string;
   check_in_opens_minutes?: number | null;
   created_by?: string | null;
-};
+} & Record<string, unknown>;
 
 const DISMISSED_KEY = "frapp.live-minutes-dismissed";
 
@@ -69,6 +75,10 @@ export function liveMeetingFor(
   for (const event of events) {
     if (event?.created_by !== viewerId) continue;
     if (withMinutes.has(event.id) || dismissed.has(event.id)) continue;
+    // An all-day, time-TBD or calendar-only event is never a meeting on now
+    // (#6098): its stored times are midnights.
+    const shape = eventTimingFieldsOf(event);
+    if (eventIsDated(shape) || shape.calendar_only) continue;
     const start = new Date(event.start_time);
     const end = new Date(event.end_time);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
