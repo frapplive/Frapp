@@ -114,7 +114,7 @@ type AuthSessionContextValue = {
    * Emails a 6-digit sign-in code (#6134). A new address gets the Confirm
    * signup email instead, whose code makes the account.
    */
-  sendEmailCode: (input: { email: string }) => Promise<void>;
+  sendEmailCode: (input: { email: string; screen?: string }) => Promise<void>;
   /**
    * Signs in with the six-digit code from any Auth email (#5625, #6134):
    * GoTrue's `email` type checks a confirmation code and a sign-in code alike,
@@ -213,8 +213,8 @@ function readAuthParams(url: string): {
  * (#6134): those append `&token_hash=…&type=magiclink` onto
  * `{{ .RedirectTo }}`, so this URL must carry `?` or the `&` produces
  * `frapp:///&token_hash=`. Once production's templates are code-only, email
- * sends need no redirect at all (the follow-up that deletes the link
- * handling here drops it from them).
+ * sends need no redirect at all, and #6136, which deletes the link
+ * handling here, drops it from them.
  */
 function appRedirectTo(): string {
   const redirectTo = Linking.createURL("/");
@@ -500,7 +500,7 @@ export function AuthSessionProvider({
   );
 
   const sendEmailCode = useCallback(
-    async ({ email }: { email: string }) => {
+    async ({ email, screen = "/sign-in" }: { email: string; screen?: string }) => {
       if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
       // A fresh request supersedes whatever the last dead link reported.
       setCallbackError(null);
@@ -513,7 +513,7 @@ export function AuthSessionProvider({
         // series spans the builds still installed.
         reportAuthFailure({
           flow: "magic_link_send",
-          screen: "/sign-in",
+          screen,
           error,
         });
         throw error;

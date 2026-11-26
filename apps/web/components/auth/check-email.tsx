@@ -3,15 +3,6 @@
 import { EmailCodeStep } from "@/components/auth/email-code-step";
 import { buildAuthCallbackUrl } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { EMAIL_RESEND_COOLDOWN_SECONDS } from "@repo/hooks/auth-error-copy";
-
-/**
- * GoTrue sends one address one auth email a minute and refuses a second with
- * a 429. Counting the minute down means the member never meets that refusal
- * by sending again right after the first email went out. Shared with
- * mobile (`@repo/hooks/auth-error-copy`).
- */
-export const RESEND_COOLDOWN_SECONDS = EMAIL_RESEND_COOLDOWN_SECONDS;
 
 /**
  * Where a transition-era confirmation link lands: `/auth/callback` with
@@ -57,8 +48,8 @@ export function CheckEmail({
   /** Overrides the sent line (the sign-in screen's unconfirmed address). */
   lead?: string;
   /**
-   * Seconds before Send a new code is offered: `RESEND_COOLDOWN_SECONDS` right
-   * after an email went out, GoTrue's own remaining seconds (at least 1) when
+   * Seconds before Send a new code is offered: `EMAIL_RESEND_COOLDOWN_SECONDS`
+   * right after an email went out, GoTrue's own remaining seconds (at least 1) when
    * it refused a send inside the minute, else 0.
    */
   initialCooldownSeconds: number;

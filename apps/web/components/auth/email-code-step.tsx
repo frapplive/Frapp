@@ -91,6 +91,17 @@ export function EmailCodeStep({
   const [notice, setNotice] = useState<string | null>(initialNotice ?? null);
   const codeRef = useRef<HTMLInputElement>(null);
   const lastTried = useRef<string | null>(null);
+  /** `onVerified` runs once, whichever way the session arrives. */
+  const finished = useRef(false);
+  const onVerifiedRef = useRef(onVerified);
+  useEffect(() => {
+    onVerifiedRef.current = onVerified;
+  }, [onVerified]);
+  const finish = () => {
+    if (finished.current) return;
+    finished.current = true;
+    onVerifiedRef.current();
+  };
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -100,6 +111,37 @@ export function EmailCodeStep({
 
   useEffect(() => {
     codeRef.current?.focus();
+  }, []);
+
+  // Production's emails keep a link beside the code until its switch (#6134,
+  // `docs/ops/deployment/supabase.md` § Auth email templates). Opened in
+  // another tab, that link signs this browser in there: the session is a
+  // cookie this tab can read, so a sign-in reported by the client, or a
+  // session found when the member comes back to this tab, carries it on too.
+  // Goes with the rest of the link handling in #6136.
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    const check = async () => {
+      if (document.visibilityState !== "visible" || finished.current) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) finish();
+      } catch {
+        // A failed read leaves the code box up; the next focus tries again.
+      }
+    };
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) finish();
+    });
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
   }, []);
 
   async function verify(value: string) {
@@ -116,7 +158,7 @@ export function EmailCodeStep({
         type: "email",
       });
       if (verifyError) throw verifyError;
-      onVerified();
+      finish();
     } catch (caught) {
       const { message, wrongCode } = describeEmailCodeError(caught);
       setError(message);
@@ -144,13 +186,15 @@ export function EmailCodeStep({
       setCode("");
       lastTried.current = null;
     } catch (caught) {
+      // Every refusal is reported, the email minute included (at info:
+      // `spec/behavior/observability.md` § Signed-out auth failures).
+      reportAuthFailure({ flow: resendFlow, screen, error: caught });
       const wait = emailCooldownSeconds(caught);
       if (wait !== undefined) {
         // One went out under a minute ago; its code still works.
         setCooldown(Math.max(1, wait));
         setNotice(cooldownCopy(wait));
       } else {
-        reportAuthFailure({ flow: resendFlow, screen, error: caught });
         setError(describeEmailSendError(caught));
       }
     } finally {

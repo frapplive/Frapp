@@ -506,31 +506,66 @@ export const AUTH_CONFIRMATION_SUBJECT = "Confirm your Frapp account";
 export const AUTH_EMAIL_CODE = /\{\{\s*\.Token\s*\}\}/;
 
 /**
- * The template variables that build an auth link: GoTrue's own verify URL,
- * the hashed token a server-side route verifies, and the redirect a link
- * lands on. A code-only email prints none of them (#6134).
+ * Anything in a body that makes a link: the template variables that build an
+ * auth link (GoTrue's own verify URL, the hashed token a server-side route
+ * verifies, the redirect a link lands on, the Site URL), an `href`, or a URL.
+ * A code-only email has none of them (#6134).
  */
-export const AUTH_EMAIL_LINK_VARIABLE = /ConfirmationURL|TokenHash|RedirectTo/i;
+export const AUTH_EMAIL_LINK = /ConfirmationURL|TokenHash|RedirectTo|SiteURL|href\s*=|https?:\/\//i;
+
+const SIGNET_TEMPLATE_FAULT =
+  "still says Signet (a heading, link text, an image's alt or title, a comment or an Outlook-only block; paste the body documented in docs/ops/deployment/supabase.md § Auth settings)";
 
 /**
- * Judge one template body as code-only: it prints `{{ .Token }}`, no auth
- * link, and not the product's old name. Returns a reason to fail, or null.
+ * Judge one template body as code-only: it prints `{{ .Token }}`, makes no
+ * link, and doesn't spell the product's old name. Returns a reason to fail,
+ * or null.
  */
 function codeOnlyTemplateFault(field, content) {
   if (!content.trim()) {
     return `${field} is empty — the hosted default is a ConfirmationURL link on *.supabase.co and no code`;
   }
-  if (!AUTH_EMAIL_CODE.test(content)) {
-    return `${field} does not print the 6-digit code ({{ .Token }})`;
-  }
-  const link = AUTH_EMAIL_LINK_VARIABLE.exec(content);
-  if (link) {
-    return `${field} still builds an auth link (${link[0]}); every Auth email carries only the code (#6134)`;
-  }
   // The subject is compared exactly, but the body is free text: a heading
   // left on the old name would reach every inbox with nothing red.
   if (SIGNET_PRODUCT_NAME.test(content)) {
-    return `${field} still says Signet (a heading, an image's alt or title, a comment or an Outlook-only block; paste the body documented in docs/ops/deployment/supabase.md § Auth settings)`;
+    return `${field} ${SIGNET_TEMPLATE_FAULT}`;
+  }
+  if (!AUTH_EMAIL_CODE.test(content)) {
+    return `${field} does not print the 6-digit code ({{ .Token }})`;
+  }
+  const link = AUTH_EMAIL_LINK.exec(content);
+  if (link) {
+    return `${field} still makes a link (${link[0]}); every Auth email carries only the code (#6134)`;
+  }
+  return null;
+}
+
+/**
+ * Judge one template body as production's transition shape (#6134): it
+ * prints `{{ .Token }}`, because the web and phone screens ask only for the
+ * code, and may keep a link beside it only if that link stays on the app
+ * host through `token_hash` with its own `type`, never a hosted default
+ * `ConfirmationURL` on *.supabase.co (#1916). Returns a reason to fail, or
+ * null.
+ */
+function transitionTemplateFault(field, content, linkType) {
+  if (!content.trim()) {
+    return `${field} is empty — the hosted default is a ConfirmationURL link on *.supabase.co and no code`;
+  }
+  if (/ConfirmationURL/i.test(content)) {
+    return `${field} still uses ConfirmationURL (href lands on *.supabase.co, and opened elsewhere it signs nobody in)`;
+  }
+  if (SIGNET_PRODUCT_NAME.test(content)) {
+    return `${field} ${SIGNET_TEMPLATE_FAULT}`;
+  }
+  if (!AUTH_EMAIL_CODE.test(content)) {
+    return `${field} does not print the 6-digit code ({{ .Token }}) the apps ask for since #6134; paste the code-and-link body in docs/ops/deployment/supabase.md § Both templates print the 6-digit code, or the code-only one`;
+  }
+  if (AUTH_EMAIL_LINK.test(content)) {
+    if (!/TokenHash/i.test(content)) return `${field} has a link without TokenHash`;
+    if (!new RegExp(`type=${linkType}\\b`, "i").test(content)) {
+      return `${field} has a token_hash link without type=${linkType}`;
+    }
   }
   return null;
 }
@@ -547,21 +582,22 @@ function templateSubject(data, field) {
  * Every Auth email carries a 6-digit code and no link (#6134, Paul
  * 2026-11-26). GoTrue sends **Magic Link** to a confirmed address and
  * **Confirm signup** to a new one, and both are what the apps send, so both
- * are judged: the subject is the one `docs/ops/deployment/supabase.md`
- * documents, the body prints `{{ .Token }}`, builds no auth link
- * ({@link AUTH_EMAIL_LINK_VARIABLE}), and doesn't spell the product's old
- * name ({@link SIGNET_PRODUCT_NAME}). No `mailer_subjects_*` may say Signet
+ * are judged: the body prints `{{ .Token }}`, makes no link
+ * ({@link AUTH_EMAIL_LINK}), and doesn't spell the product's old name
+ * ({@link SIGNET_PRODUCT_NAME}); the Magic Link subject is
+ * {@link AUTH_MAGIC_LINK_SUBJECT} and the Confirm signup subject
+ * {@link AUTH_CONFIRMATION_SUBJECT}. No `mailer_subjects_*` may say Signet
  * either. Invite, recovery and email change aren't sent by either app (no
  * password reset or email change exists, `spec/behavior/observability.md`), so
  * they aren't judged.
  *
  * `allowTransitionLink` is production's, until Paul pastes the code-only
  * templates there after the last phone build that can only follow a link is
- * retired: it accepts today's Magic Link instead, a `token_hash` link with
- * `type=magiclink` that stays on the app host (#1916; a hosted default
- * `ConfirmationURL` still FAILs), and leaves Confirm signup unjudged, as it
- * always was there. The follow-up that deletes the apps' link handling
- * drops it.
+ * retired. Both bodies must still print the code, because the web and phone
+ * screens ask only for it, but each may keep a `token_hash` link beside it
+ * for those builds ({@link transitionTemplateFault}); the Confirm signup
+ * subject isn't pinned there. #6136, which deletes the apps' link
+ * handling, drops it.
  *
  * Dashboard-only; the same GET `checkAuthSmtp` makes. Never put `smtp_pass`
  * or a template's HTML in the detail string. Judged whether or not
@@ -574,7 +610,7 @@ export async function checkAuthMagicLink({
   allowTransitionLink = false,
 } = {}) {
   const label = allowTransitionLink
-    ? "Magic Link prints the code, or a token_hash link on the app host until the switch"
+    ? "Auth emails print the 6-digit code, with a token_hash link at most until the switch"
     : "Auth emails carry a 6-digit code and no link";
   const fail = (detail) => result("auth-magic-link", label, FAIL, detail);
   const read = await readAuthConfig({ id: "auth-magic-link", label, accessToken, projectRef, fetchImpl });
@@ -591,34 +627,20 @@ export async function checkAuthMagicLink({
     );
   }
   const magicLink = templateContent(data, "mailer_templates_magic_link_content");
+  const confirmation = templateContent(data, "mailer_templates_confirmation_content");
 
   if (allowTransitionLink) {
-    if (!magicLink.trim()) {
-      return fail(
-        "mailer_templates_magic_link_content is empty — the hosted default href is ConfirmationURL on *.supabase.co",
-      );
-    }
-    if (/ConfirmationURL/i.test(magicLink)) {
-      return fail(
-        "mailer_templates_magic_link_content still uses ConfirmationURL (href lands on *.supabase.co)",
-      );
-    }
-    if (codeOnlyTemplateFault("mailer_templates_magic_link_content", magicLink) === null) {
-      return result("auth-magic-link", label, PASS, `subject=${subject}; code only`);
-    }
-    if (!/TokenHash/i.test(magicLink)) {
-      return fail("mailer_templates_magic_link_content is missing TokenHash");
-    }
-    if (!/type=magiclink/i.test(magicLink)) {
-      return fail("mailer_templates_magic_link_content is missing type=magiclink");
-    }
-    if (SIGNET_PRODUCT_NAME.test(magicLink)) {
-      return fail(
-        "mailer_templates_magic_link_content still says Signet (a heading, link text, an image's alt or title, a comment or an Outlook-only block; paste the Magic Link body documented in docs/ops/deployment/supabase.md § Auth settings)",
-      );
-    }
-    const code = AUTH_EMAIL_CODE.test(magicLink) ? "code and " : "";
-    return result("auth-magic-link", label, PASS, `subject=${subject}; ${code}token_hash href`);
+    const fault =
+      transitionTemplateFault("mailer_templates_magic_link_content", magicLink, "magiclink") ??
+      transitionTemplateFault("mailer_templates_confirmation_content", confirmation, "email");
+    if (fault) return fail(fault);
+    const shape = (content) => (AUTH_EMAIL_LINK.test(content) ? "code and token_hash href" : "code only");
+    return result(
+      "auth-magic-link",
+      label,
+      PASS,
+      `subject=${subject}; magic link: ${shape(magicLink)}; confirm signup: ${shape(confirmation)}`,
+    );
   }
 
   const magicLinkFault = codeOnlyTemplateFault("mailer_templates_magic_link_content", magicLink);
@@ -629,10 +651,7 @@ export async function checkAuthMagicLink({
       `mailer_subjects_confirmation is "${confirmSubject || "(empty)"}", expected "${AUTH_CONFIRMATION_SUBJECT}"`,
     );
   }
-  const confirmFault = codeOnlyTemplateFault(
-    "mailer_templates_confirmation_content",
-    templateContent(data, "mailer_templates_confirmation_content"),
-  );
+  const confirmFault = codeOnlyTemplateFault("mailer_templates_confirmation_content", confirmation);
   if (confirmFault) return fail(confirmFault);
   return result(
     "auth-magic-link",

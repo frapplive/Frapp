@@ -23,9 +23,9 @@ import { reportAuthFailure } from "@/lib/sentry/auth-failures";
 import {
   EMAIL_CONFIRMED_AUTH_ERROR,
   describeAuthError,
-  magicLinkRedirectUrl,
   resolveRedirectPath,
 } from "@/lib/auth/redirect";
+import { requestEmailCode } from "@/lib/auth/email-code";
 import {
   cooldownCopy,
   describeEmailSendError,
@@ -153,19 +153,7 @@ function SignInPageContent() {
     router.refresh();
   }
 
-  async function requestCode(address: string): Promise<void> {
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email: address,
-      options: {
-        // Only production's transition-era template still prints a link
-        // beside the code; `intent=sign-in-link` keeps its Confirm-signup
-        // good-news path ({@link isEmailLinkIntent}).
-        emailRedirectTo: magicLinkRedirectUrl(window.location.origin, redirectTo),
-      },
-    });
-    if (error) throw error;
-  }
+  const requestCode = (address: string) => requestEmailCode(address, redirectTo);
 
   async function handlePasswordSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -213,11 +201,12 @@ function SignInPageContent() {
       setPassword("");
       setCodeSent({ email: address, cooldown: EMAIL_RESEND_COOLDOWN_SECONDS, notice: null });
     } catch (error) {
+      reportAuthFailure({ flow: "magic_link_send", screen: "/sign-in", error });
       const cooldown = emailCooldownSeconds(error);
       if (cooldown !== undefined) {
         // An email went out under a minute ago (the confirmation, or the
-        // last code), so this one wasn't sent. Not a failure: that email's
-        // code still works.
+        // last code), so this one wasn't sent. Not a failure to the member:
+        // that email's code still works (reported at info all the same).
         setPassword("");
         setCodeSent({
           email: address,
@@ -226,7 +215,6 @@ function SignInPageContent() {
         });
         return;
       }
-      reportAuthFailure({ flow: "magic_link_send", screen: "/sign-in", error });
       toast({
         title: "Unable to send code",
         description: describeEmailSendError(error),

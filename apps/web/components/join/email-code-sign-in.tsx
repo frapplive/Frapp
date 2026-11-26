@@ -12,9 +12,8 @@ import {
 import { EmailCodeStep } from "@/components/auth/email-code-step";
 import { FloatingField } from "@/components/auth/floating-field";
 import { Button } from "@/components/ui/button";
-import { magicLinkRedirectUrl } from "@/lib/auth/redirect";
+import { requestEmailCode } from "@/lib/auth/email-code";
 import { reportAuthFailure } from "@/lib/sentry/auth-failures";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /**
  * Continue with email on the invite card (#5625): one address, then the
@@ -25,7 +24,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  * Every Auth email carries only the code since #6134. Production's templates
  * still carry a link beside it until Paul pastes the code-only ones, after
  * the last phone build that can only follow a link is retired; until then the
- * send still names `redirectTo` for that link (`magicLinkRedirectUrl`), and
+ * send still names `redirectTo` for that link (`requestEmailCode`), and
  * `onSending` lets the card remember what the member came to do should the
  * link bring them back instead.
  *
@@ -62,14 +61,7 @@ export function EmailCodeSignIn({
 
   async function requestCode(address: string): Promise<void> {
     onSending();
-    const supabase = createSupabaseBrowserClient();
-    const { error: sendError } = await supabase.auth.signInWithOtp({
-      email: address,
-      options: {
-        emailRedirectTo: magicLinkRedirectUrl(window.location.origin, redirectTo),
-      },
-    });
-    if (sendError) throw sendError;
+    await requestEmailCode(address, redirectTo);
     onCodeSent?.();
   }
 
@@ -86,6 +78,12 @@ export function EmailCodeSignIn({
       setArrival({ cooldown: EMAIL_RESEND_COOLDOWN_SECONDS, notice: null });
       setStage("code");
     } catch (caught) {
+      // Every refusal is reported, the email minute included (at info).
+      reportAuthFailure({
+        flow: "magic_link_send",
+        screen: "/join",
+        error: caught,
+      });
       const wait = emailCooldownSeconds(caught);
       if (wait !== undefined) {
         // One went out under a minute ago; its code still works.
@@ -93,11 +91,6 @@ export function EmailCodeSignIn({
         setStage("code");
         return;
       }
-      reportAuthFailure({
-        flow: "magic_link_send",
-        screen: "/join",
-        error: caught,
-      });
       setError(describeEmailSendError(caught));
     } finally {
       setSending(false);

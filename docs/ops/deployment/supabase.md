@@ -230,7 +230,11 @@ and the send cap daily (`auth-smtp`) so a revert to the hosted 2/hour mailer, a 
 Signet sender, or the burned apex From cannot sit green. It also asserts the Magic Link
 subject and `token_hash` href daily (`auth-magic-link`) so a dashboard reset to
 `{{ .ConfirmationURL }}` cannot sit green, and fails any `mailer_subjects_*` or a Magic
-Link body that still says Signet.
+Link body that still says Signet. *2026-11-26 (#6134): `auth-magic-link` now judges the
+Magic Link and Confirm signup bodies on both projects. Staging's must print the 6-digit
+code and make no link; production's must print the code and may keep a `token_hash` link
+beside it until its switch
+([§ Auth email templates](#auth-email-templates-a-6-digit-code-no-link-6134)).*
 
 Production SMTP is on, so the 07:45 `production-auth-conformance.yml` watchdog
 fails an empty host, as staging does. It requires `Frapp <no-reply@mail.frapp.live>`
@@ -258,6 +262,10 @@ says `Signet` until the owner makes that change (the table above has the last re
   refused its domain-scoped key with 403 ([#2655](https://github.com/pdcarlson/Frapp/issues/2655)).
 
 Leave the existing `frapp.live` Resend domain in place until nothing uses it.
+
+*Superseded 2026-11-26: this link-only body prints no code, so both conformance checks
+now fail it; paste the bodies in
+[§ Auth email templates](#auth-email-templates-a-6-digit-code-no-link-6134) instead.*
 
 The Magic Link template, as ADR-25 step 3 sets it. The one on staging and prod as of
 2026-09-09 is the same with Signet in the subject, heading and link text. Confirm and
@@ -315,7 +323,8 @@ needs no deploy first. The paste is
 [#1925](https://github.com/pdcarlson/Frapp/issues/1925), which covers the invite,
 recovery and email-change templates too. Until
 [#1926](https://github.com/pdcarlson/Frapp/issues/1926) asserts the template daily, a
-dashboard reset to `{{ .ConfirmationURL }}` would sit green.
+dashboard reset to `{{ .ConfirmationURL }}` would sit green. *2026-11-26: both projects'
+`auth-magic-link` now judge Confirm signup and fail `ConfirmationURL` (#6134).*
 
 #### Both templates print the 6-digit code (#5625)
 
@@ -390,6 +399,12 @@ lands on 0.15.0, so no update reaches 0.14.x. Production therefore keeps the cod
 pair above, and the apps keep the link's handling (web `/auth/callback`'s `token_hash`
 branch and email intents, mobile `createSessionFromUrl`), until:
 
+0. Before #6134 merges, Paul pastes the code-and-link pair
+   ([§ Both templates print the 6-digit code](#both-templates-print-the-6-digit-code-5625))
+   on `frapp-prod`, Magic Link and Confirm signup. It is safe on the build production
+   serves today (web `/auth/callback` and the phone verify both `token_hash` links), and
+   from the merge on Production Auth conformance requires the code in both bodies, so a
+   template that lacks it opens an incident before any member meets an empty code box.
 1. Deploy production ships #6134's merge (web and desktop ask for the code from then; the
    link beside it still works).
 2. The first phone build with #6134 is recorded in `apps/mobile/store/shipped-builds.json` on
@@ -399,7 +414,7 @@ branch and email intents, mobile `createSessionFromUrl`), until:
    (`ENV_REFERENCE.md`).
 4. Paul pastes the two code-only templates on `frapp-prod`.
 
-Then the follow-up deletes the link handling from both apps, drops `emailRedirectTo` from
+Then [#6136](https://github.com/pdcarlson/Frapp/issues/6136) deletes the link handling from both apps, drops `emailRedirectTo` from
 the email sends, and drops production conformance's `allowTransitionLink`. Until step 4,
 Production Auth conformance passes either shape (`checkAuthMagicLink` in
 `scripts/ci/staging-conformance.mjs`).

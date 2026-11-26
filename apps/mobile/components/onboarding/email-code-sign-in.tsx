@@ -60,7 +60,7 @@ export function EmailCodeSignIn({
 
   async function requestCode(): Promise<void> {
     onSending();
-    await sendEmailCode({ email: address });
+    await sendEmailCode({ email: address, screen: "/join" });
     onCodeSent?.();
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -9,11 +10,7 @@ import { FloatingField } from "@/components/auth/floating-field";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { SkeletonText } from "@/components/shared/async-states";
-import {
-  CheckEmail,
-  RESEND_COOLDOWN_SECONDS,
-  confirmationRedirectUrl,
-} from "@/components/auth/check-email";
+import { CheckEmail, confirmationRedirectUrl } from "@/components/auth/check-email";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/hooks/use-toast";
 import { reportAuthFailure } from "@/lib/sentry/auth-failures";
@@ -22,6 +19,7 @@ import { resolveRedirectPath } from "@/lib/auth/redirect";
 import {
   describeSignUpError,
   EMAIL_CODE_COPY,
+  EMAIL_RESEND_COOLDOWN_SECONDS,
   emailCooldownSeconds,
   isExistingAccountSignUp,
 } from "@repo/hooks/auth-error-copy";
@@ -114,7 +112,7 @@ function SignUpPageContent() {
       }
 
       setPassword("");
-      setSent({ email, cooldown: RESEND_COOLDOWN_SECONDS });
+      setSent({ email, cooldown: EMAIL_RESEND_COOLDOWN_SECONDS });
     } catch (error) {
       reportAuthFailure({ flow: "sign_up", screen: "/sign-up", error });
       // Refused inside GoTrue's minute: this address already has an
@@ -165,7 +163,20 @@ function SignUpPageContent() {
 
   if (sent) {
     return (
-      <AuthScreen title={EMAIL_CODE_COPY.sentTitle}>
+      <AuthScreen
+        title={EMAIL_CODE_COPY.sentTitle}
+        footer={
+          <p>
+            Already confirmed?{" "}
+            <Link
+              href={`/sign-in?redirectTo=${encodeURIComponent(redirectTo)}`}
+              className="font-semibold text-accent-text hover:underline"
+            >
+              Sign in here
+            </Link>
+          </p>
+        }
+      >
         <CheckEmail
           email={sent.email}
           redirectTo={redirectTo}

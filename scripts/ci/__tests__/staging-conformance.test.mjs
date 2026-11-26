@@ -425,7 +425,7 @@ test("today's token_hash link fails staging, which is code only", async () => {
       '<p>Your code is {{ .Token }}.</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
   });
   assert.equal(result.status, FAIL);
-  assert.match(result.detail, /mailer_templates_magic_link_content still builds an auth link/);
+  assert.match(result.detail, /mailer_templates_magic_link_content still makes a link/);
 });
 
 test("a Confirm signup body that still links fails, whichever link it is", async () => {
@@ -437,7 +437,7 @@ test("a Confirm signup body that still links fails, whichever link it is", async
       mailer_templates_confirmation_content: `<p>Your code is {{ .Token }}.</p>${link}`,
     });
     assert.equal(result.status, FAIL, link);
-    assert.match(result.detail, /mailer_templates_confirmation_content still builds an auth link/);
+    assert.match(result.detail, /mailer_templates_confirmation_content still makes a link/);
   }
 });
 
@@ -448,6 +448,18 @@ test("a template that prints no code fails, and so does an empty one", async () 
   const empty = await codeOnly({ mailer_templates_confirmation_content: "  " });
   assert.equal(empty.status, FAIL);
   assert.match(empty.detail, /mailer_templates_confirmation_content is empty/);
+});
+
+test("any link fails code-only: a SiteURL href, a literal URL, a bare href", async () => {
+  for (const link of [
+    '<a href="{{ .SiteURL }}/auth/confirm?token={{ .Token }}">Confirm</a>',
+    '<a href="https://app.frapp.live/sign-in">Sign in</a>',
+    "Open https://app.frapp.live to continue.",
+  ]) {
+    const result = await codeOnly({ mailer_templates_confirmation_content: `<p>Your code is {{ .Token }}.</p>${link}` });
+    assert.equal(result.status, FAIL, link);
+    assert.match(result.detail, /still makes a link/, link);
+  }
 });
 
 test("the code may be written {{.Token}} without spaces", async () => {
@@ -474,10 +486,10 @@ test("production's transition mode accepts the code-only template too, so the sw
     allowTransitionLink: true,
     accessToken: "t",
     projectRef: "ref",
-    fetchImpl: async () => codeOnlyConfig({ mailer_templates_confirmation_content: "" }),
+    fetchImpl: async () => codeOnlyConfig({ mailer_subjects_confirmation: "Confirm Your Signup" }),
   });
   assert.equal(result.status, PASS);
-  assert.match(result.detail, /code only/);
+  assert.match(result.detail, /magic link: code only; confirm signup: code only/);
 });
 
 // ── Magic Link template, production's transition shape (#6134): the code-only
@@ -488,7 +500,9 @@ const magicLinkConfig = (overrides = {}) =>
     smtp_host: "smtp.resend.com",
     mailer_subjects_magic_link: "Sign in to Frapp",
     mailer_templates_magic_link_content:
-      '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+      '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+    mailer_templates_confirmation_content:
+      '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a>',
     smtp_pass: "must-never-appear-in-detail",
     ...overrides,
   });
@@ -543,7 +557,7 @@ test("a Magic Link body still saying Signet fails, even with the Frapp subject a
     fetchImpl: async () =>
       magicLinkConfig({
         mailer_templates_magic_link_content:
-          '<h2>Sign in to Signet</h2><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+          '<h2>Sign in to Signet</h2><p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
       }),
   });
   assert.equal(result.status, FAIL);
@@ -560,7 +574,7 @@ test("a crest image served under its design-system file name is not a Signet lef
     fetchImpl: async () =>
       magicLinkConfig({
         mailer_templates_magic_link_content:
-          '<img src="https://frapp.live/brand/signet-emblem-B.png" alt="Frapp"><h2>Sign in to Frapp</h2><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+          '<img src="https://frapp.live/brand/signet-emblem-B.png" alt="Frapp"><h2>Sign in to Frapp</h2><p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
       }),
   });
   assert.equal(result.status, PASS);
@@ -581,7 +595,7 @@ test("SIGNET_PRODUCT_NAME matches the product name, never the design system's lo
 });
 
 test("the body check fails closed on the product name: comments, Outlook blocks, style content and alt", async () => {
-  const link = '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>';
+  const link = '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>';
   for (const leftover of [
     "<!--[if mso]><center>Sign in to Signet</center><![endif]-->",
     "<!-- Signet crest -->",
@@ -602,7 +616,7 @@ test("the body check fails closed on the product name: comments, Outlook blocks,
 });
 
 test("a Magic Link image whose alt or title says Signet fails; a style block naming signet- does not", async () => {
-  const link = '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>';
+  const link = '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>';
   for (const img of ['<img src="/brand/crest.png" alt="Signet">', '<img src="/brand/crest.png" title="Signet crest">']) {
     const result = await checkAuthMagicLink({
       allowTransitionLink: true,
@@ -671,7 +685,7 @@ test("type=magiclink without TokenHash fails", async () => {
     fetchImpl: async () =>
       magicLinkConfig({
         mailer_templates_magic_link_content:
-          '<a href="{{ .RedirectTo }}&type=magiclink">Sign in</a>',
+          '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&type=magiclink">Sign in</a>',
       }),
   });
   assert.equal(result.status, FAIL);
@@ -685,7 +699,7 @@ test("token_hash without type=magiclink fails", async () => {
     projectRef: "ref",
     fetchImpl: async () =>
       magicLinkConfig({
-        mailer_templates_magic_link_content: '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}">Sign in</a>',
+        mailer_templates_magic_link_content: '<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}">Sign in</a>',
       }),
   });
   assert.equal(result.status, FAIL);
@@ -705,6 +719,52 @@ test("Magic Link check skips without credentials and fails on a non-200", async 
     fetchImpl: async () => httpError(401),
   });
   assert.equal(failed.status, FAIL);
+});
+
+test("transition mode fails a Magic Link that prints no code, and says to paste one", async () => {
+  const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
+    accessToken: "t",
+    projectRef: "ref",
+    fetchImpl: async () =>
+      magicLinkConfig({
+        mailer_templates_magic_link_content:
+          '<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Sign in to Frapp</a>',
+      }),
+  });
+  assert.equal(result.status, FAIL);
+  assert.match(result.detail, /mailer_templates_magic_link_content does not print the 6-digit code/);
+});
+
+test("transition mode judges Confirm signup too: ConfirmationURL, no code, or a link of the wrong type fail", async () => {
+  for (const [body, reason] of [
+    ['<a href="{{ .ConfirmationURL }}">Confirm</a>', /confirmation_content still uses ConfirmationURL/],
+    ['<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm</a>', /confirmation_content does not print the 6-digit code/],
+    ['<p>{{ .Token }}</p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink">Confirm</a>', /without type=email/],
+    ["", /confirmation_content is empty/],
+  ]) {
+    const result = await checkAuthMagicLink({
+      allowTransitionLink: true,
+      accessToken: "t",
+      projectRef: "ref",
+      fetchImpl: async () => magicLinkConfig({ mailer_templates_confirmation_content: body }),
+    });
+    assert.equal(result.status, FAIL, body);
+    assert.match(result.detail, reason, body);
+  }
+});
+
+test("a code-only body that says Signet fails transition mode as Signet, not as a missing link", async () => {
+  const result = await checkAuthMagicLink({
+    allowTransitionLink: true,
+    accessToken: "t",
+    projectRef: "ref",
+    fetchImpl: async () =>
+      magicLinkConfig({ mailer_templates_magic_link_content: "<h2>Sign in to Signet</h2><p>{{ .Token }}</p>" }),
+  });
+  assert.equal(result.status, FAIL);
+  assert.match(result.detail, /still says Signet/);
+  assert.doesNotMatch(result.detail, /TokenHash/);
 });
 
 test("the template is asserted when smtp_host is empty", async () => {
@@ -732,6 +792,14 @@ test("default staging toRun includes auth-magic-link — the function alone is n
   const toRun = source.slice(source.indexOf("const toRun = checks ??"));
   assert.match(toRun, /id: "auth-magic-link"/);
   assert.match(toRun, /checkAuthMagicLink\(/);
+});
+
+test("staging's auth-magic-link row is strict: code only, never production's transition mode (#6134)", () => {
+  const source = readFileSync(new URL("../staging-conformance.mjs", import.meta.url), "utf8");
+  const toRun = source.slice(source.indexOf("const toRun = checks ??"));
+  const row = toRun.slice(toRun.indexOf('id: "auth-magic-link"'), toRun.indexOf('id: "auth-email-confirm"'));
+  assert.match(row, /checkAuthMagicLink\(/);
+  assert.doesNotMatch(row, /allowTransitionLink/);
 });
 
 // ── Leaked-password protection — off on frapp-prod for weeks, unnoticed (#2289) ──

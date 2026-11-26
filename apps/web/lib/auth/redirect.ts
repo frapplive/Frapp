@@ -3,6 +3,8 @@
 // sign-up client pages. A client-marked module imported from server code
 // arrives as a client reference, not as callable functions.
 
+import { EMAIL_LINKS_OFF_COPY } from "@repo/hooks/auth-error-copy";
+
 const DEFAULT_DASHBOARD_PATH = "/chat";
 const AUTH_ROUTE_PREFIXES = ["/sign-in", "/sign-up"];
 
@@ -211,7 +213,7 @@ export function describeAuthError(code: string): string {
     case "access_denied":
       return "The link was already used or is no longer valid. Email yourself a code below, or sign in with your password.";
     case "otp_disabled":
-      return "Email sign-in is switched off right now. Sign in with your password.";
+      return EMAIL_LINKS_OFF_COPY;
     case "exchange_failed":
       return "The link has to be opened in the browser you requested it from. Email yourself a code here, or sign in with your password.";
     case "verify_failed":

@@ -2,21 +2,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthApiError } from "@supabase/supabase-js";
 
-const { resend, verifyOtp, captureException } = vi.hoisted(() => ({
-  resend: vi.fn(async () => ({ data: {}, error: null as unknown })),
-  verifyOtp: vi.fn(async () => ({ data: {}, error: null as unknown })),
-  captureException: vi.fn(),
-}));
+const { resend, verifyOtp, getSession, onAuthStateChange, authListener, captureException } =
+  vi.hoisted(() => {
+    const authListener: { current: ((event: string, session: unknown) => void) | null } = {
+      current: null,
+    };
+    return {
+      resend: vi.fn(async () => ({ data: {}, error: null as unknown })),
+      verifyOtp: vi.fn(async () => ({ data: {}, error: null as unknown })),
+      getSession: vi.fn(async () => ({ data: { session: null as unknown } })),
+      onAuthStateChange: vi.fn((callback: (event: string, session: unknown) => void) => {
+        authListener.current = callback;
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      }),
+      authListener,
+      captureException: vi.fn(),
+    };
+  });
 
 vi.mock("@/lib/supabase/client", () => ({
   createSupabaseBrowserClient: () => ({
-    auth: { resend, verifyOtp },
+    auth: { resend, verifyOtp, getSession, onAuthStateChange },
   }),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureException }));
 
-import { CheckEmail, RESEND_COOLDOWN_SECONDS } from "./check-email";
+import { EMAIL_RESEND_COOLDOWN_SECONDS as RESEND_COOLDOWN_SECONDS } from "@repo/hooks/auth-error-copy";
+import { CheckEmail } from "./check-email";
 
 const EMAIL = "new.member@example.com";
 
@@ -49,6 +62,8 @@ describe("CheckEmail: the confirmation code (#6134)", () => {
     resend.mockReset().mockResolvedValue({ data: {}, error: null });
     verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
     captureException.mockReset();
+    getSession.mockReset().mockResolvedValue({ data: { session: null } });
+    authListener.current = null;
     vi.stubGlobal("location", { ...window.location, origin: "https://app.frapp.live" });
   });
 
@@ -134,6 +149,9 @@ describe("CheckEmail: the confirmation code (#6134)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
     expect(await screen.findByRole("status")).toHaveTextContent("We just sent you an email.");
     expect(screen.queryByRole("alert")).toBeNull();
+    // Still reported, at info: observability.md § Signed-out auth failures.
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ level: "info" }));
     expect(screen.getByRole("button", { name: "Send again in 42s" })).toBeDisabled();
   });
 
@@ -166,6 +184,26 @@ describe("CheckEmail: the confirmation code (#6134)", () => {
   it("says where the code came from when the sign-in form found the address unconfirmed", () => {
     renderPanel({ lead: "Confirm it first." });
     expect(screen.getByText("Confirm it first.")).toBeInTheDocument();
+  });
+
+  it("carries on once a transition-era link signs this browser in elsewhere, only once", async () => {
+    const { onConfirmed } = renderPanel();
+    act(() => {
+      authListener.current?.("SIGNED_IN", { access_token: "t" });
+    });
+    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays put when the member comes back still signed out", async () => {
+    const { onConfirmed } = renderPanel();
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(onConfirmed).not.toHaveBeenCalled();
   });
 
   it("goes back with the back label", () => {
