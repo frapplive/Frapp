@@ -36,4 +36,23 @@ describe("buildFindResults", () => {
     expect(targets).toContainEqual({ type: "event", eventId: "e1" });
     expect(targets).toContainEqual({ type: "backwork", entryId: "b1" });
   });
+
+  // #6053: channels rank as Jump to a channel does, and a DM never matches.
+  it("ranks a name that starts with the words first, and leaves DMs out", () => {
+    const labels = buildFindResults({
+      query: "rus",
+      filter: "Channels",
+      payload: undefined,
+      channels: [
+        { id: "a", name: "brush-up" },
+        { id: "b", name: "rush-events", category: "Recruitment" },
+        { id: "c", name: "dm-rus-1", type: "DM" },
+        { id: "d", name: "rush", hidden: true },
+      ],
+    }).map((row) => [row.label, row.hint]);
+    expect(labels).toEqual([
+      ["rush-events", "Recruitment"],
+      ["brush-up", undefined],
+    ]);
+  });
 });

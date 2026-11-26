@@ -167,6 +167,12 @@ These cause most of the iterations, so they come first.
 - **Real scale:** 150 members, 109 roles with 28-character names, 38 channels, 4,000 messages in one
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
+- **Find a channel without scrolling.** A folded category keeps its unread and mentioned channels in view,
+  and a heading's menu folds or unfolds every category; Find (Cmd/Ctrl+K or Cmd/Ctrl+F) and the phone's
+  Search open on Unread, then Recently opened, and match a channel from the first letter. Nothing sits over
+  the channel list to do it ([`search.md` § Jump to a channel](../../../spec/behavior/search.md#jump-to-a-channel),
+  [`chat/README.md` § Sidebar arrangement](../../../spec/behavior/chat/README.md#sidebar-arrangement)).
+  (11-25, #6053)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
 - **No made-up school logo.** A school is drawn by its name and short name: no initials on a colored
   tile standing in for its logo, and no real logo either, which is the school's trademark. "Get rid of it

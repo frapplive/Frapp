@@ -507,12 +507,12 @@ vi.mock("@repo/hooks", async (importOriginal) => {
   const { useQuery } = await import("@tanstack/react-query");
   return {
     ...actual,
-  // Chat timeouts (#6006): the viewer's own, read through
-  // `chatTimeout`, and the sheet's reads and writes.
-  useMyChatTimeout: () => ({ data: chatTimeout.current }),
-  useMemberByUserId: () => ({ data: undefined }),
-  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
-  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
+    // Chat timeouts (#6006): the viewer's own, read through
+    // `chatTimeout`, and the sheet's reads and writes.
+    useMyChatTimeout: () => ({ data: chatTimeout.current }),
+    useMemberByUserId: () => ({ data: undefined }),
+    useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+    useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
     // Dictation's cleanup needs the API client; nothing here dictates.
     useCleanDictation: () => async () => null,
     // The real hook's shape, minus the API client this spec doesn't provide:
@@ -693,6 +693,13 @@ vi.mock("@/components/ask/ask-in-channel", async () => {
         : null,
   };
 });
+
+// Recently opened channels for Search (#6053): spied, so a direct message
+// can be shown not to land there.
+vi.mock("@/lib/chat/last-channel", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/chat/last-channel")>()),
+  rememberRecentChannel: vi.fn(),
+}));
 
 vi.mock("@/lib/connection/use-connection", () => ({
   useConnection: () => ({ isOffline: false, writeBlockedReason: null }),
@@ -3921,6 +3928,25 @@ describe("The unread counts the screen observes (#4885)", () => {
     // Observed, never asked for from here.
     expect(unreadCountsFetch).not.toHaveBeenCalled();
     act(() => tree.unmount());
+  });
+});
+
+describe("chat thread records a recently opened channel (#6053)", () => {
+  it("remembers a channel on focus, for Search", async () => {
+    const { rememberRecentChannel } = await import("@/lib/chat/last-channel");
+    render();
+    expect(rememberRecentChannel).toHaveBeenCalledWith(
+      VIEWER,
+      expect.anything(),
+      CHANNEL,
+    );
+  });
+
+  it("never remembers a direct message", async () => {
+    const { rememberRecentChannel } = await import("@/lib/chat/last-channel");
+    channelType = "DM";
+    render();
+    expect(rememberRecentChannel).not.toHaveBeenCalled();
   });
 });
 
