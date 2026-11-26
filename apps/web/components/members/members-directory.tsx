@@ -240,7 +240,7 @@ function formatJoined(value: string): string | null {
  * then), `min-h-control-list-row` with `pointer-coarse:min-h-11` restoring
  * §2's 44px floor on touch —
  * the same carve-out `compactControlClassName` and lane 4's folder rail take,
- * and the reading §2 spells out ("compact 34px controls are web/pointer-only").
+ * and the reading §2 spells out (the mouse column is web/pointer-only).
  * It is deliberately *not* lane 4's flat `min-h-11` document row: that row is
  * not itself a control, where this one is the member's whole hit target, and
  * the lane's own density target is 32–36 on a pointer.

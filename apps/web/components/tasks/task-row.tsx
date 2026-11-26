@@ -467,7 +467,10 @@ function circleClass(state: CircleState) {
 
 function CircleMark({ state }: { state: CircleState }) {
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center" aria-hidden="true">
+    <span
+      className="flex h-control-row w-control-row shrink-0 items-center justify-center"
+      aria-hidden="true"
+    >
       <span className={circleClass(state)}>
         {state === "done" ? <Check className="h-3 w-3" /> : null}
         {state === "started" ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}

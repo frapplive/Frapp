@@ -122,8 +122,8 @@ export function EmailChipsInput({
         <span
           key={chip.value.toLowerCase()}
           className={cn(
-            // §5's Chip step: 24 tall, radius 8, padding-x 8, 12.5 / 600.
-            "inline-flex h-6 max-w-full items-center gap-1 rounded-[8px] pl-2 pr-1 text-caption font-semibold",
+            // §5's Chip step: 20 tall (24 until #6115), radius 8, padding-x 8, 12.5 / 600.
+            "inline-flex h-control-chip max-w-full items-center gap-1 rounded-[8px] pl-2 pr-1 text-caption font-semibold",
             chip.problem
               ? "bg-destructive-tint text-destructive-text"
               : "bg-card text-foreground",

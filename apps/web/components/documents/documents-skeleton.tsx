@@ -37,7 +37,10 @@ export function DocumentsPageSkeleton() {
             <SkeletonSectionLabel width="w-16" />
           </div>
           {["w-20", "w-24", "w-28", "w-32", "w-20"].map((width, index) => (
-            <div key={index} className="flex min-h-9 items-center gap-2 px-2">
+            <div
+              key={index}
+              className="flex min-h-control-row items-center gap-2 px-2 pointer-coarse:min-h-11"
+            >
               <Skeleton className="h-4 w-4 rounded-[4px]" />
               <Skeleton className={`h-[13px] ${width}`} />
             </div>

@@ -165,8 +165,8 @@ Five structural facts the table alone does not carry:
   `/`, `/dashboard` and the route-group index land on `/chat`, the open conversation ([§ Gating & routing semantics](#gating--routing-semantics)), and the chapter's channels are the sidebar's own list, always in view, so a pick opens one.
   Below `lg`, where the sidebar is a drawer, a Channels row links to `/chat` where the column holds the list.
 - **The channel list keeps room for eight rows at 1024×768, with every row showing.**
-  Each fixed row costs 30px (the 28px Row step plus the 2px gap) taken from the list; a channel row is 28px and a category heading about 28px at most, so eight rows under one heading need 264px.
-  _(Changed 2026-11-26 by Paul, [#6115](https://github.com/pdcarlson/Frapp/issues/6115): rows were 34px and channel rows 32 until the control size scale moved one step denser; the room went from about 348px to about 396px, twelve channel rows for the demo president.)_
+  Each fixed row costs 30px (the 28px Row step plus the 2px gap) taken from the list; a channel row is 28px, a category heading about 28px at most and the list's top gutter 12px, so eight rows under one heading need 264px.
+  _(Changed 2026-11-26 by Paul, [#6115](https://github.com/pdcarlson/Frapp/issues/6115): rows were 34px and channel rows 32 until the control size scale moved one step denser; the room measured for the demo president on the local stack went from 348px to 396px, enough for about twelve one-line rows under one heading.)_
   [`apps/web/tests/visual/nav-fit.spec.ts`](../../../apps/web/tests/visual/nav-fit.spec.ts) fails the required `web-responsive-floor` job when the list is given less.
   The harness runs sessionless with an owner's `*` permissions stubbed and the chapter read held open, so every permission and module row shows, More included: more rows than any seeded role sees.
   It measures the room the list is given rather than drawn rows, because the list needs a signed-in chat; the room was about 348px when #5946 added the test.
@@ -456,7 +456,7 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
 - **A page's views are plain words beside its title** (Paul, 2026-11-24, [#5947](https://github.com/frapplive/Frapp/issues/5947)). A page with two or three views renders them through `PageViews` in the same file into the header's view slot: after the title and a hairline, as [`components.md` § View labels](../design-system/components.md#view-labels-change-a-pages-or-a-lists-view) draws them, never as a boxed switch among the actions. Below `lg` they lead the header's pinned row. A member with one view sees none, and no hairline. A route with neither actions nor views draws no header row below `lg` and its body starts at the top of the pane.
   Every "New ..." button is one [`NewButton`](../../../apps/web/components/ui/new-button.tsx) ("+ New event", "+ New minutes"), and a main action with its own verb (Log hours, Upload, Adjust points) takes the same Button `action` variant ([`components.md`](../design-system/components.md) §3); on a narrow header it and Filter fold to their glyphs ([`components.md` § View labels](../design-system/components.md#view-labels-change-a-pages-or-a-lists-view) says when).
   Changed 2026-11-19 (Paul): it was one toolbar row at the top of the body carrying the route's filters, search and primary action, pushed to the trailing edge.
-  The controls sit at the toolbar height: 36 to a mouse, 44 to a finger (Button's `toolbar` size and the toolbar recipes in `table-controls.ts`, [`components.md`](../design-system/components.md) §3).
+  The controls sit at the toolbar height: the Small step, 28 to a mouse (36 until #6115), 44 to a finger (Button's `toolbar` size and the toolbar recipes in `table-controls.ts`, [`components.md`](../design-system/components.md) §3).
   A list row's secondary actions (Edit, Delete, an icon) take Button's neutral `ghost` variant.
 - **Lists are flush.**
   A list is a `<ul>` on `denseListClassName` ([`components/shared/table-controls.ts`](../../../apps/web/components/shared/table-controls.ts)): top-border dividers, no zebra, no per-row fill, no `<Table>`.
@@ -465,10 +465,10 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
   |                         | `/documents`, `/backwork`, `/billing` invoices, `/discord-import`, Chat Admin's categories and report queue                                                                                                                                   | `/members` (actives and alumni), Chat Admin's channels                     |
   | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
   | Row is itself a control | No: text plus trailing controls                                                                                                                                                                                                               | **Yes**: the row opens the member                                          |
-  | Height                  | `min-h-11` (44; on the Small step's 36 / 44 once [#3511](https://github.com/pdcarlson/Frapp/issues/3511) lands). `/backwork` is the exception: a seven-column grid at `@4xl:min-h-12` (48), stacking to two lines below a 896px page (`@4xl`) | `min-h-9`, and `pointer-coarse:min-h-11` (36, 44 on touch: the Small step) |
+  | Height                  | `min-h-11` (44; on the List row step's 32 / 44 once [#3511](https://github.com/pdcarlson/Frapp/issues/3511) lands). `/backwork` is the exception: a seven-column grid at `@4xl:min-h-12` (48), stacking to two lines below a 896px page (`@4xl`) | `min-h-control-list-row`, and `pointer-coarse:min-h-11` (32, 44 on touch: the List row step; 36 until #6115) |
 
   `pointer-coarse` is [`components.md`](../design-system/components.md) §2's pointer-only carve-out in CSS: a mouse gets the List row step (32 since #6115; `4a` drew a 34px member row), a finger the full 44.
-  Trailing 32px row controls take `compactControlClassName` on the same rule.
+  Trailing row controls take `compactControlClassName` (the Row step, 28; 32 until #6115) on the same rule.
   Rows **stack** on a narrow page (`flex-col`, becoming a row at a breakpoint: `sm` or `md` on pages not yet converted, the page's or list's own `@xl` or `@md` on those that are, § Responsive contract) rather than hide fields, because `display:none` removes text from the accessibility tree too, and at the 375px floor a hidden meta line exists nowhere in the product.
 
 - **The checkbox column is gone; selection is not.**
@@ -492,7 +492,7 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
   In a `·`-joined meta line an absent fact drops out of the line.
   In a label-over-value tile the value reads `Not set` or `Not recorded`, because a label over nothing names nothing.
   A lone `—` is a character a screen reader announces standing in for nothing.
-- **The upload sheet is `1j`** ([`components/shared/upload-sheet.tsx`](../../../apps/web/components/shared/upload-sheet.tsx)): fields and footer buttons at the Small step (36 to a mouse, 44 to a finger;
+- **The upload sheet is `1j`** ([`components/shared/upload-sheet.tsx`](../../../apps/web/components/shared/upload-sheet.tsx)): fields and footer buttons at the Small step (28 to a mouse since #6115, 44 to a finger;
   the board drew 44, [`../design-system/foundations.md`](../design-system/foundations.md) §9), inline errors on touched fields, and no instructional paragraph.
   Upload stays enabled and a missing file is an inline error; only a subscription refusal disables it, because that is a verdict about the chapter rather than the form.
   The well collapses to a file row.
@@ -830,7 +830,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   Actives and alumni rows both open `MemberDetailSheet` (alumni since [#2484](https://github.com/pdcarlson/Frapp/issues/2484)).
   _Changed 2026-11-19 (Paul picked "a small card from the row", [#5684](https://github.com/frapplive/Frapp/issues/5684)): a row or tile opens the member's card beside it (chat's `MemberPopout`), and the card's View profile opens `MemberDetailSheet` as before._
   _Changed 2026-11-20 ([#5749](https://github.com/frapplive/Frapp/issues/5749), Shawn): a list row opens the card below the row, flipping above it near the window's bottom, since a row spans the Directory and beside it the card ran off the window's left edge; a grid tile still opens it beside the tile._
-  There is no trailing "View details" button: a 44px button inside a 36px row sets the row's height on its own.
+  There is no trailing "View details" button: a 44px button inside a 32px row sets the row's height on its own.
 - **One member profile, every door** ([#3726](https://github.com/pdcarlson/Frapp/issues/3726)).
   `MemberDetailSheet` (`components/members/member-detail-sheet.tsx`) reads a member by `users.id` (`GET /v1/members/by-user/{userId}`), so chat can open it with only a sender or mention id: since 2026-11-15 (#4593) a sender's name or photo, an `@` chip or a member-list row opens chat's profile popout first, and the sheet is its View profile ([`chat/README.md` § Mentions](../../behavior/chat/README.md#mentions), "The web profile popout").
   It follows mobile s13's order ([`../mobile/screens.md`](../mobile/screens.md)): photo, name and the class-year line, Message as a small Secondary button sized to its label and centered under the name, never a full-width bar (Paul, 2026-11-20; _changed from the sheet's one full-width accent button_), then the member's roles and groups (`MemberAssignments`, below), then a flat list of Phone (when set: the number is a `tel:` link and Text beside it an `sms:` link), Email (a `mailto:` link) and Member since, then the bio, with the custom fields the viewer's tier can see, those with a value (#1749), behind a More details toggle that starts closed on every opening (#3711, 2026-11-12: contact first, logistics a tap away).
@@ -1165,7 +1165,7 @@ What needs stating is where the board describes a product this codebase does not
 ### Errors and tab titles
 
 - **404 and the root error page** are `1k`, through `CrestPage`.
-  Transcribed, not lifted: the crest renders at full opacity, the panel at radius 20 rather than 24, and the buttons at `size="sm"` (36 to a mouse, 44 to a finger since 2026-11-05) rather than 40.
+  Transcribed, not lifted: the crest renders at full opacity, the panel at radius 20 rather than 24, and the buttons at `size="sm"` (28 to a mouse since #6115, 36 from 2026-11-05, 44 to a finger) rather than 40.
 - **`app/error.tsx` reports to Sentry.**
   Before it existed every render error below the root layout reached `global-error`, which reports; catching them here without `captureException` would make the product look better and report less.
 - **The recovery prop is `retry`, not `reset`.**

@@ -48,10 +48,10 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * A field inside the sheet, at the Small step (36 to a mouse, 44 to a finger;
+ * A field inside the sheet, at the Small step (28 to a mouse, 44 to a finger;
  * the board drew 44), the same height as the dashboard toolbar row.
  *
- * `Input`, `Textarea` and `SelectTrigger` all ship §4's 40px default (44 to a
+ * `Input`, `Textarea` and `SelectTrigger` all ship the Field step (32, 44 to a
  * finger), which is right for a form on a page and one step too tall for a
  * sheet — the board
  * pitches sheet fields "one level below" deliberately, so the sheet reads as
@@ -65,7 +65,7 @@ export const UPLOAD_FIELD_CLASS = dashboardToolbarHeightClassName;
 
 /**
  * The sheet's own buttons: the board's r12 footer at the Small step of
- * foundations.md §9's scale (36 to a mouse, 44 to a finger; the board drew
+ * foundations.md §9's scale (28 to a mouse, 44 to a finger; the board drew
  * 44), its 15px label rounded onto the `label` role (14), as `components.md`
  * rounds a drawn size (#2842). That leaves it one step from `size="sm"`
  * (`px-3`, `text-sm`): the board pads the footer 16px, and `text-label` is the role

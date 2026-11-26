@@ -1,18 +1,22 @@
 import type { Config } from "tailwindcss";
 import { motionTokens } from "./motion";
+import { signetDarkTokens } from "./signet";
 
 const motionDuration = motionTokens.duration;
 const motionEasing = motionTokens.easing;
 
-/** foundations.md §9's control steps, read from `signet.css`'s `--control-*`. */
-const CONTROL_STEPS = {
-  "control-chip": "var(--control-chip)",
-  "control-row": "var(--control-row)",
-  "control-small": "var(--control-small)",
-  "control-field": "var(--control-field)",
-  "control-list-row": "var(--control-list-row)",
-  "control-settings-row": "var(--control-settings-row)",
-} as const;
+/**
+ * foundations.md §9's control steps by name (`control-row`, `control-list-row`,
+ * ...), each reading its `--control-*` property. Built from `signet.ts`'s
+ * `control` map, the one list `cn()`'s tailwind-merge registration also reads,
+ * so a step added there is a utility here with nothing to keep in step.
+ */
+const CONTROL_STEPS: Record<string, string> = Object.fromEntries(
+  Object.keys(signetDarkTokens.control).map((step) => {
+    const name = `control-${step.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+    return [name, `var(--${name})`];
+  }),
+);
 
 /**
  * Reads a color token straight out of its custom property, whatever format the

@@ -38,7 +38,7 @@ import { FOCUS_RING } from "@/components/ui/focus";
  * that, the later sibling swallows the earlier one's clicks — the defect the
  * chat slice found under its reaction chips. So the `<label>` *is* 44x44, and
  * only where 44 is the rule: `pointer-coarse` is §2's own carve-out that
- * "compact 34px controls (§7) are web/pointer-only", read in the other direction.
+ * that the mouse column of the size scale is web/pointer-only, read in the other direction.
  * A mouse keeps the small box (20px since 2026-11-05) and the 48px column; a finger gets a real 44px
  * target and the column is already wide enough to hold it.
  *
@@ -103,7 +103,7 @@ export const dashboardCheckboxHitAreaClassName = [
  * - Chat's chrome buttons, which the board puts at 32px (`1b` pin 13).
  *
  * Both are true at once through `pointer-coarse`: §2's own carve-out that
- * "compact 34px controls (§7) are web/pointer-only", read in the other
+ * that the mouse column of the size scale is web/pointer-only, read in the other
  * direction, the same trade the checkbox hit area above makes. A pointer gets the Row step (28; 32 until #6115), and
  * on touch the real 44px target returns, with the row growing to hold it.
  *

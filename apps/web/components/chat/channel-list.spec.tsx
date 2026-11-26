@@ -602,6 +602,8 @@ describe("ChannelList hide and reopen (#2303)", () => {
       name: "Hidden conversations (1)",
     });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // A fold heading like the categories: the name, then its chevron.
+    expect(toggle.lastElementChild?.tagName.toLowerCase()).toBe("svg");
     expect(screen.queryByText("Alice Chen")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
@@ -1829,5 +1831,33 @@ describe("ChannelList in the sidebar: the list's own control on its first headin
     const heading = controls[0]!.closest(".group\\/head");
     expect(heading).not.toBeNull();
     expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
+  });
+
+  it("draws each fold heading as its name, then its chevron (#6115)", () => {
+    // Claude's "Pinned ⌄" and Discord's "Events ⌄": the name leads, the fold
+    // chevron follows it, and the name is in sentence case, not capitals.
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+      />,
+    );
+    const folds = document.querySelectorAll(
+      'button[aria-expanded][data-flip^="head:"]',
+    );
+    expect(folds.length).toBeGreaterThan(0);
+    for (const fold of folds) {
+      const children = Array.from(fold.children);
+      expect(children[0]?.tagName).toBe("SPAN");
+      expect(children.at(-1)?.tagName.toLowerCase()).toBe("svg");
+      expect(fold.className).not.toMatch(/(^| )uppercase( |$)/);
+      expect(fold.className).not.toMatch(/tracking-/);
+    }
   });
 });

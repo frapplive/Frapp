@@ -97,7 +97,10 @@ export function ActivityEditor({
                     </span>
                   </Button>
                 ) : (
-                  <span aria-hidden="true" className="size-9 shrink-0" />
+                  <span
+                    aria-hidden="true"
+                    className="size-control-small shrink-0 pointer-coarse:size-11"
+                  />
                 )}
                 <CardText cardKey={key} />
                 <Button

@@ -1058,7 +1058,8 @@ export function ChannelList({
               // Two lines in Direct messages: the name, then the last line.
               // A row in Hidden conversations has no line (the server keeps
               // no preview for it), so it stays one line.
-              twoLine ? "h-12" : "h-control-row",
+              // 44 to a finger: below `lg` the list is the /chat pane.
+              twoLine ? "h-12" : "h-control-row pointer-coarse:h-11",
               railRowTone({
                 active: isActive,
                 unread: looksUnread,
@@ -1295,7 +1296,7 @@ export function ChannelList({
       aria-hidden="true"
       className={DROP_SLOT}
       style={{
-        height: (lift?.height ?? 32) + draggedThreadRows * THREAD_ROW_PX,
+        height: (lift?.height ?? THREAD_ROW_PX) + draggedThreadRows * THREAD_ROW_PX,
       }}
     />
   );
@@ -1721,11 +1722,18 @@ export function ChannelList({
               aria-expanded={showHidden}
               aria-controls="channel-section:hidden"
               className={cn(
-                "w-full px-3 pb-1 text-left text-muted hover:text-foreground",
+                "flex w-full items-center gap-1 px-3 pb-1 text-left text-muted hover:text-foreground",
                 EYEBROW,
               )}
             >
-              {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
+              <span>{`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}</span>
+              {/* Its fold chevron after the name, as every folding heading
+                draws one (#6115). */}
+              {showHidden ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              )}
             </button>
             {showHidden ? (
               <ul

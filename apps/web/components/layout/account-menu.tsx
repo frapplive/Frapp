@@ -191,7 +191,7 @@ export function AccountMenu({
             aria-label={accountLabel}
             title={name}
             className={cn(
-              "grid size-control-small shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
+              "grid size-control-small pointer-coarse:size-11 shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
               FOCUS_RING_SHELL,
             )}
           >

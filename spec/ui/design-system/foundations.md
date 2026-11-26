@@ -199,7 +199,7 @@ The accent is a signal, so it goes only where a member has to act or notice. The
 **Everything else is neutral**, from the text ladder (§4) and the surface ladder (§2):
 
 - Names (your own included), labels, eyebrows, card kind labels and metadata: `--foreground`, `--muted-foreground` or `--muted`.
-- Icons that label a row, a card or a field, and icon-only controls: `--muted-foreground`, `--foreground` on hover. The one exception is a place's hue, below. (Until 2026-11-12 mobile's You tab rows and Up next strip drew theirs a step dimmer, in `--muted`; both sit in a lead tile now, [`../mobile/patterns.md` § Rows](../mobile/patterns.md#rows).)
+- Icons that label a row, a card or a field, and icon-only controls: `--muted-foreground`, `--foreground` on hover. The one exception is a place's hue, below. A glyph that sits in a section title (a chat card's kind, "Points" or "Event") takes the title's `--muted` with it, so the title reads as one quiet label (#6115, 2026-11-26). (Until 2026-11-12 mobile's You tab rows and Up next strip drew theirs a step dimmer, in `--muted`; both sit in a lead tile now, [`../mobile/patterns.md` § Rows](../mobile/patterns.md#rows).)
 - Hover, pressed and keyboard-highlight fills, in menus, tables, lists and rails alike: `--card-hover`, never an accent tint. It is the one step above the whole surface ladder, so it reads even on `--popover` (1.15:1 since 2026-11-19, in the ladder's tint; 1.194:1 when first set) ([`components.md`](components.md) §2).
 - Numbers and stats (points, hours, counts, timers): `--foreground`.
 - Spinners: a neutral text step, `--muted` on mobile as every mobile spinner already is.
@@ -390,15 +390,15 @@ Canonical map (locked; supersedes panel 4h — see deviation note):
 
 | Step | Mouse (web, fine pointer) | Touch (web coarse pointer, and mobile) | Takes it |
 |------|------|------|------|
-| Chip | 20 | 20 drawn, 44 hit area through padding or `hitSlop` | badges, status chips, counts. Mobile's filter chips draw 32 |
+| Chip | 20 | 24 drawn on the phone (web draws 20 on every pointer), 44 hit area through padding or `hitSlop` | badges, status chips, counts. Mobile's filter chips draw 32 |
 | Row | 28 | 44 | menu, select and command rows; a checkbox row inside a form; the web sidebar's rows (New, the homes, More), its channel rows and the settings rail |
 | Small | 28 | 44 | toolbar controls (a page header's search, filters and actions), Inline (`sm`) and icon buttons, tabs, a table header, a sheet's fields and footer buttons |
 | Field | 32 | 44 | text fields, select triggers, Default buttons, the color picker |
-| List row | 32 | 44 | a dense list's one-line row (Directory, Documents, the chat member list) |
+| List row | 32 | 44 | a dense list's one-line row (Directory, Documents, the chat member list). Tasks keeps its 40px row, Paul's number of 2026-11-18 (`task-row.tsx`) |
 | Settings row | 36 | 44 | `SettingsRow` ([components.md § Settings rows](components.md#settings-rows)) |
 | Primary | (web: Field) | 48 | mobile only: a full-width button that ends a sheet or a flow step (the sheet CTA, the dues Pay button, onboarding's buttons). A property-row form commits from its header instead ([components.md § Property rows](components.md#property-rows)). A web full-width primary is a Default button, 44 on touch |
 
-*Changed 2026-11-26 by Paul ([#6115](https://github.com/pdcarlson/Frapp/issues/6115)): "buttons in general have been too big for too long." The mouse column moved one step denser, after Claude's, Discord's, Slack's and Linear's sidebars: Chip 24 → 20, Row 32 → 28 (the sidebar's own 34 folded into it), Small 36 → 28, Field 40 → 32, and the dense list row (36) and settings row (44) became steps of their own at 32 and 36. Labels stay 14 and typed values 16, so the density is in the box, not the type. The touch column did not move.*
+*Changed 2026-11-26 by Paul ([#6115](https://github.com/pdcarlson/Frapp/issues/6115)): "buttons in general have been too big for too long." The mouse column moved one step denser, after Claude's, Discord's, Slack's and Linear's sidebars: Chip 24 → 20, Row 32 → 28 (the sidebar's own 34 folded into it), Small 36 → 28, Field 40 → 32, and the dense list row (36) and settings row (44) became steps of their own at 32 and 36. Labels stay 14 and typed values 16, so the density is in the box, not the type. The touch column did not move: the phone's chips stay 24 and every touch step 44.*
 
 - **Mouse and touch are one rule, not two designs.** Web reads `pointer-coarse` for the touch column (Tailwind's `pointer-coarse:` variant), so a laptop gets the dense column and a phone or tablet browser the 44 floor. Mobile is touch-only and reads the touch column alone. The web sidebar's rows are the Row step since #6115; until then they were 34, older pointer-only geometry from the framework board.
 - **Labels stay 14, values stay 16.** Button, tab and table-header labels are 14px at every height. A menu or select row's label is 14px on a mouse and 16px on touch. A typed value is 16px at every height, because §7's body floor binds on text a member types.

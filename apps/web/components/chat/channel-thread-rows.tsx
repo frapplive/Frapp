@@ -26,8 +26,11 @@ const ROW_PADDING_PX = 8;
 const ROW_GAP_PX = 8;
 export const CHANNEL_MARK_PX = 16;
 export const DIRECT_MARK_PX = 24;
-/** A thread row's height, the channel row's `h-8`. */
-export const THREAD_ROW_PX = 32;
+/**
+ * A thread row's height on a mouse, the channel row's Row step (foundations
+ * §9: 28 since #6115). Dragging is a mouse gesture; on touch both grow to 44.
+ */
+export const THREAD_ROW_PX = 28;
 
 /**
  * A channel's active threads, indented under its row in the rail (#5300,
@@ -112,7 +115,7 @@ export function ChannelThreadRows({
               })}
               onClick={() => onOpen(thread.channel_id, thread.thread_root_id)}
               className={cn(
-                "relative flex h-control-row w-full items-center rounded-xs pr-2 text-left text-sm transition-colors",
+                "relative flex h-control-row w-full items-center rounded-xs pr-2 pointer-coarse:h-11 text-left text-sm transition-colors",
                 FOCUS_RING,
                 railRowTone({ active, unread, muted }),
               )}

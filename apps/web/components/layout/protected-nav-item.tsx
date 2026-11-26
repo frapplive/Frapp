@@ -216,8 +216,8 @@ export function navRowClassName({
      * mobile - so the row is 44px until the desktop breakpoint, then takes
      * the Row step's density.
      */
-    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-control-row lg:min-h-0",
-    collapsed ? "w-control-row justify-center" : "w-full gap-2.5 px-2.5",
+    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-control-row lg:min-h-0 lg:pointer-coarse:h-11",
+    collapsed ? "w-control-row justify-center pointer-coarse:w-11" : "w-full gap-2.5 px-2.5",
     focusClassName,
     active
       ? "bg-accent-subtle font-semibold text-accent-text"
