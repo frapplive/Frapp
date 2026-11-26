@@ -2,17 +2,19 @@
 
 import { useId, useRef, useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
+import { useSaveRushStages, type RushStage } from "@repo/hooks";
 import {
-  useSaveRushStages,
-  type RushStage,
-  type RushStageInput,
-} from "@repo/hooks";
+  draftsOf,
+  stagesBody,
+  withSavedIds,
+  type StageDraft,
+} from "@repo/hooks/rush-stage-drafts";
 import {
   RUSH_STAGE_CATEGORIES,
   RUSH_STAGE_CATEGORY_LABELS,
+  RUSH_SETTINGS_COPY,
   RUSH_STAGE_LABEL_MAX,
   rushStagesProblem,
-  sortRushStages,
   type RushStageCategory,
 } from "@repo/validation";
 import { ProfileSection } from "@/components/profile/profile-section";
@@ -24,67 +26,6 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { EYEBROW } from "@/components/ui/typography";
 import { toastFailure } from "@/lib/failure-toast";
 import { cn } from "@/lib/utils";
-
-/** One stage as the editor holds it: a saved one keeps its id. */
-export type StageDraft = {
-  /** A saved stage's id; absent for one added here and not yet saved. */
-  id?: string;
-  /** The row's React key: the id, or a client one for a new stage. */
-  rowKey: string;
-  label: string;
-  category: RushStageCategory;
-  hidden: boolean;
-};
-
-function draftsOf(stages: readonly RushStage[]): StageDraft[] {
-  return sortRushStages(stages).map((stage) => ({
-    id: stage.id,
-    rowKey: stage.id,
-    label: stage.label,
-    category: stage.category,
-    hidden: stage.hidden,
-  }));
-}
-
-/** The body `PUT /v1/rush/stages` takes: every stage, in board order. */
-export function stagesBody(drafts: readonly StageDraft[]): RushStageInput[] {
-  return RUSH_STAGE_CATEGORIES.flatMap((category) =>
-    drafts
-      .filter((draft) => draft.category === category)
-      .map((draft) => ({
-        ...(draft.id ? { id: draft.id } : {}),
-        label: draft.label.trim(),
-        category: draft.category,
-        hidden: draft.hidden,
-      })),
-  );
-}
-
-/**
- * A waiting edit, with the ids the server just gave the stages it added. A
- * stage added before that save went out has no id in the edit; it is found
- * by its row in the list that was sent (its name then may since have
- * changed) and that name among the saved stages of its category.
- */
-export function withSavedIds(
-  waiting: readonly StageDraft[],
-  sent: readonly StageDraft[],
-  saved: readonly RushStage[],
-): StageDraft[] {
-  const known = new Set(sent.flatMap((draft) => (draft.id ? [draft.id] : [])));
-  const fresh = saved.filter((stage) => !known.has(stage.id));
-  return waiting.map((draft) => {
-    if (draft.id) return draft;
-    const asSent = sent.find((row) => row.rowKey === draft.rowKey);
-    if (!asSent) return draft;
-    const match = fresh.find(
-      (stage) =>
-        stage.category === asSent.category &&
-        stage.label === asSent.label.trim(),
-    );
-    return match ? { ...draft, id: match.id } : draft;
-  });
-}
 
 let newRow = 0;
 
@@ -147,7 +88,7 @@ export function RushStageEditor({
         setSaving(false);
         setEdit(null);
         toastFailure({
-          title: "Couldn't save the stages",
+          title: RUSH_SETTINGS_COPY.stages.failed,
           error,
           fallback: "Retry in a moment.",
         });
@@ -170,11 +111,11 @@ export function RushStageEditor({
   return (
     <ProfileSection
       id="settings-module-rush-stages"
-      title="Stages"
+      title={RUSH_SETTINGS_COPY.stages.title}
       hint={
         canEdit
-          ? "Where a prospect is in recruitment. Rename, hide or reorder a stage within its group."
-          : "Where a prospect is in recruitment."
+          ? RUSH_SETTINGS_COPY.stages.editHint
+          : RUSH_SETTINGS_COPY.stages.hint
       }
     >
       <div className="grid gap-5">
@@ -294,11 +235,11 @@ function CategoryStages({
                 onCheckedChange={(shown) =>
                   replace(draft.rowKey, { hidden: !shown })
                 }
-                aria-label={`Show ${draft.label} on the board`}
+                aria-label={RUSH_SETTINGS_COPY.stages.show(draft.label)}
               />
             ) : draft.hidden ? (
               <span className="shrink-0 text-caption text-muted-foreground">
-                Hidden
+                {RUSH_SETTINGS_COPY.stages.hidden}
               </span>
             ) : null}
           </li>
@@ -309,7 +250,7 @@ function CategoryStages({
               maxLength={RUSH_STAGE_LABEL_MAX}
               label=""
               autoFocus
-              placeholder={`New ${label.toLowerCase()} stage`}
+              placeholder={RUSH_SETTINGS_COPY.stages.newStage(label)}
               onCommit={(next) => {
                 setAdding(false);
                 onChange([
@@ -340,7 +281,7 @@ function CategoryStages({
             onClick={() => setAdding(true)}
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Add a stage
+            {RUSH_SETTINGS_COPY.stages.add}
           </Button>
         </div>
       ) : null}

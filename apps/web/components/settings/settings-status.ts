@@ -66,7 +66,8 @@ export function moduleTierKind(tier: ModuleTier | string): BadgeKind {
  * `paid` reads as "Chapter Pro" rather than "Paid" deliberately — `PAID` is one
  * of the six tokens §5 *does* fix, and it means a settled invoice. The same
  * word on a module would state the opposite of what it states on `/billing`.
+ *
+ * Shared with the phone's module screens (#6030), so it lives in
+ * `@repo/validation` (`module-settings-copy.ts`).
  */
-export function moduleTierLabel(tier: ModuleTier | string): string {
-  return tier === "paid" ? "Chapter Pro" : "Free";
-}
+export { moduleTierLabel } from "@repo/validation";

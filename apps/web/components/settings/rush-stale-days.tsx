@@ -2,14 +2,14 @@
 
 import { useId, useState } from "react";
 import { useSaveRushSettings } from "@repo/hooks";
-import { RUSH_STALE_DAYS_MAX, RUSH_STALE_DAYS_MIN } from "@repo/validation";
+import {
+  RUSH_SETTINGS_COPY as COPY,
+  RUSH_STALE_DAYS_MAX,
+  RUSH_STALE_DAYS_MIN,
+} from "@repo/validation";
 import { SettingsRow } from "@/components/shared/settings-row";
 import { Input } from "@/components/ui/input";
 import { toastFailure } from "@/lib/failure-toast";
-
-function daysWord(days: number): string {
-  return `${days} ${days === 1 ? "day" : "days"}`;
-}
 
 /**
  * Recruitment → Rules' follow-up row (#5934): how many days without a logged
@@ -27,8 +27,8 @@ export function RushStaleDaysRow({
   if (canEdit) return <StaleDaysRow staleDays={staleDays} />;
   return (
     <SettingsRow
-      label={`Needs follow-up after ${daysWord(staleDays)} without a logged contact`}
-      description="Your role can't change this."
+      label={COPY.staleDays.readOnly(staleDays)}
+      description={COPY.roleCantChange}
       control={null}
     />
   );
@@ -41,10 +41,10 @@ function StaleDaysRow({ staleDays }: { staleDays: number }) {
       days={staleDays}
       min={RUSH_STALE_DAYS_MIN}
       max={RUSH_STALE_DAYS_MAX}
-      label="Needs follow-up after"
-      description="Days without a logged contact"
+      label={COPY.staleDays.label}
+      description={COPY.staleDays.hint}
       ariaLabel="Days without a logged contact before a prospect needs follow-up"
-      failTitle="Couldn't save the follow-up days"
+      failTitle={COPY.staleDays.failed}
       onSave={(days, done) => save.mutate({ stale_days: days }, done)}
     />
   );
@@ -96,7 +96,7 @@ export function RushDaysRow({
     const trimmed = text.trim();
     const next = Number(trimmed);
     if (!/^\d+$/.test(trimmed) || next < min || next > max) {
-      setProblem(`Pick from ${min} to ${max} days.`);
+      setProblem(COPY.daysRange(min, max));
       return;
     }
     setProblem(null);
@@ -156,7 +156,9 @@ export function RushDaysRow({
             }}
             className="h-9 w-16 text-center tabular-nums"
           />
-          <span className="text-sm text-muted-foreground">days</span>
+          <span className="text-sm text-muted-foreground">
+            {COPY.daysSuffix}
+          </span>
         </span>
       }
     />

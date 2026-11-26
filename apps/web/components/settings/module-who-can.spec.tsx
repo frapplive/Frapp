@@ -58,7 +58,8 @@ vi.mock("@/components/roles/use-role-permission-toggle", () => {
   return { useRolePermissionToggle: toggle, useTierPermissionToggle: toggle };
 });
 
-vi.mock("@/components/settings/settings-modules", () => ({
+vi.mock("@repo/hooks/module-settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks/module-settings")>()),
   modulePermissions: () => [
     {
       permission: "events:create",

@@ -47,6 +47,7 @@ export type SettingPhoneScreen =
   | "/chapter-vocabulary"
   | "/chapter-roles"
   | "/chapter-logs"
+  | "/module-settings"
   | "/preferences";
 
 export type SettingEntry = {
@@ -77,6 +78,8 @@ export type SettingEntry = {
   phone?: {
     screen: SettingPhoneScreen;
     anchor?: string;
+    /** More params the screen needs, such as a module's `module=points`. */
+    params?: Readonly<Record<string, string>>;
     /**
      * Drawn only for a chapter: the phone's Chapter tab parts that read the
      * chapter's config, which a council's routes refuse (#5933). A council
@@ -109,7 +112,7 @@ type ModuleWords = {
   keywords: readonly string[];
 };
 
-/** The module pages of Chapter settings, in rail order (`settings-modules.ts`). */
+/** The module pages of Chapter settings, in rail order (`module-settings.ts`). */
 const MODULE_WORDS: readonly ModuleWords[] = [
   { key: "chat", label: "Chat", keywords: ["messages", "messaging"] },
   {
@@ -742,6 +745,13 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       web: alwaysOn
         ? { page: module.key }
         : { page: module.key, anchor: `settings-module-${module.key}-switch` },
+      // The module's screen on the phone (#6030), which reads the chapter's
+      // config, so a council is sent to the web dashboard.
+      phone: {
+        screen: "/module-settings",
+        params: { module: module.key },
+        chapterOnly: true,
+      },
     };
   }),
   {
@@ -799,6 +809,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "hours",
     web: { page: "hours", anchor: "settings-module-hours-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours" },
+      chapterOnly: true,
+    },
   },
   {
     id: "service-goals",
@@ -813,6 +828,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-module-service-goals",
       params: { page: "goal-service" },
     },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-service" },
+      chapterOnly: true,
+    },
   },
   {
     id: "study-goals",
@@ -826,6 +846,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "hours",
       anchor: "settings-module-study-goals",
       params: { page: "goal-study" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-study" },
+      chapterOnly: true,
     },
   },
   {
@@ -851,6 +876,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "points",
     web: { page: "points", anchor: "settings-module-points-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points" },
+      chapterOnly: true,
+    },
   },
   {
     id: "points-goal",
@@ -864,6 +894,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "points",
       anchor: "settings-module-points-goals",
       params: { page: "goal-points" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points", page: "goal-points" },
+      chapterOnly: true,
     },
   },
   {
@@ -879,6 +914,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "meetings",
       anchor: "settings-module-meetings-rules",
       params: { page: "sections" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "meetings", page: "sections" },
+      chapterOnly: true,
     },
   },
   {

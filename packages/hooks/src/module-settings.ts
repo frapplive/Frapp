@@ -1,4 +1,11 @@
-import type { GoalMetric } from "@repo/validation";
+import { MODULE_CATALOG } from "@repo/org-archetypes";
+import {
+  PERMISSION_REGISTRY,
+  RETIRED_PERMISSIONS,
+  isBetaOffModule,
+  type GoalMetric,
+  type PermissionDefinition,
+} from "@repo/validation";
 import type { TierRow, TieredRole } from "./role-tiers";
 
 /*
@@ -75,6 +82,25 @@ const GOAL_UNIT: Record<
   study: { per: 60, one: "hour a week", many: "hours a week" },
 };
 
+/** Points are stored as points; hours as minutes, typed as whole hours. */
+export function goalPerUnit(metric: GoalMetric): number {
+  return GOAL_UNIT[metric].per;
+}
+
+/** The page a Goals row opens: `goal-points`. */
+export function goalPageId(metric: GoalMetric): string {
+  return `goal-${metric}`;
+}
+
+/** The measure a goal page is about, or `null` for any other page. */
+export function goalMetricOfPage(
+  page: string | null | undefined,
+): GoalMetric | null {
+  if (!page?.startsWith("goal-")) return null;
+  const metric = page.slice("goal-".length);
+  return metric in GOAL_UNIT ? (metric as GoalMetric) : null;
+}
+
 /**
  * A Goals row's value: "No goal", "120 points", "4 hours a week", and how many
  * roles are held to a different goal ("20 hours, 2 roles differ"). Hours are
@@ -101,4 +127,187 @@ export function goalSummary(
 export function countSummary(count: number, one: string, many: string): string {
   if (count === 0) return "None";
   return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The modules that have a page in Chapter settings (#4073), in rail order,
+ * on web and the phone alike (#6030): web's rail and the phone's Modules group
+ * list the same rows in the same order and words.
+ *
+ * Each one is a row in the Modules group and opens one page: the
+ * switch, the rules the chapter can really set, who can do what, and the
+ * module's officer tool. The order is how often a chapter reaches for each,
+ * not the catalog's order: chat and events first, recruitment and dues last.
+ *
+ * Not every `MODULE_CATALOG` entry is here. Members, the audit log and
+ * Chapter settings itself are the chapter, not a module you switch; Billing
+ * is Plan and billing. The catalog's prototype extras (Academics, Risk
+ * Management, Lines and the rest) have no product behind them, so the
+ * Modules tab's switches for them saved a value nothing read (#1760) and
+ * they get no page.
+ */
+export type ModuleSettings = {
+  /** `enabled_modules` key, and the rail row's `?tab=` value. */
+  key: string;
+  label: string;
+  /** One line under the page title: what the module is for a member. */
+  description: string;
+  /** What switching it off takes away, said on the page while it is off. */
+  offNote: string;
+  /** Free modules are always on; the switch is drawn locked. */
+  alwaysOn: boolean;
+  tier: "free" | "paid";
+};
+
+type ModuleCopy = Pick<
+  ModuleSettings,
+  "key" | "label" | "description" | "offNote"
+>;
+
+const MODULE_COPY: readonly ModuleCopy[] = [
+  {
+    key: "chat",
+    label: "Chat",
+    description: "Channels and direct messages for the whole chapter.",
+    offNote: "",
+  },
+  {
+    key: "announcements",
+    label: "Announcements",
+    description: "Officer posts that reach every member, with a push.",
+    offNote: "",
+  },
+  {
+    key: "events",
+    label: "Events",
+    description:
+      "The chapter calendar, RSVPs, required attendance and check-in.",
+    offNote:
+      "Members don't see Events in the sidebar or as a card in chat, and no new events can be made.",
+  },
+  {
+    key: "points",
+    label: "Points",
+    description:
+      "The points ledger and standings: points from events, service and officers.",
+    offNote:
+      "Members don't see points on their profile or in the Directory, and nothing earns points until it's back on.",
+  },
+  {
+    key: "hours",
+    label: "Service hours",
+    description:
+      "Members log service and study hours; officers approve service for points.",
+    offNote:
+      "Members don't see service or study hours on their profile, and no hours can be logged.",
+  },
+  {
+    key: "geofences",
+    label: "Study zones",
+    description:
+      "Places on the map where a study session counts, and what it earns.",
+    offNote: "Study sessions can't start, and the Study zones tool is hidden.",
+  },
+  {
+    key: "tasks",
+    label: "Tasks",
+    description: "Assign work to members and confirm it's done.",
+    offNote:
+      "Members don't see Tasks in the sidebar or as a card in chat, and no new tasks can be made.",
+  },
+  {
+    key: "polls",
+    label: "Polls",
+    description: "Quick votes posted in a channel.",
+    offNote: "No one can post a new poll in chat.",
+  },
+  {
+    key: "meetings",
+    label: "Meetings",
+    description:
+      "Minutes for chapter, exec and committee meetings, posted to the members each meeting invites.",
+    offNote:
+      "Members don't see Meetings in the sidebar, and no minutes can be started or posted. Minutes already written are kept.",
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    description: "The chapter's files: bylaws, minutes, forms.",
+    offNote: "Members don't see Documents in the sidebar.",
+  },
+  {
+    key: "backwork",
+    label: "Backwork",
+    description: "The chapter's library of past coursework.",
+    offNote: "Members don't see Backwork in the sidebar.",
+  },
+  {
+    key: "reports",
+    label: "Reports",
+    description: "Exports of attendance, points, roster and service.",
+    offNote: "The Reports tool is hidden and nothing can be exported.",
+  },
+  {
+    key: "rush",
+    label: "Recruitment",
+    description: "Prospects, notes, votes and bids during recruitment.",
+    offNote: "Members don't see Recruitment, and no prospect can be added.",
+  },
+  {
+    key: "dues",
+    label: "Dues",
+    description: "Dues amounts, payment plans and late fees.",
+    offNote: "Members aren't invoiced for dues.",
+  },
+];
+
+/** Every module with a page, in rail order, catalog tier attached. */
+export const MODULE_SETTINGS: readonly ModuleSettings[] = MODULE_COPY.flatMap(
+  (copy) => {
+    const entry = MODULE_CATALOG.find((m) => m.key === copy.key);
+    if (!entry) return [];
+    return [
+      {
+        ...copy,
+        alwaysOn: entry.alwaysOn,
+        tier: entry.tier === "paid" ? "paid" : "free",
+      },
+    ];
+  },
+);
+
+const MODULE_SETTINGS_BY_KEY: ReadonlyMap<string, ModuleSettings> = new Map(
+  MODULE_SETTINGS.map((module) => [module.key, module]),
+);
+
+export function moduleSettingsFor(key: string): ModuleSettings | undefined {
+  return MODULE_SETTINGS_BY_KEY.get(key);
+}
+
+export function isModuleSettingsTab(tab: string): boolean {
+  return MODULE_SETTINGS_BY_KEY.has(tab);
+}
+
+/**
+ * Modules with a page this release. A module that is off for every chapter in
+ * the beta (`BETA_OFF_MODULES`, Dues today) has none, the way the Dues tab
+ * was hidden before it.
+ */
+export function shownModuleSettings(): readonly ModuleSettings[] {
+  return MODULE_SETTINGS.filter((module) => !isBetaOffModule(module.key));
+}
+
+/**
+ * The permissions that belong to a module, from the permission registry the
+ * Roles page reads (#4069), so "who can" on a module page and the Roles page
+ * name the same things in the same words. The retired ones
+ * (`RETIRED_PERMISSIONS`, #5728) are left out, as the Roles page leaves them.
+ */
+export function modulePermissions(
+  moduleKey: string,
+): readonly PermissionDefinition[] {
+  return PERMISSION_REGISTRY.filter(
+    (entry) =>
+      entry.module === moduleKey && !RETIRED_PERMISSIONS.has(entry.permission),
+  );
 }

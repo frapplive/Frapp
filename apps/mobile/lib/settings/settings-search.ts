@@ -58,8 +58,12 @@ export function settingPhoneRoute(
 ): NotificationTarget | null {
   const phone = settingPhoneTarget(entry, options);
   if (!phone) return null;
-  return phone.anchor
-    ? { pathname: phone.screen, params: { setting: entry.id } }
+  const params = {
+    ...phone.params,
+    ...(phone.anchor ? { setting: entry.id } : {}),
+  };
+  return Object.keys(params).length > 0
+    ? { pathname: phone.screen, params }
     : { pathname: phone.screen };
 }
 

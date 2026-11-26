@@ -22,7 +22,12 @@ import { RushDaysRow } from "./rush-stale-days";
 import {
   RUSH_BID_EXPIRY_DAYS_MAX,
   RUSH_BID_EXPIRY_DAYS_MIN,
+  RUSH_SETTINGS_COPY,
+  joinNames,
+  rushContactsSkippedLine,
 } from "@repo/validation";
+
+const COPY = RUSH_SETTINGS_COPY;
 
 /** The menu value for "no pick": the default role, no Group, no card. */
 const NONE = "__none";
@@ -39,10 +44,7 @@ type ChannelOption = {
 const TRIGGER = "w-56 max-w-[50vw]";
 
 /** "Ana", "Ana and Ben", "Ana, Ben and Cal". */
-export function namesList(names: readonly string[]): string {
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
+export const namesList = joinNames;
 
 /**
  * The rest of the Recruitment module page (#5973,
@@ -75,7 +77,7 @@ export function RushRecruitmentPicks({
   if (!settings) return null;
 
   const locked = !canEdit || save.isPending;
-  const readOnly = canEdit ? null : "Your role can't change this.";
+  const readOnly = canEdit ? null : COPY.roleCantChange;
 
   const roles = asArray<RoleOption>(rolesQuery.data).filter(
     (role) => !role.permissions.includes("*"),
@@ -124,16 +126,14 @@ export function RushRecruitmentPicks({
   return (
     <>
       <SettingsGroup
-        heading="Joining"
-        footnote="A prospect whose acceptance is confirmed is invited to join with this role."
+        heading={COPY.joining.heading}
+        footnote={COPY.joining.footnote}
       >
         <SettingsRow
-          label="New member role"
+          label={COPY.joining.label}
           description={
             noRole ? (
-              <span className="text-warning">
-                Your New members tier has no role. Pick one.
-              </span>
+              <span className="text-warning">{COPY.joining.noRole}</span>
             ) : (
               (readOnly ?? undefined)
             )
@@ -149,17 +149,22 @@ export function RushRecruitmentPicks({
                 )
               }
             >
-              <SelectTrigger className={TRIGGER} aria-label="New member role">
+              <SelectTrigger
+                className={TRIGGER}
+                aria-label={COPY.joining.label}
+              >
                 <SelectValue
                   placeholder={
-                    rolesQuery.isError ? "Couldn't load roles" : "Pick a role"
+                    rolesQuery.isError
+                      ? COPY.joining.rolesFailed
+                      : COPY.joining.pick
                   }
                 />
               </SelectTrigger>
               <SelectContent>
                 {defaultRole ? (
                   <SelectItem value={NONE}>
-                    {`${defaultRole.name} (default)`}
+                    {`${defaultRole.name}${COPY.joining.defaultSuffix}`}
                   </SelectItem>
                 ) : null}
                 {roles
@@ -176,21 +181,18 @@ export function RushRecruitmentPicks({
       </SettingsGroup>
 
       <SettingsGroup
-        heading="Sign-ups"
-        footnote="Used once your interest form is open. The card shows a name and stage, never contact details."
+        heading={COPY.signUps.heading}
+        footnote={COPY.signUps.footnote}
       >
         <SettingsRow
-          label="Recruitment contacts"
+          label={COPY.signUps.contacts}
           description={
             skipped.length > 0 ? (
               <span className="text-warning">
-                {`${namesList(skipped)} can't open recruitment, so ${
-                  skipped.length === 1 ? "isn't" : "aren't"
-                } told.`}
+                {rushContactsSkippedLine(skipped)}
               </span>
             ) : (
-              (readOnly ??
-              "Told about each sign-up, with recruitment's managers")
+              (readOnly ?? COPY.signUps.contactsHint)
             )
           }
           control={
@@ -206,12 +208,12 @@ export function RushRecruitmentPicks({
             >
               <SelectTrigger
                 className={TRIGGER}
-                aria-label="Recruitment contacts"
+                aria-label={COPY.signUps.contacts}
               >
-                <SelectValue placeholder="Pick a Group" />
+                <SelectValue placeholder={COPY.signUps.pickGroup} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>No Group</SelectItem>
+                <SelectItem value={NONE}>{COPY.signUps.noGroup}</SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.id} value={group.id}>
                     {group.name}
@@ -222,10 +224,8 @@ export function RushRecruitmentPicks({
           }
         />
         <SettingsRow
-          label="Card channel"
-          description={
-            readOnly ?? "Only a channel everyone in it can open recruitment"
-          }
+          label={COPY.signUps.card}
+          description={readOnly ?? COPY.signUps.cardHint}
           control={
             <Select
               value={channelKnown ? (settings.card_channel_id ?? NONE) : ""}
@@ -237,11 +237,11 @@ export function RushRecruitmentPicks({
                 )
               }
             >
-              <SelectTrigger className={TRIGGER} aria-label="Card channel">
-                <SelectValue placeholder="Pick a channel" />
+              <SelectTrigger className={TRIGGER} aria-label={COPY.signUps.card}>
+                <SelectValue placeholder={COPY.signUps.pickChannel} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>No card</SelectItem>
+                <SelectItem value={NONE}>{COPY.signUps.noCard}</SelectItem>
                 {channels.map((channel) => (
                   <SelectItem key={channel.id} value={channel.id}>
                     {`#${channel.name}`}
@@ -269,10 +269,8 @@ export function RushBidExpiryRow({ canEdit }: { canEdit: boolean }) {
   if (!canEdit) {
     return (
       <SettingsRow
-        label={`Bids expire after ${settings.bid_expiry_days} ${
-          settings.bid_expiry_days === 1 ? "day" : "days"
-        }`}
-        description="Your role can't change this."
+        label={COPY.bidDays.readOnly(settings.bid_expiry_days)}
+        description={COPY.roleCantChange}
         control={null}
       />
     );
@@ -282,10 +280,10 @@ export function RushBidExpiryRow({ canEdit }: { canEdit: boolean }) {
       days={settings.bid_expiry_days}
       min={RUSH_BID_EXPIRY_DAYS_MIN}
       max={RUSH_BID_EXPIRY_DAYS_MAX}
-      label="Bids expire after"
-      description="Unless the prospect answers first"
+      label={COPY.bidDays.label}
+      description={COPY.bidDays.hint}
       ariaLabel="Days a bid stays open before it expires"
-      failTitle="Couldn't save how long bids last"
+      failTitle={COPY.bidDays.failed}
       onSave={(days, done) => save.mutate({ bid_expiry_days: days }, done)}
     />
   );

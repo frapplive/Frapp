@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { permissionOfWhoCanPage } from "@repo/hooks/module-settings";
+import {
+  modulePermissions,
+  permissionOfWhoCanPage,
+  type ModuleSettings,
+} from "@repo/hooks/module-settings";
+import { MODULE_ALWAYS_ON, moduleSwitchLine } from "@repo/validation";
 import { Badge } from "@/components/ui/badge";
-import { type ModuleSettings } from "@/components/settings/settings-modules";
-import { modulePermissions } from "@/components/settings/settings-modules";
 import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
@@ -158,15 +161,12 @@ export function ModuleSettingsPage({
     </SettingsSubpage>
   );
 
-  const offLine = `Off. ${module.offNote} Turning it back on brings everything back; nothing was deleted.`;
-  const roleLine =
-    !module.alwaysOn && !canManage
-      ? "Your role can't switch modules on or off."
-      : null;
-  const switchDescription =
-    [!on && !module.alwaysOn ? offLine : null, roleLine]
-      .filter(Boolean)
-      .join(" ") || undefined;
+  const switchDescription = moduleSwitchLine({
+    on,
+    alwaysOn: module.alwaysOn,
+    offNote: module.offNote,
+    canManage,
+  });
 
   return (
     <>
@@ -192,7 +192,7 @@ export function ModuleSettingsPage({
               control={
                 <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Lock className="h-3.5 w-3.5" aria-hidden />
-                  Always on
+                  {MODULE_ALWAYS_ON}
                 </span>
               }
             />

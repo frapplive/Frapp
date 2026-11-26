@@ -62,7 +62,7 @@ import {
 import {
   isModuleSettingsTab,
   shownModuleSettings,
-} from "@/components/settings/settings-modules";
+} from "@repo/hooks/module-settings";
 import {
   chapterProfileSaveBody,
   readChapterBranding,

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   ONLY_THE_PRESIDENT,
   countSummary,
+  goalMetricOfPage,
+  goalPageId,
+  goalPerUnit,
   goalSummary,
+  modulePermissions,
   permissionOfWhoCanPage,
   whoCanHolders,
   whoCanPageId,
@@ -109,5 +113,34 @@ describe("module settings rows", () => {
     expect(countSummary(0, "tag", "tags")).toBe("None");
     expect(countSummary(1, "tag", "tags")).toBe("1 tag");
     expect(countSummary(6, "stage", "stages")).toBe("6 stages");
+  });
+});
+
+describe("modulePermissions", () => {
+  it("lists a module's permissions from the registry", () => {
+    expect(
+      modulePermissions("events").map((entry) => entry.permission),
+    ).toEqual(["events:create", "events:update", "events:delete"]);
+  });
+
+  it("leaves out the retired permissions, as the Roles page does (#5728)", () => {
+    expect(modulePermissions("announcements")).toEqual([]);
+    expect(
+      modulePermissions("chat").map((entry) => entry.permission),
+    ).not.toContain("alumni:post");
+  });
+});
+
+describe("goal pages (#6030)", () => {
+  it("names a measure's page and reads it back", () => {
+    expect(goalPageId("service")).toBe("goal-service");
+    expect(goalMetricOfPage("goal-study")).toBe("study");
+    expect(goalMetricOfPage("goal-nope")).toBeNull();
+    expect(goalMetricOfPage("can-points:adjust")).toBeNull();
+  });
+
+  it("types points as points and hours as minutes", () => {
+    expect(goalPerUnit("points")).toBe(1);
+    expect(goalPerUnit("service")).toBe(60);
   });
 });

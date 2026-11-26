@@ -209,14 +209,16 @@ describe("SearchScreen", () => {
     hooks.permissions = ["*"];
     try {
       const tree = await render();
-      await type(tree, "points goal");
+      await type(tree, "discord import");
       expect(drawnText(results(tree))).toContain(
-        "Chapter settings · Points. Changed on the web dashboard.",
+        "Chapter settings · Chat. Changed on the web dashboard.",
       );
       const row = tree.root.find(
         (node) =>
           (node.type as unknown) === "Pressable" &&
-          String(node.props.accessibilityLabel ?? "").startsWith("Points goal"),
+          String(node.props.accessibilityLabel ?? "").startsWith(
+            "Discord import",
+          ),
       );
       expect(row.props.accessibilityHint).toBe("Opens the web dashboard.");
       vi.mocked(WebBrowser.openBrowserAsync).mockRejectedValueOnce(
@@ -225,7 +227,7 @@ describe("SearchScreen", () => {
       await act(async () => row.props.onPress());
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
         expect.stringContaining(
-          "/settings?tab=points&page=goal-points&setting=points-goal",
+          "/settings?tab=chat&tool=discord-import&setting=discord-import",
         ),
       );
       expect(drawnText(tree.root)).toContain(

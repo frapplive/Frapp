@@ -3,6 +3,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import {
+  GOAL_METRIC_COPY,
+  GOAL_PAGE_COPY,
+  goalRoleHint,
   GOAL_ROLE_LIMIT,
   GOAL_TARGET_MAX,
   GOALS_FOOTNOTE,
@@ -18,7 +21,11 @@ import {
 import { Target } from "lucide-react";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
-import { goalSummary } from "@repo/hooks/module-settings";
+import {
+  goalPageId,
+  goalPerUnit,
+  goalSummary,
+} from "@repo/hooks/module-settings";
 import {
   NumberRule,
   RulesList,
@@ -48,35 +55,18 @@ import { cn } from "@/lib/utils";
  * 2026-11-06). Hours are whole hours; the API stores minutes.
  */
 
+/** The shared words (`GOAL_METRIC_COPY`), plus web's Save button labels. */
 const METRIC_COPY: Record<
   GoalMetric,
-  { label: string; hint: string; suffix: string; save: string; saved: string }
+  (typeof GOAL_METRIC_COPY)[GoalMetric] & { save: string }
 > = {
-  points: {
-    label: "Points goal",
-    hint: "Points each member works toward this semester. Leave it empty for no goal.",
-    suffix: "points",
-    save: "Save points goal",
-    saved: "Points goal saved",
-  },
-  service: {
-    label: "Service hours goal",
-    hint: "Approved service hours each member works toward this semester. Leave it empty for no goal.",
-    suffix: "hours",
-    save: "Save service goal",
-    saved: "Service hours goal saved",
-  },
-  study: {
-    label: "Study hours goal",
-    hint: "Study hours each member works toward each week, Sunday to Saturday. Leave it empty for no goal.",
-    suffix: "hours a week",
-    save: "Save study goal",
-    saved: "Study hours goal saved",
-  },
+  points: { ...GOAL_METRIC_COPY.points, save: "Save points goal" },
+  service: { ...GOAL_METRIC_COPY.service, save: "Save service goal" },
+  study: { ...GOAL_METRIC_COPY.study, save: "Save study goal" },
 };
 
 /** Points are stored as points; hours as minutes and typed as whole hours. */
-const perUnit = (metric: GoalMetric) => (metric === "points" ? 1 : 60);
+const perUnit = goalPerUnit;
 const toDraft = (metric: GoalMetric, stored: number | null) =>
   stored === null ? "" : String(Math.round(stored / perUnit(metric)));
 const maxDraft = (metric: GoalMetric) =>
@@ -84,10 +74,8 @@ const maxDraft = (metric: GoalMetric) =>
 
 type RoleDraft = { role_id: string; draft: string };
 
-/** The page a Goals row opens (`?page=`, #6030). */
-export function goalPageId(metric: GoalMetric): string {
-  return `goal-${metric}`;
-}
+/** The page a Goals row opens (`?page=`, #6030), shared with the phone. */
+export { goalPageId };
 
 /** A goal's page title, the measure's own name. */
 export function goalPageTitle(metric: GoalMetric): string {
@@ -144,7 +132,7 @@ export function ModuleGoals({
     <ProfileSection
       id={`settings-module-${metrics[0]}-goals`}
       title="Goals"
-      hint="Each member sees a ring toward their goal on Activity, under their week. Set a different goal for a role, and a member holding several answers to their highest-ranked one."
+      hint={GOAL_PAGE_COPY.hint}
     >
       {goals.isPending || roles.isPending ? (
         <p className="text-caption text-muted-foreground">Loading goals</p>
@@ -273,12 +261,12 @@ function GoalForm({
           disabled={disabled}
         />
         {rows.map((row) => {
-          const name = nameOf.get(row.role_id) ?? "Removed role";
+          const name = nameOf.get(row.role_id) ?? GOAL_PAGE_COPY.removedRole;
           return (
             <div key={row.role_id} className="relative">
               <NumberRule
                 label={name}
-                hint={`Members who hold ${name} work toward this instead. Leave it empty to hold them to no goal.`}
+                hint={goalRoleHint(name)}
                 suffix={copy.suffix}
                 draft={row.draft}
                 onDraft={(draft) =>
@@ -373,12 +361,12 @@ function AddRoleGoal({
           )}
         >
           <Plus className="h-3.5 w-3.5" aria-hidden />
-          Different goal for a role
+          {GOAL_PAGE_COPY.addRole}
         </button>
       }
       align="start"
       label={`Role for a different ${label.toLowerCase()}`}
-      placeholder="Find a role"
+      placeholder={GOAL_PAGE_COPY.findRole}
       items={roles}
       nameOf={(role) => role.name}
       keyOf={(role) => role.id}
