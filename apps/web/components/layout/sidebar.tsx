@@ -44,6 +44,7 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
 import { LiveMeetingCard } from "@/components/meetings/live-meeting-card";
 import { ConnectionPill } from "@/components/shared/connection-pill";
+import { Skeleton } from "@/components/shared/async-states";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -268,7 +269,9 @@ export function Sidebar({
           // A gated row is hidden until the permission read answers (#3854),
           // as is a row whose only open view is gated. It holds its place
           // meanwhile, so More and the channel list don't move down a row
-          // when it arrives.
+          // when it arrives, and draws a row's shape there (a glyph and a
+          // label bar): an empty slot read as a gap in the nav (#6121;
+          // rulebook § States, loading draws the loaded layout's shape).
           const gated = (
             rule: Pick<
               NavItem,
@@ -289,8 +292,14 @@ export function Sidebar({
                 key={item.id}
                 aria-hidden="true"
                 data-nav-placeholder=""
-                className="block min-h-touch shrink-0 lg:h-[34px] lg:min-h-0"
-              />
+                className={cn(
+                  "flex min-h-touch shrink-0 items-center lg:h-[34px] lg:min-h-0",
+                  rail ? "w-[34px] justify-center" : "w-full gap-2.5 px-2.5",
+                )}
+              >
+                <Skeleton className={cn(ICON, "shrink-0 rounded-[5px]")} />
+                {rail ? null : <Skeleton className="h-[11px] w-20" />}
+              </span>
             );
           }
           return (

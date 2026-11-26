@@ -74,11 +74,30 @@ export const CORS_ALLOWED_ORIGINS: Readonly<
   local: LOCAL_DEV_ORIGINS,
 };
 
+/**
+ * How long a browser may reuse a preflight answer, in seconds (#6121).
+ *
+ * Every dashboard read carries `authorization` and `x-chapter-id`, so the
+ * browser asks `OPTIONS` before each URL it hasn't asked about lately. With no
+ * `Access-Control-Max-Age` Chrome keeps that answer five seconds, so an open
+ * a few seconds after the last one paid a full extra round trip before the
+ * bootstrap and every first-screen read: on Slow 4G the shell sat on its
+ * placeholders about 1.1 s waiting for a bootstrap the API answered in
+ * well under 100 ms. Two hours is Chrome's ceiling (Firefox allows 24).
+ *
+ * What a cached preflight allows is narrow: the method and the header names.
+ * The real response still has to carry this origin in
+ * `Access-Control-Allow-Origin`, so an origin taken off the list above is
+ * refused on its next request, cache or no cache.
+ */
+export const CORS_PREFLIGHT_MAX_AGE_SECONDS = 7200;
+
 /** The options `configureApp` hands `enableCors` for one deployment. */
 export function corsOptionsFor(environment: DeploymentEnvironment) {
   return {
     origin: [...CORS_ALLOWED_ORIGINS[environment]],
     credentials: true,
     exposedHeaders: [...CORS_EXPOSED_HEADERS],
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
   };
 }

@@ -461,7 +461,10 @@ describe("DashboardShell", () => {
       expect(
         within(primary()).queryByRole("link", { name: "Directory" }),
       ).toBeNull();
-      expect(primary().querySelector("[data-nav-placeholder]")).not.toBeNull();
+      const placeholder = primary().querySelector("[data-nav-placeholder]");
+      expect(placeholder).not.toBeNull();
+      // A row's shape, a glyph and a label bar, not an empty gap (#6121).
+      expect(placeholder?.querySelectorAll(".skeleton-shimmer").length).toBe(2);
     });
 
     it("draws the chapter as a label at the head, with the bell and the collapse control, and no chapter menu", () => {

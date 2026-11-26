@@ -164,8 +164,33 @@ describe("AccountMenu", () => {
     ).toBeInTheDocument();
   });
 
-  it("falls back to a neutral label before the user query resolves", () => {
-    useCurrentUser.mockReturnValue({ data: undefined });
+  it("draws the row's shape, not a stand-in identity, while the user is read (#6121)", () => {
+    useCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    const { container } = render(
+      <AccountMenu variant="foot" switcher={ONE_CHAPTER} />,
+    );
+    const trigger = screen.getByRole("button", { name: "Account menu" });
+    expect(trigger).toBeInTheDocument();
+    expect(screen.queryByText("Your account")).toBeNull();
+    // Neither "YA" nor any other initials stand in for the member.
+    expect(screen.queryByText("YA")).toBeNull();
+    expect(container.querySelectorAll(".skeleton-shimmer").length).toBe(2);
+  });
+
+  it("draws the rail's avatar as a disc while the user is read (#6121)", () => {
+    useCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    const { container } = render(
+      <AccountMenu variant="rail" switcher={ONE_CHAPTER} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Account menu" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("YA")).toBeNull();
+    expect(container.querySelectorAll(".skeleton-shimmer").length).toBe(1);
+  });
+
+  it("names the menu in plain words when the user read failed or can't run", () => {
+    useCurrentUser.mockReturnValue({ data: undefined, isLoading: false });
     render(<AccountMenu variant="foot" switcher={ONE_CHAPTER} />);
     expect(
       screen.getByRole("button", { name: /account menu for Your account/i }),
