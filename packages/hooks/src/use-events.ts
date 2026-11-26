@@ -8,11 +8,16 @@ import {
   type components,
 } from "@repo/api-sdk";
 
+/** The key {@link useEvents} reads, for writers and the web's shell cache. */
+export function eventsQueryKey(chapterId: string | null | undefined) {
+  return ["events", chapterId] as const;
+}
+
 export function useEvents(options?: { enabled?: boolean }) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
-    queryKey: ["events", chapterId],
+    queryKey: eventsQueryKey(chapterId),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/events", { signal });
       if (error) throw error;

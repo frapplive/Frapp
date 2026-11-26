@@ -78,10 +78,15 @@ export function currentChapterQueryKey(chapterId: string | null | undefined) {
   return chapterQueryKey("current", chapterId);
 }
 
+/** The key `useAccessibleChapters` reads, for the web's shell cache. */
+export function accessibleChaptersQueryKey() {
+  return chapterQueryKey("accessible");
+}
+
 export function useListChapters(options?: { enabled?: boolean }) {
   const client = useFrappClient();
   return useQuery({
-    queryKey: chapterQueryKey("accessible"),
+    queryKey: accessibleChaptersQueryKey(),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/chapters", { signal });
       if (error) throw error;
