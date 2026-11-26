@@ -1,15 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { errorCopy, useAiConsent, useFrappAiChoice } from "@repo/hooks";
-import { AI_SETTINGS_COPY, FRAPP_AI_COPY } from "@repo/validation";
-import { ProfileSection } from "@/components/profile/profile-section";
+import {
+  errorCopy,
+  useAiChapterSettings,
+  useAiConsent,
+  useFrappAiChoice,
+  usePermissionList,
+} from "@repo/hooks";
+import {
+  AI_SETTINGS_COPY,
+  FRAPP_AI_COPY,
+  aiSwitchesInEffect,
+  can,
+} from "@repo/validation";
 import { MeetFrappAiDialog } from "@/components/ai/meet-frapp-ai";
 import { anyReadUncached } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useToast } from "@/lib/hooks/use-toast";
+import { PRIVACY_URL } from "@/lib/legal-links";
+
+/** Chapter settings' AI page, where the president turns the chapter's AI on. */
+const CHAPTER_AI_PATH = "/settings?tab=ai";
 
 /**
  * Settings → Frapp Intelligence: the member's own switch, changed any time
@@ -24,6 +38,10 @@ import { useToast } from "@/lib/hooks/use-toast";
  *
  * The rail shows the row only while the server has AI (`useAiConsent`
  * answers `null` otherwise).
+ *
+ * An officer who can open Chapter settings also gets the Chapter AI row, how
+ * many of the chapter's AI features are on, which opens that page; the
+ * phone's Frapp Intelligence page draws the same row and footnote (#6032).
  */
 export function AiSection() {
   const { isOffline } = useNetwork();
@@ -32,6 +50,9 @@ export function AiSection() {
   const choice = useFrappAiChoice();
   const [meetOpen, setMeetOpen] = useState(false);
   const consent = consentQuery.data;
+  const permissions = usePermissionList();
+  const showChapterAi = !!consent && can("chapter-config:view", permissions);
+  const chapterAi = useAiChapterSettings({ enabled: showChapterAi });
 
   if (isOffline && anyReadUncached(consentQuery)) {
     return (
@@ -71,8 +92,24 @@ export function AiSection() {
   }
 
   return (
-    <ProfileSection id="ai" title={FRAPP_AI_COPY.settingsTitle}>
-      <SettingsGroup>
+    <section id="ai" className="scroll-mt-16">
+      <SettingsGroup
+        label={FRAPP_AI_COPY.settingsTitle}
+        footnote={
+          <>
+            {FRAPP_AI_COPY.settingsFootnote}{" "}
+            <a
+              href={PRIVACY_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-foreground underline underline-offset-4"
+            >
+              {FRAPP_AI_COPY.privacyLink}
+            </a>
+            .
+          </>
+        }
+      >
         <SettingsRow
           label={FRAPP_AI_COPY.settingsSwitch}
           description={FRAPP_AI_COPY.settingsCaption}
@@ -83,6 +120,15 @@ export function AiSection() {
             else void turnOff();
           }}
         />
+        {showChapterAi && chapterAi.data ? (
+          <SettingsRow
+            label={AI_SETTINGS_COPY.chapterRow}
+            value={AI_SETTINGS_COPY.chapterRowValue(
+              aiSwitchesInEffect(chapterAi.data),
+            )}
+            href={CHAPTER_AI_PATH}
+          />
+        ) : null}
       </SettingsGroup>
       <MeetFrappAiDialog
         open={meetOpen}
@@ -92,6 +138,6 @@ export function AiSection() {
         }}
         onDismiss={() => setMeetOpen(false)}
       />
-    </ProfileSection>
+    </section>
   );
 }

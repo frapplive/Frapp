@@ -65,7 +65,7 @@ export class StartGoogleCalendarConnectDto {
   @ApiPropertyOptional({
     enum: GOOGLE_CALENDAR_WEB_RETURN_KEYS,
     description:
-      'For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps or Settings → Calendar.',
+      'For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps. `calendar` is the retired Settings → Calendar address, which now opens Linked apps.',
   })
   @IsOptional()
   @IsIn(GOOGLE_CALENDAR_WEB_RETURN_KEYS)

@@ -938,7 +938,7 @@ Copy in `apps/mobile/lib/onboarding/display-step.ts` and `apps/web/components/on
 
 | Surface | Title | Copy |
 |---|---|---|
-| Web | `Pick your chat display` | `Choose how messages look on this browser. You can change it anytime in Settings.` In the setup wizard, the three Chat density cards from Settings → Appearance and chat, then `Continue`. (It said "in your profile" until #5080; the control has lived in Settings since #3856.) |
+| Web | `Pick your chat display` | `Choose how messages look on this browser. You can change it anytime in Settings.` In the setup wizard, the three Chat density cards from Settings → Chat, then `Continue`. (It said "in your profile" until #5080; the control has lived in Settings since #3856.) |
 | Mobile | `Pick your chat display` | `Choose how messages look on this phone. You can change it anytime in Settings.` Then Settings' three cards and a gold `Continue`, in chapter setup. |
 
 ### Pick your roles
@@ -1006,7 +1006,7 @@ Onboarding's notifications step never shows these: it is skipped when push is un
 
 ### Notification preferences (mobile, s16)
 
-The status footnote under Settings' notification switches (`notificationsMeta` in `apps/mobile/app/(app)/preferences.tsx`).
+The status footnote under Settings' notification switches (`notificationsMeta` in `apps/mobile/components/settings/personal/notifications-page.tsx`, Settings → Notifications).
 It shows the first row that applies, in this order, so a write in flight reads as saving even while the first read is still out.
 Once synced it shows nothing: the steady state needs no line.
 

@@ -201,7 +201,7 @@ describe("SearchScreen", () => {
     );
     await act(async () => row.props.onPress());
     expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
-      "/preferences?setting=quiet-hours",
+      "/preferences?page=notifications&setting=quiet-hours",
     );
   });
 

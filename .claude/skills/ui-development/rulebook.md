@@ -107,7 +107,8 @@ These cause most of the iterations, so they come first.
   drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
   The widths to capture are in [`review-checklist.md`](review-checklist.md) § 1. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
-  its tools inside itself, not in drawers. (11-11, 11-12)
+  its tools inside itself, not in drawers. (11-11, 11-12) *Changed 11-25 by Paul (#6032): both Settings
+  pages, Chapter settings and the member's own, take the full width, so a rail stands as a column.*
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a
   form docks in place (`Panel docked`); a short question is a centred dialog; a quick list is a dropdown
   under its button; a name opens a profile popout; the bell is a popover; Catch me up is inline in the

@@ -809,6 +809,13 @@ describe("DashboardShell", () => {
       expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
     });
 
+    it("hides beside personal Settings too, which takes the row like Chapter settings (#6032)", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/preferences";
+      const { container } = shell();
+      expect(chatPanel(container)).toHaveClass("hidden");
+    });
+
     it("is not built beside a page below lg, where the shell is one page", () => {
       setWindowWidth(800);
       mockPathname.value = "/tasks";

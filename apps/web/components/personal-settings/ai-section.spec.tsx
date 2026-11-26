@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   notNow: vi.fn(),
   toast: vi.fn(),
   offline: false,
+  permissions: [] as string[],
+  chapterAi: undefined as Record<string, unknown> | undefined,
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -28,6 +30,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     turnOn: state.turnOn,
     notNow: state.notNow,
     pending: false,
+  }),
+  usePermissionList: () => state.permissions,
+  useAiChapterSettings: ({ enabled }: { enabled: boolean }) => ({
+    data: enabled ? state.chapterAi : undefined,
   }),
 }));
 
@@ -66,12 +72,16 @@ describe("the member's Frapp Intelligence switch in Settings", () => {
     state.notNow.mockReset().mockResolvedValue(undefined);
     state.toast.mockReset();
     state.offline = false;
+    state.permissions = [];
+    state.chapterAi = undefined;
   });
 
   it("shows it off until the member said yes, and names no company", () => {
     state.consent = consent();
     render(<AiSection />);
-    expect(screen.getByRole("switch", { name: "Frapp Intelligence" })).not.toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Frapp Intelligence" }),
+    ).not.toBeChecked();
     expect(screen.getByText(FRAPP_AI_COPY.settingsCaption)).toBeInTheDocument();
     // The companies are named on Meet Frapp Intelligence, where the yes is given.
     expect(screen.queryByText(/anthropic|google/i)).toBeNull();
@@ -81,13 +91,17 @@ describe("the member's Frapp Intelligence switch in Settings", () => {
     const user = userEvent.setup();
     state.consent = consent({ answer: "no" });
     render(<AiSection />);
-    await user.click(screen.getByRole("switch", { name: "Frapp Intelligence" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Frapp Intelligence" }),
+    );
     expect(state.turnOn).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Meet Frapp Intelligence");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(state.turnOn).toHaveBeenCalledTimes(1);
-    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp Intelligence is on" });
+    expect(state.toast).toHaveBeenCalledWith({
+      title: "Frapp Intelligence is on",
+    });
   });
 
   it("turning it off records a No at once", async () => {
@@ -98,7 +112,9 @@ describe("the member's Frapp Intelligence switch in Settings", () => {
     expect(control).toBeChecked();
     await user.click(control);
     expect(state.notNow).toHaveBeenCalledTimes(1);
-    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp Intelligence is off" });
+    expect(state.toast).toHaveBeenCalledWith({
+      title: "Frapp Intelligence is off",
+    });
   });
 
   it("says why when turning it off can't be saved", async () => {
@@ -106,7 +122,9 @@ describe("the member's Frapp Intelligence switch in Settings", () => {
     state.consent = consent({ answer: "yes" });
     state.notNow.mockRejectedValue({ statusCode: 500 });
     render(<AiSection />);
-    await user.click(screen.getByRole("switch", { name: "Frapp Intelligence" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Frapp Intelligence" }),
+    );
     expect(state.toast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Couldn't turn off Frapp Intelligence",
@@ -119,7 +137,35 @@ describe("the member's Frapp Intelligence switch in Settings", () => {
     state.consent = consent();
     state.offline = true;
     render(<AiSection />);
-    expect(screen.getByRole("switch", { name: "Frapp Intelligence" })).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: "Frapp Intelligence" }),
+    ).toBeDisabled();
+  });
+
+  it("links the privacy policy from its footnote", () => {
+    state.consent = consent();
+    render(<AiSection />);
+    expect(
+      screen.getByRole("link", { name: FRAPP_AI_COPY.privacyLink }),
+    ).toHaveAttribute("href", expect.stringContaining("/privacy"));
+  });
+
+  it("gives an officer who runs Chapter settings the Chapter AI row, which opens its AI page (#6032)", () => {
+    state.consent = consent();
+    state.permissions = ["chapter-config:view"];
+    state.chapterAi = { ask_enabled: true };
+    render(<AiSection />);
+    expect(screen.getByRole("link", { name: /Chapter AI/ })).toHaveAttribute(
+      "href",
+      "/settings?tab=ai",
+    );
+  });
+
+  it("has no Chapter AI row for a member", () => {
+    state.consent = consent();
+    state.chapterAi = { ask_enabled: true };
+    render(<AiSection />);
+    expect(screen.queryByRole("link", { name: /Chapter AI/ })).toBeNull();
   });
 
   it("draws nothing on a server with no AI", () => {
