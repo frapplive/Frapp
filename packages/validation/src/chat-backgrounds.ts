@@ -13,6 +13,7 @@ export const CHAT_BACKGROUND_BUILT_INS = [
   "midnight",
   "game-day",
   "letters",
+  "holiday",
 ] as const;
 export type ChatBackgroundBuiltIn = (typeof CHAT_BACKGROUND_BUILT_INS)[number];
 
@@ -31,6 +32,7 @@ export const CHAT_BACKGROUND_LABELS: Record<ChatBackgroundKey, string> = {
   midnight: "Midnight",
   "game-day": "Game day",
   letters: "Letters",
+  holiday: "Holiday",
   photo: "Photo",
 };
 
@@ -73,4 +75,60 @@ export function isChatBackgroundKey(
     typeof value === "string" &&
     (CHAT_BACKGROUND_KEYS as readonly string[]).includes(value)
   );
+}
+
+/**
+ * The Holiday season (#6149): from December 1 to December 26, in the viewer's
+ * own local date, a chapter whose default is Plain shows Holiday instead,
+ * unless an officer turned the season off for the chapter
+ * (`holiday_season: false`). A channel or a chapter that chose its own
+ * background keeps it, and a DM stays plain. Computed from the date, so the
+ * season starts and ends with no deploy and no write.
+ */
+export const HOLIDAY_SEASON = {
+  /** 0-based, as `Date#getMonth` counts. */
+  month: 11,
+  firstDay: 1,
+  lastDay: 26,
+} as const;
+
+/** Whether `date`, read in its own local time zone, falls in the season. */
+export function isHolidaySeason(date: Date): boolean {
+  return (
+    date.getMonth() === HOLIDAY_SEASON.month &&
+    date.getDate() >= HOLIDAY_SEASON.firstDay &&
+    date.getDate() <= HOLIDAY_SEASON.lastDay
+  );
+}
+
+/** The officer switch's words, on web and the phone. */
+export const HOLIDAY_SEASON_COPY = {
+  label: "Holiday background this season",
+  description: "Dec 1 to 26, channels on Plain show Holiday.",
+  /** In place of the description when a flip didn't save (it flips back). */
+  saveFailed: "Couldn't save. Try again.",
+} as const;
+
+/**
+ * What a member sees, season applied: the API's resolved background with
+ * Plain swapped for Holiday while the season is on for this chapter. Only a
+ * background that comes from the chapter default (`source: "chapter"`) is
+ * swapped; a channel's own Plain was chosen, and a DM (`none`) stays plain.
+ */
+export function withHolidaySeason<
+  T extends {
+    background: string;
+    source?: "channel" | "chapter" | "none";
+    holiday_season?: boolean;
+  },
+>(resolved: T, now: Date): T {
+  if (
+    resolved.source === "chapter" &&
+    resolved.background === "plain" &&
+    resolved.holiday_season !== false &&
+    isHolidaySeason(now)
+  ) {
+    return { ...resolved, background: "holiday" };
+  }
+  return resolved;
 }

@@ -97,6 +97,7 @@ describe('ChatBackgroundService (#3973)', () => {
         background: 'midnight',
         source: 'chapter',
         photo_url: null,
+        holiday_season: true,
       });
     });
 
@@ -129,6 +130,7 @@ describe('ChatBackgroundService (#3973)', () => {
         background: 'photo',
         source: 'channel',
         photo_url: 'https://signed',
+        holiday_season: true,
       });
     });
 
@@ -150,6 +152,7 @@ describe('ChatBackgroundService (#3973)', () => {
         background: 'letters',
         source: 'chapter',
         photo_url: null,
+        holiday_season: true,
       });
       expect(storage.getSignedDownloadUrl).not.toHaveBeenCalled();
     });
@@ -165,6 +168,7 @@ describe('ChatBackgroundService (#3973)', () => {
         background: 'plain',
         source: 'none',
         photo_url: null,
+        holiday_season: false,
       });
     });
 
@@ -306,6 +310,7 @@ describe('ChatBackgroundService (#3973)', () => {
       await expect(service.getChapterDefault(CHAPTER)).resolves.toEqual({
         background: 'photo',
         photo_url: 'https://signed',
+        holiday_season: true,
       });
     });
 
@@ -401,6 +406,54 @@ describe('ChatBackgroundService (#3973)', () => {
         service.setChapterDefault(CHAPTER, 'actor', 'photo', PHOTO),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(chapterRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the Holiday season switch (#6149)', () => {
+    it('reads as on for a chapter that never turned it off', async () => {
+      const { service } = setup();
+      await expect(service.getChapterDefault(CHAPTER)).resolves.toMatchObject({
+        background: 'plain',
+        holiday_season: true,
+      });
+    });
+
+    it("carries a chapter's off switch to every channel read", async () => {
+      const { service } = setup({
+        chapter: { chat_background: 'plain', chat_background_holiday: false },
+      });
+      await expect(
+        service.getForChannel('ch-1', CHAPTER, 'u'),
+      ).resolves.toMatchObject({
+        background: 'plain',
+        source: 'chapter',
+        holiday_season: false,
+      });
+    });
+
+    it('never swaps the key itself: the clients apply the season by date', async () => {
+      const { service } = setup({ chapter: { chat_background: 'plain' } });
+      await expect(
+        service.getForChannel('ch-1', CHAPTER, 'u'),
+      ).resolves.toMatchObject({ background: 'plain' });
+    });
+
+    it('saves the switch and answers with the default', async () => {
+      const { service, chapterRepo } = setup();
+      await service.setHolidaySeason(CHAPTER, false);
+      expect(chapterRepo.update).toHaveBeenCalledWith(CHAPTER, {
+        chat_background_holiday: false,
+      });
+    });
+
+    it('takes Holiday as a background chosen by hand', async () => {
+      const { service, chapterRepo } = setup();
+      await service.setChapterDefault(CHAPTER, 'actor', 'holiday', undefined);
+      expect(chapterRepo.update).toHaveBeenCalledWith(CHAPTER, {
+        chat_background: 'holiday',
+        chat_background_photo_path: null,
+        chat_background_message_id: null,
+      });
     });
   });
 

@@ -1,5 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const putSignedUpload = vi.hoisted(() => vi.fn());
 vi.mock("./put-signed-upload", async (importActual) => ({
@@ -12,9 +12,12 @@ import {
   CHAT_BACKGROUND_FAILURE_COPY,
   canSetChannelBackground,
   chatBackgroundErrorCopy,
+  chatBackgroundKeys,
+  useChatBackground,
   useRequestChatBackgroundPhotoUrl,
   useSetChannelBackground,
   useSetChapterChatBackground,
+  useSetChatBackgroundHolidaySeason,
 } from "./use-chat-background";
 import { createHookWrapper, createTestQueryClient } from "./test-utils";
 
@@ -278,5 +281,90 @@ describe("chat background hooks", () => {
         CHAT_BACKGROUND_FAILURE_COPY.upload,
       );
     });
+  });
+});
+
+/** The Holiday season (#6149), as the thread reads it. */
+describe("the Holiday season", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function readOn(date: string, resolved: Record<string, unknown>) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(date));
+    const client = { GET: vi.fn().mockResolvedValue(ok(resolved)) };
+    return renderHook(() => useChatBackground("c-1"), {
+      wrapper: wrapper(client),
+    });
+  }
+
+  const plainDefault = {
+    background: "plain",
+    source: "chapter",
+    photo_url: null,
+    holiday_season: true,
+  };
+
+  it("reads a Plain chapter default as Holiday in the season", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", plainDefault);
+    await waitFor(() =>
+      expect(result.current.data?.background).toBe("holiday"),
+    );
+  });
+
+  it("leaves it Plain once the season is over", async () => {
+    const { result } = readOn("2026-12-27T00:00:00", plainDefault);
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  it("leaves it Plain where the chapter turned the season off", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", {
+      ...plainDefault,
+      holiday_season: false,
+    });
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  it("leaves a channel's own Plain alone", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", {
+      ...plainDefault,
+      source: "channel",
+    });
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  it("saves the switch, showing it at once and putting it back on a failure", async () => {
+    const queryClient = createTestQueryClient();
+    const key = chatBackgroundKeys.detail("chapter-1", "default");
+    queryClient.setQueryData(key, {
+      background: "plain",
+      photo_url: null,
+      holiday_season: true,
+    });
+    const client = {
+      PUT: vi.fn().mockResolvedValue({
+        data: undefined,
+        error: { message: "nope" },
+        response: { ok: false, status: 500 },
+      }),
+    };
+    const { result } = renderHook(() => useSetChatBackgroundHolidaySeason(), {
+      wrapper: createHookWrapper({
+        client,
+        queryClient,
+        chapterId: "chapter-1",
+      }),
+    });
+    act(() => result.current.mutate(false));
+    await waitFor(() =>
+      expect(client.PUT).toHaveBeenCalledWith(
+        "/v1/chat-backgrounds/default/holiday-season",
+        { body: { enabled: false } },
+      ),
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(
+      queryClient.getQueryData<{ holiday_season: boolean }>(key)
+        ?.holiday_season,
+    ).toBe(true);
   });
 });

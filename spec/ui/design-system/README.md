@@ -246,6 +246,8 @@ Execution protocol and evidence requirements: [`docs/guides/accessibility-testin
 
 Outside a signature moment, motion MUST remain subtle and functional. Every class, signature included, MUST be compatible with reduced-motion preferences.
 
+*Changed in #6149 by gampheadband, 2026-11-26:* ambient decoration that loops slowly behind content, never over it, is allowed beside the four classes when it is the look itself: Ask's breathing glow, and the Holiday chat background's snow ([`spec/behavior/chat/README.md`](../../behavior/chat/README.md) § Chat backgrounds), which drifts one 160px tile every 24 seconds. It moves by transform alone, is still under reduced motion, and is not a signature moment.
+
 ### Signature moments
 
 *Added 2026-11-06 (#3493).* A signature moment is the one deliberate, fun animation a flow may have, there to make an accomplishment feel like one and to set Frapp apart. The owner asked for a few of them, built consistently across the app. Every moment follows the same rules:

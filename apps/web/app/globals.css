@@ -165,6 +165,27 @@
 }
 
 /*
+ * Holiday's snow behind a thread (#6149, `components/chat/chat-background.tsx`):
+ * one tile down every `--snowfall-duration`, by transform alone so it
+ * composites without repainting the messages. Ambient decoration like Ask's
+ * glow, not a signature moment. Still under reduced motion.
+ */
+@keyframes chat-snowfall {
+  to {
+    transform: translateY(var(--snowfall-distance));
+  }
+}
+.chat-snowfall {
+  animation: chat-snowfall var(--snowfall-duration) linear infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-snowfall {
+    animation: none;
+  }
+}
+
+/*
  * The setting a search opened (`lib/settings/use-setting-jump.ts`): a chapter
  * accent tint and ring that hold for a moment and fade, the way Vercel's and
  * GitHub's settings searches light the field they land on. Held without the

@@ -5,10 +5,13 @@ import {
   useChapterChatBackground,
   useRequestChatBackgroundPhotoUrl,
   useSetChapterChatBackground,
+  useSetChatBackgroundHolidaySeason,
 } from "@repo/hooks";
-import type { ChatBackgroundKey } from "@repo/validation";
+import { HOLIDAY_SEASON_COPY, type ChatBackgroundKey } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ChatBackgroundSwatches } from "@/components/chat/chat-background-picker";
+import { ListRow, ListSection } from "@/components/list-section";
+import { Toggle } from "@/components/toggle";
 import {
   SheetBackToClose,
   SheetGrabber,
@@ -27,6 +30,9 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * channel without its own background shows. Web's twin is Chat settings →
  * Default chat background. The row opens this only for a member who holds
  * `CHAPTER_PROFILE_PERMISSIONS`, the route's own guard.
+ *
+ * Under the swatches, the Holiday season's switch (#6149), saved the moment
+ * it flips, as web's Chat admin → Look draws it.
  *
  * A tap saves and, once saved, closes. Photo opens the library first; the
  * sheet stays up meanwhile, so a refusal is read here. A save can land after
@@ -137,7 +143,49 @@ export function ChatBackgroundDefaultPicker({
           {error}
         </Text>
       ) : null}
+      <HolidaySeasonRow
+        holidaySeason={current.data?.holiday_season}
+        loaded={current.data !== undefined}
+      />
     </>
+  );
+}
+
+/** "Holiday background this season" (#6149): on until an officer turns it off. */
+function HolidaySeasonRow({
+  holidaySeason,
+  loaded,
+}: {
+  holidaySeason: boolean | undefined;
+  loaded: boolean;
+}) {
+  const setHolidaySeason = useSetChatBackgroundHolidaySeason();
+  const [failed, setFailed] = useState(false);
+  return (
+    <ListSection>
+      <ListRow
+        label={HOLIDAY_SEASON_COPY.label}
+        description={
+          failed
+            ? HOLIDAY_SEASON_COPY.saveFailed
+            : HOLIDAY_SEASON_COPY.description
+        }
+        descriptionTone={failed ? "destructive" : "default"}
+        trailing={
+          <Toggle
+            value={holidaySeason ?? true}
+            disabled={!loaded}
+            accessibilityLabel={HOLIDAY_SEASON_COPY.label}
+            onValueChange={(next) => {
+              setFailed(false);
+              setHolidaySeason.mutate(next, {
+                onError: () => setFailed(true),
+              });
+            }}
+          />
+        }
+      />
+    </ListSection>
   );
 }
 

@@ -2451,6 +2451,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat-backgrounds/default/holiday-season": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Turn the Holiday season (a Plain default shows Holiday, Dec 1 to 26) on or off for the chapter */
+        put: operations["ChatBackgroundController_setHolidaySeason_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat-backgrounds/default/photo-url": {
         parameters: {
             query?: never;
@@ -10503,7 +10520,7 @@ export interface components {
              * @description What to draw behind the messages column.
              * @enum {string}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             /**
              * @description Where it came from: the channel's own setting, the chapter default, or `none` for a DM (always plain).
              * @enum {string}
@@ -10511,13 +10528,15 @@ export interface components {
             source: "channel" | "chapter" | "none";
             /** @description A signed URL for the photo when `background` is `photo`; null otherwise, or when signing failed (draw plain). */
             photo_url: string | null;
+            /** @description Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key. */
+            holiday_season: boolean;
         };
         SetChannelBackgroundDto: {
             /**
              * @description A built-in key, `photo` (with `storage_path`), or null to follow the chapter's default.
              * @enum {string|null}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo" | null;
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo" | null;
             /** @description Required with `photo`: the path the photo-url call returned. */
             storage_path?: string;
         };
@@ -10535,17 +10554,23 @@ export interface components {
         };
         ChapterChatBackgroundResponseDto: {
             /** @enum {string} */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             photo_url: string | null;
+            /** @description Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key. */
+            holiday_season: boolean;
         };
         SetChapterChatBackgroundDto: {
             /**
              * @description A built-in key, or `photo` (with `storage_path`).
              * @enum {string}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             /** @description Required with `photo`: the path the photo-url call returned. */
             storage_path?: string;
+        };
+        SetChatBackgroundHolidaySeasonDto: {
+            /** @description On: a Plain default shows Holiday from Dec 1 to 26. Off: it stays Plain. */
+            enabled: boolean;
         };
         ReorderChannelsDto: {
             /**
@@ -21512,6 +21537,38 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetChapterChatBackgroundDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterChatBackgroundResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatBackgroundController_setHolidaySeason_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetChatBackgroundHolidaySeasonDto"];
             };
         };
         responses: {

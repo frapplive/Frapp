@@ -479,6 +479,7 @@ vi.mock("react-native-reanimated", () => {
     cancelAnimation: vi.fn(),
     useReducedMotion: vi.fn(() => false),
     Easing: {
+      linear: (t: number) => t,
       ease: (t: number) => t,
       sin: (t: number) => t,
       cubic: (t: number) => t,

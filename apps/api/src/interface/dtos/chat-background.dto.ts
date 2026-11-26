@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { CHAT_BACKGROUND_KEYS, type ChatBackgroundKey } from '@repo/validation';
 
 export class ChatBackgroundPhotoUrlDto {
@@ -85,6 +91,12 @@ export class ChatBackgroundResponseDto {
       'A signed URL for the photo when `background` is `photo`; null otherwise, or when signing failed (draw plain).',
   })
   photo_url: string | null;
+
+  @ApiProperty({
+    description:
+      "Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key.",
+  })
+  holiday_season: boolean;
 }
 
 export class ChapterChatBackgroundResponseDto {
@@ -93,4 +105,19 @@ export class ChapterChatBackgroundResponseDto {
 
   @ApiProperty({ type: String, nullable: true })
   photo_url: string | null;
+
+  @ApiProperty({
+    description:
+      "Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key.",
+  })
+  holiday_season: boolean;
+}
+
+export class SetChatBackgroundHolidaySeasonDto {
+  @ApiProperty({
+    description:
+      'On: a Plain default shows Holiday from Dec 1 to 26. Off: it stays Plain.',
+  })
+  @IsBoolean()
+  enabled: boolean;
 }
