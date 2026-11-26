@@ -111,7 +111,10 @@ type Notification = {
       /** "Minutes posted" (`meeting.service.ts`) names the minutes too. */
       meetingId?: string;
       taskId?: string;
-      /** "review": a task submitted to the reader for sign-off. */
+      /**
+       * "review": a task submitted to the reader for sign-off; "extension":
+       * a request for more time on it, for the reader to decide (#6096).
+       */
       view?: string;
       invoiceId?: string;
       /** "Suggested tasks to review" names what they were drawn from. */
@@ -191,7 +194,10 @@ export function deepLinkFor(notification: Notification): string {
     case "tasks":
       return target.view === "review" && target.taskId
         ? `/activity?review=${encodeURIComponent(target.taskId)}`
-        : target.taskId
+        : // "Sam asks for more time" opens that request's panel (#6096).
+          target.view === "extension" && target.taskId
+          ? `/activity?extension=${encodeURIComponent(target.taskId)}`
+          : target.taskId
           ? tasksTaskLink(target.taskId)
           : "/activity";
     // Suggested tasks to review (#4313): on the minutes they came from, where

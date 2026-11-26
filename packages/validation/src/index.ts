@@ -303,6 +303,8 @@ export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
 export * from "./task-due";
+// Asking for more time on a task (#6096).
+export * from "./task-extension";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";

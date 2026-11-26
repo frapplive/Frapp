@@ -35,6 +35,15 @@ officer queues need their own permission, as below.
 - **Task confirmations:** completed tasks waiting for a confirm, longest waiting first. Only for a
   `tasks:manage` holder, and never their own completion, which the confirm route refuses
   ([`tasks.md`](tasks.md)).
+- **Requests for more time** (`task_extensions`, #6096): a member asking for more time on a task,
+  oldest first, for every `tasks:manage` holder but the member who asked, as confirmations are (the
+  push goes only to the task's creator and the officers in the group it is from). A request its task
+  has moved past (done, handed over, re-dated, given a fixed deadline) is left out. Each row says who
+  asks, the task, the due asked for and why it waits on an officer, and opens to the reason with
+  Approve and Decline ([`tasks.md` § Asking for more time](tasks.md#asking-for-more-time)). Not
+  snoozable and never unread: a request waits until someone answers it. Counted in
+  `needs_you_count`. Served only to a client that asks with `extensions=true`, so a phone build from
+  before them gets none and its badge never counts rows it can't show.
 - **Hours approvals:** pending service entries, oldest first. Only for a `service:approve` holder,
   and never their own entry, which the approve route refuses
   ([`service-hours.md`](service-hours.md)). There is no assigned approver: every approver sees

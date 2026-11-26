@@ -352,6 +352,8 @@ export interface CreateTaskSeriesInput {
   next_due_date: string;
   /** What every copy is made with (Frapp links), already checked. */
   attachments: FrappLink[];
+  /** A fixed deadline on every copy (#6096). */
+  fixed_deadline?: boolean;
 }
 
 /** What {@link ITaskRepository.createGroup} writes (#4295 step 3). */
@@ -378,4 +380,6 @@ export interface CreateTaskGroupInput {
   followed_by?: string | null;
   /** What every copy holds (Frapp links), already checked. */
   attachments: FrappLink[];
+  /** A fixed deadline on every copy (#6096). */
+  fixed_deadline?: boolean;
 }

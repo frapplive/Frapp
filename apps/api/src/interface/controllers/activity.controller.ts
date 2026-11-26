@@ -122,6 +122,7 @@ export class ActivityController {
       weekStart: query.week_start ? new Date(query.week_start) : undefined,
       now: new Date(),
       minutes: query.minutes === 'true',
+      extensions: query.extensions === 'true',
     });
   }
 

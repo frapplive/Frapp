@@ -59,6 +59,10 @@ const {
 vi.mock("@/lib/hooks/use-tenant-kind", () => ({ useIsCouncil: () => false }));
 
 const liftMutateAsync = vi.fn();
+const restoreMutate = vi.fn();
+const mockBlocked = vi.hoisted(() => ({
+  current: [] as { user_id: string; blocked_at: string }[],
+}));
 
 vi.mock("@repo/hooks", async () => ({
   // The pure reader of the DM response runs for real.
@@ -89,6 +93,11 @@ vi.mock("@repo/hooks", async () => ({
     isPending: false,
   }),
   useTimeOutMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // Restore extension requests (#6096).
+  useBlockedFromExtensions: ({ enabled }: { enabled?: boolean } = {}) => ({
+    data: enabled ? mockBlocked.current : undefined,
+  }),
+  useRestoreTaskExtensions: () => ({ mutate: restoreMutate, isPending: false }),
   useNowDate: () => new Date(),
   useUpdateMemberRoles: () => ({
     mutateAsync: updateRolesMutateAsync,
@@ -179,6 +188,7 @@ vi.mock("@/components/members/member-assignments", () => ({
   ),
 }));
 
+import { TASK_EXTENSION_COPY } from "@repo/validation";
 import { MemberDetailSheet } from "./member-detail-sheet";
 
 const baseMember = {
@@ -1016,5 +1026,46 @@ describe("MemberDetailSheet roles and groups", () => {
     const section = screen.getByRole("region", { name: "Roles and groups" });
     expect(section).toHaveTextContent("Roles r-pres");
     expect(section).toHaveAttribute("data-editable", "true");
+  });
+});
+
+describe("MemberDetailSheet extension requests (#6096)", () => {
+  beforeEach(() => {
+    mockBlocked.current = [];
+    restoreMutate.mockReset();
+  });
+
+  it("offers Restore for a blocked member to a tasks:manage holder", () => {
+    mockBlocked.current = [
+      {
+        user_id: String(baseMember.user_id),
+        blocked_at: "2026-11-20T00:00:00Z",
+      },
+    ];
+    renderProfile();
+    expect(
+      screen.getByText(TASK_EXTENSION_COPY.blockedBadge),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: TASK_EXTENSION_COPY.restore }),
+    );
+    expect(restoreMutate.mock.calls[0]?.[0]).toBe(baseMember.user_id);
+  });
+
+  it("says nothing for a member who can still ask, or to a member", () => {
+    const { unmount } = renderProfile();
+    expect(screen.queryByText(TASK_EXTENSION_COPY.blockedBadge)).toBeNull();
+    unmount();
+    mockBlocked.current = [
+      {
+        user_id: String(baseMember.user_id),
+        blocked_at: "2026-11-20T00:00:00Z",
+      },
+    ];
+    mockPermissions.current = ["members:view"];
+    renderProfile();
+    expect(
+      screen.queryByRole("button", { name: TASK_EXTENSION_COPY.restore }),
+    ).toBeNull();
   });
 });

@@ -52,6 +52,7 @@ import {
 import { checkboxSequence } from "@/lib/tasks/transitions";
 import { markDoneLabel } from "@/lib/tasks/task-photos";
 import { editFactsOfRow, taskEditable } from "@/lib/tasks/task-edit";
+import { rowCantAskForMoreTime } from "@/lib/tasks/extension";
 
 /**
  * Who a group task went to, in the shared words (`taskGroupLabel`):
@@ -129,6 +130,12 @@ export interface TaskScreenControls {
   reassign: boolean;
   /** The long-press menu's Duplicate: New task, filled in from this one. */
   duplicate: boolean;
+  /**
+   * Ask for more time (#6096): the assignee of an open, dated task with no
+   * fixed deadline, no request waiting and the right to ask
+   * (`cantAskForMoreTime`). A round on the bar, or in More when it is full.
+   */
+  askForMoreTime: boolean;
 }
 
 export function taskScreenControls({
@@ -202,6 +209,9 @@ export function taskScreenControls({
     reassign: edit,
     // Creating needs `tasks:manage` (`POST /v1/tasks`), nothing more.
     duplicate: canManage,
+    // An officer who can edit the task moves its due themselves, as on web.
+    askForMoreTime:
+      !edit && !toggleRefused && rowCantAskForMoreTime(row, viewerId) === null,
   };
 }
 
@@ -211,6 +221,7 @@ export type TaskMenuKey =
   | "confirm"
   | "sendBack"
   | "start"
+  | "askForMoreTime"
   | "reopen"
   | "edit"
   | "reassign"
@@ -240,6 +251,7 @@ export function taskMenuKeys(
     if (controls.confirmInMenu) keys.push("confirm");
     if (controls.sendBack) keys.push("sendBack");
     if (controls.start) keys.push("start");
+    if (controls.askForMoreTime) keys.push("askForMoreTime");
     if (controls.reopen) keys.push("reopen");
     if (controls.edit) keys.push("edit");
     if (controls.reassign) keys.push("reassign");
@@ -554,6 +566,9 @@ export interface TaskBarLayout {
   /** Edit as a round, or in More, after Send back. */
   editRound: boolean;
   editInMore: boolean;
+  /** Ask for more time (#6096) as a round, or in More once the bar is full. */
+  askRound: boolean;
+  askInMore: boolean;
   /** Whether More is drawn at all. */
   moreShown: boolean;
   /** The rounds beside the pill, More included: the pill's words read it. */
@@ -570,13 +585,18 @@ export interface TaskBarLayout {
  *   "Confirm · +10 pts".
  * - Send back is a round while the bar holds fewer than three others, else
  *   More's first row: Send back or Edit, then Delete and Delete for everyone.
+ * - Ask for more time (#6096), the assignee's, is a round only on a bar with
+ *   no other round, so Mark done keeps its whole verb ("Mark done with a
+ *   photo"); beside More or any other round it is a row in More, after the
+ *   status moves.
  */
 export function taskBarLayout({
   controls,
   removePeople,
   otherMoreRows,
 }: {
-  controls: Pick<TaskScreenControls, "confirm" | "sendBack" | "edit">;
+  controls: Pick<TaskScreenControls, "confirm" | "sendBack" | "edit"> &
+    Partial<Pick<TaskScreenControls, "askForMoreTime">>;
   /** Remove people's round is drawn (a group's copy, its copies read). */
   removePeople: boolean;
   /** More's other rows: Start, Mark not done, Give it back, the deletes. */
@@ -588,14 +608,28 @@ export function taskBarLayout({
   const others = [editRound, removePeople, moreRows > 0].filter(Boolean).length;
   const sendBackRound = controls.sendBack && others < BAR_ROUNDS_MAX;
   const sendBackInMore = controls.sendBack && !sendBackRound;
-  const moreShown = moreRows > 0 || sendBackInMore;
+  const moreBefore = moreRows > 0 || sendBackInMore;
+  const used = [editRound, removePeople, sendBackRound, moreBefore].filter(
+    Boolean,
+  ).length;
+  const ask = controls.askForMoreTime === true;
+  const askRound = ask && used === 0;
+  const askInMore = ask && !askRound;
+  const moreShown = moreBefore || askInMore;
   return {
     sendBackRound,
     sendBackInMore,
     editRound,
     editInMore,
+    askRound,
+    askInMore,
     moreShown,
-    rounds: [sendBackRound, editRound, removePeople, moreShown].filter(Boolean)
-      .length,
+    rounds: [
+      sendBackRound,
+      editRound,
+      removePeople,
+      askRound,
+      moreShown,
+    ].filter(Boolean).length,
   };
 }

@@ -26,7 +26,7 @@ import {
 } from "@/components/item-actions-menu";
 import { ProofField } from "@/components/tasks/task-form-fields";
 import { TASK_EDIT_COPY } from "@/lib/tasks/task-edit";
-import { TASK_AUDIENCE_COPY } from "@repo/validation";
+import { TASK_AUDIENCE_COPY, TASK_EXTENSION_COPY } from "@repo/validation";
 
 /**
  * The task screen (#5492), which replaced the task detail sheet: what it
@@ -135,6 +135,15 @@ const rejectTask = vi.fn<
     body: { comment: string; require_photo?: boolean };
   }) => Promise<unknown>
 >(async () => ({}));
+const requestExtension = vi.fn(async () => ({
+  extension: {
+    id: "x1",
+    status: "approved",
+    to_due_date: "2026-11-21",
+    to_due_at: null,
+  },
+  now_blocked: false,
+}));
 const addSubtask = vi.fn();
 const deleteSubtask = vi.fn();
 const updateTask = vi.fn<
@@ -171,6 +180,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateTaskStatus: () => ({ mutateAsync: mutateStatus }),
   useConfirmTask: () => ({ mutateAsync: confirmTask, isPending: false }),
   useRejectTask: () => ({ mutateAsync: rejectTask, isPending: false }),
+  useRequestTaskExtension: () => ({
+    mutateAsync: requestExtension,
+    isPending: false,
+  }),
   useDeleteTask: () => ({ mutateAsync: deleteTask, isPending: false }),
   useUpdateTask: () => ({ mutateAsync: updateTask, isPending: false }),
   useRequestTaskPhotoUploadUrl: () => ({ mutateAsync: vi.fn() }),
@@ -259,6 +272,18 @@ vi.mock("@/components/tasks/send-back-sheet", async (importOriginal) => {
   };
 });
 
+// Ask for more time's sheet (#6096): here only what the screen hands it.
+vi.mock("@/components/tasks/ask-more-time-sheet", async (importOriginal) => {
+  const { createElement } = await import("react");
+  return {
+    ...(await importOriginal<
+      typeof import("@/components/tasks/ask-more-time-sheet")
+    >()),
+    AskForMoreTimeSheet: (props: object) =>
+      createElement("AskForMoreTimeSheet", props),
+  };
+});
+
 import TaskDetailsScreen from "@/app/(app)/task-details";
 
 function render(id: string | null = "t1"): ReactTestRenderer {
@@ -343,7 +368,7 @@ describe("A member's own plain task: a little", () => {
   it("offers Start in More, and it sends the assignee's To do → In progress (#5492)", () => {
     const tree = render();
     press(tree, "More");
-    expect(moreRowLabels()).toEqual(["Start"]);
+    expect(moreRowLabels()).toEqual(["Start", "Ask for more time"]);
     act(() => pickItemMenuAction("Start"));
     expect(mutateStatus).toHaveBeenCalledTimes(1);
     expect(mutateStatus).toHaveBeenCalledWith({
@@ -590,8 +615,13 @@ describe("An officer on a task for everyone: a lot", () => {
     expect(control(tree, "Edit task")).toBeDefined();
     expect(control(tree, "Remove people")).toBeDefined();
     press(tree, "More");
-    // Their own copy, still To do: Start leads, the deletes last and red.
-    expect(moreRowLabels()).toEqual(["Start", "Delete", "Delete for everyone"]);
+    // Their own copy, still To do: Start leads, the deletes last and red. An
+    // officer who can edit it moves its due themselves, so no Ask (#6096).
+    expect(moreRowLabels()).toEqual([
+      "Start",
+      "Delete",
+      "Delete for everyone",
+    ]);
     expect(moreMenu().actions.map((action) => !!action.destructive)).toEqual([
       false,
       true,
@@ -860,7 +890,7 @@ describe("A member on a task for everyone", () => {
     expect(control(tree, "Edit task")).toBeUndefined();
     // Their own copy's Start, and nothing an officer has.
     press(tree, "More");
-    expect(moreRowLabels()).toEqual(["Start"]);
+    expect(moreRowLabels()).toEqual(["Start", "Ask for more time"]);
     act(() => tree.unmount());
   });
 
@@ -930,7 +960,7 @@ describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
     const tree = render();
     // More holds only Start on a member's ordinary open task.
     press(tree, "More");
-    expect(moreRowLabels()).toEqual(["Start"]);
+    expect(moreRowLabels()).toEqual(["Start", "Ask for more time"]);
     act(() => tree.unmount());
   });
 });
@@ -1540,5 +1570,79 @@ describe("A task a group follows (#5613)", () => {
       tree.root.findAll((node) => node.props.title === "From"),
     ).toHaveLength(0);
     act(() => tree.unmount());
+  });
+});
+
+describe("Asking for more time (#6096)", () => {
+  afterEach(() => {
+    task = PLAIN;
+  });
+
+  it("opens the Ask sheet from More, and says what came of it under the due", async () => {
+    const tree = render();
+    press(tree, "More");
+    act(() => pickItemMenuAction(TASK_EXTENSION_COPY.ask));
+    const sheet = tree.root.find(
+      (node) => (node.type as unknown) === "AskForMoreTimeSheet",
+    );
+    expect(sheet.props.row.id).toBe("t1");
+    await act(async () => {
+      await sheet.props.onSubmit({ due_date: "2026-11-21", reason: "Late" });
+    });
+    expect(requestExtension).toHaveBeenCalledWith({
+      id: "t1",
+      body: { due_date: "2026-11-21", reason: "Late" },
+    });
+    expect(screenText(tree)).toContain(TASK_EXTENSION_COPY.approvedNow);
+    act(() => tree.unmount());
+  });
+
+  it("is a round on a bar with nothing else, beside Mark done", () => {
+    task = { ...PLAIN, status: "IN_PROGRESS", stored_status: "IN_PROGRESS" };
+    const tree = render();
+    expect(control(tree, TASK_EXTENSION_COPY.ask)).toBeDefined();
+    expect(control(tree, "More")).toBeUndefined();
+    act(() => tree.unmount());
+  });
+
+  it("says a fixed deadline where Ask would be, and offers no Ask", () => {
+    task = { ...PLAIN, fixed_deadline: true };
+    const tree = render();
+    expect(screenText(tree)).toContain(TASK_EXTENSION_COPY.fixedNoExtensions);
+    press(tree, "More");
+    expect(moreRowLabels()).toEqual(["Start"]);
+    act(() => tree.unmount());
+  });
+
+  it("says a request waits, and the latest answer", () => {
+    task = {
+      ...PLAIN,
+      extension: {
+        id: "x1",
+        status: "pending",
+        reason: "Late",
+        from_due_date: "2026-11-20",
+        to_due_date: "2026-11-23",
+        created_at: "2026-11-18T09:00:00.000Z",
+      },
+    };
+    const waiting = render();
+    expect(screenText(waiting)).toContain(TASK_EXTENSION_COPY.waiting);
+    act(() => waiting.unmount());
+    task = {
+      ...PLAIN,
+      extension: {
+        id: "x1",
+        status: "declined",
+        reason: "Late",
+        from_due_date: "2026-11-20",
+        to_due_date: "2026-11-23",
+        decline_reason: "The event is Friday",
+        created_at: "2026-11-18T09:00:00.000Z",
+      },
+    };
+    const declined = render();
+    expect(screenText(declined)).toContain("Not extended: The event is Friday");
+    act(() => declined.unmount());
   });
 });

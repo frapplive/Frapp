@@ -7,12 +7,16 @@ import {
   minutesDraftState,
   minutesDraftStateLabel,
   signUpLinkKind,
+  TASK_EXTENSION_COPY,
+  TASK_EXTENSION_NEEDS_OFFICER_LABELS,
   taskGroupLabel,
 } from "@repo/validation";
 import { isSentBack, localTaskStatus, taskStatusLabel } from "./task-card";
 import {
   closesAtHasPassed,
+  formatClockShort,
   formatDayHeading,
+  formatDayWords,
   formatDueLabel,
   formatMinutesRounded,
   formatRelativeDayTime,
@@ -23,6 +27,9 @@ import {
 
 export type Activity = components["schemas"]["ActivityDto"];
 export type ActivityTask = components["schemas"]["ActivityTaskDto"];
+/** A request for more time the member can decide (#6096). */
+export type ActivityTaskExtension =
+  components["schemas"]["ActivityTaskExtensionDto"];
 /**
  * A task for everyone the member assigned, as one row of `task_items`
  * (#5492): the group's progress and what its copies share.
@@ -269,6 +276,11 @@ export type ActivityRow = RowBase &
     | { kind: "poll"; poll: ActivityPoll }
     | { kind: "event"; event: ActivityEvent }
     | { kind: "hours"; entry: ActivityHours }
+    /**
+     * A member's request for more time an officer decides (#6096): opens to
+     * the reason, the due asked for, and Approve and Decline.
+     */
+    | { kind: "extension"; extension: ActivityTaskExtension }
     | { kind: "link"; link: ActivityLink }
     | { kind: "card"; card: ActivityCard }
     | { kind: "reminder"; reminder: ActivityReminder }
@@ -639,6 +651,56 @@ function hoursRow(entry: ActivityHours): ActivityRow {
     dateBlock: null,
     unread: entry.unread,
     readRef: { kind: "hours_entry", item_id: entry.id },
+    progress: null,
+  };
+}
+
+/**
+ * The due a request asks for, in a row's words: "Saturday", "tomorrow at
+ * 5 PM" (#6096).
+ */
+export function extensionDueWords(
+  extension: Pick<ActivityTaskExtension, "to_due_date" | "to_due_at">,
+  now: Date = new Date(),
+): string {
+  if (extension.to_due_at) {
+    const at = parseInstant(extension.to_due_at);
+    if (at) return `${formatDayWords(at, now)} at ${formatClockShort(at)}`;
+  }
+  return formatDayWords(
+    parseInstantOrBareLocalNoon(extension.to_due_date) ?? extension.to_due_date,
+    now,
+  );
+}
+
+function extensionRow(
+  extension: ActivityTaskExtension,
+  now: Date,
+): ActivityRow {
+  const why = extension.needs_officer
+    ? TASK_EXTENSION_NEEDS_OFFICER_LABELS[extension.needs_officer]
+    : null;
+  return {
+    kind: "extension",
+    key: `needs:extension:${extension.id}`,
+    extension,
+    title: TASK_EXTENSION_COPY.asks(extension.requester_name || "A member"),
+    detail: [
+      extension.task.title,
+      `to ${extensionDueWords(extension, now)}`,
+      why,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: extension.task.assignee_id,
+    // An ask that opens: the officer reads the reason before deciding.
+    badge: { label: "Decide", variant: "warning" },
+    glyph: "task",
+    dateBlock: null,
+    // New until someone answers it; there is no dot to clear.
+    unread: false,
+    readRef: null,
     progress: null,
   };
 }
@@ -1210,6 +1272,10 @@ export function activityReviewRows(
     ...activity.needs_you.task_confirmations.map((task) =>
       taskRow(task, "needs-confirm", "confirm", now),
     ),
+    // An API read from before #6096 has none.
+    ...(activity.needs_you.task_extensions ?? []).map((extension) =>
+      extensionRow(extension, now),
+    ),
     ...activity.needs_you.hours_approvals.map(hoursRow),
   ];
 }
@@ -1245,7 +1311,41 @@ export function findActivityTaskRow(
 export function activityRowTaskId(row: ActivityRow): string | null {
   if (row.kind === "task") return row.task.id;
   if (row.kind === "task-group") return row.group.task_id;
+  if (row.kind === "extension") return row.extension.task.id;
   return null;
+}
+
+/**
+ * Whether an Activity row is the member's own open To do task with a fixed
+ * deadline (#6096), whose second line both apps draw in the danger red. The
+ * To do list's rows are the member's own (`needs:`); a task they assigned,
+ * or one waiting on their sign-off, isn't theirs to finish by it.
+ */
+export function activityRowFixedDeadline(row: ActivityRow): boolean {
+  return (
+    row.kind === "task" &&
+    row.glyph === "task" &&
+    row.key.startsWith("needs:") &&
+    row.task.fixed_deadline === true &&
+    row.task.stored_status !== "COMPLETED"
+  );
+}
+
+/**
+ * The row an "asks for more time" push opens (`target.view ===
+ * "extension"`, #6096): the waiting request on that task, or null once
+ * someone answered it.
+ */
+export function findActivityExtensionRow(
+  activity: Activity,
+  taskId: string,
+  now: Date = new Date(),
+): ActivityRow | null {
+  return (
+    activityReviewRows(activity, now).find(
+      (row) => row.kind === "extension" && row.extension.task.id === taskId,
+    ) ?? null
+  );
 }
 
 /**

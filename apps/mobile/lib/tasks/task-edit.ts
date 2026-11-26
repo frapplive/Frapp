@@ -255,6 +255,19 @@ export function proofSave(
 }
 
 /**
+ * Fixed deadline as switched (#6096): no extensions, urgent to its assignee.
+ * On a group task's copy it goes with `scope: "group"` (`scopedEdit`), and on
+ * a repeating copy it asks which tasks, as the other fields do.
+ */
+export function fixedDeadlineSave(
+  row: TaskRowModel,
+  next: boolean,
+): TaskFieldSave {
+  if (next === row.fixedDeadline) return NONE;
+  return { kind: "save", body: { fixed_deadline: next } };
+}
+
+/**
  * From as picked (#5473): the tier, role or group the task is from, or
  * `null` for its creator alone. On a group task's copy it goes with
  * `scope: "group"` (`scopedEdit`), since a group follows every copy.
@@ -340,6 +353,9 @@ export function rowAfter(row: TaskRowModel, body: TaskEdit): TaskRowModel {
     ...(body.due_date !== undefined ? { dueDay: body.due_date } : {}),
     ...(body.due_at !== undefined ? { dueAt: body.due_at } : {}),
     ...(body.proof_kind !== undefined ? { proofKind: body.proof_kind } : {}),
+    ...(body.fixed_deadline !== undefined
+      ? { fixedDeadline: body.fixed_deadline }
+      : {}),
     ...(body.assignee_id !== undefined ? { assigneeId: body.assignee_id } : {}),
     ...(body.followed_by !== undefined
       ? { followedBy: body.followed_by ?? null }

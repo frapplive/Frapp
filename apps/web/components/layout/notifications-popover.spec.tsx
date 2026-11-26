@@ -813,6 +813,12 @@ describe("deepLinkFor: task notifications", () => {
     );
   });
 
+  it("opens a request for more time's decision in Activity (#6096)", () => {
+    expect(deepLinkFor(task({ taskId: "t1", view: "extension" }))).toBe(
+      "/activity?extension=t1",
+    );
+  });
+
   it("opens every other task notification's task on Activity (#5948)", () => {
     expect(deepLinkFor(task({ taskId: "t1" }))).toBe("/activity?task=t1");
     expect(deepLinkFor(task({ view: "review" }))).toBe("/activity");

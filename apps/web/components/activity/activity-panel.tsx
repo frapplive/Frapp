@@ -41,6 +41,7 @@ import {
   type ActivityRow,
 } from "@repo/hooks";
 import { ActivityFaces } from "./activity-row-lead";
+import { ExtensionReview } from "./extension-review";
 import { useActivityPoll } from "./use-activity-poll";
 
 const PANEL_TITLES: Record<ActivityRow["kind"], string> = {
@@ -49,6 +50,7 @@ const PANEL_TITLES: Record<ActivityRow["kind"], string> = {
   poll: "Poll",
   event: "Event",
   hours: "Service hours",
+  extension: "Task",
   link: "Link",
   card: "Sign-up",
   reminder: "Reminder",
@@ -180,6 +182,10 @@ function PanelCard({
           onActed={onActed}
         />
       );
+    case "extension":
+      return (
+        <ExtensionPanel row={row} onClose={onClose} onActed={onActed} />
+      );
     case "link":
       // A sign-up link row opens the link, not the panel.
       return null;
@@ -233,6 +239,30 @@ function TaskPanel({
     );
   }
   return <TaskCard message={message} viewerId={viewerId} isConfirmed />;
+}
+
+/** A member's request for more time, for an officer to decide (#6096). */
+function ExtensionPanel({
+  row,
+  onClose,
+  onActed,
+}: {
+  row: Extract<ActivityRow, { kind: "extension" }>;
+  onClose: (key?: string) => void;
+  onActed: () => void;
+}) {
+  const faceFor = useContext(ActivityFaces);
+  return (
+    <ExtensionReview
+      extension={row.extension}
+      face={faceFor(row.extension.task.assignee_id)}
+      onDone={() => {
+        // The list re-reads, so the row leaves; only this row's panel closes.
+        onActed();
+        onClose(row.key);
+      }}
+    />
+  );
 }
 
 function EventPanel({ row }: { row: Extract<ActivityRow, { kind: "event" }> }) {

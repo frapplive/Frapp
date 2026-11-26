@@ -626,3 +626,21 @@ export function MicGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
     </Frame>
   );
 }
+
+/**
+ * Ask for more time (#6096): Lucide's `ClockArrowUp` reduced to a clock with
+ * a plus, a clock face the due fields draw, and the plus of "more".
+ */
+export function MoreTimeGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: ControlGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M20.5 13A8.5 8.5 0 1 1 12 3.5" {...detail} />
+      <Path d="M12 7.5V12l3 2" {...detail} />
+      <Path d="M19 3v6M16 6h6" {...detail} />
+    </Frame>
+  );
+}
