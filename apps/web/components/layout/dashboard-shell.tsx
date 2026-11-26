@@ -319,7 +319,9 @@ function Shell({
   const chatMounted = onChatRoute || desktop !== false;
   // `undefined` hides gated rows until the read answers; `null` means the
   // offline dashboard can't ask, and shows them (`useNavPermissions`, #3854).
-  const permissions = useNavPermissions();
+  // Drawn from the last answer while the read is out (#5049): nav rows and
+  // the page title only, never a decision.
+  const permissions = useNavPermissions({ fromShellCache: true });
   // Module gating: items tied to a disabled module hide once the chapter read
   // resolves. Undefined while loading means "do not gate", so nothing flashes
   // out during the initial load. Read from the member-readable current chapter,

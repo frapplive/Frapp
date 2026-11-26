@@ -168,6 +168,7 @@ import {
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { EventsPageSkeleton } from "@/components/events/events-skeleton";
+import { useShellCached } from "@/lib/shell-cache/shell-cache-sync";
 
 type EventRow = Record<string, unknown>;
 type Entry = EventListEntry<EventRow>;
@@ -410,9 +411,14 @@ function AddressedEventsPage() {
     enabled: Boolean(activeChapterId),
   });
 
+  // The list this browser last saw for this member and chapter, drawn while
+  // the read is out (#5049). Only the list reads it: the reopen and New
+  // intent below wait on the live answer, so nothing acts on a kept copy.
+  const keptEvents = useShellCached<EventRow[]>("events");
+  const fromKept = eventsQuery.isLoading && Array.isArray(keptEvents);
   const events = useMemo<EventRow[]>(
-    () => eventsQuery.data ?? [],
-    [eventsQuery.data],
+    () => eventsQuery.data ?? (fromKept ? (keptEvents ?? []) : []),
+    [eventsQuery.data, fromKept, keptEvents],
   );
 
   // Reopen the editor the page was left with (#4593), once this viewer could
@@ -1049,7 +1055,7 @@ function AddressedEventsPage() {
     );
   }
 
-  if (eventsQuery.isLoading) {
+  if (eventsQuery.isLoading && !fromKept) {
     return <EventsPageSkeleton />;
   }
 

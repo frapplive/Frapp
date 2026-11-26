@@ -118,7 +118,10 @@ const openBatches = new Map<string, Batch[]>();
  * page sections sends them as two bootstrap calls at once, so the shell's
  * answer never waits on the slowest page section (an inbox page, a big
  * events list, a stalled unread count). Each call runs the guard chain once,
- * so the split costs one more chain per open, not one per section.
+ * so the split costs one more chain on an open that splits; a batch whose
+ * shell or page side is a single section isn't split, because that section
+ * would otherwise go to its own route, a chain of its own anyway, and lose
+ * the companions the batch fetches.
  */
 const SHELL_SECTIONS: ReadonlySet<BootstrapSection> = new Set([
   "user",
@@ -291,31 +294,53 @@ export function createFirstScreenBatchMiddleware(options?: {
   const windowMs = options?.windowMs ?? FIRST_SCREEN_BATCH_WINDOW_MS;
 
   /**
-   * Splits a batch into its layers (shell first, then the page) and sends
-   * each at once. A layer of one section goes to its own route, as a batch of
-   * one always has.
+   * Splits a batch into its layers (shell, then the page) and sends each at
+   * once, when each layer is worth a bootstrap call of its own; otherwise the
+   * batch goes out whole, as before the split. Companions are worked out for
+   * the whole batch, so none is fetched twice, and each rides the layer that
+   * shares its kind: What's new with the shell, the nav's "not set up yet"
+   * reads (geofences, documents) with the page, so the shell's answer never
+   * waits on them.
    */
   const send = (batch: Batch) => {
     if (batch.chapter === null) {
       for (const waiter of batch.waiters) waiter.resolve(undefined);
       return;
     }
-    const shell = batch.waiters.filter((w) => SHELL_SECTIONS.has(w.section));
-    const page = batch.waiters.filter((w) => !SHELL_SECTIONS.has(w.section));
-    for (const waiters of [shell, page]) {
-      if (waiters.length > 0) void sendLayer(batch, waiters);
-    }
-  };
-
-  const sendLayer = async (batch: Batch, waiters: Waiter[]) => {
-    const asked = [...new Set(waiters.map((w) => w.section))];
+    const asked = [...new Set(batch.waiters.map((w) => w.section))];
     if (asked.length < FIRST_SCREEN_BATCH_MIN_SECTIONS) {
-      for (const waiter of waiters) waiter.resolve(undefined);
+      for (const waiter of batch.waiters) waiter.resolve(undefined);
       return;
     }
     const companions = [
       ...new Set(asked.flatMap((section) => COMPANIONS[section] ?? [])),
     ].filter((section) => !asked.includes(section));
+    const isShell = (section: BootstrapSection) => SHELL_SECTIONS.has(section);
+    const shell = batch.waiters.filter((w) => isShell(w.section));
+    const page = batch.waiters.filter((w) => !isShell(w.section));
+    const sections = (waiters: Waiter[]) =>
+      new Set(waiters.map((w) => w.section)).size;
+    if (
+      sections(shell) < FIRST_SCREEN_BATCH_MIN_SECTIONS ||
+      sections(page) < FIRST_SCREEN_BATCH_MIN_SECTIONS
+    ) {
+      void sendLayer(batch, batch.waiters, companions);
+      return;
+    }
+    void sendLayer(batch, shell, companions.filter(isShell));
+    void sendLayer(
+      batch,
+      page,
+      companions.filter((section) => !isShell(section)),
+    );
+  };
+
+  const sendLayer = async (
+    batch: Batch,
+    waiters: Waiter[],
+    companions: BootstrapSection[],
+  ) => {
+    const asked = [...new Set(waiters.map((w) => w.section))];
     let body: Record<string, unknown> | null = null;
     try {
       const url = new URL(batch.request.url);

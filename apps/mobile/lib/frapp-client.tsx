@@ -119,7 +119,8 @@ export function FrappProvider({ children }: { children: React.ReactNode }) {
         checkRejectedSession();
       },
       // A launch or a return to the app fires its reads at once; the ones
-      // `GET /v1/bootstrap` covers go out as one request (#4709, #3728).
+      // `GET /v1/bootstrap` covers go out together, the shell's and the page's
+      // as two calls at once (#4709, #3728, #5049).
       batchFirstScreenReads: true,
     });
   }, []);

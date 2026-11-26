@@ -151,7 +151,7 @@ describe("first-screen batching", () => {
     expect((await unread).data).toEqual({ section: "channel_unread" });
   });
 
-  it("sends a layer of one section to its own route", async () => {
+  it("keeps a batch whole when one layer would be a single section", async () => {
     const fetchMock = stubFetch((include) =>
       json(Object.fromEntries(include.map((section) => [section, {}]))),
     );
@@ -163,9 +163,30 @@ describe("first-screen batching", () => {
       api.GET("/v1/channels/unread"),
     ]);
 
-    expect(urlsOf(fetchMock).sort()).toEqual([
-      "/v1/bootstrap?include=channels,channel_unread",
-      "/v1/users/me/permissions",
+    // Split, permissions would go to its own route and lose its companions.
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,channels,channel_unread,geofences,documents",
+    ]);
+  });
+
+  it("fetches each companion once, with the layer of its kind", async () => {
+    const fetchMock = stubFetch((include) =>
+      json(Object.fromEntries(include.map((section) => [section, {}]))),
+    );
+    const api = client({ token: "token-split-companions" });
+
+    await Promise.all([
+      api.GET("/v1/users/me/permissions"),
+      api.GET("/v1/users/me"),
+      api.GET("/v1/channels"),
+      api.GET("/v1/channels/unread"),
+    ]);
+
+    // What's new rides with the shell; the nav's "not set up yet" reads ride
+    // with the page, so the shell's answer never waits on them.
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,user,whats_new",
+      "/v1/bootstrap?include=channels,channel_unread,geofences,documents",
     ]);
   });
 
@@ -341,7 +362,7 @@ describe("first-screen batching", () => {
 
     await Promise.all([
       api.GET("/v1/users/me/permissions"),
-      api.GET("/v1/chapters/current"),
+      api.GET("/v1/channels"),
     ]);
     // The nav asks once permissions have answered; the batch already has it.
     const documents = await api.GET("/v1/documents");
@@ -349,7 +370,7 @@ describe("first-screen batching", () => {
     const again = await api.GET("/v1/documents");
 
     expect(urlsOf(fetchMock)).toEqual([
-      "/v1/bootstrap?include=permissions,current_chapter,geofences,documents",
+      "/v1/bootstrap?include=permissions,channels,geofences,documents",
       "/v1/documents",
     ]);
     expect(documents.data).toEqual({ section: "documents" });

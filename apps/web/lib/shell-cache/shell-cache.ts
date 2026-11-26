@@ -1,5 +1,5 @@
 /**
- * The shell cache: the last answers a member's dashboard needs to draw itself,
+ * The shell cache: the last answers a member's dashboard draws itself from,
  * kept per member and per chapter so a revisit paints them before the network
  * answers (#5049, Paul 2026-11-26: "some of this should be cached and queried
  * in layers").
@@ -7,39 +7,35 @@
  * Named rows, never the query cache. Each row is one read's last answer,
  * stored under the Supabase auth uid and the chapter id it was fetched under,
  * so there is no key under which another member's or another chapter's answer
- * can be read back (`spec/ui/resilience/caching.md` § Shell cache). The rows,
- * by the layer they paint in:
+ * can be read back (`spec/ui/resilience/caching.md` § Shell cache).
  *
- * 1. Identity and shell: the roster (names, photos, role colours), the
- *    member's permissions in this chapter, the chapter's member view, the
- *    member's chapters, and the member's own name and photo.
- * 2. The open page: Activity and the Calendar's events.
+ * Read, never seeded. `ShellCacheSync` reads the rows once per scope and
+ * offers them to the few screens that draw from them while their live read is
+ * out (`useShellCached`): the account row, the nav, the chapter head, members'
+ * names, and the Calendar. Nothing goes into the query cache, because a
+ * seeded answer reads as a live one to everything else: a redirect, a module
+ * gate or a one-time reopen would act on a week-old answer (the review of
+ * #5049 found three that did).
  *
- * What is left out, on purpose. `["user","me"]` is never seeded: its readers
- * take a whole profile (Profile's form starts from it), and a partial row
- * there is how a stale or missing field gets saved back. Only the name and
- * photo are kept, for the account row, and they're read through
- * {@link ShellIdentity}, never through the query cache. Nothing about money,
- * nobody else's contact details, no tokens, no messages (chat keeps its own
- * first-chunk cache).
+ * What is left out, on purpose: `["user","me"]` (only the name and photo are
+ * kept, through their own row), nothing about money (the chapter row keeps
+ * its name, logo and branding, not its billing state), nobody else's contact
+ * details, no tokens, no messages (chat keeps its own first-chunk cache).
  *
  * `localStorage`, not IndexedDB: this sits on the shell path of every route,
  * and Dexie there would cost every page the bundle `first-chunk-wipe.ts`
- * keeps off it; reads are synchronous, so the seed lands in the first effect
- * after hydration; and a clear is a loop over keys that can't be blocked by a
- * second tab.
+ * keeps off it; reads are synchronous, so the rows are there in the first
+ * effect after hydration; and a clear is a loop over keys that can't be
+ * blocked by a second tab.
  */
 import type { QueryKey } from "@tanstack/react-query";
 import {
-  accessibleChaptersQueryKey,
-  activityKeys,
   currentChapterQueryKey,
   eventsQueryKey,
   myPermissionsQueryKey,
   rosterQueryKey,
 } from "@repo/hooks";
-
-import { SHELL_CACHE_PREFIX } from "./shell-cache-clear";
+import { SHELL_CACHE_PREFIX, shellCacheClosed } from "./shell-cache-clear";
 
 export { SHELL_CACHE_PREFIX, clearShellCache } from "./shell-cache-clear";
 
@@ -61,16 +57,37 @@ export interface ShellQueryPart {
   layer: ShellLayer;
   /** The key the reading hook uses, for this chapter. */
   key: (chapterId: string) => QueryKey;
+  /** The part of the answer worth keeping; the whole answer when omitted. */
+  keep?: (data: unknown) => unknown;
 }
 
-/** The queries kept, in the order they're seeded: layer 1 first. */
+/** The chapter row: what the chapter head draws, and nothing else. */
+function chapterHead(data: unknown): unknown {
+  if (!data || typeof data !== "object") return undefined;
+  const row = data as {
+    name?: unknown;
+    logo_url?: unknown;
+    branding?: unknown;
+  };
+  if (typeof row.name !== "string") return undefined;
+  return {
+    name: row.name,
+    logo_url: typeof row.logo_url === "string" ? row.logo_url : null,
+    branding: row.branding ?? null,
+  };
+}
+
+/** The queries kept, by layer. */
 export const SHELL_QUERY_PARTS: readonly ShellQueryPart[] = [
   { name: "roster", layer: 1, key: (c) => rosterQueryKey(c) },
   { name: "permissions", layer: 1, key: (c) => myPermissionsQueryKey(c) },
-  { name: "chapter", layer: 1, key: (c) => currentChapterQueryKey(c) },
-  { name: "chapters", layer: 1, key: () => accessibleChaptersQueryKey() },
+  {
+    name: "chapter",
+    layer: 1,
+    key: (c) => currentChapterQueryKey(c),
+    keep: chapterHead,
+  },
   { name: "events", layer: 2, key: (c) => eventsQueryKey(c) },
-  { name: "activity", layer: 2, key: (c) => activityKeys.chapter(c) },
 ];
 
 /** The member's own name and photo, the one identity row (never `["user","me"]`). */
@@ -132,7 +149,7 @@ export function writeShellRow(
   at: number = Date.now(),
 ): void {
   const store = storage();
-  if (!store || data === undefined) return;
+  if (!store || data === undefined || shellCacheClosed()) return;
   try {
     const value = JSON.stringify({ at, data } satisfies StoredRow);
     if (value.length > SHELL_CACHE_MAX_ROW_CHARS) {

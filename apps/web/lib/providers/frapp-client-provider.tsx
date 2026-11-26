@@ -117,7 +117,8 @@ export function FrappProvider({ children }: { children: React.ReactNode }) {
       // every screen: `lib/auth/rejected-session.ts`.
       onUnauthorized: () => void handleRejectedSession(),
       // An open or a return to the tab fires its reads at once; the ones
-      // `GET /v1/bootstrap` covers go out as one request (#4709, #3728).
+      // `GET /v1/bootstrap` covers go out together, the shell's and the page's
+      // as two calls at once (#4709, #3728, #5049).
       batchFirstScreenReads: true,
     });
     // "View as a role" (#4072) is for looking: while it runs, a write the

@@ -2,7 +2,7 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { resetObservabilityOnLogout } from "@/lib/observability/reset";
-import { clearShellCache } from "@/lib/shell-cache/shell-cache-clear";
+import { closeShellCache } from "@/lib/shell-cache/shell-cache-clear";
 
 /**
  * When this tab last started signing itself out. A global sign-out revokes
@@ -27,8 +27,9 @@ export async function signOutCurrentSession(
 ) {
   ownSignOutStartedAt = Date.now();
   // Before the sign-out, so the shell cache is gone even when the navigation
-  // that follows outruns the identity-change effect (#5049).
-  clearShellCache();
+  // that follows outruns the identity-change effect, and closed, so an answer
+  // landing during the round trip isn't written back (#5049).
+  closeShellCache();
   const supabase = createSupabaseBrowserClient();
   await supabase.auth.signOut(
     options.scope ? { scope: options.scope } : undefined,
