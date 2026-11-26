@@ -199,7 +199,7 @@ export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
           to remember. The visible header row stays a visual label.
         */}
         <div
-          className={`grid min-h-9 grid-cols-[1fr_72px_72px] items-center gap-2 bg-surface-1 px-4 text-caption font-semibold text-muted-foreground @md:grid-cols-[1fr_120px_120px]`}
+          className={`grid min-h-control-small grid-cols-[1fr_72px_72px] items-center gap-2 bg-surface-1 px-4 text-caption font-semibold text-muted-foreground @md:grid-cols-[1fr_120px_120px]`}
         >
           <span>Module</span>
           <span className="text-center">Free</span>
