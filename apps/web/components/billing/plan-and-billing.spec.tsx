@@ -28,12 +28,14 @@ afterEach(() => {
 
 const invoicesQuery: {
   isPending: boolean;
+  isSuccess: boolean;
   isError: boolean;
   fetchStatus: "fetching" | "paused" | "idle";
   data: unknown;
   refetch: () => void;
 } = {
   isPending: false,
+  isSuccess: true,
   isError: false,
   fetchStatus: "idle",
   data: [],
@@ -95,17 +97,16 @@ vi.mock("@/lib/providers/network-provider", () => ({
 
 // Each child owns its own queries and gates and is covered by its own spec.
 vi.mock("@/components/billing/plan-panel", () => ({
-  PlanPanel: ({ invoicesHref }: { invoicesHref?: string }) => (
-    <div data-testid="plan-panel" data-invoices-href={invoicesHref} />
-  ),
+  PlanPanel: () => <div data-testid="plan-panel" />,
 }));
 vi.mock("@/components/billing/plan-matrix", () => ({
   PlanMatrix: () => <div data-testid="plan-matrix" />,
+  planMatrixTitle: (onPaidPlan: boolean) =>
+    onPaidPlan ? "What your plan includes" : "What the subscription unlocks",
+  planMatrixModuleCount: () => 12,
 }));
 vi.mock("@/components/billing/invoice-list", () => ({
-  InvoiceList: ({ id }: { id?: string }) => (
-    <div data-testid="invoice-list" id={id} />
-  ),
+  InvoiceList: () => <div data-testid="invoice-list" />,
 }));
 
 const { PlanAndBilling: BillingPage } = await import("./plan-and-billing");
@@ -116,6 +117,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   networkState.isOffline = false;
   invoicesQuery.isPending = false;
+  invoicesQuery.isSuccess = true;
   invoicesQuery.isError = false;
   invoicesQuery.fetchStatus = "idle";
   invoicesQuery.data = [];
@@ -161,31 +163,115 @@ describe("the route is flush on the shell", () => {
       expect(screen.queryByText(narration)).not.toBeInTheDocument();
     }
   });
+});
 
-  it("orders the page plan, matrix, invoices, and wires the panel's anchor", () => {
+/*
+ * The settings-row shape (#6031): a title, the plan as one row, then rows for
+ * the plan table and the member invoices, each opening a page of its own with
+ * a way back. No pricing, legal or plan wording changed.
+ */
+describe("the page in rows", () => {
+  it("titles itself, then the plan, then the table's and the invoices' rows", () => {
     render(<BillingPage />);
 
-    expect(screen.getByTestId("plan-panel")).toHaveAttribute(
-      "data-invoices-href",
-      "#invoices",
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Plan and billing" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
+    // Neither the table nor the list is on the page itself.
+    expect(screen.queryByTestId("plan-matrix")).toBeNull();
+    expect(screen.queryByTestId("invoice-list")).toBeNull();
+
+    const table = screen.getByRole("link", { name: /What your plan includes/ });
+    expect(table).toHaveAttribute("href", "/settings?tab=billing&page=plan");
+    expect(table).toHaveTextContent("12 modules");
+    const invoices = screen.getByRole("link", { name: /Member invoices/ });
+    expect(invoices).toHaveAttribute(
+      "href",
+      "/settings?tab=billing&page=invoices",
     );
-    expect(screen.getByTestId("invoice-list")).toHaveAttribute(
-      "id",
-      "invoices",
-    );
+    expect(invoices).toHaveTextContent("None open");
+  });
+
+  it("names the table for a chapter off a paid plan as the page always did", () => {
+    chapter.incomplete();
+    render(<BillingPage />);
+    expect(
+      screen.getByRole("link", { name: /What the subscription unlocks/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("counts the open invoices, and shows no count until the read answers", () => {
+    invoicesQuery.data = [
+      { id: "i-1", status: "OPEN" },
+      { id: "i-2", status: "OPEN" },
+      { id: "i-3", status: "PAID" },
+    ];
+    const { unmount } = render(<BillingPage />);
+    expect(
+      screen.getByRole("link", { name: /Member invoices/ }),
+    ).toHaveTextContent("2 open");
+    unmount();
+
+    invoicesQuery.isSuccess = false;
+    invoicesQuery.isPending = true;
+    invoicesQuery.data = undefined;
+    render(<BillingPage />);
+    expect(
+      screen.getByRole("link", { name: /Member invoices/ }),
+    ).toHaveTextContent(/^Member invoices$/);
+  });
+
+  it("opens the plan table as its own page, with a way back", () => {
+    render(<BillingPage page="plan" />);
+
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "What your plan includes",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("plan-matrix")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Plan and billing" }),
+    ).toHaveAttribute("href", "/settings?tab=billing");
+    expect(screen.queryByTestId("plan-panel")).toBeNull();
+  });
+
+  it("opens the member invoices as their own page, with a way back", () => {
+    render(<BillingPage page="invoices" />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Member invoices" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("invoice-list")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Plan and billing" }),
+    ).toHaveAttribute("href", "/settings?tab=billing");
+  });
+
+  it("draws the page itself for a page it doesn't have", () => {
+    render(<BillingPage page="nope" />);
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Plan and billing" }),
+    ).toBeInTheDocument();
   });
 });
 
 describe("while dues is beta-off", () => {
-  it("drops the invoice list and the panel's link to it", () => {
+  it("drops the invoices row, and its page draws the page itself", () => {
     betaOff.keys = ["dues"];
-    render(<BillingPage />);
+    const { unmount } = render(<BillingPage />);
 
     expect(invoiceReadOptions.at(-1)).toEqual({ enabled: false });
+    expect(screen.queryByRole("link", { name: /Member invoices/ })).toBeNull();
+    unmount();
+
+    render(<BillingPage page="invoices" />);
     expect(screen.queryByTestId("invoice-list")).not.toBeInTheDocument();
-    expect(screen.getByTestId("plan-panel")).not.toHaveAttribute(
-      "data-invoices-href",
-    );
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Plan and billing" }),
+    ).toBeInTheDocument();
   });
 
   it("does not hold the page offline on an invoice read it never makes", () => {
@@ -262,7 +348,7 @@ describe("the lapse banner, this page only (4d note 4)", () => {
 describe("the offline path (#1621)", () => {
   it("keeps rendering the page when the reads are cached", () => {
     networkState.isOffline = true;
-    render(<BillingPage />);
+    render(<BillingPage page="invoices" />);
 
     expect(screen.getByTestId("invoice-list")).toBeInTheDocument();
     expect(screen.queryByText(/unavailable offline/i)).not.toBeInTheDocument();
@@ -296,7 +382,7 @@ describe("the offline path (#1621)", () => {
     // screen for exactly the members who came here to pay an invoice — so it
     // is not among this page's queries at all.
     networkState.isOffline = true;
-    render(<BillingPage />);
+    render(<BillingPage page="invoices" />);
 
     expect(screen.getByTestId("invoice-list")).toBeInTheDocument();
   });
@@ -306,7 +392,9 @@ describe("Cancel or close, which replaced Danger zone (#3827)", () => {
   it("points a Stripe customer at Manage in Stripe", () => {
     render(<BillingPage />);
     expect(screen.getByText(/to cancel, open/i)).toBeInTheDocument();
-    expect(screen.getByText(/to close the chapter for good/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/to close the chapter for good/i),
+    ).toBeInTheDocument();
   });
 
   it("tells a chapter Frapp turned on that there is nothing in Stripe", () => {
