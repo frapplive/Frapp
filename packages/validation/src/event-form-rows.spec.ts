@@ -110,6 +110,8 @@ describe("eventFormShowsRow (#6098)", () => {
     expect(
       eventFormShowsRow("repeat", { timing: "all_day", calendarOnly: false }),
     ).toBe(false);
-    expect(eventFormShowsRow("location", { timing: "all_day", calendarOnly: true })).toBe(true);
+    expect(
+      eventFormShowsRow("location", { timing: "all_day", calendarOnly: true }),
+    ).toBe(true);
   });
 });

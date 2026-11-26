@@ -507,7 +507,10 @@ describe("On the calendar only (#6098)", () => {
       "pledges not invited, everyone else on the calendar only",
     );
     expect(
-      describeAttendance(withEveryoneAnswer(emptyAttendanceDraft(), "calendar_only"), () => undefined),
+      describeAttendance(
+        withEveryoneAnswer(emptyAttendanceDraft(), "calendar_only"),
+        () => undefined,
+      ),
     ).toBe("On the calendar only for everyone");
   });
 
@@ -528,12 +531,9 @@ describe("On the calendar only (#6098)", () => {
   it("offers role rows only calendar only or Not invited while it holds", () => {
     const draft = withEveryoneAnswer(base, "calendar_only");
     const options = { allowRequired: true, calendarOnlyAllowed: true };
-    expect(attendanceAnswerChoices(draft, { kind: "everyone" }, options)).toEqual([
-      "required",
-      "optional",
-      "calendar_only",
-      "not_invited",
-    ]);
+    expect(
+      attendanceAnswerChoices(draft, { kind: "everyone" }, options),
+    ).toEqual(["required", "optional", "calendar_only", "not_invited"]);
     expect(
       attendanceAnswerChoices(
         draft,
@@ -542,10 +542,14 @@ describe("On the calendar only (#6098)", () => {
       ),
     ).toEqual(["calendar_only", "not_invited"]);
     expect(
-      attendanceAnswerChoices(base, { kind: "everyone" }, {
-        ...options,
-        calendarOnlyAllowed: false,
-      }),
+      attendanceAnswerChoices(
+        base,
+        { kind: "everyone" },
+        {
+          ...options,
+          calendarOnlyAllowed: false,
+        },
+      ),
     ).toEqual(["required", "optional", "not_invited"]);
   });
 
@@ -558,7 +562,11 @@ describe("On the calendar only (#6098)", () => {
       attendanceAnswerChoices(
         draft,
         { kind: "role", current: "not_invited" },
-        { allowRequired: true, calendarOnlyAllowed: true, floor: "not_invited" },
+        {
+          allowRequired: true,
+          calendarOnlyAllowed: true,
+          floor: "not_invited",
+        },
       ),
     ).toEqual(["not_invited"]);
   });
@@ -573,8 +581,11 @@ describe("On the calendar only (#6098)", () => {
       roles: { pledges: "not_invited" },
     });
     expect(
-      withRoleAnswer(withEveryoneAnswer(base, "calendar_only"), "exec", "not_invited")
-        .roles,
+      withRoleAnswer(
+        withEveryoneAnswer(base, "calendar_only"),
+        "exec",
+        "not_invited",
+      ).roles,
     ).toEqual({ pledges: "not_invited", exec: "not_invited" });
   });
 });

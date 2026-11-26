@@ -58,10 +58,10 @@ describe("eventInvitees", () => {
     ).toHaveLength(4);
     // A role of theirs set apart does.
     expect(
-      eventInvitees(
-        { is_mandatory: true, optional_role_ids: ["alumni"] },
-        [...members, alumnus],
-      ).map((m) => m.user_id),
+      eventInvitees({ is_mandatory: true, optional_role_ids: ["alumni"] }, [
+        ...members,
+        alumnus,
+      ]).map((m) => m.user_id),
     ).toContain("e");
   });
 
@@ -113,10 +113,22 @@ describe("eventPagePhase, events that take no attendance (#6098)", () => {
   it("follows a TBD event's day", () => {
     const shape = { timing: "time_tbd", start_date: "2026-11-25" };
     expect(
-      eventPagePhase(null, null, 10, new Date(2026, 10, 25, 12).getTime(), shape),
+      eventPagePhase(
+        null,
+        null,
+        10,
+        new Date(2026, 10, 25, 12).getTime(),
+        shape,
+      ),
     ).toBe("upcoming");
     expect(
-      eventPagePhase(null, null, 10, new Date(2026, 10, 26, 12).getTime(), shape),
+      eventPagePhase(
+        null,
+        null,
+        10,
+        new Date(2026, 10, 26, 12).getTime(),
+        shape,
+      ),
     ).toBe("past");
   });
 });

@@ -1116,7 +1116,7 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
     });
   });
 
-  it('copies a calendar-only event\'s invite without calling the copy calendar-only (#6098)', async () => {
+  it("copies a calendar-only event's invite without calling the copy calendar-only (#6098)", async () => {
     const lastYear = {
       id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       name: 'FSL Leaders Reception',
@@ -1132,7 +1132,10 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
     } as unknown as Event;
     expect(await build([lastYear]).draft(reception(), officer)).toMatchObject({
       payload: {
-        attendance: { everyone: 'optional', roles: { [TREASURER]: 'not_invited' } },
+        attendance: {
+          everyone: 'optional',
+          roles: { [TREASURER]: 'not_invited' },
+        },
         attendance_line: 'Treasurer not invited, everyone else optional',
       },
     });

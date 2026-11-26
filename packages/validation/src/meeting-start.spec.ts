@@ -140,13 +140,23 @@ describe("looksLikeHearing", () => {
 
 describe("dated and calendar-only events (#6098)", () => {
   const allDay = {
-    ...event("d", "Philanthropy drive", "2026-11-17T00:00:00", "2026-11-18T00:00:00"),
+    ...event(
+      "d",
+      "Philanthropy drive",
+      "2026-11-17T00:00:00",
+      "2026-11-18T00:00:00",
+    ),
     timing: "all_day",
     start_date: "2026-11-17",
     end_date: "2026-11-17",
   };
   const calendarOnly = {
-    ...event("c", "Council deadline", "2026-11-17T19:00:00", "2026-11-17T20:00:00"),
+    ...event(
+      "c",
+      "Council deadline",
+      "2026-11-17T19:00:00",
+      "2026-11-17T20:00:00",
+    ),
     calendar_only: true,
   };
 

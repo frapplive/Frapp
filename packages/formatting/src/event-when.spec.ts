@@ -110,7 +110,10 @@ describe("formatEventRelativeWhen", () => {
 describe("eventChipWords", () => {
   it("says the name, when, required and tentative in one order", () => {
     expect(
-      eventChipWords("Rush BBQ", "Time TBD", { required: true, tentative: true }),
+      eventChipWords("Rush BBQ", "Time TBD", {
+        required: true,
+        tentative: true,
+      }),
     ).toEqual({
       label: "Open Rush BBQ, Time TBD, required, tentative",
       visible: "Time TBD",

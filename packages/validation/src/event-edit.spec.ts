@@ -434,7 +434,10 @@ describe("eventEditPatch, dates (#6098)", () => {
 
   it("sends tentative and calendar only when they change", () => {
     expect(
-      eventEditPatch(STORED, null, { is_tentative: false, calendar_only: false }),
+      eventEditPatch(STORED, null, {
+        is_tentative: false,
+        calendar_only: false,
+      }),
     ).toEqual({});
     expect(
       eventEditPatch(STORED, null, { is_tentative: true, calendar_only: true }),

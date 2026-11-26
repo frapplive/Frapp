@@ -126,11 +126,15 @@ describe("dated days", () => {
 describe("eventDatedDays", () => {
   it("lists a dated event's days and none for a timed one", () => {
     expect(
-      eventDatedDays({ timing: "all_day", start_date: "2026-12-30", end_date: "2027-01-02" }),
+      eventDatedDays({
+        timing: "all_day",
+        start_date: "2026-12-30",
+        end_date: "2027-01-02",
+      }),
     ).toEqual(["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"]);
-    expect(eventDatedDays({ timing: "time_tbd", start_date: "2026-12-30" })).toEqual([
-      "2026-12-30",
-    ]);
+    expect(
+      eventDatedDays({ timing: "time_tbd", start_date: "2026-12-30" }),
+    ).toEqual(["2026-12-30"]);
     expect(eventDatedDays({})).toEqual([]);
   });
 });

@@ -824,14 +824,19 @@ describe("Running by kind (#4173, #5779)", () => {
     expect(todo!.dated.dateBlock).toEqual({ month: "NOV", day: "12" });
     expect(todo!.dated.detail).toBe("Tomorrow · All day · Great Room");
     expect(todo!.timed.detail).toBe("All day · Great Room");
-    expect(todo!.dated.badge).toEqual({ label: "Tentative", variant: "outline" });
+    expect(todo!.dated.badge).toEqual({
+      label: "Tentative",
+      variant: "outline",
+    });
     expect(todo!.at?.getHours()).toBe(0);
     expect(todo!.now).toBe(false);
   });
 
   it("says Tentative in the line when Required takes the badge (#6098)", () => {
     const data = activity({
-      coming_up: [event({ start_time: "2026-11-12T17:00:00", is_tentative: true })],
+      coming_up: [
+        event({ start_time: "2026-11-12T17:00:00", is_tentative: true }),
+      ],
     });
     const [todo] = activityToDos(data, NOW);
     expect(todo!.dated.badge?.label).toBe("Required");
