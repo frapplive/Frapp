@@ -110,6 +110,28 @@ interface Batch {
 const openBatches = new Map<string, Batch[]>();
 
 /**
+ * The first layer of an open (#5049, Paul 2026-11-26: "queried in layers"):
+ * who the member is and what the shell draws around every page, the member,
+ * their permissions, the chapter, their chapters and the roster, plus the
+ * reads that gate or follow those (the terms gate, What's new, and the
+ * settings the account menu's status rows read). A batch that holds some of these and some
+ * page sections sends them as two bootstrap calls at once, so the shell's
+ * answer never waits on the slowest page section (an inbox page, a big
+ * events list, a stalled unread count). Each call runs the guard chain once,
+ * so the split costs one more chain per open, not one per section.
+ */
+const SHELL_SECTIONS: ReadonlySet<BootstrapSection> = new Set([
+  "user",
+  "permissions",
+  "legal_acceptance",
+  "whats_new",
+  "chapters",
+  "current_chapter",
+  "member_roster",
+  "settings",
+]);
+
+/**
  * Reads a screen makes only once an earlier one has answered: What's new
  * once the user is known, the nav's "not set up yet" check (geofences,
  * documents) once permissions are. Fetching them with the read they wait on
@@ -268,13 +290,27 @@ export function createFirstScreenBatchMiddleware(options?: {
 }): Middleware {
   const windowMs = options?.windowMs ?? FIRST_SCREEN_BATCH_WINDOW_MS;
 
-  const send = async (batch: Batch) => {
-    const asked = [...new Set(batch.waiters.map((w) => w.section))];
-    if (
-      asked.length < FIRST_SCREEN_BATCH_MIN_SECTIONS ||
-      batch.chapter === null
-    ) {
+  /**
+   * Splits a batch into its layers (shell first, then the page) and sends
+   * each at once. A layer of one section goes to its own route, as a batch of
+   * one always has.
+   */
+  const send = (batch: Batch) => {
+    if (batch.chapter === null) {
       for (const waiter of batch.waiters) waiter.resolve(undefined);
+      return;
+    }
+    const shell = batch.waiters.filter((w) => SHELL_SECTIONS.has(w.section));
+    const page = batch.waiters.filter((w) => !SHELL_SECTIONS.has(w.section));
+    for (const waiters of [shell, page]) {
+      if (waiters.length > 0) void sendLayer(batch, waiters);
+    }
+  };
+
+  const sendLayer = async (batch: Batch, waiters: Waiter[]) => {
+    const asked = [...new Set(waiters.map((w) => w.section))];
+    if (asked.length < FIRST_SCREEN_BATCH_MIN_SECTIONS) {
+      for (const waiter of waiters) waiter.resolve(undefined);
       return;
     }
     const companions = [
@@ -324,7 +360,7 @@ export function createFirstScreenBatchMiddleware(options?: {
         });
       }
     }
-    for (const waiter of batch.waiters) {
+    for (const waiter of waiters) {
       const value = body?.[waiter.section];
       waiter.resolve(
         value === undefined || value === null ? undefined : jsonResponse(value),
@@ -381,7 +417,7 @@ export function createFirstScreenBatchMiddleware(options?: {
           );
           if (left.length > 0) openBatches.set(session, left);
           else openBatches.delete(session);
-          void send(created);
+          send(created);
         }, windowMs);
       });
     },

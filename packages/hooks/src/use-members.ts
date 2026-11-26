@@ -81,11 +81,16 @@ export function useMembers(options?: { enabled?: boolean }) {
  * which invalidate `["members", chapterId]`, prefix-match it — removing a member
  * drops them from the roster with no extra wiring.
  */
+/** The key {@link useChapterRoster} reads, for writers and the web's shell cache. */
+export function rosterQueryKey(chapterId: string | null | undefined) {
+  return ["members", chapterId, "roster"] as const;
+}
+
 export function useChapterRoster() {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
-    queryKey: ["members", chapterId, "roster"],
+    queryKey: rosterQueryKey(chapterId),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/members/roster", {
         signal,
