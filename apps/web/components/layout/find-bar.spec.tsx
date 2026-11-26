@@ -77,7 +77,20 @@ vi.mock("@repo/hooks", async () => ({
   ...(await vi.importActual<typeof import("@repo/hooks/channel-jump")>(
     "@repo/hooks/channel-jump",
   )),
-  useChannelJump: () => jumpState.current,
+  ...(await vi.importActual<typeof import("@repo/hooks/channel-badge")>(
+    "@repo/hooks/channel-badge",
+  )),
+  // The search's Channels group reads `findChannels`: the channels a case
+  // put in the jump state, else the channel read's rows.
+  useChannelJump: () => ({
+    countsKnown: true,
+    isMuted: () => false,
+    ...jumpState.current,
+    findChannels: (jumpState.current.channels.length > 0
+      ? jumpState.current.channels
+      : (channelsQuery.current.data as { id: string; name: string }[])
+    ).map((channel) => ({ ...channel, category: undefined })),
+  }),
   useActiveChapterId: () => "chapter-1",
   useSearch: () => searchQuery.current,
   useChannels: () => channelsQuery.current,
@@ -620,8 +633,14 @@ describe("FindBar", () => {
       ).toBeInTheDocument();
       const [first, second, third] = screen.getAllByRole("option");
       // A mention carries its count; a plain unread carries none (§5).
-      expect(first).toHaveTextContent("exec@ 1");
-      expect(second).toHaveTextContent(/^rush-events$/);
+      // A screen reader hears the channel list's words for each.
+      expect(first).toHaveTextContent("exec@ 1, 1 mention, 3 unread");
+      expect(within(first!).getByText("@ 1")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(second).toHaveTextContent(/^rush-events, 4 unread messages$/);
+      expect(third).toHaveTextContent(/^general$/);
       expect(within(second!).getByText("rush-events")).toHaveClass("font-bold");
       expect(within(third!).getByText("general")).not.toHaveClass("font-bold");
       await user.keyboard("{Enter}");
@@ -652,6 +671,98 @@ describe("FindBar", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       chord({ key: "k", metaKey: false, ctrlKey: true });
       expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("leaves a Mac's Ctrl+K to a text field, where only Cmd+K opens Find", async () => {
+      const platform = Object.getOwnPropertyDescriptor(
+        window.navigator,
+        "platform",
+      );
+      Object.defineProperty(window.navigator, "platform", {
+        value: "MacIntel",
+        configurable: true,
+      });
+      try {
+        render(
+          <>
+            <FindBar />
+            <textarea aria-label="Message" />
+          </>,
+        );
+        act(() => screen.getByRole("textbox", { name: "Message" }).focus());
+        // Ctrl+K deletes to the end of the line there.
+        const kill = chord({ key: "k", metaKey: false, ctrlKey: true });
+        expect(kill.defaultPrevented).toBe(false);
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        chord({ key: "k" });
+        expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      } finally {
+        if (platform) {
+          Object.defineProperty(window.navigator, "platform", platform);
+        } else {
+          delete (window.navigator as { platform?: string }).platform;
+        }
+      }
+    });
+
+    it("opens empty on Cmd+K, on the lists, though Find kept a search", async () => {
+      channelsQuery.current = { data: [{ id: "c1", name: "announcements" }] };
+      searchQuery.current = searchState({ data: searchPayload() });
+      jumpState.current = { ...jumpState.current, unread: [general] };
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await openAndType(user, "announce");
+      await user.keyboard("{Escape}");
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+      chord({ key: "k" });
+      expect(await screen.findByRole("combobox")).toHaveValue("");
+      expect(screen.getByRole("group", { name: "Unread" })).toBeInTheDocument();
+    });
+
+    it("treats a lone # as nothing typed, and matches by the letters after it", async () => {
+      jumpState.current = {
+        ...jumpState.current,
+        channels: [rush, general],
+        unread: [rush],
+      };
+      const user = userEvent.setup();
+      render(<FindBar />);
+      const input = await openAndType(user, "#");
+      expect(screen.getByRole("group", { name: "Unread" })).toBeInTheDocument();
+      expect(screen.queryByText("No channels match.")).toBeNull();
+      await user.type(input, "ge");
+      expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "general",
+      ]);
+    });
+
+    it("says how to jump when nothing is unread or recently opened", async () => {
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await user.click(trigger());
+      await screen.findByRole("combobox");
+      expect(
+        screen.getByText(
+          "Nothing unread. Type a channel's name to jump to it.",
+        ),
+      ).toBeInTheDocument();
+      // The "from 3 letters" line belongs under letters, not here.
+      expect(screen.queryByText(/from 3 letters/)).toBeNull();
+    });
+
+    it("draws no search status over the channel matches while the search catches up", async () => {
+      jumpState.current = { ...jumpState.current, channels: [rush] };
+      // The debounced text still holds an earlier search's words.
+      debounced.current = "rush party";
+      searchQuery.current = searchState({ isFetching: true });
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await openAndType(user, "ru");
+      expect(screen.queryByText("Searching...")).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent("1 channel.");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
     });
   });
 

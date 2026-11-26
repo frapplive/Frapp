@@ -27,6 +27,8 @@ const hooks = vi.hoisted(() => ({
   chapterId: "ch-1" as string | null,
   timedOutSources: [] as string[],
   present: vi.fn(),
+  // Jump to a channel's Unread list (#6053), empty unless a case fills it.
+  jumpUnread: [] as { id: string; name: string; type: string }[],
 }));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -45,16 +47,27 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useChannels: () => ({ data: hooks.channels }),
   // Jump to a channel (#6053): its lists are covered by its own specs; here
   // it holds the channels, with nothing unread or recently opened.
-  useChannelJump: () => ({
-    channels: (
-      (hooks.channels ?? []) as { type?: string; hidden?: boolean }[]
-    ).filter((c) => c.type !== "DM" && !c.hidden),
-    unread: [],
-    recent: [],
-    countsFor: () => undefined,
-    looksUnread: () => false,
-    categoryOf: () => undefined,
-  }),
+  useChannelJump: () => {
+    const channels = (
+      (hooks.channels ?? []) as {
+        id: string;
+        name: string;
+        type?: string;
+        hidden?: boolean;
+      }[]
+    ).filter((c) => c.type !== "DM" && !c.hidden);
+    return {
+      channels,
+      findChannels: channels.map((c) => ({ ...c, category: undefined })),
+      unread: hooks.jumpUnread,
+      recent: [],
+      countsKnown: true,
+      countsFor: () => undefined,
+      looksUnread: () => false,
+      isMuted: () => false,
+      categoryOf: () => undefined,
+    };
+  },
   useCurrentChapter: () => ({ data: { enabled_modules: hooks.modules } }),
   useViewerUserId: () => "u-me",
   useActiveChapterId: () => hooks.chapterId,
@@ -138,6 +151,7 @@ const results = (tree: ReactTestRenderer) =>
   tree.root.findByProps({ testID: "search-results" });
 
 beforeEach(() => {
+  hooks.jumpUnread = [];
   hooks.payload = PAYLOAD;
   hooks.fetching = false;
   hooks.error = false;
@@ -348,5 +362,19 @@ describe("SearchScreen", () => {
       "frapp.recentSearches.u-me.ch-1",
       JSON.stringify(["rush", "formal"]),
     );
+  });
+
+  // #6053: before anything is typed, the jump lists lead, above the recent
+  // searches.
+  it("lists the unread channels before typing, above the recent searches", async () => {
+    hooks.jumpUnread = [{ id: "c-rush", name: "rush", type: "PUBLIC" }];
+    vi.mocked(AsyncStorage.getItem).mockResolvedValue(
+      JSON.stringify(["formal"]),
+    );
+    const tree = await render();
+    const text = drawnText(tree.root);
+    expect(text).toContain("Unread");
+    expect(text).toContain("#rush");
+    expect(text.indexOf("#rush")).toBeLessThan(text.indexOf("formal"));
   });
 });

@@ -11,6 +11,7 @@ export * from "./ask-starter";
 export * from "./calendar-birthdays";
 export * from "./calendar-tasks";
 export * from "./calendar-time-grid";
+export * from "./channel-badge";
 export * from "./channel-jump";
 export * from "./channel-members";
 export * from "./channel-row-actions";

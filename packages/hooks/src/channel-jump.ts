@@ -42,6 +42,25 @@ export const JUMP_RECENT_LABEL = "Recently opened";
 export const JUMP_MORE_FROM_LETTERS = (letters: number) =>
   `Messages, events and more from ${letters} letters.`;
 
+/** Before anything is typed, when nothing is unread or recently opened. */
+export const JUMP_NOTHING_YET =
+  "Nothing unread. Type a channel's name to jump to it.";
+
+/**
+ * Which list Find and Search draw for what was typed (#6053): the jump lists
+ * for nothing (a lone `#` counts as nothing, since it starts a channel's
+ * name), the channel matches below a search's minimum, and the search from
+ * there (`null`). `letters` is what the matches rank by, without the `#`.
+ */
+export function jumpModeOf(
+  typed: string,
+  minLetters: number,
+): { mode: "lists" | "letters" | null; letters: string } {
+  const letters = typed.trim().replace(/^#/, "").trim();
+  if (letters === "") return { mode: "lists", letters };
+  return { mode: letters.length < minLetters ? "letters" : null, letters };
+}
+
 /** The channels a member can jump to: listed, not hidden, not a DM. */
 export function jumpableChannels<C extends JumpChannel>(
   channels: readonly C[] | undefined,
@@ -120,6 +139,8 @@ export interface ChannelJumpListsInput<C extends JumpChannel> {
   recentIds: readonly string[];
   unreadLimit?: number;
   recentLimit?: number;
+  /** `channelsThatLookUnread`'s answer, when the caller already has it. */
+  unreadIds?: ReadonlySet<string>;
 }
 
 /**
@@ -136,12 +157,11 @@ export function channelJumpLists<C extends JumpChannel>({
   recentIds,
   unreadLimit = JUMP_UNREAD_LIMIT,
   recentLimit = JUMP_RECENT_LIMIT,
+  unreadIds,
 }: ChannelJumpListsInput<C>): { unread: C[]; recent: C[] } {
-  const reads = channelsThatLookUnread(
-    channels,
-    unreadByChannelId,
-    mutedChannelIds,
-  );
+  const reads =
+    unreadIds ??
+    channelsThatLookUnread(channels, unreadByChannelId, mutedChannelIds);
   const mentioned: C[] = [];
   const plain: C[] = [];
   for (const channel of channels) {
@@ -161,19 +181,6 @@ export function channelJumpLists<C extends JumpChannel>({
     if (recent.length >= recentLimit) break;
   }
   return { unread, recent };
-}
-
-/**
- * A row's count, drawn only when the channel addresses the member: a channel
- * that is merely unread carries no number, its bold name says so
- * (foundations.md §5). Counts stop at 99+.
- */
-export function jumpMentionLabel(
-  counts: SidebarUnreadCounts | undefined,
-): string | null {
-  const mentions = counts?.mentionCount ?? 0;
-  if (mentions <= 0) return null;
-  return `@ ${mentions > 99 ? "99+" : mentions}`;
 }
 
 // ── Recently opened, remembered on the device ──────────────────────────────

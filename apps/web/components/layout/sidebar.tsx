@@ -448,8 +448,8 @@ function NewRow({
 }
 
 /**
- * Search: opens Find (`find-bar.tsx`), the centred dialog Cmd/Ctrl+F opens
- * too. A row since the top bar and its field went (#5946), where Claude and
+ * Search: opens Find (`find-bar.tsx`), the centred dialog Cmd/Ctrl+F and
+ * Cmd/Ctrl+K open too. A row since the top bar and its field went (#5946), where Claude and
  * Notion keep theirs.
  */
 function SearchRow({

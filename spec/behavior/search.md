@@ -10,12 +10,12 @@ A single search bar accessible from the top of the mobile and web app:
 - All results respect chapter scoping and permission checks. Chat-message results are filtered through the same `canAccessChannel` predicate the chat surface uses ([`chat/README.md`](chat/README.md)); vault content is never indexed ([`vault.md`](vault.md#search-indexing)); the member directory requires `members:view`; backwork hits come back only to a caller holding `backwork:upload` or `backwork:admin`, the same any-of gate as the library itself ([`backwork.md` § Taxonomy Admin](backwork.md#taxonomy-admin)), and are an empty array for anyone else (2026-11-05: before this the source checked nothing, which no client exposed until the web Find dialog listed backwork); event hits pass the same role-targeting filter as `GET /v1/events`.
 - Implementation: Postgres full-text search (`tsvector` / `to_tsquery`) on relevant columns. **All four sources are now on it.** Chat, events and members each match a `GENERATED ALWAYS ... STORED` tsvector behind a GIN index, queried with `websearch_to_tsquery('english', …)`; Backwork goes through a function (below):
 
-  | Source | Column | Covers | Index | Migration |
-  | --- | --- | --- | --- | --- |
-  | Chat | `chat_messages.content_search` | `content` | `idx_chat_messages_content_search` | `20260823122000` |
-  | Backwork | `search_backwork_resources(chapter, query, limit)` | `title`, `course_number`, department code and name, the course's name and nicknames, professor, `tags` | none (one chapter's rows) | `20261106190000`, `20261109230000` |
-  | Events | `events.search_vector` | `name`, `description` | `idx_events_search` | `20260829002000` |
-  | Members | `users.display_name_search` | `display_name` | `idx_users_display_name_search` | `20260829002000` |
+  | Source   | Column                                             | Covers                                                                                                 | Index                              | Migration                          |
+  | -------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------- | ---------------------------------- |
+  | Chat     | `chat_messages.content_search`                     | `content`                                                                                              | `idx_chat_messages_content_search` | `20260823122000`                   |
+  | Backwork | `search_backwork_resources(chapter, query, limit)` | `title`, `course_number`, department code and name, the course's name and nicknames, professor, `tags` | none (one chapter's rows)          | `20261106190000`, `20261109230000` |
+  | Events   | `events.search_vector`                             | `name`, `description`                                                                                  | `idx_events_search`                | `20260829002000`                   |
+  | Members  | `users.display_name_search`                        | `display_name`                                                                                         | `idx_users_display_name_search`    | `20260829002000`                   |
 
   The tsvector's text-search configuration (`english`) and the query's parse configuration must stay in step — a query parsed under a different configuration than the one that built the vector silently under-matches.
 
@@ -32,18 +32,20 @@ Paul's pick of 2026-11-25 ([#6053](https://github.com/frapplive/Frapp/issues/605
 - **Before anything is typed** they list two groups:
   - **Unread**, up to ten: every channel whose row reads unread on the channel list (`countsLookUnread`, so a muted channel's plain unread is left out and its mention isn't), mentions first, then in the chapter's order. While the unread counts are unknown it lists none.
   - **Recently opened**, up to five: the channels this device opened last, newest first, less any listed under Unread. A device keeps up to eight, per member and chapter, beside the last channel and for its reason ([`chat/README.md`](chat/README.md), "it is where this device was"): localStorage on web, AsyncStorage on the phone, never sent. Web adds a channel when it becomes the open one; the phone adds it when its thread opens, once the channel is known not to be a direct message.
+  - With neither group to show, once the counts are known, one line: `Nothing unread. Type a channel's name to jump to it.`
   - On the phone the member's recent searches stay under them.
+- **A lone `#`** counts as nothing typed, so it shows the two groups.
 - **With one or two letters**, fewer than a search needs (§ MVP defaults), they list the channels the letters match, at once, from the channel list already in memory: a name that starts with them first (`ru` → `#rush-events`), then a word inside the name (`ev` → `#rush-events`), then anywhere; ties go to the shorter name, then A to Z, and a leading `#` is ignored. Up to ten. Under them, `Messages, events and more from 3 letters.`, left off in a council, which has only channels; with no match, `No channels match.` On web the list reads the raw text, so Enter opens a channel without the 200 ms wait a search's debounce needs, and the filter chips are not shown, since they narrow a search.
 - **From three letters** the search runs as before, and its Channels group ranks the same way.
 - **Channels only.** A direct message's stored name is not what its row shows, so no DM is listed or matched, in these groups or in a search's Channels group; a person is found by name under Members.
-- **A row** reads as its row on the channel list: the name, bold while unread, a count only for a mention (`@ 1`, up to `@ 99+`; a merely unread channel carries no number, [`../ui/design-system/foundations.md`](../ui/design-system/foundations.md) §5), and its category's name as the hint. Opening one opens the channel.
-- **On web Cmd/Ctrl+K opens Find** as well as Cmd/Ctrl+F. Unlike Cmd/Ctrl+F, which leaves a text field to the browser's own find, Cmd/Ctrl+K opens Find from the chat composer too, where Slack's and Discord's open their switcher, and focus goes back there when Find closes.
+- **A row** reads as its row on the channel list: the name, bold while unread, a count only for a mention (`@ 1`, up to `@ 99+`; a merely unread channel carries no number, [`../ui/design-system/foundations.md`](../ui/design-system/foundations.md) §5), and its category's name as the hint. A screen reader hears the channel list's own words for the row (its name, whether it is private, its mentions or that it is unread, muted), then the category. Opening one opens the channel.
+- **On web Cmd/Ctrl+K opens Find** as well as Cmd/Ctrl+F, and opens it empty, on the two groups, where Cmd/Ctrl+F and the Search row keep what was last typed. Unlike Cmd/Ctrl+F, which leaves a text field to the browser's own find, Cmd/Ctrl+K opens Find from the chat composer too, where Slack's and Discord's open their switcher, and focus goes back there when Find closes. On a Mac only Cmd+K does that from a text field: Ctrl+K there is the system's delete-to-end-of-line, so it stays with the field.
 
 ## Single-channel scope
 
 `GET /v1/search` takes an optional **`channelId`**. It serves the single-channel half of the
 chat search contract ([`chat/README.md`](chat/README.md#messages) § Messages, the **Search** block:
-*"Full-text search within a single channel or across all channels the user can access"*), which the cross-domain form
+_"Full-text search within a single channel or across all channels the user can access"_), which the cross-domain form
 alone could not express.
 
 - **Only the `messages` source runs**; `backwork`, `events` and `members` come back empty. The
@@ -54,9 +56,10 @@ alone could not express.
   sends no `channelId` and still pays the full four-source fan-out, exactly as the web Find
   dialog does — there is no source-selection parameter today. Do not read this bullet as
   "chat search is cheap"; it is cheap for the default scope and unchanged for the wide one.
+
 - **The channel is intersected with the caller's accessible-channel set, never trusted.** It is
   the same `accessibleChannelIds` → `canAccessChannel` path the unscoped form uses, so search
-  cannot disagree with chat about which role-gated channels a member may read. The id is *also*
+  cannot disagree with chat about which role-gated channels a member may read. The id is _also_
   pushed down as a candidate filter on the channel query so a single-channel search does not
   scan every channel row in the chapter — but the intersection is kept as the correctness
   guarantee, deliberately not replaced by it. Narrowing candidates cannot widen the answer;
@@ -78,12 +81,12 @@ that apart from a channel with no matches. Narrowing has to reach SQL.
 2026-11-10; web's chat search panel sends them from its filter chips,
 [`chat/README.md`](chat/README.md#messages) § Messages, the **Search** block):
 
-| Parameter | Matches | Notes |
-| --- | --- | --- |
-| `fromUserId` | messages whose `sender_id` is this user | An id that is not a uuid returns no matches, not an error; a repeated one is a 400. An imported archive message matches only once its author has linked their Discord account, which is what gives it a `sender_id` ([`chat/README.md`](chat/README.md), Discord import). |
-| `after` | sent at or after this instant | An ISO 8601 instant with an explicit offset (`2026-11-01T00:00:00-05:00`), the rule of `apps/api/src/domain/constants/iso-instant.ts`. A bare date is rejected: the client sends the instant of its own local midnight. |
-| `before` | sent strictly before this instant | Same form as `after`. |
-| `has` | carries every listed trait | Comma-separated or repeated: `file` (any attachment, images included), `image` (an attachment whose content type is `image/*`), `link` (the text contains `http…://`), `poll` (`kind = 'poll'`, the chat-card poll every client creates; a row from the legacy `POST /v1/channels/:id/polls` is not one, [`polls.md`](polls.md), and #3887 retires that route). |
+| Parameter    | Matches                                 | Notes                                                                                                                                                                                                                                                                                                                                                           |
+| ------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fromUserId` | messages whose `sender_id` is this user | An id that is not a uuid returns no matches, not an error; a repeated one is a 400. An imported archive message matches only once its author has linked their Discord account, which is what gives it a `sender_id` ([`chat/README.md`](chat/README.md), Discord import).                                                                                       |
+| `after`      | sent at or after this instant           | An ISO 8601 instant with an explicit offset (`2026-11-01T00:00:00-05:00`), the rule of `apps/api/src/domain/constants/iso-instant.ts`. A bare date is rejected: the client sends the instant of its own local midnight.                                                                                                                                         |
+| `before`     | sent strictly before this instant       | Same form as `after`.                                                                                                                                                                                                                                                                                                                                           |
+| `has`        | carries every listed trait              | Comma-separated or repeated: `file` (any attachment, images included), `image` (an attachment whose content type is `image/*`), `link` (the text contains `http…://`), `poll` (`kind = 'poll'`, the chat-card poll every client creates; a row from the legacy `POST /v1/channels/:id/polls` is not one, [`polls.md`](polls.md), and #3887 retires that route). |
 
 - **A filter never widens access.** The filters are passed to the message query beside the
   caller's accessible-channel ids, never in place of them, so the rule of
@@ -116,16 +119,16 @@ that apart from a channel with no matches. Narrowing has to reach SQL.
   attachments). The old query ran three 100-channel chunks at once, so its wait was about one
   chunk and its database work all three; the new one is one call:
 
-  | Filter | Before, one 100-channel chunk | Before, all 300 | After, all 300 |
-  | --- | --- | --- | --- |
-  | `has=link` | 487 ms | 1,417 ms | 9 ms |
-  | wide `after` | 212 ms | 569 ms | 11 ms |
-  | old `before` (all but the last 17 months) | 48 ms | 112 ms | 12 ms |
-  | `has=image` | 294 ms | 677 ms | 96 ms |
-  | `has=file` | 308 ms | 655 ms | 190–270 ms |
-  | a sender with 5% of messages | 28 ms | 41 ms | 40 ms |
-  | a sender with 0.02% of messages | under 1 ms | under 1 ms | 3 ms |
-  | `has=poll` | 0.6 ms | 0.8 ms | 4 ms |
+  | Filter                                    | Before, one 100-channel chunk | Before, all 300 | After, all 300 |
+  | ----------------------------------------- | ----------------------------- | --------------- | -------------- |
+  | `has=link`                                | 487 ms                        | 1,417 ms        | 9 ms           |
+  | wide `after`                              | 212 ms                        | 569 ms          | 11 ms          |
+  | old `before` (all but the last 17 months) | 48 ms                         | 112 ms          | 12 ms          |
+  | `has=image`                               | 294 ms                        | 677 ms          | 96 ms          |
+  | `has=file`                                | 308 ms                        | 655 ms          | 190–270 ms     |
+  | a sender with 5% of messages              | 28 ms                         | 41 ms           | 40 ms          |
+  | a sender with 0.02% of messages           | under 1 ms                    | under 1 ms      | 3 ms           |
+  | `has=poll`                                | 0.6 ms                        | 0.8 ms          | 4 ms           |
 
   A sender keeps the old flat shape, which `idx_chat_messages_sender` already bounded by that
   member's own messages; a per-channel walk would probe every channel for a member who may have
@@ -149,11 +152,12 @@ v1 ships with the following defaults. Chapter admins cannot override them; tunin
 - **Typo tolerance:** Backwork only (2026-11-06, #585), through `pg_trgm`'s `word_similarity`, which also lets a Backwork query match within a word. Chat, events and members have none, so **those three** never match **within** a word — `websearch_to_tsquery` matches lexemes, so `attach` finds `attached` (stemming) but `tach` finds nothing. `pg_trgm` is installed in the `extensions` schema by `20261106190000`, and both PGlite harnesses the `pglite-migrations` CI job runs, `scripts/pglite/harness.mjs` and `apps/web/lib/realtime/change-topics.spec.ts`, register it; a new migration that needs another extension must register it in both, or that job fails. The same job also applies every migration to a `pgvector/pgvector:pg17` service container (`scripts/db-race/`, #4862), which has contrib and `vector` only, so an extension outside those needs that image changed in `ci.yml` too.
 
   This trade is most noticeable on **member names**, because people do type partial names: `Budget` finds `Budgetson`, `udgets` does not. That is the cost of the index and it applies to the three indexed sources alike — a source left on `ILIKE` would match differently from the rest, which is worse than the trade itself. Backwork differs because it is one chapter's library, small enough to score every row.
+
 - **Query syntax:** `websearch` parse mode, so quoted phrases, `or`, and a leading `-` for negation all work as a user would expect from a search box — and, unlike `to_tsquery`, stray punctuation never raises a syntax error. A query that reduces to no lexemes at all (a lone stop word) matches nothing.
 - **Stopwords:** Postgres default English stopword list.
-- **Server-side timeout:** 500 ms budget, applied **per source, not to the search as a whole**. A source that exceeds it contributes an empty array and nothing else changes, so a slow chat-message scan no longer discards member, event and backwork hits that had already come back. `x-search-timeout: 1` is still set when *any* source is short, and `x-search-timeout-sources` names which ones (comma-separated, from `backwork | events | members | messages`) — the difference between "we found nothing" and "we stopped looking here", which the client must render differently.
+- **Server-side timeout:** 500 ms budget, applied **per source, not to the search as a whole**. A source that exceeds it contributes an empty array and nothing else changes, so a slow chat-message scan no longer discards member, event and backwork hits that had already come back. `x-search-timeout: 1` is still set when _any_ source is short, and `x-search-timeout-sources` names which ones (comma-separated, from `backwork | events | members | messages`) — the difference between "we found nothing" and "we stopped looking here", which the client must render differently.
 
-  This remains an application-level budget (`SearchService.searchWithinBudget`) rather than a Postgres `statement_timeout`, since supabase-js does not cleanly expose per-query `statement_timeout`; it discards a slow result rather than cancelling the query. It should now be rare rather than routine for a chat search with text, which is index-backed, and for a [filter with no text](#message-filters), which is answered per channel through indexes; an attachment filter over a large archive is the slowest case left. A source that *errors* still fails the whole request as a 500 — only slowness degrades.
+  This remains an application-level budget (`SearchService.searchWithinBudget`) rather than a Postgres `statement_timeout`, since supabase-js does not cleanly expose per-query `statement_timeout`; it discards a slow result rather than cancelling the query. It should now be rare rather than routine for a chat search with text, which is index-backed, and for a [filter with no text](#message-filters), which is answered per channel through indexes; an attachment filter over a large archive is the slowest case left. A source that _errors_ still fails the whole request as a 500 — only slowness degrades.
 
 ## Acceptance criteria
 
@@ -167,6 +171,7 @@ v1 ships with the following defaults. Chapter admins cannot override them; tunin
 - [ ] Every source is index-backed: once a table is large enough for GIN's startup cost to pay off, `explain` shows a Bitmap Index Scan on that source's index. A Seq Scan on a small table is the planner being right, not a missing index — check with `set enable_seqscan = off` before chasing it. Likewise, on a chapter-scoped source the planner may prefer the `chapter_id` btree and apply the tsquery as a filter; that is also correct when the chapter's slice is already small.
 
   Measured on the local stack at 20,000 events in one chapter with a selective term: the `ILIKE` pair this replaced ran a 20,001-row sequential scan in **35.673 ms**; the tsquery form is a Bitmap Index Scan at **0.071 ms**.
+
 - [ ] Search results carry every column of their source table. The four sources enumerate columns instead of `select('*')` so the generated tsvector is not shipped back per row — which means an added column silently stops appearing in search results, since rows are cast to the entity type rather than inferred. `scripts/pglite/landmarks.mjs` asserts `EVENT_SEARCH_COLUMNS` / `BACKWORK_SEARCH_COLUMNS` equal their table's real columns minus the vector; add a column and that gate fails until the list is updated.
 - [ ] Member search issues **one** query and never materialises the roster: a reintroduced `from('users')` fan-out or an `.in(rosterIds)` list is the regression to watch for, and `supabase-search.repository.spec.ts` asserts both negatives.
 - [ ] Imported archive messages are searchable. The archive is in the same table and the same index; the `kind = 'imported'` exclusions elsewhere (unread counts, push, Realtime) deliberately do not apply here — being findable is the point of importing it.

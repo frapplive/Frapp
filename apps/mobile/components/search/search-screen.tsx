@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { TextInput } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   buildFindResults,
   isSearchRunnable,
   settingEntryById,
   useActiveChapterId,
-  useChannels,
   useCurrentChapter,
+  jumpModeOf,
+  SEARCH_MIN_QUERY_LENGTH,
   useChannelJump,
   useSearch,
   useViewerUserId,
@@ -26,7 +27,6 @@ import { FrappCrest } from "@/components/frapp-crest";
 import { AskSheet } from "@/components/ask/ask-sheet";
 import { useAiSurfaces } from "@/lib/ai/availability";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { isDirectChannel, selectChannels } from "@/lib/chat/channel-list";
 import { selectionHaptic } from "@/lib/haptics";
 import {
   openNotificationTarget,
@@ -164,38 +164,38 @@ export function SearchScreen() {
   const [recentChannelIds, setRecentChannelIds] = useState<readonly string[]>(
     [],
   );
-  useEffect(() => {
-    if (!viewerId) return;
-    let live = true;
-    void readRecentChannels(viewerId, chapterId).then((stored) => {
-      if (live) setRecentChannelIds(stored);
-    });
-    return () => {
-      live = false;
-    };
-  }, [viewerId, chapterId]);
+  // Read each time Search comes into view: it stays mounted under the
+  // thread it opens, and that channel is a recently opened one on return.
+  useFocusEffect(
+    useCallback(() => {
+      if (!viewerId) return;
+      let live = true;
+      void readRecentChannels(viewerId, chapterId).then((stored) => {
+        if (live) setRecentChannelIds(stored);
+      });
+      return () => {
+        live = false;
+      };
+    }, [viewerId, chapterId]),
+  );
   const jump = useChannelJump(recentChannelIds);
+  const { mode: jumpMode, letters: jumpLetters } = jumpModeOf(
+    query,
+    SEARCH_MIN_QUERY_LENGTH,
+  );
 
   // ---- The search -----------------------------------------------------
   const typed = query.trim();
   const debounced = useDebouncedValue(typed, DEBOUNCE_MS);
-  const runnable = isSearchRunnable(typed);
+  // A lone # or `#ab` is still Jump to a channel (#6053), not a search.
+  const runnable = isSearchRunnable(typed) && jumpMode === null;
   const search = useSearch(debounced);
-  const channels = useChannels();
   const modules = useCurrentChapter().data?.enabled_modules;
   // Settings the member can change, by name or synonym (2026-11-19).
   const findSettings = usePhoneSettingsSearch();
   // A council's Chapter tab settings open on the web (#5933).
   const chapterFeatures = !useIsCouncil();
 
-  // A DM's stored name is not what its row shows, so only channels match.
-  const named = useMemo(
-    () =>
-      selectChannels(channels.data).filter(
-        (channel) => !channel.hidden && !isDirectChannel(channel),
-      ),
-    [channels.data],
-  );
   const hiddenGroups = useMemo(() => {
     const hidden = new Set<FindGroup>(["Backwork"]);
     if (!isModuleEnabled(modules, "events")) hidden.add("Events");
@@ -233,7 +233,9 @@ export function SearchScreen() {
     return buildFindResults({
       query: debounced,
       filter: shownFilter,
-      channels: named,
+      // The jumpable channels with their category's name, so a row's hint
+      // matches the jump rows'. No DM: its stored name isn't its row's.
+      channels: jump.findChannels,
       payload: search.data?.payload,
       hiddenGroups,
       settings: findSettings(debounced),
@@ -249,7 +251,7 @@ export function SearchScreen() {
     runnable,
     debounced,
     shownFilter,
-    named,
+    jump.findChannels,
     search.data,
     hiddenGroups,
     findSettings,
@@ -341,9 +343,9 @@ export function SearchScreen() {
         searchGlyph
       />
 
-      {typed === "" || !runnable ? (
+      {jumpMode !== null ? (
         <ChannelJumpList
-          typed={typed}
+          letters={jumpMode === "letters" ? jumpLetters : ""}
           jump={jump}
           onOpen={(channel) => openJumpChannel(channel.id)}
           showMoreNote={chapterFeatures}

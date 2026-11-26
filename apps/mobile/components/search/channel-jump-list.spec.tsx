@@ -29,17 +29,20 @@ const general = ch("c-gen", "general");
 function jumpOf(over: Partial<ChannelJump> = {}): ChannelJump {
   return {
     channels: [exec, rush, brunch, general],
+    findChannels: [],
     unread: [],
     recent: [],
+    countsKnown: true,
     countsFor: () => undefined,
     looksUnread: () => false,
+    isMuted: () => false,
     categoryOf: () => undefined,
     ...over,
   };
 }
 
 function render(
-  typed: string,
+  letters: string,
   jump: ChannelJump,
   onOpen = vi.fn(),
   showMoreNote = true,
@@ -49,7 +52,7 @@ function render(
     tree = create(
       <FrappThemeProvider>
         <ChannelJumpList
-          typed={typed}
+          letters={letters}
           jump={jump}
           onOpen={onOpen}
           showMoreNote={showMoreNote}
@@ -86,9 +89,10 @@ describe("ChannelJumpList (#6053)", () => {
     expect(text.indexOf("Unread")).toBeLessThan(
       text.indexOf("Recently opened"),
     );
+    // Chat home's words for each row, then its category.
     expect(rowLabels(tree)).toEqual([
-      "#exec, 1 mention",
-      "#rush-events, Recruitment, unread",
+      "#exec, 1 mention, 3 unread",
+      "#rush-events, 4 unread, Recruitment",
       "#general",
     ]);
     // Only the mention carries a number (foundations §5).
@@ -97,8 +101,34 @@ describe("ChannelJumpList (#6053)", () => {
     expect(text).not.toContain("from 3 letters");
   });
 
-  it("draws nothing before typing when nothing is unread or recently opened", () => {
-    expect(rowLabels(render("", jumpOf()))).toEqual([]);
+  it("says how to jump when nothing is unread or recently opened", () => {
+    const tree = render("", jumpOf());
+    expect(rowLabels(tree)).toEqual([]);
+    expect(drawnText(tree.root)).toContain(
+      "Nothing unread. Type a channel's name to jump to it.",
+    );
+  });
+
+  it("says nothing of the kind while the unread counts are unknown", () => {
+    const tree = render("", jumpOf({ countsKnown: false }));
+    expect(drawnText(tree.root)).not.toContain("Nothing unread");
+  });
+
+  it("says a muted or private channel is so, as Chat home does", () => {
+    const secret = { ...ch("c-sec", "secret"), type: "PRIVATE" };
+    const tree = render(
+      "",
+      jumpOf({
+        channels: [secret],
+        unread: [secret],
+        countsFor: () => ({ unreadCount: 2, mentionCount: 1 }),
+        looksUnread: () => true,
+        isMuted: () => true,
+      }),
+    );
+    expect(rowLabels(tree)).toEqual([
+      "#secret, private channel, muted, 1 mention, 2 unread",
+    ]);
   });
 
   it("lists the channels two letters match, best first, and opens one", () => {

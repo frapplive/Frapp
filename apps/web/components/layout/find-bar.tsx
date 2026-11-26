@@ -50,6 +50,20 @@ import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
  * The query lives here, not in the dialog, so closing the dialog (Escape or a
  * click outside) and reopening it keeps what was typed.
  */
+/** Apple's platforms, where Ctrl+K is a text field's "delete to end of line". */
+function isApplePlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+}
+
+/**
+ * Whether a K chord pressed inside a text field is the jump key: Cmd+K on a
+ * Mac, Ctrl+K elsewhere. A Mac's plain Ctrl+K stays the field's own.
+ */
+function isJumpChordInText(event: KeyboardEvent): boolean {
+  return isApplePlatform() ? event.metaKey : event.ctrlKey;
+}
+
 type FindEntry = {
   open: boolean;
   query: string;
@@ -122,18 +136,18 @@ export function FindProvider({ children }: { children: ReactNode }) {
        */
       if (document.querySelector("[data-radix-focus-guard]")) return;
       const active = document.activeElement;
-      if (
-        key === "f" &&
+      const inTextField =
         active instanceof HTMLElement &&
         (active.isContentEditable ||
           active.tagName === "TEXTAREA" ||
-          active.tagName === "INPUT")
-      ) {
+          active.tagName === "INPUT");
+      if (inTextField && (key === "f" || !isJumpChordInText(event))) {
         // Someone is typing somewhere else (the chat composer, a form field).
         // Stealing the caret mid-sentence is worse than not binding at all.
         // Cmd/Ctrl+K is the jump key (#6053), so it opens Find from the
         // composer too, as Slack's and Discord's do, and focus goes back
-        // there on close; it means nothing to a text field.
+        // there on close; but a Mac's plain Ctrl+K deletes to the end of
+        // the line in a text field, so there only Cmd+K does.
         return;
       }
       event.preventDefault();
@@ -141,6 +155,9 @@ export function FindProvider({ children }: { children: ReactNode }) {
         active instanceof HTMLElement && active !== document.body
           ? active
           : null;
+      // The jump key opens Find empty, on the unread and recently opened
+      // channels (#6053); Cmd/Ctrl+F and the Search row keep what was typed.
+      if (key === "k") setQuery("");
       setSelectOnOpen(true);
       setOpen(true);
     }

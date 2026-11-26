@@ -6,7 +6,7 @@ import {
   RECENT_CHANNELS_CAP,
   channelJumpLists,
   channelsThatLookUnread,
-  jumpMentionLabel,
+  jumpModeOf,
   jumpableChannels,
   parseRecentChannels,
   rankChannelMatches,
@@ -158,14 +158,19 @@ describe("channelsThatLookUnread", () => {
   });
 });
 
-describe("jumpMentionLabel", () => {
-  it("counts only what addresses the member, up to 99+", () => {
-    expect(jumpMentionLabel({ unreadCount: 12, mentionCount: 0 })).toBeNull();
-    expect(jumpMentionLabel(undefined)).toBeNull();
-    expect(jumpMentionLabel({ unreadCount: 3, mentionCount: 2 })).toBe("@ 2");
-    expect(jumpMentionLabel({ unreadCount: 300, mentionCount: 120 })).toBe(
-      "@ 99+",
-    );
+describe("jumpModeOf", () => {
+  it("draws the lists for nothing, a lone # included", () => {
+    expect(jumpModeOf("", 3)).toEqual({ mode: "lists", letters: "" });
+    expect(jumpModeOf(" # ", 3)).toEqual({ mode: "lists", letters: "" });
+  });
+
+  it("matches channels below the minimum, by the letters after a #", () => {
+    expect(jumpModeOf("ru", 3)).toEqual({ mode: "letters", letters: "ru" });
+    expect(jumpModeOf("#ru", 3)).toEqual({ mode: "letters", letters: "ru" });
+  });
+
+  it("hands three letters and more to the search", () => {
+    expect(jumpModeOf("rus", 3).mode).toBeNull();
   });
 });
 
