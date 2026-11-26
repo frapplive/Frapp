@@ -391,7 +391,7 @@ Confirm signup) once #6134's merge is live on staging and before the next 07:30 
 conformance run, which requires the code-only pair from that merge on. Production is Paul's
 alone, in the order below.
 
-**Production waits for the last phone build that can only follow a link.** Phone builds
+**Production waits for the phone build that asks for the code.** Phone builds
 before the one that carries #6134 have a code box only on the invite card; their s01
 "Magic link" and "Resend email" wait for a link. Mobile JavaScript reaches an installed build
 only as an update for its own `expo.version` (`docs/ops/deployment/mobile.md`), and #6134
@@ -409,15 +409,18 @@ branch and email intents, mobile `createSessionFromUrl`), until:
    link beside it still works).
 2. The first phone build with #6134 is recorded in `apps/mobile/store/shipped-builds.json` on
    both platforms.
-3. `MOBILE_MIN_VERSION_IOS` and `MOBILE_MIN_VERSION_ANDROID` in Infisical `prod` name that
-   build, and a Deploy production carries them, so an older build shows the update screen
-   (`ENV_REFERENCE.md`).
-4. Paul pastes the two code-only templates on `frapp-prod`.
+3. Paul pastes the two code-only templates on `frapp-prod`.
+
+*Paul, 2026-11-26: switch without forcing an update.* The minimum version is not raised for
+this. A build older than the one with #6134 keeps signing in with a password, Google or Apple,
+but its s01 email sign-in and "Resend email" wait for a link that no longer comes, until the
+member updates. Raising `MOBILE_MIN_VERSION_IOS` and `MOBILE_MIN_VERSION_ANDROID` to that build
+(`ENV_REFERENCE.md`) remains the way to retire those builds if that changes.
 
 Then [#6136](https://github.com/pdcarlson/Frapp/issues/6136) deletes the link handling from both apps, drops `emailRedirectTo` from
-the email sends, and drops production conformance's `allowTransitionLink`. Until step 4,
-Production Auth conformance passes either shape (`checkAuthMagicLink` in
-`scripts/ci/staging-conformance.mjs`).
+the email sends, and drops production conformance's `allowTransitionLink`. Until step 3,
+Production Auth conformance requires the code in both bodies and allows a `token_hash` link
+beside it (`checkAuthMagicLink` in `scripts/ci/staging-conformance.mjs`).
 
 #### ADR-25 step 3: the sender becomes Frapp
 
