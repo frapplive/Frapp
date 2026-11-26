@@ -3,7 +3,7 @@
  * need no agent, and they are what stops the corpus from quietly rotting into
  * a set of cases that look adversarial but assert nothing.
  */
-import { DEFAULT_SYSTEM_ROLES } from '#domain/constants/permissions';
+import { DEFAULT_SYSTEM_ROLES, WILDCARD } from '#domain/constants/permissions';
 import { ceilingPermits } from '#domain/utils/permissions';
 import { allEvalCases } from './cases';
 import * as fixtures from './cases/fixtures';
@@ -202,7 +202,7 @@ describe.each(escalationEntries)(
       const callerPermissions = new Set(evalCase.invocation.caller.permissions);
       const attempted = injection.attemptedPermission ?? '';
       expect(
-        callerPermissions.has('*') || callerPermissions.has(attempted),
+        callerPermissions.has(WILDCARD) || callerPermissions.has(attempted),
       ).toBe(true);
     });
   },

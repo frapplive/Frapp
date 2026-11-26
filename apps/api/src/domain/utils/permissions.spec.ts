@@ -30,11 +30,14 @@ describe('resolveRequiredPermissions', () => {
     ).toEqual([['x', 'y'], ['z']]);
   });
 
-  it('sets no group for an empty any-of list', () => {
+  it('sets no group for an empty any-of list at either level', () => {
     expect(resolveRequiredPermissions(['a'], [], [], ['z'])).toEqual({
       all: ['a'],
       anyOf: [['z']],
     });
+    expect(
+      resolveRequiredPermissions(undefined, undefined, ['x'], []).anyOf,
+    ).toEqual([['x']]);
   });
 
   it('copies the metadata, so a caller editing the result leaves it alone', () => {

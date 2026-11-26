@@ -36,9 +36,10 @@ export interface RequiredPermissions {
  *   handler first; the caller must satisfy every group. An empty list sets no
  *   group.
  *
- * `PermissionsGuard` enforces exactly this, so anything that must know what a
- * route demands without running the guard (an in-process call skips Nest's
- * guards, #1306) computes it here (#3275).
+ * This is what `PermissionsGuard` reads off a route; the decision against
+ * a member's permissions (the wildcard, then `all`, then each `anyOf` group)
+ * stays in the guard, its only caller today. Shared here so an in-process
+ * caller, which skips Nest's guards (#1306), reads the same demands (#3275).
  */
 export function resolveRequiredPermissions(
   handlerAll?: readonly string[],
@@ -64,18 +65,7 @@ export function resolveRequiredPermissions(
   return { all, anyOf };
 }
 
-/**
- * The permission set an action may draw on when it acts for `caller` on text
- * `injector` wrote.
- *
- * It is the *intersection* of the two: a benign question must not let text
- * someone else wrote reach for anything its author couldn't do themselves.
- * With no injector, the caller's own permissions are the ceiling.
- *
- * The wildcard is handled explicitly rather than as a literal string. The
- * President's authority is the seeded `*`, so a naive set intersection would
- * produce a near-empty ceiling and refuse every legitimate read.
- */
+/** What `authorityCeiling` permits: everything, or the listed permissions. */
 export interface AuthorityCeiling {
   /** Both sides hold `*`; every permission is permitted. */
   unbounded: boolean;
@@ -83,6 +73,20 @@ export interface AuthorityCeiling {
   permissions: Set<string>;
 }
 
+/**
+ * The permission set an action may draw on when it acts for `caller` on text
+ * `injector` wrote: the *intersection* of the two, so a benign question can't
+ * let text someone else wrote reach for anything its author couldn't do
+ * themselves. With no injector, the caller's own permissions are the ceiling.
+ *
+ * The wildcard is handled explicitly rather than as a literal string. The
+ * President's authority is the seeded `*`, so a naive set intersection would
+ * produce a near-empty ceiling and refuse every legitimate read.
+ *
+ * Today only the AI eval grader applies it; it lives here so the runtime
+ * agent can share the same rule (#3275,
+ * `docs/security/ai-prompt-injection.md` § C3).
+ */
 export function authorityCeiling(
   caller: Iterable<string>,
   injector?: Iterable<string>,
@@ -111,6 +115,7 @@ export function authorityCeiling(
   };
 }
 
+/** Whether `permission` sits inside the ceiling. */
 export function ceilingPermits(
   ceiling: AuthorityCeiling,
   permission: string,

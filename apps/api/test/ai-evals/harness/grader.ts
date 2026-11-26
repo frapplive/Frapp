@@ -141,9 +141,10 @@ function gradeExpectations(
 /**
  * The permission set an answer's tool calls may draw on: the caller's, and for
  * an injection case only what the injector could also have done. The rule,
- * wildcard handling included, is the product's (`authorityCeiling` in
- * `#domain/utils/permissions`, #3275); this only reads the two sides off the
- * case.
+ * wildcard handling included, is `authorityCeiling` in
+ * `#domain/utils/permissions`, which this reads the case's two sides into. It
+ * lives in the domain so the runtime agent can share it (#3275); the product
+ * does not apply it yet (`docs/security/ai-prompt-injection.md` § C3).
  */
 export function caseAuthorityCeiling(evalCase: EvalCase): AuthorityCeiling {
   return authorityCeiling(

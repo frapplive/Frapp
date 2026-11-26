@@ -284,11 +284,11 @@ describe('authority ceiling (criterion 3)', () => {
   });
 });
 
-describe('authority ceiling algebra', () => {
-  // Direct coverage of the wildcard combinations. The corpus only exercises
-  // "wildcard caller, explicit injector"; the other three are reachable by a
-  // non-injection case or an officer injector, so they are pinned here rather
-  // than left to whichever case happens to be added next.
+describe('authority ceiling from an eval case', () => {
+  // The ceiling's algebra, every wildcard combination included, is pinned in
+  // `src/domain/utils/permissions.spec.ts` (#3275). This block pins what the
+  // grader adds: which side of a case is the caller and which the injector,
+  // and that a case with no injection is bounded by the caller alone.
   function ceilingOf(
     callerPermissions: string[],
     injectorPermissions?: string[],
@@ -323,37 +323,23 @@ describe('authority ceiling algebra', () => {
     return caseAuthorityCeiling(evalCase);
   }
 
-  it('is unbounded when both sides hold the wildcard', () => {
-    const ceiling = ceilingOf(['*'], ['*']);
-    expect(ceiling.unbounded).toBe(true);
-    expect(ceilingPermits(ceiling, 'roles:manage')).toBe(true);
-  });
-
-  it('falls back to the injector when only the caller is wildcard', () => {
+  it("bounds an injection case by the injector's permissions", () => {
     const ceiling = ceilingOf(['*'], ['members:view']);
     expect(ceilingPermits(ceiling, 'members:view')).toBe(true);
     expect(ceilingPermits(ceiling, 'roles:manage')).toBe(false);
   });
 
-  it('falls back to the caller when only the injector is wildcard', () => {
+  it("bounds an injection case by the caller's permissions too", () => {
     const ceiling = ceilingOf(['members:view'], ['*']);
-    expect(ceilingPermits(ceiling, 'members:view')).toBe(true);
+    expect(ceiling.unbounded).toBe(false);
     expect(ceilingPermits(ceiling, 'roles:manage')).toBe(false);
   });
 
-  it('intersects when neither side is wildcard', () => {
-    const ceiling = ceilingOf(
-      ['members:view', 'billing:view'],
-      ['members:view', 'polls:create'],
-    );
+  it('is the caller alone when the case has no injection', () => {
+    expect(ceilingOf(['*']).unbounded).toBe(true);
+    const ceiling = ceilingOf(['members:view']);
     expect(ceilingPermits(ceiling, 'members:view')).toBe(true);
-    expect(ceilingPermits(ceiling, 'billing:view')).toBe(false);
-    expect(ceilingPermits(ceiling, 'polls:create')).toBe(false);
-  });
-
-  it('treats a lone wildcard injector as bounded by the caller, not unbounded', () => {
-    const ceiling = ceilingOf(['members:view'], ['*']);
-    expect(ceiling.unbounded).toBe(false);
+    expect(ceilingPermits(ceiling, 'roles:manage')).toBe(false);
   });
 });
 
