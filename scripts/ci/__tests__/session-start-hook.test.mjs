@@ -555,9 +555,11 @@ test("a failed npm ci is reported and the session still starts bringup", async (
   assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 1, "no retry, no npm install");
 });
 
-test("an npm ci that exits 0 but leaves turbo broken counts as failed", (t) => {
+test("an npm ci that exits 0 but leaves turbo broken says so, not that npm failed", (t) => {
   const s = repairScratch(t, { npm: 'echo "npm $*" >> "$NPM_CALLS"' });
-  assert.match(runHook(s, { env: s.env }), /this hook's 'npm ci' failed \(exit 0; log /);
+  const context = runHook(s, { env: s.env });
+  assert.match(context, /after this hook's 'npm ci' succeeded it still cannot/);
+  assert.doesNotMatch(context, /blaming the network/);
 });
 
 test("an npm ci past its time limit is stopped, so the hook still reports", (t) => {
@@ -570,12 +572,37 @@ test("an npm ci past its time limit is stopped, so the hook still reports", (t) 
 });
 
 for (const source of ["clear", "compact"]) {
-  test(`a ${source} fire, mid-session, never runs npm ci`, (t) => {
+  test(`a ${source} fire, mid-session, never runs npm ci, and says so`, (t) => {
     const s = repairScratch(t);
-    runHook(s, { env: s.env, input: JSON.stringify({ hook_event_name: "SessionStart", source }) });
+    const context = runHook(s, { env: s.env, input: JSON.stringify({ hook_event_name: "SessionStart", source }) });
     assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 0);
+    assert.match(context, new RegExp(`does not run 'npm ci' on a ${source}`));
   });
 }
+
+for (const sentinel of [".cloud-sandbox-up.done", ".cloud-sandbox-up.failed"]) {
+  test(`a bringup that finished this boot (${sentinel}) is not followed by npm ci`, (t) => {
+    // Its session may be running the `npm ci` its sentinel told it to, and no bringup would
+    // follow to build the packages, so the repair is not this hook's to make.
+    const s = repairScratch(t);
+    priorLock(s, { boot: "boot-B", sentinel });
+    const context = runHook(s, { boot: "boot-B", env: s.env, input: JSON.stringify({ source: "resume" }) });
+    assert.equal(npmCalls(s).length, 0);
+    assert.match(context, /one already finished in this container, so it did not run 'npm ci'/);
+    assert.match(context, /already finished this session/);
+    assert.doesNotMatch(context, /Bringup builds the workspace packages as usual/);
+  });
+}
+
+test("a lock from an earlier boot is repaired before the relaunch", async (t) => {
+  const s = repairScratch(t);
+  priorLock(s, { boot: "boot-A", sentinel: ".cloud-sandbox-up.failed" });
+  const context = runHook(s, { boot: "boot-B", env: s.env });
+  assert.match(context, /so this hook ran 'npm ci' before starting bringup/);
+  assert.match(context, /restarted since the last bringup/);
+  assert.ok(await eventually(() => npmCalls(s).includes("bringup")));
+  assert.equal(npmCalls(s)[0].split(" in ")[0], "npm ci --no-audit --no-fund");
+});
 
 test("a resume fire repairs like a startup", (t) => {
   const s = repairScratch(t);
@@ -590,6 +617,7 @@ test("npm ci never runs beside a live bringup", async (t) => {
   lockPid(s, pid);
   const context = runHook(s, { env: s.env });
   assert.match(context, /stack bringup is still running/);
+  assert.match(context, /a bringup is running, so this hook did not run 'npm ci' beside it/);
   assert.equal(npmCalls(s).length, 0);
 });
 
@@ -604,6 +632,36 @@ test("two session starts at once run one npm ci; the second finds turbo working"
     });
   assert.deepEqual(await Promise.all([fire(), fire()]), [0, 0]);
   assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 1);
+});
+
+test("when the first session start's npm ci fails, the one that waited does not install again", async (t) => {
+  const s = repairScratch(t, { npm: 'echo "npm $*" >> "$NPM_CALLS"; sleep 1; exit 1' });
+  const env = hookEnv(s, { env: s.env });
+  const fire = () =>
+    new Promise((resolve) => {
+      const child = spawn("bash", [HOOK], { env, stdio: ["pipe", "pipe", "pipe"] });
+      let out = "";
+      child.stdout.on("data", (d) => (out += d));
+      child.stdin.end();
+      child.on("close", (code) => resolve({ code, context: JSON.parse(out).hookSpecificOutput.additionalContext }));
+    });
+  const runs = await Promise.all([fire(), fire()]);
+  assert.deepEqual(runs.map((r) => r.code), [0, 0]);
+  assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 1);
+  assert.ok(runs.some((r) => /another session start's 'npm ci' did not fix it/.test(r.context)));
+});
+
+test("a session start that cannot get the repair's turn in time does not install", (t) => {
+  // Another hook holds the turn (a stand-in holding the flock); this one waits its limit
+  // (FRAPP_NPM_CI_WAIT, the install's plus 20 seconds by default) and gives up without
+  // running npm ci.
+  const s = repairScratch(t);
+  const holder = spawn("flock", [`${s.lock}.npm-ci`, "sleep", "30"]);
+  t.after(() => holder.kill("SIGKILL"));
+  spawnSync("sleep", ["0.3"]);
+  const context = runHook(s, { env: { ...s.env, FRAPP_NPM_CI_WAIT: "1" } });
+  assert.match(context, /another session start is still running 'npm ci' on it/);
+  assert.equal(npmCalls(s).filter((c) => c.startsWith("npm")).length, 0);
 });
 
 test("a laptop session never runs npm ci", (t) => {
@@ -826,7 +884,7 @@ function alive(pid) {
  * machine's real bringup log.
  */
 function realBringup(s) {
-  for (const lib of ["cloud-sandbox-common.sh", "supabase-cli.sh", "local-postgres-acl.sh", "local-seed-data.sh"]) {
+  for (const lib of ["cloud-sandbox-common.sh", "node-deps.sh", "supabase-cli.sh", "local-postgres-acl.sh", "local-seed-data.sh"]) {
     copyFileSync(path.join(REPO_ROOT, "scripts", "lib", lib), path.join(s.root, "scripts", "lib", lib));
   }
   copyFileSync(BRINGUP, path.join(s.root, "scripts", "cloud-sandbox-up.sh"));

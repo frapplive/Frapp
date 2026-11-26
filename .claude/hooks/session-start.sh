@@ -1,6 +1,7 @@
 #!/bin/bash
-# SessionStart hook: in the cloud sandbox only, kick off the local Docker + Supabase + API
-# stack in the background. Work tracking lives in GitHub Issues (via the GitHub MCP) —
+# SessionStart hook: in the cloud sandbox only, repair a node_modules that cannot run turbo
+# (in the foreground: Claude's first response waits for it), then kick off the local Docker +
+# Supabase + API stack in the background. Work tracking lives in GitHub Issues (via the GitHub MCP) —
 # there is no in-repo backlog to summarize here; /next reads the tracker directly.
 set -euo pipefail
 
@@ -137,7 +138,9 @@ sys.stdout.write("".join(parts))
 }
 
 # Cloud sandbox: launch the local stack in the background so the session is never blocked
-# on the ~60-90s bringup. Gated on `in_cloud` above, so local laptop sessions skip it. A
+# on the ~60-90s bringup. The one foreground step is the node_modules repair, only when
+# turbo cannot run, and time-capped (see there): anything else added here blocks every
+# session start. Gated on `in_cloud` above, so local laptop sessions skip it. A
 # /tmp lock prevents relaunching on session resume.
 # See docs/internal/environment/CLOUD_SANDBOX.md.
 if [ -n "$in_cloud" ] && [ -f "$ROOT/scripts/cloud-sandbox-up.sh" ] && [ -f "$ROOT/scripts/lib/bringup-lock.sh" ]; then
@@ -180,23 +183,53 @@ if [ -n "$in_cloud" ] && [ -f "$ROOT/scripts/cloud-sandbox-up.sh" ] && [ -f "$RO
   #   - `npm ci` deletes node_modules first, so it runs only when turbo does not run at all
   #     (node_deps_turbo_runs, the very check bringup fails on): a tree that cannot start a
   #     gate has nothing left to destroy. A merely incomplete tree is left alone.
-  #   - No race with the session: Claude's first response waits for SessionStart hooks, and
-  #     `clear` and `compact` fires, which come mid-session while the agent may have its own
-  #     commands running, never repair. No race with bringup either: it runs only when no
-  #     bringup holds the lock, and before this hook launches one. Two hooks at once take
-  #     turns on a flock beside the lock, and the second re-checks after the first.
+  #   - It runs only when this hook is about to launch bringup (repair_wanted): no lock, a lock
+  #     from an earlier boot, or a dead one with no sentinel. Then no bringup is running, and
+  #     no session in this container has been told to run `npm ci` itself, since that comes
+  #     from a finished bringup's sentinel. Bringup then builds the workspace packages. Never on
+  #     `clear` or `compact` fires, which come mid-session.
+  #   - No race with this session: Claude's first response waits for SessionStart hooks.
+  #   - Two hooks at once take turns on a flock on `$LOCK.npm-ci` (node_deps_guard). One that
+  #     had to wait for the turn never installs, since the holder already tried: it re-checks
+  #     and reports. One that cannot get the turn in time does not install either.
   #   - `npm ci` alone, never an `npm install` fallback, which would rewrite the tracked
   #     package-lock.json on the session's branch.
   #
-  # Bounded by NPM_CI_TIMEOUT, well under the 600-second default a SessionStart command hook
-  # gets: a hook cancelled at its timeout loses all its output, STARTING_MSG included. A
-  # failure is reported and the session starts as before; bringup's sentinel still reads
-  # `(dependencies)`. Bringup builds the workspace packages, so the hook does not.
+  # Time: Claude Code cancels a SessionStart command hook at 600s by default and drops all
+  # its output, STARTING_MSG included. The install is capped at NPM_CI_TIMEOUT; a waiting
+  # hook gives up at NPM_CI_WAIT, 20s after that, so neither path passes about 440s plus
+  # the 10s decision guard.
+  # When the hook does not repair a broken tree, it says why; its log is written only when it
+  # ran `npm ci`.
   NPM_CI_LOG="${FRAPP_NPM_CI_LOG:-/tmp/cloud-sandbox-npm-ci.log}"
   NPM_CI_TIMEOUT="${FRAPP_NPM_CI_TIMEOUT:-420}"
+  NPM_CI_WAIT="${FRAPP_NPM_CI_WAIT:-$(( NPM_CI_TIMEOUT + 20 ))}"
+  YOURSELF="Run 'npm ci' yourself, then build the workspace packages with 'npx turbo run build --filter=\"./packages/*\"'."
+
+  # Whether the decision below will launch a bringup, which then builds the packages. A lock
+  # this boot left with a sentinel beside it is a bringup that finished, whose session may be
+  # running its own `npm ci` right now. An old hook's lock with no boot id counts as finished.
+  repair_wanted() {
+    [ -d "$LOCK" ] || return 0
+    bringup_lock_live "$LOCK" && return 1
+    local lock_boot
+    lock_boot="$(cat "$LOCK/boot_id" 2>/dev/null || true)"
+    if [ -n "$current_boot" ] && [ -n "$lock_boot" ] && [ "$lock_boot" != "$current_boot" ]; then
+      return 0
+    fi
+    if [ -f "$ROOT/.cloud-sandbox-up.done" ] || [ -f "$ROOT/.cloud-sandbox-up.failed" ]; then
+      return 1
+    fi
+    return 0
+  }
+
   repair_node_deps() {
-    node_deps_turbo_runs "$ROOT" && return 0
-    if [ -d "$LOCK" ] && bringup_lock_live "$LOCK"; then
+    if ! repair_wanted; then
+      if [ -d "$LOCK" ] && bringup_lock_live "$LOCK"; then
+        msg="${msg} Cloud sandbox: node_modules cannot run turbo, and a bringup is running, so this hook did not run 'npm ci' beside it. Wait for its sentinel, which will read '(dependencies)'. ${YOURSELF}"
+      else
+        msg="${msg} Cloud sandbox: node_modules cannot run turbo. This hook repairs it only before it starts a bringup, and one already finished in this container, so it did not run 'npm ci'. ${YOURSELF}"
+      fi
       return 0
     fi
     local started status
@@ -205,23 +238,46 @@ if [ -n "$in_cloud" ] && [ -f "$ROOT/scripts/cloud-sandbox-up.sh" ] && [ -f "$RO
       && status=0 || status=$?
     if [ "$status" -eq 0 ] && node_deps_turbo_runs "$ROOT"; then
       msg="${msg} Cloud sandbox: node_modules could not run turbo, so this hook ran 'npm ci' before starting bringup ($(( $(date +%s) - started ))s; log ${NPM_CI_LOG}). Bringup builds the workspace packages as usual."
+    elif [ "$status" -eq 0 ]; then
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, and after this hook's 'npm ci' succeeded it still cannot (log ${NPM_CI_LOG}). The install finished, so look at node_modules/.bin/turbo and turbo's platform package, not the network."
     elif [ "$status" -eq 124 ]; then
-      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' did not finish within ${NPM_CI_TIMEOUT}s, so it was stopped (log ${NPM_CI_LOG}). Run 'npm ci' yourself, then build the packages, as the '(dependencies)' sentinel will say."
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' did not finish within ${NPM_CI_TIMEOUT}s, so it was stopped (log ${NPM_CI_LOG}). ${YOURSELF}"
     else
-      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' failed (exit ${status}; log ${NPM_CI_LOG}). Read that log before blaming the network: the registry rides the default allowlist. Bringup's sentinel will read '(dependencies)'."
+      msg="${msg} Cloud sandbox: node_modules could not run turbo, and this hook's 'npm ci' failed (exit ${status}; log ${NPM_CI_LOG}). Read that log before blaming the network: the registry rides the default allowlist. ${YOURSELF}"
     fi
   }
-  if [ -f "$ROOT/scripts/lib/node-deps.sh" ] && command -v npm >/dev/null 2>&1; then
-    case "$hook_source" in
-      clear | compact) ;;
-      *)
-        # shellcheck source=scripts/lib/node-deps.sh
-        . "$ROOT/scripts/lib/node-deps.sh"
-        node_deps_guard "$LOCK.npm-ci" "$NPM_CI_TIMEOUT"
-        repair_node_deps
-        node_deps_unguard
-        ;;
-    esac
+
+  if [ -f "$ROOT/scripts/lib/node-deps.sh" ]; then
+    # shellcheck source=scripts/lib/node-deps.sh
+    . "$ROOT/scripts/lib/node-deps.sh"
+    if ! node_deps_turbo_runs "$ROOT"; then
+      case "$hook_source" in
+        clear | compact)
+          msg="${msg} Cloud sandbox: node_modules cannot run turbo. This hook does not run 'npm ci' on a ${hook_source}, which comes mid-session. ${YOURSELF}"
+          ;;
+        *)
+          if ! command -v npm >/dev/null 2>&1; then
+            msg="${msg} Cloud sandbox: node_modules cannot run turbo, and npm is not on PATH, so this hook could not repair it. Tell the user."
+          else
+            node_deps_guard "$LOCK.npm-ci" "$NPM_CI_WAIT" && guard=0 || guard=$?
+            case "$guard" in
+              0) repair_node_deps ;;
+              2)
+                if node_deps_turbo_runs "$ROOT"; then
+                  msg="${msg} Cloud sandbox: node_modules could not run turbo; another session start repaired it while this one waited."
+                else
+                  msg="${msg} Cloud sandbox: node_modules cannot run turbo, and another session start's 'npm ci' did not fix it (log ${NPM_CI_LOG}; its own session was told why). ${YOURSELF}"
+                fi
+                ;;
+              *)
+                msg="${msg} Cloud sandbox: node_modules cannot run turbo, and another session start is still running 'npm ci' on it, so this one did not start another. Check again in a few minutes before running 'npm ci' yourself (log ${NPM_CI_LOG})."
+                ;;
+            esac
+            node_deps_unguard
+          fi
+          ;;
+      esac
+    fi
   fi
 
   # One session start decides at a time. Every branch below reads the lock and then acts on

@@ -16,13 +16,18 @@ node_deps_turbo_runs() {
     && "$root/node_modules/.bin/turbo" --version >/dev/null 2>&1
 }
 
-# Take turns at repairing the tree: a flock on file $1, on fd 8, waiting at most $2 seconds;
-# node_deps_unguard releases it. Two session starts at once would otherwise run two `npm ci`
-# over one node_modules. Where flock is missing, nothing is serialized.
+# Take turns at repairing the tree: a flock on file $1, on fd 8; node_deps_unguard releases it.
+# Two session starts at once would otherwise run two `npm ci` over one node_modules. Unlike
+# bringup_guard (scripts/lib/bringup-lock.sh), the caller needs to know how it got the turn:
+#   0  at once, or flock is missing (nothing is serialized): this caller may repair
+#   2  after waiting for another holder: that one already tried, so this caller must not
+#   1  not within $2 seconds: another holder is still at it, so this caller must not
 node_deps_guard() {
-  if command -v flock >/dev/null 2>&1 && { exec 8>>"$1"; } 2>/dev/null; then
-    flock -w "$2" 8 2>/dev/null || true
-  fi
+  command -v flock >/dev/null 2>&1 || return 0
+  { exec 8>>"$1"; } 2>/dev/null || return 0
+  flock -n 8 2>/dev/null && return 0
+  flock -w "$2" 8 2>/dev/null && return 2
+  return 1
 }
 
 node_deps_unguard() {
