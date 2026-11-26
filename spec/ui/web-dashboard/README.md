@@ -1003,7 +1003,7 @@ Flushed together on 2026-11-05 (with `/polls`, since retired, #3871); the board 
 - **Study zones are a flush list** with quiet row actions, and New study zone (a `NewButton`) sits on the Zones section's label row, since Study zones is a Settings section rather than a page with a header of its own.
 - **Denied copy names the role, never the permission key**: "Your role can't see every poll." was the shape, not `polls:view_all`.
 - **Dates in the house shapes**: `@repo/formatting`'s display helpers ("Friday, November 6 · 5:00 – 7:00 PM", "Due tomorrow", "Overdue by 2 days"), written out as [`writing.md` § 5a](../design-system/writing.md#5a-dates-and-times) says, never a numeric date with seconds.
-  Both apps' task due lines read the same helpers through `@repo/hooks`' `taskDueLine`, and both chat event cards read `formatEventWindow` ("Tonight · 6:00 – 7:00 PM"), since #4135 (2026-11-12).
+  Both apps' task due lines read the same helpers through `@repo/hooks`' `taskDueLine`, and both chat event cards read `formatEventWhen` ("Tonight · 6:00 – 7:00 PM", or "Friday · All day" for a dated event; `formatEventWindow` until #6098), since #4135 (2026-11-12).
   Mobile's event rows still format their times with their own copy until they read these ([#3420](https://github.com/pdcarlson/Frapp/issues/3420)).
 
 ### Recruitment
