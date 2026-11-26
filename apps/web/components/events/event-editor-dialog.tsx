@@ -739,9 +739,9 @@ type CreateShapeFields =
   | { timing: EventTiming; start_date: string; end_date?: string };
 
 /**
- * `POST /v1/events` as this form sends it: `useCreateEvent`'s body, which
- * still requires a time and points, widened to the dated shape and the
- * tentative and calendar-only flags the API takes since #6098.
+ * `POST /v1/events` as this form sends it: `useCreateEvent`'s body, with
+ * the shape held as either times or a dated event's days, never both
+ * (#6098), and the agenda.
  */
 type CreateEventBody = Omit<
   Parameters<ReturnType<typeof useCreateEvent>["mutateAsync"]>[0],
