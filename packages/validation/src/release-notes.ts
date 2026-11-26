@@ -124,6 +124,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     title: "New in this update",
     changes: [
       "Signing in or confirming a new account by email now gives you a 6-digit code to type right where you asked for it.",
+      "You can ask for more time on a task with a reason, and up to a day with a good reason is granted right away; officers can mark a task's deadline as fixed.",
     ],
     web: [
       "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, and officers see the chapter's board under Everyone's.",
