@@ -93,11 +93,14 @@ export function useJumpToLatest({
   }, []);
 
   const detach = useRef<(() => void) | null>(null);
+  const scrollerElement = useRef<HTMLElement | null>(null);
   const scrollerRef = useCallback(
-    (element: HTMLElement | Window | null) => {
+    (next: HTMLElement | Window | null) => {
       detach.current?.();
       detach.current = null;
-      if (!(element instanceof HTMLElement)) return;
+      scrollerElement.current = next instanceof HTMLElement ? next : null;
+      if (!(next instanceof HTMLElement)) return;
+      const element = next;
       let lastTop = element.scrollTop;
       const onScroll = () => {
         const top = element.scrollTop;
@@ -124,6 +127,25 @@ export function useJumpToLatest({
 
   const markNewest = useCallback(() => moveTo("newest"), [moveTo]);
 
+  /**
+   * Reads the zone from where the scroller is now, for a scroll made there in
+   * code to somewhere other than the end: the timeline opening on a channel's
+   * first unread message (#6052). The scroll events that brought it there
+   * moved down from the list's top, which the rule above takes for an arrival
+   * being followed, so they never left `newest` on their own.
+   */
+  const measure = useCallback(() => {
+    const scroller = scrollerElement.current;
+    if (!scroller || scroller.clientHeight <= 0) return;
+    moveTo(
+      zoneFor(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        scroller.clientHeight,
+        followWithin,
+      ),
+    );
+  }, [followWithin, moveTo]);
+
   const seenWhenLeft = state.seenWhenLeft;
   const hasNewBelow = useMemo(
     () => zone !== "newest" && arrivedSince(rows, seenWhenLeft),
@@ -133,6 +155,7 @@ export function useJumpToLatest({
   return {
     scrollerRef,
     markNewest,
+    measure,
     /** Draw the jump control. */
     showsJump: zone === "away" || hasNewBelow,
     hasNewBelow,

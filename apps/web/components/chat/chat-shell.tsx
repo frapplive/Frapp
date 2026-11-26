@@ -53,6 +53,9 @@ import {
   useSetChannelBackground,
   chatBackgroundErrorCopy,
   useMarkChannelRead,
+  newMessagesMark,
+  readArrival,
+  type UnreadArrival,
   useCategories,
   useChapterRoster,
   useMemberDisplayNames,
@@ -93,6 +96,7 @@ import {
 import { sidebarThreadsByChannel } from "@repo/chat-core/threads";
 import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
 import { typingLabel } from "@repo/chat-core/typing-label";
+
 import { attachmentRequestBody } from "@repo/chat-core/adapters";
 import {
   channelPreviewLine,
@@ -2308,6 +2312,12 @@ export function ChatShell({
   // `now()`; there is no mark-read-to-a-message.
   const markRead = useMarkChannelRead();
   const markReadMutate = markRead.mutate;
+  // The timeline's "New messages" pill's Mark as read (#6052). Opening already
+  // stamped the cursor; this stamps it again for anything since, and the pill
+  // takes its divider away.
+  const markActiveChannelRead = useCallback(() => {
+    if (activeChannelId) markReadMutate(activeChannelId);
+  }, [activeChannelId, markReadMutate]);
   /*
     Only while the thread is on screen. Below `lg` the list and the thread are
     one screen each, and a member back on the list (the arrow, `Esc`, the
@@ -2975,6 +2985,54 @@ export function ChatShell({
     // The counts landed after the channel did (a first load).
     setArrival({ ...arrival, unread: liveUnread });
   }
+  /*
+    The "New messages" divider and pill (#6052) take the count and the
+    cursor the same way, once per visit: when the channel changes, and each
+    time the thread comes back on screen (below `lg`, back from the channel
+    list; the panel shown again), since leaving stamped it read. The stamps
+    while it is on screen move neither. A visit that opens before the counts
+    first answer takes the first answer.
+  */
+  const [threadVisit, setThreadVisit] = useState({
+    onScreen: threadOnScreen,
+    count: 0,
+  });
+  if (threadVisit.onScreen !== threadOnScreen) {
+    setThreadVisit({
+      onScreen: threadOnScreen,
+      count: threadVisit.count + (threadOnScreen ? 1 : 0),
+    });
+  }
+  const liveCounted: UnreadArrival | null =
+    liveUnread === null
+      ? null
+      : (readArrival(unreadQuery.data, activeChannelId) ?? {
+          unread: 0,
+          lastReadAt: null,
+        });
+  const [unreadAtOpen, setUnreadAtOpen] = useState<{
+    channelId: string | null;
+    visit: number;
+    counted: UnreadArrival | null;
+  }>({ channelId: null, visit: -1, counted: null });
+  if (
+    unreadAtOpen.channelId !== activeChannelId ||
+    unreadAtOpen.visit !== threadVisit.count
+  ) {
+    setUnreadAtOpen({
+      channelId: activeChannelId,
+      visit: threadVisit.count,
+      counted: liveCounted,
+    });
+  } else if (unreadAtOpen.counted === null && liveCounted !== null) {
+    setUnreadAtOpen({ ...unreadAtOpen, counted: liveCounted });
+  }
+  const countedAtOpen =
+    unreadAtOpen.channelId === activeChannelId ? unreadAtOpen.counted : null;
+  const newMessages = useMemo(
+    () => newMessagesMark(countedAtOpen),
+    [countedAtOpen],
+  );
   const arrivedAt = useRef<{ channelId: string; at: string } | null>(null);
   useEffect(() => {
     arrivedAt.current = activeChannelId
@@ -4395,6 +4453,8 @@ export function ChatShell({
                   avatarFor={avatarFor}
                   messages={channel.messages}
                   askTurns={askTurns}
+                  newMessages={newMessages}
+                  onMarkRead={markActiveChannelRead}
                   threadUnread={threadUnread}
                   blockList={{ blockState, thread }}
                   onUnblock={handleUnblock}

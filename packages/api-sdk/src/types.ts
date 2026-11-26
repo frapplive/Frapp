@@ -9673,6 +9673,11 @@ export interface components {
             unread_count: number;
             /** @description Subset of unread_count that mentions the caller. Mentions are resolved server-side at send time. */
             mention_count: number;
+            /**
+             * Format: date-time
+             * @description The caller’s read cursor the counts were taken from; null for a channel they never opened. Places the thread’s “New messages” divider; never re-count from it.
+             */
+            last_read_at: string | null;
         };
         ForwardedGifDto: {
             provider: string;
@@ -15522,7 +15527,7 @@ export interface components {
              */
             return_url?: string;
             /**
-             * @description For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps or Settings → Calendar.
+             * @description For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps. `calendar` is the retired Settings → Calendar address, which now opens Linked apps.
              * @enum {string}
              */
             web_return?: "events" | "linked_apps" | "calendar";

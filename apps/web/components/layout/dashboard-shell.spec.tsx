@@ -395,7 +395,9 @@ describe("DashboardShell", () => {
     expect(notificationsLive.calls).toBeGreaterThan(0);
   });
 
-  it("does not answer Cmd+K, and advertises no ⌘K", () => {
+  // Cmd/Ctrl+K opens Find, the jump key (#6053), and no keycap advertises
+  // it, as none advertises Cmd/Ctrl+F (2026-11-05).
+  it("answers Cmd+K with Find, and advertises no ⌘K", () => {
     shell();
     const event = new KeyboardEvent("keydown", {
       key: "k",
@@ -406,7 +408,7 @@ describe("DashboardShell", () => {
     act(() => {
       window.dispatchEvent(event);
     });
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
     expect(screen.queryByText(/⌘K/)).toBeNull();
   });
 
@@ -454,14 +456,15 @@ describe("DashboardShell", () => {
       expect(popover.querySelector("[data-channel-list-slot]")).not.toBeNull();
     });
 
-    it("holds a gated row's place while permissions are read, so nothing below it moves (#3854)", () => {
+    it("leaves no gap where a gated row will go while permissions are read (#6121)", () => {
       setWindowWidth(1440);
       mockPermissions.value = undefined;
       shell();
       expect(
         within(primary()).queryByRole("link", { name: "Directory" }),
       ).toBeNull();
-      expect(primary().querySelector("[data-nav-placeholder]")).not.toBeNull();
+      expect(primary().querySelector("[data-nav-placeholder]")).toBeNull();
+      expect(primary().querySelector(".skeleton-shimmer")).toBeNull();
     });
 
     it("draws the chapter as a label at the head, with the bell and the collapse control, and no chapter menu", () => {
@@ -809,6 +812,13 @@ describe("DashboardShell", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
       expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
+    });
+
+    it("hides beside personal Settings too, which takes the row like Chapter settings (#6032)", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/preferences";
+      const { container } = shell();
+      expect(chatPanel(container)).toHaveClass("hidden");
     });
 
     it("is not built beside a page below lg, where the shell is one page", () => {

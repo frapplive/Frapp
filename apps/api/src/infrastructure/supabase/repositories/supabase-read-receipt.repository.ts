@@ -51,6 +51,7 @@ export class SupabaseReadReceiptRepository implements IChannelReadReceiptReposit
       channel_id: row.channel_id,
       unread_count: Number(row.unread_count),
       mention_count: Number(row.mention_count),
+      last_read_at: row.last_read_at ?? null,
     }));
   }
 

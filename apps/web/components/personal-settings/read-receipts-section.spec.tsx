@@ -33,7 +33,7 @@ vi.mock("@/lib/providers/network-provider", () => ({
 
 const { ReadReceiptsSection } = await import("./read-receipts-section");
 
-/** Settings → Appearance and chat → Read receipts (#5519). */
+/** Settings → Chat → Direct messages → Read receipts (#5519, #6032). */
 describe("ReadReceiptsSection", () => {
   beforeEach(() => {
     Object.assign(state, {
