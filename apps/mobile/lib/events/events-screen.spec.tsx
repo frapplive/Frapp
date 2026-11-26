@@ -1054,7 +1054,6 @@ describe("Calendar long-press menus", () => {
     expect(labels(tree)).toEqual([
       "Mark done",
       "Start",
-      "Ask for more time",
       "Edit",
       "Reassign",
       "Duplicate",
@@ -1125,7 +1124,6 @@ describe("Calendar long-press menus", () => {
     expect(labels(tree)).toEqual([
       "Mark done",
       "Start",
-      "Ask for more time",
       "Edit",
       "Reassign",
       "Duplicate",
