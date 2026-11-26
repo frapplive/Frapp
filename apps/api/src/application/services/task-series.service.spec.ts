@@ -26,6 +26,7 @@ const SERIES: TaskSeries = {
   proof_kind: 'none',
   subtask_titles: [],
   attachments: [],
+  fixed_deadline: false,
   due_time: '21:00:00',
   recurrence_rule: RULE,
   first_due_date: '2026-11-09',
@@ -63,6 +64,7 @@ const copy = (over: Partial<Task> = {}): Task => ({
   meeting_id: null,
   followed_by: null,
   attachments: [],
+  fixed_deadline: false,
   created_at: '2026-11-10T00:00:00.000Z',
   ...over,
 });

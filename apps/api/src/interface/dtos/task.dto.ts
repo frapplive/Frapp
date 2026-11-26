@@ -280,6 +280,14 @@ export class CreateTaskDto {
   proof_kind?: TaskProofKind;
 
   @ApiPropertyOptional({
+    description:
+      'A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group\'s copies and a series\' copies all carry it.',
+  })
+  @IsOptional()
+  @IsStrictBoolean()
+  fixed_deadline?: boolean;
+
+  @ApiPropertyOptional({
     description: TASK_RECURRENCE_RULE_DESCRIPTION,
     maxLength: MAX_REPEAT_RULE_LENGTH,
   })
@@ -507,6 +515,12 @@ export class CreateTaskResponseDto implements Task {
   })
   attachments: FrappLink[];
 
+  @ApiProperty({
+    description:
+      'A fixed deadline (#6096): never eligible for an extension, and shown more urgent to its assignee.',
+  })
+  fixed_deadline: boolean;
+
   @ApiProperty({ format: 'date-time' })
   created_at: string;
 
@@ -688,6 +702,14 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsIn(TASK_PROOF_KINDS)
   proof_kind?: TaskProofKind;
+
+  @ApiPropertyOptional({
+    description:
+      'A fixed deadline (#6096): no extensions. Turning it on closes a request for more time still waiting on the task. With `scope: group` every copy not yet confirmed; with `scope: series` the copies still to come too.',
+  })
+  @IsOptional()
+  @IsStrictBoolean()
+  fixed_deadline?: boolean;
 
   @ApiPropertyOptional({
     type: String,

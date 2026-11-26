@@ -125,6 +125,8 @@ export function activitySnoozedRows(
     if (
       row.kind === "reminder" ||
       row.kind === "task-group" ||
+      // A request for more time (#6096) waits until someone answers it.
+      row.kind === "extension" ||
       row.kind === "minutes-to-write" ||
       row.kind === "minutes-draft" ||
       row.kind === "minutes-notes"

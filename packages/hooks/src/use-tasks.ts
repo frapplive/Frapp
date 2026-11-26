@@ -342,7 +342,7 @@ async function cancelTaskQueries(
  * here: the clear runs after commit, so an in-flight `onSettled` can still
  * resolve against the old chapter first.
  */
-function invalidateTask(
+export function invalidateTask(
   queryClient: QueryClient,
   chapterId: string | null,
   id: string,

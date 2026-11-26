@@ -44,6 +44,14 @@ export interface Member {
   chat_timeout_reason?: string | null;
   /** The `users.id` of the officer who set the timeout. */
   chat_timeout_by?: string | null;
+  /**
+   * When the member was granted a 3rd extension in 30 days (#6096): they
+   * can't ask for more time on a task until an officer restores it. Optional
+   * only so fixtures written before the column needn't name it.
+   */
+  extension_requests_blocked_at?: string | null;
+  /** When an officer last restored it; earlier extensions stop counting. */
+  extension_requests_restored_at?: string | null;
   created_at: string;
   updated_at: string;
 }

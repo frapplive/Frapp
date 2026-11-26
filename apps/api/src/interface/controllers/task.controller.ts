@@ -66,6 +66,15 @@ import {
   ShareTaskToChatResponseDto,
 } from '../dtos/task.dto';
 import { OpenTaskDto } from '../dtos/open-task.dto';
+import {
+  BlockedFromExtensionsDto,
+  DeclineTaskExtensionDto,
+  DecideTaskExtensionResponseDto,
+  RequestTaskExtensionDto,
+  RequestTaskExtensionResponseDto,
+  RestoreTaskExtensionsDto,
+} from '../dtos/task-extension.dto';
+import { TaskExtensionService } from '../../application/services/task-extension/task-extension.service';
 import { ThrottleFanOutWrite } from '../decorators/throttle-profiles.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { TASK_FOLLOWER_COPY } from '@repo/validation';
@@ -86,6 +95,7 @@ export class TaskController {
     private readonly taskSeriesService: TaskSeriesService,
     private readonly rbacService: RbacService,
     private readonly openTaskService: OpenTaskService,
+    private readonly extensionService: TaskExtensionService,
   ) {}
 
   @Get()
@@ -125,6 +135,35 @@ export class TaskController {
     );
   }
 
+  @Get('extension-requests/blocked')
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @ApiOperation({
+    summary: "Members who can't ask for more time (#6096)",
+    description:
+      'Each was granted 3 extensions in 30 days. An officer restores one with `POST /v1/tasks/extension-requests/restore`.',
+  })
+  @ApiOkResponse({ type: [BlockedFromExtensionsDto] })
+  listBlockedFromExtensions(
+    @CurrentChapterId() chapterId: string,
+  ): Promise<BlockedFromExtensionsDto[]> {
+    return this.extensionService.listBlocked(chapterId);
+  }
+
+  @Post('extension-requests/restore')
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Let a member ask for more time again (#6096)',
+    description:
+      'Clears the block 3 extensions in 30 days put on them; extensions granted before now stop counting. 404 when they could already ask.',
+  })
+  async restoreExtensions(
+    @CurrentChapterId() chapterId: string,
+    @Body() dto: RestoreTaskExtensionsDto,
+  ): Promise<void> {
+    await this.extensionService.restore(chapterId, dto.user_id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get task by id' })
   async getOne(
@@ -150,7 +189,12 @@ export class TaskController {
     if (!(await this.taskService.mayRead(task, chapterId, userId, isAdmin))) {
       throw new ForbiddenException('Access denied to this task');
     }
-    return this.taskService.asReadBy(task, userId, isAdmin);
+    const [view] = await this.taskService.withViewerStanding(
+      chapterId,
+      userId,
+      [task],
+    );
+    return this.taskService.asReadBy(view, userId, isAdmin);
   }
 
   @Post('photo-upload-url')
@@ -253,6 +297,7 @@ export class TaskController {
       point_reward: dto.point_reward ?? null,
       reference_photo_paths: dto.reference_photo_paths,
       proof_kind: dto.proof_kind,
+      fixed_deadline: dto.fixed_deadline,
       recurrence_rule: dto.recurrence_rule,
       channel_id: dto.channel_id,
       client_message_id: dto.client_message_id,
@@ -390,6 +435,89 @@ export class TaskController {
       requirePhoto: dto.require_photo,
       actorUserId: userId,
     });
+  }
+
+  @Post(':id/extension-requests')
+  @ApiOperation({
+    summary: 'Ask for more time on a task (#6096)',
+    description:
+      "The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 `task.extension_fixed_deadline`), while they may ask (403 `task.extension_blocked` after 3 extensions in 30 days). One waiting request per task (409 `task.extension_waiting`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.",
+  })
+  @ApiCreatedResponse({ type: RequestTaskExtensionResponseDto })
+  @FeatureEvent(
+    'task-extension-requested',
+    ({ result }: FeatureEventInput<unknown, RequestTaskExtensionResponseDto>) => ({
+      auto_approved: result.extension.auto_approved,
+      needs_officer: result.extension.needs_officer ?? 'none',
+      now_blocked: result.now_blocked,
+    }),
+  )
+  requestExtension(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestTaskExtensionDto,
+  ): Promise<RequestTaskExtensionResponseDto> {
+    return this.extensionService.request({
+      chapterId,
+      userId,
+      taskId: id,
+      dueDate: dto.due_date,
+      dueAt: dto.due_at ?? null,
+      reason: dto.reason,
+    });
+  }
+
+  @Post(':id/extension-requests/:requestId/approve')
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @ApiOperation({
+    summary: 'Approve a request for more time (#6096)',
+    description:
+      "Moves the task's due through the officer's edit, so the reminders re-arm, and tells the member. Not your own request (403). 409 when someone answered first, or when the task changed since they asked (done, handed over, re-dated or fixed: `task.extension_stale`, and the request is closed).",
+  })
+  @ApiCreatedResponse({ type: DecideTaskExtensionResponseDto })
+  @FeatureEvent('task-extension-approved')
+  async approveExtension(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+  ): Promise<DecideTaskExtensionResponseDto> {
+    return {
+      extension: await this.extensionService.approve(
+        chapterId,
+        id,
+        requestId,
+        userId,
+      ),
+    };
+  }
+
+  @Post(':id/extension-requests/:requestId/decline')
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @ApiOperation({
+    summary: 'Decline a request for more time, with a reason (#6096)',
+    description:
+      'The due stays and the member is told why. The same refusals as approving.',
+  })
+  @ApiCreatedResponse({ type: DecideTaskExtensionResponseDto })
+  @FeatureEvent('task-extension-declined')
+  async declineExtension(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body() dto: DeclineTaskExtensionDto,
+  ): Promise<DecideTaskExtensionResponseDto> {
+    return {
+      extension: await this.extensionService.decline(
+        chapterId,
+        id,
+        requestId,
+        userId,
+        dto.reason,
+      ),
+    };
   }
 
   @Post(':id/release')

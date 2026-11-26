@@ -36,6 +36,7 @@ import { ROLE_TIER_REPOSITORY } from '#domain/repositories/role-tier.repository.
 import type { IRoleTierRepository } from '#domain/repositories/role-tier.repository.interface';
 import { accessHolderFromRoles } from '#domain/utils/channel-access';
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
+import { TASK_EXTENSION_REQUEST_REPOSITORY } from '#domain/repositories/task-extension-request.repository.interface';
 import type { IOpenTaskRepository } from '#domain/repositories/open-task.repository.interface';
 import {
   STORAGE_PROVIDER,
@@ -83,6 +84,7 @@ describe('TaskService', () => {
       'findByChapter' | 'findMemberIds' | 'findById'
     >
   >;
+  let mockExtensionRepo: Record<string, jest.Mock>;
   let mockOpenTaskRepo: jest.Mocked<
     Pick<IOpenTaskRepository, 'findClaimedFrom'>
   >;
@@ -122,6 +124,7 @@ describe('TaskService', () => {
     meeting_id: null,
     followed_by: null,
     attachments: [],
+    fixed_deadline: false,
     created_at: '2026-02-26T00:00:00.000Z',
   };
 
@@ -247,6 +250,12 @@ describe('TaskService', () => {
       }),
     };
 
+    mockExtensionRepo = {
+      latestForTasks: jest.fn().mockResolvedValue(new Map()),
+      standing: jest.fn().mockResolvedValue(null),
+      withdrawPending: jest.fn().mockResolvedValue(undefined),
+      listPending: jest.fn().mockResolvedValue([]),
+    };
     linkRepos = frappLinkRepoMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -263,6 +272,10 @@ describe('TaskService', () => {
         { provide: CHAPTER_GROUP_REPOSITORY, useValue: mockGroupRepo },
         { provide: ROLE_TIER_REPOSITORY, useValue: mockTierRepo },
         { provide: OPEN_TASK_REPOSITORY, useValue: mockOpenTaskRepo },
+        {
+          provide: TASK_EXTENSION_REQUEST_REPOSITORY,
+          useValue: mockExtensionRepo,
+        },
         FrappLinkChecker,
         ...linkRepos.providers,
       ],
@@ -862,6 +875,7 @@ describe('TaskService', () => {
         subtask_titles: ['Open it'],
         followed_by: null,
         attachments: [],
+        fixed_deadline: false,
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -2047,6 +2061,7 @@ describe('TaskService', () => {
         latest_due_at: '2026-11-17T02:00:00.000Z',
         next_due_date: '2026-11-23',
         attachments: [],
+        fixed_deadline: false,
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -3356,6 +3371,8 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
+        extension_requests_blocked: false,
       });
     });
 
@@ -3376,6 +3393,8 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
+        extension_requests_blocked: false,
       });
     });
 
@@ -3652,6 +3671,7 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
       });
     });
 

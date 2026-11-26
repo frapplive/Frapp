@@ -50,6 +50,7 @@ const task = (overrides: Partial<TaskView>): TaskView => ({
   meeting_id: null,
   followed_by: null,
   attachments: [],
+  fixed_deadline: false,
   created_at: iso(-48 * HOUR),
   ...overrides,
 });
@@ -105,6 +106,7 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
       ),
     ),
     listAssignedItems: jest.fn().mockResolvedValue([]),
+    waitingExtensions: jest.fn().mockResolvedValue([]),
   };
   const serviceEntryService = {
     findByChapterFiltered: jest.fn().mockResolvedValue([]),
