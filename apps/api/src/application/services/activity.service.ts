@@ -59,6 +59,10 @@ import type { Member } from '#domain/entities/member.entity';
 import type { ServiceEntry } from '#domain/entities/service-entry.entity';
 import { TaskStatus } from '#domain/entities/task.entity';
 import type { TaskGroupSummary, TaskView } from '#domain/entities/task.entity';
+import type {
+  TaskExtensionAiVerdict,
+  TaskExtensionNeedsOfficer,
+} from '#domain/entities/task-extension-request.entity';
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
   CARD_VOTE_ACTION_TYPE,
@@ -157,6 +161,11 @@ export interface ActivityTask {
    * group is. `null` for a one-person task.
    */
   group: TaskGroupSummary | null;
+  /**
+   * A fixed deadline (#6096): no extensions, and its assignee's row reads
+   * more urgent.
+   */
+  fixed_deadline: boolean;
   created_at: string;
   /**
    * Whether the caller hasn't opened it since it appeared
@@ -442,12 +451,40 @@ export interface ActivityWeek {
   unavailable: ActivityWeekPart[];
 }
 
+/**
+ * A member's request for more time an officer decides (#6096,
+ * `spec/behavior/tasks.md` § Asking for more time): the task as a row, the
+ * due asked for, the reason, and why it waits on an officer.
+ */
+export interface ActivityTaskExtension {
+  /** The request's id. */
+  id: string;
+  task: ActivityTask;
+  /** Empty when the member cannot be resolved (they have left). */
+  requester_name: string;
+  reason: string;
+  from_due_date: string;
+  from_due_at: string | null;
+  to_due_date: string;
+  to_due_at: string | null;
+  needs_officer: TaskExtensionNeedsOfficer | null;
+  /** What AI made of the reason, when it was asked. */
+  ai_verdict: TaskExtensionAiVerdict | null;
+  ai_note: string | null;
+  created_at: string;
+}
+
 export interface ActivityView {
   needs_you: {
     /** Open tasks assigned to the caller, soonest due first. */
     tasks: ActivityTask[];
     /** Finished tasks the caller can confirm, longest waiting first. */
     task_confirmations: ActivityTask[];
+    /**
+     * Requests for more time the caller can decide (#6096), oldest first.
+     * Not snoozable; empty without `tasks:manage`.
+     */
+    task_extensions: ActivityTaskExtension[];
     /** Pending service entries the caller can approve, oldest first. */
     hours_approvals: ActivityHoursEntry[];
     /** Open polls the caller can read and hasn't voted on, soonest closing first. */
@@ -853,6 +890,7 @@ function activityTaskRow(
     sent_back_at: task.sent_back_at ?? null,
     proof_kind: task.proof_kind ?? 'none',
     group: task.group ?? null,
+    fixed_deadline: task.fixed_deadline ?? false,
     created_at: task.created_at,
     unread: false,
     snoozed_until: null,
@@ -997,7 +1035,13 @@ export class ActivityService {
     chapterId: string,
     userId: string,
     enabledModules: EnabledModules,
-    options: { weekStart?: Date; now?: Date; minutes?: boolean } = {},
+    options: {
+      weekStart?: Date;
+      now?: Date;
+      minutes?: boolean;
+      /** The client draws requests for more time (#6096). */
+      extensions?: boolean;
+    } = {},
   ): Promise<ActivityView> {
     const permissions = await this.rbacService.getEffectivePermissions(
       chapterId,
@@ -1073,7 +1117,14 @@ export class ActivityService {
     ] = await Promise.all([
       this.settle('tasks', chapterId, () =>
         on('tasks')
-          ? this.readTasks(chapterId, userId, permissions, weekStart, nowDate)
+          ? this.readTasks(
+              chapterId,
+              userId,
+              permissions,
+              weekStart,
+              nowDate,
+              options.extensions === true,
+            )
           : Promise.resolve({
               mine: [],
               confirmations: [],
@@ -1081,6 +1132,7 @@ export class ActivityService {
               assigned: [],
               assignedItems: [],
               doneThisWeek: 0,
+              extensions: [],
             }),
       ),
       this.settle('hours_approvals', chapterId, () =>
@@ -1173,6 +1225,7 @@ export class ActivityService {
       assigned: [],
       assignedItems: [],
       doneThisWeek: 0,
+      extensions: [],
     });
     const hoursApprovals = valueOf('hours_approvals', hours, []);
     const pollLists = valueOf('polls', polls, {
@@ -1241,6 +1294,7 @@ export class ActivityService {
       // still counted, which takes 26 waiting confirmations to matter.
       taskLists.confirmationsWaiting -
       (confirmations.length - awake(confirmations).length) +
+      taskLists.extensions.length +
       awake(approvals).length +
       awake(unvoted).length +
       awake(unanswered).length +
@@ -1256,6 +1310,7 @@ export class ActivityService {
       needs_you: {
         tasks: awakeFirst(myTasks).slice(0, LIST_LIMIT),
         task_confirmations: awakeFirst(confirmations).slice(0, LIST_LIMIT),
+        task_extensions: taskLists.extensions,
         hours_approvals: awakeFirst(approvals).slice(0, LIST_LIMIT),
         polls: awakeFirst(unvoted).slice(0, LIST_LIMIT),
         cards: awakeFirst(unanswered).slice(0, LIST_LIMIT),
@@ -1550,6 +1605,8 @@ export class ActivityService {
           needs_you.hours_approvals,
           (row) => row.id,
         ),
+        // Not unread-marked: a request is new until someone answers it.
+        task_extensions: needs_you.task_extensions,
         polls: mark('poll', needs_you.polls, (row) => row.message_id),
         cards: needs_you.cards.map((row) =>
           unread.has(`${cardReadKind(row)}:${row.message_id}`)
@@ -2013,6 +2070,11 @@ export class ActivityService {
     permissions: string[],
     weekStart: number,
     now: Date,
+    /**
+     * Whether the client draws requests for more time (#6096): a build from
+     * before them gets none, so its badge never counts rows it can't show.
+     */
+    withExtensions = false,
   ): Promise<{
     mine: ActivityTask[];
     confirmations: ActivityTask[];
@@ -2022,6 +2084,8 @@ export class ActivityService {
     assignedItems: ActivityTaskItem[];
     /** The caller's own tasks marked done since the week began. */
     doneThisWeek: number;
+    /** Requests for more time the caller can decide (#6096). */
+    extensions: ActivityTaskExtension[];
   }> {
     const canManage = can(SystemPermissions.TASKS_MANAGE, permissions);
     // Each list is its own read, filtered in SQL, so none depends on reading
@@ -2034,7 +2098,7 @@ export class ActivityService {
     // (`TaskService.confirmCompletion`, the no-self-award rule), so yours are
     // not offered as waiting on you.
     const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
-    const [own, waiting, made, madeItems] = await Promise.all([
+    const [own, waiting, made, madeItems, extensions] = await Promise.all([
       // The caller's tasks not yet confirmed and, in the same read, those
       // they marked done since the week began, confirmed or not: marking it
       // done was the member's part. One sent back since is open again and is
@@ -2064,6 +2128,22 @@ export class ActivityService {
       // The same, a task for everyone once (#5492), under the same rule.
       canManage
         ? this.taskService.listAssignedItems(chapterId, userId, LIST_LIMIT, now)
+        : Promise.resolve([]),
+      // Requests for more time (#6096), for every officer as confirmations
+      // are; the push goes to the task's creator and the group it is from.
+      // A failed read of them costs this list alone, not the task section.
+      canManage && withExtensions
+        ? this.taskService
+            .waitingExtensions(chapterId, userId, LIST_LIMIT)
+            .catch((error: unknown) => {
+              reportCaughtFailure(this.logger, {
+                level: 'warning',
+                site: 'activity-task-extensions',
+                message: `could not read requests for more time in ${chapterId}`,
+                error,
+              });
+              return [];
+            })
         : Promise.resolve([]),
     ]);
     const doneThisWeek = own.tasks.filter(
@@ -2107,10 +2187,13 @@ export class ActivityService {
       item.kind === 'task' ? [item.task] : [],
     );
     const names = await this.namesOf(
-      [...mine, ...confirmations, ...assigned, ...singles].flatMap((task) => [
-        task.assignee_id,
-        task.created_by,
-      ]),
+      [
+        ...mine,
+        ...confirmations,
+        ...assigned,
+        ...singles,
+        ...extensions.map((row) => row.task),
+      ].flatMap((task) => [task.assignee_id, task.created_by]),
     );
     const toRow = (task: TaskView) => activityTaskRow(task, names);
     return {
@@ -2128,6 +2211,22 @@ export class ActivityService {
             },
       ),
       doneThisWeek,
+      extensions: extensions.map(
+        ({ request, task }): ActivityTaskExtension => ({
+          id: request.id,
+          task: toRow(task),
+          requester_name: names.get(request.requester_id) ?? '',
+          reason: request.reason,
+          from_due_date: request.from_due_date,
+          from_due_at: request.from_due_at,
+          to_due_date: request.to_due_date,
+          to_due_at: request.to_due_at,
+          needs_officer: request.needs_officer,
+          ai_verdict: request.ai_verdict,
+          ai_note: request.ai_note,
+          created_at: request.created_at,
+        }),
+      ),
     };
   }
 

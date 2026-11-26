@@ -667,6 +667,34 @@ const CASES: Record<string, Partial<Record<FeatureEventName, Case[]>>> = {
       ],
     ],
   },
+  'TaskController.requestExtension': {
+    'task-extension-requested': [
+      [
+        'a day approved at once',
+        {
+          result: {
+            extension: { auto_approved: true, needs_officer: null },
+            now_blocked: false,
+          },
+        },
+        { auto_approved: true, needs_officer: 'none', now_blocked: false },
+      ],
+      [
+        'more than a day, to an officer',
+        {
+          result: {
+            extension: { auto_approved: false, needs_officer: 'over_a_day' },
+            now_blocked: false,
+          },
+        },
+        {
+          auto_approved: false,
+          needs_officer: 'over_a_day',
+          now_blocked: false,
+        },
+      ],
+    ],
+  },
   'TaskController.create': {
     'task-created': [
       [

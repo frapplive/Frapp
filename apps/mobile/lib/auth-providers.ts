@@ -2,23 +2,24 @@ import { describeOAuthError } from "@repo/hooks/auth-error-copy";
 
 export type OAuthProvider = "apple" | "google";
 
-// Mobile s01 keeps the password and magic-link form behind "Continue with
+// Mobile s01 keeps the password and email-code form behind "Continue with
 // email" (#3349), so these name that button rather than controls that aren't
 // on screen when an OAuth kickoff fails. Web's copy lives in
 // `apps/web/lib/auth/oauth.ts`, where the form is always visible.
 export const IDENTITY_COLLISION_COPY =
-  "An account with this email already exists. Tap Continue with email and sign in with your password or a magic link. Google or Apple can attach to that same account on later visits.";
+  "An account with this email already exists. Tap Continue with email and sign in with your password or an email code. Google or Apple can attach to that same account on later visits.";
 
 export const OAUTH_UNAVAILABLE_COPY =
-  "This sign-in method isn't available yet. Tap Continue with email to use your password or a magic link.";
+  "This sign-in method isn't available yet. Tap Continue with email to use your password or an email code.";
 
 /**
- * An email link (magic link or confirmation) that was opened after it expired,
- * or a second time. The form that asks for a new one is behind Continue with
- * email, so this names that button.
+ * An email link (a magic link or confirmation from before #6134, or one
+ * production's transition-era template still prints beside the code) opened
+ * after it expired, or a second time. The form that sends a code is behind
+ * Continue with email, so this names that button.
  */
 export const DEAD_LINK_COPY =
-  "That sign-in link has expired or was already used. Tap Continue with email to get a new one.";
+  "That sign-in link has expired or was already used. Tap Continue with email to get a code.";
 
 export const START_FAILED_COPY = "Unable to start sign-in. Retry in a moment.";
 export const FINISH_FAILED_COPY = "Unable to finish sign-in. Retry in a moment.";

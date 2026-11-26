@@ -2,14 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { READ_RECEIPTS_COPY, useReadReceiptsSetting } from "@repo/hooks";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { PERSONAL_SETTINGS_COPY } from "@repo/validation";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useToast } from "@/lib/hooks/use-toast";
 
 /**
- * The Read receipts switch (#5519, Paul, 2026-11-18), under Appearance and
- * chat, as the phone keeps it under Settings › Chat. Two-way, as WhatsApp's
+ * The Read receipts switch (#5519, Paul, 2026-11-18), under Settings › Chat ›
+ * Direct messages on both apps (#6032). Two-way, as WhatsApp's
  * is; the copy and the write are `useReadReceiptsSetting`'s, shared with the
  * phone. Drawn once the settings read has answered, so a member who turned it
  * off never sees it on first.
@@ -32,8 +32,8 @@ export function ReadReceiptsSection() {
   if (!setting.ready) return null;
 
   return (
-    <ProfileSection id="read-receipts" title={READ_RECEIPTS_COPY.label}>
-      <SettingsGroup>
+    <section id="read-receipts" className="scroll-mt-16">
+      <SettingsGroup heading={PERSONAL_SETTINGS_COPY.directMessages}>
         <SettingsRow
           label={READ_RECEIPTS_COPY.label}
           description={READ_RECEIPTS_COPY.description}
@@ -42,6 +42,6 @@ export function ReadReceiptsSection() {
           onCheckedChange={setting.setEnabled}
         />
       </SettingsGroup>
-    </ProfileSection>
+    </section>
   );
 }

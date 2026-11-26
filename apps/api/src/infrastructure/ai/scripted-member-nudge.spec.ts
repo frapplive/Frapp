@@ -37,6 +37,7 @@ const TASK: Task = {
   meeting_id: null,
   followed_by: null,
   attachments: [],
+  fixed_deadline: false,
   created_at: '2026-11-08T15:00:00.000Z',
 };
 

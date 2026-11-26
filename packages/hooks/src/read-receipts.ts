@@ -5,7 +5,7 @@ import { useUpdateUserSettings, useUserSettings } from "./use-notifications";
 
 /**
  * The Read receipts switch (#5519, Paul, 2026-11-18), the same on the phone's
- * Settings › Chat and web's Appearance and chat.
+ * Settings › Chat and web's Settings → Chat (#6032).
  *
  * Two-way, as WhatsApp's is: off, the member's reads of a direct message are
  * not reported to anyone, and they are told about no one's, so their own

@@ -9,6 +9,7 @@ import {
 import { scriptedChatCatchUp } from './scripted-chat-catch-up';
 import type { ScriptedReplies } from './scripted-language-model';
 import { scriptedMemberNudge } from './scripted-member-nudge';
+import { scriptedTaskExtensionReason } from './scripted-task-extension-reason';
 import {
   scriptedMinutesDraft,
   scriptedMinutesNotes,
@@ -38,4 +39,5 @@ export const SCRIPTED_REPLIES: ScriptedReplies = {
   'minutes.draft': scriptedMinutesDraft,
   'minutes.notes': scriptedMinutesNotes,
   'nudges.write': scriptedMemberNudge,
+  'tasks.extension-reason': scriptedTaskExtensionReason,
 };

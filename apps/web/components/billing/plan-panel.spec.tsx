@@ -99,7 +99,9 @@ vi.mock("@/components/shared/can", () => ({
   },
 }));
 
-vi.mock("@/lib/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
+vi.mock("@/lib/hooks/use-toast", () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
 
 const { PlanPanel } = await import("./plan-panel");
 
@@ -123,13 +125,13 @@ function setParam(value: string | null) {
   mockSearchParams.mockReturnValue({ get: () => value });
 }
 
-function renderPanel(props: { invoicesHref?: string } = {}) {
+function renderPanel() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={qc}>
-      <PlanPanel {...props} />
+      <PlanPanel />
     </QueryClientProvider>,
   );
 }
@@ -147,9 +149,7 @@ describe("the panel states plan status, always (4d)", () => {
     setChapter("active");
     renderPanel();
 
-    expect(
-      screen.getByRole("heading", { name: "Pro" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pro" })).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     // No recovery to offer; the portal is the secondary action.
     expect(
@@ -288,14 +288,11 @@ describe("the meta line carries only facts that exist", () => {
     expect(screen.getByText(/past due since/i)).toBeInTheDocument();
   });
 
-  it("links to the invoice list on the same page when given an anchor", () => {
+  it("links to no invoice list: the invoices are their own row (#6031)", () => {
     setChapter("active");
-    renderPanel({ invoicesHref: "#invoices" });
+    renderPanel();
 
-    expect(screen.getByRole("link", { name: "Invoices" })).toHaveAttribute(
-      "href",
-      "#invoices",
-    );
+    expect(screen.queryByRole("link", { name: "Invoices" })).toBeNull();
   });
 });
 
@@ -378,8 +375,10 @@ describe("recovery splits by status (#929)", () => {
     await waitFor(() => expect(mockCheckoutMutate).toHaveBeenCalledTimes(1));
     expect(mockCheckoutMutate).toHaveBeenCalledWith({
       customer_email: "treasurer@example.edu",
-      success_url: "https://app.frapp.test/settings?tab=billing&checkout=success",
-      cancel_url: "https://app.frapp.test/settings?tab=billing&checkout=cancelled",
+      success_url:
+        "https://app.frapp.test/settings?tab=billing&checkout=success",
+      cancel_url:
+        "https://app.frapp.test/settings?tab=billing&checkout=cancelled",
     });
     // Blocking, and the hand-off is the whole of it: the panel never flips its
     // own chip to Active on the way out.
@@ -606,9 +605,7 @@ describe("the three permission branches are three different facts", () => {
     setChapter("incomplete");
     renderPanel();
 
-    expect(
-      screen.queryByText(/ask an officer/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/ask an officer/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("can-default-loading")).toBeInTheDocument();
   });
 
@@ -741,14 +738,11 @@ describe("the panel names no plan the chapter does not hold", () => {
     expect(screen.getByText("Unknown")).toBeInTheDocument();
   });
 
-  it("does not carry the board's page-title tracking on its plan name", () => {
-    // `4d:244` puts -0.3px on the 24px page title; `4d:245`'s 22px plan name
-    // has no letter-spacing. The title is not rendered on this route at all.
+  it("names the plan in a row heading under the page's own title (#6031)", () => {
     setChapter("active");
     renderPanel();
 
-    const heading = screen.getByRole("heading", { name: "Pro" });
-    expect(heading.className).toContain("text-[22px]");
+    const heading = screen.getByRole("heading", { level: 3, name: "Pro" });
     expect(heading.className).not.toContain("tracking-");
   });
 });

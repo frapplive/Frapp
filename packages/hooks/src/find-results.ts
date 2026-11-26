@@ -1,5 +1,6 @@
 import { formatDay, formatDayTime } from "@repo/formatting";
 import { memberLabel } from "./display-names";
+import { jumpableChannels, rankChannelMatches } from "./channel-jump";
 import type { SettingMatch } from "./settings-search";
 
 /**
@@ -66,6 +67,9 @@ function asArray<T>(value: unknown): T[] {
 type ChannelRow = {
   id?: string;
   name?: string | null;
+  type?: string;
+  hidden?: boolean;
+  /** The category's name, the row's hint. */
   category?: string | null;
 };
 
@@ -184,19 +188,33 @@ export function buildFindResults({
   const channelRows = asArray<ChannelRow>(channels);
   const out: FindResult[] = [];
 
+  // Channels rank as Jump to a channel ranks them (#6053): a name that starts
+  // with the words first, then a word inside it, then anywhere. A direct
+  // message's stored name is not what its row shows, so it never matches.
   if (wants("Channels")) {
-    let count = 0;
-    for (const row of channelRows) {
-      const name = row.name ?? "";
-      if (!name.toLowerCase().includes(needle)) continue;
+    const named = jumpableChannels(
+      channelRows.flatMap((row) =>
+        row.id && row.name
+          ? [
+              {
+                id: row.id,
+                name: row.name,
+                type: row.type ?? "PUBLIC",
+                hidden: row.hidden,
+                category: row.category,
+              },
+            ]
+          : [],
+      ),
+    );
+    for (const row of rankChannelMatches(named, needle, limit)) {
       out.push({
-        id: `channel-${row.id ?? name}`,
+        id: `channel-${row.id}`,
         group: "Channels",
-        label: name,
+        label: row.name,
         hint: row.category ?? undefined,
-        target: { type: "channel", channelId: row.id ?? null },
+        target: { type: "channel", channelId: row.id },
       });
-      if (++count >= limit) break;
     }
   }
 

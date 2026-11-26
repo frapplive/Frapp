@@ -4,6 +4,10 @@ import type {
   TaskGroupProgress,
   TaskProofKind,
 } from '@repo/validation';
+import type {
+  TaskExtensionNeedsOfficer,
+  TaskExtensionStatus,
+} from './task-extension-request.entity';
 
 export enum TaskStatus {
   TODO = 'TODO',
@@ -99,6 +103,12 @@ export interface Task {
    * hold the same list; a series' copies are made with its template's.
    */
   attachments: FrappLink[];
+  /**
+   * A fixed deadline (#6096, Paul 2026-11-25): never eligible for an
+   * extension, and shown more urgent to its assignee. Set by whoever creates
+   * or edits the task (`tasks:manage`).
+   */
+  fixed_deadline: boolean;
   created_at: string;
 }
 
@@ -173,6 +183,8 @@ export interface TaskSeries {
   subtask_titles: string[];
   /** What each copy is made with (Frapp links). */
   attachments: FrappLink[];
+  /** Whether each copy has a fixed deadline (#6096). */
+  fixed_deadline: boolean;
   /** Copies' time of day on the rule's wall clock (`HH:MM:SS`), or null. */
   due_time: string | null;
   /** The rule, in the event rule format with an open end allowed. */
@@ -250,6 +262,33 @@ export interface TaskView extends Task {
    * list and detail reads.
    */
   followed_by_name?: string | null;
+  /**
+   * The latest request for more time on the task (#6096), for its assignee
+   * and `tasks:manage` holders; null when there is none, and never sent to
+   * a follower. Present on the list and detail reads.
+   */
+  extension?: TaskExtensionSummary | null;
+  /**
+   * For the assignee's own read only: true while they can't ask for more
+   * time (3 extensions in 30 days, until an officer restores it, #6096).
+   */
+  extension_requests_blocked?: boolean;
+}
+
+/** What a task read says about its latest request for more time (#6096). */
+export interface TaskExtensionSummary {
+  id: string;
+  status: TaskExtensionStatus;
+  reason: string;
+  from_due_date: string;
+  from_due_at: string | null;
+  to_due_date: string;
+  to_due_at: string | null;
+  needs_officer: TaskExtensionNeedsOfficer | null;
+  auto_approved: boolean;
+  decline_reason: string | null;
+  decided_at: string | null;
+  created_at: string;
 }
 
 /** Which of a task's photos: the officer's reference or the assignee's proof. */

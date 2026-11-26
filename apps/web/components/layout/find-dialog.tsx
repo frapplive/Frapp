@@ -21,12 +21,22 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  useChannels,
+  JUMP_MORE_FROM_LETTERS,
+  JUMP_NOTHING_YET,
+  JUMP_RECENT_LABEL,
+  JUMP_UNREAD_LABEL,
+  badgeLabel,
+  jumpModeOf,
+  rankChannelMatches,
+  unreadAnnouncement,
+  useActiveChapterId,
+  useChannelJump,
   useDepartments,
   usePermissionList,
   useSearch,
   SEARCH_MIN_QUERY_LENGTH,
   SEARCH_COMPLETED_EVENT,
+  type JumpChannel,
 } from "@repo/hooks";
 import { canAny } from "@repo/validation";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -38,7 +48,12 @@ import { AnalyticsContext } from "@/lib/providers/analytics-provider";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { DialogOverlay } from "@/components/ui/dialog";
 import { EYEBROW } from "@/components/ui/typography";
+import { Badge } from "@/components/ui/badge";
+import { chatDeepLink } from "@/lib/chat/chat-links";
+import { readRecentChannels } from "@/lib/chat/last-channel";
+import { useChatViewerId } from "@/lib/chat/viewer-id";
 import {
+  ALL_GROUP_LIMIT,
   FIND_GROUPS,
   buildFindResults,
   type FindFilter,
@@ -48,7 +63,9 @@ import {
 
 /**
  * The Find dialog: a centered search over channels, settings, members,
- * messages, events and backwork, opened by Cmd/Ctrl+F or the top-bar field (`find-bar.tsx`).
+ * messages, events and backwork, opened by Cmd/Ctrl+F, Cmd/Ctrl+K, the
+ * sidebar's Search row or, below `lg`, the top bar's field (`find-bar.tsx`).
+ * Before a search's minimum it is Jump to a channel (#6053, below).
  *
  * **Why a dialog again.** #2141 replaced the ⌘K palette with a field that
  * dropped its results under itself, 520px wide. Paul picked a centered dialog
@@ -68,6 +85,19 @@ import {
  * Focus never leaves the input while arrowing: the list is an
  * `aria-activedescendant` listbox, as the field's dropdown was.
  */
+
+/**
+ * A row Find draws: a search result, or a Jump to a channel row (#6053), which
+ * carries its own heading (Unread, Recently opened), its weight and its
+ * mention count.
+ */
+type FindRow = FindResult & {
+  heading?: string;
+  unread?: boolean;
+  badge?: string | null;
+  /** What a screen reader hears for its unread, as on the channel list. */
+  announcement?: string;
+};
 
 export const FIND_PLACEHOLDER = "Find channels, members, messages and more";
 /** A council's Find lists its channels alone (#5933). */
@@ -222,7 +252,16 @@ function FindPanel({
   const isCouncil = useIsCouncil();
   if (isCouncil) placeholder = COUNCIL_FIND_PLACEHOLDER;
   const search = useSearch(isCouncil ? "" : debouncedQuery);
-  const channels = useChannels();
+  // Jump to a channel's facts (#6053): the lists, and the channels with their
+  // category's name, which the search's Channels group takes too.
+  const viewerId = useChatViewerId();
+  const chapterKey = useActiveChapterId() ?? "sole";
+  // Read when the panel mounts, which is each time Find opens.
+  const recentIds = useMemo(
+    () => readRecentChannels(viewerId, chapterKey),
+    [viewerId, chapterKey],
+  );
+  const jump = useChannelJump(recentIds);
   const isModuleEnabled = useChapterModuleGate();
   const permissions = usePermissionList();
   // Settings the member can change, found by name or synonym (2026-11-19).
@@ -272,7 +311,7 @@ function FindPanel({
         ? buildFindResults({
             query: debouncedQuery,
             filter: effectiveFilter,
-            channels: channels.data,
+            channels: jump.findChannels,
             payload: search.data?.payload,
             departments: departments.data,
             hiddenGroups,
@@ -283,13 +322,65 @@ function FindPanel({
       hasMinQuery,
       debouncedQuery,
       effectiveFilter,
-      channels.data,
+      jump.findChannels,
       search.data,
       departments.data,
       hiddenGroups,
       findSettings,
     ],
   );
+
+  /*
+   * Jump to a channel (#6053, Paul's pick of 2026-11-25). Before anything is
+   * typed Find lists the unread channels, then the ones this browser opened
+   * lately; with fewer letters than a search needs it lists the channels
+   * that match them, at once, from the list already in memory. Both read the
+   * raw query, not the debounced one, so Enter opens a channel without the
+   * 200ms wait a search needs. The rules are `@repo/hooks` `channel-jump.ts`,
+   * shared with the phone's Search.
+   */
+  const { mode: jumpMode, letters: typedLetters } = jumpModeOf(
+    query,
+    SEARCH_MIN_QUERY_LENGTH,
+  );
+  const jumpRows = useMemo<FindRow[]>(() => {
+    if (jumpMode === null) return [];
+    const row = (channel: JumpChannel, heading: string): FindRow => {
+      const counts = jump.countsFor(channel.id);
+      return {
+        id: `jump-${heading}-${channel.id}`,
+        group: "Channels",
+        heading,
+        label: channel.name,
+        hint: jump.categoryOf(channel),
+        target: { type: "channel", channelId: channel.id },
+        href: chatDeepLink({ channelId: channel.id }),
+        unread: jump.looksUnread(channel.id),
+        // A count only for a mention (foundations §5); a screen reader
+        // hears the channel list's words either way.
+        badge:
+          counts && counts.mentionCount > 0
+            ? badgeLabel(counts.unreadCount, counts.mentionCount)
+            : null,
+        announcement:
+          counts && jump.looksUnread(channel.id)
+            ? unreadAnnouncement(counts)
+            : undefined,
+      };
+    };
+    if (jumpMode === "lists") {
+      return [
+        ...jump.unread.map((channel) => row(channel, JUMP_UNREAD_LABEL)),
+        ...jump.recent.map((channel) => row(channel, JUMP_RECENT_LABEL)),
+      ];
+    }
+    return rankChannelMatches(
+      jump.channels,
+      typedLetters,
+      ALL_GROUP_LIMIT * 2,
+    ).map((channel) => row(channel, "Channels"));
+  }, [jumpMode, jump, typedLetters]);
+  const rows: FindRow[] = jumpMode === null ? results : jumpRows;
 
   // A new query or filter means a new list, so the preselection goes back to
   // the top. Adjusted during render rather than in an effect, so the reset
@@ -384,14 +475,17 @@ function FindPanel({
   );
 
   // "Searching..." only for text that will actually be searched.
+  // A jump list reads the raw text, so the search's status and timeouts,
+  // which read the debounced text, stand down while one is drawn.
   const showResults =
-    hasMinQuery ||
-    (isDebouncing && query.trim().length >= SEARCH_MIN_QUERY_LENGTH);
+    jumpMode === null &&
+    (hasMinQuery ||
+      (isDebouncing && query.trim().length >= SEARCH_MIN_QUERY_LENGTH));
   const isLoading = search.isFetching || isDebouncing;
 
   // The highlight starts on the first result, which may not be there yet:
   // then no row is lit, and Enter waits for it.
-  const rowCount = results.length;
+  const rowCount = rows.length;
   const activeIndex = movedTo !== null && movedTo < rowCount ? movedTo : 0;
 
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -406,9 +500,10 @@ function FindPanel({
       setMovedTo((activeIndex - 1 + rowCount) % rowCount);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      // The list still belongs to the previous text; see `hasMinQuery`.
-      if (isDebouncing) return;
-      openResult(results[activeIndex]);
+      // The list still belongs to the previous text; see `hasMinQuery`. A
+      // jump list reads the raw text, so it is never behind.
+      if (isDebouncing && jumpMode === null) return;
+      openResult(rows[activeIndex]);
     }
   }
 
@@ -441,7 +536,7 @@ function FindPanel({
    * scan degrades alone, which means a partial timeout has to be announced
    * even when the list is showing hits.
    */
-  const partialTimeout = timedOut && results.length > 0;
+  const partialTimeout = showResults && timedOut && results.length > 0;
   let statusMessage: string | null = null;
   if (!showResults) {
     statusMessage = null;
@@ -455,9 +550,10 @@ function FindPanel({
       : "No matches.";
   }
 
+  const listShown = showResults || jumpMode !== null;
   const activeId =
-    showResults && results[activeIndex]
-      ? `find-option-${results[activeIndex]!.id}`
+    listShown && rows[activeIndex]
+      ? `find-option-${rows[activeIndex]!.id}`
       : undefined;
 
   return (
@@ -471,7 +567,7 @@ function FindPanel({
           ref={inputRef}
           type="text"
           role="combobox"
-          aria-expanded={showResults}
+          aria-expanded={listShown}
           aria-controls="find-results"
           aria-autocomplete="list"
           aria-activedescendant={activeId}
@@ -488,7 +584,7 @@ function FindPanel({
       </div>
 
       {/* One group (a council's channels, #5933) is nothing to narrow. */}
-      {chips.length > 2 ? (
+      {chips.length > 2 && jumpMode === null ? (
         <div
           role="group"
           aria-label="Show"
@@ -525,7 +621,9 @@ function FindPanel({
         {showResults
           ? (statusMessage ??
             `${results.length} result${results.length === 1 ? "" : "s"}.`)
-          : ""}
+          : jumpMode === "letters"
+            ? `${rows.length} channel${rows.length === 1 ? "" : "s"}.`
+            : ""}
       </p>
 
       <div
@@ -534,9 +632,9 @@ function FindPanel({
         aria-label={placeholder}
         className="min-h-0 flex-1 overflow-y-auto p-2"
       >
-        {!showResults ? (
+        {jumpMode === "letters" && rows.length === 0 ? (
           <p className="px-2.5 py-3 text-sm text-muted-foreground">
-            Type at least {SEARCH_MIN_QUERY_LENGTH} characters.
+            No channels match.
           </p>
         ) : null}
 
@@ -554,9 +652,11 @@ function FindPanel({
           </p>
         ) : null}
 
-        {results.map((result, index) => {
+        {rows.map((result, index) => {
+          const heading = result.heading ?? result.group;
           const isNewGroup =
-            index === 0 || results[index - 1]!.group !== result.group;
+            index === 0 ||
+            (rows[index - 1]!.heading ?? rows[index - 1]!.group) !== heading;
           const Icon = GROUP_ICON[result.group];
           const active = index === activeIndex;
           return (
@@ -567,14 +667,14 @@ function FindPanel({
             <div
               key={result.id}
               role="group"
-              aria-label={isNewGroup ? result.group : undefined}
+              aria-label={isNewGroup ? heading : undefined}
             >
               {isNewGroup ? (
                 <p
                   aria-hidden="true"
                   className={cn("px-2.5 pb-1 pt-3 text-muted", EYEBROW)}
                 >
-                  {result.group}
+                  {heading}
                 </p>
               ) : null}
               <button
@@ -604,16 +704,48 @@ function FindPanel({
                   )}
                   aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1 truncate">{result.label}</span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate",
+                    // An unread channel reads as its row in the list does: a
+                    // bold title, and a number only for a mention (§5).
+                    result.unread && "font-bold",
+                  )}
+                >
+                  {result.label}
+                </span>
                 {result.hint ? (
                   <span className="max-w-[45%] shrink-0 truncate text-caption text-muted-foreground">
                     {result.hint}
                   </span>
                 ) : null}
+                {result.badge ? (
+                  <Badge
+                    variant="mention"
+                    aria-hidden="true"
+                    className="h-5 shrink-0 px-1.5 normal-case tracking-normal"
+                  >
+                    {result.badge}
+                  </Badge>
+                ) : null}
+                {result.announcement ? (
+                  <span className="sr-only">, {result.announcement}</span>
+                ) : null}
               </button>
             </div>
           );
         })}
+
+        {jumpMode === "lists" && rows.length === 0 && jump.countsKnown ? (
+          <p className="px-2.5 py-3 text-sm text-muted-foreground">
+            {JUMP_NOTHING_YET}
+          </p>
+        ) : null}
+        {jumpMode === "letters" && !isCouncil ? (
+          <p className="px-2.5 pb-1 pt-3 text-caption text-muted-foreground">
+            {JUMP_MORE_FROM_LETTERS(SEARCH_MIN_QUERY_LENGTH)}
+          </p>
+        ) : null}
       </div>
     </>
   );

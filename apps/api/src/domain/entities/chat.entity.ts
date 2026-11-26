@@ -610,6 +610,12 @@ export interface ChannelUnreadCount {
   channel_id: string;
   unread_count: number;
   mention_count: number;
+  /**
+   * The read cursor the counts were taken from, or `null` for a channel the
+   * viewer never opened (#6052). Only places a thread's "New messages"
+   * divider; the counts are what say how much is unread.
+   */
+  last_read_at: string | null;
 }
 
 /**

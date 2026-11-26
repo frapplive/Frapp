@@ -291,6 +291,12 @@ export interface ValidatedNewTask {
    * API refuses.
    */
   followed_by?: string;
+  /**
+   * A fixed deadline (#6096): added by the sheet from its switch, only when
+   * on, never by {@link validateNewTask}. Not on a task up for grabs, whose
+   * route carries none.
+   */
+  fixed_deadline?: true;
 }
 
 /**
@@ -369,6 +375,8 @@ export interface TaskPrefill {
   dueTime: string | null;
   /** The tier, role or group it is from (#5473), or `null`. */
   followedBy: string | null;
+  /** A fixed deadline (#6096), carried by a Duplicate. */
+  fixedDeadline?: boolean;
 }
 
 /**
@@ -439,6 +447,7 @@ export function taskDuplicateOf(
         : DEFAULT_DUE_CHOICE,
     dueTime: time,
     followedBy: row.followedBy,
+    ...(row.fixedDeadline ? { fixedDeadline: true } : {}),
   };
 }
 
@@ -474,8 +483,14 @@ export type TaskCreateRequest =
   | { route: "open"; body: CreateOpenTaskBody };
 
 export function createRequestOf(task: ValidatedNewTask): TaskCreateRequest {
-  const { who, reference_photo_paths, recurrence_rule, followed_by, ...fields } =
-    task;
+  const {
+    who,
+    reference_photo_paths,
+    recurrence_rule,
+    followed_by,
+    fixed_deadline,
+    ...fields
+  } = task;
   const request = taskWhoRequest(who);
   if (!request) {
     // `validateNewTask` never lets nobody through.
@@ -498,6 +513,7 @@ export function createRequestOf(task: ValidatedNewTask): TaskCreateRequest {
       ...(reference_photo_paths ? { reference_photo_paths } : {}),
       ...(recurrence_rule ? { recurrence_rule } : {}),
       ...(followed_by && !recurrence_rule ? { followed_by } : {}),
+      ...(fixed_deadline ? { fixed_deadline } : {}),
     },
   };
 }

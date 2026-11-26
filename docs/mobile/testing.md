@@ -57,8 +57,9 @@ you to log in, an Expo account is being resolved that you are not signed in to.
 
 [`interaction-smoke-checklist.md`](interaction-smoke-checklist.md)
 is the script. Note that in Expo Go the deep-link scheme is `exp://`, not
-`frapp://`, so the magic-link rows in §1 are unreachable regardless of the
-Supabase redirect allowlist — use the password sign-in path.
+`frapp://`, so a link back into the app (Google or Apple in the browser) is
+unreachable regardless of the Supabase redirect allowlist. Email codes (#6134)
+and password sign-in need no redirect.
 
 On a store build, start with [`device-pass.md`](device-pass.md): the short, ordered
 pass through the rows only a phone can settle.

@@ -3,7 +3,7 @@ import React from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { AI_SETTINGS_COPY, FRAPP_AI_COPY } from "@repo/validation";
 import { SectionHeader } from "@/components/list-section";
@@ -45,6 +45,11 @@ const state = vi.hoisted(() => ({
   readReceipts: { enabled: true, ready: true, failed: false },
   setReadReceipts: vi.fn(),
   permissions: [] as string[],
+  // Whether the tenant is known to be a chapter (`useServesChapterFeatures`).
+  chapterFeatures: false,
+  // Whether it is known to be a council (`useIsCouncil`, #5933).
+  council: false,
+  signOut: vi.fn(async () => undefined),
   pushReason: null as string | null,
   quietHoursEnabled: false,
   // `null` is a signed-in member whose token names no chapter (#5104).
@@ -137,11 +142,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 // Linked apps has its own spec (`components/settings/linked-apps-section.spec.tsx`);
 // this one only checks the rest of Settings.
 vi.mock("@/components/settings/linked-apps-section", () => ({
-  LinkedAppsSection: () => null,
+  LinkedAppsSection: "LinkedAppsSection",
+  SignInSection: () => null,
+}));
+
+vi.mock("@/lib/tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tenant-kind")>()),
+  useServesChapterFeatures: () => state.chapterFeatures,
+  useIsCouncil: () => state.council,
 }));
 
 vi.mock("@/lib/auth-session", () => ({
-  useAuthSession: () => ({ signOut: vi.fn() }),
+  useAuthSession: () => ({ signOut: state.signOut }),
 }));
 
 vi.mock("@/lib/account/delete-account-prompt", () => ({
@@ -224,13 +236,21 @@ vi.mock("@/lib/chapter-branding", () => ({
 }));
 
 import SettingsScreen from "@/app/(app)/preferences";
+import { confirmDeleteAccount } from "@/lib/account/delete-account-prompt";
 import { AnalyticsContext } from "@/lib/analytics-provider";
 
 const mounted: ReactTestRenderer[] = [];
 
+/**
+ * Renders Settings at one of its pages (#6032): `null` is the first page, the
+ * list of rows; each other value is the `?page=` a row pushes. Most of what
+ * this file checks lives on Notifications, so that is the default.
+ */
 function render(
   track: ((name: string, properties?: object) => void) | null = null,
+  page: string | null = "notifications",
 ): ReactTestRenderer {
+  vi.mocked(useLocalSearchParams).mockReturnValue(page ? { page } : {});
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
@@ -246,6 +266,9 @@ function render(
 }
 
 beforeEach(() => {
+  vi.mocked(useLocalSearchParams).mockReturnValue({});
+  state.chapterFeatures = false;
+  state.council = false;
   state.permissions = [];
   state.pushReason = null;
   state.quietHoursEnabled = false;
@@ -304,10 +327,178 @@ function primerWrites(): unknown[] {
 /** #3022. s16 opens from You's Settings row and draws `‹ You`. */
 describe("Settings back row (#3022)", () => {
   it("draws ‹ You above the title", () => {
-    const tree = render();
+    const tree = render(null, null);
 
     expect(screenText(tree).startsWith("You\nSettings")).toBe(true);
     expectBackRow(tree, "You", "/you");
+  });
+
+  it.each([
+    ["notifications", "Notifications"],
+    ["chat", "Chat"],
+    ["apps", "Linked apps"],
+    ["account", "Account"],
+  ])("draws ‹ Settings above the %s page's title (#6032)", (page, title) => {
+    const tree = render(null, page);
+
+    expect(screenText(tree).startsWith(`Settings\n${title}`)).toBe(true);
+    expectBackRow(tree, "Settings", "/preferences");
+  });
+});
+
+/**
+ * The first page (#6032): a short list of rows in web's rail order, each a
+ * glyph, a label, its value and a chevron, pushing its own page.
+ */
+describe("Settings first page", () => {
+  const rowLabels = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAll(
+        (node) =>
+          typeof node.props.label === "string" &&
+          typeof node.props.onPress === "function" &&
+          node.props.leading !== undefined,
+      )
+      .map((node) => node.props.label);
+
+  it("lists the pages in web's order, under the same groups", () => {
+    state.aiConsent = { answer: "yes", sheet_changed: false };
+    state.chapterFeatures = true;
+    const tree = render(null, null);
+    const headers = tree.root
+      .findAll((node) => node.type === SectionHeader)
+      .map((node) => node.props.children);
+    expect(headers).toEqual(["My account", "In your chapter", "About"]);
+    expect(rowLabels(tree).slice(0, 6)).toEqual([
+      "Notifications",
+      "Chat",
+      "Linked apps",
+      "Frapp Intelligence",
+      "Account",
+      "Blocked members",
+    ]);
+    // Values a member reads at a glance.
+    const text = screenText(tree);
+    expect(text).toContain("Cozy");
+    expect(text).toContain("On");
+    // Nothing that belongs on a page sits on the first one.
+    expect(text).not.toContain("Quiet hours");
+    expect(text).not.toContain("Sign out");
+    expect(text).not.toContain("Appearance");
+    state.aiConsent = null;
+    state.chapterFeatures = false;
+  });
+
+  it("has no Linked apps row until the tenant is known to be a chapter (#5933)", () => {
+    expect(screenText(render(null, null))).not.toContain("Linked apps");
+  });
+
+  it("holds the Linked apps page's chapter reads back from a council, which a search can still open (#5933)", () => {
+    const linkedApps = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) => (node.type as unknown) === "LinkedAppsSection",
+      );
+    state.chapterFeatures = true;
+    expect(linkedApps(render(null, "apps"))).toHaveLength(1);
+
+    state.chapterFeatures = false;
+    state.council = true;
+    const council = render(null, "apps");
+    expect(linkedApps(council)).toHaveLength(0);
+    expect(screenText(council)).toContain("A council has no linked apps.");
+
+    // While the tenant's kind is still being read, nothing is sent and
+    // nothing is claimed.
+    state.council = false;
+    const unknown = render(null, "apps");
+    expect(linkedApps(unknown)).toHaveLength(0);
+    expect(screenText(unknown)).not.toContain("council");
+  });
+});
+
+/**
+ * Settings → Account (#6032): Sign out and Delete account, moved off the
+ * first page with their words and behaviour unchanged.
+ */
+describe("Settings account page", () => {
+  const accountRow = (tree: ReactTestRenderer, label: string) =>
+    tree.root.find(
+      (node) =>
+        node.props.label === label && typeof node.props.onPress === "function",
+    );
+
+  it("signs out and returns to sign-in", async () => {
+    const replace = vi.mocked(useRouter().replace);
+    replace.mockClear();
+    state.signOut.mockClear();
+    const tree = render(null, "account");
+    await act(async () => {
+      accountRow(tree, "Sign out").props.onPress();
+    });
+    expect(state.signOut).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/(auth)/sign-in");
+  });
+
+  it("asks before deleting the account, and signs out once it is deleted", async () => {
+    const confirm = vi.mocked(confirmDeleteAccount);
+    confirm.mockClear();
+    state.signOut.mockClear();
+    const tree = render(null, "account");
+    const row = accountRow(tree, "Delete account");
+    expect(row.props.destructive).toBe(true);
+    expect(row.props.accessibilityHint).toBe(
+      "Permanently deletes your account. You'll be asked to confirm.",
+    );
+    act(() => row.props.onPress());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    // Nothing is deleted until the prompt is confirmed.
+    expect(state.signOut).not.toHaveBeenCalled();
+    await act(async () => {
+      confirm.mock.calls[0]![0].onDeleted();
+    });
+    expect(state.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("pushes each page as its own stack entry", () => {
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    const tree = render(null, null);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "Notifications" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/preferences",
+      params: { page: "notifications" },
+    });
+  });
+
+  it("says Notifications is off only while push is off on this phone", async () => {
+    state.getPushPermission = async () => ({
+      granted: false,
+      canAskAgain: false,
+      status: "denied",
+    });
+    const off = render(null, null);
+    await settle();
+    const row = (tree: ReactTestRenderer) =>
+      tree.root.find(
+        (node) =>
+          node.props.label === "Notifications" &&
+          typeof node.props.onPress === "function",
+      );
+    expect(row(off).props.value).toBe("Off");
+
+    state.getPushPermission = async () => ({
+      granted: true,
+      canAskAgain: true,
+      status: "granted",
+    });
+    const on = render(null, null);
+    await settle();
+    expect(row(on).props.value).toBeNull();
   });
 });
 
@@ -327,15 +518,16 @@ describe("Settings switches", () => {
       status: "granted",
     });
     const tree = render();
+    const chat = render(null, "chat");
     await settle();
-    const switches = tree.root.findAll(
-      (node) => (node.type as unknown) === "Switch",
+    const switches = [tree, chat].flatMap((page) =>
+      page.root.findAll((node) => (node.type as unknown) === "Switch"),
     );
 
-    // Push, quiet hours, then one per notification category this member is
-    // shown (no permissions here, so not the officers' join switch, nor the
-    // weekly recap, which goes to `members:view`), Read receipts under Chat
-    // (#5519), and the Activity card's own switch (#5464).
+    // Notifications: push, quiet hours, then one per notification category
+    // this member is shown (no permissions here, so not the officers' join
+    // switch, nor the weekly recap, which goes to `members:view`), and the
+    // Activity card's own switch (#5464). Chat: Read receipts (#5519).
     expect(pushSwitches(tree)).toHaveLength(1);
     expect(switches).toHaveLength(
       2 + NOTIFICATION_CATEGORIES.length - 2 + 1 + 1,
@@ -357,10 +549,13 @@ describe("Settings switches", () => {
  * where a read-only value is changed, or what went wrong.
  */
 describe("Settings copy", () => {
-  // Search settings (2026-11-19): typing swaps the rows for the matches, and a
-  // match on this screen is lit in place.
-  it("finds a setting by another word, and lights its row", async () => {
-    const tree = render();
+  // Search settings (2026-11-19): typing swaps the rows for the matches. A
+  // match on a page opens that page with its row lit (#6032); one on the
+  // first page is lit in place.
+  it("finds a setting by another word, and opens its page", async () => {
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    const tree = render(null, null);
     const search = tree.root.findByProps({
       accessibilityLabel: "Search settings",
     });
@@ -368,26 +563,61 @@ describe("Settings copy", () => {
     const text = screenText(tree);
     expect(text).toContain("Quiet hours");
     expect(text).toContain("Settings · Notifications");
-    expect(text).not.toContain("Chat density");
+    expect(text).not.toContain("Blocked members");
     const row = tree.root.find(
       (node) =>
         (node.type as unknown) === "Pressable" &&
         node.props.accessibilityLabel === "Quiet hours",
     );
     act(() => row.props.onPress());
-    expect(screenText(tree)).toContain("Chat density");
+    expect(push).toHaveBeenCalledWith(
+      "/preferences?page=notifications&setting=quiet-hours",
+    );
+  });
+
+  it("lights a match on the first page in place", () => {
+    const tree = render(null, null);
+    const search = tree.root.findByProps({
+      accessibilityLabel: "Search settings",
+    });
+    act(() => search.props.onChangeText("unblock"));
+    const row = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Blocked members",
+    );
+    act(() => row.props.onPress());
+    expect(
+      tree.root.findAllByProps({ testID: "setting-lit-blocked" }),
+    ).not.toHaveLength(0);
+  });
+
+  it("lights the row a search result's `setting` param names on its page", () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({
+      page: "notifications",
+      setting: "quiet-hours",
+    });
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <SettingsScreen />
+        </FrappThemeProvider>,
+      );
+    });
+    mounted.push(tree);
     expect(
       tree.root.findAllByProps({ testID: "setting-lit-quiet-hours" }),
     ).not.toHaveLength(0);
   });
 
-  it("draws the category switches with their labels only", () => {
+  it("draws each category switch with its one line, as web's (#6032)", () => {
     state.permissions = ["*"];
     const text = screenText(render());
 
     for (const category of NOTIFICATION_CATEGORIES) {
       expect(text).toContain(category.label);
-      expect(text).not.toContain(category.description);
+      expect(text).toContain(category.description);
     }
   });
 
@@ -449,7 +679,7 @@ describe("Settings copy", () => {
     // (spec/behavior/chat/README.md), so "always arrive" claimed too much.
     const text = screenText(render());
 
-    expect(text).toContain("Chapter announcements can't be switched off here.");
+    expect(text).toContain("announcements can't be switched off here.");
     expect(text).not.toContain("always arrive");
   });
 
@@ -477,13 +707,13 @@ describe("Settings copy", () => {
 
     expect(labels).not.toContain("Chat");
     expect(screenText(tree)).toContain(
-      "Mute a channel or DM from the chat itself.",
+      "Mute a channel or DM from the chat itself",
     );
   });
 
   it("names the chat density on its row, which opens the density sheet", () => {
     densitySheet.present.mockClear();
-    const tree = render();
+    const tree = render(null, "chat");
     expect(screenText(tree)).toContain("Chat density");
     expect(screenText(tree)).toContain("Cozy");
     const row = tree.root.find(
@@ -516,7 +746,7 @@ describe("Settings copy", () => {
 
     it("isn't drawn where the server has no AI", () => {
       state.aiConsent = null;
-      const tree = render();
+      const tree = render(null, null);
       expect(aiSwitch(tree)).toHaveLength(0);
       expect(screenText(tree)).not.toContain("Frapp Intelligence");
     });
@@ -527,7 +757,7 @@ describe("Settings copy", () => {
       [null, false],
     ])("is on only for a member who said yes (%s)", (answer, on) => {
       state.aiConsent = { answer, sheet_changed: false };
-      const tree = render();
+      const tree = render(null, "ai");
       expect(aiSwitch(tree)[0].props.value).toBe(on);
       // What it does, never who it works with (Paul, 2026-11-17): the
       // companies are named on Meet Frapp Intelligence, where the yes is given.
@@ -535,34 +765,18 @@ describe("Settings copy", () => {
       expect(screenText(tree)).not.toMatch(/Anthropic|Google/);
     });
 
-    it("sits in its own AI section, before Account", () => {
+    it("has its own page, its title the product's name (#6032)", () => {
       state.aiConsent = { answer: "yes", sheet_changed: false };
-      const tree = render();
-      // The header itself, not a row label that happens to contain "AI".
-      const headers = tree.root
-        .findAll((node) => node.type === SectionHeader)
-        .map((node) => node.props.children);
-      expect(headers).toEqual([
-        "Notifications",
-        "Chat",
-        "Activity",
-        "AI",
-        "Account",
-      ]);
-      const text = screenText(tree);
-      expect(text.indexOf("Nudges on Activity")).toBeGreaterThan(
-        text.indexOf("Chat density"),
-      );
-      expect(text.indexOf("Nudges on Activity")).toBeLessThan(
-        text.indexOf("Appearance"),
-      );
+      const text = screenText(render(null, "ai"));
+      expect(text.startsWith("Settings\nFrapp Intelligence")).toBe(true);
+      expect(text).not.toContain("Nudges on Activity");
     });
 
     it("links the privacy policy under the section, and says so there if it can't open", async () => {
       state.aiConsent = { answer: "yes", sheet_changed: false };
       const open = vi.mocked(WebBrowser.openBrowserAsync);
       open.mockClear();
-      const tree = render();
+      const tree = render(null, "ai");
       const link = tree.root.find(
         (node) =>
           node.props.accessibilityRole === "link" &&
@@ -577,8 +791,6 @@ describe("Settings copy", () => {
       const text = screenText(tree);
       const error = text.indexOf("Privacy Policy couldn't be opened");
       expect(error).toBeGreaterThan(-1);
-      // Under the AI section, not a screen away under Account.
-      expect(error).toBeLessThan(text.indexOf("Appearance"));
     });
 
     it("offers Chapter AI only to a member who sees the chapter's AI switches", () => {
@@ -591,14 +803,14 @@ describe("Settings copy", () => {
             typeof node.props.onPress === "function",
         );
       state.permissions = [];
-      expect(chapterRow(render())).toHaveLength(0);
+      expect(chapterRow(render(null, "ai"))).toHaveLength(0);
       // A roles manager opens Chapter settings for Roles, but web's AI tab
       // is `chapter-config:view`'s, so neither shows them the switches.
       state.permissions = ["roles:manage"];
-      expect(chapterRow(render())).toHaveLength(0);
+      expect(chapterRow(render(null, "ai"))).toHaveLength(0);
 
       state.permissions = ["chapter-config:view"];
-      const [row] = chapterRow(render());
+      const [row] = chapterRow(render(null, "ai"));
       expect(row.props.value).toBe("2 on");
       act(() => row.props.onPress());
       expect(vi.mocked(useRouter().push)).toHaveBeenCalledWith(
@@ -618,7 +830,7 @@ describe("Settings copy", () => {
         can_change: true,
         updated_at: null,
       };
-      const row = render().root.find(
+      const row = render(null, "ai").root.find(
         (node) =>
           node.props.label === AI_SETTINGS_COPY.chapterRow &&
           typeof node.props.onPress === "function",
@@ -635,13 +847,10 @@ describe("Settings copy", () => {
         );
       state.readReceipts = { enabled: true, ready: true, failed: false };
       state.setReadReceipts.mockClear();
-      const tree = render();
+      const tree = render(null, "chat");
       const text = screenText(tree);
       expect(text.indexOf("Read receipts")).toBeGreaterThan(
         text.indexOf("Chat density"),
-      );
-      expect(text.indexOf("Read receipts")).toBeLessThan(
-        text.indexOf("Nudges on Activity"),
       );
       const [toggle] = receiptsSwitch(tree);
       expect(toggle!.props.value).toBe(true);
@@ -650,11 +859,13 @@ describe("Settings copy", () => {
 
       // Not drawn until settings answer, so it never flips under a thumb.
       state.readReceipts = { enabled: false, ready: false, failed: false };
-      expect(receiptsSwitch(render())).toHaveLength(0);
+      expect(receiptsSwitch(render(null, "chat"))).toHaveLength(0);
 
       // A failed save says so under the section.
       state.readReceipts = { enabled: true, ready: true, failed: true };
-      expect(screenText(render())).toContain("Couldn't change read receipts");
+      expect(screenText(render(null, "chat"))).toContain(
+        "Couldn't change read receipts",
+      );
       state.readReceipts = { enabled: true, ready: true, failed: false };
     });
 
@@ -681,7 +892,7 @@ describe("Settings copy", () => {
       aiSheet.present.mockClear();
       aiNotNow.mockClear();
       state.aiConsent = { answer: "no", sheet_changed: false };
-      const tree = render();
+      const tree = render(null, "ai");
       act(() => aiSwitch(tree)[0].props.onValueChange(true));
       expect(aiSheet.present).toHaveBeenCalled();
       expect(aiNotNow).not.toHaveBeenCalled();
@@ -690,7 +901,7 @@ describe("Settings copy", () => {
     it("turns it off at once", () => {
       aiNotNow.mockClear();
       state.aiConsent = { answer: "yes", sheet_changed: false };
-      const tree = render();
+      const tree = render(null, "ai");
       act(() => aiSwitch(tree)[0].props.onValueChange(false));
       expect(aiNotNow).toHaveBeenCalledTimes(1);
     });
@@ -704,7 +915,7 @@ describe("Settings copy", () => {
             "Shows the latest changes to the app." &&
           typeof node.props.onPress === "function",
       );
-    const plain = render();
+    const plain = render(null, null);
     expect(whatsNewRow(plain).props.accessibilityValue).toBeUndefined();
     await act(async () => {
       await markWhatsNewQuiet("2026-11-10#1");
@@ -733,7 +944,7 @@ describe("Settings copy", () => {
     // Even for the President: the accent, chat background and study zones
     // moved to Chapter settings.
     state.permissions = ["*"];
-    const text = screenText(render());
+    const text = screenText(render(null, null));
     expect(text).not.toContain("Chapter accent");
     expect(text).not.toContain("Chat background");
     expect(text).not.toContain("Study zones");

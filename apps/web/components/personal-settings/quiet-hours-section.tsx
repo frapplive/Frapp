@@ -7,13 +7,16 @@ import {
   useUserSettings,
   type UserSettings as StoredUserSettings,
 } from "@repo/hooks";
-import { localTimeZone, timeZoneCity } from "@repo/validation";
+import {
+  PERSONAL_SETTINGS_COPY,
+  localTimeZone,
+  timeZoneCity,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { TimeField } from "@/components/ui/time-field";
 import { useToast } from "@/lib/hooks/use-toast";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { SectionLabel } from "@/components/shared/section-label";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { anyReadUncached, pausedRead } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -27,6 +30,9 @@ import { QuietHoursSkeleton } from "@/components/personal-settings/personal-sett
  * the contract's type, so renaming one of these fields there fails to compile
  * here rather than seeding an empty input.
  */
+/** A time field sized to its value inside a settings row. */
+const TIME_FIELD = "w-32";
+
 type UserSettings = Partial<
   Pick<
     StoredUserSettings,
@@ -35,7 +41,7 @@ type UserSettings = Partial<
 >;
 
 /**
- * Settings → Notifications: quiet hours. They are stored on the person
+ * Settings → Notifications → Quiet hours. They are stored on the person
  * (`user_settings`), not on a chapter, so they sit in the rail's "My account"
  * group and follow the member into every chapter. Moved here from `/profile`
  * with the rest of the personal settings (#3856).
@@ -214,98 +220,121 @@ export function QuietHoursSection() {
     );
   }
 
+  /*
+   * The page's first group (#6032): the switch, then From and To while it is
+   * on (off, there is nothing for them to govern; owner, 2026-11-06), the way
+   * the phone's Notifications page draws them. The times are `TimeField`s,
+   * not the browser's time box (rulebook § 4), and keep their Save button
+   * until the epic's last step makes typed settings save on their own (#6033).
+   *
+   * The zone is a fact, not a field. A member who never set one got this
+   * browser's when they switched quiet hours on, so its row only shows when
+   * the zone in force is another one, and offers the one fix that needs no
+   * list, as the phone's Time zone row does.
+   *
+   * The Theme select that used to live here is gone: Frapp is dark-only and
+   * nothing read `user_settings.theme` (#920). A control with no reader is
+   * deleted, not restyled.
+   */
+  const startValue = (settings.quiet_hours_start ?? "").slice(0, 5);
+  const endValue = (settings.quiet_hours_end ?? "").slice(0, 5);
   return (
-    <ProfileSection
-      id="quiet-hours"
-      title="Quiet hours"
-      hint="Non-urgent notifications stay silent between these times."
-    >
-      {/*
-        The Theme select that used to live here is gone, and the copy that
-        promised "theme controls the whole dashboard" with it.
-        `next-themes` and the header toggle were deleted in the #920 shell
-        slice — the design system is dark-only and `foundations.md` defines no light
-        values — so the control had been writing `user_settings.theme` with
-        nothing on any surface reading it. `spec/ui/web-dashboard/README.md`
-        has asserted "no user-facing theme switch" since that slice; this is
-        what makes it true. A control with no reader is deleted, not
-        restyled.
-      */}
-      {preferencesState ?? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="quiet-hours-switch">Quiet hours</Label>
-            <Switch
-              id="quiet-hours-switch"
+    <section id="quiet-hours" className="scroll-mt-16">
+      {preferencesState ? (
+        <div className="space-y-2">
+          <SectionLabel id="quiet-hours-label">
+            {PERSONAL_SETTINGS_COPY.quietHours}
+          </SectionLabel>
+          {preferencesState}
+        </div>
+      ) : (
+        <form className="space-y-3" onSubmit={handleSettingsSubmit}>
+          <SettingsGroup
+            heading={PERSONAL_SETTINGS_COPY.quietHours}
+            footnote={PERSONAL_SETTINGS_COPY.quietHoursFootnote}
+          >
+            <SettingsRow
+              label={PERSONAL_SETTINGS_COPY.quietHours}
               checked={quietHoursOn}
-              aria-disabled={isOffline || undefined}
+              // Not disabled offline: the switch keeps its state legible and
+              // a press says why nothing changed (`refuseOffline`).
+              disabled={updateSettings.isPending}
               onCheckedChange={handleQuietHoursToggle}
             />
-          </div>
-          {/* The times only while quiet hours are on: off, there is
-              nothing for them to govern (owner, 2026-11-06). */}
+            {quietHoursOn ? (
+              <>
+                <SettingsRow
+                  label="From"
+                  control={
+                    <TimeField
+                      id="quiet-start"
+                      aria-label="Quiet hours start"
+                      className={TIME_FIELD}
+                      anchor="22:00"
+                      value={startValue}
+                      onChange={(next) =>
+                        setSettingsDraft((prev) => ({
+                          ...prev,
+                          quiet_hours_start: next,
+                        }))
+                      }
+                    />
+                  }
+                />
+                <SettingsRow
+                  label="To"
+                  control={
+                    <TimeField
+                      id="quiet-end"
+                      aria-label="Quiet hours end"
+                      className={TIME_FIELD}
+                      anchor="08:00"
+                      value={endValue}
+                      onChange={(next) =>
+                        setSettingsDraft((prev) => ({
+                          ...prev,
+                          quiet_hours_end: next,
+                        }))
+                      }
+                    />
+                  }
+                />
+                {zoneInForce !== browserZone ? (
+                  <SettingsRow
+                    label="Time zone"
+                    description={`Times are in ${timeZoneCity(zoneInForce)} time. This browser is on ${timeZoneCity(browserZone)} time.`}
+                    control={
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="toolbar"
+                        disabled={updateSettings.isPending}
+                        onClick={handleUseBrowserZone}
+                      >
+                        Use {timeZoneCity(browserZone)} time
+                      </Button>
+                    }
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </SettingsGroup>
           {quietHoursOn ? (
-            <form className="space-y-4" onSubmit={handleSettingsSubmit}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="quiet-start">From</Label>
-                  <Input
-                    id="quiet-start"
-                    type="time"
-                    required
-                    value={settings.quiet_hours_start ?? ""}
-                    onChange={(event) =>
-                      setSettingsDraft((prev) => ({
-                        ...prev,
-                        quiet_hours_start: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="quiet-end">To</Label>
-                  <Input
-                    id="quiet-end"
-                    type="time"
-                    required
-                    value={settings.quiet_hours_end ?? ""}
-                    onChange={(event) =>
-                      setSettingsDraft((prev) => ({
-                        ...prev,
-                        quiet_hours_end: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              {/* The zone is a fact, not a field. A member who never set
-                  one got this browser's when they switched quiet hours on,
-                  so this line only speaks up when the zone in force is
-                  another one, and offers the one fix that needs no list. */}
-              {zoneInForce !== browserZone ? (
-                <p className="text-sm text-muted-foreground">
-                  Times are in {timeZoneCity(zoneInForce)} time.{" "}
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline underline-offset-4"
-                    onClick={handleUseBrowserZone}
-                  >
-                    Use {timeZoneCity(browserZone)} time
-                  </button>
-                </p>
-              ) : null}
-              <div className="flex items-center justify-end gap-2">
-                <Button type="submit" disabled={updateSettings.isPending}>
-                  {updateSettings.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Save quiet hours
-                </Button>
-              </div>
-            </form>
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                size="toolbar"
+                disabled={updateSettings.isPending || !startValue || !endValue}
+              >
+                {updateSettings.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Save quiet hours
+              </Button>
+            </div>
           ) : null}
-        </div>
+        </form>
       )}
-    </ProfileSection>
+    </section>
   );
 }

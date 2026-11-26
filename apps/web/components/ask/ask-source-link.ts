@@ -17,7 +17,8 @@ const PAGE_ROUTES: Record<string, string | null> = {
   points: standingHref("points"),
   standings: POINTS_STANDINGS_HREF,
   dues: null,
-  tasks: "/tasks",
+  // The member's tasks are Activity's since the Tasks page folded in (#5948).
+  tasks: "/activity",
 };
 
 /**

@@ -100,6 +100,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     activityRowAction: actual.activityRowAction,
     activityWeekSummary: actual.activityWeekSummary,
     findActivityTaskRow: actual.findActivityTaskRow,
+    findActivityExtensionRow: actual.findActivityExtensionRow,
     activityArchiveKeys: actual.activityArchiveKeys,
     activityKeys: actual.activityKeys,
     activityStandingKeys: actual.activityStandingKeys,
@@ -146,6 +147,29 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => mockSearch,
   usePathname: () => "/activity",
   useRouter: () => ({ replace: mockReplace }),
+}));
+// The Tasks board's two parts (#5948) are stubbed to which part was asked
+// for; `tasks-board.spec.tsx` owns what each draws.
+const mockEveryoneOffered = vi.fn(() => false);
+vi.mock("@/components/tasks/everyones-tasks", () => ({
+  useEveryoneOffered: (tasksOn: boolean) => tasksOn && mockEveryoneOffered(),
+}));
+vi.mock("@/components/tasks/tasks-board", () => ({
+  TasksBoard: ({
+    part,
+    onShowEveryone,
+  }: {
+    part: string;
+    onShowEveryone?: () => void;
+  }) => (
+    <div data-testid={`tasks-board-${part}`}>
+      {onShowEveryone ? (
+        <button type="button" onClick={onShowEveryone}>
+          Stub: show everyone&apos;s
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 // The chapter's module switches, unknown here unless a test sets them.
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
@@ -318,6 +342,7 @@ beforeEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   mockSearch = new URLSearchParams();
+  mockEveryoneOffered.mockReturnValue(false);
   mockModuleGate.mockReturnValue(undefined);
   mockUser.mockReturnValue({ userId: "me", isLoading: false });
   mockNetwork.mockReturnValue({ isOffline: false });
@@ -1439,6 +1464,72 @@ describe("ActivityPage", () => {
     });
   });
 
+  describe("Mine and Everyone's (#5948)", () => {
+    const views = () => screen.queryByRole("tablist", { name: "Whose tasks" });
+
+    it("draws no views for a member with only their own, and keeps Mine's task parts", () => {
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      expect(views()).toBeNull();
+      expect(screen.getByTestId("tasks-board-mine")).toBeInTheDocument();
+      expect(screen.queryByTestId("tasks-board-everyone")).toBeNull();
+    });
+
+    it("opens on Mine, and Everyone's is the chapter's board in place of the page", async () => {
+      mockEveryoneOffered.mockReturnValue(true);
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      const tabs = views()!;
+      expect(within(tabs).getByRole("tab", { name: "Mine" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(toDo()).toBeInTheDocument();
+
+      await userEvent.click(
+        within(tabs).getByRole("tab", { name: "Everyone's" }),
+      );
+      expect(screen.getByTestId("tasks-board-everyone")).toBeInTheDocument();
+      expect(screen.queryByTestId("tasks-board-mine")).toBeNull();
+      expect(screen.queryByRole("region", { name: /to do/i })).toBeNull();
+    });
+
+    it("goes to Everyone's from a task made on Mine for someone else", async () => {
+      mockEveryoneOffered.mockReturnValue(true);
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Stub: show everyone's" }),
+      );
+      expect(screen.getByTestId("tasks-board-everyone")).toBeInTheDocument();
+    });
+
+    it("opens on Everyone's from ?view=everyone, the Tasks page's old way in", () => {
+      mockEveryoneOffered.mockReturnValue(true);
+      mockSearch = new URLSearchParams("view=everyone");
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      expect(screen.getByTestId("tasks-board-everyone")).toBeInTheDocument();
+    });
+
+    it("stays on Mine for ?view=everyone when Everyone's isn't offered", () => {
+      mockSearch = new URLSearchParams("view=everyone");
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      expect(screen.queryByTestId("tasks-board-everyone")).toBeNull();
+      expect(toDo()).toBeInTheDocument();
+    });
+
+    it("draws neither part with Tasks off for the chapter", () => {
+      mockEveryoneOffered.mockReturnValue(true);
+      mockModuleGate.mockReturnValue((module) => module !== "tasks");
+      mockActivity.mockReturnValue(loaded({}));
+      render(<ActivityPage />);
+      expect(views()).toBeNull();
+      expect(screen.queryByTestId("tasks-board-mine")).toBeNull();
+    });
+  });
+
   it("lays out by its own width, since it is usually a pane beside chat", () => {
     mockPermissions.mockReturnValue({
       data: { permissions: ["tasks:manage"] },
@@ -1920,6 +2011,50 @@ describe("ActivityPage", () => {
     expect(refetch).toHaveBeenCalledTimes(2);
   });
 
+  it("opens a request for more time from its push (#6096), or its task once answered", async () => {
+    const extension = {
+      id: "req-1",
+      task: { ...task, id: "t7", title: "Sweep the porch" },
+      requester_name: "Sam Lee",
+      reason: "Shift ran late",
+      from_due_date: "2026-11-14",
+      from_due_at: null,
+      to_due_date: "2026-11-16",
+      to_due_at: null,
+      needs_officer: "over_a_day",
+      ai_verdict: null,
+      ai_note: null,
+      created_at: "2026-11-13T01:00:00Z",
+    };
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() =>
+        Promise.resolve({
+          data: data({
+            needs_you: { ...nothingWaiting, task_extensions: [extension] },
+          }),
+        }),
+      ),
+    });
+    mockSearch = new URLSearchParams("extension=t7");
+    const { unmount } = render(<ActivityPage />);
+    await act(async () => {});
+    expect(
+      screen.getByText("panel:Sam Lee asks for more time"),
+    ).toBeInTheDocument();
+    expect(mockReplace).toHaveBeenCalledWith("/activity", { scroll: false });
+    unmount();
+
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() => Promise.resolve({ data: data() })),
+    });
+    mockSearch = new URLSearchParams("extension=t7");
+    render(<ActivityPage />);
+    await act(async () => {});
+    expect(mockReplace).toHaveBeenCalledWith("/activity?task=t7");
+  });
+
   it("sends a review the fresh read doesn't hold to that task on the board", async () => {
     mockActivity.mockReturnValue({
       ...loaded(),
@@ -1930,7 +2065,7 @@ describe("ActivityPage", () => {
     await act(async () => {});
 
     expect(screen.queryByText(/^panel:/)).not.toBeInTheDocument();
-    expect(mockReplace).toHaveBeenCalledWith("/tasks?task=gone");
+    expect(mockReplace).toHaveBeenCalledWith("/activity?task=gone");
   });
 
   it("dots an unread row and records the open when it is opened (#4405)", () => {
@@ -2517,7 +2652,7 @@ describe("Tasks you assigned: one row per task for everyone (#5538)", () => {
     // One row for the thirty copies, beside the one-person task.
     expect(within(part()).getAllByRole("listitem")).toHaveLength(2);
     const row = within(part()).getByRole("link", { name: /Clean the house/ });
-    expect(row).toHaveAttribute("href", "/tasks?group=group-1");
+    expect(row).toHaveAttribute("href", "/activity?group=group-1");
     expect(row).toHaveTextContent(/Everyone · /);
     expect(row).toHaveAccessibleName(/12 of 30 done/);
     expect(within(row).getByText("12 of 30")).toHaveAttribute(
@@ -2571,6 +2706,6 @@ describe("Tasks you assigned: one row per task for everyone (#5538)", () => {
     await act(async () => {});
 
     expect(screen.queryByTestId("panel")).toBeNull();
-    expect(mockReplace).toHaveBeenCalledWith("/tasks?group=group-1");
+    expect(mockReplace).toHaveBeenCalledWith("/activity?group=group-1");
   });
 });

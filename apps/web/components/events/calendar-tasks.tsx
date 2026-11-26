@@ -23,6 +23,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { everyonesTasksLink, tasksTaskLink } from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
 
 /**
@@ -188,8 +189,23 @@ function CalendarTaskPopover({
             )}
           </div>
         )}
+        {/* On Activity (#5948): one task opens in the task panel (a copy of a
+            task for everyone opens its group). An entry that folds several
+            members' separate tasks (same title, day and time,
+            `selectCalendarTasks`) opens Everyone's, where each is listed:
+            only the officer who assigned them sees such an entry. */}
         <Button asChild variant="secondary" size="toolbar">
-          <Link href="/tasks">Open Tasks</Link>
+          {item.kind === "mine" || item.assignees.length === 1 ? (
+            <Link
+              href={tasksTaskLink(
+                item.kind === "mine" ? item.taskId : item.assignees[0]!.taskId,
+              )}
+            >
+              Open task
+            </Link>
+          ) : (
+            <Link href={everyonesTasksLink()}>Open in Everyone&apos;s</Link>
+          )}
         </Button>
       </PopoverContent>
     </Popover>

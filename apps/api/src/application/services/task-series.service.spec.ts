@@ -26,6 +26,7 @@ const SERIES: TaskSeries = {
   proof_kind: 'none',
   subtask_titles: [],
   attachments: [],
+  fixed_deadline: false,
   due_time: '21:00:00',
   recurrence_rule: RULE,
   first_due_date: '2026-11-09',
@@ -63,6 +64,7 @@ const copy = (over: Partial<Task> = {}): Task => ({
   meeting_id: null,
   followed_by: null,
   attachments: [],
+  fixed_deadline: false,
   created_at: '2026-11-10T00:00:00.000Z',
   ...over,
 });
@@ -132,6 +134,24 @@ describe('TaskSeriesService (#5119)', () => {
         'ch-1',
         'admin-1',
         expect.objectContaining({ title: 'Kitchen', point_reward: 8 }),
+        undefined,
+      );
+    });
+
+    it('fixes the deadline on the copies to come and the open one (#6096)', async () => {
+      await service.update('open', 'ch-1', 'admin-1', { fixed_deadline: true });
+
+      expect(repo.updateSeriesIfNext).toHaveBeenCalledWith(
+        'ch-1',
+        'series-1',
+        '2026-11-23',
+        { fixed_deadline: true },
+      );
+      expect(tasks.update).toHaveBeenCalledWith(
+        'open',
+        'ch-1',
+        'admin-1',
+        expect.objectContaining({ fixed_deadline: true }),
         undefined,
       );
     });

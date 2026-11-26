@@ -120,6 +120,16 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-26",
+    title: "New in this update",
+    changes: [
+      "Signing in or confirming a new account by email now gives you a 6-digit code to type right where you asked for it.",
+    ],
+    web: [
+      "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, and officers see the chapter's board under Everyone's.",
+    ],
+  },
+  {
     date: "2026-11-25",
     title: "New in this update",
     changes: [
@@ -134,12 +144,18 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
       "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
       "Frapp Intelligence now knows who uploaded a document and who posted minutes, finds replies in threads, and asks which event you mean when two different ones share a word.",
+      "Opening a channel or direct message with unread messages now takes you to the first one, under a \"New messages\" line, and a button at the top shows how many are new and takes you back to them, with Mark as read beside it.",
+      "Search opens on your unread channels and the ones you opened lately, and finds a channel from its first letter.",
+      "Settings is now a short list that opens a page for each part, with all your notification choices together on one page.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
       "Rush fits beside chat: stages with nobody in them fold to their names so the full ones keep their room, and the views, search and New fold into icons when the page is narrow.",
       "School and council shows your school by its name, without the made-up initials badge beside it.",
       "Each module's page in Chapter settings shows who can do what and its goals at a glance, and opens each one, like the ledger or a permission, on a page of its own.",
+      "Plan and billing now shows your plan as one row, with what it includes and your member invoices each on a page of their own.",
+      "Cmd+K, or Ctrl+K, opens Find from anywhere, even while you're typing a message.",
+      "The dashboard opens faster when you come back to it, and while the sidebar loads it shows placeholder shapes instead of empty gaps or a stand-in name.",
     ],
     phone: [
       "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",

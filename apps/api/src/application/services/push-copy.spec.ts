@@ -4,6 +4,8 @@ import {
   formatEventWhen,
   joinFacts,
   taskSubmittedCopy,
+  taskExtensionAskedCopy,
+  taskExtensionDecidedCopy,
 } from './push-copy';
 
 const NOW = new Date('2026-11-06T12:00:00Z');
@@ -296,5 +298,49 @@ describe('formatEventWhen, dated events (#6098)', () => {
         dates: { timing: 'timed', start_date: null, end_date: null },
       }),
     ).toBe('Mon, Nov 9, 8–9 PM');
+  });
+});
+
+describe('task extension pushes (#6096)', () => {
+  it('names who asks, the task, the due asked for and the reason', () => {
+    expect(
+      taskExtensionAskedCopy(
+        'Sam Lee',
+        { title: 'Sweep the porch' },
+        { reason: 'Shift ran late' },
+        'Sat, Nov 28',
+      ),
+    ).toEqual({
+      title: 'Sam Lee asks for more time: Sweep the porch',
+      body: 'To Sat, Nov 28 · "Shift ran late"',
+    });
+  });
+
+  it('cuts a long reason by character', () => {
+    const { body } = taskExtensionAskedCopy(
+      'Sam',
+      { title: 'Sweep' },
+      { reason: `${'a'.repeat(70)} 🎉` },
+      'Sat, Nov 28',
+    );
+    expect(body).toBe(`To Sat, Nov 28 · "${'a'.repeat(59)}…"`);
+  });
+
+  it('tells the member the answer', () => {
+    expect(
+      taskExtensionDecidedCopy(
+        { title: 'Sweep the porch' },
+        { approved: true, due: 'Sat, Nov 28' },
+      ),
+    ).toEqual({
+      title: 'Sweep the porch',
+      body: 'More time granted · now due Sat, Nov 28',
+    });
+    expect(
+      taskExtensionDecidedCopy(
+        { title: 'Sweep the porch' },
+        { approved: false, reason: 'The event is Friday' },
+      ).body,
+    ).toBe('Not extended · "The event is Friday"');
   });
 });

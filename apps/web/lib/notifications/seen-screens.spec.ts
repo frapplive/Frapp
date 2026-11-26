@@ -12,16 +12,14 @@ describe("notificationScreensForPath", () => {
       "ai_suggestions",
     ]);
     expect(notificationScreensForPath("/members")).toEqual(["members"]);
-    // Task reviews, and the weekly recap push (#4985).
+    // Task reviews, the weekly recap push (#4985), and every task since the
+    // Tasks page folded in (#5948). Not suggested tasks: Everyone's marks
+    // those itself, since a visit to Mine never shows them.
     expect(notificationScreensForPath("/activity")).toEqual([
       "tasks",
       "activity",
     ]);
-    // Suggested tasks are reviewed on the board and under their minutes.
-    expect(notificationScreensForPath("/tasks")).toEqual([
-      "tasks",
-      "ai_suggestions",
-    ]);
+    // Suggested tasks are reviewed under their minutes too.
     expect(notificationScreensForPath("/meetings/abc")).toEqual([
       "ai_suggestions",
     ]);

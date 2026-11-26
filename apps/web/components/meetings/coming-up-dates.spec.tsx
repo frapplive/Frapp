@@ -129,7 +129,7 @@ describe("ComingUpDates", () => {
     render(<ComingUpDates meetingId="m-1" dates={dates} viewerId="u-me" />);
     expect(
       screen.getByRole("link", { name: "Task · Jake Ruiz" }),
-    ).toHaveAttribute("href", "/tasks?task=t-1");
+    ).toHaveAttribute("href", "/activity?task=t-1");
     expect(
       screen.getByRole("link", { name: "On the calendar" }),
     ).toHaveAttribute("href", "/events?event=e-1");

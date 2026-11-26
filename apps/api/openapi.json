@@ -12394,6 +12394,88 @@
         ]
       }
     },
+    "/v1/tasks/extension-requests/blocked": {
+      "get": {
+        "description": "Each was granted 3 extensions in 30 days. An officer restores one with `POST /v1/tasks/extension-requests/restore`.",
+        "operationId": "TaskController_listBlockedFromExtensions_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedFromExtensionsDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Members who can't ask for more time (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/extension-requests/restore": {
+      "post": {
+        "description": "Clears the block 3 extensions in 30 days put on them; extensions granted before now stop counting. 404 when they could already ask.",
+        "operationId": "TaskController_restoreExtensions_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreTaskExtensionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Let a member ask for more time again (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
     "/v1/tasks/{id}": {
       "get": {
         "operationId": "TaskController_getOne_v1",
@@ -12822,6 +12904,183 @@
           }
         ],
         "summary": "Reject task completion (revert to IN_PROGRESS)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests": {
+      "post": {
+        "description": "The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 `task.extension_fixed_deadline`), while they may ask (403 `task.extension_blocked` after 3 extensions in 30 days). One waiting request per task (409 `task.extension_waiting`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.",
+        "operationId": "TaskController_requestExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestTaskExtensionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ask for more time on a task (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests/{requestId}/approve": {
+      "post": {
+        "description": "Moves the task's due through the officer's edit, so the reminders re-arm, and tells the member. Not your own request (403). 409 when someone answered first, or when the task changed since they asked (done, handed over, re-dated or fixed: `task.extension_stale`, and the request is closed).",
+        "operationId": "TaskController_approveExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a request for more time (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests/{requestId}/decline": {
+      "post": {
+        "description": "The due stays and the member is told why. The same refusals as approving.",
+        "operationId": "TaskController_declineExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineTaskExtensionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Decline a request for more time, with a reason (#6096)",
         "tags": [
           "Tasks"
         ]
@@ -13421,6 +13680,192 @@
         ]
       }
     },
+    "/v1/ai/consent": {
+      "get": {
+        "description": "The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.",
+        "operationId": "AiConsentController_getConsent_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConsentStateDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get what Meet Frapp Intelligence shows and the caller’s answer",
+        "tags": [
+          "AI"
+        ]
+      },
+      "put": {
+        "description": "Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.",
+        "operationId": "AiConsentController_answerConsent_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerAiConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConsentStateDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "409": {
+            "description": "The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/v1/ai/settings": {
+      "get": {
+        "description": "Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.",
+        "operationId": "AiChapterSettingsController_getSettings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChapterSettingsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the chapter’s AI switches",
+        "tags": [
+          "AI"
+        ]
+      },
+      "patch": {
+        "description": "President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.",
+        "operationId": "AiChapterSettingsController_updateSettings_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiChapterSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChapterSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not the chapter’s president (`ai.settings.president_only`)."
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Turn the chapter’s AI features on or off",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
     "/v1/tenants/resolve": {
       "get": {
         "description": "Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.",
@@ -13873,192 +14318,6 @@
         "summary": "The action items still open across one repeating meeting’s posted minutes, newest first: open until the task each became is done (#5482)",
         "tags": [
           "Meetings"
-        ]
-      }
-    },
-    "/v1/ai/consent": {
-      "get": {
-        "description": "The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.",
-        "operationId": "AiConsentController_getConsent_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiConsentStateDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get what Meet Frapp Intelligence shows and the caller’s answer",
-        "tags": [
-          "AI"
-        ]
-      },
-      "put": {
-        "description": "Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.",
-        "operationId": "AiConsentController_answerConsent_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AnswerAiConsentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiConsentStateDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "409": {
-            "description": "The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)",
-        "tags": [
-          "AI"
-        ]
-      }
-    },
-    "/v1/ai/settings": {
-      "get": {
-        "description": "Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.",
-        "operationId": "AiChapterSettingsController_getSettings_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiChapterSettingsDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get the chapter’s AI switches",
-        "tags": [
-          "AI"
-        ]
-      },
-      "patch": {
-        "description": "President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.",
-        "operationId": "AiChapterSettingsController_updateSettings_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAiChapterSettingsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiChapterSettingsDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller is not the chapter’s president (`ai.settings.president_only`)."
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Turn the chapter’s AI features on or off",
-        "tags": [
-          "AI"
         ]
       }
     },
@@ -20015,6 +20274,18 @@
             "required": false,
             "in": "query",
             "description": "`true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          },
+          {
+            "name": "extensions",
+            "required": false,
+            "in": "query",
+            "description": "`true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096).",
             "schema": {
               "type": "string",
               "enum": [
@@ -30741,12 +31012,19 @@
           "mention_count": {
             "type": "number",
             "description": "Subset of unread_count that mentions the caller. Mentions are resolved server-side at send time."
+          },
+          "last_read_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The caller’s read cursor the counts were taken from; null for a channel they never opened. Places the thread’s “New messages” divider; never re-count from it."
           }
         },
         "required": [
           "channel_id",
           "unread_count",
-          "mention_count"
+          "mention_count",
+          "last_read_at"
         ]
       },
       "ForwardedGifDto": {
@@ -35918,6 +36196,36 @@
           "confirmed"
         ]
       },
+      "BlockedFromExtensionsDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blocked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "user_id",
+          "blocked_at"
+        ]
+      },
+      "RestoreTaskExtensionsDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The member to restore."
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
       "RequestTaskPhotoUploadUrlDto": {
         "type": "object",
         "properties": {
@@ -36123,6 +36431,10 @@
             ],
             "description": "What Mark done needs (#4635): `none` (default), `photo` (one or more proof photos) or `link`."
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group's copies and a series' copies all carry it."
+          },
           "recurrence_rule": {
             "type": "string",
             "description": "Repeat on a schedule (#5119): the event rule format (`packages/validation/src/recurrence.ts`), `FREQ` DAILY, WEEKLY or MONTHLY, `INTERVAL` 1 to 30, `BYDAY` or `BYMONTHDAY`, a required `TZID` (the officer's zone), and `COUNT` (2 to 120), `UNTIL` (YYYYMMDD) or no end. Example: `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York`. The task is the first copy; the next is made once it is due, on the same time of day in that zone.",
@@ -36327,6 +36639,10 @@
               "$ref": "#/components/schemas/FrappLinkDto"
             }
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): never eligible for an extension, and shown more urgent to its assignee."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -36377,6 +36693,7 @@
           "meeting_id",
           "followed_by",
           "attachments",
+          "fixed_deadline",
           "created_at",
           "photos"
         ]
@@ -36459,6 +36776,10 @@
             ],
             "description": "What Mark done needs (#4635). Changing it doesn't touch a completion already waiting on an officer."
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): no extensions. Turning it on closes a request for more time still waiting on the task. With `scope: group` every copy not yet confirmed; with `scope: series` the copies still to come too."
+          },
           "followed_by": {
             "type": "string",
             "nullable": true,
@@ -36538,6 +36859,271 @@
             "description": "\"Ask for a photo next time\": raises the task's `proof_kind` to `photo`, so the next Mark done needs one."
           }
         }
+      },
+      "RequestTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "The day asked for (`YYYY-MM-DD`), later than the task's. For a task due at a time, the day of `due_at` as the member sees it."
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The moment asked for: required on a task due at a time, refused on one due by a day."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Why the member needs more time, in one short line."
+          }
+        },
+        "required": [
+          "due_date",
+          "reason"
+        ]
+      },
+      "TaskExtensionSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "declined",
+              "withdrawn"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer; null when it was approved automatically."
+          },
+          "auto_approved": {
+            "type": "boolean"
+          },
+          "decline_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "auto_approved",
+          "decline_reason",
+          "decided_at",
+          "created_at"
+        ]
+      },
+      "RequestTaskExtensionResponseDto": {
+        "type": "object",
+        "properties": {
+          "extension": {
+            "$ref": "#/components/schemas/TaskExtensionSummaryDto"
+          },
+          "now_blocked": {
+            "type": "boolean",
+            "description": "True when this extension made 3 in 30 days: the member can't ask again until an officer restores it."
+          }
+        },
+        "required": [
+          "extension",
+          "now_blocked"
+        ]
+      },
+      "TaskExtensionRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "declined",
+              "withdrawn"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer; null when it was approved automatically."
+          },
+          "auto_approved": {
+            "type": "boolean"
+          },
+          "decline_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requester_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ai_verdict": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "invalid"
+            ],
+            "nullable": true,
+            "description": "What AI made of the reason; null when it wasn't asked (over a day, a second request, back to back) or couldn't answer."
+          },
+          "ai_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "auto_approved",
+          "decline_reason",
+          "decided_at",
+          "created_at",
+          "chapter_id",
+          "task_id",
+          "requester_id",
+          "ai_verdict",
+          "ai_note",
+          "decided_by"
+        ]
+      },
+      "DecideTaskExtensionResponseDto": {
+        "type": "object",
+        "properties": {
+          "extension": {
+            "$ref": "#/components/schemas/TaskExtensionRequestDto"
+          }
+        },
+        "required": [
+          "extension"
+        ]
+      },
+      "DeclineTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Why not, shown to the member."
+          }
+        },
+        "required": [
+          "reason"
+        ]
       },
       "OpenTaskDto": {
         "type": "object",
@@ -36963,6 +37549,190 @@
         "required": [
           "assignee_id"
         ]
+      },
+      "AiConsentSheetProviderDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "google",
+              "assemblyai"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "The company's own name, shown as is.",
+            "example": "Anthropic"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ]
+      },
+      "AiConsentSheetDataKindDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "questions",
+              "chapter_records",
+              "roster",
+              "channel_messages",
+              "meetings"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "What is sent, in words a client shows as is.",
+            "example": "Questions you ask"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ]
+      },
+      "AiConsentSheetDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "description": "The sheet version. Send it back with the answer; a new version asks everyone again.",
+            "example": 1
+          },
+          "providers": {
+            "description": "Every provider member data is sent to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConsentSheetProviderDto"
+            }
+          },
+          "data": {
+            "description": "Every kind of data that is sent.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConsentSheetDataKindDto"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "providers",
+          "data"
+        ]
+      },
+      "AiConsentStateDto": {
+        "type": "object",
+        "properties": {
+          "sheet": {
+            "$ref": "#/components/schemas/AiConsentSheetDto"
+          },
+          "answer": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "nullable": true,
+            "description": "The answer on the current version. Null when not answered, which counts as No."
+          },
+          "answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sheet_changed": {
+            "type": "boolean",
+            "description": "True when the caller answered an earlier version but not this one, so the sheet changed since."
+          }
+        },
+        "required": [
+          "sheet",
+          "answer",
+          "answered_at",
+          "sheet_changed"
+        ]
+      },
+      "AnswerAiConsentDto": {
+        "type": "object",
+        "properties": {
+          "sheet_version": {
+            "type": "number",
+            "description": "The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.",
+            "example": 1
+          },
+          "answer": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          }
+        },
+        "required": [
+          "sheet_version",
+          "answer"
+        ]
+      },
+      "AiChapterSettingsDto": {
+        "type": "object",
+        "properties": {
+          "ask": {
+            "type": "boolean",
+            "description": "The Questions and requests switch: members can ask Frapp Intelligence."
+          },
+          "meeting_notes": {
+            "type": "boolean",
+            "description": "Drafting minutes, and tasks suggested from them, is on."
+          },
+          "chat_source": {
+            "type": "boolean",
+            "description": "Messages in chapter channels, from members who said yes, are a source."
+          },
+          "nudges": {
+            "type": "boolean",
+            "description": "Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When a switch last changed. Null when none ever has."
+          },
+          "can_change": {
+            "type": "boolean",
+            "description": "Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again."
+          }
+        },
+        "required": [
+          "ask",
+          "meeting_notes",
+          "chat_source",
+          "nudges",
+          "updated_at",
+          "can_change"
+        ]
+      },
+      "UpdateAiChapterSettingsDto": {
+        "type": "object",
+        "properties": {
+          "ask": {
+            "type": "boolean"
+          },
+          "meeting_notes": {
+            "type": "boolean"
+          },
+          "chat_source": {
+            "type": "boolean"
+          },
+          "nudges": {
+            "type": "boolean"
+          }
+        }
       },
       "ResolvedTenantDto": {
         "type": "object",
@@ -38072,190 +38842,6 @@
           "event_start_time",
           "items"
         ]
-      },
-      "AiConsentSheetProviderDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "enum": [
-              "anthropic",
-              "google",
-              "assemblyai"
-            ]
-          },
-          "name": {
-            "type": "string",
-            "description": "The company's own name, shown as is.",
-            "example": "Anthropic"
-          }
-        },
-        "required": [
-          "key",
-          "name"
-        ]
-      },
-      "AiConsentSheetDataKindDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "enum": [
-              "questions",
-              "chapter_records",
-              "roster",
-              "channel_messages",
-              "meetings"
-            ]
-          },
-          "label": {
-            "type": "string",
-            "description": "What is sent, in words a client shows as is.",
-            "example": "Questions you ask"
-          }
-        },
-        "required": [
-          "key",
-          "label"
-        ]
-      },
-      "AiConsentSheetDto": {
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "number",
-            "description": "The sheet version. Send it back with the answer; a new version asks everyone again.",
-            "example": 1
-          },
-          "providers": {
-            "description": "Every provider member data is sent to.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConsentSheetProviderDto"
-            }
-          },
-          "data": {
-            "description": "Every kind of data that is sent.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConsentSheetDataKindDto"
-            }
-          }
-        },
-        "required": [
-          "version",
-          "providers",
-          "data"
-        ]
-      },
-      "AiConsentStateDto": {
-        "type": "object",
-        "properties": {
-          "sheet": {
-            "$ref": "#/components/schemas/AiConsentSheetDto"
-          },
-          "answer": {
-            "type": "string",
-            "enum": [
-              "yes",
-              "no"
-            ],
-            "nullable": true,
-            "description": "The answer on the current version. Null when not answered, which counts as No."
-          },
-          "answered_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "sheet_changed": {
-            "type": "boolean",
-            "description": "True when the caller answered an earlier version but not this one, so the sheet changed since."
-          }
-        },
-        "required": [
-          "sheet",
-          "answer",
-          "answered_at",
-          "sheet_changed"
-        ]
-      },
-      "AnswerAiConsentDto": {
-        "type": "object",
-        "properties": {
-          "sheet_version": {
-            "type": "number",
-            "description": "The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.",
-            "example": 1
-          },
-          "answer": {
-            "type": "string",
-            "enum": [
-              "yes",
-              "no"
-            ]
-          }
-        },
-        "required": [
-          "sheet_version",
-          "answer"
-        ]
-      },
-      "AiChapterSettingsDto": {
-        "type": "object",
-        "properties": {
-          "ask": {
-            "type": "boolean",
-            "description": "The Questions and requests switch: members can ask Frapp Intelligence."
-          },
-          "meeting_notes": {
-            "type": "boolean",
-            "description": "Drafting minutes, and tasks suggested from them, is on."
-          },
-          "chat_source": {
-            "type": "boolean",
-            "description": "Messages in chapter channels, from members who said yes, are a source."
-          },
-          "nudges": {
-            "type": "boolean",
-            "description": "Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes."
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true,
-            "description": "When a switch last changed. Null when none ever has."
-          },
-          "can_change": {
-            "type": "boolean",
-            "description": "Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again."
-          }
-        },
-        "required": [
-          "ask",
-          "meeting_notes",
-          "chat_source",
-          "nudges",
-          "updated_at",
-          "can_change"
-        ]
-      },
-      "UpdateAiChapterSettingsDto": {
-        "type": "object",
-        "properties": {
-          "ask": {
-            "type": "boolean"
-          },
-          "meeting_notes": {
-            "type": "boolean"
-          },
-          "chat_source": {
-            "type": "boolean"
-          },
-          "nudges": {
-            "type": "boolean"
-          }
-        }
       },
       "AiRunDto": {
         "type": "object",
@@ -42268,6 +42854,10 @@
               }
             ]
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): no extensions, and its assignee’s row reads more urgent."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -42300,6 +42890,7 @@
           "sent_back_at",
           "proof_kind",
           "group",
+          "fixed_deadline",
           "created_at",
           "unread",
           "snoozed_until"
@@ -42457,6 +43048,87 @@
         "required": [
           "kind",
           "group"
+        ]
+      },
+      "ActivityTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The request’s id."
+          },
+          "task": {
+            "$ref": "#/components/schemas/ActivityTaskDto"
+          },
+          "requester_name": {
+            "type": "string",
+            "description": "Empty when the member cannot be resolved (they have left)."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer: more than a day, a second request on the task, a repeating task extended on its previous copy too, a reason AI judged invalid, or AI off or failing."
+          },
+          "ai_verdict": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "invalid"
+            ],
+            "nullable": true,
+            "description": "What AI made of the reason, when it was asked."
+          },
+          "ai_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "task",
+          "requester_name",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "ai_verdict",
+          "ai_note",
+          "created_at"
         ]
       },
       "ActivityHoursEntryDto": {
@@ -42736,6 +43408,13 @@
               "$ref": "#/components/schemas/ActivityTaskDto"
             }
           },
+          "task_extensions": {
+            "description": "Requests for more time the caller can decide (#6096: `tasks:manage`, never their own), oldest first. Counted in `needs_you_count`; not snoozable.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityTaskExtensionDto"
+            }
+          },
           "hours_approvals": {
             "description": "Pending service entries the caller can approve (`service:approve`, never their own), oldest first.",
             "type": "array",
@@ -42761,6 +43440,7 @@
         "required": [
           "tasks",
           "task_confirmations",
+          "task_extensions",
           "hours_approvals",
           "polls",
           "cards"
@@ -47030,7 +47710,7 @@
               "linked_apps",
               "calendar"
             ],
-            "description": "For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps or Settings → Calendar."
+            "description": "For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps. `calendar` is the retired Settings → Calendar address, which now opens Linked apps."
           }
         },
         "required": [

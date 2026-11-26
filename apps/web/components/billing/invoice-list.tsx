@@ -1,7 +1,8 @@
 "use client";
 
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { SectionTitledByPage } from "@/components/profile/profile-section";
 import { AlertCircle, Loader2 } from "lucide-react";
 import {
   useCreateInvoice,
@@ -130,8 +131,11 @@ const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: "void", label: "Void" },
 ];
 
-export function InvoiceList({ id }: { id?: string }) {
+export function InvoiceList() {
   const { toast } = useToast();
+  // On its own page (#6031), whose title names it: the label stays for
+  // screen readers and the counts stay in view.
+  const titledByPage = useContext(SectionTitledByPage);
 
   const { data: permissionsPayload } = useMyPermissions();
   const canManage = can(
@@ -391,11 +395,7 @@ export function InvoiceList({ id }: { id?: string }) {
   }
 
   return (
-    <section
-      id={id}
-      aria-labelledby="invoice-list-heading"
-      className="space-y-3"
-    >
+    <section aria-labelledby="invoice-list-heading" className="space-y-3">
       {/*
         One toolbar row: the list's name and its counts on the left, its
         controls on the right, on the page surface. `1f` pin 2.
@@ -441,7 +441,11 @@ export function InvoiceList({ id }: { id?: string }) {
             ) : null
           }
         >
-          Invoices
+          {titledByPage ? (
+            <span className="sr-only">Invoices</span>
+          ) : (
+            "Invoices"
+          )}
         </SectionLabel>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full @md:w-64">

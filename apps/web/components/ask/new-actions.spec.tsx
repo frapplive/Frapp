@@ -51,7 +51,7 @@ describe("NewActions (#5946)", () => {
     expect(actions()).toEqual([
       ["New minutes", "/documents?type=minutes&new=minutes"],
       ["New event", "/events?new=1"],
-      ["New task", "/tasks?new=1"],
+      ["New task", "/activity?new=1"],
       ["New message", "/messages?new=1"],
       ["Log hours", "/profile?open=service&new=1"],
       ["Upload", "/documents?new=1"],

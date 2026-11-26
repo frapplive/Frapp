@@ -229,6 +229,7 @@ export * from "./permission-registry";
 // Client-side RBAC gates, shared by apps/web and apps/mobile. Moved out of
 // `apps/web/lib/auth/can.ts` with #994 so the wildcard rule has one definition.
 export * from "./permissions";
+export * from "./personal-settings";
 export * from "./phone";
 export * from "./phone-reach";
 // What each points category is called, and the officer action's one name,
@@ -301,6 +302,8 @@ export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
 export * from "./task-due";
+// Asking for more time on a task (#6096).
+export * from "./task-extension";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";

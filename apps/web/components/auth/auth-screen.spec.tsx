@@ -164,11 +164,11 @@ describe("the redirect chain survives the rebuild", () => {
     searchParams.value = new URLSearchParams();
   });
 
-  it("keeps the password primary, the providers equal, and the magic link a text link", () => {
+  it("keeps the password primary, the providers equal, and the email code a text link", () => {
     render(<SignInPage />);
     const apple = screen.getByRole("button", { name: "Continue with Apple" });
     const google = screen.getByRole("button", { name: "Continue with Google" });
-    const magic = screen.getByRole("button", { name: "Email me a magic link instead" });
+    const magic = screen.getByRole("button", { name: "Email me a code instead" });
     expect(apple.className).toBe(google.className);
     // A text link, not a third full-width button (Paul, 2026-11-05).
     expect(magic.className).not.toMatch(/\bw-full\b/);
@@ -179,10 +179,10 @@ describe("the redirect chain survives the rebuild", () => {
     expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
   });
 
-  it("puts Continue before the magic link in tab order", () => {
+  it("puts Continue before the email code in tab order", () => {
     render(<SignInPage />);
     const submit = screen.getByRole("button", { name: "Continue" });
-    const magic = screen.getByRole("button", { name: "Email me a magic link instead" });
+    const magic = screen.getByRole("button", { name: "Email me a code instead" });
     expect(
       submit.compareDocumentPosition(magic) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
