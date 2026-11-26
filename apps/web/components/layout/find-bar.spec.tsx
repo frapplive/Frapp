@@ -23,6 +23,7 @@ const {
   moduleGate,
   permissionList,
   debounced,
+  jumpState,
 } = vi.hoisted(() => ({
   push: vi.fn(),
   searchQuery: {
@@ -44,6 +45,19 @@ const {
   permissionList: { current: [] as string[] },
   // `null` passes the live value through; a string pins the debounced one.
   debounced: { current: null as string | null },
+  // Jump to a channel's lists (#6053); empty unless a case fills them.
+  jumpState: {
+    current: {
+      channels: [] as { id: string; name: string; type: string }[],
+      unread: [] as { id: string; name: string; type: string }[],
+      recent: [] as { id: string; name: string; type: string }[],
+      countsFor: (() => undefined) as (
+        id: string,
+      ) => { unreadCount: number; mentionCount: number } | undefined,
+      looksUnread: (() => false) as (id: string) => boolean,
+      categoryOf: (() => undefined) as (channel: unknown) => string | undefined,
+    },
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -58,7 +72,13 @@ vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
   useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
 }));
 
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async () => ({
+  // The jump rules run for real (#6053); only their data is stubbed.
+  ...(await vi.importActual<typeof import("@repo/hooks/channel-jump")>(
+    "@repo/hooks/channel-jump",
+  )),
+  useChannelJump: () => jumpState.current,
+  useActiveChapterId: () => "chapter-1",
   useSearch: () => searchQuery.current,
   useChannels: () => channelsQuery.current,
   useDepartments: (options?: { enabled?: boolean }) => {
@@ -70,6 +90,10 @@ vi.mock("@repo/hooks", () => ({
   aiAvailableFrom: () => false,
   SEARCH_MIN_QUERY_LENGTH: 3,
   SEARCH_COMPLETED_EVENT: "search-completed",
+}));
+
+vi.mock("@/lib/chat/viewer-id", () => ({
+  useChatViewerId: () => "viewer-1",
 }));
 
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
@@ -197,6 +221,14 @@ describe("FindBar", () => {
     moduleGate.current = () => true;
     permissionList.current = ["members:view", "backwork:upload"];
     debounced.current = null;
+    jumpState.current = {
+      channels: [],
+      unread: [],
+      recent: [],
+      countsFor: () => undefined,
+      looksUnread: () => false,
+      categoryOf: () => undefined,
+    };
   });
 
   it("carries no keyboard hint, closed or open", async () => {
@@ -507,16 +539,120 @@ describe("FindBar", () => {
     );
   });
 
-  it("lists nothing under the minimum query length", async () => {
-    channelsQuery.current = { data: [{ id: "c1", name: "announcements" }] };
-    const user = userEvent.setup();
-    render(<FindBar />);
-    await openAndType(user, "an");
-    expect(screen.queryAllByRole("option")).toHaveLength(0);
-    expect(screen.getByRole("combobox")).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+  // #6053: Jump to a channel. Below a search's minimum, Find lists the
+  // channels that match, at once, and runs no search.
+  describe("Jump to a channel (#6053)", () => {
+    const rush = { id: "c-rush", name: "rush-events", type: "PUBLIC" };
+    const brunch = { id: "c-brunch", name: "brunch", type: "PUBLIC" };
+    const general = { id: "c-gen", name: "general", type: "PUBLIC" };
+    const exec = { id: "c-exec", name: "exec", type: "PRIVATE" };
+
+    it("lists the channels two letters match, best first, with no chips", async () => {
+      jumpState.current = {
+        ...jumpState.current,
+        channels: [brunch, rush, general],
+        categoryOf: (channel) =>
+          (channel as { id: string }).id === "c-rush"
+            ? "Recruitment"
+            : undefined,
+      };
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await openAndType(user, "ru");
+      const options = screen.getAllByRole("option");
+      expect(options.map((o) => o.textContent)).toEqual([
+        "rush-eventsRecruitment",
+        "brunch",
+      ]);
+      expect(screen.getByRole("combobox")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+      expect(screen.queryByRole("group", { name: "Show" })).toBeNull();
+      expect(
+        screen.getByText("Messages, events and more from 3 letters."),
+      ).toBeInTheDocument();
+    });
+
+    it("opens a channel on Enter without waiting for the search's debounce", async () => {
+      jumpState.current = { ...jumpState.current, channels: [rush] };
+      // The debounced text trails: a search would ignore Enter here.
+      debounced.current = "";
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await openAndType(user, "ru");
+      await user.keyboard("{Enter}");
+      expect(push).toHaveBeenCalledWith(
+        expect.stringContaining("channel=c-rush"),
+      );
+    });
+
+    it("says so when no channel matches", async () => {
+      jumpState.current = { ...jumpState.current, channels: [general] };
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await openAndType(user, "zz");
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(screen.getByText("No channels match.")).toBeInTheDocument();
+    });
+
+    it("opens on Unread then Recently opened, unread bold, a mention counted", async () => {
+      jumpState.current = {
+        ...jumpState.current,
+        channels: [exec, rush, general],
+        unread: [exec, rush],
+        recent: [general],
+        countsFor: (id) =>
+          id === "c-exec"
+            ? { unreadCount: 3, mentionCount: 1 }
+            : id === "c-rush"
+              ? { unreadCount: 4, mentionCount: 0 }
+              : undefined,
+        looksUnread: (id) => id !== "c-gen",
+      };
+      const user = userEvent.setup();
+      render(<FindBar />);
+      await user.click(trigger());
+      await screen.findByRole("combobox");
+      expect(screen.getByRole("group", { name: "Unread" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("group", { name: "Recently opened" }),
+      ).toBeInTheDocument();
+      const [first, second, third] = screen.getAllByRole("option");
+      // A mention carries its count; a plain unread carries none (§5).
+      expect(first).toHaveTextContent("exec@ 1");
+      expect(second).toHaveTextContent(/^rush-events$/);
+      expect(within(second!).getByText("rush-events")).toHaveClass("font-bold");
+      expect(within(third!).getByText("general")).not.toHaveClass("font-bold");
+      await user.keyboard("{Enter}");
+      expect(push).toHaveBeenCalledWith(
+        expect.stringContaining("channel=c-exec"),
+      );
+    });
+
+    it("opens Find on Cmd+K and Ctrl+K", async () => {
+      render(<FindBar />);
+      const event = chord({ key: "k" });
+      expect(event.defaultPrevented).toBe(true);
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("opens on Cmd+K from a text field, where Cmd+F stays the browser's", async () => {
+      // The composer is the usual place to press it. jsdom has no
+      // `isContentEditable`, so a text area stands in for the composer.
+      render(
+        <>
+          <FindBar />
+          <textarea aria-label="Message" />
+        </>,
+      );
+      act(() => screen.getByRole("textbox", { name: "Message" }).focus());
+      const find = chord();
+      expect(find.defaultPrevented).toBe(false);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      chord({ key: "k", metaKey: false, ctrlKey: true });
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    });
   });
 
   it("closes on Escape, hands focus back, and keeps the query for next time", async () => {

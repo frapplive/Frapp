@@ -1,4 +1,9 @@
-import { lastChannelStorageKey } from "@repo/hooks";
+import {
+  lastChannelStorageKey,
+  parseRecentChannels,
+  recentChannelsStorageKey,
+  withRecentChannel,
+} from "@repo/hooks";
 import type { ChatView } from "@/lib/chat/chat-links";
 
 /**
@@ -41,11 +46,44 @@ export function writeLastChannel(
 ): void {
   if (!userId || !chapterId || typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      storageKey(userId, chapterId, view),
-      channelId,
-    );
+    window.localStorage.setItem(storageKey(userId, chapterId, view), channelId);
   } catch {
     /* Best-effort: the next open falls back to #general. */
+  }
+  // A channel opened is also a recently opened one, for Find (#6053).
+  if (view === "channels") {
+    try {
+      const key = recentChannelsStorageKey(userId, chapterId);
+      window.localStorage.setItem(
+        key,
+        JSON.stringify(
+          withRecentChannel(
+            parseRecentChannels(window.localStorage.getItem(key)),
+            channelId,
+          ),
+        ),
+      );
+    } catch {
+      /* Best-effort: Find then lists fewer recently opened channels. */
+    }
+  }
+}
+
+/**
+ * The channels this browser opened lately, newest first, for Find's
+ * Recently opened group (#6053; `@repo/hooks` `channel-jump.ts` owns the
+ * rule). Best-effort like the last channel: unreadable storage reads empty.
+ */
+export function readRecentChannels(
+  userId: string | null | undefined,
+  chapterId: string | null | undefined,
+): string[] {
+  if (!userId || !chapterId || typeof window === "undefined") return [];
+  try {
+    return parseRecentChannels(
+      window.localStorage.getItem(recentChannelsStorageKey(userId, chapterId)),
+    );
+  } catch {
+    return [];
   }
 }

@@ -96,9 +96,10 @@ import { cn } from "@/lib/utils";
  *
  * What this shell deliberately no longer does:
  *
- * - **No ⌘K palette and no keydown listener for it.** Find is the
- *   replacement: the sidebar's Search row opens a centered dialog, as does
- *   Cmd/Ctrl+F, both owned by `find-bar.tsx`. The `cmdk` dependency stays:
+ * - **No ⌘K palette.** Find is the replacement: the sidebar's Search row
+ *   opens a centered dialog, as do Cmd/Ctrl+F and Cmd/Ctrl+K (the jump key
+ *   since #6053, which opens Find on the unread and recently opened
+ *   channels), all owned by `find-bar.tsx`. The `cmdk` dependency stays:
  *   `components/ui/command.tsx` still serves the chat slash palette and the
  *   chapter wizard.
  * - **No home view.** With nothing open the old shell drew the chapter's

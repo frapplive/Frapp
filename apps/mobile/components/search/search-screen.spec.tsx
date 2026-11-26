@@ -43,6 +43,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isError: hooks.error,
   }),
   useChannels: () => ({ data: hooks.channels }),
+  // Jump to a channel (#6053): its lists are covered by its own specs; here
+  // it holds the channels, with nothing unread or recently opened.
+  useChannelJump: () => ({
+    channels: (
+      (hooks.channels ?? []) as { type?: string; hidden?: boolean }[]
+    ).filter((c) => c.type !== "DM" && !c.hidden),
+    unread: [],
+    recent: [],
+    countsFor: () => undefined,
+    looksUnread: () => false,
+    categoryOf: () => undefined,
+  }),
   useCurrentChapter: () => ({ data: { enabled_modules: hooks.modules } }),
   useViewerUserId: () => "u-me",
   useActiveChapterId: () => hooks.chapterId,
@@ -160,10 +172,14 @@ describe("SearchScreen", () => {
     expect(drawnText(results(tree))).not.toContain("Rush kickoff");
   });
 
-  it("asks for three characters, and says when nothing matches", async () => {
+  // #6053: below three letters the channels they match stand in, at once.
+  it("lists the channels two letters match, and says when nothing matches", async () => {
     const tree = await render();
     await type(tree, "ru");
-    expect(drawnText(tree.root)).toContain(SEARCH_COPY.tooShort);
+    expect(drawnText(tree.root)).toContain("#rush");
+    expect(drawnText(tree.root)).toContain(
+      "Messages, events and more from 3 letters.",
+    );
     hooks.payload = { members: [], messages: [], events: [] };
     await type(tree, "zzz");
     expect(drawnText(tree.root)).toContain(SEARCH_COPY.none);

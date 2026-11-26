@@ -90,7 +90,7 @@ Top to bottom:
    A member whose saved chapter is no longer one of theirs gets the recovery card in its place, the first thing in the column (`ChapterLabel` in [`chapter-switcher.tsx`](../../../apps/web/components/layout/chapter-switcher.tsx)).
 2. **New and Search.**
    New wears the shared New button's outlined accent and opens Frapp Intelligence's page, `/ask`, the app's start view ([§ Top bar](#top-bar), "New is the start view").
-   Search opens the Find dialog, as Cmd/Ctrl+F does on every route.
+   Search opens the Find dialog, as Cmd/Ctrl+F and Cmd/Ctrl+K do on every route.
 3. **The five homes**, Activity, Messages, Calendar, Resources and Directory, then **More** while it holds anything (table below).
    Each home answers one of the three questions a member opens Frapp with ([`positioning.md` § Three questions](../../product/positioning.md#three-questions)): Activity and Calendar what is on me and what is happening, Messages what is being said to me, Resources and Directory where it is and who it is.
    There are no section headings: five rows need none, and a heading over each pair spent 37px the channel list wants.
@@ -318,13 +318,14 @@ It holds no account avatar: the member's row is the drawer's foot, and one menu 
   A route `page-title.ts` does not know gets no title rather than an invented one.
   Mobile keeps its in-screen titles ([`../mobile/patterns.md`](../mobile/patterns.md) § Screen headers).
 
-- **Find** ([`find-bar.tsx`](../../../apps/web/components/layout/find-bar.tsx), [`find-dialog.tsx`](../../../apps/web/components/layout/find-dialog.tsx)) is a centered dialog, opened from the sidebar's Search row from `lg` up, from the top bar's field-shaped button below it, and by Cmd/Ctrl+F on every route.
+- **Find** ([`find-bar.tsx`](../../../apps/web/components/layout/find-bar.tsx), [`find-dialog.tsx`](../../../apps/web/components/layout/find-dialog.tsx)) is a centered dialog, opened from the sidebar's Search row from `lg` up, from the top bar's field-shaped button below it, and by Cmd/Ctrl+F or Cmd/Ctrl+K on every route (Cmd/Ctrl+K also from the chat composer).
   The dialog searches channels, settings, members, messages, events and backwork, in that order (settings since 2026-11-19, [`../../behavior/settings/README.md` § Search settings](../../behavior/settings/README.md#search-settings)), with filter chips to narrow to one group, and every dated row carries its date: a message its sent day, an event its start, a backwork file its course, term and the day it was added ([`find-results.ts`](../../../apps/web/components/layout/find-results.ts)).
   Events and Backwork drop out when the chapter switches their module off (and stay out while that setting is still loading), and Backwork also drops out for a member without `backwork:upload` or `backwork:admin`, whom `/v1/search` sends no backwork rows either ([`search.md`](../../behavior/search.md)).
+  Before anything is typed it lists the member's unread channels, then the ones this browser opened lately, and one or two letters list the channels they match at once, with no chips; a search starts from three letters ([`search.md` § Jump to a channel](../../behavior/search.md#jump-to-a-channel), #6053).
   Typing on the focused field opens the dialog with that text, as it would in the field it looks like.
   It replaced the ⌘K `cmdk` palette, which is deleted, and the chat channel list's own search field, which went with it.
   It carries **no navigation list**, so nav gating stays in one place (`nav-config.ts` and `isNavItemVisible`); a hand-maintained list of destinations here would be the defect the palette's derived list once fixed.
-  One narrowing it carries: its Channels group matches the channel payload's `name`, which for a DM is not the participant's name, so typing a person finds the member but not the DM ([#2220](https://github.com/pdcarlson/Frapp/issues/2220)).
+  Its Channels group lists channels only: a DM's stored `name` is not the participant's name, so typing a person finds the member, not the DM ([#2220](https://github.com/pdcarlson/Frapp/issues/2220); DMs left the group in #6053, where they had matched only on fragments of that stored name).
   Member, event and backwork rows open their route, not the item, because none of those routes takes a deep link yet.
   `cmdk` stays a dependency, because the slash palette and the onboarding wizard still use `components/ui/command.tsx`.
   **It departs from the board on three points** (Paul, 2026-11-05).
@@ -756,7 +757,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   narrower, or beside a tool, it opens over the chat column in place of the timeline, with Back returning to it ([`spec/behavior/chat/README.md`](../../behavior/chat/README.md) § Messages, Message threads).
   _Changed 2026-11-12 ([#4297](https://github.com/pdcarlson/Frapp/issues/4297), asked by Shawn):_ until then it never opened as a third column.
 - **The channel list has no search field and no "N channels" count.**
-  Find (the sidebar's Search row, or Cmd/Ctrl+F) covers channels, members and messages (`1b` pin 8), and events and backwork besides.
+  Find (the sidebar's Search row, Cmd/Ctrl+F or Cmd/Ctrl+K) covers channels, members and messages (`1b` pin 8), and events and backwork besides.
   A read-only channel says so only in its composer: the lock glyph it once carried in the list was dropped in [#2877](https://github.com/pdcarlson/Frapp/issues/2877), because it shared its glyph with the private-channel mark.
   - Changed in [#4668](https://github.com/pdcarlson/Frapp/issues/4668) by Shawn (`shawnatomklein-eng`), 2026-11-13, for the Messages list only (the Direct messages list until #5946): it has a **people search**, a field-shaped button under its header reading "Find or start a conversation" (Discord's words for the same field), built as Find is so the two read as one search ([`dm-search-dialog.tsx`](../../../apps/web/components/chat/dm-search-dialog.tsx)).
     Clicking it, typing on it, the header's New message pencil or the empty list's "Find someone to message" opens a centered dialog with Find's size, rows, group headings and keys.

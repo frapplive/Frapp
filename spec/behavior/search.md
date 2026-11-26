@@ -25,6 +25,20 @@ A single search bar accessible from the top of the mobile and web app:
 
 - Member results are one query, not two: `members` with a `users!inner(…)` embed, filtered by `users.display_name_search` and scoped by the outer `chapter_id`. `users` is a **global** table, so that outer `.eq('chapter_id', …)` is the only thing keeping this source chapter-local — the embed filters within the chapter's members rather than searching users at large. It previously loaded the entire chapter roster before filtering.
 
+## Jump to a channel
+
+Paul's pick of 2026-11-25 ([#6053](https://github.com/frapplive/Frapp/issues/6053), from Winston's "scrolling through every channel to find stuff is a pain"; concept A of its concepts page). Web's Find and the phone's Search find a channel without a search, as Slack's Cmd+K, Discord's quick switcher and Linear's Cmd+K do. One rule for both: `@repo/hooks` `channel-jump.ts`, read through `useChannelJump`.
+
+- **Before anything is typed** they list two groups:
+  - **Unread**, up to ten: every channel whose row reads unread on the channel list (`countsLookUnread`, so a muted channel's plain unread is left out and its mention isn't), mentions first, then in the chapter's order. While the unread counts are unknown it lists none.
+  - **Recently opened**, up to five: the channels this device opened last, newest first, less any listed under Unread. A device keeps up to eight, per member and chapter, beside the last channel and for its reason ([`chat/README.md`](chat/README.md), "it is where this device was"): localStorage on web, AsyncStorage on the phone, never sent. Web adds a channel when it becomes the open one; the phone adds it when its thread opens, once the channel is known not to be a direct message.
+  - On the phone the member's recent searches stay under them.
+- **With one or two letters**, fewer than a search needs (§ MVP defaults), they list the channels the letters match, at once, from the channel list already in memory: a name that starts with them first (`ru` → `#rush-events`), then a word inside the name (`ev` → `#rush-events`), then anywhere; ties go to the shorter name, then A to Z, and a leading `#` is ignored. Up to ten. Under them, `Messages, events and more from 3 letters.`, left off in a council, which has only channels; with no match, `No channels match.` On web the list reads the raw text, so Enter opens a channel without the 200 ms wait a search's debounce needs, and the filter chips are not shown, since they narrow a search.
+- **From three letters** the search runs as before, and its Channels group ranks the same way.
+- **Channels only.** A direct message's stored name is not what its row shows, so no DM is listed or matched, in these groups or in a search's Channels group; a person is found by name under Members.
+- **A row** reads as its row on the channel list: the name, bold while unread, a count only for a mention (`@ 1`, up to `@ 99+`; a merely unread channel carries no number, [`../ui/design-system/foundations.md`](../ui/design-system/foundations.md) §5), and its category's name as the hint. Opening one opens the channel.
+- **On web Cmd/Ctrl+K opens Find** as well as Cmd/Ctrl+F. Unlike Cmd/Ctrl+F, which leaves a text field to the browser's own find, Cmd/Ctrl+K opens Find from the chat composer too, where Slack's and Discord's open their switcher, and focus goes back there when Find closes.
+
 ## Single-channel scope
 
 `GET /v1/search` takes an optional **`channelId`**. It serves the single-channel half of the
@@ -127,7 +141,7 @@ that apart from a channel with no matches. Narrowing has to reach SQL.
 
 v1 ships with the following defaults. Chapter admins cannot override them; tuning requires a code change. These numbers exist so implementers don't have to guess — revisit with real usage signal before v2.
 
-- **Minimum query length:** 3 characters. Shorter queries return an empty result with an inline hint. The one exception is an empty query beside a [message filter](#message-filters).
+- **Minimum query length:** 3 characters. Shorter queries return an empty result. The one exception is an empty query beside a [message filter](#message-filters). The clients list the channels a shorter query matches instead, on the device (§ Jump to a channel); until #6053 they showed `Type at least 3 characters.`
 - **Per-domain cap:** `SEARCH_LIMIT` in `search.service.ts`, currently **10** results per source. Anything past it is silently dropped.
 - **Paging:** none. `GET /v1/search` accepts `q`, `channelId` and the [message filters](#message-filters) — there is no page or offset parameter and no `.range()` in the query path, so the cap above is the whole result set. (The spec previously claimed 20 per domain / 80 per page and a 50-result cap; none of that was ever built.)
 - **Ranking:** specified as Postgres `ts_rank_cd` over the `tsvector` columns, with per-domain field weighting (e.g. Backwork title outweighs tags) set via `setweight` at index time rather than at query time. **Implemented for Backwork only** (2026-11-06, #585): `search_backwork_resources` ranks by `ts_rank_cd` over weights it applies at query time, since it builds its document per row. For chat, events and members `supabase-search.repository.ts` applies no `ts_rank`, ordering chat by `created_at`, leaving the other two unordered, and cutting each source at `SEARCH_LIMIT`. Migration `20260829002000` records that gap. Anything that needs relevance scores on those three (hybrid retrieval, rerank) has to add this first.

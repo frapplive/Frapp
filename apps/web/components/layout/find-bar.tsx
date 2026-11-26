@@ -22,8 +22,8 @@ import {
 import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 
 /**
- * Find: the centered Find dialog (`find-dialog.tsx`), the Cmd/Ctrl+F binding
- * that opens it, and the two visible ways in. From `lg` up that is the
+ * Find: the centered Find dialog (`find-dialog.tsx`), the Cmd/Ctrl+F and
+ * Cmd/Ctrl+K bindings that open it, and the two visible ways in. From `lg` up that is the
  * sidebar's Search row (`sidebar.tsx`, #5946); below it, where the sidebar is
  * a drawer, the top bar keeps the field-shaped button (`FindField`).
  *
@@ -103,7 +103,8 @@ export function FindProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "f") return;
+      const key = event.key.toLowerCase();
+      if (key !== "f" && key !== "k") return;
       // `repeat` guard: holding the chord should open once, not re-fire.
       if (event.repeat) return;
       // Already open: the chord means "back to the search text".
@@ -122,6 +123,7 @@ export function FindProvider({ children }: { children: ReactNode }) {
       if (document.querySelector("[data-radix-focus-guard]")) return;
       const active = document.activeElement;
       if (
+        key === "f" &&
         active instanceof HTMLElement &&
         (active.isContentEditable ||
           active.tagName === "TEXTAREA" ||
@@ -129,6 +131,9 @@ export function FindProvider({ children }: { children: ReactNode }) {
       ) {
         // Someone is typing somewhere else (the chat composer, a form field).
         // Stealing the caret mid-sentence is worse than not binding at all.
+        // Cmd/Ctrl+K is the jump key (#6053), so it opens Find from the
+        // composer too, as Slack's and Discord's do, and focus goes back
+        // there on close; it means nothing to a text field.
         return;
       }
       event.preventDefault();

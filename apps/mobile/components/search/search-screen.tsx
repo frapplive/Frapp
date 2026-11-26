@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type { TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
-import type { SignetTokens } from "@repo/theme/signet";
 import {
   buildFindResults,
   isSearchRunnable,
   settingEntryById,
-  SEARCH_MIN_QUERY_LENGTH,
   useActiveChapterId,
   useChannels,
   useCurrentChapter,
+  useChannelJump,
   useSearch,
   useViewerUserId,
   type FindFilter,
@@ -44,7 +43,10 @@ import {
   withRecentSearch,
   writeRecentSearches,
 } from "@/lib/search/recent-searches";
-import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
+import { tint, useFrappTheme } from "@/lib/theme";
+import { createSearchStyles } from "@/components/search/search-styles";
+import { ChannelJumpList } from "@/components/search/channel-jump-list";
+import { readRecentChannels } from "@/lib/chat/last-channel";
 
 /**
  * Search, the phone's own (#5139; Paul's pick of 2026-11-16, option A of
@@ -82,7 +84,6 @@ export const SEARCH_COPY = {
   placeholder: "Search your chapter",
   recent: "Recent",
   clearRecent: "Clear",
-  tooShort: `Type at least ${SEARCH_MIN_QUERY_LENGTH} characters.`,
   searching: "Searching...",
   failed: "Search is unavailable right now. Try again in a moment.",
   timedOut: "Search took too long. Try a narrower term.",
@@ -109,7 +110,7 @@ type SearchRow = FindResult & { route: NotificationTarget | null };
 /** What the Search screen draws inside its shell. */
 export function SearchScreen() {
   const { tokens } = useFrappTheme();
-  const styles = useMemo(() => createStyles(tokens), [tokens]);
+  const styles = useMemo(() => createSearchStyles(tokens), [tokens]);
   const router = useRouter();
   const { accent } = useChapterBranding();
   const hasAsk = useAiSurfaces().ask;
@@ -157,6 +158,23 @@ export function SearchScreen() {
     setRecent([]);
     if (viewerId) writeRecentSearches(viewerId, chapterId, []);
   }, [viewerId, chapterId]);
+
+  // ---- Jump to a channel (#6053) --------------------------------------
+  // The channels this phone opened lately, read when Search opens.
+  const [recentChannelIds, setRecentChannelIds] = useState<readonly string[]>(
+    [],
+  );
+  useEffect(() => {
+    if (!viewerId) return;
+    let live = true;
+    void readRecentChannels(viewerId, chapterId).then((stored) => {
+      if (live) setRecentChannelIds(stored);
+    });
+    return () => {
+      live = false;
+    };
+  }, [viewerId, chapterId]);
+  const jump = useChannelJump(recentChannelIds);
 
   // ---- The search -----------------------------------------------------
   const typed = query.trim();
@@ -258,7 +276,8 @@ export function SearchScreen() {
       : (search.data?.timedOut ?? false) && !matchedHere;
 
   let status: string | null = null;
-  if (typed !== "" && !runnable) status = SEARCH_COPY.tooShort;
+  // Below a search's minimum the channel matches stand in (#6053).
+  if (typed !== "" && !runnable) status = null;
   else if (runnable && noChapter && !matchedHere) status = SEARCH_COPY.failed;
   else if (runnable && settling && rows.length === 0)
     status = SEARCH_COPY.searching;
@@ -294,6 +313,16 @@ export function SearchScreen() {
     }
   };
 
+  const openJumpChannel = (channelId: string) => {
+    const route = findTargetRoute(
+      { type: "channel", channelId },
+      { chapterFeatures },
+    );
+    if (!route) return;
+    selectionHaptic();
+    openNotificationTarget(router, route);
+  };
+
   // ---- Handing the words to Ask ---------------------------------------
   const askRef = useRef<BottomSheetModal>(null);
   const [askDraft, setAskDraft] = useState<string | null>(null);
@@ -311,6 +340,15 @@ export function SearchScreen() {
         accessibilityLabel={SEARCH_COPY.placeholder}
         searchGlyph
       />
+
+      {typed === "" || !runnable ? (
+        <ChannelJumpList
+          typed={typed}
+          jump={jump}
+          onOpen={(channel) => openJumpChannel(channel.id)}
+          showMoreNote={chapterFeatures}
+        />
+      ) : null}
 
       {typed === "" ? (
         recent.length > 0 ? (
@@ -438,56 +476,4 @@ export function SearchScreen() {
       ) : null}
     </>
   );
-}
-
-function createStyles(tokens: SignetTokens) {
-  return StyleSheet.create({
-    headingRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    heading: {
-      ...typeRole(tokens.typography.role.caption),
-      fontFamily: fontFamilyFor(600),
-      color: tokens.color.text.mutedForeground,
-      paddingTop: tokens.spacing.lg,
-      paddingBottom: tokens.spacing.xs,
-    },
-    clear: {
-      ...typeRole(tokens.typography.role.caption),
-      fontFamily: fontFamilyFor(600),
-      paddingTop: tokens.spacing.lg,
-      paddingBottom: tokens.spacing.xs,
-    },
-    status: {
-      ...typeRole(tokens.typography.role.body),
-      color: tokens.color.text.mutedForeground,
-      paddingTop: tokens.spacing.md,
-    },
-    row: {
-      minHeight: tokens.touch.minimum,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing.md,
-    },
-    askRow: {
-      marginTop: tokens.spacing.lg,
-      paddingHorizontal: tokens.spacing.md,
-      borderWidth: 1,
-      borderRadius: tokens.radius.card,
-    },
-    label: {
-      flexShrink: 1,
-      flexGrow: 1,
-      ...typeRole(tokens.typography.role.body),
-      color: tokens.color.text.foreground,
-    },
-    hint: {
-      flexShrink: 0,
-      maxWidth: "45%",
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
-    },
-  });
 }

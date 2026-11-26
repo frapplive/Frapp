@@ -467,9 +467,11 @@ function MutedMark({ color }: { color: string }) {
 /**
  * The count badge, drawn only when the member was addressed (a mention or an
  * unread DM), in the fixed mention red. A merely unread channel carries no
- * number since 2026-11-07, so the neutral fill it used is gone.
+ * number since 2026-11-07, so the neutral fill it used is gone. Exported for
+ * Search's Jump to a channel rows (#6053), so a row there counts as its row
+ * on Chat home does.
  */
-function UnreadBadge({
+export function UnreadBadge({
   unreadCount,
   mentionCount,
 }: {

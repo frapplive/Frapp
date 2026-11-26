@@ -395,7 +395,9 @@ describe("DashboardShell", () => {
     expect(notificationsLive.calls).toBeGreaterThan(0);
   });
 
-  it("does not answer Cmd+K, and advertises no ⌘K", () => {
+  // Cmd/Ctrl+K opens Find, the jump key (#6053), and no keycap advertises
+  // it, as none advertises Cmd/Ctrl+F (2026-11-05).
+  it("answers Cmd+K with Find, and advertises no ⌘K", () => {
     shell();
     const event = new KeyboardEvent("keydown", {
       key: "k",
@@ -406,7 +408,7 @@ describe("DashboardShell", () => {
     act(() => {
       window.dispatchEvent(event);
     });
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
     expect(screen.queryByText(/⌘K/)).toBeNull();
   });
 
