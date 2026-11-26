@@ -797,6 +797,15 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     calls: 2,
     entries: [MEMBER_TEXT],
   },
+  // Asking for more time (#6096): "<name> asks for more time" to the
+  // officers who can decide, and the answer to the member. Each names the
+  // task as an officer titled it and quotes the member's reason or the
+  // officer's, never chat. The count is the notify-named calls and helpers
+  // (`notifyApprovers`, `notifyRequester`, `notifyQuietly` twice).
+  'application/services/task-extension/task-extension.service.ts': {
+    calls: 6,
+    entries: [MEMBER_TEXT],
+  },
   // The one `notifyUser` behind TaskService's and OpenTaskService's pushes
   // (`notifyQuietly`, 2026-11-18); its callers above say what each push
   // names: the task as an officer titled it, and a member's name.

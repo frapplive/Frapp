@@ -49,7 +49,10 @@ const seed = () => ({
     inA({ id: 'req-a', ...request }),
     inB({ id: 'req-b', ...request }),
   ],
-  members: [inA({ id: 'member-a', ...member }), inB({ id: 'member-b', ...member })],
+  members: [
+    inA({ id: 'member-a', ...member }),
+    inB({ id: 'member-b', ...member }),
+  ],
   tasks: [
     inA({ id: 'task-a', series_id: SERIES, occurrence_date: '2026-11-19' }),
     inB({ id: 'task-b', series_id: SERIES, occurrence_date: '2026-11-19' }),
@@ -151,8 +154,16 @@ describe('SupabaseTaskExtensionRequestRepository — tenant scope', () => {
     harness = createTenantHarness({
       tables: {
         members: [
-          inA({ id: 'member-a', ...member, extension_requests_blocked_at: null }),
-          inB({ id: 'member-b', ...member, extension_requests_blocked_at: null }),
+          inA({
+            id: 'member-a',
+            ...member,
+            extension_requests_blocked_at: null,
+          }),
+          inB({
+            id: 'member-b',
+            ...member,
+            extension_requests_blocked_at: null,
+          }),
         ],
       },
     });

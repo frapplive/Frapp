@@ -135,7 +135,9 @@ describe('TaskExtensionService (#6096)', () => {
     );
   });
 
-  const ask = (over: Partial<Parameters<TaskExtensionService['request']>[0]> = {}) =>
+  const ask = (
+    over: Partial<Parameters<TaskExtensionService['request']>[0]> = {},
+  ) =>
     service.request({
       chapterId: CHAPTER,
       userId: MEMBER,
@@ -180,7 +182,10 @@ describe('TaskExtensionService (#6096)', () => {
     });
 
     it('sends a reason AI calls invalid to an officer, never refusing it', async () => {
-      reasons.judge.mockResolvedValue({ verdict: 'invalid', note: 'No reason.' });
+      reasons.judge.mockResolvedValue({
+        verdict: 'invalid',
+        note: 'No reason.',
+      });
 
       const result = await ask({ reason: 'forgot' });
 
@@ -274,7 +279,8 @@ describe('TaskExtensionService (#6096)', () => {
     it.each([
       [
         'a task with a fixed deadline',
-        () => taskRepo.findById.mockResolvedValue(task({ fixed_deadline: true })),
+        () =>
+          taskRepo.findById.mockResolvedValue(task({ fixed_deadline: true })),
         BadRequestException,
       ],
       [
@@ -376,7 +382,10 @@ describe('TaskExtensionService (#6096)', () => {
 
     it('the creator and the officers in the group it is from, never the asker', async () => {
       taskRepo.findById.mockResolvedValue(task({ followed_by: 'role:exec' }));
-      taskService.followerRecipients.mockResolvedValue(['follower-1', 'follower-2']);
+      taskService.followerRecipients.mockResolvedValue([
+        'follower-1',
+        'follower-2',
+      ]);
       audiences.canConfirm.mockResolvedValue(new Set([CREATOR, 'follower-1']));
 
       await ask();

@@ -77,6 +77,8 @@ describe("cantAskForMoreTime", () => {
   });
 
   it("lets them ask again once a request is decided", () => {
-    expect(cantAskForMoreTime({ ...task, extension: { status: "declined" } }, "me")).toBe(null);
+    expect(
+      cantAskForMoreTime({ ...task, extension: { status: "declined" } }, "me"),
+    ).toBe(null);
   });
 });

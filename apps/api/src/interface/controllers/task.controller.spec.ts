@@ -825,10 +825,8 @@ describe('TaskController', () => {
 
     it('keeps deciding and restoring to tasks:manage, asking to every member', () => {
       const required = (name: keyof TaskController) =>
-        Reflect.getMetadata(
-          PERMISSIONS_KEY,
-          TaskController.prototype[name],
-        ) as string[] | undefined;
+        Reflect.getMetadata(PERMISSIONS_KEY, TaskController.prototype[name]) as
+          string[] | undefined;
       expect(required('approveExtension')).toEqual([
         SystemPermissions.TASKS_MANAGE,
       ]);

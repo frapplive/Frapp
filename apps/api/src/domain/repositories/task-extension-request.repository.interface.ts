@@ -49,7 +49,10 @@ export interface ITaskExtensionRequestRepository {
     taskIds: string[],
   ): Promise<Map<string, TaskExtensionRequest>>;
   /** The chapter's waiting requests, oldest first. */
-  listPending(chapterId: string, limit: number): Promise<TaskExtensionRequest[]>;
+  listPending(
+    chapterId: string,
+    limit: number,
+  ): Promise<TaskExtensionRequest[]>;
   /**
    * Moves a waiting request to its decision, as a compare-and-set on
    * `status = 'pending'`: null when it was decided first.
@@ -81,7 +84,10 @@ export interface ITaskExtensionRequestRepository {
     seriesId: string,
     occurrenceDate: string,
   ): Promise<string | null>;
-  standing(chapterId: string, userId: string): Promise<ExtensionStanding | null>;
+  standing(
+    chapterId: string,
+    userId: string,
+  ): Promise<ExtensionStanding | null>;
   /** Blocks the member from asking; a block already set keeps its time. */
   block(chapterId: string, userId: string, at: string): Promise<void>;
   /** Clears a block; false when the member had none. */

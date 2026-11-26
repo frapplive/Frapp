@@ -20280,6 +20280,18 @@
                 "true"
               ]
             }
+          },
+          {
+            "name": "extensions",
+            "required": false,
+            "in": "query",
+            "description": "`true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
           }
         ],
         "responses": {

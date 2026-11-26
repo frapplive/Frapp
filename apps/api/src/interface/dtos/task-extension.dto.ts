@@ -32,7 +32,7 @@ export class RequestTaskExtensionDto {
   @ApiProperty({
     format: 'date',
     description:
-      'The day asked for (`YYYY-MM-DD`), later than the task\'s. For a task due at a time, the day of `due_at` as the member sees it.',
+      "The day asked for (`YYYY-MM-DD`), later than the task's. For a task due at a time, the day of `due_at` as the member sees it.",
   })
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'due_date must be YYYY-MM-DD' })
@@ -145,7 +145,7 @@ export class TaskExtensionRequestDto
     enum: ['valid', 'invalid'],
     nullable: true,
     description:
-      'What AI made of the reason; null when it wasn\'t asked (over a day, a second request, back to back) or couldn\'t answer.',
+      "What AI made of the reason; null when it wasn't asked (over a day, a second request, back to back) or couldn't answer.",
   })
   ai_verdict: TaskExtensionAiVerdict | null;
 
@@ -163,7 +163,7 @@ export class RequestTaskExtensionResponseDto {
 
   @ApiProperty({
     description:
-      'True when this extension was the 3rd in 30 days: the member can\'t ask again until an officer restores it.',
+      "True when this extension was the 3rd in 30 days: the member can't ask again until an officer restores it.",
   })
   now_blocked: boolean;
 }

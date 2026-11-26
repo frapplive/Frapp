@@ -394,7 +394,10 @@ export function taskExtensionAskedCopy(
 ): { title: string; body: string } {
   return {
     title: `${name} asks for more time: ${task.title}`,
-    body: joinFacts(`To ${due}`, quotedLine(request.reason, EXTENSION_REASON_MAX)),
+    body: joinFacts(
+      `To ${due}`,
+      quotedLine(request.reason, EXTENSION_REASON_MAX),
+    ),
   };
 }
 
@@ -406,8 +409,7 @@ export function taskExtensionAskedCopy(
 export function taskExtensionDecidedCopy(
   task: { title: string },
   decision:
-    | { approved: true; due: string }
-    | { approved: false; reason: string },
+    { approved: true; due: string } | { approved: false; reason: string },
 ): { title: string; body: string } {
   return {
     title: task.title,

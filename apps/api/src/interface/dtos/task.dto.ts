@@ -281,7 +281,7 @@ export class CreateTaskDto {
 
   @ApiPropertyOptional({
     description:
-      'A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group\'s copies and a series\' copies all carry it.',
+      "A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group's copies and a series' copies all carry it.",
   })
   @IsOptional()
   @IsStrictBoolean()

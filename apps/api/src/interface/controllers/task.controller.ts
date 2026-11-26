@@ -446,7 +446,9 @@ export class TaskController {
   @ApiCreatedResponse({ type: RequestTaskExtensionResponseDto })
   @FeatureEvent(
     'task-extension-requested',
-    ({ result }: FeatureEventInput<unknown, RequestTaskExtensionResponseDto>) => ({
+    ({
+      result,
+    }: FeatureEventInput<unknown, RequestTaskExtensionResponseDto>) => ({
       auto_approved: result.extension.auto_approved,
       needs_officer: result.extension.needs_officer ?? 'none',
       now_blocked: result.now_blocked,

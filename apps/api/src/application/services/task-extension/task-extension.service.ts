@@ -140,9 +140,9 @@ export class TaskExtensionService {
     const from = { due_date: task.due_date.slice(0, 10), due_at: task.due_at };
     const to = this.checkedNewDue(task, input);
 
-    const earlier = (await this.requests.listForTask(chapterId, task.id)).filter(
-      (row) => row.status !== 'withdrawn',
-    );
+    const earlier = (
+      await this.requests.listForTask(chapterId, task.id)
+    ).filter((row) => row.status !== 'withdrawn');
     if (earlier.some((row) => row.status === 'pending')) {
       throw new ConflictException({
         code: TASK_EXTENSION_ERRORS.waiting,
@@ -464,7 +464,10 @@ export class TaskExtensionService {
    * them able to decide (the creator left or lost the permission), every
    * `tasks:manage` holder.
    */
-  private async approversOf(task: Task, requesterId: string): Promise<string[]> {
+  private async approversOf(
+    task: Task,
+    requesterId: string,
+  ): Promise<string[]> {
     const followers = await this.taskService.followerRecipients(
       task,
       task.chapter_id,
@@ -500,8 +503,7 @@ export class TaskExtensionService {
     }
     if (approvers.length === 0) return;
     const name =
-      (await displayNameFor(this.userRepo, request.requester_id)) ??
-      'A member';
+      (await displayNameFor(this.userRepo, request.requester_id)) ?? 'A member';
     const copy = (timeZone: string | null) =>
       taskExtensionAskedCopy(
         name,

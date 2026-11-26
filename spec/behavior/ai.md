@@ -1070,6 +1070,12 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
 > The numbers are this session's: six weeks ahead, 52 weeks back, 60 days of slack, three new a week, five waiting, 150 days before a name is raised again, three months for a chore, Ask as the switch, the president as the member it acts for, and no model call.
 > The no-model choice leaves out what only a model could compare: the free-text action items and decisions of last year's minutes that never became tasks (#4416).
 
+## Asking for more time
+
+A member asking for more time on a task (#6096) has their reason judged by `tasks.extension-reason`: the task's title and the reason in, valid or invalid and a short note out, nothing else about the member.
+It is in the `nudges` family, so it stands behind the nudges switch and the member's own yes; with either off, or the call failing, the request goes to an officer, as it does when the reason is judged invalid.
+A valid verdict approves at most one extension of a day; the rules are [`tasks.md` § Asking for more time](tasks.md#asking-for-more-time).
+
 ## Nudges
 
 Half of an officer's job is nudging people, and a reminder alone ("Task due tomorrow") does not move anyone.

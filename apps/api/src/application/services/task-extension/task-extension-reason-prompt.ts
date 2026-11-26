@@ -14,8 +14,7 @@ import type { LanguageModelMessage } from '#domain/adapters/language-model.inter
  * grants a single extension of a day at most: everything larger is decided
  * by an officer before the model is asked.
  */
-export const TASK_EXTENSION_REASON_PROMPT_VERSION =
-  'tasks.extension-reason@v1';
+export const TASK_EXTENSION_REASON_PROMPT_VERSION = 'tasks.extension-reason@v1';
 
 export const TASK_EXTENSION_OPEN = '<reason>';
 export const TASK_EXTENSION_CLOSE = '</reason>';

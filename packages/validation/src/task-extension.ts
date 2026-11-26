@@ -96,12 +96,7 @@ export interface ExtendableTask extends TaskDue {
  * `blocked` show the reason in its place.
  */
 export type CantAskForMoreTime =
-  | "not_mine"
-  | "done"
-  | "no_due"
-  | "fixed"
-  | "waiting"
-  | "blocked";
+  "not_mine" | "done" | "no_due" | "fixed" | "waiting" | "blocked";
 
 export function cantAskForMoreTime(
   task: ExtendableTask,

@@ -12,8 +12,7 @@ import {
 
 /** What the classifier made of a reason, or that it couldn't say. */
 export type ExtensionReasonVerdict =
-  | { verdict: TaskExtensionAiVerdict; note: string }
-  | { verdict: null };
+  { verdict: TaskExtensionAiVerdict; note: string } | { verdict: null };
 
 /**
  * Judges a member's reason for more time (#6096, `spec/behavior/tasks.md`

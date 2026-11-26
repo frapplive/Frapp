@@ -14,9 +14,7 @@ import { SupabaseQueryError } from '../supabase-query-error';
 const UNIQUE_VIOLATION = '23505';
 
 @Injectable()
-export class SupabaseTaskExtensionRequestRepository
-  implements ITaskExtensionRequestRepository
-{
+export class SupabaseTaskExtensionRequestRepository implements ITaskExtensionRequestRepository {
   constructor(
     @Inject(SUPABASE_CLIENT)
     private readonly supabase: FrappSupabaseClient,
@@ -234,7 +232,12 @@ export class SupabaseTaskExtensionRequestRepository
     if (error) throw new SupabaseQueryError(error);
     return (data ?? []).flatMap((row) =>
       row.extension_requests_blocked_at
-        ? [{ user_id: row.user_id, blocked_at: row.extension_requests_blocked_at }]
+        ? [
+            {
+              user_id: row.user_id,
+              blocked_at: row.extension_requests_blocked_at,
+            },
+          ]
         : [],
     );
   }

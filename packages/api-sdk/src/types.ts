@@ -29876,6 +29876,8 @@ export interface operations {
                 week_start?: string;
                 /** @description `true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949). */
                 minutes?: "true";
+                /** @description `true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096). */
+                extensions?: "true";
             };
             header?: never;
             path?: never;

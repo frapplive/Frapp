@@ -1020,7 +1020,13 @@ export class ActivityService {
     chapterId: string,
     userId: string,
     enabledModules: EnabledModules,
-    options: { weekStart?: Date; now?: Date; minutes?: boolean } = {},
+    options: {
+      weekStart?: Date;
+      now?: Date;
+      minutes?: boolean;
+      /** The client draws requests for more time (#6096). */
+      extensions?: boolean;
+    } = {},
   ): Promise<ActivityView> {
     const permissions = await this.rbacService.getEffectivePermissions(
       chapterId,
@@ -1096,7 +1102,14 @@ export class ActivityService {
     ] = await Promise.all([
       this.settle('tasks', chapterId, () =>
         on('tasks')
-          ? this.readTasks(chapterId, userId, permissions, weekStart, nowDate)
+          ? this.readTasks(
+              chapterId,
+              userId,
+              permissions,
+              weekStart,
+              nowDate,
+              options.extensions === true,
+            )
           : Promise.resolve({
               mine: [],
               confirmations: [],
@@ -2041,6 +2054,11 @@ export class ActivityService {
     permissions: string[],
     weekStart: number,
     now: Date,
+    /**
+     * Whether the client draws requests for more time (#6096): a build from
+     * before them gets none, so its badge never counts rows it can't show.
+     */
+    withExtensions = false,
   ): Promise<{
     mine: ActivityTask[];
     confirmations: ActivityTask[];
@@ -2097,7 +2115,7 @@ export class ActivityService {
         : Promise.resolve([]),
       // Requests for more time (#6096), for every officer as confirmations
       // are; the push goes to the task's creator and the group it is from.
-      canManage
+      canManage && withExtensions
         ? this.taskService.waitingExtensions(chapterId, userId, LIST_LIMIT)
         : Promise.resolve([]),
     ]);

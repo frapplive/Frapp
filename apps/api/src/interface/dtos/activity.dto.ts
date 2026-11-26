@@ -1265,6 +1265,16 @@ export class ActivityQueryDto extends ActivityWeekQueryDto {
   @IsOptional()
   @IsIn(['true'])
   minutes?: 'true';
+
+  @ApiProperty({
+    required: false,
+    enum: ['true'],
+    description:
+      '`true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096).',
+  })
+  @IsOptional()
+  @IsIn(['true'])
+  extensions?: 'true';
 }
 
 /**
