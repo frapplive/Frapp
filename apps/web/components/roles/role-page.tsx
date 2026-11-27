@@ -10,6 +10,7 @@ import {
   useViewerDisplayName,
 } from "@repo/hooks";
 import {
+  deleteRoleConfirm,
   isActiveRole,
   isEveryoneRole,
   memberCountLabel,
@@ -20,8 +21,8 @@ import {
   roleColorOrNull,
   rolePermissionsFootnote,
   SELF_ASSIGNABLE_REFUSAL_COPY,
-  selfAssignableRefusal,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
+  selfAssignableRefusal,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ErrorState } from "@/components/shared/async-states";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
 import {
   ActionMenuButton,
   type RowMenuEntry,
@@ -69,27 +73,11 @@ import {
   mayGrant,
   previewPermissions,
   reachesOutside,
+  permissionsAfterMove,
   reachesRole,
   reachesTier,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
-
-/**
- * A role's permissions after a move: the tier's, plus its overrides that are
- * on, minus those that are off. The API's `effectivePermissions` rule, which
- * the database applies on the write.
- */
-function permissionsAfterMove(
-  tierPermissions: readonly string[],
-  overrides: Readonly<Record<string, boolean>>,
-): string[] {
-  const result = new Set(tierPermissions);
-  for (const [permission, on] of Object.entries(overrides)) {
-    if (on) result.add(permission);
-    else result.delete(permission);
-  }
-  return [...result];
-}
 
 /** The Select's value for "outside the tiers"; Radix can't carry `""`. */
 const OUTSIDE = "__outside__";
@@ -204,7 +192,17 @@ function RoleBody({
   const { confirm, confirmDialog } = useConfirmDialog();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
-  const stepper = useStepRole(roles, tiers);
+  const stepper = useStepRole(
+    roles,
+    tiers,
+    // The President role is no one's to edit, but a wildcard caller
+    // may still move it past a neighbour (the API ranks it at the top).
+    (target) =>
+      canManage &&
+      (isWildcardRole(target)
+        ? reach.wildcard
+        : reachesRole(reach, target, tiers)),
+  );
   const holders = useMemo(() => [role], [role]);
   const { permissionsOf, toggle, pending } = useRolePermissionToggle(holders);
 
@@ -296,10 +294,7 @@ function RoleBody({
 
   async function remove() {
     const ok = await confirm({
-      title: `Delete ${role.name}?`,
-      description:
-        "Members holding this role lose what it gives them right away. This can't be undone.",
-      confirmLabel: PEOPLE_SETTINGS_COPY.deleteRole,
+      ...confirmWords(deleteRoleConfirm(role.name)),
       tone: "destructive",
     });
     if (!ok) return;

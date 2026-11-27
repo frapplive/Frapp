@@ -37,8 +37,11 @@ function role(
   };
 }
 
-function stepper(roles: TieredRole[]) {
-  return renderHook(() => useStepRole(roles, TIERS)).result.current;
+function stepper(
+  roles: TieredRole[],
+  canWrite: (role: TieredRole) => boolean = () => true,
+) {
+  return renderHook(() => useStepRole(roles, TIERS, canWrite)).result.current;
 }
 
 beforeEach(() => {
@@ -120,5 +123,17 @@ describe("useStepRole", () => {
     expect(updateRole.mock.calls).toEqual([
       [{ id: "b", body: { display_order: 2 } }],
     ]);
+  });
+
+  it("offers no step that would write a role the officer can't reach", async () => {
+    const president = role("president", 1, { tier_id: "t1" });
+    const vp = role("vp", 2, { tier_id: "t1" });
+    const step = stepper(
+      [president, vp],
+      (target) => target.id !== "president",
+    );
+    expect(step.canStep(vp, -1)).toBe(false);
+    await step.step(vp, -1);
+    expect(updateRole).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,10 @@ import {
   useUpdateRoleTier,
 } from "@repo/hooks";
 import {
+  deleteTierConfirm,
+  deleteTierLabel,
   memberCountLabel,
+  mentionTierLabel,
   PEOPLE_SETTINGS_COPY,
   ROLE_TIER_NAME_MAX_LENGTH,
   tierPermissionsFootnote,
@@ -15,7 +18,10 @@ import {
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
 import { ErrorState } from "@/components/shared/async-states";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
 import {
   ActionMenuButton,
   type RowMenuEntry,
@@ -149,9 +155,9 @@ export function TierPermissionsPage({
 
   async function remove() {
     const ok = await confirm({
-      title: `Delete ${tier!.name}?`,
-      description: `It has no roles left, so nobody loses anything. The other ${words.plural} keep their order.`,
-      confirmLabel: `Delete ${words.singular}`,
+      ...confirmWords(
+        deleteTierConfirm(tier!.name, words.singular, words.plural),
+      ),
       tone: "destructive",
     });
     if (!ok) return;
@@ -187,8 +193,8 @@ export function TierPermissionsPage({
       key: "delete",
       label:
         tierRoles.length > 0
-          ? `Delete ${words.singular} (move its roles out first)`
-          : `Delete ${words.singular}`,
+          ? `${deleteTierLabel(words.singular)} (move its roles out first)`
+          : deleteTierLabel(words.singular),
       destructive: true,
       disabled: !editable || tierRoles.length > 0,
       onSelect: () => void remove(),
@@ -227,7 +233,7 @@ export function TierPermissionsPage({
       */}
       <SettingsGroup label={tier.name}>
         <SettingsRow
-          label={`Anyone can @mention this ${words.singular}`}
+          label={mentionTierLabel(words.singular)}
           checked={tier.mentionable}
           disabled={!editable || updateTier.isPending}
           onCheckedChange={(on) =>

@@ -12,6 +12,8 @@ import {
 } from "@repo/hooks";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
+  addTierLabel,
+  deleteRoleConfirm,
   isActiveRole,
   isEveryoneRole,
   memberCountLabel,
@@ -34,7 +36,10 @@ import {
   anyReadUncached,
 } from "@/components/shared/async-states";
 import type { RowMenuEntry } from "@/components/shared/row-menu";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -150,7 +155,17 @@ function TierList({
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
   const isHidden = useIsPermissionHidden();
-  const stepper = useStepRole(roles, tiers);
+  const stepper = useStepRole(
+    roles,
+    tiers,
+    // The President role is no one's to edit, but a wildcard caller
+    // may still move it past a neighbour (the API ranks it at the top).
+    (target) =>
+      canManage &&
+      (isWildcardRole(target)
+        ? reach.wildcard
+        : reachesRole(reach, target, tiers)),
+  );
 
   const filtering = normalizeWords(query).length > 0;
   const rolesIn = useMemo(() => {
@@ -194,10 +209,7 @@ function TierList({
 
   async function removeRole(role: TieredRole) {
     const ok = await confirm({
-      title: `Delete ${role.name}?`,
-      description:
-        "Members holding this role lose what it gives them right away. This can't be undone.",
-      confirmLabel: PEOPLE_SETTINGS_COPY.deleteRole,
+      ...confirmWords(deleteRoleConfirm(role.name)),
       tone: "destructive",
     });
     if (!ok) return;
@@ -356,7 +368,7 @@ function TierList({
       })}
 
       {canManage && !filtering ? (
-        <SettingsGroup label={`Add ${words.singular}`}>
+        <SettingsGroup label={addTierLabel(words.singular)}>
           <AddTierRow
             words={words}
             onAdd={(name) =>

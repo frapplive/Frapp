@@ -19,11 +19,12 @@ import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import { memberLabel } from "@repo/hooks/display-names";
 import {
   AUTO_GROUP_FOOTNOTE,
+  deleteGroupConfirm,
   GROUP_MEMBERS_MAX,
   GROUP_NAME_MAX_LENGTH,
+  groupDisplayName,
   GROUPS_FOOTNOTE,
   GROUPS_MAX,
-  groupDisplayName,
   memberCountLabel,
   PEOPLE_SETTINGS_COPY,
   roleColorLabel,
@@ -47,7 +48,10 @@ import {
   anyReadUncached,
   pausedRead,
 } from "@/components/shared/async-states";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
 import { InlineNote } from "@/components/shared/inline-note";
 import { MemberSearchField } from "@/components/shared/member-search-field";
 import {
@@ -139,10 +143,7 @@ export function GroupsGroup({
 
   async function handleDelete(group: ChapterGroup) {
     const confirmed = await confirm({
-      title: `Delete ${group.name}?`,
-      description:
-        "Its members stay in the chapter. A channel that lists it stops letting them in through it.",
-      confirmLabel: `Delete ${group.name}`,
+      ...confirmWords(deleteGroupConfirm(group.name)),
       tone: "destructive",
     });
     if (!confirmed) return;
@@ -597,10 +598,7 @@ function GroupBody({
 
   async function handleDelete() {
     const confirmed = await confirm({
-      title: `Delete ${group.name}?`,
-      description:
-        "Its members stay in the chapter. A channel that lists it stops letting them in through it.",
-      confirmLabel: `Delete ${group.name}`,
+      ...confirmWords(deleteGroupConfirm(group.name)),
       tone: "destructive",
     });
     if (!confirmed) return;

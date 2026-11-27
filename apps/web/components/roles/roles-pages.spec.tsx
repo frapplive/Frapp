@@ -459,9 +459,11 @@ describe("the tier list", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Move up" }));
     await waitFor(() =>
+      // Both sit at 1: the list is numbered afresh from 1 in its new
+      // order, so only the President, now second, is written.
       expect(h.updateRole).toHaveBeenCalledWith({
-        id: "vp",
-        body: { display_order: 0 },
+        id: "pres",
+        body: { display_order: 2 },
       }),
     );
     expect(h.updateRole).toHaveBeenCalledTimes(1);
