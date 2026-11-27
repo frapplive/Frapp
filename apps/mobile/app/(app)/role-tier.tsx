@@ -360,7 +360,9 @@ function TierNameField({
   const [draft, setDraft] = useState<string | null>(null);
   const committing = useRef(false);
   const latest = useRef({ draft, value, onSave });
-  latest.current = { draft, value, onSave };
+  useEffect(() => {
+    latest.current = { draft, value, onSave };
+  });
   // Leaving the screen with the field still focused may unmount it before
   // it blurs: save what was typed then too, so Back never drops a rename.
   useEffect(
