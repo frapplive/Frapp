@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Eye,
@@ -16,8 +16,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  addChoice,
+  createFieldBody,
   deleteMemberFieldConfirm,
-  keyFromLabel,
+  MEMBER_FIELD_TYPES,
+  MEMBER_FIELD_VISIBILITIES,
+  newFieldBlocker,
+  parseMaxLength,
+  type NewFieldDraft,
   MEMBER_FIELD_LABEL_MAX_LENGTH,
   MEMBER_FIELD_TYPE_LABEL,
   MEMBER_FIELD_VISIBILITY_LABEL,
@@ -75,7 +81,7 @@ import { SettingsNameField } from "@/components/settings/settings-name-field";
 import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { useToastedRun } from "@/lib/hooks/use-toasted-run";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { guardIntDraft, parseGuardedInt } from "@/lib/utils";
+import { guardIntDraft } from "@/lib/utils";
 
 type Props = {
   /** Whether the caller holds `chapter-config:manage`. */
@@ -89,23 +95,6 @@ const NEW = "new";
 function fieldHref(id: string): string {
   return `${BASE}&field=${encodeURIComponent(id)}`;
 }
-
-/** The picker's order: the everyday types first. */
-const FIELD_TYPES: readonly CustomFieldType[] = [
-  "text",
-  "select",
-  "boolean",
-  "phone",
-  "number",
-  "decimal",
-];
-
-const VISIBILITIES: readonly CustomFieldVisibility[] = [
-  "chapter",
-  "exec",
-  "president",
-  "self",
-];
 
 /** Each type's glyph, the same on its row and the phone's. */
 const TYPE_ICON: Record<CustomFieldType, LucideIcon> = {
@@ -155,32 +144,48 @@ export function SettingsFieldsTab({ canManage }: Props) {
   const [pendingOrder, setPendingOrder] = useState<ChapterCustomField[] | null>(
     null,
   );
+  // The newest order not yet sent, and whether a save is running.
+  const wantedOrder = useRef<ChapterCustomField[] | null>(null);
+  const savingOrder = useRef(false);
 
   const saved = fieldsQuery.data ?? [];
   const fields = pendingOrder ?? saved;
 
   async function reorder(next: ChapterCustomField[]) {
-    // One order at a time: a move made while one saves waits for it.
-    if (pendingOrder) return;
     setPendingOrder(next);
-    const patches = memberFieldSortPatches(
-      next.map((field) => field.id),
-      saved,
-    );
-    // One write per field whose place changed, in turn: each is its own
-    // Logs entry, and the API has no whole-list order for fields.
-    await run(
+    wantedOrder.current = next;
+    // A move made while one saves joins the queue rather than racing it.
+    if (savingOrder.current) return;
+    savingOrder.current = true;
+    // The sorts as written so far, so a queued move is worked out against
+    // what this page already saved, not a list read before it.
+    const sorts = new Map(saved.map((field) => [field.id, field.sort]));
+    const ok = await run(
       async () => {
-        for (const patch of patches) {
-          await updateField.mutateAsync({
-            id: patch.id,
-            body: { sort: patch.sort },
-          });
+        while (wantedOrder.current) {
+          const ids = wantedOrder.current.map((field) => field.id);
+          wantedOrder.current = null;
+          const patches = memberFieldSortPatches(
+            ids,
+            [...sorts].map(([id, sort]) => ({ id, sort })),
+          );
+          // One write per field whose place changed, in turn: each is its
+          // own Logs entry, and the API has no whole-list order for fields.
+          // Each settles after the list is re-read (`useUpdateCustomField`).
+          for (const patch of patches) {
+            await updateField.mutateAsync({
+              id: patch.id,
+              body: { sort: patch.sort },
+            });
+            sorts.set(patch.id, patch.sort);
+          }
         }
       },
       "Couldn't save the order",
       "Part of it may have saved. Reload to see where each field is.",
     );
+    if (!ok) wantedOrder.current = null;
+    savingOrder.current = false;
     setPendingOrder(null);
   }
 
@@ -208,11 +213,7 @@ export function SettingsFieldsTab({ canManage }: Props) {
     );
   }
 
-  function menuFor(
-    field: ChapterCustomField,
-    index: number,
-    onDelete: () => void = () => void remove(field),
-  ): RowMenuEntry[] {
+  function menuFor(field: ChapterCustomField, index: number): RowMenuEntry[] {
     return [
       {
         type: "item",
@@ -234,7 +235,7 @@ export function SettingsFieldsTab({ canManage }: Props) {
         key: "delete",
         label: MEMBER_FIELDS_COPY.deleteField,
         destructive: true,
-        onSelect: onDelete,
+        onSelect: () => void remove(field),
       },
     ];
   }
@@ -273,14 +274,14 @@ export function SettingsFieldsTab({ canManage }: Props) {
         key={field.id}
         field={field}
         canManage={canManage}
-        menu={menuFor(
-          field,
-          index,
-          () =>
-            void remove(field).then((gone) => {
-              if (gone) router.push(BASE);
-            }),
-        )}
+        index={index}
+        count={saved.length}
+        onMove={(by) => move(field, by)}
+        onDelete={() =>
+          void remove(field).then((gone) => {
+            if (gone) router.push(BASE);
+          })
+        }
       />
     ) : (
       <SettingsSubpage
@@ -369,13 +370,44 @@ export function SettingsFieldsTab({ canManage }: Props) {
 function FieldPage({
   field,
   canManage,
-  menu,
+  index,
+  count,
+  onMove,
+  onDelete,
 }: {
   field: ChapterCustomField;
   canManage: boolean;
-  /** The header's ⋯: Move up, Move down, Delete. */
-  menu: RowMenuEntry[];
+  /** Its place in the list, and the list's length, for Move up and down. */
+  index: number;
+  count: number;
+  onMove: (by: -1 | 1) => void;
+  onDelete: () => void;
 }) {
+  // The header's ⋯: Move up, Move down, Delete, as the row's menu has.
+  const menu: RowMenuEntry[] = [
+    {
+      type: "item",
+      key: "up",
+      label: PEOPLE_SETTINGS_COPY.moveUp,
+      disabled: index <= 0,
+      onSelect: () => onMove(-1),
+    },
+    {
+      type: "item",
+      key: "down",
+      label: PEOPLE_SETTINGS_COPY.moveDown,
+      disabled: index < 0 || index >= count - 1,
+      onSelect: () => onMove(1),
+    },
+    { type: "separator", key: "sep" },
+    {
+      type: "item",
+      key: "delete",
+      label: MEMBER_FIELDS_COPY.deleteField,
+      destructive: true,
+      onSelect: onDelete,
+    },
+  ];
   const update = useUpdateCustomField();
   const run = useToastedRun();
   const patch = (
@@ -485,7 +517,7 @@ function VisibilityRow({
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
-            {VISIBILITIES.map((visibility) => (
+            {MEMBER_FIELD_VISIBILITIES.map((visibility) => (
               <SelectItem key={visibility} value={visibility}>
                 {MEMBER_FIELD_VISIBILITY_LABEL[visibility]}
               </SelectItem>
@@ -512,13 +544,23 @@ function LongestAnswerRow({
 }) {
   const saved = value === null ? "" : String(value);
   const [text, setText] = useState(saved);
+  const focused = useRef(false);
+  // The value last sent, so Enter and then leaving the field send it once.
+  const sent = useRef<number | null>(value);
+  // A change saved elsewhere shows here while the field isn't being edited.
+  useEffect(() => {
+    sent.current = value;
+    if (!focused.current) setText(value === null ? "" : String(value));
+  }, [value]);
   function commit() {
-    const next = text === "" ? null : (parseGuardedInt(text, 1) ?? undefined);
+    const next = parseMaxLength(text);
     if (next === undefined) {
       setText(saved);
       return;
     }
-    if (next !== value) void onSave(next);
+    if (next === sent.current) return;
+    sent.current = next;
+    void onSave(next);
   }
   return (
     <SettingsRow
@@ -535,7 +577,13 @@ function LongestAnswerRow({
             const next = guardIntDraft(event.target.value);
             if (next !== undefined) setText(next);
           }}
-          onBlur={commit}
+          onFocus={() => {
+            focused.current = true;
+          }}
+          onBlur={() => {
+            focused.current = false;
+            commit();
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -618,8 +666,10 @@ function OptionsGroup({
           maxLength={120}
           submitLabel="Add"
           onAdd={async (choice) => {
-            if (shown.includes(choice)) return true;
-            const next = [...shown, choice];
+            // An option already there, in any case, adds nothing (the
+            // phone's rule too, `addChoice`).
+            const next = addChoice(shown, choice);
+            if (next.length === shown.length) return true;
             setPending(next);
             const ok = await onChange(next);
             setPending(null);
@@ -655,35 +705,30 @@ function NewFieldPage({
   const [required, setRequired] = useState(false);
   const [sensitive, setSensitive] = useState(false);
 
-  const missing = !label.trim()
-    ? MEMBER_FIELDS_COPY.needsName
-    : type === "select" && choices.length === 0
-      ? MEMBER_FIELDS_COPY.needsOption
-      : type === "text" &&
-          maxLength !== "" &&
-          parseGuardedInt(maxLength, 1) === undefined
-        ? MEMBER_FIELDS_COPY.maxLengthFloor
-        : null;
+  // The draft as the phone's page holds it, checked and sent by the same
+  // rules (`member-field-rules.ts`).
+  const draft: NewFieldDraft = {
+    label,
+    type,
+    choices,
+    maxLength,
+    visibility,
+    required,
+    sensitive,
+  };
+  const missing = newFieldBlocker(draft);
 
   async function submit() {
     if (missing || create.isPending) return;
-    const max = type === "text" ? parseGuardedInt(maxLength, 1) : undefined;
     let createdId: string | undefined;
     const ok = await run(
       async () => {
-        const created = await create.mutateAsync({
-          key: keyFromLabel(label, existingKeys, "field"),
-          label: label.trim(),
-          type,
-          required,
-          sensitive,
-          visibility,
-          ...(type === "select"
-            ? { options: { choices } }
-            : max !== undefined
-              ? { options: { max_length: max } }
-              : {}),
-        });
+        const created = await create.mutateAsync(
+          createFieldBody(
+            draft,
+            existingKeys.map((key) => ({ key })),
+          ),
+        );
         createdId = (created as { id?: string } | undefined)?.id;
       },
       "Couldn't add the field",
@@ -749,7 +794,7 @@ function NewFieldPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="end">
-                {FIELD_TYPES.map((entry) => (
+                {MEMBER_FIELD_TYPES.map((entry) => (
                   <SelectItem key={entry} value={entry}>
                     {MEMBER_FIELD_TYPE_LABEL[entry]}
                   </SelectItem>

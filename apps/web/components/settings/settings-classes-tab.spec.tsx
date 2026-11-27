@@ -141,7 +141,11 @@ function resetMocks() {
     fetchStatus: "idle",
     refetch: vi.fn().mockResolvedValue(undefined),
   });
-  mockMembers.mockReturnValue({ data: MEMBERS, isError: false });
+  mockMembers.mockReturnValue({
+    data: MEMBERS,
+    isError: false,
+    refetch: vi.fn().mockResolvedValue({ data: MEMBERS }),
+  });
   mockReorder.mockResolvedValue(undefined);
   mockAssign.mockResolvedValue(undefined);
   mockRename.mockResolvedValue(undefined);
@@ -551,7 +555,33 @@ describe("SettingsClassesTab", () => {
         { member_id: "m1", pledge_class_id: "alpha", order_number: 1 },
         { member_id: "m2", pledge_class_id: "alpha", order_number: 2 },
       ]);
-      expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" });
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" }),
+      );
+    });
+
+    it("works the next change out against the roster as saved", async () => {
+      // What the server holds after the first Save: Ada out of Alpha.
+      const saved = MEMBERS.map((member) =>
+        member.id === "m1"
+          ? { ...member, pledge_class_id: null, order_number: null }
+          : member,
+      );
+      mockMembers.mockReturnValue({
+        data: MEMBERS,
+        isError: false,
+        refetch: vi.fn().mockResolvedValue({ data: saved }),
+      });
+      openAlpha();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove Ada from Alpha" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" }),
+      );
+      // Nothing left to save: the page now reads the saved roster.
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     });
 
     it("says the save failed and keeps the change on screen", async () => {

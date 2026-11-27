@@ -5,7 +5,7 @@ import {
   classRowsOf,
   moveClassRow,
   type ClassMember,
-} from "./pledge-classes";
+} from "./pledge-class-editor";
 
 const member = (
   id: string,

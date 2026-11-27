@@ -12,7 +12,19 @@ import {
 } from "@repo/hooks";
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import {
+  addChoice,
   can,
+  choiceProblem,
+  createFieldBody,
+  EMPTY_FIELD_DRAFT,
+  MEMBER_FIELD_TYPES,
+  MEMBER_FIELD_VISIBILITIES,
+  moveChoice,
+  newFieldBlocker,
+  parseMaxLength,
+  withChoices,
+  withMaxLength,
+  type NewFieldDraft,
   deleteMemberFieldConfirm,
   MEMBER_FIELD_LABEL_MAX_LENGTH,
   MEMBER_FIELD_TYPE_LABEL,
@@ -64,21 +76,6 @@ import { Toggle } from "@/components/toggle";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { useKeptSheetDraft, useKeptSheetOpening } from "@/lib/kept-sheet-draft";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
-import {
-  addChoice,
-  choiceProblem,
-  createFieldBody,
-  EMPTY_FIELD_DRAFT,
-  MAX_LENGTH_INVALID,
-  MEMBER_FIELD_TYPES,
-  MEMBER_FIELD_VISIBILITIES,
-  moveChoice,
-  newFieldBlocker,
-  parseMaxLength,
-  withChoices,
-  withMaxLength,
-  type NewFieldDraft,
-} from "@/lib/settings/member-fields";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /** A field's name: the API takes up to this many characters. */
@@ -513,7 +510,7 @@ function ExistingField({
             onSave={async (typed) => {
               const parsed = parseMaxLength(typed);
               if (parsed === undefined) {
-                setMaxLengthFailure(MAX_LENGTH_INVALID);
+                setMaxLengthFailure(MEMBER_FIELDS_COPY.maxLengthFloor);
                 return false;
               }
               setMaxLengthFailure(null);

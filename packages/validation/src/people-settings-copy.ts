@@ -299,15 +299,6 @@ export function memberFieldFacts(field: {
     .join(" · ");
 }
 
-/** A pick-one field's options as its row value: "S, M, L, XL". */
-export function memberFieldOptionsValue(
-  choices: readonly string[] | null | undefined,
-): string {
-  return choices && choices.length > 0
-    ? choices.join(", ")
-    : MEMBER_FIELDS_COPY.noOptions;
-}
-
 /** The confirm for deleting a member field. */
 export function deleteMemberFieldConfirm(label: string): {
   title: string;

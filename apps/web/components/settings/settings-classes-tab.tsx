@@ -4,9 +4,13 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import {
+  addableClassMembers,
   addRow,
   classAssignments,
-  fraternalOrderComparator,
+  classMemberCounts,
+  classRowsOf,
+  movesFromLabel,
+  type AddableMember,
   renumberRows,
   useAssignPledgeClasses,
   useCreatePledgeClass,
@@ -19,7 +23,6 @@ import {
   type MemberProfile,
   type PledgeClass,
 } from "@repo/hooks";
-import { memberLabel } from "@repo/hooks/display-names";
 import {
   readKeptDraft,
   useKeptDraftKeys,
@@ -148,18 +151,10 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
   // `undefined` until the roster read answers: a count, the delete warning
   // and the class editor all need the real roster, never an empty stand-in.
   const members = membersQuery.data;
-  const countByClass = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const member of members ?? []) {
-      if (member.pledge_class_id) {
-        counts.set(
-          member.pledge_class_id,
-          (counts.get(member.pledge_class_id) ?? 0) + 1,
-        );
-      }
-    }
-    return counts;
-  }, [members]);
+  const countByClass = useMemo(
+    () => classMemberCounts(members ?? []),
+    [members],
+  );
   const countOf = (id: string) =>
     members ? (countByClass.get(id) ?? 0) : null;
 
@@ -249,6 +244,7 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
         members={members}
         membersFailed={membersQuery.isError && !members}
         onRetryMembers={() => void membersQuery.refetch()}
+        refetchMembers={async () => (await membersQuery.refetch()).data}
         canManage={canManage}
         classTerm={classTerm}
         orderTerm={orderTerm}
@@ -389,26 +385,6 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
   );
 }
 
-function rowName(member: MemberProfile): string {
-  return memberLabel(member.display_name, member.user_id);
-}
-
-/** A class's members as editor rows, in the order the Directory lists them. */
-function rowsOf(
-  members: readonly MemberProfile[],
-  classId: string,
-  classes: readonly PledgeClass[],
-): ClassEditorRow[] {
-  return members
-    .filter((member) => member.pledge_class_id === classId)
-    .sort(fraternalOrderComparator(classes))
-    .map((member) => ({
-      memberId: member.id,
-      name: rowName(member),
-      number: member.order_number === null ? "" : String(member.order_number),
-    }));
-}
-
 /**
  * One class's page (`?tab=classes&class=<id>`): its name on top, saved on its
  * own; its members in the order the Directory will list them; ⋯ in the
@@ -432,6 +408,7 @@ function ClassPage({
   members,
   membersFailed,
   onRetryMembers,
+  refetchMembers,
   canManage,
   classTerm,
   orderTerm,
@@ -444,6 +421,7 @@ function ClassPage({
   members: readonly MemberProfile[] | undefined;
   membersFailed: boolean;
   onRetryMembers: () => void;
+  refetchMembers: () => Promise<readonly MemberProfile[] | undefined>;
   canManage: boolean;
   classTerm: string;
   orderTerm: string;
@@ -509,6 +487,7 @@ function ClassPage({
           pledgeClass={pledgeClass}
           classes={classes}
           members={members}
+          refetchMembers={refetchMembers}
           canManage={canManage}
           orderTerm={orderTerm}
         />
@@ -528,12 +507,15 @@ function ClassMembers({
   pledgeClass,
   classes,
   members: liveMembers,
+  refetchMembers,
   canManage,
   orderTerm,
 }: {
   pledgeClass: PledgeClass;
   classes: readonly PledgeClass[];
   members: readonly MemberProfile[];
+  /** Reads the roster again and resolves with it (undefined if that fails). */
+  refetchMembers: () => Promise<readonly MemberProfile[] | undefined>;
   canManage: boolean;
   orderTerm: string;
 }) {
@@ -555,7 +537,7 @@ function ClassMembers({
   // must not read as "the officer took them out". A kept draft brings its own.
   const [members, setMembers] = useState(() => opening?.members ?? liveMembers);
   const [rows, setRows] = useState<ClassEditorRow[]>(
-    () => opening?.rows ?? rowsOf(liveMembers, pledgeClass.id, classes),
+    () => opening?.rows ?? classRowsOf(liveMembers, pledgeClass.id, classes),
   );
 
   const assignments = classAssignments(pledgeClass.id, rows, members);
@@ -575,7 +557,7 @@ function ClassMembers({
   function reset() {
     kept.discard();
     setMembers(liveMembers);
-    setRows(rowsOf(liveMembers, pledgeClass.id, classes));
+    setRows(classRowsOf(liveMembers, pledgeClass.id, classes));
   }
 
   const classNameById = useMemo(
@@ -586,24 +568,16 @@ function ClassMembers({
     () => new Set(rows.map((row) => row.memberId)),
     [rows],
   );
-  // Everyone who can be added: members in no class first, since they are the
-  // ones a new class is usually made of, then members of another class.
+  // Everyone who can be added, in the phone's order too: members in no
+  // class first, since a new class is usually made of them.
   const addable = useMemo(
-    () =>
-      members
-        .filter((member) => !inDraft.has(member.id))
-        .sort(
-          (a, b) =>
-            Number(a.pledge_class_id !== null) -
-              Number(b.pledge_class_id !== null) ||
-            rowName(a).localeCompare(rowName(b)),
-        ),
-    [members, inDraft],
+    () => addableClassMembers(members, inDraft, classNameById),
+    [members, inDraft, classNameById],
   );
 
-  function addMember(member: MemberProfile) {
+  function addMember(entry: AddableMember) {
     setRows((previous) =>
-      addRow(previous, { memberId: member.id, name: rowName(member) }),
+      addRow(previous, { memberId: entry.member.id, name: entry.name }),
     );
   }
 
@@ -613,7 +587,15 @@ function ClassMembers({
     try {
       await assign.mutateAsync(assignments);
       kept.drop();
-      // The page stays open on what was saved, read back from the roster.
+      // The page stays open, so the next edit is worked out against the
+      // roster as saved, not the one this page opened on: without it a
+      // second Save re-sends the first, and taking out a member just added
+      // writes nothing. The phone does the same.
+      const fresh = await refetchMembers();
+      if (fresh) {
+        setMembers(fresh);
+        setRows(classRowsOf(fresh, pledgeClass.id, classes));
+      }
       toast({ title: `${pledgeClass.name} saved` });
     } catch (error) {
       kept.release();
@@ -635,14 +617,11 @@ function ClassMembers({
           <MemberSearchField
             label={PLEDGE_CLASS_SETTINGS_COPY.addMember}
             items={addable}
-            nameOf={rowName}
-            keyOf={(member) => member.id}
-            detailOf={(member) => {
-              const from = member.pledge_class_id
-                ? classNameById.get(member.pledge_class_id)
-                : undefined;
-              return from ? `Moves from ${from}` : null;
-            }}
+            nameOf={(entry) => entry.name}
+            keyOf={(entry) => entry.member.id}
+            detailOf={(entry) =>
+              entry.movesFrom ? movesFromLabel(entry.movesFrom) : null
+            }
             onAdd={addMember}
             emptyText={PLEDGE_CLASS_SETTINGS_COPY.everyoneIn}
             disabled={assign.isPending}

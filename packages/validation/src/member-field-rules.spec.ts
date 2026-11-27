@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { CreateCustomFieldSchema, MEMBER_FIELDS_COPY } from "@repo/validation";
+import { CreateCustomFieldSchema } from "./chapter-config";
+import { MEMBER_FIELDS_COPY } from "./people-settings-copy";
 import {
   addChoice,
   choiceProblem,
   createFieldBody,
   EMPTY_FIELD_DRAFT,
-  MAX_LENGTH_INVALID,
-  moveChoice,
+    moveChoice,
   moveFieldPatches,
   newFieldBlocker,
   parseMaxLength,
   withChoices,
   withMaxLength,
-} from "./member-fields";
+} from "./member-field-rules";
 
 describe("a new member field (#6029)", () => {
   it("says why Add field waits: a name, then a pick-one field's option", () => {
@@ -28,7 +28,7 @@ describe("a new member field (#6029)", () => {
       newFieldBlocker({ ...named, type: "select", choices: ["S"] }),
     ).toBeNull();
     expect(newFieldBlocker({ ...named, maxLength: "ten" })).toBe(
-      MAX_LENGTH_INVALID,
+      MEMBER_FIELDS_COPY.maxLengthFloor,
     );
   });
 
@@ -58,15 +58,15 @@ describe("a new member field (#6029)", () => {
       label: "Shirt size",
       type: "select",
       options: { choices: ["S", "M"] },
-      sort: 4,
     });
+    // The API puts it last; a sort worked out from a stale list could tie.
+    expect(body).not.toHaveProperty("sort");
     expect(CreateCustomFieldSchema.safeParse(body).success).toBe(true);
     const text = createFieldBody(
       { ...EMPTY_FIELD_DRAFT, label: "Bio", maxLength: "200" },
       [],
     );
     expect(text.options).toEqual({ max_length: 200 });
-    expect(text.sort).toBe(0);
     expect(
       createFieldBody({ ...EMPTY_FIELD_DRAFT, label: "Bio" }, []).options,
     ).toBeUndefined();

@@ -1,29 +1,31 @@
+import type {
+  ChapterCustomField,
+  CreateCustomField,
+  CustomFieldType,
+  CustomFieldVisibility,
+} from "./chapter-config";
+import { keyFromLabel } from "./custom-field-key";
 import {
-  keyFromLabel,
   MEMBER_FIELDS_COPY,
   memberFieldSortPatches,
   moveId,
-  type ChapterCustomField,
-  type CreateCustomField,
-  type CustomFieldType,
-  type CustomFieldVisibility,
-} from "@repo/validation";
+} from "./people-settings-copy";
 
 /**
- * The rules behind the phone's Member fields pages (#6029): Chapter settings →
- * Member fields (`app/(app)/member-fields.tsx`) and one field's page
- * (`app/(app)/member-field.tsx`). The words and the order writes are shared
- * with web (`@repo/validation`'s `people-settings-copy.ts`).
+ * The rules behind both apps' Member fields pages (#6029): web's
+ * `settings-fields-tab.tsx` and the phone's `member-fields.tsx` and
+ * `member-field.tsx` read these, so a picker's order, a new field's checks
+ * and its create body are the same on both.
  */
 
-/** The types in the Type picker's order, as `MEMBER_FIELD_TYPE_LABEL` lists them. */
+/** The types in the Type picker's order: the everyday ones first. */
 export const MEMBER_FIELD_TYPES: readonly CustomFieldType[] = [
   "text",
-  "number",
-  "decimal",
-  "phone",
   "select",
   "boolean",
+  "phone",
+  "number",
+  "decimal",
 ];
 
 /** Who can see a field, in the Visible to picker's order. */
@@ -66,13 +68,10 @@ export function newFieldBlocker(draft: NewFieldDraft): string | null {
     return MEMBER_FIELDS_COPY.needsOption;
   }
   if (draft.type === "text" && parseMaxLength(draft.maxLength) === undefined) {
-    return MAX_LENGTH_INVALID;
+    return MEMBER_FIELDS_COPY.maxLengthFloor;
   }
   return null;
 }
-
-/** Said under Longest answer for something that isn't a whole number over 0. */
-export const MAX_LENGTH_INVALID = "Longest answer is a whole number";
 
 /**
  * The longest answer as typed: a whole number over 0, `null` for blank (no
@@ -88,12 +87,12 @@ export function parseMaxLength(text: string): number | null | undefined {
 
 /**
  * `POST /v1/custom-fields`' body for a draft that `newFieldBlocker` passes:
- * a key made from the name (the officer never types one), and the field at
- * the end of the list.
+ * a key made from the name (the officer never types one). No `sort`: the API
+ * puts a new field at the end, which a list read earlier could tie with.
  */
 export function createFieldBody(
   draft: NewFieldDraft,
-  existing: readonly Pick<ChapterCustomField, "key" | "sort">[],
+  existing: readonly Pick<ChapterCustomField, "key">[],
 ): CreateCustomField {
   const label = draft.label.trim();
   const maxLength =
@@ -115,7 +114,6 @@ export function createFieldBody(
     required: draft.required,
     sensitive: draft.sensitive,
     visibility: draft.visibility,
-    sort: existing.reduce((last, field) => Math.max(last, field.sort + 1), 0),
     ...(options ? { options } : {}),
   };
 }
@@ -168,11 +166,8 @@ export function moveChoice(
   index: number,
   by: -1 | 1,
 ): string[] | null {
-  const target = index + by;
-  if (index < 0 || target < 0 || target >= choices.length) return null;
-  const next = [...choices];
-  [next[index], next[target]] = [next[target]!, next[index]!];
-  return next;
+  const choice = choices[index];
+  return choice === undefined ? null : moveId(choices, choice, by);
 }
 
 /** A field's stored options with new choices, for `PATCH`. */

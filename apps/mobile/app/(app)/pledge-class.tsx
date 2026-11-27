@@ -69,7 +69,7 @@ import {
   classRowsOf,
   moveClassRow,
   movesFromLabel,
-} from "@/lib/settings/pledge-classes";
+} from "@repo/hooks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 function firstParam(value: string | string[] | undefined): string {

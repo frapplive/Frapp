@@ -14,6 +14,7 @@ import {
   MEMBER_FIELD_VISIBILITY_LABEL,
   MEMBER_FIELDS_COPY,
   memberFieldFacts,
+  moveFieldPatches,
   PEOPLE_SETTINGS_COPY,
   type ChapterCustomField,
 } from "@repo/validation";
@@ -35,7 +36,6 @@ import {
 } from "@/components/item-actions-menu";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
-import { moveFieldPatches } from "@/lib/settings/member-fields";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**

@@ -42,7 +42,7 @@ import { NameSheet } from "@/components/roles/name-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { usePledgeClassTerms } from "@/lib/directory/pledge-class";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
-import { classMemberCounts } from "@/lib/settings/pledge-classes";
+import { classMemberCounts } from "@repo/hooks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**

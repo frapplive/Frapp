@@ -230,7 +230,7 @@ describe("SettingsFieldsTab: the list", () => {
     ]);
   });
 
-  it("saves one order at a time: a move made while one saves is dropped", async () => {
+  it("saves one order at a time: a move made while one saves is sent after it", async () => {
     let finish: () => void = () => {};
     mockUpdate.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finish = resolve)),
@@ -246,10 +246,14 @@ describe("SettingsFieldsTab: the list", () => {
     );
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     finish();
-    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(2));
+    // The queued move is worked out against the sorts just written, so
+    // Parent phone lands second and Major last.
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(4));
     expect(mockUpdate.mock.calls.map(([call]) => call)).toEqual([
       { id: "f2", body: { sort: 0 } },
       { id: "f1", body: { sort: 1 } },
+      { id: "f3", body: { sort: 1 } },
+      { id: "f1", body: { sort: 2 } },
     ]);
   });
 

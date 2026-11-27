@@ -171,6 +171,8 @@ export * from "./meeting-recording";
 export * from "./meeting-start";
 // ── Meeting minutes (#4312) ──────────────────────────────────────────────────
 export * from "./meetings";
+// Both apps' Member fields rules: picker order, a new field's checks and body (#6029).
+export * from "./member-field-rules";
 // Member nudges (#4781): the one card on Activity the AI writes for a member.
 export * from "./member-nudge";
 // ── `@`-mention resolution (C1 of #937) ──────────────────────────────────────
