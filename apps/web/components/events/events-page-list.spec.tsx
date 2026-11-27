@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { selectCalendarBirthdays } from "@repo/hooks/calendar-birthdays";
 import { selectCalendarTasks } from "@repo/hooks/calendar-tasks";
 import { CALENDAR_KIND_HUE } from "@repo/hooks/activity-agenda";
@@ -158,7 +158,6 @@ vi.mock("@/lib/realtime/use-realtime-table", () => ({
 }));
 
 // The page's URL; no `?event=` unless a test sets one.
-const searchRef = vi.hoisted(() => ({ current: new URLSearchParams() }));
 // The agenda's birthday items (#4959), as `useCalendarBirthdays` serves them.
 const birthdaysRef = vi.hoisted(() => ({
   current: [] as import("@repo/hooks/calendar-birthdays").CalendarBirthday[],
@@ -175,11 +174,13 @@ const narrowRef = vi.hoisted(() => ({ current: null as boolean | null }));
 vi.mock("@/lib/use-is-narrow", () => ({
   useIsNarrow: () => [() => undefined, narrowRef.current],
 }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchRef.current,
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 import { EventsPage } from "./events-page";
+import { setAddress } from "@/tests/address-search-params";
 
 const row = (name: RegExp) => {
   const button = screen.getByRole("button", { name });
@@ -213,7 +214,7 @@ beforeEach(() => {
   eventsQuery.data = EVENTS;
   eventsQuery.isError = false;
   permissionsRef.current = ["events:create", "events:update", "members:view"];
-  searchRef.current = new URLSearchParams();
+  setAddress("/events");
   birthdaysRef.current = [];
   tasksRef.current = { items: [] };
   narrowRef.current = null;
@@ -221,7 +222,7 @@ beforeEach(() => {
 
 describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
   it("opens that event's detail sheet", () => {
-    searchRef.current = new URLSearchParams({ event: "evt-2" });
+    setAddress("/events?event=evt-2");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
@@ -232,12 +233,65 @@ describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
     );
   });
 
-  it("opens nothing for an id the list does not hold", () => {
-    searchRef.current = new URLSearchParams({ event: "gone" });
+  it("opens nothing for an id the list does not hold, says so, and drops it (#6043)", async () => {
+    setAddress("/events?event=gone");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ open: false }),
+    );
+    expect(
+      await screen.findByText(/That event isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("puts the event a row opens in the address, and its close goes Back (#6043)", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    const go = vi.spyOn(window.history, "go");
+    try {
+      await user.click(row(/study night/i).querySelector("button")!);
+      expect(window.location.search).toBe("?event=evt-2");
+      expect(push).toHaveBeenCalledTimes(1);
+      const props = detailSheetProps.mock.lastCall![0] as {
+        onOpenChange: (open: boolean) => void;
+      };
+      act(() => props.onOpenChange(false));
+      expect(go).toHaveBeenCalledWith(-1);
+    } finally {
+      push.mockRestore();
+      go.mockRestore();
+    }
+  });
+
+  it("closes the sheet when Back takes the event out of the address (#6043)", async () => {
+    setAddress("/events?event=evt-2");
+    render(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(detailSheetProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      ),
+    );
+  });
+});
+
+describe("EventsPage hour grid address (#6043)", () => {
+  it("pushes the hour grid, and Back closes it", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    await user.click(screen.getByRole("button", { name: "Hours for Today" }));
+    expect(window.location.search).toMatch(/^\?hours=\d{4}-\d{2}-\d{2}$/);
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole("button", { name: /^create event on/i }),
+      ).toHaveLength(0),
     );
   });
 });

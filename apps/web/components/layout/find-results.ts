@@ -6,6 +6,7 @@ import {
   type FindTarget,
 } from "@repo/hooks/find-results";
 import { chatDeepLink } from "@/lib/chat/chat-links";
+import { eventDeepLink } from "@/lib/events/event-links";
 
 /**
  * What the Find dialog lists: the shared list (`@repo/hooks`
@@ -37,7 +38,8 @@ function findHref(target: FindTarget): string {
     case "member":
       return "/members";
     case "event":
-      return "/events";
+      // The event itself, docked in place of the Calendar (#6043).
+      return target.eventId ? eventDeepLink(target.eventId) : "/events";
     case "backwork":
       return "/backwork";
     case "setting": {
