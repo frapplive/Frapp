@@ -235,34 +235,12 @@ const linkedType = {
 };
 // The router's search params follow the History API, as Next's do, so the
 // page's address (folder, viewer, Who can see, Minutes) moves as it would.
-vi.mock("next/navigation", async () => {
-  const { useMemo, useSyncExternalStore } = await import("react");
-  const listeners = new Set<() => void>();
-  const notify = () => listeners.forEach((listener) => listener());
-  for (const key of ["pushState", "replaceState"] as const) {
-    const original = window.history[key].bind(window.history);
-    window.history[key] = (...args: Parameters<History["pushState"]>) => {
-      original(...args);
-      notify();
-    };
-  }
-  window.addEventListener("popstate", notify);
-  const subscribe = (listener: () => void) => {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  };
-  return {
-    useSearchParams: () => {
-      const search = useSyncExternalStore(
-        subscribe,
-        () => window.location.search,
-      );
-      return useMemo(() => new URLSearchParams(search), [search]);
-    },
-    useRouter: () => router,
-    usePathname: () => "/documents",
-  };
-});
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
+  useRouter: () => router,
+  usePathname: () => "/documents",
+}));
 // Every test opens on the bare library; the address carries no state over.
 beforeEach(() => window.history.replaceState(null, "", "/documents"));
 
@@ -3944,9 +3922,7 @@ describe("DocumentsPage minutes rows (#5949)", () => {
     const user = userEvent.setup();
     render(<DocumentsPage />);
     await user.click(await filterButton(user, "File type"));
-    await user.click(
-      await screen.findByRole("menuitem", { name: /^Minutes/ }),
-    );
+    await user.click(await screen.findByRole("menuitem", { name: /^Minutes/ }));
     await waitFor(() => expect(window.location.search).toBe("?type=minutes"));
     expect(screen.queryByText("Chapter bylaws")).not.toBeInTheDocument();
   });

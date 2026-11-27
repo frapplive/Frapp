@@ -76,7 +76,17 @@ import {
   eventTakesAttendance,
   eventTimingFieldsOf,
   eventsCount,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
 import { useNewIntent } from "@/components/layout/new-intent";
@@ -241,6 +251,41 @@ function editorDraftNameOf(editor: KeptEditor): string {
 }
 
 export function EventsPage() {
+  // The open event, its editor, the picked day and the hour grid are read
+  // from the address, and `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedEventsPage />
+    </Suspense>
+  );
+}
+
+const E = WEB_ADDRESS_PARAMS.events;
+const EVENTS_ADDRESS = [E.day, E.event, E.edit, E.hours] as const;
+
+/** A `YYYY-MM-DD` from the address as a local day, or `null` for one that
+ * isn't a real day. */
+function dayFromParam(value: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const day = dateOfKey(value);
+  // `dateOfKey` rolls an out-of-range part over: 2026-02-31 is not a day.
+  return day && localIsoDate(day) === value ? day : null;
+}
+
+function AddressedEventsPage() {
+  /*
+    The address (#6043, spec § Addresses): `day=` is the picked day, replaced
+    as days are picked so Back doesn't walk every one; `event=` is the open
+    event and `edit=1` its editor, each pushed; `hours=` is the hour grid,
+    pushed. Each close follows the address's rule. The state below follows
+    the address: a write here moves both, and Back, Forward or a link moves
+    the address first and the state after it.
+  */
+  const address = useAddressParams(EVENTS_ADDRESS);
+  const dayParam = address.values[E.day];
+  const eventParam = address.values[E.event];
+  const editParam = address.values[E.edit] === "1";
+  const hoursParam = address.values[E.hours];
   const { isOffline } = useNetwork();
   const { toast } = useToast();
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
@@ -640,6 +685,103 @@ export function EventsPage() {
     [calendarEvents, agendaItems, hiddenKinds],
   );
 
+  /*
+    The state follows the address when Back, Forward or a link moves it
+    (the writes above move both, so these find nothing to do for them).
+    Effects, as the editor left open above is: what they follow is outside
+    React.
+  */
+  /* eslint-disable react-hooks/set-state-in-effect -- following the address */
+  // The event closed by Back: the sheet goes with it.
+  useEffect(() => {
+    if (eventParam === null && detailSheetOpen) setDetailSheetOpen(false);
+  }, [eventParam, detailSheetOpen]);
+  /*
+    The editor follows `edit=` only when the address moves it (Back closes
+    it, Forward or a reload opens it again), never on a render where the two
+    merely differ: the page's own close goes Back, which lands a moment
+    later, and the form the page was left with (#4593) reopens without it.
+  */
+  const [editWanted, setEditWanted] = useState(editParam);
+  const editSeen = useRef(editParam);
+  useEffect(() => {
+    if (editSeen.current === editParam) return;
+    editSeen.current = editParam;
+    setEditWanted(editParam);
+    if (!editParam && editorDialog.open && editorMode === "edit") {
+      editorDialog.setOpen(false);
+      keepEditorOpen(null);
+      if (eventParam !== null) setDetailSheetOpen(true);
+    }
+    // Only a move of the address acts here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam]);
+  // Waits for its event, then opens once, for someone who may edit it; an
+  // `edit=1` they may not use is taken out of the address.
+  useEffect(() => {
+    if (!editWanted || !activeEvent || eventIdOf(activeEvent) !== eventParam)
+      return;
+    setEditWanted(false);
+    if (!canMarkAttendance || !eventWriteGate.allowed) {
+      replaceAddress({ [E.edit]: null });
+      return;
+    }
+    if (editorDialog.open) return;
+    setDetailSheetOpen(false);
+    setEditorMode("edit");
+    keepEditorOpen({ mode: "edit", event: activeEvent, plan: null, day: null });
+    editorDialog.setOpen(true);
+    // `keepEditorOpen` and the dialog's setter are stable in what they do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editWanted, activeEvent, eventParam]);
+  // The picked day, from a link, a reload or Back to another page's entry.
+  useEffect(() => {
+    if (dayParam === null) {
+      if (pickedKey !== null && pickedKey !== todayKey) setPickedKey(null);
+      return;
+    }
+    if (dayParam === pickedKey) return;
+    const day = dayFromParam(dayParam);
+    if (!day) return;
+    setPickedKey(dayParam);
+    // The month and week strip follow the day the address names.
+    setNavMonth(day);
+    setStripStartKey(dayParam);
+    if (!hoursDay) showDayOnAgenda(day);
+    // Follows the address only; the page's own picks move both.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayParam]);
+  // The hour grid: opened by Forward or a link, closed by Back.
+  useEffect(() => {
+    if (hoursParam === null) {
+      if (hoursDay) {
+        // Back from the grid: the agenda comes back on its day, as its own
+        // back arrow does.
+        const day = hoursDay;
+        setHoursDay(null);
+        setHoursSingle(false);
+        showDayOnAgenda(day);
+      }
+      return;
+    }
+    const day = dayFromParam(hoursParam);
+    if (day && (!hoursDay || localIsoDate(hoursDay) !== hoursParam)) {
+      setHoursDay(day);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoursParam]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  // An event the address names that this member can't see, or that is
+  // gone: said in its place and taken out of the address.
+  const deadEvent = useDeadAddressParam(
+    E.event,
+    eventParam,
+    Array.isArray(eventsQuery.data) &&
+      !eventsQuery.isFetching &&
+      eventParam !== null &&
+      !events.some((event) => eventIdOf(event) === eventParam),
+  );
+
   // Brings a picked day's heading into view once it has rendered.
   useEffect(() => {
     if (!scrollTarget) return;
@@ -670,18 +812,24 @@ export function EventsPage() {
     setNavMonth(null);
     setStripStartKey(null);
     setPickedKey(null);
+    replaceAddress({ [E.day]: null });
     if (hoursDay) {
       setHoursDay(todayStart);
+      replaceAddress({ [E.hours]: localIsoDate(todayStart) });
       return;
     }
     showDayOnAgenda(todayStart);
   }
 
   function pickDay(day: Date) {
-    setPickedKey(localIsoDate(day));
+    const key = localIsoDate(day);
+    setPickedKey(key);
+    // The day is replaced, not pushed: Back doesn't walk every day picked.
+    replaceAddress({ [E.day]: key === todayKey ? null : key });
     // On the hour grid, a picked day moves the grid there.
     if (hoursDay) {
       setHoursDay(startOfDay(day));
+      replaceAddress({ [E.hours]: key });
       return;
     }
     showDayOnAgenda(day);
@@ -691,7 +839,15 @@ export function EventsPage() {
     const day = hoursDay;
     setHoursDay(null);
     setHoursSingle(false);
+    closeAddress([E.hours]);
     if (day) showDayOnAgenda(day);
+  }
+
+  /** Opens the hour grid on `day`, a step Back returns from. */
+  function openHours(day: Date, single: boolean) {
+    setHoursDay(startOfDay(day));
+    setHoursSingle(single);
+    pushAddress({ [E.hours]: localIsoDate(day) });
   }
 
   const calendarCreateDefaults = useMemo(() => {
@@ -981,7 +1137,11 @@ export function EventsPage() {
   // Any meeting of a series opens with its series, from an agenda row, a
   // past row or the hour grid: the sheet then has the head's rule (a
   // generated meeting carries none) and the series' upcoming meetings.
-  function openDetails(event: EventRow, linked = { excuse: false }) {
+  function openDetails(
+    event: EventRow,
+    linked: { excuse: boolean; fromAddress?: boolean } = { excuse: false },
+  ) {
+    if (!linked.fromAddress) pushAddress({ [E.event]: eventIdOf(event) });
     setExcuseAsk((ask) =>
       linked.excuse
         ? { eventId: eventIdOf(event), count: (ask?.count ?? 0) + 1 }
@@ -1192,8 +1352,7 @@ export function EventsPage() {
               aria-label={`Hours for ${heading}`}
               onClick={() => {
                 setPickedKey(day.key);
-                setHoursSingle(false);
-                setHoursDay(dayDate);
+                openHours(dayDate, false);
               }}
               className={cn(
                 "flex min-h-7 items-center gap-0.5 rounded-md px-1.5 text-caption font-semibold text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
@@ -1302,6 +1461,14 @@ export function EventsPage() {
         />
       ) : null}
 
+      {deadEvent !== null ? (
+        // An event from the address that isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That event isn&apos;t available. It may have been deleted, or you may
+          not have access.
+        </p>
+      ) : null}
+
       <div
         ref={layoutRef}
         // Until the pane is measured it draws the wide layout, which wraps:
@@ -1385,6 +1552,7 @@ export function EventsPage() {
                 onOpenDay={(day) => {
                   setHoursDay(startOfDay(day));
                   setHoursSingle(true);
+                  replaceAddress({ [E.hours]: localIsoDate(day) });
                 }}
                 onCreateAt={(day, hour) => openCreate(day, hour)}
                 canCreate={canCreateEvents}
@@ -1557,29 +1725,38 @@ export function EventsPage() {
         </div>
       </div>
 
-      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`). In its
-          own boundary: it reads the URL, which must not hold back the page. */}
+      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`), from
+          a link, Back, Forward or a reload. */}
       <Suspense fallback={null}>
         <OpenLinkedEvent
           events={events}
           idOf={eventIdOf}
-          onOpen={openDetails}
+          onOpen={(event, linked) =>
+            openDetails(event, { ...linked, fromAddress: true })
+          }
         />
       </Suspense>
 
       <EventDetailSheet
         open={detailSheetOpen}
-        onOpenChange={setDetailSheetOpen}
+        onOpenChange={(open) => {
+          setDetailSheetOpen(open);
+          // Its back arrow and Escape close by the address's rule.
+          if (!open) closeAddress([E.event, E.edit]);
+        }}
         event={activeEvent}
         series={activeSeries}
         seriesRule={activeSeriesHead?.recurrence_rule}
         onSelectOccurrence={(occurrence) => {
           setExcuseAsk(null);
           setActiveEvent(occurrence);
+          // Another meeting of the same series, in place.
+          replaceAddress({ [E.event]: eventIdOf(occurrence) });
         }}
         usingPreviewData={false}
         excuseAsk={excuseAsk}
         onRequestEdit={(event) => {
+          pushAddress({ [E.edit]: "1" });
           setActiveEvent(event);
           setDetailSheetOpen(false);
           setEditorMode("edit");
@@ -1610,6 +1787,13 @@ export function EventsPage() {
             !leftEditedEvent.current
           ) {
             setDetailSheetOpen(true);
+          }
+          // The editor's `edit=1` closes by the address's rule; a series
+          // save that left the event closes the event's too.
+          if (!open && editorMode === "edit") {
+            closeAddress(
+              leftEditedEvent.current ? [E.event, E.edit] : [E.edit],
+            );
           }
           leftEditedEvent.current = false;
         }}
