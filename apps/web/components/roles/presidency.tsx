@@ -216,6 +216,9 @@ export function TransferPresidencyRow() {
             trigger={
               <button
                 type="button"
+                // The row's label names what this does; the button alone
+                // shows only today's President.
+                aria-label={`${PEOPLE_SETTINGS_COPY.transferPresidency}, now ${viewerName ?? "you"}`}
                 disabled={transferPresidency.isPending}
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition hover:bg-card-hover disabled:opacity-50",

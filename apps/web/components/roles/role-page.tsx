@@ -197,7 +197,7 @@ function RoleBody({
   const { confirm, confirmDialog } = useConfirmDialog();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
-  const stepper = useStepRole(roles);
+  const stepper = useStepRole(roles, tiers);
   const holders = useMemo(() => [role], [role]);
   const { permissionsOf, toggle, pending } = useRolePermissionToggle(holders);
 

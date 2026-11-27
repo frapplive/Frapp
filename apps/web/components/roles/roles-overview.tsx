@@ -150,7 +150,7 @@ function TierList({
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
   const isHidden = useIsPermissionHidden();
-  const stepper = useStepRole(roles);
+  const stepper = useStepRole(roles, tiers);
 
   const filtering = normalizeWords(query).length > 0;
   const rolesIn = useMemo(() => {
