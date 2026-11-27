@@ -3,6 +3,7 @@
 import { NowCard } from "@/components/events/now-card";
 import {
   Fragment,
+  useCallback,
   Suspense,
   useEffect,
   useMemo,
@@ -11,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { useQueryClient } from "@tanstack/react-query";
@@ -52,7 +53,16 @@ import {
   tasksTaskLink,
 } from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
-import { can, type ActivityCardKey } from "@repo/validation";
+import {
+  can,
+  type ActivityCardKey,
+  WEB_ADDRESS_PARAMS,
+} from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { replaceAddress } from "@/lib/address/address";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { ActivityPanel } from "./activity-panel";
 import {
@@ -984,10 +994,10 @@ function ReviewParam({
 }
 
 /**
- * Reads `?view=everyone` (`everyonesTasksLink`: the Tasks page's old links
- * and its redirect, #5948) once and hands it to the page, then drops it from
- * the address, as `ReviewParam` does with its own. Never stored: the page
- * opens on Mine.
+ * Hears `?view=everyone` (`everyonesTasksLink`: the Tasks page's old links
+ * and its redirect, #5948) and a task link arriving, so the page can leave
+ * the editor or the Archive for them. The view itself is the address
+ * (`ActivityPage`, #6044).
  */
 function ViewParam({
   onEveryone,
@@ -1009,15 +1019,7 @@ function ViewParam({
     if (taskLink) latest.current.onTaskLink();
   }, [taskLink]);
   useEffect(() => {
-    if (!asked) return;
-    latest.current.onEveryone();
-    const url = new URL(window.location.href);
-    url.searchParams.delete(ACTIVITY_VIEW_PARAM);
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${url.pathname}${url.search}`,
-    );
+    if (asked) latest.current.onEveryone();
   }, [asked]);
   return null;
 }
@@ -1079,7 +1081,31 @@ const ACTIVITY_VIEWS = [
  * under them.
  */
 export function ActivityPage() {
+  // The view and the open row are read from the address, and
+  // `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedActivityPage />
+    </Suspense>
+  );
+}
+
+const A = WEB_ADDRESS_PARAMS.activity;
+const ACTIVITY_ADDRESS = [A.view, A.item] as const;
+/** `view=archive`: the Archive in place of the page (#5127). */
+const ARCHIVE_VIEW = "archive";
+
+function AddressedActivityPage() {
   const activity = useActivity();
+  /*
+    The view (Mine, `view=everyone`, `view=archive`) and the open row
+    (`item=<row key>`) are the address (#6044, spec § Addresses): each pushes,
+    so Back returns to the view and the row before, and the panel's close and
+    the Archive's back arrow close by the address's rule. Mine is the bare
+    address.
+  */
+  const address = useAddressParams(ACTIVITY_ADDRESS);
+  const { open: openActivityAddress, close: closeActivityAddress } = address;
   // The shared 30s clock the poll cards read: a poll whose time runs out
   // leaves the list within a tick, without a re-read (#4258), and the days
   // and Next stay current while the page is open.
@@ -1090,9 +1116,18 @@ export function ActivityPage() {
   const queryClient = useQueryClient();
   const isModuleEnabled = useChapterModuleGate();
   const tasksOn = isModuleEnabled?.("tasks") ?? true;
-  // Mine or Everyone's, for this visit; never stored, so the page opens on
-  // the member's own (#5578, as the Tasks page did).
-  const [viewPick, setViewPick] = useState<ActivityView>("mine");
+  // Mine or Everyone's, from the address; the bare address is the member's
+  // own (#5578, as the Tasks page did).
+  const viewPick: ActivityView =
+    address.values[A.view] === EVERYONES_VIEW ? "everyone" : "mine";
+  const setViewPick = useCallback(
+    (next: ActivityView) =>
+      openActivityAddress({
+        [A.view]: next === "everyone" ? EVERYONES_VIEW : null,
+        [A.item]: null,
+      }),
+    [openActivityAddress],
+  );
   const everyoneOffered = useEveryoneOffered(tasksOn);
   const view: ActivityView = everyoneOffered ? viewPick : "mine";
   const summary = useMemo(
@@ -1142,9 +1177,24 @@ export function ActivityPage() {
   const snoozeActions = useActivitySnoozeActions();
   // A read when the soonest snooze ends, for its dot and the badge.
   useActivitySnoozeWake(activity.data);
+  // The row last opened here, kept so a row that has left the lists (a vote
+  // cast, an archived item) stays open as it was. What is open is the
+  // address's `item=`.
   const [opened, setOpened] = useState<ActivityRow | null>(null);
-  // The Archive (#5127) in place of the page, for this visit; never stored.
-  const [showArchive, setShowArchive] = useState(false);
+  const itemParam = address.values[A.item];
+  // The Archive (#5127) in place of the page.
+  const showArchive = address.values[A.view] === ARCHIVE_VIEW;
+  const setShowArchive = useCallback(
+    (show: boolean) =>
+      show
+        ? openActivityAddress({ [A.view]: ARCHIVE_VIEW, [A.item]: null })
+        : closeActivityAddress([A.view]),
+    [openActivityAddress, closeActivityAddress],
+  );
+  const showRow = (row: ActivityRow, options?: { replace?: boolean }) => {
+    setOpened(row);
+    openActivityAddress({ [A.item]: row.key }, options);
+  };
   // Dots (#4405): opening a row from here is what reads it; scrolling past
   // doesn't, and neither does acting on the item elsewhere in Frapp.
   const { markRead } = useActivityUnread(activity.data);
@@ -1164,7 +1214,7 @@ export function ActivityPage() {
       row.kind !== "minutes-draft" &&
       row.kind !== "minutes-notes"
     )
-      setOpened(row);
+      showRow(row);
   };
   // `/activity?review=<taskId>`: a "submitted a task" notification
   // (`deepLinkFor` in the bell). Opens that task's panel once the read has
@@ -1176,7 +1226,6 @@ export function ActivityPage() {
   // on the board, which opens it, or its group, in the task panel (#5538).
   // The copy a task for everyone's row names opens the group, as the row does.
   const router = useRouter();
-  const pathname = usePathname();
   const openReview = async (
     taskId: string,
     view: "review" | "extension" = "review",
@@ -1190,8 +1239,15 @@ export function ActivityPage() {
     if (row?.kind === "task-group") {
       router.replace(tasksGroupLink(row.group.id));
     } else if (row) {
-      openFromList(row);
-      router.replace(pathname, { scroll: false });
+      // The notification's mark becomes the row's address, in place, so the
+      // panel closes like any row a link opened (§ Addresses).
+      if (row.unread && row.readRef) markRead([row.readRef]);
+      setOpened(row);
+      replaceAddress({
+        [A.review]: null,
+        [A.extension]: null,
+        [A.item]: row.key,
+      });
     } else {
       router.replace(tasksTaskLink(taskId));
     }
@@ -1277,17 +1333,33 @@ export function ActivityPage() {
     () => (visible ? activityReviewQueue(visible, now) : []),
     [visible, now],
   );
-  const openRow = useMemo(
+  const listedRow = useMemo(
     () =>
-      opened === null
-        ? null
-        : ([
+      itemParam === null
+        ? undefined
+        : [
             ...(agenda?.rows ?? []),
             ...(review?.rows ?? []),
             ...groups.flatMap((group) => group.rows),
             ...snoozedRows,
-          ].find((row) => row.key === opened.key) ?? opened),
-    [agenda, review, groups, snoozedRows, opened],
+          ].find((row) => row.key === itemParam),
+    [agenda, review, groups, snoozedRows, itemParam],
+  );
+  const openRow =
+    itemParam === null
+      ? null
+      : (listedRow ?? (opened?.key === itemParam ? opened : null));
+  // A row the address names that the read doesn't hold, and this page didn't
+  // open (a link, Back or a reload to something finished or gone): said in
+  // its place, and taken out of the address. The Archive reads its own rows,
+  // so a row there is judged by the Archive.
+  const deadItem = useDeadAddressParam(
+    A.item,
+    itemParam,
+    activity.data !== undefined &&
+      !showArchive &&
+      itemParam !== null &&
+      openRow === null,
   );
 
   // The views beside the title, on the page itself (not over the editor or
@@ -1309,17 +1381,17 @@ export function ActivityPage() {
     <Suspense fallback={null}>
       <ViewParam
         onEveryone={() => {
-          // A link is a deliberate move: it leaves the editor or the Archive.
+          // A link is a deliberate move: it leaves the editor.
           setEditing(false);
-          setShowArchive(false);
-          setViewPick("everyone");
         }}
-        onTaskLink={() => setShowArchive(false)}
+        onTaskLink={() => {
+          if (showArchive) replaceAddress({ [A.view]: null });
+        }}
       />
       <ReviewParam
         open={async (taskId, kind) => {
           // A review opens on Mine, where its panel is.
-          setViewPick("mine");
+          if (viewPick !== "mine") replaceAddress({ [A.view]: null });
           await openReview(taskId, kind);
         }}
       />
@@ -1520,6 +1592,13 @@ export function ActivityPage() {
                 ) : null}
               </PageActions>
               {views}
+              {deadItem !== null ? (
+                // A row from the address that isn't here (§ Addresses).
+                <p role="status" className="text-sm text-muted-foreground">
+                  That item isn&apos;t on your Activity any more. It may be finished
+                  or removed.
+                </p>
+              ) : null}
               <NowCard />
               {mineTasks}
               {arrangement.shown.map((key) => (
@@ -1547,9 +1626,9 @@ export function ActivityPage() {
             onClose={(key) => {
               // A late answer from one row's action must not close another row
               // the member has since opened.
-              setOpened((current) =>
-                key === undefined || current?.key === key ? null : current,
-              );
+              if (key === undefined || itemParam === key) {
+                closeActivityAddress([A.item]);
+              }
               // The cards write through their own hooks (a task's status, a
               // check-in), which this page's read does not hear about, so it is
               // re-read when the panel closes by hand. An action's own close
@@ -1566,7 +1645,12 @@ export function ActivityPage() {
                     // skipped already, and the list still holds the skipped.
                     reviewQueue.slice(at + 1);
               },
-              open: openFromList,
+              // The next review replaces the one done, so Back closes the
+              // panel rather than stepping back through the queue.
+              open: (row: ActivityRow) => {
+                if (row.unread && row.readRef) markRead([row.readRef]);
+                showRow(row, { replace: true });
+              },
             }}
           />
         </div>
