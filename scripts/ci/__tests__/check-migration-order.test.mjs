@@ -492,8 +492,10 @@ test("the first entry in the queue (built on main itself) is judged as before", 
 test("a migration this PR shares with the entry ahead (a stacked PR) is not this PR's", async () => {
   // A PR built on another's branch carries the other's migration too. Once the
   // other is ahead in the queue that file is base, so only the stacked PR's own
-  // migration is judged, and it sorts after both.
-  const queueBase = [...QUEUE_MAIN, QUEUE_AHEAD];
+  // migration is judged. The shared file sorts BELOW a third entry's, so a gate
+  // that judged it as this PR's (against main) would refuse it.
+  const shared = m("20261123150000", "stacked_base");
+  const queueBase = [...QUEUE_MAIN, shared, QUEUE_AHEAD];
   const own = m("20261123200000", "stacked_on_top");
   const code = await runOrderGate({
     accessToken: "t",
@@ -506,6 +508,56 @@ test("a migration this PR shares with the entry ahead (a stacked PR) is not this
     ...quiet,
   });
   assert.equal(code, 0);
+});
+
+test("a rename out of a bad far-future version passes while queued behind another entry", async () => {
+  // The floor is what this PR keeps. A fix PR renaming `29990101000000` out of
+  // the way removes it from the queue's floor as it does from main's, or the
+  // fix could never merge through the queue.
+  const farFuture = m("29990101000000", "bad_version");
+  const main = [...QUEUE_MAIN, farFuture];
+  const queueBase = [...main, QUEUE_AHEAD];
+  const renamed = m("20261123200000", "bad_version");
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...QUEUE_MAIN, QUEUE_AHEAD, renamed],
+    readBase: refs({ "main-tip": main, "queue-base": queueBase }),
+    fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+    ...quiet,
+  });
+  assert.equal(code, 0);
+});
+
+test("the queue base comes from ORDER_GATE_QUEUE_BASE_REF when not passed", async () => {
+  // The workflow hands it over as an env var (merge-queue-triggers.test.mjs pins
+  // that line); this pins the script's side of the same wire.
+  const queueBase = [...QUEUE_MAIN, QUEUE_AHEAD];
+  const saved = process.env.ORDER_GATE_QUEUE_BASE_REF;
+  let failure = "";
+  process.env.ORDER_GATE_QUEUE_BASE_REF = "queue-base";
+  try {
+    const code = await runOrderGate({
+      accessToken: "t",
+      baseRef: "main-tip",
+      environments: ENVIRONMENTS,
+      readHead: () => [...queueBase, QUEUE_BEHIND],
+      readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": queueBase }),
+      fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+      log: () => {},
+      error: (text) => {
+        failure += `${text}\n`;
+      },
+      writeSummary: () => {},
+    });
+    assert.equal(code, 1);
+    assert.match(failure, /a PR ahead of it in the merge queue adds/);
+  } finally {
+    if (saved === undefined) delete process.env.ORDER_GATE_QUEUE_BASE_REF;
+    else process.env.ORDER_GATE_QUEUE_BASE_REF = saved;
+  }
 });
 
 test("an unreadable queue base is an invocation error, not a pass", async () => {

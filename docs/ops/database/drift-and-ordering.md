@@ -80,15 +80,16 @@ merge). Before it, the queue let both through: #5925's `20261123194106` merged 8
 seconds before #5923's `20261123183858` on 2026-11-24, staging applied the later
 version first and refused the earlier one, and every staging deploy stopped
 until #5958 renamed it (#4795). Now the entry behind fails with
-`back-dated-against-queue` and leaves the queue. Once the PR ahead merges,
-`PR base sync` renumbers it, and it is queued again.
+`back-dated-against-queue` and leaves the queue. Nothing queues it again or
+tells its author, so it is re-queued by hand: after `PR base sync` has renumbered
+it, once the PR ahead has merged, or as it is, if the PR ahead left the queue
+without merging.
 
-What the queue still lets through: two PRs merged in the **same** queue group
-(a group size above one) are both built on `main`, so neither is ahead of the
-other and they are not compared. They reach `main` together, and the next
-deploy's `db push` applies them in version order, so nothing is refused. The
-group sizes are GitHub's defaults
+This holds inside a queue group too: each entry is built on the one ahead of it,
+so a group's second PR is compared with its first
 ([`github-branch-protection-runbook.md` § Merge queue](../github-branch-protection-runbook.md#merge-queue)).
+Two PRs with the same version aren't this check's to catch: `migration-safety`'s
+duplicate-version check refuses them.
 
 `migration-replay` in the queue applies the whole pending set, the PRs ahead
 included, so two migrations that conflict in SQL fail the later PR there.

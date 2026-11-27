@@ -160,14 +160,17 @@ export function removedMigrations({ head, base }) {
  *
  *   10:00  PR-A (`20260901120000`) and PR-B (`20260901090000`) are both green;
  *          neither sorts before staging's newest applied version.
- *   10:02  A merges. B rebases (branch protection is `strict: true`).
- *   10:03  B's gate re-runs. Staging has not applied A yet, so B is still green.
+ *   10:02  A merges. B's base is now `main` with A on it.
+ *   10:03  B's gate runs against that base. Staging has not applied A yet, so
+ *          the applied-floor rule alone would still pass B.
  *   10:06  The staging deploy applies A. Staging's newest is now `…120000`.
  *   10:20  B merges. `db push` refuses `…090000`. #1373, again.
  *
  * GitHub never expires a check that passed, so the applied-floor rule cannot
- * close that window. This rule closes it deterministically: at 10:02 B's BASE
- * already contains `…120000`, and no database is consulted.
+ * close that window. This rule closes it whenever B is checked against a base
+ * that holds A: at 10:03 B's BASE already contains `…120000`, and no database
+ * is consulted. Which run sees such a base is the merge queue's business now
+ * (the dated notes below): a PR need not be up to date with `main` to merge.
  *
  * The floor is the SURVIVING set (base ∩ head), not the base set. A PR whose
  * whole purpose is to rename a bad far-future version out of the way removes it
@@ -181,17 +184,22 @@ export function removedMigrations({ head, base }) {
  * can hold in their head, where "after everything on main that some environment
  * has already applied, as of when your check happened to run" is not.
  *
- * (2026-11-27) The 10:02 step above assumed branch protection forced B to
+ * (2026-11-13) The 10:02 step above assumed branch protection forced B to
  * rebase. It no longer does: `REQUIRE_UP_TO_DATE` in lib/required-checks.mjs
- * has been false since 2026-11-11, so B's PR check can run against a base
- * without A. That is how #4757's `20261113130014` landed after #4771's
- * `20261113132007` and halted staging (#4795). The merge queue is the guard now:
- * every PR merges through it, and in a `merge_group` run this rule is applied a
- * second time against the commit the queue built B on (`main` plus the entries
- * ahead, `queueBaseRef` in `runOrderGate`). At that point B's base holds A
- * whether or not A has merged yet, so B leaves the queue instead of landing.
- * Measuring against `main`'s tip alone, as the queue run first did, let
- * #5925's `20261123194106` and #5923's `20261123183858` through on 2026-11-24.
+ * has been false since 2026-11-11, so B can merge on a check that ran against
+ * a base without A, and this rule does not see A. That is how #4757's
+ * `20261113130014` landed after #4771's `20261113132007` and halted staging.
+ * `pr-base-sync` renumbers B once `main` moves, but only if B has not already
+ * merged. The open window and its options are #4795.
+ *
+ * (2026-11-27) Closed in the merge queue, the guard Paul chose (#4795). Every
+ * PR merges through it, and a `merge_group` run applies this rule a second time
+ * against the commit the queue built B on (`main` plus the entries ahead,
+ * `queueBaseRef` in `runOrderGate`). That base holds A whether or not A has
+ * merged yet, so B leaves the queue instead of landing. The timeline above now
+ * describes that run. Measuring against `main`'s tip alone, as the queue run
+ * first did, let #5925's `20261123194106` and #5923's `20261123183858` through
+ * on 2026-11-24.
  */
 export function classifyLocalOrder({ introduced, surviving }) {
   const floor = newestVersion(surviving);
@@ -302,8 +310,10 @@ export function decideOrderOutcome({ local, queue = null, results, introduced = 
         `PR ahead of it in the merge queue adds:\n${files}\n\n` +
         `Merged in this order, staging applies \`${queue.floor}\` first and the CLI then refuses ` +
         `yours — "${CLI_REFUSAL}" — halting every staging deploy until a rename lands (#4795). ` +
-        `The queue drops this PR instead. Once the PR ahead merges, \`PR base sync\` renumbers ` +
-        `this PR's migrations (or run \`npm run merge:main\`, which renumbers them); then queue it again.`,
+        `The queue drops this PR instead, and nothing queues it again or tells its author: re-queue ` +
+        `it by hand. If the PR ahead merges, \`PR base sync\` renumbers this PR's migrations first ` +
+        `(or run \`npm run merge:main\`, which renumbers them); re-queue once that push is green. ` +
+        `If the PR ahead leaves the queue without merging, re-queue this PR as it is.`,
     };
   }
 
