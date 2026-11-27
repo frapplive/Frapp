@@ -5,7 +5,7 @@ import {
   UNAVAILABLE_QUOTE,
 } from "@repo/chat-core/reply-preview";
 import { SignetTokens } from "@repo/theme/signet";
-import { resolveAuthorLabel } from "@repo/hooks";
+import { authorAwaitsRoster, resolveAuthorLabel } from "@repo/hooks";
 import { italicFontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -39,6 +39,7 @@ export function ReplyQuote({
   replyParent,
   hiddenText,
   nameFor,
+  rosterLoading = false,
   viewerId,
   onPress,
   onLongPress,
@@ -48,6 +49,11 @@ export function ReplyQuote({
   /** Drawn instead of the parent when the block list hides it. */
   hiddenText?: string;
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight: a parent author it hasn't named yet
+   * is left out of the quote until it lands, never `Member 2f4a1c` (#6127).
+   */
+  rosterLoading?: boolean;
   /** Resolved, like every row surface's (#2250): a null viewer mislabels the member's own quote. */
   viewerId: string;
   /** Scrolls to the parent; omitted when there is nothing to scroll to. */
@@ -83,10 +89,15 @@ export function ReplyQuote({
           </Text>
         ) : (
           <Text style={styles.preview} numberOfLines={2}>
-            <Text style={styles.author}>
-              {resolveAuthorLabel(replyParent, nameFor, viewerId)}
-            </Text>
-            {"  "}
+            {authorAwaitsRoster(replyParent, nameFor, rosterLoading) &&
+            replyParent.sender_id !== viewerId ? null : (
+              <>
+                <Text style={styles.author}>
+                  {resolveAuthorLabel(replyParent, nameFor, viewerId)}
+                </Text>
+                {"  "}
+              </>
+            )}
             {replyPreviewText(replyParent)}
           </Text>
         )}

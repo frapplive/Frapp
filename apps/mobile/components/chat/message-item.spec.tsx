@@ -186,6 +186,8 @@ function renderItem(
     onOpenThread?: () => void;
     threadUnread?: number;
     threadPreview?: ThreadLastReply | null;
+    nameFor?: (userId: string) => string | null;
+    rosterLoading?: boolean;
   } = {},
 ): ReactTestRenderer {
   let tree!: ReactTestRenderer;
@@ -195,7 +197,8 @@ function renderItem(
         <MessageItem
           message={message}
           viewerId={VIEWER}
-          nameFor={(id) => (id === OTHER ? "Casey" : null)}
+          nameFor={extra.nameFor ?? ((id) => (id === OTHER ? "Casey" : null))}
+          rosterLoading={extra.rosterLoading}
           roleColorFor={extra.roleColorFor}
           startsRun={extra.startsRun ?? true}
           endsRun={extra.endsRun}
@@ -260,6 +263,48 @@ describe("an imported author's row", () => {
         (node.type as unknown) === "Text" && node.props.children === "DD",
     );
     expect(JSON.stringify(initials.props.style)).toContain("Figtree_700Bold");
+  });
+});
+
+// #6127: rows painted from the device cache before the roster answers draw
+// a name placeholder and a neutral avatar, never the author's id.
+describe("a row drawn while the roster loads", () => {
+  const texts = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAll((node) => (node.type as unknown) === "Text")
+      .map((node) => node.props.children);
+  const hasPlaceholder = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => node.props.testID === "author-name-placeholder")
+      .length > 0;
+
+  it("draws a placeholder, not Member xxxxxx or id initials", () => {
+    const tree = renderItem(message(), undefined, {
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+    expect(hasPlaceholder(tree)).toBe(true);
+    expect(
+      texts(tree).some((t) => typeof t === "string" && t.startsWith("Member ")),
+    ).toBe(false);
+    expect(texts(tree)).not.toContain(OTHER.slice(0, 2).toUpperCase());
+  });
+
+  it("keeps You on the viewer's own row, with no id initials", () => {
+    const tree = renderItem(message({ sender_id: VIEWER }), undefined, {
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+    expect(hasPlaceholder(tree)).toBe(false);
+    expect(texts(tree)).not.toContain(VIEWER.slice(0, 2).toUpperCase());
+  });
+
+  it("draws the fallback label once the roster has loaded or failed", () => {
+    const tree = renderItem(message(), undefined, {
+      nameFor: () => null,
+      rosterLoading: false,
+    });
+    expect(hasPlaceholder(tree)).toBe(false);
+    expect(texts(tree)).toContain(`Member ${OTHER.slice(0, 6)}`);
   });
 });
 

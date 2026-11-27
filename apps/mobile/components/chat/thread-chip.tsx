@@ -7,6 +7,7 @@ import {
 } from "@repo/chat-core/threads";
 import type { ThreadLastReply, ThreadSummary } from "@repo/chat-core/types";
 import {
+  authorAwaitsRoster,
   authorInitialsFallback,
   memberAvatarHue,
   memberAvatarTint,
@@ -46,6 +47,11 @@ export function threadCardMiddle(hasPreview: boolean): number {
 export interface ThreadChipProps {
   summary: ThreadSummary;
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight: a replier it hasn't named yet draws
+   * no name and a neutral face, not `Member 2f4a1c` (#6127).
+   */
+  rosterLoading?: boolean;
   /** A replier's top role color, which picks their initials paint (#3860). */
   roleColorFor?: (userId: string) => string | null;
   /** A replier's photo, when they have one; initials otherwise. */
@@ -89,6 +95,7 @@ export interface ThreadChipProps {
 export function ThreadChip({
   summary,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   avatarFor,
   unread = 0,
@@ -112,7 +119,7 @@ export function ThreadChip({
 
   const previewSender = preview?.sender_id ?? null;
   // Named as the timeline names an author, by the rule web's card shares.
-  const parts = preview
+  const namedParts = preview
     ? threadPreviewParts(preview, viewerId, {
         nameOf: (id) =>
           resolveAuthorName({ sender_id: id, author_name: null }, nameFor),
@@ -124,6 +131,20 @@ export function ThreadChip({
           ),
       })
     : null;
+  // While the roster loads, the preview leaves out a replier it can't name
+  // yet, and their face waits as a neutral disc (#6127). The viewer's own
+  // reply still reads "You".
+  const previewAwaits = previewSender
+    ? authorAwaitsRoster(
+        { sender_id: previewSender, author_name: null },
+        nameFor,
+        rosterLoading,
+      )
+    : false;
+  const parts =
+    namedParts && previewAwaits && previewSender !== viewerId
+      ? { ...namedParts, name: null }
+      : namedParts;
   const label = threadCardLabel({ replies, fresh, lastReply, preview: parts });
 
   // "last reply 5m ago" shows whole or not at all. React Native has no
@@ -237,20 +258,26 @@ export function ThreadChip({
             <MemberAvatar
               uri={avatarFor?.(previewSender) ?? null}
               initials={
-                parts?.fullName
-                  ? initialsFor(parts.fullName)
-                  : authorInitialsFallback({
-                      sender_id: previewSender,
-                      author_name: null,
-                    })
+                previewAwaits
+                  ? ""
+                  : parts?.fullName
+                    ? initialsFor(parts.fullName)
+                    : authorInitialsFallback({
+                        sender_id: previewSender,
+                        author_name: null,
+                      })
               }
               size={PREVIEW_FACE_SIZE}
-              tint={memberAvatarTint(
-                memberAvatarHue(
-                  previewSender,
-                  roleColorFor?.(previewSender) ?? null,
-                ),
-              )}
+              tint={
+                previewAwaits
+                  ? null
+                  : memberAvatarTint(
+                      memberAvatarHue(
+                        previewSender,
+                        roleColorFor?.(previewSender) ?? null,
+                      ),
+                    )
+              }
               style={styles.previewFace}
               textStyle={styles.previewFaceText}
             />
