@@ -1,49 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CalendarPlus, Loader2 } from "lucide-react";
 import { type SemesterArchive, type useSemesterRollover } from "@repo/hooks";
-import { formatDayRange } from "@repo/formatting";
+import { formatDay, formatDayRange } from "@repo/formatting";
+import {
+  currentSemesterStart,
+  dayAfter,
+  newSemesterDefaults,
+  SEMESTER_SETTINGS_COPY as COPY,
+  semesterRolloverOpensOn,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
-import { ProfileSection } from "@/components/profile/profile-section";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PermissionsOfflineSurface } from "@/components/shared/async-states";
 import { Can } from "@/components/shared/can";
 import { type useConfirmDialog } from "@/components/shared/confirm-dialog";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   SubscriptionNotice,
   type SubscriptionGate,
 } from "@/components/shared/subscription-gate";
+import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
 import {
   SectionSkeleton,
   SkeletonRows,
 } from "@/components/shared/page-skeletons";
-import { InlineNote } from "@/components/shared/inline-note";
+
+/** The Semester page, and the new-semester page opened from its row. */
+export const SEMESTER_SETTINGS_PATH = "/settings?tab=semester";
+export const NEW_SEMESTER_SETTINGS_PATH = `${SEMESTER_SETTINGS_PATH}&page=new`;
+
+/** `?page=` on the Semester row that opens the new-semester page. */
+export const NEW_SEMESTER_PAGE = "new";
 
 export type RolloverForm = ReturnType<typeof useRolloverForm>;
 
 /**
- * The rollover form's fields, held by the page rather than the tab: Radix
- * unmounts an inactive `TabsContent`, and a rollover awaiting its confirmation
- * finishes (and clears the form) even if the officer has moved tab meanwhile.
+ * The new-semester page's fields, held by the settings page rather than the
+ * tab: Radix unmounts an inactive `TabsContent`, and the draft stays when the
+ * officer goes back to Semester and comes again (rulebook § 4, keep the
+ * draft). A rollover awaiting its confirmation finishes, and clears the form,
+ * even if the officer has moved on meanwhile.
+ *
+ * The dates are `null` until the officer types one, so the page shows the
+ * dates the archives imply (`newSemesterDefaults`) without copying them into
+ * the draft: a draft kept across a rollover would otherwise hold last
+ * semester's first day.
  */
 export function useRolloverForm() {
   const [label, setLabel] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState<string | null>(null);
+  const [end, setEnd] = useState<string | null>(null);
   // Defaults to off: promotion rewrites roles across the whole chapter and is
   // not one-click undoable, so it is opted into per rollover, never inherited.
   const [promoteNewMembers, setPromoteNewMembers] = useState(false);
 
   function reset() {
     setLabel("");
-    setStart("");
-    setEnd("");
+    setStart(null);
+    setEnd(null);
     setPromoteNewMembers(false);
   }
 
@@ -60,15 +80,7 @@ export function useRolloverForm() {
   };
 }
 
-export function SettingsSemesterTab({
-  form,
-  pledgeTerm,
-  confirm,
-  rollover,
-  rolloverGate,
-  semesters,
-  semestersPending,
-}: {
+type Props = {
   form: RolloverForm;
   pledgeTerm: string;
   /**
@@ -78,7 +90,7 @@ export function SettingsSemesterTab({
   confirm: ReturnType<typeof useConfirmDialog>["confirm"];
   rollover: ReturnType<typeof useSemesterRollover>;
   /**
-   * Scoped to the rollover card on purpose. `SemesterRolloverController` is the
+   * Scoped to the rollover on purpose. `SemesterRolloverController` is the
    * only paid-ops write on this screen (#841); `chapter-config`, `chapter`, and
    * `user` are `@FreeTier` and `notification` is not chapter-guarded at all, so
    * gating the rest would lock a lapsed chapter out of settings it is still
@@ -87,39 +99,182 @@ export function SettingsSemesterTab({
   rolloverGate: SubscriptionGate;
   semesters: SemesterArchive[];
   semestersPending: boolean;
-}) {
+  /** `?page=`: `new` opens the new-semester page. */
+  page: string | null;
+};
+
+/**
+ * Chapter settings → Semester (#6028, Paul's "go as drawn" 2026-11-27): the
+ * page says which semester this is, offers ending it as a row that opens its
+ * own page, and lists the archived semesters as rows (Canvas and Google
+ * Classroom list a term by its name and dates, the current one first).
+ *
+ * The page's one write is the rollover, an action rather than a setting, so
+ * it keeps its button on its own page (`?tab=semester&page=new`) and #6033's
+ * save-on-their-own doesn't touch it. Semester is web-only: a twice-a-year
+ * desk task (#4074, Paul 2026-11-27).
+ */
+export function SettingsSemesterTab(props: Props) {
+  const main = <SemesterPage {...props} />;
+  if (props.page !== NEW_SEMESTER_PAGE) return main;
+  /*
+    The new-semester page is a whole surface, so the gate standing in for it
+    offline is the card-shaped state (`can-fallback.spec.tsx` lists it). A
+    viewer who can't start one, arriving by a link, gets the Semester page.
+  */
+  return (
+    <Can
+      permission="semester:rollover"
+      deniedFallback={main}
+      offlineFallback={(retry) => (
+        <PermissionsOfflineSurface
+          description="Reconnect to check whether you can start a new semester."
+          onRetry={retry}
+        />
+      )}
+    >
+      <NewSemesterPage {...props} />
+    </Can>
+  );
+}
+
+function SemesterPage({
+  semesters,
+  semestersPending,
+}: Pick<Props, "semesters" | "semestersPending">) {
+  const since = currentSemesterStart(semesters);
+  const opensOn = semesterRolloverOpensOn(semesters);
+  // Newest first, as the archives were filed.
+  const archives = [...semesters].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  return (
+    <div className="space-y-8">
+      <SettingsGroup
+        id="settings-this-semester"
+        heading={COPY.thisSemester}
+        footnote={COPY.thisSemesterFootnote}
+      >
+        <SettingsRow
+          label={COPY.currentRow}
+          control={
+            semestersPending ? null : (
+              <Value>
+                {COPY.currentValue(since ? formatDay(since) : null)}
+              </Value>
+            )
+          }
+        />
+        <Can permission="semester:rollover" deniedFallback={null}>
+          <SettingsRow
+            id="settings-start-a-new-semester"
+            icon={CalendarPlus}
+            label={COPY.newRow}
+            value={opensOn ? COPY.opensOn(formatDay(opensOn) ?? "") : undefined}
+            href={NEW_SEMESTER_SETTINGS_PATH}
+          />
+        </Can>
+      </SettingsGroup>
+
+      {semestersPending ? (
+        <SectionSkeleton label={COPY.loadingArchives} className="">
+          <SkeletonRows
+            rows={3}
+            lines={1}
+            trailing={["w-32"]}
+            trailingHeight="h-[13px]"
+            rowClassName="py-2"
+            bare
+          />
+        </SectionSkeleton>
+      ) : (
+        <SettingsGroup
+          id="settings-archived-semesters"
+          heading={COPY.archived}
+          footnote={COPY.archivedFootnote}
+        >
+          {archives.length === 0 ? (
+            <SettingsRow label={COPY.noArchives} muted control={null} />
+          ) : (
+            archives.map((archive) => (
+              <SettingsRow
+                key={archive.id}
+                label={archive.label}
+                control={
+                  <Value>
+                    {formatDayRange(archive.start_date, archive.end_date) ??
+                      `${archive.start_date} – ${archive.end_date}`}
+                  </Value>
+                }
+              />
+            ))
+          )}
+        </SettingsGroup>
+      )}
+    </div>
+  );
+}
+
+function Value({ children }: { children: ReactNode }) {
+  return <span className="text-sm text-muted-foreground">{children}</span>;
+}
+
+/**
+ * Whether the new-semester page is still what the address shows. A rollover
+ * confirmed and then left (the officer moved to another row while it ran)
+ * must not pull them back to Semester when it finishes.
+ */
+function onNewSemesterPage(): boolean {
+  const url = new URL(window.location.href);
+  return (
+    url.searchParams.get("tab") === "semester" &&
+    url.searchParams.get("page") === NEW_SEMESTER_PAGE
+  );
+}
+
+function NewSemesterPage({
+  form,
+  pledgeTerm,
+  confirm,
+  rollover,
+  rolloverGate,
+  semesters,
+}: Props) {
   const { toast } = useToast();
-  const {
-    label: semesterLabel,
-    start: semesterStart,
-    end: semesterEnd,
-    promoteNewMembers,
-  } = form;
-  // "every X", not "Xs": `pledgeTerm` can be an officer-typed free-text
-  // override with no plural-form guarantee (see settings-org-tab.tsx's
-  // vocab editor) — naively appending "s" breaks for a term already plural
-  // or ending in s/x/z/ch/sh.
-  const promoteToggleLabel = `Also make every ${pledgeTerm} a full member`;
+  const defaults = newSemesterDefaults(semesters);
+  const name = form.label.trim();
+  const start = form.start ?? defaults.start;
+  const end = form.end ?? defaults.end;
+  const opensOn = semesterRolloverOpensOn(semesters);
+  const opensOnWords = opensOn ? COPY.opensOn(formatDay(opensOn) ?? "") : null;
+  const promote = form.promoteNewMembers ? { pledgeTerm } : null;
+  const gateProps = rolloverGate.controlProps(rollover.isPending);
+  // The button says what's missing while it can't be pressed (rulebook § 9).
+  const blockedBy = opensOnWords ?? (name ? null : COPY.nameFirst);
 
   async function startRollover(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!semesterLabel) return;
-    // The date fields hold "" while their text is not a date (`DateField`),
-    // and `required` on a text input lets any text through.
-    if (!semesterStart || !semesterEnd) {
+    if (!name || opensOn) return;
+    // The date fields hold "" while their text is not a date (`DateField`).
+    if (!start || !end) {
       toast({
-        title: "Pick a start and end date",
-        description: "Try a date like January 12 or May 8.",
+        title: COPY.pickDates,
+        description: COPY.pickDatesHint,
         variant: "destructive",
       });
       return;
     }
+    const range = formatDayRange(start, end) ?? `${start} – ${end}`;
+    const nextDay = dayAfter(end);
     const confirmed = await confirm({
-      title: `Start a new semester labelled "${semesterLabel}"?`,
-      description: promoteNewMembers
-        ? `The current leaderboard period is archived and a new one begins. Points already awarded are kept — only the leaderboard's default window moves. Every ${pledgeTerm} also becomes a full member; they keep any other roles they hold, and this cannot be undone in one step.`
-        : "The current leaderboard period is archived and a new one begins. Points already awarded are kept — only the leaderboard's default window moves.",
-      confirmLabel: "Start new semester",
+      title: COPY.confirmTitle(name),
+      description: COPY.confirmBody(
+        name,
+        range,
+        nextDay ? formatDay(nextDay) : null,
+        promote,
+      ),
+      confirmLabel: COPY.submit,
       // Not destructive: a rollover archives rather than deletes, and
       // `writing.md` §7's own copy for this flow says the history stays. A red
       // button would state a loss the API does not perform. Promotion is a role
@@ -129,190 +284,129 @@ export function SettingsSemesterTab({
     });
     if (!confirmed) return;
     try {
+      // Settles once the archives are read again (`useSemesterRollover`), so
+      // Semester shows the new archive when the officer lands on it.
       await rollover.mutateAsync({
-        label: semesterLabel,
-        start_date: semesterStart,
-        end_date: semesterEnd,
-        promote_new_members: promoteNewMembers,
+        label: name,
+        start_date: start,
+        end_date: end,
+        promote_new_members: form.promoteNewMembers,
       });
       toast({
-        title: "Semester archived",
-        description: promoteNewMembers
-          ? `${semesterLabel} is now the active period, and every ${pledgeTerm} is now a full member.`
-          : `${semesterLabel} is now the active period.`,
+        title: COPY.started,
+        description: COPY.startedBody(name, promote),
       });
       form.reset();
+      if (onNewSemesterPage()) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("page");
+        window.history.replaceState(null, "", url.toString());
+      }
     } catch (error) {
       toast({
-        title: "Couldn't archive semester",
-        description: getErrorMessage(
-          error,
-          "Rollovers are limited to one per month. Check the archive list below.",
-        ),
+        title: COPY.failed,
+        description: getErrorMessage(error, COPY.failedFallback),
         variant: "destructive",
       });
     }
   }
 
   return (
-    <div className="space-y-10">
-      <Can
-        permission="semester:rollover"
-        deniedFallback={null}
-        offlineFallback={(retry) => (
-          <PermissionsOfflineSurface
-            description="Reconnect to check whether you can start a new semester."
-            onRetry={retry}
-          />
-        )}
-      >
-        <ProfileSection
-          id="settings-start-a-new-semester"
-          title="Start a new semester"
-          hint="Archives the current leaderboard period. Points are kept."
-        >
-          <form onSubmit={startRollover}>
-            <div className="grid gap-3 md:grid-cols-3">
-              {/*
-                Disable, don't hide (§5 rule 4) — and the notice sits on
-                the rollover card rather than the page header so it never
-                reads as "all of settings is blocked". `mb-0` because the
-                grid gap already spaces it.
-              */}
-              <SubscriptionNotice
-                gate={rolloverGate}
-                feature="semester rollover"
-                className="mb-0 md:col-span-3"
-              />
-              <div className="grid gap-1 md:col-span-1">
-                <Label htmlFor="semester-label">Label</Label>
-                <Input
-                  id="semester-label"
-                  value={semesterLabel}
-                  onChange={(event) => form.setLabel(event.target.value)}
-                  placeholder="Fall 2026"
-                  required
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="semester-start">Start date</Label>
-                <DateField
-                  id="semester-start"
-                  lean="nearest"
-                  placeholder="e.g. January 12"
-                  value={semesterStart}
-                  onChange={form.setStart}
-                  required
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="semester-end">End date</Label>
-                <DateField
-                  id="semester-end"
-                  lean="nearest"
-                  placeholder="e.g. May 8"
-                  value={semesterEnd}
-                  onChange={form.setEnd}
-                  required
-                />
-              </div>
-              {/*
-                Pledge promotion (spec/behavior/semester-rollover.md step
-                3). Optional and off by default — it rewrites roles across
-                the chapter, so it is opted into per rollover. The
-                confirmation dialog restates the consequence before it
-                runs. Same `gate.controlProps` as the submit button so an
-                ungated chapter cannot toggle a control it cannot use.
-
-                Wrapped in `<Can permission="roles:manage">` because the
-                API enforces exactly that on the promotion path: rewriting
-                `members.role_ids` is what `PATCH /members/:id/roles`
-                gates, and `semester:rollover` alone does not carry it.
-                Offering the toggle without it would produce a 403 at
-                submit. A rollover *without* promotion stays available —
-                this hides the toggle, never the card.
-
-                `aria-label` is explicit rather than inherited from the
-                wrapping `<label>`: a `<label>` does not name a `button`,
-                which is what Radix renders for `role="switch"`. Same
-                reason `settings-fields-tab.tsx` names its switches.
-              */}
-              <Can permission="roles:manage">
-                <label className="flex items-start gap-2 text-sm md:col-span-3">
-                  <Switch
-                    id="semester-promote"
-                    aria-label={promoteToggleLabel}
-                    checked={promoteNewMembers}
-                    onCheckedChange={form.setPromoteNewMembers}
-                    {...rolloverGate.controlProps(rollover.isPending)}
-                  />
-                  <span>
-                    {promoteToggleLabel}
-                    <span className="block text-xs text-muted-foreground">
-                      {`Everyone currently holding the ${pledgeTerm} role becomes a Member. Other roles they hold are kept.`}
-                    </span>
-                  </span>
-                </label>
-              </Can>
-            </div>
-            <div className="mt-4 flex justify-end">
-              {/*
-                No dialog to gate here, so the submit *is* the entry
-                control — and a disabled default button also suppresses
-                implicit Enter submission from the three fields above.
-              */}
-              <Button
-                type="submit"
-                {...rolloverGate.controlProps(rollover.isPending)}
-              >
-                {rollover.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
-                Archive current semester
-              </Button>
-            </div>
-          </form>
-        </ProfileSection>
-      </Can>
-
-      <ProfileSection
-        id="settings-archived-semesters"
-        title="Archived semesters"
-      >
-        <div>
-          {semestersPending ? (
-            <SectionSkeleton label="Loading archives" className="">
-              <SkeletonRows
-                rows={3}
-                lines={1}
-                trailing={["w-32"]}
-                trailingHeight="h-[13px]"
-                rowClassName="py-2"
-                bare
-              />
-            </SectionSkeleton>
-          ) : semesters.length === 0 ? (
-            <InlineNote>
-              No archived semesters yet. Each rollover adds one.
-            </InlineNote>
-          ) : (
-            <ul className="divide-y divide-border/70">
-              {semesters.map((archive) => (
-                <li
-                  key={archive.id}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
-                  <span className="font-medium">{archive.label}</span>
-                  <span className="text-muted-foreground">
-                    {formatDayRange(archive.start_date, archive.end_date) ??
-                      `${archive.start_date} – ${archive.end_date}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+    <SettingsSubpage
+      backHref={SEMESTER_SETTINGS_PATH}
+      backLabel={COPY.title}
+      title={COPY.newTitle}
+    >
+      <form onSubmit={startRollover} className="space-y-8">
+        {/*
+          Disable, don't hide (§5 rule 4): the notice sits on this page
+          rather than the settings header so it never reads as "all of
+          settings is blocked".
+        */}
+        <SubscriptionNotice
+          gate={rolloverGate}
+          feature="semester rollover"
+          className="mb-0"
+        />
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-1">
+            <Label htmlFor="semester-label">{COPY.nameLabel}</Label>
+            <Input
+              id="semester-label"
+              value={form.label}
+              onChange={(event) => form.setLabel(event.target.value)}
+              placeholder={COPY.namePlaceholder}
+              autoFocus
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="semester-start">{COPY.firstDay}</Label>
+            <DateField
+              id="semester-start"
+              lean="nearest"
+              placeholder={COPY.firstDayPlaceholder}
+              value={start}
+              onChange={form.setStart}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="semester-end">{COPY.lastDay}</Label>
+            <DateField
+              id="semester-end"
+              lean="nearest"
+              placeholder={COPY.lastDayPlaceholder}
+              value={end}
+              onChange={form.setEnd}
+              required
+            />
+          </div>
         </div>
-      </ProfileSection>
-    </div>
+        {/*
+          Pledge promotion (spec/behavior/semester-rollover.md step 3).
+          Optional and off by default — it rewrites roles across the
+          chapter, so it is opted into per rollover, and the confirmation
+          restates it. Behind `roles:manage` because the API enforces exactly
+          that on the promotion path (`PATCH /members/:id/roles`), which
+          `semester:rollover` alone does not carry: offering it without would
+          produce a 403 at submit. Without it the footnote stands alone.
+        */}
+        <Can
+          permission="roles:manage"
+          deniedFallback={
+            <p className="px-1 text-caption text-muted-foreground">
+              {COPY.limitFootnote}
+            </p>
+          }
+        >
+          <SettingsGroup label={COPY.newTitle} footnote={COPY.limitFootnote}>
+            <SettingsRow
+              id="semester-promote"
+              label={COPY.promoteLabel(pledgeTerm)}
+              description={COPY.promoteLine}
+              checked={form.promoteNewMembers}
+              onCheckedChange={form.setPromoteNewMembers}
+              disabled={gateProps.disabled}
+            />
+          </SettingsGroup>
+        </Can>
+        <div className="flex justify-end">
+          {/*
+            The submit is the entry control, and a disabled default button
+            also suppresses implicit Enter submission from the fields above.
+          */}
+          <Button
+            type="submit"
+            {...gateProps}
+            disabled={gateProps.disabled || blockedBy !== null}
+          >
+            {rollover.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            {blockedBy ?? COPY.submit}
+          </Button>
+        </div>
+      </form>
+    </SettingsSubpage>
   );
 }

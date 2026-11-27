@@ -48,6 +48,8 @@ export type SettingPhoneScreen =
   | "/chapter-vocabulary"
   | "/chapter-roles"
   | "/chapter-logs"
+  | "/chapter-privacy"
+  | "/chapter-ai"
   | "/pledge-classes"
   | "/member-fields"
   | "/module-settings"
@@ -518,6 +520,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["analytics", "tracking", "telemetry", "privacy", "opt out"],
     requires: CONFIG,
     web: { page: "privacy", anchor: "settings-privacy" },
+    phone: { screen: "/chapter-privacy" },
   },
   {
     // The record of officer changes (Paul, 2026-11-21), which was the
@@ -550,7 +553,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: "president",
     needsAi: true,
     web: { page: "ai" },
-    phone: { screen: "/chapter-settings", anchor: "ai" },
+    phone: { screen: "/chapter-ai" },
   },
   {
     id: "plan",

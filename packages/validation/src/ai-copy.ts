@@ -117,14 +117,16 @@ export function aiSwitchesInEffect(
 export const AI_SETTINGS_COPY = {
   title: "AI",
   /**
-   * No company names (Paul, 2026-11-17: "we don't need to say it works with
-   * Anthropic, Google, and AssemblyAI ... that lives in the privacy policy").
-   * They stay on Meet Frapp Intelligence, where the member's yes is given.
+   * The switches' group heading, drawn only while the Diagnostics group
+   * shows under it (one beta chapter); otherwise the page is one group.
    */
-  description:
-    "Each is on unless the president turns it off, and each member chooses for themselves whether Frapp Intelligence is on.",
-  /** The phone's footnote under the switches in Chapter settings. */
-  phoneFootnote:
+  featuresHeading: "Features",
+  /**
+   * The footnote under the switches, on web's AI page and the phone's AI
+   * screen alike (#6028). No company names (Paul, 2026-11-17): they are on
+   * Meet Frapp Intelligence and in the privacy policy.
+   */
+  footnote:
     "Each member also chooses for themselves whether Frapp Intelligence is on.",
   /** The phone's row in a member's own Settings that opens these switches. */
   chapterRow: "Chapter AI",
@@ -137,6 +139,8 @@ export const AI_SETTINGS_COPY = {
   turnedOff: (label: string) => `${label} turned off`,
   saveFailed: "Couldn't change the AI setting",
   loadFailed: "Couldn't load the chapter's AI settings",
+  /** The phone's AI screen reached where the server has no AI, or by a viewer it doesn't open to. */
+  unavailable: "AI features aren't available here.",
   offlineTitle: "AI settings unavailable offline",
   offlineDescription: "Reconnect to see which AI features are on.",
   retryLater: "Retry in a moment.",

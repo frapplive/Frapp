@@ -90,6 +90,9 @@ export const SCREEN_TITLES = {
   "chapter-identity": "Identity & founding",
   "chapter-type": "Organization type",
   "chapter-vocabulary": "Vocabulary",
+  // Chapter settings' Privacy and AI screens (#6028), titled as web's pages.
+  "chapter-privacy": "Privacy",
+  "chapter-ai": "AI",
   // A module's screen and its own screens (#6030) are titled by the module
   // or the setting, which a back control over one reads from that screen's
   // route (`moduleScreenTitle`). This is the stack's own title.

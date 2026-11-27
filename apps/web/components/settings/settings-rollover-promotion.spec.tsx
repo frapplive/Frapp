@@ -44,7 +44,8 @@ vi.mock("@/lib/stores/chapter-store", async () =>
 // links do.
 vi.mock("next/navigation", async () =>
   (await import("@/tests/settings-harness")).navigation(
-    () => new URLSearchParams("tab=semester"),
+    // The rollover's own page since #6028.
+    () => new URLSearchParams("tab=semester&page=new"),
   ),
 );
 
@@ -74,11 +75,17 @@ const promoteSwitch = () =>
 
 /** Fill the three required fields and submit, leaving the confirm dialog open. */
 async function submitRollover(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText(/^label$/i), "Fall 2026");
-  await user.type(screen.getByLabelText(/start date/i), "2026-08-01");
-  await user.type(screen.getByLabelText(/end date/i), "2026-12-15");
+  await user.type(
+    screen.getByLabelText(/name of the semester ending/i),
+    "Fall 2026",
+  );
+  // Last day starts on today; the officer types over it.
+  await user.clear(screen.getByLabelText(/first day/i));
+  await user.type(screen.getByLabelText(/first day/i), "2026-08-01");
+  await user.clear(screen.getByLabelText(/last day/i));
+  await user.type(screen.getByLabelText(/last day/i), "2026-12-15");
   await user.click(
-    screen.getByRole("button", { name: /archive current semester/i }),
+    screen.getByRole("button", { name: /^start new semester$/i }),
   );
 }
 
@@ -149,8 +156,8 @@ describe("semester rollover — New Member promotion (#285)", () => {
     // confirming — a bulk role change is not undoable in one step.
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(/becomes a full member/i);
-    expect(dialog).toHaveTextContent(/keep any other roles they hold/i);
-    expect(dialog).toHaveTextContent(/cannot be undone/i);
+    expect(dialog).toHaveTextContent(/keeps their other roles/i);
+    expect(dialog).toHaveTextContent(/can't be undone/i);
     // Case-sensitive: "New Member" title-cased to match how the role is
     // displayed everywhere else, not vocab()'s sentence-case "New member".
     expect(dialog).toHaveTextContent(
@@ -191,7 +198,7 @@ describe("semester rollover — New Member promotion (#285)", () => {
     ).not.toBeInTheDocument();
     // The rollover itself is still available — only the extra option is gated.
     expect(
-      screen.getByRole("button", { name: /archive current semester/i }),
+      screen.getByLabelText(/name of the semester ending/i),
     ).toBeInTheDocument();
   });
 

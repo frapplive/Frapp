@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { chapterSubscription } from "@/tests/chapter-subscription";
@@ -89,13 +89,22 @@ async function openAccentPage(
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
-const rolloverButton = () =>
-  screen.getByRole("button", { name: /archive current semester/i });
+// The rollover is its own page since #6028 (`?tab=semester&page=new`), and
+// its button waits for the semester's name, so each test names it first.
+const rolloverButton = () => {
+  fireEvent.change(screen.getByLabelText(/name of the semester ending/i), {
+    target: { value: "Fall 2026" },
+  });
+  return screen.getByRole("button", { name: /^start new semester$/i });
+};
 const saveProfileButton = () =>
   screen.getByRole("button", { name: /save profile/i });
 
 describe("settings semester rollover subscription gating", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState(null, "", "/settings?tab=semester&page=new");
+  });
 
   it("leaves the rollover control alone on an active chapter", () => {
     chapter.active();
@@ -180,9 +189,9 @@ describe("settings semester rollover subscription gating", () => {
     chapter.incomplete();
     render(<SettingsPage />);
 
-    expect(screen.getByLabelText(/^label$/i)).toBeEnabled();
-    expect(screen.getByLabelText(/start date/i)).toBeEnabled();
-    expect(screen.getByLabelText(/end date/i)).toBeEnabled();
+    expect(screen.getByLabelText(/name of the semester ending/i)).toBeEnabled();
+    expect(screen.getByLabelText(/first day/i)).toBeEnabled();
+    expect(screen.getByLabelText(/last day/i)).toBeEnabled();
   });
 
   it("fails open when the subscription status cannot be established", () => {

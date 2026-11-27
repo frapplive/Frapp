@@ -6,14 +6,14 @@ import {
   ASK_DIAGNOSTICS_DAYS,
   formatAiAnswerDate,
 } from "@repo/validation";
-import { RulesList } from "@/components/settings/module-rules";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useNetwork } from "@/lib/providers/network-provider";
 
 /**
- * Chapter settings → AI: the beta diagnostics window on Ask
+ * Chapter settings → AI's Diagnostics group: the beta diagnostics window on Ask
  * (`spec/behavior/ai.md` § Stored AI text, ADR-28 decision 8, #4315).
  *
  * Drawn only for the one chapter the server offers the window to
@@ -26,7 +26,7 @@ import { useNetwork } from "@/lib/providers/network-provider";
  * It is a button with its state in words rather than a switch: a switch says
  * "on until I turn it off", and this turns itself off on a date.
  */
-export function AskDiagnosticsRow() {
+export function AskDiagnosticsGroup() {
   const status = useAskStatus();
   const change = useSetAskDiagnostics();
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -76,42 +76,39 @@ export function AskDiagnosticsRow() {
   }
 
   return (
-    <div className="space-y-3">
-      <RulesList>
-        <div className="flex items-start justify-between gap-8 px-4 py-4">
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium text-foreground">
-              {ASK_DIAGNOSTICS_COPY.label}
-            </p>
-            <div className="space-y-1 text-caption text-muted-foreground">
-              <p>{ASK_DIAGNOSTICS_COPY.description}</p>
-              <p className="text-foreground">
-                {endsAt
-                  ? ASK_DIAGNOSTICS_COPY.on(formatAiAnswerDate(endsAt))
-                  : ASK_DIAGNOSTICS_COPY.off}
-              </p>
-            </div>
-          </div>
-          {diagnostics.can_change ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="shrink-0"
-              disabled={isOffline || change.isPending}
-              onClick={() => void set(endsAt === null)}
-            >
-              {endsAt ? ASK_DIAGNOSTICS_COPY.stop : ASK_DIAGNOSTICS_COPY.start}
-            </Button>
-          ) : null}
-        </div>
-      </RulesList>
-      {diagnostics.can_change ? null : (
-        <p className="text-caption text-muted-foreground">
-          {ASK_DIAGNOSTICS_COPY.presidentOnly}
-        </p>
-      )}
+    <>
+      <SettingsGroup
+        heading={ASK_DIAGNOSTICS_COPY.heading}
+        footnote={
+          diagnostics.can_change
+            ? ASK_DIAGNOSTICS_COPY.footnote
+            : `${ASK_DIAGNOSTICS_COPY.presidentOnly} ${ASK_DIAGNOSTICS_COPY.footnote}`
+        }
+      >
+        <SettingsRow
+          id="settings-ask-diagnostics"
+          label={ASK_DIAGNOSTICS_COPY.label}
+          description={
+            endsAt
+              ? ASK_DIAGNOSTICS_COPY.on(formatAiAnswerDate(endsAt))
+              : ASK_DIAGNOSTICS_COPY.off
+          }
+          control={
+            diagnostics.can_change ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={isOffline || change.isPending}
+                onClick={() => void set(endsAt === null)}
+              >
+                {endsAt ? ASK_DIAGNOSTICS_COPY.stop : ASK_DIAGNOSTICS_COPY.start}
+              </Button>
+            ) : null
+          }
+        />
+      </SettingsGroup>
       {confirmDialog}
-    </div>
+    </>
   );
 }

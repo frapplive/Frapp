@@ -85,8 +85,8 @@ export function AiSettingsPage() {
                 value={AI_SETTINGS_COPY.chapterRowValue(
                   aiSwitchesInEffect(chapterAi.data),
                 )}
-                accessibilityHint="Opens Chapter settings, where the president turns the chapter's AI features on or off."
-                onPress={() => router.push("/chapter-settings")}
+                accessibilityHint="Opens the chapter's AI features, which the president turns on or off."
+                onPress={() => router.push("/chapter-ai")}
               />
             ) : null}
           </ListSection>

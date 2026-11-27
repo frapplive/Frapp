@@ -322,6 +322,17 @@ export function NewspaperGlyph({
 }
 
 /** Lucide's `Shield`. */
+/** Lucide's `Lock`: Chapter settings' Privacy row (#6028). */
+export function LockGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Rect x={3} y={11} width={18} height={11} rx={2} ry={2} {...detail} />
+      <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...detail} />
+    </Frame>
+  );
+}
+
 export function ShieldGlyph({
   color,
   size = DEFAULT_SIZE,

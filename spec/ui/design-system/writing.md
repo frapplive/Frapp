@@ -442,14 +442,15 @@ The rollover is the one that is **not** destructive-toned — it archives rather
 | Loading | — | `Loading chapter settings...` |
 | Error | `Couldn't load chapter settings` | the load-failure line (§ copy rules), then `Changes you make here update every surface in the dashboard.` |
 | No chapter | `Chapter settings` | `Select an active chapter to edit its branding, semester state, or billing configuration.` |
-| Semester empty | — | `No archived semesters yet. Each rollover adds one.` (one line) |
+| Semester empty | — | `None yet`, one muted row in the Archived semesters group (#6028; it was `No archived semesters yet. Each rollover adds one.`) |
 | Custom fields empty | — | `No fields yet. Members fill these in under More details.` (one line, in the list's group; "Add a field" is the row under it) |
 | Nothing for this role (the settings rail) | — | `Nothing in Settings for your role. Officer tools come with an officer role; ask your chapter president if you need one.` (one line) |
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can start a new semester.` |
 | Accent hex needed | — | `Enter a hex code like #5AA9E6 to save an accent color.` (muted on an empty field, warning once something unsavable is typed) |
 | Accent preview fallback | — | `This color is hard to read on menus and dialogs, so the preview shows <hex> instead. Saving stores the color you entered, and the palette is derived from it.` |
 | Accent server contrast disclosure | — | `<Accent text on the app background\|Accent text on its own tinted background\|Text on the accent's solid fill\|Text on the accent's hover shade> reads at <n>:1, under the 4.5:1 minimum. Try a lighter or darker shade of this hue and save again.` |
-| Rollover confirmation | `Start a new semester labelled "<label>"?` | `The current leaderboard period is archived and a new one begins. Points already awarded are kept — only the leaderboard's default window moves.` · confirm `Start new semester` |
+| Rollover confirmation | `End <name> and start a new semester?` | `<name>, <first day> – <last day>, is archived and standings count from <the day after>. Points already awarded are kept.` With promotion it adds `Every <New Member> also becomes a full member and keeps their other roles. This can't be undone in one step.` · confirm `Start new semester`. The name is the semester that ends, which is what the API files (#6028; it was `Start a new semester labelled "<label>"?`, which read as naming the new one). Words in `SEMESTER_SETTINGS_COPY` (`@repo/validation`) |
+| Rollover done | `New semester started` | `<name> is archived.` (with promotion: `, and every <New Member> is now a full member.`) |
 | Delete field confirmation | `Delete the field "<label>"?` | `Members lose the values they have entered for it, and the column disappears from the directory. This cannot be undone.` · confirm `Delete field` |
 | Number field refused at save | `<Field> needs a number` (empty) · `<Field> starts at <min>` (under its floor) | `Enter a whole number of <min> or more.` Dues grace days and installment count, a workflow threshold. `<Field>` is the input's own label, or `The threshold for “<workflow>”` for a workflow threshold. |
 | Dues amount refused at save | `<Field> needs an amount` | `Enter an amount in dollars, like 425 or 42.50.` Amounts are typed in dollars and stored in cents (2026-11-05; they were typed in cents). |

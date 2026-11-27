@@ -4,6 +4,7 @@ import {
   type AiChapterSettings,
   errorCopy,
   useAiChapterSettings,
+  useAskStatus,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
 import {
@@ -13,8 +14,8 @@ import {
   formatAiAnswerDate,
   type AiSwitchCopy,
 } from "@repo/validation";
-import { RulesList, SwitchRule } from "@/components/settings/module-rules";
-import { AskDiagnosticsRow } from "@/components/settings/ask-diagnostics-row";
+import { AskDiagnosticsGroup } from "@/components/settings/ask-diagnostics-group";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { anyReadUncached } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -22,10 +23,12 @@ import { useToast } from "@/lib/hooks/use-toast";
 
 /**
  * Chapter settings → AI (#4308, `spec/behavior/ai.md` § Consent, gate 1):
- * the president's switch for each AI feature family, laid out like a module
- * page (#4073): the title, a line on who turns them on, then the switches. No
- * company names (Paul, 2026-11-17): they are on Meet Frapp Intelligence and in the
- * privacy policy.
+ * the president's switch for each AI feature family, as settings rows (#6028):
+ * one line each, the phone's AI screen's words, and what every switch shares
+ * in the footnote, as iOS Settings' Apple Intelligence page draws them. No
+ * title block: the rail names the page, as on Semester and Privacy. No
+ * company names (Paul, 2026-11-17): they are on Meet Frapp Intelligence and
+ * in the privacy policy.
  *
  * The rail shows this row only while the server has AI
  * (`useAiConsent` answers `null` otherwise), so with `AI_ENABLED` off Chapter
@@ -46,6 +49,9 @@ export function SettingsAiTab() {
   const { isOffline } = useNetwork();
   const settingsQuery = useAiChapterSettings();
   const update = useUpdateAiChapterSettings();
+  // Diagnostics draws only for the one chapter the server offers it to; with
+  // it the switches take a heading, so the page reads as two groups.
+  const diagnosticsOffered = useAskStatus().data?.diagnostics?.offered === true;
   const { toast } = useToast();
 
   const settings = settingsQuery.data;
@@ -85,39 +91,43 @@ export function SettingsAiTab() {
       />
     );
   } else {
+    const footnote = settings
+      ? [
+          settings.can_change ? null : AI_SETTINGS_COPY.presidentOnly,
+          AI_SETTINGS_COPY.footnote,
+          settings.updated_at
+            ? AI_SETTINGS_COPY.lastChanged(
+                formatAiAnswerDate(settings.updated_at),
+              )
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : null;
     body = (
-      <AiSwitchList
-        settings={settings ?? null}
-        // Every switch waits while one saves: each answer replaces the whole
-        // cached row, so two saves in flight could leave one drawn wrong.
-        disabled={isOffline || update.isPending}
-        onToggle={(entry, next) => void toggle(entry, next)}
-      />
+      <SettingsGroup
+        label={AI_SETTINGS_COPY.title}
+        heading={
+          diagnosticsOffered ? AI_SETTINGS_COPY.featuresHeading : undefined
+        }
+        footnote={footnote}
+      >
+        <AiSwitchRows
+          settings={settings ?? null}
+          // Every switch waits while one saves: each answer replaces the
+          // whole cached row, so two saves in flight could leave one drawn
+          // wrong.
+          disabled={isOffline || update.isPending}
+          onToggle={(entry, next) => void toggle(entry, next)}
+        />
+      </SettingsGroup>
     );
   }
 
   return (
-    <div className="space-y-10">
-      <header className="space-y-1 border-b border-border pb-6">
-        <h2 className="text-title text-foreground">{AI_SETTINGS_COPY.title}</h2>
-        <p className="text-sm text-muted-foreground">
-          {AI_SETTINGS_COPY.description}
-        </p>
-      </header>
-      <div className="space-y-3">
-        {body}
-        {settings ? (
-          <p className="text-caption text-muted-foreground">
-            {settings.can_change ? null : `${AI_SETTINGS_COPY.presidentOnly} `}
-            {settings.updated_at
-              ? AI_SETTINGS_COPY.lastChanged(
-                  formatAiAnswerDate(settings.updated_at),
-                )
-              : null}
-          </p>
-        ) : null}
-      </div>
-      <AskDiagnosticsRow />
+    <div className="space-y-8">
+      {body}
+      <AskDiagnosticsGroup />
     </div>
   );
 }
@@ -127,7 +137,7 @@ export function SettingsAiTab() {
  * their full height, so nothing moves when it does; a read can't be in
  * flight long, since this page only shows once the server answered.
  */
-function AiSwitchList({
+function AiSwitchRows({
   settings,
   disabled,
   onToggle,
@@ -138,21 +148,21 @@ function AiSwitchList({
 }) {
   const canChange = settings?.can_change === true;
   return (
-    <RulesList>
+    <>
       {AI_SWITCHES.map((entry) => {
         const { checked, parentOff, waitsOnParent } = aiSwitchState(
           entry,
           settings,
         );
         return (
-          <SwitchRule
+          <SettingsRow
             key={entry.key}
+            id={`settings-ai-${entry.key}`}
             label={entry.label}
-            hint={
-              <div className="space-y-1">
-                <p>{entry.description}</p>
-                {waitsOnParent ? <p>{AI_SETTINGS_COPY.dependsOnAsk}</p> : null}
-              </div>
+            description={
+              waitsOnParent
+                ? `${entry.short} ${AI_SETTINGS_COPY.dependsOnAsk}`
+                : entry.short
             }
             checked={checked}
             nested={entry.dependsOn !== undefined}
@@ -164,10 +174,10 @@ function AiSwitchList({
               // president who turned Ask off can still clear what it reads.
               waitsOnParent
             }
-            onChange={(next) => onToggle(entry, next)}
+            onCheckedChange={(next) => onToggle(entry, next)}
           />
         );
       })}
-    </RulesList>
+    </>
   );
 }

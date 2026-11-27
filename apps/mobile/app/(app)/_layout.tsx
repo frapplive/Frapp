@@ -206,6 +206,16 @@ export default function AppLayout() {
         name="chapter-vocabulary"
         options={{ title: SCREEN_TITLES["chapter-vocabulary"] }}
       />
+      {/* Chapter settings' Privacy and AI (#6028), each a pushed screen of
+          web's page; AI also opens from Settings' Chapter AI row. */}
+      <Stack.Screen
+        name="chapter-privacy"
+        options={{ title: SCREEN_TITLES["chapter-privacy"] }}
+      />
+      <Stack.Screen
+        name="chapter-ai"
+        options={{ title: SCREEN_TITLES["chapter-ai"] }}
+      />
       {/* The record of officer changes (Paul, 2026-11-21), from Chapter settings. */}
       <Stack.Screen
         name="chapter-logs"

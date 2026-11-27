@@ -21,7 +21,11 @@ import {
   type ChapterLogoUpload,
   type SemesterArchive,
 } from "@repo/hooks";
-import { type GoalMetric, type PatchChapterConfig } from "@repo/validation";
+import {
+  type GoalMetric,
+  type PatchChapterConfig,
+  PRIVACY_SETTINGS_COPY,
+} from "@repo/validation";
 import { memberViewVocabulary, titleCase, vocab } from "@repo/org-archetypes";
 import { InlineNote } from "@/components/shared/inline-note";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -943,6 +947,7 @@ function SettingsPageContent() {
               rolloverGate={rolloverGate}
               semesters={semesters}
               semestersPending={semestersQuery.isPending}
+              page={searchParams.get("page")}
             />
           </TabsContent>
 
@@ -1076,7 +1081,9 @@ function SettingsPageContent() {
                 onToggle={(optOut) =>
                   patchConfig(
                     { analytics_opt_out: optOut },
-                    optOut ? "Analytics disabled" : "Analytics enabled",
+                    optOut
+                      ? PRIVACY_SETTINGS_COPY.turnedOff
+                      : PRIVACY_SETTINGS_COPY.turnedOn,
                   )
                 }
               />,
