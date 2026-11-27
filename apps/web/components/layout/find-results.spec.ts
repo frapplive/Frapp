@@ -76,6 +76,20 @@ describe("buildFindResults", () => {
     });
   });
 
+  it("opens a member's own page in the Directory (#6046)", () => {
+    const results = buildFindResults({
+      query: "ada",
+      filter: "All",
+      channels: [],
+      payload: {
+        members: [{ user_id: "u-1", display_name: "Ada Lovelace" }],
+      },
+      now: NOW,
+    });
+    const member = results.find((result) => result.group === "Members");
+    expect(member?.href).toBe("/members?member=u-1");
+  });
+
   it("dates an event with its start", () => {
     const [hit] = buildFindResults({
       query: "cabinet",

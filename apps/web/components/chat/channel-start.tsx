@@ -11,7 +11,10 @@ import {
 import { isDirectChannel } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { channelSettingsPath } from "@/components/settings/settings-paths";
+import {
+  channelDescriptionPath,
+  channelSettingsPath,
+} from "@/components/settings/settings-paths";
 import { AuditGlyph, DirectMessageGlyph, LockGlyph } from "./chat-glyphs";
 
 /** What the channel mark and the channel start read from a channel. */
@@ -117,7 +120,13 @@ export function ChannelStart({
       </div>
       {canEdit && !isDirect ? (
         <Button asChild variant="secondary" size="sm">
-          <Link href={channelSettingsPath(channel.id)}>
+          <Link
+            href={
+              copy.description
+                ? channelSettingsPath(channel.id)
+                : channelDescriptionPath(channel.id)
+            }
+          >
             {copy.description
               ? EDIT_CHANNEL_LABEL
               : ADD_CHANNEL_DESCRIPTION_LABEL}

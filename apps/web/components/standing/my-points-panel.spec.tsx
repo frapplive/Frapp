@@ -54,7 +54,13 @@ const tx = (
   amount: number,
   category: string,
   description: string,
-) => ({ id, amount, category, description, created_at: "2026-11-16T18:00:00Z" });
+) => ({
+  id,
+  amount,
+  category,
+  description,
+  created_at: "2026-11-16T18:00:00Z",
+});
 
 describe("MyPointsPanel: your points on your Profile (#5950)", () => {
   beforeEach(() => {
@@ -120,7 +126,9 @@ describe("MyPointsPanel: your points on your Profile (#5950)", () => {
   it("says so in one line when there are no points yet, and offers no export", () => {
     mocks.summary.data = { balance: 0, transactions: [] };
     render(<MyPointsPanel onClose={() => {}} />);
-    expect(screen.getByText("No points in this period yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No points in this period yet."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Export/ })).toBeNull();
   });
 

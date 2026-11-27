@@ -170,6 +170,44 @@ describe("selectChannels", () => {
     ]);
   });
 
+  // #6031: Channel settings' rows read these, so a mangled value reads as
+  // unset rather than as an answer the officer never gave.
+  it("carries a channel's defaults, keeping only values it can show", () => {
+    const [set, mangled, bare] = selectChannels([
+      {
+        id: "a",
+        name: "general",
+        type: "PUBLIC",
+        is_default: true,
+        activity_excluded: true,
+        default_notification_level: "mentions",
+        is_read_only: false,
+      },
+      {
+        id: "b",
+        name: "rush",
+        type: "PUBLIC",
+        is_default: "true",
+        activity_excluded: 1,
+        default_notification_level: "loud",
+        is_read_only: "no",
+      },
+      { id: "c", name: "social", type: "PUBLIC" },
+    ]);
+    expect(set).toMatchObject({
+      is_default: true,
+      activity_excluded: true,
+      default_notification_level: "mentions",
+      is_read_only: false,
+    });
+    for (const row of [mangled, bare]) {
+      expect(row).not.toHaveProperty("is_default");
+      expect(row).not.toHaveProperty("activity_excluded");
+      expect(row).not.toHaveProperty("default_notification_level");
+      expect(row).not.toHaveProperty("is_read_only");
+    }
+  });
+
   it("survives a non-array payload", () => {
     expect(selectChannels(undefined)).toEqual([]);
     expect(selectChannels(null)).toEqual([]);

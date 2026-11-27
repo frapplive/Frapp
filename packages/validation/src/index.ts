@@ -47,6 +47,8 @@ export * from "./beta-off-modules";
 // A member's birthday (#4959): its rules, its words, and where it falls.
 export * from "./birthday";
 export * from "./channel-access-lists";
+// A channel's settings on both apps (#6031).
+export * from "./channel-settings-copy";
 export * from "./chapter-branding";
 export * from "./chapter-config";
 export * from "./chapter-goals";

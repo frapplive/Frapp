@@ -252,14 +252,15 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     phone: { screen: "/chapter-settings", anchor: "accent" },
   },
   {
-    // The chapter's default chat background is set from the phone's Chapter
-    // settings and, on web, from a channel's menu, so only the phone lists it.
+    // Set from the phone's Chapter settings and, on web, from the Chat page's
+    // Chat background row, which opens its own page (#6031).
     id: "chat-background",
     label: "Chat background",
     area: "chapter",
     section: "Chapter",
     keywords: ["wallpaper", "background", "chat theme", "pattern"],
     requires: CONFIG,
+    web: { page: "chat", params: { page: "background" } },
     phone: { screen: "/chapter-settings", anchor: "chat-background" },
   },
   {

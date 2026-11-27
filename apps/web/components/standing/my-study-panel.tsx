@@ -108,7 +108,9 @@ export function MyStudyPanel({ onClose }: { onClose: () => void }) {
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-4">
         <StandingStat
           label="All time"
-          value={query.isPending || failed ? "–" : formatServiceHours(totalMinutes)}
+          value={
+            query.isPending || failed ? "–" : formatServiceHours(totalMinutes)
+          }
           detail={query.isPending || failed ? null : "hours"}
         />
       </dl>

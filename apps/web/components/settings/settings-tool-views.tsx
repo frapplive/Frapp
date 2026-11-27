@@ -5,7 +5,11 @@ import {
   DISCORD_IMPORT_NOTIFICATION_SCREEN,
 } from "@repo/hooks";
 import { StudyZonesManager } from "@/components/geofences/study-zones-manager";
-import { ChatAdminPage } from "@/components/chat-admin/chat-admin-page";
+import {
+  ChatAdminPage,
+  ChatSettingsSubpage,
+} from "@/components/chat-admin/chat-admin-page";
+import { ChannelSettingsPage } from "@/components/chat-admin/channel-settings-page";
 import { DiscordImportPage } from "@/components/discord-import/discord-import-page";
 import { PointsLedger } from "@/components/points/points-ledger";
 import { ReportsPage } from "@/components/reports/reports-page";
@@ -51,13 +55,9 @@ export function SettingsToolPage({ toolId }: { toolId: string }) {
     case "study-zones":
       return <StudyZonesManager />;
     case "chat-admin":
-      return (
-        <>
-          {/* Opening the report queue reads the new-report notices. */}
-          <MarkScreensSeen screens={[CHAT_REPORTS_NOTIFICATION_SCREEN]} />
-          <ChatAdminPage />
-        </>
-      );
+      // The report queue is a page of its own (`?page=reports`), which reads
+      // the new-report notices when it opens.
+      return <ChatAdminPage />;
     case "reports":
       return <ReportsPage />;
     default:
@@ -70,17 +70,25 @@ export function SettingsToolSubpage({ subpage }: { subpage: SettingsSubpage }) {
   if (subpage.kind === "channel") {
     return (
       <>
-        <MarkScreensSeen screens={[CHAT_REPORTS_NOTIFICATION_SCREEN]} />
+        {subpage.page === "reports" ? (
+          // Opening a channel's reports reads the new-report notices.
+          <MarkScreensSeen screens={[CHAT_REPORTS_NOTIFICATION_SCREEN]} />
+        ) : null}
         {/*
           Keyed by channel, so opening another channel's settings starts from
-          that channel's row rather than the last one's drafts.
+          that channel's row rather than the last one's drafts. Not by page:
+          an access list half-made on its page survives going back.
         */}
-        <ChatAdminPage
+        <ChannelSettingsPage
           key={subpage.channelId}
-          initialChannelId={subpage.channelId}
+          channelId={subpage.channelId}
+          page={subpage.page}
         />
       </>
     );
+  }
+  if (subpage.kind === "chat-page") {
+    return <ChatSettingsSubpage page={subpage.page} />;
   }
   return (
     <SubpageFrame

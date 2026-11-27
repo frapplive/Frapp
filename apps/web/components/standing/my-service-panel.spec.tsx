@@ -185,7 +185,9 @@ describe("MyServicePanel: Withdraw is the submitter's own", () => {
     expect(
       within(pending).getByRole("button", { name: "Withdraw" }),
     ).toBeEnabled();
-    expect(within(approved).queryByRole("button", { name: "Withdraw" })).toBeNull();
+    expect(
+      within(approved).queryByRole("button", { name: "Withdraw" }),
+    ).toBeNull();
     expect(withdrawButtons()).toHaveLength(1);
   });
 
@@ -206,10 +208,7 @@ describe("MyServicePanel: Withdraw is the submitter's own", () => {
 
     const withdraw = screen.getByRole("button", { name: "Withdraw" });
     expect(withdraw).toBeDisabled();
-    expect(withdraw).toHaveAttribute(
-      "aria-describedby",
-      "subscription-notice",
-    );
+    expect(withdraw).toHaveAttribute("aria-describedby", "subscription-notice");
   });
 
   it("shows Withdraw on nobody else's entry, however privileged", () => {
@@ -279,7 +278,9 @@ describe("MyServicePanel: while the viewer's id is unknown (#1346)", () => {
     expect(within(log).getByText("Highway cleanup")).toBeInTheDocument();
     expect(withdrawButtons()).toHaveLength(0);
     expect(
-      screen.getByText(/couldn't confirm your account, so withdrawing is unavailable/i),
+      screen.getByText(
+        /couldn't confirm your account, so withdrawing is unavailable/i,
+      ),
     ).toBeInTheDocument();
   });
 });

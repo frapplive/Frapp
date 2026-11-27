@@ -71,6 +71,11 @@ export function useChatReports(
   status: ChatReportStatus = "open",
   /** One channel's reports only: Chat admin's per-channel view. */
   channelId?: string,
+  /**
+   * False for a viewer who can't review reports, so a row that counts them
+   * (#6031) asks nothing the server would refuse.
+   */
+  enabled = true,
 ) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
@@ -91,7 +96,7 @@ export function useChatReports(
       if (error) throw error;
       return data;
     },
-    enabled: !!chapterId,
+    enabled: enabled && !!chapterId,
   });
 }
 

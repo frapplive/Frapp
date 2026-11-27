@@ -5,6 +5,7 @@ import {
   type FindResult as SharedFindResult,
   type FindTarget,
 } from "@repo/hooks/find-results";
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 import { chatDeepLink } from "@/lib/chat/chat-links";
 import { eventDeepLink } from "@/lib/events/event-links";
 
@@ -36,7 +37,10 @@ function findHref(target: FindTarget): string {
         messageId: target.messageId ?? undefined,
       });
     case "member":
-      return "/members";
+      // The member's own page in the Directory (#6046).
+      return target.userId
+        ? `/members?${WEB_ADDRESS_PARAMS.members.member}=${encodeURIComponent(target.userId)}`
+        : "/members";
     case "event":
       // The event itself, docked in place of the Calendar (#6043).
       return target.eventId ? eventDeepLink(target.eventId) : "/events";
