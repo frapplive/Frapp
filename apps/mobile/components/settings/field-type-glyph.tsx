@@ -1,16 +1,16 @@
 import type { CustomFieldType } from "@repo/validation";
 import {
-  CircleDotGlyph,
-  DecimalGlyph,
   HashGlyph,
+  ListGlyph,
   PhoneGlyph,
-  ToggleGlyph,
+  ToggleLeftGlyph,
   TypeGlyph,
 } from "@/components/settings-glyphs";
 
 /**
  * A member field's type as a glyph (#6029): at the start of its row on
- * Member fields, and beside each answer in its page's Type picker.
+ * Member fields, and beside each answer in its page's Type picker. The same
+ * Lucide glyph web's `TYPE_ICON` draws (`settings-fields-tab.tsx`).
  */
 export function FieldTypeGlyph({
   type,
@@ -23,14 +23,13 @@ export function FieldTypeGlyph({
     case "text":
       return <TypeGlyph color={color} />;
     case "number":
-      return <HashGlyph color={color} />;
     case "decimal":
-      return <DecimalGlyph color={color} />;
+      return <HashGlyph color={color} />;
     case "phone":
       return <PhoneGlyph color={color} />;
     case "select":
-      return <CircleDotGlyph color={color} />;
+      return <ListGlyph color={color} />;
     case "boolean":
-      return <ToggleGlyph color={color} />;
+      return <ToggleLeftGlyph color={color} />;
   }
 }

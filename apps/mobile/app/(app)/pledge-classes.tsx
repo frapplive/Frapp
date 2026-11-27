@@ -157,7 +157,7 @@ export default function PledgeClassesScreen() {
   if (classesQuery.isError && classesQuery.data === undefined) {
     body = (
       <ErrorState
-        title="Couldn't load the list"
+        title={PLEDGE_CLASS_SETTINGS_COPY.loadFailed}
         body={describeLoadFailure(classesQuery.error)}
         onRetry={() => void classesQuery.refetch()}
         isRetrying={classesQuery.isFetching}

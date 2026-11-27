@@ -681,9 +681,12 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "order number",
       "roll number",
     ],
-    requires: ["roles:manage"],
+    // The row's gate (`chapterSettingsAccess`): the tab's `roles:manage`
+    // with the `members:view` its list and roster reads take.
+    requires: ["roles:manage", "members:view"],
     web: { page: "classes", anchor: "settings-classes" },
-    phone: { screen: "/pledge-classes" },
+    // `/v1/pledge-classes` refuses a council (ChapterGuard).
+    phone: { screen: "/pledge-classes", chapterOnly: true },
   },
   {
     id: "member-fields",

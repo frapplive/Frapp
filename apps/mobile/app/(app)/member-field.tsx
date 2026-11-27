@@ -20,6 +20,7 @@ import {
   MEMBER_FIELD_TYPES,
   MEMBER_FIELD_VISIBILITIES,
   moveChoice,
+  moveFieldPatches,
   newFieldBlocker,
   parseMaxLength,
   withChoices,
@@ -78,8 +79,6 @@ import { useKeptSheetDraft, useKeptSheetOpening } from "@/lib/kept-sheet-draft";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
-/** A field's name: the API takes up to this many characters. */
-
 const BACK_TO_MEMBER_FIELDS = {
   label: MEMBER_FIELDS_COPY.pageTitle,
   href: "/member-fields",
@@ -94,20 +93,26 @@ function firstParam(value: string | string[] | undefined): string {
 
 /**
  * One member field on the phone (#6029), pushed from Chapter settings →
- * Member fields, in web's rows and words: the name on top, then Type, Options
- * (pick-one only), Longest answer (text only), Visible to, Required and
- * Sensitive.
+ * Member fields, in web's rows, order and words (`settings-fields-tab.tsx`
+ * `FieldPage`): the name on top, then Type, Longest answer (text only),
+ * Visible to, Required and Sensitive, then the Options group (pick-one only).
  *
  * An existing field saves each row on its own (rulebook § 9): the name and
  * the longest answer on Done or leaving the field, a pick or a switch the
  * moment it changes, each option as it is added, moved or taken out. Its
- * type is fixed once made, so Type is a plain value. Delete is in the
- * header's ⋯.
+ * type is fixed once made, so Type is a plain value. The header's ⋯ has
+ * Move up, Move down and Delete field (red, last), as web's.
+ *
+ * A failure is said once, where it happened: a rename under the name, a
+ * longest answer under its field, an option under the options, and anything
+ * else (a pick, a switch, a move, a delete) in one line at the page's end.
  *
  * `?new=1` is a new field: the same rows, held on the page (and kept when it
  * is left, as web keeps its form), with Type a picker, committed by "Add
  * field" in the floating glass bar, which stays dimmed and says what's
- * missing ("Add a name first", "Add an option first") until it can go.
+ * missing ("Add a name first", "Add an option first") until it can go. Once
+ * added, the new field's page replaces this one, so Back goes to the list,
+ * as web's does.
  *
  * Writes need `chapter-config:manage`; anyone else reads the rows unchanged.
  */
@@ -128,7 +133,7 @@ export default function MemberFieldScreen() {
     return (
       <ScreenShell back={BACK_TO_MEMBER_FIELDS} title="Member field">
         <ErrorState
-          title="Couldn't load this field"
+          title={MEMBER_FIELDS_COPY.loadFailed}
           body={describeLoadFailure(fieldsQuery.error)}
           onRetry={() => void fieldsQuery.refetch()}
           isRetrying={fieldsQuery.isFetching}
@@ -147,13 +152,20 @@ export default function MemberFieldScreen() {
     return (
       <ScreenShell back={BACK_TO_MEMBER_FIELDS} title="Member field">
         <ErrorState
-          title="This field is gone"
-          body="Someone may have deleted it. Go back to Member fields to see them as they are now."
+          title={MEMBER_FIELDS_COPY.gone}
+          body={MEMBER_FIELDS_COPY.goneDetail}
         />
       </ScreenShell>
     );
   }
-  return <ExistingField key={field.id} field={field} canManage={canManage} />;
+  return (
+    <ExistingField
+      key={field.id}
+      field={field}
+      fields={fieldsQuery.data}
+      canManage={canManage}
+    />
+  );
 }
 
 function FieldSkeleton() {
@@ -245,52 +257,65 @@ function FieldRows({
     return itemMenu.handleFor({ title: choice, actions });
   }
 
+  const typeRow = (
+    <ListRow
+      label={MEMBER_FIELDS_COPY.type}
+      leading={<FieldTypeGlyph type={type} color={glyphColor} />}
+      value={MEMBER_FIELD_TYPE_LABEL[type]}
+      variant={typeEditable ? "default" : "detail"}
+      onPress={
+        typeEditable && editable ? () => typeRef.current?.present() : undefined
+      }
+    />
+  );
+  const settingRows = (
+    <>
+      <ListRow
+        label={MEMBER_FIELDS_COPY.visibleTo}
+        value={MEMBER_FIELD_VISIBILITY_LABEL[visibility]}
+        onPress={editable ? () => visibilityRef.current?.present() : undefined}
+      />
+      <ListRow
+        label={MEMBER_FIELDS_COPY.required}
+        trailing={
+          <Toggle
+            value={required}
+            disabled={!editable}
+            onValueChange={onRequired}
+            accessibilityLabel={MEMBER_FIELDS_COPY.required}
+          />
+        }
+      />
+      <ListRow
+        label={MEMBER_FIELDS_COPY.sensitive}
+        trailing={
+          <Toggle
+            value={sensitive}
+            disabled={!editable}
+            onValueChange={onSensitive}
+            accessibilityLabel={MEMBER_FIELDS_COPY.sensitive}
+          />
+        }
+      />
+    </>
+  );
+
   return (
     <>
-      <ListSection>
-        <ListRow
-          label={MEMBER_FIELDS_COPY.type}
-          leading={<FieldTypeGlyph type={type} color={glyphColor} />}
-          value={MEMBER_FIELD_TYPE_LABEL[type]}
-          variant={typeEditable ? "default" : "detail"}
-          onPress={
-            typeEditable && editable
-              ? () => typeRef.current?.present()
-              : undefined
-          }
-        />
-        <ListRow
-          label={MEMBER_FIELDS_COPY.visibleTo}
-          value={MEMBER_FIELD_VISIBILITY_LABEL[visibility]}
-          onPress={
-            editable ? () => visibilityRef.current?.present() : undefined
-          }
-        />
-        <ListRow
-          label={MEMBER_FIELDS_COPY.required}
-          trailing={
-            <Toggle
-              value={required}
-              disabled={!editable}
-              onValueChange={onRequired}
-              accessibilityLabel={MEMBER_FIELDS_COPY.required}
-            />
-          }
-        />
-        <ListRow
-          label={MEMBER_FIELDS_COPY.sensitive}
-          trailing={
-            <Toggle
-              value={sensitive}
-              disabled={!editable}
-              onValueChange={onSensitive}
-              accessibilityLabel={MEMBER_FIELDS_COPY.sensitive}
-            />
-          }
-        />
-      </ListSection>
-
-      {type === "text" ? maxLengthField : null}
+      {/* Web's order: Type, Longest answer (a text field, typed in its own
+          field), then Visible to, Required and Sensitive. */}
+      {type === "text" ? (
+        <>
+          <ListSection>{typeRow}</ListSection>
+          {maxLengthField}
+          <ListSection>{settingRows}</ListSection>
+        </>
+      ) : (
+        <ListSection>
+          {typeRow}
+          {settingRows}
+        </ListSection>
+      )}
 
       {type === "select" ? (
         <>
@@ -392,9 +417,12 @@ function FieldRows({
 
 function ExistingField({
   field,
+  fields,
   canManage,
 }: {
   field: ChapterCustomField;
+  /** The chapter's fields in order, for Move up and Move down. */
+  fields: readonly ChapterCustomField[];
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -402,14 +430,20 @@ function ExistingField({
   const styles = createStyles(tokens);
   const update = useUpdateCustomField();
   const remove = useDeleteCustomField();
+  // Each failure is said once: a rename under the name, the longest answer
+  // under its field, and the rest (a pick, a switch, a move, a delete) in
+  // the page's one line.
+  const [renameFailure, setRenameFailure] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [maxLengthFailure, setMaxLengthFailure] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const index = fields.findIndex((entry) => entry.id === field.id);
 
   async function save(
     body: UpdateCustomFieldInput,
-    onFail: (message: string) => void = setFailure,
+    onFail: (message: string | null) => void = setFailure,
   ): Promise<boolean> {
-    setFailure(null);
+    onFail(null);
     try {
       await update.mutateAsync({ id: field.id, body });
       return true;
@@ -418,6 +452,25 @@ function ExistingField({
         `Couldn't change ${field.label}. ${errorCopy(error, "Try again in a moment.", { serverWritesForMembers: true })}`,
       );
       return false;
+    }
+  }
+
+  async function move(by: -1 | 1) {
+    const patches = moveFieldPatches(fields, field.id, by);
+    if (patches.length === 0) return;
+    setFailure(null);
+    setMoving(true);
+    try {
+      // One at a time, in order, as the list's long press writes them.
+      for (const patch of patches) {
+        await update.mutateAsync({ id: patch.id, body: { sort: patch.sort } });
+      }
+    } catch (error) {
+      setFailure(
+        `Couldn't save the order. ${errorCopy(error, "Try again in a moment.", { serverWritesForMembers: true })}`,
+      );
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -455,7 +508,26 @@ function ExistingField({
             onPress={() =>
               openItemMenu({
                 title: field.label,
+                // Web's ⋯: Move up, Move down, then Delete field, red, last.
                 actions: [
+                  ...(index > 0 && !moving
+                    ? [
+                        {
+                          key: "up",
+                          label: PEOPLE_SETTINGS_COPY.moveUp,
+                          run: () => void move(-1),
+                        },
+                      ]
+                    : []),
+                  ...(index >= 0 && index < fields.length - 1 && !moving
+                    ? [
+                        {
+                          key: "down",
+                          label: PEOPLE_SETTINGS_COPY.moveDown,
+                          run: () => void move(1),
+                        },
+                      ]
+                    : []),
                   {
                     key: "delete",
                     label: MEMBER_FIELDS_COPY.deleteField,
@@ -475,9 +547,9 @@ function ExistingField({
         label={MEMBER_FIELDS_COPY.name}
         value={field.label}
         editable={canManage}
-        failure={failure}
+        failure={renameFailure}
         maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
-        onSave={(label) => save({ label })}
+        onSave={(label) => save({ label }, setRenameFailure)}
       />
       <FieldRows
         type={field.type}
@@ -567,9 +639,16 @@ function NewField({
     setFailure(null);
     kept.hold();
     try {
-      await create.mutateAsync(createFieldBody(draft, fields));
+      const created = await create.mutateAsync(createFieldBody(draft, fields));
       kept.clear();
-      router.back();
+      const id = (created as { id?: string } | undefined)?.id;
+      // The new field's page, in this one's place, so Back goes to the list
+      // (web's `onCreated` replaces its address the same way).
+      if (id) {
+        router.replace({ pathname: "/member-field", params: { id } });
+      } else {
+        router.back();
+      }
     } catch (error) {
       kept.release();
       setFailure(

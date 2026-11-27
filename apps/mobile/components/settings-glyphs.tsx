@@ -484,26 +484,11 @@ export function IdCardGlyph({
 }
 
 /*
- * A member field's type, at the start of its row (#6029): Text is `Type`,
- * Number is `Hash`, and these four are Lucide's `DecimalsArrowRight`,
- * `Phone`, `CircleDot` (Pick one) and `ToggleRight` (Yes or no).
+ * A member field's type, at the start of its row (#6029), web's `TYPE_ICON`
+ * (`settings-fields-tab.tsx`): Text is `Type`, Number and Decimal are
+ * `Hash`, and these three are Lucide's `Phone`, `List` (Pick one) and
+ * `ToggleLeft` (Yes or no).
  */
-
-export function DecimalGlyph({
-  color,
-  size = DEFAULT_SIZE,
-}: SettingsGlyphProps) {
-  const { detail } = paint({ color });
-  return (
-    <Frame size={size}>
-      <Path d="M10 18h10" {...detail} />
-      <Path d="m17 21 3-3-3-3" {...detail} />
-      <Path d="M3 11h.01" {...detail} />
-      <Rect x={15} y={3} width={5} height={8} rx={2.5} {...detail} />
-      <Rect x={6} y={3} width={5} height={8} rx={2.5} {...detail} />
-    </Frame>
-  );
-}
 
 export function PhoneGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   const { detail } = paint({ color });
@@ -517,27 +502,28 @@ export function PhoneGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   );
 }
 
-export function CircleDotGlyph({
-  color,
-  size = DEFAULT_SIZE,
-}: SettingsGlyphProps) {
+export function ListGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   const { detail } = paint({ color });
   return (
     <Frame size={size}>
-      <Circle cx={12} cy={12} r={10} {...detail} />
-      <Circle cx={12} cy={12} r={1} fill={color} />
+      <Path d="M3 5h.01" {...detail} />
+      <Path d="M3 12h.01" {...detail} />
+      <Path d="M3 19h.01" {...detail} />
+      <Path d="M8 5h13" {...detail} />
+      <Path d="M8 12h13" {...detail} />
+      <Path d="M8 19h13" {...detail} />
     </Frame>
   );
 }
 
-export function ToggleGlyph({
+export function ToggleLeftGlyph({
   color,
   size = DEFAULT_SIZE,
 }: SettingsGlyphProps) {
   const { detail } = paint({ color });
   return (
     <Frame size={size}>
-      <Circle cx={15} cy={12} r={3} {...detail} />
+      <Circle cx={9} cy={12} r={3} {...detail} />
       <Rect x={2} y={5} width={20} height={14} rx={7} {...detail} />
     </Frame>
   );

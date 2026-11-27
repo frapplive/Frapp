@@ -481,8 +481,10 @@ export default function ChapterSettingsScreen() {
               ["roles:manage", "chapter-config:view"],
               tab.permissions,
             )}
-            pledgeClasses={access.pledgeClasses}
-            memberFields={access.memberFields}
+            // Both routes refuse a council (ChapterGuard, no `@TenantKinds`),
+            // so their rows draw only where the tenant serves chapter features.
+            pledgeClasses={tab.chapterFeatures && access.pledgeClasses}
+            memberFields={tab.chapterFeatures && access.memberFields}
           />
         ) : null}
         {search.searching || !tab.chapterFeatures ? null : (
