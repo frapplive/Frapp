@@ -3,6 +3,7 @@ import { useDeleteRole, useUpdateRole } from "@repo/hooks";
 import { errorCopy } from "@repo/hooks/error-copy";
 import { planRoleStep } from "@repo/hooks/role-step";
 import {
+  isWildcardRole,
   reachesOutside,
   reachesRole,
   reachesTier,
@@ -42,7 +43,11 @@ export function useRoleActions(data: RolesData) {
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
   const [failure, setFailure] = useState<RoleFailure>(null);
+  // One step at a time: a second Move built from the list before the first
+  // one's writes land would interleave with them (web's `useStepRole`).
+  const [stepping, setStepping] = useState(false);
   const tierIds = new Set(tiers.map((tier) => tier.id));
+  const byId = new Map(roles.map((role) => [role.id, role]));
 
   async function attempt(
     role: TieredRole,
@@ -65,9 +70,30 @@ export function useRoleActions(data: RolesData) {
   const editable = (role: TieredRole) =>
     canManage && reachesRole(reach, role, tiers) && !isEveryoneRole(role);
 
-  function step(role: TieredRole, by: -1 | 1) {
+  // A step writes its neighbour too (every role in the list, on a tie):
+  // offered only when the officer reaches each one, as on web, so the API
+  // never refuses half a swap. The President role is no one's to edit, but
+  // a wildcard caller may still move it past a neighbour.
+  const writable = (role: TieredRole) =>
+    canManage &&
+    (isWildcardRole(role) ? reach.wildcard : reachesRole(reach, role, tiers));
+
+  function stepPlan(role: TieredRole, by: -1 | 1) {
+    if (stepping) return null;
     const writes = planRoleStep(roles, tierIds, role, by);
+    if (!writes) return null;
+    return writes.every((write) => {
+      const target = byId.get(write.id);
+      return !!target && writable(target);
+    })
+      ? writes
+      : null;
+  }
+
+  function step(role: TieredRole, by: -1 | 1) {
+    const writes = stepPlan(role, by);
     if (!writes) return;
+    setStepping(true);
     void attempt(
       role,
       async () => {
@@ -79,7 +105,7 @@ export function useRoleActions(data: RolesData) {
         }
       },
       MOVE_FAILED,
-    );
+    ).finally(() => setStepping(false));
   }
 
   function moveTo(role: TieredRole, tierId: string | null) {
@@ -111,14 +137,14 @@ export function useRoleActions(data: RolesData) {
   function stepActions(role: TieredRole): ItemMenuAction[] {
     if (!editable(role)) return [];
     const actions: ItemMenuAction[] = [];
-    if (planRoleStep(roles, tierIds, role, -1)) {
+    if (stepPlan(role, -1)) {
       actions.push({
         key: "up",
         label: PEOPLE_SETTINGS_COPY.moveUp,
         run: () => step(role, -1),
       });
     }
-    if (planRoleStep(roles, tierIds, role, 1)) {
+    if (stepPlan(role, 1)) {
       actions.push({
         key: "down",
         label: PEOPLE_SETTINGS_COPY.moveDown,
@@ -153,18 +179,19 @@ export function useRoleActions(data: RolesData) {
     // A Non-chapter business role can't sit in a tier (#4958), and Actives
     // (#5802) stays in its tier, as the API holds them.
     const movable = !role.self_assignable && !isActiveRole(role);
+    // A tier_id naming a missing tier reads as outside, as the list shows it.
+    const tierId =
+      role.tier_id && tierIds.has(role.tier_id) ? role.tier_id : null;
     const moves: ItemMenuAction[] = movable
       ? [
           ...tiers
-            .filter(
-              (tier) => tier.id !== role.tier_id && reachesTier(reach, tier),
-            )
+            .filter((tier) => tier.id !== tierId && reachesTier(reach, tier))
             .map((tier) => ({
               key: `move-${tier.id}`,
               label: `Move to ${tier.name}`,
               run: () => moveTo(role, tier.id),
             })),
-          ...(role.tier_id !== null && reachesOutside(reach)
+          ...(tierId !== null && reachesOutside(reach)
             ? [
                 {
                   key: "move-outside",

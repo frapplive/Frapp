@@ -47,6 +47,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { cn, getErrorMessage } from "@/lib/utils";
 import {
   byDisplayOrder,
+  addsTiers,
   isWildcardRole,
   reachesOutside,
   reachesRole,
@@ -367,7 +368,7 @@ function TierList({
         );
       })}
 
-      {canManage && !filtering ? (
+      {canManage && addsTiers(reach) && !filtering ? (
         <SettingsGroup label={addTierLabel(words.singular)}>
           <AddTierRow
             words={words}

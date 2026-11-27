@@ -195,6 +195,15 @@ export function reachesTier(reach: Reach, tier: TierRow): boolean {
 }
 
 /**
+ * Whether the caller may add a tier: the API ranks a new tier below the
+ * caller's own, so a caller with no tier of their own (no finite rank, not
+ * `*`) is refused. Unknown until the caller's roles are read.
+ */
+export function addsTiers(reach: Reach): boolean {
+  return reach.known && (reach.wildcard || Number.isFinite(reach.rank));
+}
+
+/**
  * Whether the caller may edit a role: below their own rank, and never a `*`
  * role, which moves only through Transfer presidency.
  */

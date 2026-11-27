@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -230,7 +230,9 @@ export default function RoleTierScreen() {
       back={BACK_TO_ROLES}
       title={tier.name}
       headerAction={
-        editable ? (
+        // A menu with nothing in it would be a dead button: the ⋯ shows
+        // only when it holds something.
+        editable && menuActions.length > 0 ? (
           <HeaderButton
             label={`More for ${tier.name}`}
             onPress={() =>
@@ -356,9 +358,22 @@ function TierNameField({
 }) {
   // What the officer is typing, or `null` while the field shows the saved name.
   const [draft, setDraft] = useState<string | null>(null);
+  const committing = useRef(false);
+  const latest = useRef({ draft, value, onSave });
+  latest.current = { draft, value, onSave };
+  // Leaving the screen with the field still focused may unmount it before
+  // it blurs: save what was typed then too, so Back never drops a rename.
+  useEffect(
+    () => () => {
+      const { draft: left, value: saved, onSave: save } = latest.current;
+      const next = left?.trim();
+      if (next && next !== saved && !committing.current) void save(next);
+    },
+    [],
+  );
 
   async function commit() {
-    if (draft === null) return;
+    if (draft === null || committing.current) return;
     const next = draft.trim();
     if (!next || next === value) {
       setDraft(null);
@@ -366,7 +381,10 @@ function TierNameField({
     }
     // Held until saved, so the field doesn't flick back to the old name;
     // a failed save keeps it for another try.
-    if (await onSave(next)) setDraft(null);
+    committing.current = true;
+    const ok = await onSave(next);
+    committing.current = false;
+    if (ok) setDraft(null);
   }
 
   return (

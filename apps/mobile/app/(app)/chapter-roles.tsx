@@ -11,6 +11,7 @@ import {
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
+  addsTiers,
   byDisplayOrder,
   isWildcardRole,
   reachesOutside,
@@ -306,7 +307,7 @@ function RolesAndGroups() {
           );
         })}
 
-        {canManage && !filtering ? (
+        {canManage && addsTiers(reach) && !filtering ? (
           <ListSection>
             <ListRow
               label={addTierLabel(words.singular)}

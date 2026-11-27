@@ -165,6 +165,8 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const status = useFormSaveStatus();
   const tierSheetRef = useRef<BottomSheetModal>(null);
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
+  // A tier_id naming a missing tier reads as outside, as the list shows it.
+  const tierId = tier?.id ?? null;
   // The Everyone role (#4191): its permissions and @everyone switch change
   // here; its name and tier are fixed, as the API holds them.
   const everyone = isEveryoneRole(role);
@@ -183,7 +185,7 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
     roleColorOrNull(role.color),
   );
   const [colorTouched, setColorTouched] = useState(false);
-  const [placement, setPlacement] = useState(role.tier_id ?? OUTSIDE);
+  const [placement, setPlacement] = useState(tierId ?? OUTSIDE);
   const [mentionable, setMentionable] = useState(role.mentionable);
   const [pickable, setPickable] = useState(role.self_assignable);
   const [saving, setSaving] = useState(false);
@@ -194,7 +196,7 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
     system_key: role.system_key,
     tier_id: draftTierId,
     permissions:
-      draftTierId === (role.tier_id ?? null)
+      draftTierId === tierId
         ? role.permissions
         : permissionsAfterMove(
             tiers.find((candidate) => candidate.id === draftTierId)
@@ -244,11 +246,10 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const tierOptions = [
     ...tiers
       .filter(
-        (candidate) =>
-          candidate.id === role.tier_id || reachesTier(reach, candidate),
+        (candidate) => candidate.id === tierId || reachesTier(reach, candidate),
       )
       .map((candidate) => ({ value: candidate.id, label: candidate.name })),
-    ...(role.tier_id === null || reachesOutside(reach)
+    ...(tierId === null || reachesOutside(reach)
       ? [{ value: OUTSIDE, label: outsideTiersHeading(words.plural) }]
       : []),
   ];
@@ -305,6 +306,20 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           }
           accessibilityHint={`Opens the ${words.plural}.`}
         />
+        {tier ? (
+          // What the tier gives lives on its page: the way there, for
+          // anyone who can see this role (web's "Open <tier>").
+          <ListRow
+            label={`Open ${tier.name}`}
+            onPress={() =>
+              router.push({
+                pathname: "/role-tier",
+                params: { tierId: tier.id },
+              })
+            }
+            accessibilityHint={`Opens ${tier.name}: what every role in it can do.`}
+          />
+        ) : null}
         <RoleColorRow
           label={PEOPLE_SETTINGS_COPY.color}
           value={color}
