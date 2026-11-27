@@ -79,8 +79,18 @@ function ownState(): Record<string, unknown> {
  * with the address it was pushed from. Does nothing when nothing changes.
  */
 export function pushAddress(changes: AddressChanges): void {
+  pushAddressTo(addressWith(currentAddress(), changes));
+}
+
+/**
+ * Opens `href`, an address on the same page (a link drawn inside it, such as
+ * a Chapter settings row), the way `pushAddress` opens a parameter: pushed
+ * and marked with the address it was pushed from, so its back arrow can go
+ * Back to it (`closeToAddress`).
+ */
+export function pushAddressTo(href: string): void {
   const from = currentAddress();
-  const to = addressWith(from, changes);
+  const to = addressWith(href, {});
   if (to === from) return;
   const state = ownState();
   window.history.pushState(
@@ -118,11 +128,22 @@ export function replaceAddress(changes: AddressChanges): void {
  * that address, so Back leaves the page as it would have.
  */
 export function closeAddress(names: readonly string[]): void {
-  const from = currentAddress();
-  const to = addressWith(
-    from,
-    Object.fromEntries(names.map((name) => [name, null])),
+  closeToAddress(
+    addressWith(
+      currentAddress(),
+      Object.fromEntries(names.map((name) => [name, null])),
+    ),
   );
+}
+
+/**
+ * Closes to `href`, the parent a back arrow names (a Chapter settings page's
+ * "‹ Roles and groups"), by the same rule as `closeAddress`: Back to it when
+ * this tab pushed the current entry over it, else a replace.
+ */
+export function closeToAddress(href: string): void {
+  const from = currentAddress();
+  const to = addressWith(href, {});
   if (to === from) return;
   const state = ownState();
   const chain = pushedOver(state);

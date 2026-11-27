@@ -34,6 +34,19 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(h.params),
 }));
 
+// The page opens and closes its pages through the address (#6049).
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  pushAddressTo: (href: string) => h.push(href),
+  closeToAddress: (href: string) => h.push(href),
+  replaceAddress: (changes: Record<string, string | null>) =>
+    h.replace(
+      `${LIST}${Object.entries(changes)
+        .map(([name, value]) => `&${name}=${value}`)
+        .join("")}`,
+    ),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useCustomFields: () => mockUseCustomFields(),

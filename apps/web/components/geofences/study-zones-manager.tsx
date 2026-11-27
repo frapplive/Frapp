@@ -7,7 +7,7 @@ import {
   useKeptDraftKeys,
   writeKeptPanel,
 } from "@repo/hooks/kept-drafts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import { StudyZonesGlyph } from "@/components/events/chapter-ops-glyphs";
 import {
@@ -17,7 +17,16 @@ import {
   useMyPermissions,
   useUpdateGeofence,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import { can, WEB_ADDRESS_PARAMS } from "@repo/validation";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
 import { NewButton } from "@/components/ui/new-button";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +74,9 @@ import {
  * Who can manage zones is the page's own Who can section, so the drawer that
  * repeated it is gone.
  */
+/** `&zone=<id>`: a study zone's editor, open in place of the page. */
+const ZONE_PARAM = WEB_ADDRESS_PARAMS.settings.zone;
+
 export function StudyZonesManager() {
   const { toast } = useToast();
   const { isOffline } = useNetwork();
@@ -150,9 +162,62 @@ export function StudyZonesManager() {
     writeKeptPanel(editorPanelKey, editorOpen ? { id: editingId } : null);
   }, [editorPanelKey, editorOpen, editingId, leftEditor]);
 
+  /*
+    A zone's editor is `&zone=<id>` (#6049), pushed, so Back closes it,
+    Forward or a reload opens it again, and its back arrow closes by the
+    address's rule. New study zone is a docked create panel, which has no
+    address until #6157 decides those; the editor a page was left with
+    (#4593) reopens without one, as Calendar's does.
+  */
+  const zoneParam = useAddressParams([ZONE_PARAM]).values[ZONE_PARAM];
+  const deadZone = useDeadAddressParam(
+    ZONE_PARAM,
+    zoneParam,
+    zonesLoaded && zoneParam !== null && !zones.some((z) => z.id === zoneParam),
+  );
+  const permissionsLoaded = permissionsPayload !== undefined;
+  // Follows `zone=` only when the address moves it, never on a render where
+  // the two merely differ: the editor's own close goes Back, which lands a
+  // moment later.
+  const [zoneWanted, setZoneWanted] = useState(zoneParam);
+  const zoneSeen = useRef(zoneParam);
+  useEffect(() => {
+    if (zoneSeen.current === zoneParam) return;
+    zoneSeen.current = zoneParam;
+    setZoneWanted(zoneParam);
+    if (zoneParam === null && editorOpen && editingId !== null) {
+      setEditorOpen(false);
+    }
+    // Only a move of the address acts here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneParam]);
+  // Waits for the zones and the permission, then opens once, for someone
+  // who may manage zones; a `zone=` they may not use is taken out.
+  useEffect(() => {
+    if (!zoneWanted || !zonesLoaded || !permissionsLoaded) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- acted on once
+    setZoneWanted(null);
+    if (!zones.some((zone) => zone.id === zoneWanted)) return;
+    if (!canManageZones || !gate.allowed) {
+      replaceAddress({ [ZONE_PARAM]: null });
+      return;
+    }
+    if (editorOpen && editingId === zoneWanted) return;
+    setEditingId(zoneWanted);
+    setEditorOpen(true);
+    // The setters are stable in what they do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneWanted, zonesLoaded, permissionsLoaded]);
+
   function openEditor(zone: StudyZone | null) {
+    if (zone) pushAddress({ [ZONE_PARAM]: zone.id });
     setEditingId(zone?.id ?? null);
     editor.setOpen(true);
+  }
+
+  function onEditorOpenChange(open: boolean) {
+    editor.setOpen(open);
+    if (!open && editingId !== null) closeAddress([ZONE_PARAM]);
   }
 
   async function toggleActive(zone: StudyZone) {
@@ -247,6 +312,11 @@ export function StudyZonesManager() {
         <div className="@container space-y-4">
           <SubscriptionNotice gate={gate} feature="managing study zones" />
 
+          {deadZone ? (
+            <InlineNote>
+              That study zone isn&apos;t here anymore. It may have been deleted.
+            </InlineNote>
+          ) : null}
           {isOffline && anyReadUncached(geofencesQuery) ? (
             <NestedOffline
               sole
@@ -362,7 +432,7 @@ export function StudyZonesManager() {
 
           <StudyZoneEditor
             open={editor.open}
-            onOpenChange={editor.setOpen}
+            onOpenChange={onEditorOpenChange}
             zone={editing}
             zones={zones}
             campus={chapterQuery.data?.university ?? null}

@@ -68,6 +68,12 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => search.current,
 }));
 
+// The page closes its pages through the address (#6049).
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  closeToAddress: (href: string) => router.push(href),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {
@@ -1003,7 +1009,7 @@ describe("ChannelSettingsPage — Delete channel", () => {
 
     await waitFor(() => expect(mockDeleteChannel).toHaveBeenCalledWith("ch-1"));
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
+      expect(router.push).toHaveBeenCalledWith(
         "/settings?tab=chat&page=chat-admin",
       ),
     );

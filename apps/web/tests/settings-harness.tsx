@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { vi } from "vitest";
 
 /**
@@ -105,11 +105,54 @@ export function chapterStore(
   };
 }
 
-/** `next/navigation`, with the query string read on every render. */
+/** Fired after a `pushState` or `replaceState` (`followHistory`). */
+const HISTORY_EVENT = "settings-harness:history";
+let historyFollowed = false;
+
+/**
+ * Has `pushState` and `replaceState` say they ran, so `navigation`'s
+ * `useSearchParams` re-renders on an address the page moved itself, as Next's
+ * router follows those calls live (`lib/address/address.ts`).
+ */
+function followHistory(): void {
+  if (historyFollowed) return;
+  historyFollowed = true;
+  for (const method of ["pushState", "replaceState"] as const) {
+    const original = window.history[method].bind(window.history);
+    window.history[method] = (...args: Parameters<History["pushState"]>) => {
+      original(...args);
+      window.dispatchEvent(new Event(HISTORY_EVENT));
+    };
+  }
+}
+
+function subscribeHistory(onChange: () => void): () => void {
+  window.addEventListener(HISTORY_EVENT, onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener(HISTORY_EVENT, onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}
+
+/**
+ * `next/navigation`, with the query string read on every render, and again
+ * whenever the page moves the address through the History API.
+ */
 export function navigation(
   searchParams: () => URLSearchParams = () => new URLSearchParams(),
 ) {
-  return { useSearchParams: () => searchParams() };
+  followHistory();
+  return {
+    useSearchParams: () => {
+      const search = useSyncExternalStore(
+        subscribeHistory,
+        () => searchParams().toString(),
+        () => searchParams().toString(),
+      );
+      return useMemo(() => new URLSearchParams(search), [search]);
+    },
+  };
 }
 
 /**
@@ -117,7 +160,7 @@ export function navigation(
  * at its `href` and re-renders, so the page reads the new query string. Used
  * for the Chapter tab's rows, which open `?tab=org&page=<page>`, by a spec
  * whose `navigation` reads `window.location.search`, which the page's own tab
- * switch moves with `replaceState` (dropping `?page=` as it does live). Such a
+ * switch moves with `pushState` (dropping `?page=` as it does live). Such a
  * spec resets the address in `beforeEach`.
  */
 export function followLink(link: HTMLElement, rerender: () => void) {

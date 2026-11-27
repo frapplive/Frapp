@@ -6,13 +6,15 @@ import { ArrowLeft } from "lucide-react";
 import { SectionTitledByPage } from "@/components/profile/profile-section";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
+import { SETTINGS_BACK_LINK_ATTR } from "@/components/settings/settings-address-links";
 
 /**
  * The way back from a page opened inside a module page of Chapter settings
  * (#3837): one channel's settings, or Discord import, both drawn in place of
  * the Chat page. A quiet line above the page's heading, the way Discord's
  * channel settings and iOS Settings put the parent's name behind a back arrow,
- * so the rail row stays lit and nothing else moves.
+ * so the rail row stays lit and nothing else moves. It closes the page by
+ * the address's rule (`SettingsAddressLinks`): Back when this tab opened it.
  */
 export function SettingsBackLink({
   href,
@@ -24,6 +26,7 @@ export function SettingsBackLink({
   return (
     <Link
       href={href}
+      {...{ [SETTINGS_BACK_LINK_ATTR]: "" }}
       className={cn(
         "-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-muted-foreground transition hover:text-foreground",
         FOCUS_RING,

@@ -162,6 +162,8 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   // A pledge class's page and a member field's page (#6029).
   "class",
   "field",
+  // A study zone's editor (#6049).
+  WEB_ADDRESS_PARAMS.settings.zone,
   // A channel's Description focused, from "Add a description" (#6031).
   FOCUS_DESCRIPTION_PARAM,
   // The points ledger's member, from a member's card.

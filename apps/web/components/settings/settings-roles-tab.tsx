@@ -1,7 +1,8 @@
 "use client";
 
+import { closeToAddress, pushAddressTo } from "@/lib/address/address";
 import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Search, UserPlus } from "lucide-react";
 import { defaultInviteRoleChoices } from "@repo/hooks/chapter-roles";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -98,7 +99,6 @@ export function SettingsRolesTab({
   isSavingConfig,
 }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { data: permissionsPayload } = useMyPermissions();
   const permissions = permissionsPayload?.permissions;
   const [query, setQuery] = useState("");
@@ -125,7 +125,7 @@ export function SettingsRolesTab({
     }),
     [],
   );
-  const backToRoles = () => router.push(BASE);
+  const backToRoles = () => closeToAddress(BASE);
 
   if (tierId) {
     return (
@@ -159,7 +159,7 @@ export function SettingsRolesTab({
             ? PEOPLE_SETTINGS_COPY.autoGroupsRow
             : PEOPLE_SETTINGS_COPY.pageTitle
         }
-        onDone={() => router.push(backHref)}
+        onDone={() => closeToAddress(backHref)}
       />
     );
   }
@@ -185,7 +185,7 @@ export function SettingsRolesTab({
         <RolesOverview
           query={query}
           links={links}
-          onOpenRole={(id) => router.push(links.role(id))}
+          onOpenRole={(id) => pushAddressTo(links.role(id))}
         />
       ) : null}
       {/*
@@ -197,7 +197,7 @@ export function SettingsRolesTab({
         canManage={canManageGroups}
         query={query}
         links={links}
-        onCreated={(id) => router.push(links.group(id))}
+        onCreated={(id) => pushAddressTo(links.group(id))}
       />
       {normalizeWords(query).length === 0 &&
       (!configUnavailable || isPresident) ? (

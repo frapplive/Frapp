@@ -29,6 +29,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+// The page opens and closes its pages through the address (#6049).
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  pushAddressTo: (href: string) => mockPush(href),
+  closeToAddress: (href: string) => mockPush(href),
+}));
+
 // The page head's count and search read the roles pages' data; the pages
 // themselves are mocked below.
 vi.mock("@/components/roles/use-roles-data", () => ({

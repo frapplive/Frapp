@@ -100,6 +100,12 @@ export interface PhoneAddress {
   pathname: string;
   /** Web parameter name → the phone screen's parameter name. */
   params?: Readonly<Record<string, string>>;
+  /**
+   * Parameters that must hold exactly these values for this screen, and that
+   * only say where the page sits on web, so the phone drops them: Chapter
+   * settings' `tab=roles` in front of a role or tier (#6049).
+   */
+  matches?: Readonly<Record<string, string>>;
 }
 
 /** One web address shape: a path, and the parameters that pick a phone screen. */
@@ -254,7 +260,26 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
     params: Object.values(P.preferences),
     phone: [{ pathname: "/preferences" }],
   },
-  { path: "/settings", params: Object.values(P.settings), phone: null },
+  // Web only, except Roles and groups' role and tier pages, which the phone
+  // has (#6049). Any other Chapter settings address stays in the browser.
+  {
+    path: "/settings",
+    params: Object.values(P.settings),
+    phone: [
+      {
+        when: [P.settings.tier],
+        matches: { [P.settings.tab]: "roles" },
+        pathname: "/role-tier",
+        params: { [P.settings.tier]: "tierId" },
+      },
+      {
+        when: [P.settings.role],
+        matches: { [P.settings.tab]: "roles" },
+        pathname: "/role",
+        params: { [P.settings.role]: "roleId" },
+      },
+    ],
+  },
   // Pages with no address of their own below the path yet. Frapp
   // Intelligence (`/ask`) gets one when its conversations get ids (#4704).
   { path: "/ask", params: [], phone: [{ pathname: "/ask" }] },
@@ -288,6 +313,22 @@ export function webAddressRow(pathname: string): WebAddressRow | null {
  * address no page owns. `pathname` and `search` are a URL's own
  * (`/events`, `?event=…`).
  */
+/**
+ * Whether `query` picks `candidate`: each of its `when` parameters present,
+ * and each of its `matches` holding its value.
+ */
+export function phoneRowFits(
+  candidate: PhoneAddress & { when?: readonly string[] },
+  query: URLSearchParams,
+): boolean {
+  return (
+    (candidate.when ?? []).every((name) => query.get(name)) &&
+    Object.entries(candidate.matches ?? {}).every(
+      ([name, value]) => query.get(name) === value,
+    )
+  );
+}
+
 export function phoneAddressFor(
   pathname: string,
   search: string | URLSearchParams,
@@ -296,9 +337,7 @@ export function phoneAddressFor(
   if (!row?.phone) return null;
   const query =
     typeof search === "string" ? new URLSearchParams(search) : search;
-  const target = row.phone.find((candidate) =>
-    (candidate.when ?? []).every((name) => query.get(name)),
-  );
+  const target = row.phone.find((candidate) => phoneRowFits(candidate, query));
   if (!target) return null;
   const params: Record<string, string> = {};
   for (const [web, phone] of Object.entries(target.params ?? {})) {

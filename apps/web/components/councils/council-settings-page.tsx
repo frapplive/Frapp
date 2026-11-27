@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { pushAddress } from "@/lib/address/address";
+import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   useCouncil,
@@ -95,18 +96,12 @@ export function CouncilSettingsPage() {
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
   const tabParam = rawTab ? (TAB_ALIASES[rawTab] ?? rawTab) : null;
-  const [activeTab, setActiveTab] = useState(tabParam ?? "council");
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- follow `?tab=` deep links, as Chapter settings does
-    if (tabParam) setActiveTab(tabParam);
-  }, [tabParam]);
+  // The address is the tab: a rail row pushes `?tab=`, so Back walks the
+  // rows visited and a reload lands on the one open (#6049).
+  const activeTab = tabParam ?? "council";
   const changeTab = useCallback((next: string) => {
-    setActiveTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    url.searchParams.delete("tier");
-    url.searchParams.delete("role");
-    window.history.replaceState(null, "", url.toString());
+    pushAddress({ tab: next, tier: null, role: null });
+    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
   }, []);
 
   if (chapterQuery.isError && !chapterQuery.data) {
@@ -134,6 +129,9 @@ export function CouncilSettingsPage() {
     <Tabs
       value={shownTab}
       onValueChange={changeTab}
+      // Arrow keys move focus along the rail; Enter or a click opens a row,
+      // so each step Back returns from is one the member chose (#6049).
+      activationMode="manual"
       className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
     >
       <SettingsRail

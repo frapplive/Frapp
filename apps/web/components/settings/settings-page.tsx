@@ -98,6 +98,12 @@ import {
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
+import { SettingsAddressLinks } from "@/components/settings/settings-address-links";
 import { settingEntryById } from "@repo/hooks/settings-search";
 import { rushPipelineAccess } from "@repo/hooks/rush-pipeline";
 import {
@@ -232,13 +238,9 @@ function SettingsPageContent() {
     rawTabParam === "modules" && requestedModuleKey
       ? requestedModuleKey
       : resolveSettingsTabParam(rawTabParam);
-  const [activeTab, setActiveTab] = useState(tabParam ?? "org");
-  useEffect(() => {
-    if (tabParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- follow `?tab=` deep links without wiping a tab the member already picked
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  // The address is the open row (#6049): a rail row pushes `?tab=`, so Back
+  // walks the rows visited, Forward reopens them and a reload lands on one.
+  const activeTab = tabParam ?? "org";
   /*
     A page opened inside a module page (#3837): one channel's settings
     (`?channel=`, the chat rail's Edit channel) or Discord import
@@ -270,9 +272,7 @@ function SettingsPageContent() {
     if (!chapterPage) return;
     const url = new URL(window.location.href);
     if (url.searchParams.get("page") === chapterPage) return;
-    url.searchParams.set("tab", "org");
-    url.searchParams.set("page", chapterPage);
-    window.history.replaceState(null, "", url.toString());
+    replaceAddress({ tab: "org", page: chapterPage });
   }, [chapterPage]);
   // A new-report link from before the queue had a page of its own (#6031)
   // carried `#reported-messages` on the Chat page or on Chat admin: it opens
@@ -286,21 +286,17 @@ function SettingsPageContent() {
     if (page !== null && page !== "chat-admin") return;
     url.searchParams.set("page", "reports");
     url.hash = "";
+    // On arrival only, so the entry carries no mark to keep.
     window.history.replaceState(null, "", url.toString());
   }, []);
   // Switching rows starts the panel at its top, not wherever the last one
-  // was scrolled to: the panel scrolls inside the shell's tool pane. The
-  // address follows the row, without the params that opened a page inside
-  // the last one, so Chat shows its own page when the officer comes back to
-  // it, and a refresh or a copied link lands on the row they were on. Next
-  // keeps `useSearchParams` in step with `replaceState`.
+  // was scrolled to: the panel scrolls inside the shell's tool pane. A row
+  // pushes its address, without the params that opened a page inside the
+  // last one, so Chat shows its own page when the officer comes back to it,
+  // Back walks the rows visited (iOS Settings, Discord's server settings),
+  // and a refresh or a copied link lands on the row they were on (#6049).
   const changeTab = useCallback((next: string) => {
-    setActiveTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    for (const param of SETTINGS_SUBPAGE_PARAMS) url.searchParams.delete(param);
-    url.hash = "";
-    window.history.replaceState(null, "", url.toString());
+    pushAddress({ tab: next, ...SUBPAGE_CLEARED });
     document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
   }, []);
 
@@ -834,6 +830,9 @@ function SettingsPageContent() {
       <Tabs
         value={shownTab}
         onValueChange={changeTab}
+        // Arrow keys move focus along the rail; Enter or a click opens a
+        // row, so each step Back returns from is one the member chose (#6049).
+        activationMode="manual"
         className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
       >
         <SettingsRail
@@ -842,11 +841,13 @@ function SettingsPageContent() {
             // The lit row closes a page opened inside it (a channel's
             // settings, Discord import, the plan table) and goes back to the
             // row's own page.
+            // It closes by the address's rule: Back when this tab opened
+            // the page, else a replace with the row's own address.
             if (
               value === shownTab &&
               (channelParam || toolParam || searchParams.get("page"))
             ) {
-              changeTab(value);
+              closeAddress(SETTINGS_SUBPAGE_PARAMS);
             }
           }}
         />
@@ -1088,6 +1089,11 @@ function SettingsPageContent() {
   );
 }
 
+/** Each page-in-place parameter, removed: a rail row's address drops them. */
+const SUBPAGE_CLEARED = Object.fromEntries(
+  SETTINGS_SUBPAGE_PARAMS.map((param) => [param, null]),
+);
+
 // `SettingsPageContent` reads `?tab=` via `useSearchParams`, which Next requires
 // to sit under a Suspense boundary (matches the sign-in/sign-up/join pattern).
 export function SettingsPage() {
@@ -1113,9 +1119,13 @@ export function SettingsPage() {
           kindLoading ? (
             <SettingsBodySkeleton />
           ) : tenantKind === "council" ? (
-            <CouncilSettingsPage />
+            <SettingsAddressLinks>
+              <CouncilSettingsPage />
+            </SettingsAddressLinks>
           ) : (
-            <SettingsPageContent />
+            <SettingsAddressLinks>
+              <SettingsPageContent />
+            </SettingsAddressLinks>
           )
         }
       </Suspense>

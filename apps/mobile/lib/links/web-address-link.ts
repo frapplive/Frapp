@@ -1,6 +1,7 @@
 import {
   isOnOneOfOrigins,
   phoneAddressFor,
+  phoneRowFits,
   webAddressRow,
 } from "@repo/validation";
 import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
@@ -55,10 +56,13 @@ export function webLinkTarget(
   if (!screen) return null;
   const chosen = row.phone.find(
     (candidate) =>
-      candidate.pathname === screen.pathname &&
-      (candidate.when ?? []).every((name) => query.get(name)),
+      candidate.pathname === screen.pathname && phoneRowFits(candidate, query),
   );
-  const kept = new Set(Object.keys(chosen?.params ?? {}));
+  // What the screen reads, and what only placed the page on web (`matches`).
+  const kept = new Set([
+    ...Object.keys(chosen?.params ?? {}),
+    ...Object.keys(chosen?.matches ?? {}),
+  ]);
   const context = new Set(
     row.phone
       .slice(chosen ? row.phone.indexOf(chosen) + 1 : 0)

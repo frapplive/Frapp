@@ -40,7 +40,10 @@ describe("a web address opens its phone screen (#6050)", () => {
           ...(screen.when ?? []),
           ...Object.keys(screen.params ?? {}),
         ]);
-        const query = new URLSearchParams([...names].map((n) => [n, "x1"]));
+        const query = new URLSearchParams([
+          ...[...names].map((n): [string, string] => [n, "x1"]),
+          ...Object.entries(screen.matches ?? {}),
+        ]);
         const search = query.toString();
         const link = `${ORIGIN}${row.path}${search ? `?${search}` : ""}`;
         const target = webLinkTarget(link, [ORIGIN]);
@@ -73,13 +76,26 @@ describe("a web address opens its phone screen (#6050)", () => {
       `${ORIGIN}/members?tab=alumni`,
       `${ORIGIN}/activity?posting=p1`,
       `${ORIGIN}/chat?message=m1`,
+      `${ORIGIN}/settings?tab=roles&group=g1`,
+      `${ORIGIN}/settings?tab=chat&channel=c1`,
     ]) {
       expect(webLinkTarget(link, [ORIGIN]), link).toBeNull();
     }
     // A less specific screen's parameter is context, not a record.
     expect(
-      systemPathForWebLink(`${ORIGIN}/events?day=2026-11-30&event=e1`, [ORIGIN]),
+      systemPathForWebLink(`${ORIGIN}/events?day=2026-11-30&event=e1`, [
+        ORIGIN,
+      ]),
     ).toBe("/event-details?id=e1");
+  });
+
+  it("opens Roles and groups' role and tier pages on the phone's (#6049)", () => {
+    expect(
+      systemPathForWebLink(`${ORIGIN}/settings?tab=roles&role=r1`, [ORIGIN]),
+    ).toBe("/role?roleId=r1");
+    expect(
+      systemPathForWebLink(`${ORIGIN}/settings?tab=roles&tier=t1`, [ORIGIN]),
+    ).toBe("/role-tier?tierId=t1");
   });
 
   it("trims ids, and treats an empty one as absent", () => {

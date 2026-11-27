@@ -29,6 +29,7 @@ describe("web addresses", () => {
         for (const name of [
           ...(target.when ?? []),
           ...Object.keys(target.params ?? {}),
+          ...Object.keys(target.matches ?? {}),
         ]) {
           expect(row.params, `${row.path} ${name}`).toContain(name);
         }
@@ -38,7 +39,8 @@ describe("web addresses", () => {
 
   it("every phone list ends on a screen that needs no parameter", () => {
     for (const row of WEB_ADDRESSES) {
-      if (!row.phone) continue;
+      // Chapter settings is web only but for the role pages (#6049).
+      if (!row.phone || row.path === "/settings") continue;
       expect(row.phone.at(-1)?.when ?? [], row.path).toEqual([]);
     }
   });
@@ -97,9 +99,22 @@ describe("web addresses", () => {
 
   it("leaves web-only pages and unknown paths in the browser", () => {
     expect(phoneAddressFor("/settings", "?tab=chat")).toBeNull();
+    expect(phoneAddressFor("/settings", "?tab=roles")).toBeNull();
+    expect(phoneAddressFor("/settings", "?tab=chat&role=r1")).toBeNull();
     expect(phoneAddressFor("/backwork", "")).toBeNull();
     expect(phoneAddressFor("/meetings/abc/notes", "")).toBeNull();
     expect(phoneAddressFor("/nowhere", "")).toBeNull();
+  });
+
+  it("opens Roles and groups' role and tier pages on the phone's", () => {
+    expect(phoneAddressFor("/settings", "?tab=roles&role=r1")).toEqual({
+      pathname: "/role",
+      params: { roleId: "r1" },
+    });
+    expect(phoneAddressFor("/settings", "?tab=roles&tier=t1")).toEqual({
+      pathname: "/role-tier",
+      params: { tierId: "t1" },
+    });
   });
 
   it("matches a dynamic segment", () => {

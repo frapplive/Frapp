@@ -3,8 +3,10 @@ import {
   ADDRESS_FROM_KEY,
   addressWith,
   closeAddress,
+  closeToAddress,
   consumeAddressParam,
   pushAddress,
+  pushAddressTo,
   replaceAddress,
 } from "./address";
 
@@ -132,5 +134,27 @@ describe("moving the address", () => {
     window.history.replaceState({}, "", "/settings?setting=b");
     consumeAddressParam("setting", "a");
     expect(here()).toBe("/settings?setting=b");
+  });
+
+  it("opening a same-page link pushes it, marked with where it came from", () => {
+    pushAddressTo("/events?event=e1");
+    expect(here()).toBe("/events?event=e1");
+    expect(window.history.state[ADDRESS_FROM_KEY]).toEqual(["/events?day=d"]);
+  });
+
+  it("a back arrow to the page this tab came from goes Back to it", () => {
+    pushAddressTo("/events?event=e1");
+    pushAddressTo("/events?event=e1&edit=1");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeToAddress("/events?day=d");
+    expect(go).toHaveBeenCalledWith(-2);
+  });
+
+  it("a back arrow on a page that came from a link replaces it with its parent", () => {
+    window.history.replaceState({}, "", "/settings?tab=roles&role=r1");
+    const go = vi.spyOn(window.history, "go");
+    closeToAddress("/settings?tab=roles");
+    expect(go).not.toHaveBeenCalled();
+    expect(here()).toBe("/settings?tab=roles");
   });
 });

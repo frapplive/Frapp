@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -131,6 +132,13 @@ vi.mock("@/components/geofences/zone-map", () => ({
   ),
 }));
 
+// The editor's `&zone=` (#6049) follows the address as Next's router does.
+vi.mock("next/navigation", async () =>
+  (await import("@/tests/settings-harness")).navigation(
+    () => new URLSearchParams(window.location.search),
+  ),
+);
+
 const { StudyZonesManager } = await import("./study-zones-manager");
 const { searchPlaces } = await import("@/lib/maps/map-provider");
 
@@ -150,6 +158,55 @@ async function menuItem(name: RegExp) {
 const turnOffItem = () => menuItem(/turn off/i);
 const deleteItem = () => menuItem(/delete/i);
 
+const ZONES_PAGE = "/settings?tab=geofences&page=study-zones";
+beforeEach(() => {
+  window.history.replaceState({}, "", ZONES_PAGE);
+});
+
+describe("StudyZonesManager addresses (#6049)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("opens a zone's editor from its address, on arrival", async () => {
+    chapter.active();
+    window.history.replaceState({}, "", `${ZONES_PAGE}&zone=gf-1`);
+    render(<StudyZonesManager />);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("pushes the zone it opens, and closing it goes Back", async () => {
+    chapter.active();
+    render(<StudyZonesManager />);
+    await userEvent.click(editButton());
+    expect(window.location.search).toContain("zone=gf-1");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    await userEvent.keyboard("{Escape}");
+    expect(go).toHaveBeenCalledWith(-1);
+    go.mockRestore();
+  });
+
+  it("closes the editor when Back takes the zone off the address", async () => {
+    chapter.active();
+    render(<StudyZonesManager />);
+    await userEvent.click(editButton());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    act(() => window.history.replaceState({}, "", ZONES_PAGE));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("says a zone that's gone isn't there, and takes it off the address", async () => {
+    chapter.active();
+    window.history.replaceState({}, "", `${ZONES_PAGE}&zone=gone`);
+    render(<StudyZonesManager />);
+    expect(
+      await screen.findByText(/that study zone isn.t here anymore/i),
+    ).toBeInTheDocument();
+    expect(window.location.search).not.toContain("zone=");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
 describe("StudyZonesManager subscription gating", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -160,9 +217,9 @@ describe("StudyZonesManager subscription gating", () => {
     expect(createTrigger()).toBeEnabled();
     expect(editButton()).toBeEnabled();
     expect(await turnOffItem()).not.toHaveAttribute("data-disabled");
-    expect(screen.getByRole("menuitem", { name: /delete/i })).not.toHaveAttribute(
-      "data-disabled",
-    );
+    expect(
+      screen.getByRole("menuitem", { name: /delete/i }),
+    ).not.toHaveAttribute("data-disabled");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -330,9 +387,10 @@ describe("StudyZonesManager layout", () => {
     // The shape is the map's, never a box of numbers (Paul, 2026-11-12).
     expect(screen.queryByLabelText(/vertices/i)).toBeNull();
     expect(screen.getByTestId("zone-map")).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Outline" }),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Outline" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("puts New study zone beside the Zones heading, with no page h1", () => {
@@ -421,7 +479,9 @@ describe("StudyZonesManager map editor", () => {
     await userEvent.click(createTrigger());
     const search = screen.getByPlaceholderText("Find a building or address");
     await userEvent.type(search, "Folsom");
-    fireEvent.mouseDown(await screen.findByRole("option", { name: /folsom library/i }));
+    fireEvent.mouseDown(
+      await screen.findByRole("option", { name: /folsom library/i }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create study zone" }));
 
     await waitFor(() => expect(mockCreateMutate).toHaveBeenCalledTimes(1));
