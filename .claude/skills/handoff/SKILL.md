@@ -112,7 +112,8 @@ states as a rule rather than orientation, because the next session can't redisco
   screens and files can run as parallel lanes; a handoff says which lane it is and what the other
   lane holds.
 
-A coordinator's handoff to its successor is its own procedure and starts the successor without
+A worker the coordinator started to run an epic's chain doesn't offer: nobody reads its chat, so it goes
+on to the next step itself ([`coordinator` § Chains](../coordinator/SKILL.md#chains)). A coordinator's handoff to its successor is its own procedure and starts the successor without
 asking ([`coordinator`](../coordinator/SKILL.md)); this rule doesn't apply to it. A `research` or
 `walkthrough` handoff carries no item 8: research ends by queuing its issue's card, and a
 walkthrough by recording the result.
