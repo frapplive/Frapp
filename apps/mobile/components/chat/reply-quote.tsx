@@ -5,7 +5,7 @@ import {
   UNAVAILABLE_QUOTE,
 } from "@repo/chat-core/reply-preview";
 import { SignetTokens } from "@repo/theme/signet";
-import { authorAwaitsRoster, resolveAuthorLabel } from "@repo/hooks";
+import { authorNameAwaitsRoster, resolveAuthorLabel } from "@repo/hooks";
 import { italicFontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -89,8 +89,12 @@ export function ReplyQuote({
           </Text>
         ) : (
           <Text style={styles.preview} numberOfLines={2}>
-            {authorAwaitsRoster(replyParent, nameFor, rosterLoading) &&
-            replyParent.sender_id !== viewerId ? null : (
+            {authorNameAwaitsRoster(
+              replyParent,
+              nameFor,
+              viewerId,
+              rosterLoading,
+            ) ? null : (
               <>
                 <Text style={styles.author}>
                   {resolveAuthorLabel(replyParent, nameFor, viewerId)}

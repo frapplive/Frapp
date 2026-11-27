@@ -103,6 +103,7 @@ import type { ClosableCardKind } from "@repo/chat-core/chat-client";
 import {
   authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -506,12 +507,16 @@ export function MessageItem({
   // built from their id (#6127). The viewer's own row keeps "You"; only its
   // avatar waits.
   const awaitingName = authorAwaitsRoster(message, nameFor, rosterLoading);
-  const authorLabel: React.ReactNode =
-    awaitingName && message.sender_id !== viewerId ? (
-      <NamePlaceholder />
-    ) : (
-      resolveAuthorLabel(message, nameFor, viewerId)
-    );
+  const authorLabel: React.ReactNode = authorNameAwaitsRoster(
+    message,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  ) ? (
+    <NamePlaceholder />
+  ) : (
+    resolveAuthorLabel(message, nameFor, viewerId)
+  );
   // The name and photo open the author's profile, as Discord's and mobile's
   // do; Frapp's own posts, an imported author and a member who left open
   // nothing (`authorProfileUserId`).
@@ -883,8 +888,12 @@ export function MessageItem({
         <QuotedMessage
           author={
             replyParent ? (
-              authorAwaitsRoster(replyParent, nameFor, rosterLoading) &&
-              replyParent.sender_id !== viewerId ? (
+              authorNameAwaitsRoster(
+                replyParent,
+                nameFor,
+                viewerId,
+                rosterLoading,
+              ) ? (
                 // The parent's author, while the roster loads (#6127).
                 <NamePlaceholder
                   className="h-auto"
@@ -926,6 +935,7 @@ export function MessageItem({
       forwarded={forwardedCopy}
       hidden={hiddenForwardedText(forwardedCopy, message, blockState, viewerId)}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       viewerId={viewerId}
     />
   ) : null;

@@ -851,6 +851,7 @@ vi.mock("@repo/hooks", async () => ({
     refetch: vi.fn(),
   }),
   resolveAuthorLabel: () => "",
+  authorNameAwaitsRoster: () => false,
   // Bookmarks (#462). The shell renders the panel unconditionally, so these
   // have to exist here even though this file's assertions are about deep links,
   // the composer remount and delete wiring. `mockBookmarks` lets the bookmark

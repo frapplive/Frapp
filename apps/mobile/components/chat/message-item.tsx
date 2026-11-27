@@ -47,6 +47,7 @@ import {
 import {
   authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -55,6 +56,7 @@ import {
 import { useMentionChips } from "@repo/hooks/mention-chips";
 import { MemberAvatar } from "@/components/member-avatar";
 import { SkeletonBlock } from "@/components/state-block";
+import { useRaisedSurfaces } from "@/lib/surfaces";
 import { AlertGlyph } from "@/components/control-glyphs";
 import { PinGlyph } from "@/components/documents/document-glyphs";
 import { ThreadChip, threadCardMiddle } from "./thread-chip";
@@ -663,7 +665,12 @@ function rowAuthor(
   // name and a neutral avatar, not a fake identity built from their id
   // (#6127). The viewer's own row keeps "You"; only its avatar waits.
   const avatarPending = authorAwaitsRoster(message, nameFor, rosterLoading);
-  const namePending = avatarPending && message.sender_id !== viewerId;
+  const namePending = authorNameAwaitsRoster(
+    message,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  );
   return {
     namePending,
     avatarPending,
@@ -679,6 +686,8 @@ function rowAuthor(
 
 /** What a screen reader hears for an author whose name is still loading. */
 const LOADING_NAME = "Loading name";
+/** Compact's inline name placeholder: figure spaces, about a short name wide. */
+const COMPACT_NAME_PLACEHOLDER = "\u2007".repeat(10);
 
 /**
  * The author line's name while the roster that names the author is still
@@ -688,7 +697,12 @@ const LOADING_NAME = "Loading name";
  */
 function AuthorNamePlaceholder() {
   return (
-    <View testID="author-name-placeholder" style={{ justifyContent: "center" }}>
+    <View
+      testID="author-name-placeholder"
+      accessible
+      accessibilityLabel={LOADING_NAME}
+      style={{ justifyContent: "center" }}
+    >
       <SkeletonBlock width={88} height={12} radius={6} />
     </View>
   );
@@ -704,6 +718,7 @@ function CompactLead({
   message,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   onOpenProfile,
   onOpenActions,
@@ -712,35 +727,53 @@ function CompactLead({
   message: ChatMessage;
   viewerId: string;
   nameFor: (userId: string) => string | null;
+  rosterLoading?: boolean;
   roleColorFor?: (userId: string) => string | null;
   onOpenProfile?: (userId: string) => void;
   onOpenActions?: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const openAuthor = authorProfileOpener(message, onOpenProfile, nameFor);
-  const { authorLabel, roleColor } = rowAuthor(
+  const surfaces = useRaisedSurfaces();
+  const { authorLabel, roleColor, namePending, avatarPending } = rowAuthor(
     message,
     nameFor,
     viewerId,
     roleColorFor,
+    rosterLoading,
   );
+  const openAuthor = avatarPending
+    ? undefined
+    : authorProfileOpener(message, onOpenProfile, nameFor);
   return (
     <Text>
       <Text style={styles.compactTime}>
         {formatTimeOfDay(message.created_at)}{" "}
       </Text>
-      <Text
-        style={
-          roleColor
-            ? [styles.compactName, { color: roleColor }]
-            : styles.compactName
-        }
-        onPress={openAuthor}
-        onLongPress={openAuthor ? onOpenActions : undefined}
-        suppressHighlighting
-      >
-        {authorLabel}
-      </Text>{" "}
+      {namePending ? (
+        // The lead is text inside the body's `Text`, which can't hold the
+        // placeholder's View, so the bar is blank figure spaces on the
+        // skeleton fill: the body keeps its place when the name lands (#6127).
+        <Text
+          testID="author-name-placeholder"
+          accessibilityLabel={LOADING_NAME}
+          style={[styles.compactName, { backgroundColor: surfaces.raised }]}
+        >
+          {COMPACT_NAME_PLACEHOLDER}
+        </Text>
+      ) : (
+        <Text
+          style={
+            roleColor
+              ? [styles.compactName, { color: roleColor }]
+              : styles.compactName
+          }
+          onPress={openAuthor}
+          onLongPress={openAuthor ? onOpenActions : undefined}
+          suppressHighlighting
+        >
+          {authorLabel}
+        </Text>
+      )}{" "}
     </Text>
   );
 }
@@ -908,6 +941,7 @@ export function MessageItem({
       forwarded={forwardedCopy}
       hidden={forwardedHidden}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       viewerId={viewerId}
       onLongPress={onOpenActions}
     />
@@ -929,15 +963,8 @@ export function MessageItem({
   // carries the profile action there (`leadsWithAuthor`, below).
   // A flagged message keeps its name on a line of its own, the flag beside
   // it, rather than leading the sentence (#4288).
-  // A name still loading takes the frame's own line too (#6127): the lead
-  // is text inside the body's `Text`, which can't hold the placeholder bar.
   const leadsInline =
-    compact &&
-    startsRun &&
-    !flag &&
-    (message.is_deleted || hasText) &&
-    !rowAuthor(message, nameFor, viewerId, roleColorFor, rosterLoading)
-      .namePending;
+    compact && startsRun && !flag && (message.is_deleted || hasText);
   const bodyA11y = messageActionsA11yProps(onOpenActions, {
     links: hasText ? parsed.links : [],
     onJumpToParent: quoteJump(message, onJumpToParent),
@@ -992,6 +1019,7 @@ export function MessageItem({
       message={message}
       viewerId={viewerId}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       roleColorFor={roleColorFor}
       onOpenProfile={onOpenProfile}
       onOpenActions={onOpenActions}

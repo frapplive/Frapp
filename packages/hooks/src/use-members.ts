@@ -215,12 +215,15 @@ export interface MemberDisplayNames {
    */
   isPending: boolean;
   /**
-   * True only while the first roster read is in flight (TanStack's
-   * `isLoading`): no data yet *and* a fetch running. Unlike {@link isPending}
-   * it goes false when the read fails or is disabled (no active chapter), so a
-   * row that draws a name placeholder on it falls back to
-   * {@link memberFallbackLabel} then rather than holding a skeleton forever
-   * (#6127). Pass it to `authorAwaitsRoster`.
+   * No roster has landed yet and the first read is still under way: fetching,
+   * or paused offline with nothing cached (`spec/ui/design-system/README.md`
+   * gates a loading state on `isLoading` or a paused fetch). Unlike
+   * {@link isPending} it goes false, and stays false through later retries,
+   * once the read has failed, and it is never true for a disabled read (no
+   * active chapter). So a row that draws a name placeholder on it falls back
+   * to {@link memberFallbackLabel} then, rather than holding a skeleton
+   * forever or flashing one on each retry (#6127). Pass it to
+   * `authorAwaitsRoster`.
    */
   rosterLoading: boolean;
   isError: boolean;
@@ -325,7 +328,12 @@ export function useMemberDisplayNames(): MemberDisplayNames {
     roleColorFor,
     avatarTintFor,
     isPending: query.isPending,
-    rosterLoading: query.isLoading,
+    // `errorUpdateCount`, not `isError`: a refetch of a read with no data
+    // puts it back to `pending`, so `isError` drops for every retry.
+    rosterLoading:
+      query.data === undefined &&
+      query.errorUpdateCount === 0 &&
+      (query.isFetching || query.fetchStatus === "paused"),
     isError: query.isError,
     hasData: query.data !== undefined,
     isFetching: query.isFetching,

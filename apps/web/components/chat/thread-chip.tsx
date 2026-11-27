@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import {
   authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -171,7 +172,12 @@ export function ThreadChip({
   );
   // A name placeholder stands in for the fallback label until the roster
   // lands, and the card's spoken label leaves the name out meanwhile.
-  const namePending = previewAwaits && previewSender !== viewerId;
+  const namePending = authorNameAwaitsRoster(
+    previewAuthor,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  );
   const parts =
     namedParts && namePending ? { ...namedParts, name: null } : namedParts;
   const previewSrc = previewSender

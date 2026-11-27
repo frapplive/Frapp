@@ -373,6 +373,12 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     expect(result.current.rosterLoading).toBe(true);
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.rosterLoading).toBe(false);
+    // A background refetch with names in hand isn't loading: a departed
+    // member's permanent fallback never flashes to a placeholder.
+    mockGet.mockReturnValue(new Promise(() => {}));
+    result.current.refetch();
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+    expect(result.current.rosterLoading).toBe(false);
 
     expect(result.current.nameFor("user-1")).toBe("Marcus Reid");
     // display_name is NOT NULL DEFAULT '', so '' must not render as a name.
@@ -396,6 +402,12 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
 
     expect(result.current.nameFor("user-1")).toBeNull();
     // A failed read stops the placeholders: rows fall back to the label.
+    expect(result.current.rosterLoading).toBe(false);
+
+    // A retry of the failed read doesn't bring them back (#6127 review).
+    mockGet.mockReturnValue(new Promise(() => {}));
+    result.current.refetch();
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
     expect(result.current.rosterLoading).toBe(false);
   });
 });

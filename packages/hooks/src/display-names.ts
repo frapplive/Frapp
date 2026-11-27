@@ -326,22 +326,25 @@ export function authorInitialsFallback(author: MessageAuthor): string {
 }
 
 /**
- * Whether a message's author line should draw a name placeholder rather than a
- * label, because the roster that would name them hasn't landed yet (#6127).
+ * Whether a message's author is still waiting on the roster to be named, so
+ * a row draws a placeholder rather than an identity built from their id
+ * (#6127).
  *
  * Chat paints its last messages from the on-device cache before
  * `GET /v1/members/roster` answers. Until then {@link resolveAuthorLabel} falls
  * through to {@link memberFallbackLabel} and {@link authorInitialsFallback}
  * draws id initials: a fake identity for a second, which the UI rulebook's
- * § States forbids. While this is true a row draws a name-shaped skeleton and
- * a neutral avatar disc instead.
+ * § States forbids. While this is true a row draws a neutral avatar disc;
+ * {@link authorNameAwaitsRoster} says whether its name waits too.
  *
- * True only for a member author (`sender_id` set, not the system actor) with
- * no name from the roster or the row's own `author_name`, and only while
- * `rosterLoading` (`useMemberDisplayNames().rosterLoading`) holds. Once the
- * roster has landed, or its read failed, a member it can't name reads
- * `Member 2f4a1c` again, the permanent fallback (#2422). The viewer's own row
- * counts too: its label is "You", but its avatar would draw id initials.
+ * True only while `rosterLoading` (`useMemberDisplayNames().rosterLoading`)
+ * holds, for a member author (`sender_id` set, not the system actor) the
+ * roster can't name yet. A linked imported row counts too: its `author_name`
+ * is an old Discord snapshot that {@link resolveAuthorName} uses only once the
+ * roster has missed for good, so drawing it now would swap a stale handle
+ * for the member's name a moment later. Once the roster has landed, or its
+ * read failed, a member it can't name reads `Member 2f4a1c` again, the
+ * permanent fallback (#2422).
  */
 export function authorAwaitsRoster(
   author: MessageAuthor,
@@ -350,7 +353,26 @@ export function authorAwaitsRoster(
 ): boolean {
   if (!rosterLoading) return false;
   if (!author.sender_id || author.sender_id === SYSTEM_SENDER_ID) return false;
-  return resolveAuthorName(author, nameFor) === null;
+  return nameFor(author.sender_id) === null;
+}
+
+/**
+ * {@link authorAwaitsRoster} for the author's *name*: the viewer's own row
+ * still reads "You" while the roster loads (only its avatar waits), so the
+ * name slot draws a placeholder only for someone else. One rule for every
+ * name slot (author line, reply quote, thread card, forwarded card), so none
+ * drops the viewer clause.
+ */
+export function authorNameAwaitsRoster(
+  author: MessageAuthor,
+  nameFor: NameResolver,
+  viewerId: string | null,
+  rosterLoading: boolean,
+): boolean {
+  return (
+    authorAwaitsRoster(author, nameFor, rosterLoading) &&
+    !(viewerId !== null && author.sender_id === viewerId)
+  );
 }
 
 /**

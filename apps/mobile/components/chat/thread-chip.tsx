@@ -9,6 +9,7 @@ import type { ThreadLastReply, ThreadSummary } from "@repo/chat-core/types";
 import {
   authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -134,15 +135,15 @@ export function ThreadChip({
   // While the roster loads, the preview leaves out a replier it can't name
   // yet, and their face waits as a neutral disc (#6127). The viewer's own
   // reply still reads "You".
-  const previewAwaits = previewSender
-    ? authorAwaitsRoster(
-        { sender_id: previewSender, author_name: null },
-        nameFor,
-        rosterLoading,
-      )
-    : false;
+  const previewAuthor = { sender_id: previewSender, author_name: null };
+  const previewAwaits = authorAwaitsRoster(
+    previewAuthor,
+    nameFor,
+    rosterLoading,
+  );
   const parts =
-    namedParts && previewAwaits && previewSender !== viewerId
+    namedParts &&
+    authorNameAwaitsRoster(previewAuthor, nameFor, viewerId, rosterLoading)
       ? { ...namedParts, name: null }
       : namedParts;
   const label = threadCardLabel({ replies, fresh, lastReply, preview: parts });

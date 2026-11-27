@@ -1005,6 +1005,25 @@ describe("MessageItem reply-with-quote (#489)", () => {
     expect(screen.getByText("agreed")).toBeInTheDocument();
   });
 
+  it("draws a name placeholder for the quoted author while the roster loads (#6127)", () => {
+    renderItemWithProps({
+      message: message({
+        id: "child-1",
+        reply_to_id: "parent-1",
+        content: "agreed",
+      }),
+      replyParent: PARENT,
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+    expect(screen.getByText("the original")).toBeInTheDocument();
+    expect(screen.queryByText(/^Member /)).not.toBeInTheDocument();
+    // The row's author line and the quote each draw one.
+    expect(
+      document.querySelectorAll('[data-slot="name-placeholder"]'),
+    ).toHaveLength(2);
+  });
+
   it("jumps to the quoted message from the quote (#2142)", async () => {
     // The quote used to open `ThreadPanel` in the Details rail. Both are gone;
     // the quote now scrolls the timeline to the message it quotes, which is the

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   actorLabel,
   authorAwaitsRoster,
+  authorNameAwaitsRoster,
   authorInitialsFallback,
   directChannelDisplayName,
   displayNameOrNull,
@@ -369,13 +370,28 @@ describe("authorAwaitsRoster (#6127)", () => {
         true,
       ),
     ).toBe(false);
+  });
+
+  it("holds a linked imported row's old handle back until the roster names them", () => {
     expect(
       authorAwaitsRoster(
         { sender_id: "user-z", author_name: "old_handle" },
         none,
         true,
       ),
+    ).toBe(true);
+  });
+
+  it("keeps the viewer's own name slot (You) out of the placeholder", () => {
+    expect(
+      authorNameAwaitsRoster({ sender_id: VIEWER }, none, VIEWER, true),
     ).toBe(false);
+    expect(
+      authorNameAwaitsRoster({ sender_id: "user-z" }, none, VIEWER, true),
+    ).toBe(true);
+    expect(
+      authorNameAwaitsRoster({ sender_id: "user-z" }, none, null, true),
+    ).toBe(true);
   });
 });
 

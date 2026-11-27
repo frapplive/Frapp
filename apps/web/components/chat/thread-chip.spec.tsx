@@ -164,6 +164,9 @@ describe("ThreadChip (#3785)", () => {
     expect(screen.queryByText(/Member 2f4a1c/)).not.toBeInTheDocument();
     expect(screen.queryByText("2F")).not.toBeInTheDocument();
     expect(
+      document.querySelector('[data-slot="name-placeholder"]'),
+    ).not.toBeNull();
+    expect(
       screen.getByRole("button", {
         name: /latest: see you there\. Open thread$/,
       }),
