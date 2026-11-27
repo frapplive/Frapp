@@ -664,6 +664,25 @@ describe("This time last year", () => {
     expect(screenText(tree)).toContain(lastYearTaskLine("November 18, 2025"));
   });
 
+  // #6148. The instant is a day off from its date in every zone, so the
+  // card can only say the 22nd by reading the event's own day.
+  it("says a dated event's own day, never its stored midnight", () => {
+    state.items = [
+      {
+        ...FORMAL,
+        event: {
+          name: "Retreat",
+          last_year_at: "2025-11-20T12:00:00Z",
+          last_year_date: "2025-11-22",
+          times: 1,
+        },
+      },
+    ];
+    expect(screenText(render())).toContain(
+      lastYearEventLine("November 22, 2025", 1),
+    );
+  });
+
   it("opens the event form on last year's event, and adds nothing until it is created", async () => {
     const tree = render();
     await act(async () =>

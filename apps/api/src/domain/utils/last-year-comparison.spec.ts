@@ -114,9 +114,38 @@ describe('compareWithLastYear', () => {
         sourceId: 'e1',
         name: 'Philanthropy Week',
         lastYearAt: '2026-04-13T22:00:00.000Z',
+        lastYearDate: null,
         times: 1,
       },
     ]);
+  });
+
+  it('keeps a dated event’s own first day, from its first occurrence (#6148)', () => {
+    const [thing] = compareWithLastYear({
+      now: NOW,
+      lastYearEvents: [
+        {
+          id: 'e2',
+          name: 'Retreat',
+          start_time: '2026-04-18T04:00:00.000Z',
+          start_date: '2026-04-18',
+        },
+        {
+          id: 'e1',
+          name: 'Retreat',
+          start_time: '2026-04-11T04:00:00.000Z',
+          start_date: '2026-04-11',
+        },
+      ],
+      tasks: [],
+      thisYearTitles: [],
+    });
+    expect(thing).toMatchObject({
+      sourceId: 'e1',
+      lastYearAt: '2026-04-11T04:00:00.000Z',
+      lastYearDate: '2026-04-11',
+      times: 2,
+    });
   });
 
   it('stays quiet when this year has it under another name, as an event or a task', () => {

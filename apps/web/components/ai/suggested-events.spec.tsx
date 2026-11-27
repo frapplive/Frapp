@@ -127,6 +127,24 @@ describe("SuggestedEvents (#3930)", () => {
     ).toBeTruthy();
   });
 
+  // #6148. The instant here is a day off from its date in every zone, so
+  // the row can only say the 22nd by reading the event's own day.
+  it("says a dated event's own day, never its stored midnight", () => {
+    mocks.items.current = [
+      suggestion("1", {
+        name: "Retreat",
+        last_year_at: "2025-11-20T12:00:00.000Z",
+        last_year_date: "2025-11-22",
+      }),
+    ];
+    render(<SuggestedEvents headingId="h" onPlan={vi.fn()} />);
+    expect(
+      screen.getByText(
+        "Held on November 22, 2025. I don’t see it on this year’s calendar.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("answers Already planned in one tap, saying why", async () => {
     mocks.items.current = [suggestion("1")];
     render(<SuggestedEvents headingId="h" onPlan={vi.fn()} />);

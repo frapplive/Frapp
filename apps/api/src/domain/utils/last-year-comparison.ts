@@ -177,6 +177,8 @@ export interface LastYearEventRecord {
   id: string;
   name: string;
   start_time: string;
+  /** A dated (all-day or time-TBD) event's first day; null when timed. */
+  start_date?: string | null;
 }
 
 export interface LastYearTaskRecord {
@@ -200,6 +202,11 @@ export type LastYearThing =
       name: string;
       /** When that first occurrence started. */
       lastYearAt: string;
+      /**
+       * That occurrence's first day when it was dated (#6148), since its
+       * `lastYearAt` is only the saver's local midnight; null when timed.
+       */
+      lastYearDate: string | null;
       /** How many times it was held in the stretch (a weekly series: six). */
       times: number;
     }
@@ -281,6 +288,7 @@ export function compareWithLastYear(
       sourceId: first.id,
       name: first.name,
       lastYearAt: first.start_time,
+      lastYearDate: first.start_date ?? null,
       times: held.length,
     });
   }

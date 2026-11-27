@@ -78,7 +78,7 @@ export { nextUpLine } from "./next-up";
 export {
   datedDaysThisYear,
   lastYearBareDay,
-  lastYearDay,
+  lastYearEventDay,
   nameForThisYear,
   sameWeekdayThisYear,
 } from "./last-year";

@@ -12216,6 +12216,11 @@ export interface components {
              * @description When the source event started, last year.
              */
             last_year_at: string | null;
+            /**
+             * Format: date
+             * @description Present when last year's event was all-day or time-TBD: its first day, with no time zone. Read it instead of `last_year_at`, which for such an event is only the saver's local midnight.
+             */
+            last_year_date?: string;
             /** @description How many times it was held around then (a weekly series). */
             times: number;
         };

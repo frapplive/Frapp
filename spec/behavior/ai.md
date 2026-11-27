@@ -1008,6 +1008,8 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
   I don't see it on this year's calendar."
   It never says something is missing, never tells an officer what to do, and never repeats itself.
   The words are shared by web and mobile (`packages/validation/src/last-year.ts`).
+  An all-day or time-TBD event's day is its own first day, the same in every time zone: the suggestion carries it as `last_year_date`, because its `last_year_at` is only the saver's local midnight, which reads as the day before west of them.
+  A timed event's day is its start in the reader's zone, and so is any suggestion stored before the day was carried (`lastYearEventDay`, #6148).
 - **No model reads anything.**
   The comparison is dates and titles, done in code, and the line an officer reads is a fixed sentence around last year's own title and date.
   Nothing leaves Frapp, so the feature asks for no member's Yes, sends nothing to a provider, and counts against no spending limit.

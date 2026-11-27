@@ -153,5 +153,48 @@ describe('AiSuggestionController (#4309)', () => {
         expect(dto.quote).toBeNull();
       },
     );
+
+    // #6148: a dated event's own day travels with it; nothing else changes.
+    it('lists a dated event with its own first day', () => {
+      const dto = AiSuggestionDto.from(
+        row({
+          kind: 'event',
+          payload: {
+            name: 'Retreat',
+            last_year_at: '2025-11-22T05:00:00.000Z',
+            last_year_date: '2025-11-22',
+            times: 1,
+          },
+        }),
+      );
+      expect(dto.event).toEqual({
+        name: 'Retreat',
+        last_year_at: '2025-11-22T05:00:00.000Z',
+        last_year_date: '2025-11-22',
+        times: 1,
+      });
+    });
+
+    it.each([
+      ['a timed event, or one stored before #6148,', undefined],
+      ['a day that is not one', '2025-02-30'],
+    ])('lists %s without a day of its own', (_label, day) => {
+      const dto = AiSuggestionDto.from(
+        row({
+          kind: 'event',
+          payload: {
+            name: 'Formal',
+            last_year_at: '2025-04-04T22:00:00.000Z',
+            ...(day ? { last_year_date: day } : {}),
+            times: 1,
+          },
+        }),
+      );
+      expect(dto.event).toEqual({
+        name: 'Formal',
+        last_year_at: '2025-04-04T22:00:00.000Z',
+        times: 1,
+      });
+    });
   });
 });

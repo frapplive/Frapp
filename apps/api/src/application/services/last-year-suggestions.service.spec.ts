@@ -152,6 +152,8 @@ interface FakeEvent {
   name: string;
   start_time: string;
   end_time: string;
+  /** A dated (all-day or time-TBD) event's first day. */
+  start_date?: string | null;
   /** Left out of a member's list unless they are in the Exec group. */
   execOnly?: boolean;
   created_by?: string | null;
@@ -443,6 +445,34 @@ describe('LastYearSuggestionsService', () => {
         },
       });
       expect(rows.rows[0].dedupe_key).toMatch(/^[0-9a-f]{32}$/);
+    });
+
+    it('keeps a timed event’s payload without a day of its own (#6148)', async () => {
+      const { run, rows } = build({ events: LAST_YEAR });
+      await run();
+      for (const row of rows.rows) {
+        expect(row.payload).not.toHaveProperty('last_year_date');
+      }
+    });
+
+    it('carries a dated event’s own first day beside its stored midnight (#6148)', async () => {
+      // Saved in New York: its start is that zone's midnight, which reads
+      // as April 12 to an officer in California.
+      const { run, rows } = build({
+        events: [
+          anEvent(LAST_PHIL, 'Philanthropy Week', '2026-04-13', {
+            start_time: '2026-04-13T04:00:00.000Z',
+            start_date: '2026-04-13',
+          }),
+        ],
+      });
+      await expect(run()).resolves.toEqual({ proposed: 1, withdrawn: 0 });
+      expect(rows.rows[0].payload).toEqual({
+        name: 'Philanthropy Week',
+        last_year_at: '2026-04-13T04:00:00.000Z',
+        last_year_date: '2026-04-13',
+        times: 1,
+      });
     });
 
     it('raises a finished task with no assignee, its checklist, and the same weekday this year', async () => {

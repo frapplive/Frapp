@@ -8,7 +8,7 @@ import {
   dueEntryFromTask,
   formatDateEntry,
   lastYearBareDay,
-  lastYearDay,
+  lastYearEventDay,
 } from "@repo/formatting";
 import {
   useAcceptAiSuggestion,
@@ -1185,7 +1185,7 @@ function LastYearEventRow({
   styles: Styles;
 }) {
   const { event } = item;
-  const line = lastYearEventLine(lastYearDay(event.last_year_at), event.times);
+  const line = lastYearEventLine(lastYearEventDay(event), event.times);
   return (
     <View style={styles.card}>
       <View

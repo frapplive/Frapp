@@ -14,6 +14,10 @@ import {
   type TaskSuggestionAudience,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
+import {
+  dateOrNull,
+  instantOrNull,
+} from '#domain/utils/ai-suggestion-payload-values';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
 import type {
   ChangeFieldSpec,
@@ -100,7 +104,6 @@ export interface TaskProposalContext {
 const ASK_SOURCE_TYPE = 'request';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function text(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -130,25 +133,6 @@ function uuidList(value: unknown): string[] {
 
 function uuidOrNull(value: unknown): string | null {
   return typeof value === 'string' && UUID.test(value) ? value : null;
-}
-
-function dateOrNull(value: unknown): string | null {
-  if (typeof value !== 'string' || !DATE.test(value)) return null;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ||
-    parsed.toISOString().slice(0, 10) !== value
-    ? null
-    : value;
-}
-
-/** Longer than any ISO 8601 instant, so a model's essay is not one. */
-const INSTANT_MAX_LENGTH = 40;
-
-function instantOrNull(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length > INSTANT_MAX_LENGTH) {
-    return null;
-  }
-  return Number.isNaN(Date.parse(value)) ? null : value;
 }
 
 function subtaskList(value: unknown): string[] {

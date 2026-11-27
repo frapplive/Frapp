@@ -37904,6 +37904,11 @@
             "format": "date-time",
             "description": "When the source event started, last year."
           },
+          "last_year_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Present when last year's event was all-day or time-TBD: its first day, with no time zone. Read it instead of `last_year_at`, which for such an event is only the saver's local midnight."
+          },
           "times": {
             "type": "number",
             "description": "How many times it was held around then (a weekly series)."
