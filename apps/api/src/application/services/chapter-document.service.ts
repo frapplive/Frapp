@@ -4,6 +4,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -47,6 +48,7 @@ import {
   isDocumentFile,
   isMinutesSeriesFolder,
   type ChapterDocument,
+  type ChapterDocumentFile,
   type ChapterDocumentFolder,
   type ChapterDocumentStarTarget,
   type ChapterDocumentStars,
@@ -56,6 +58,7 @@ import {
   type IStorageProvider,
 } from '#domain/adapters/storage.interface';
 import { assertSafeStoragePath } from '#domain/utils/storage-path';
+import { toReportableError } from '../../infrastructure/observability/reportable-error';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { isObjectKeySegment, storedFilename } from '#domain/constants/storage';
 
@@ -68,6 +71,7 @@ import { RbacService } from './rbac.service';
 import { MeetingService, type PostedMinutesFacts } from './meeting.service';
 import {
   assertUploadRequestAllowed,
+  assertUploadedPathUnder,
   mintChapterUpload,
 } from './chapter-upload';
 
@@ -144,6 +148,8 @@ const SYNCED_FOLDER_IS_DRIVES =
 
 @Injectable()
 export class ChapterDocumentService {
+  private readonly logger = new Logger(ChapterDocumentService.name);
+
   constructor(
     @Inject(CHAPTER_DOCUMENT_REPOSITORY)
     private readonly documentRepo: IChapterDocumentRepository,
@@ -718,53 +724,8 @@ export class ChapterDocumentService {
   }
 
   async confirmUpload(input: ConfirmUploadInput): Promise<ChapterDocument> {
-    const prefix = `chapters/${input.chapter_id}/documents/`;
-    if (!input.storage_path.startsWith(prefix)) {
-      throw new BadRequestException(
-        'storage_path must be within the chapter documents folder',
-      );
-    }
-    // See the equivalent guard in BackworkService.confirmUpload: a prefix check
-    // alone lets relative segments through, and this value is persisted and
-    // later signed for download.
-    //
-    // `assertSafeStoragePath` is domain-layer code and throws a plain `Error`;
-    // this catch is what turns that into the `BadRequestException` (400) API
-    // consumers have always seen on an unsafe path.
-    try {
-      assertSafeStoragePath(
-        input.storage_path,
-        'storage_path must not contain relative path segments',
-      );
-    } catch (error) {
-      throw new BadRequestException((error as Error).message);
-    }
-    // The rest must be the `{documentId}/{filename}` that `requestUploadUrl`
-    // mints. The traversal guard above lets `?`, `#`, `%` and a trailing space
-    // through, and a suffixed or percent-encoded spelling of a filed path names the same
-    // object while comparing unequal to it, so it would get past the filed-row
-    // read and the unique index below and file that object a second time.
-    const segments = input.storage_path.slice(prefix.length).split('/');
-    if (segments.length !== 2 || !segments.every(isObjectKeySegment)) {
-      throw new BadRequestException(
-        'storage_path must be a path the upload URL route minted',
-      );
-    }
-
-    // `requestUploadUrl` validates the declared content type before minting a
-    // signed URL, but that validation is not carried into this call — the two
-    // are separate requests with no shared state. Without re-checking here, a
-    // caller could confirm a real, already-validated upload under an arbitrary
-    // `content_type`, corrupting the provenance metadata this column exists to
-    // feed (the AI corpus retrieval design).
-    if (
-      input.content_type != null &&
-      !isAllowedUploadMime('document', input.content_type)
-    ) {
-      throw new BadRequestException(
-        `Content type "${input.content_type}" is not allowed`,
-      );
-    }
+    assertMintedDocumentPath(input.chapter_id, input.storage_path);
+    assertDocumentContentType(input.content_type);
 
     const folder = normalizeFolderName(input.folder);
 
@@ -834,6 +795,136 @@ export class ChapterDocumentService {
     if (document.uploaded_by !== uploadedBy) {
       throw new ConflictException('That upload has already been filed');
     }
+    return document;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A new version of an uploaded file (#6055 part 3)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * A signed upload link for a new version of one file
+   * (`POST /documents/:id/version-upload-url`): checked as any upload is
+   * (type, size), for a file the caller may give a new version
+   * ({@link replaceableDocument}). Nothing changes until
+   * {@link replaceFile} confirms it.
+   */
+  async requestVersionUploadUrl(
+    id: string,
+    chapterId: string,
+    userId: string,
+    file: RequestUploadUrlFile,
+  ) {
+    await this.replaceableDocument(id, chapterId, userId);
+    return this.requestUploadUrl({ chapterId, ...file });
+  }
+
+  /**
+   * Puts a new version's stored file in place of the old one
+   * (`PUT /documents/:id/file`). The row keeps its id, title, folder, who can
+   * see it, pin, stars, links and uploader; only the file and what describes
+   * it (type, size) change. The new path wakes Ask's index on its own: the
+   * `chapter_documents` corpus trigger re-reads a row whose `storage_path`
+   * changes, as it does when the Drive sync copies a file again in place.
+   *
+   * No history: the earlier file is deleted once the row points at the new
+   * one, as the Drive sync does with a replaced copy. Idempotent: sending the
+   * path the row already has (a retry whose answer was lost) answers with the
+   * row unchanged.
+   */
+  async replaceFile(
+    id: string,
+    chapterId: string,
+    userId: string,
+    input: { storage_path: string; content_type: string; byte_size?: number },
+  ): Promise<ChapterDocument> {
+    const document = await this.replaceableDocument(id, chapterId, userId);
+    if (input.storage_path === document.storage_path) return document;
+    assertMintedDocumentPath(chapterId, input.storage_path);
+    assertDocumentContentType(input.content_type);
+    // The bytes must be there before the row moves onto them and the old
+    // file goes: a path that was minted but never uploaded to would leave
+    // the document pointing at nothing, with its earlier file deleted.
+    await assertUploadedPathUnder(
+      this.storageProvider,
+      DOCUMENTS_BUCKET,
+      `chapters/${chapterId}/documents/`,
+      input.storage_path,
+      {
+        field: 'storage_path',
+        outsidePrefix:
+          'storage_path must be within the chapter documents folder',
+        missing:
+          "We couldn't find the new version's file. Upload it again, then save it.",
+      },
+    );
+    // A path another row files is that row's object: taking it here would
+    // leave two rows on one object, and deleting either would empty both.
+    if (
+      await this.documentRepo.findByStoragePath(input.storage_path, chapterId)
+    ) {
+      throw new ConflictException('That upload has already been filed');
+    }
+
+    const replaced = await this.documentRepo.replaceFile(
+      id,
+      chapterId,
+      document.storage_path,
+      {
+        storage_path: input.storage_path,
+        content_type: input.content_type,
+        byte_size: input.byte_size ?? null,
+      },
+    );
+    if (!replaced) {
+      // Deleted meanwhile, or another new version landed first: the old
+      // file is no longer this call's to remove.
+      if (!(await this.documentRepo.findById(id, chapterId))) {
+        throw new NotFoundException(NOT_FOUND_DOCUMENT);
+      }
+      throw new ConflictException(
+        'Someone else uploaded a new version first. Reopen the file and try again.',
+      );
+    }
+    await this.storageProvider
+      .deleteFile(DOCUMENTS_BUCKET, document.storage_path)
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Could not remove a replaced document's old file: ${toReportableError(error).message}`,
+        ),
+      );
+    return replaced;
+  }
+
+  /**
+   * A file the caller may give a new version: one they see, that is an
+   * upload (not a meeting's minutes, and not a file from Google Drive, which
+   * is changed in Drive and comes back with the next sync), and that they
+   * uploaded or manage documents for, the rule every change to one file's
+   * own settings follows ({@link assertUploaderOrManager}). Holding upload or
+   * manage at all is the routes' check (`@RequireAnyOfPermissions`), as
+   * storing a new file is an upload.
+   */
+  private async replaceableDocument(
+    id: string,
+    chapterId: string,
+    userId: string,
+  ): Promise<ChapterDocumentFile> {
+    const document = await this.visibleDocument(id, chapterId, userId);
+    if (!isDocumentFile(document)) {
+      throw new ConflictException(MINUTES_ARE_THE_MEETINGS);
+    }
+    if (document.drive_file_id !== null) {
+      throw new ConflictException(
+        'This file comes from Google Drive. Change it in Google Drive, and Documents follows.',
+      );
+    }
+    await this.assertUploaderOrManager(
+      [document],
+      chapterId,
+      userId,
+      'upload a new version',
+    );
     return document;
   }
 
@@ -1375,4 +1466,55 @@ export function normalizeFolderName(
   if (folder === null || folder === undefined) return null;
   const trimmed = folder.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * A stored path a confirm may file: one `requestUploadUrl` minted in the
+ * chapter's documents folder. A prefix check alone lets relative segments
+ * through, and this value is persisted and later signed for download (see
+ * the equivalent guard in `BackworkService.confirmUpload`).
+ * `assertSafeStoragePath` is domain-layer code and throws a plain `Error`;
+ * the catch turns that into the 400 API consumers have always seen.
+ *
+ * The rest must be the `{documentId}/{filename}` that `requestUploadUrl`
+ * mints. The traversal guard lets `?`, `#`, `%` and a trailing space
+ * through, and a suffixed or percent-encoded spelling of a filed path names
+ * the same object while comparing unequal to it, so it would get past the
+ * filed-row read and the unique index and file that object a second time.
+ */
+function assertMintedDocumentPath(chapterId: string, storagePath: string) {
+  const prefix = `chapters/${chapterId}/documents/`;
+  if (!storagePath.startsWith(prefix)) {
+    throw new BadRequestException(
+      'storage_path must be within the chapter documents folder',
+    );
+  }
+  try {
+    assertSafeStoragePath(
+      storagePath,
+      'storage_path must not contain relative path segments',
+    );
+  } catch (error) {
+    throw new BadRequestException((error as Error).message);
+  }
+  const segments = storagePath.slice(prefix.length).split('/');
+  if (segments.length !== 2 || !segments.every(isObjectKeySegment)) {
+    throw new BadRequestException(
+      'storage_path must be a path the upload URL route minted',
+    );
+  }
+}
+
+/**
+ * The upload URL route checks the declared type before minting, but that
+ * check is not carried into the confirm: the two are separate requests with
+ * no shared state. Without it here, a caller could file a real upload under
+ * an arbitrary `content_type`, which the viewer and the AI corpus read.
+ */
+function assertDocumentContentType(contentType: string | null | undefined) {
+  if (contentType != null && !isAllowedUploadMime('document', contentType)) {
+    throw new BadRequestException(
+      `Content type "${contentType}" is not allowed`,
+    );
+  }
 }

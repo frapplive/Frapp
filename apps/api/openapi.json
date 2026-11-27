@@ -14272,6 +14272,73 @@
         ]
       }
     },
+    "/v1/meetings/{id}/action-items/{index}/task": {
+      "post": {
+        "operationId": "MeetingActionItemTasksController_makeTask_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "index",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeActionItemTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingActionItemTaskDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The minutes changed since they were read, or the item is a task already (another officer made it at the same moment, or it was accepted up for grabs)"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Make an action item of posted minutes a task for these members, when no suggestion is waiting for it (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion. The service also checks Meetings is on",
+        "tags": [
+          "Meetings"
+        ]
+      }
+    },
     "/v1/meetings/series/{key}/open-action-items": {
       "get": {
         "operationId": "MeetingActionItemTasksController_seriesOpen_v1",
@@ -18787,6 +18854,118 @@
           }
         ],
         "summary": "Set who can see one document",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/v1/documents/{id}/version-upload-url": {
+      "post": {
+        "operationId": "ChapterDocumentController_requestVersionUploadUrl_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestDocumentUploadUrlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentVersionUploadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes); confirm it with PUT /v1/documents/{id}/file",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/v1/documents/{id}/file": {
+      "put": {
+        "operationId": "ChapterDocumentController_replaceFile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceDocumentFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterDocumentDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a document’s file with a new version, keeping its id, folder, who can see it, pin and stars (the earlier file is deleted)",
         "tags": [
           "Documents"
         ]
@@ -38779,6 +38958,40 @@
           "task"
         ]
       },
+      "MakeActionItemTaskDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The item’s text as the officer saw it, so an edit to the minutes meanwhile is caught.",
+            "maxLength": 1000
+          },
+          "assignee_ids": {
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "One member gets the task; several each get their own copy.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Defaults to the item’s text."
+          },
+          "due_date": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null for none. Defaults to the day the minutes named."
+          }
+        },
+        "required": [
+          "text",
+          "assignee_ids"
+        ]
+      },
       "OpenActionItemDto": {
         "type": "object",
         "properties": {
@@ -42048,6 +42261,49 @@
             }
           }
         }
+      },
+      "DocumentVersionUploadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "description": "Short-lived signed URL; PUT the new version’s bytes to it."
+          },
+          "storage_path": {
+            "type": "string",
+            "description": "Storage path to send as storage_path on PUT /v1/documents/{id}/file, once the bytes are uploaded."
+          },
+          "document_id": {
+            "type": "string",
+            "description": "The upload id embedded in storage_path. Not the versioned document’s id: the document keeps its own id, and no new document is made."
+          }
+        },
+        "required": [
+          "upload_url",
+          "storage_path",
+          "document_id"
+        ]
+      },
+      "ReplaceDocumentFileDto": {
+        "type": "object",
+        "properties": {
+          "storage_path": {
+            "type": "string",
+            "description": "Storage path returned from version-upload-url, after the bytes were PUT to its upload_url"
+          },
+          "content_type": {
+            "type": "string",
+            "description": "MIME content type of the new version, as declared for its upload; it may differ from the earlier file’s"
+          },
+          "byte_size": {
+            "type": "number",
+            "description": "Size of the new version in bytes"
+          }
+        },
+        "required": [
+          "storage_path",
+          "content_type"
+        ]
       },
       "FrappLinkTargetDto": {
         "type": "object",

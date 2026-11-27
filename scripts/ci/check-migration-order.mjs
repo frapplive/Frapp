@@ -80,6 +80,9 @@
 //
 // Env inputs:
 //   ORDER_GATE_BASE_REF     — required, the ref this change is measured against
+//   ORDER_GATE_QUEUE_BASE_REF — merge queue runs only: `merge_group.base_sha`, the
+//                           commit the queue built this entry on. This PR's own
+//                           migrations must sort after everything there (#4795)
 //   SUPABASE_ACCESS_TOKEN_STAGING, SUPABASE_ACCESS_TOKEN_PRODUCTION
 //                           — for a live read only, ignored with --snapshot;
 //                             SUPABASE_ACCESS_TOKEN stands in for a missing one
@@ -157,14 +160,17 @@ export function removedMigrations({ head, base }) {
  *
  *   10:00  PR-A (`20260901120000`) and PR-B (`20260901090000`) are both green;
  *          neither sorts before staging's newest applied version.
- *   10:02  A merges. B rebases (branch protection is `strict: true`).
- *   10:03  B's gate re-runs. Staging has not applied A yet, so B is still green.
+ *   10:02  A merges. B's base is now `main` with A on it.
+ *   10:03  B's gate runs against that base. Staging has not applied A yet, so
+ *          the applied-floor rule alone would still pass B.
  *   10:06  The staging deploy applies A. Staging's newest is now `…120000`.
  *   10:20  B merges. `db push` refuses `…090000`. #1373, again.
  *
  * GitHub never expires a check that passed, so the applied-floor rule cannot
- * close that window. This rule closes it deterministically: at 10:02 B's BASE
- * already contains `…120000`, and no database is consulted.
+ * close that window. This rule closes it whenever B is checked against a base
+ * that holds A: at 10:03 B's BASE already contains `…120000`, and no database
+ * is consulted. Which run sees such a base is the merge queue's business now
+ * (the dated notes below): a PR need not be up to date with `main` to merge.
  *
  * The floor is the SURVIVING set (base ∩ head), not the base set. A PR whose
  * whole purpose is to rename a bad far-future version out of the way removes it
@@ -185,6 +191,15 @@ export function removedMigrations({ head, base }) {
  * `20261113130014` landed after #4771's `20261113132007` and halted staging.
  * `pr-base-sync` renumbers B once `main` moves, but only if B has not already
  * merged. The open window and its options are #4795.
+ *
+ * (2026-11-27) Closed in the merge queue, the guard Paul chose (#4795). Every
+ * PR merges through it, and a `merge_group` run applies this rule a second time
+ * against the commit the queue built B on (`main` plus the entries ahead,
+ * `queueBaseRef` in `runOrderGate`). That base holds A whether or not A has
+ * merged yet, so B leaves the queue instead of landing. The timeline above now
+ * describes that run. Measuring against `main`'s tip alone, as the queue run
+ * first did, let #5925's `20261123194106` and #5923's `20261123183858` through
+ * on 2026-11-24.
  */
 export function classifyLocalOrder({ introduced, surviving }) {
   const floor = newestVersion(surviving);
@@ -262,7 +277,7 @@ function renameRemedy(floor) {
  * applied migration is about to create a foreign row, and telling its author to
  * rename something is the opposite of the advice they need.
  */
-export function decideOrderOutcome({ local, results, introduced = [], removed = [] }) {
+export function decideOrderOutcome({ local, queue = null, results, introduced = [], removed = [] }) {
   // Clause 1 first, because it needs nothing and is never ambiguous.
   if (local && local.offending.length > 0) {
     const files = local.offending.map((m) => `  ~ ${m.file}`).join("\n");
@@ -278,6 +293,27 @@ export function decideOrderOutcome({ local, results, introduced = [], removed = 
         `whether that has happened at the moment your check ran is a race you cannot observe. ` +
         `Every new migration sorting after everything on the base branch is the invariant that ` +
         `makes the race impossible rather than merely unlikely.`,
+    };
+  }
+
+  // Clause 1, in the merge queue: the same rule against the commit the queue
+  // built this PR on, so a migration queued AHEAD counts as already on the base.
+  // Checked after the `main` clause, whose floor is never higher: a migration
+  // back-dated against `main` gets that message, with its plain rename remedy.
+  if (queue && queue.offending.length > 0) {
+    const files = queue.offending.map((m) => `  ~ ${m.file}`).join("\n");
+    return {
+      ok: false,
+      code: "back-dated-against-queue",
+      message:
+        `${queue.offending.length} migration(s) this PR adds sort BEFORE \`${queue.floor}\`, which a ` +
+        `PR ahead of it in the merge queue adds:\n${files}\n\n` +
+        `Merged in this order, staging applies \`${queue.floor}\` first and the CLI then refuses ` +
+        `yours — "${CLI_REFUSAL}" — halting every staging deploy until a rename lands (#4795). ` +
+        `The queue drops this PR instead, and nothing queues it again or tells its author: re-queue ` +
+        `it by hand. If the PR ahead merges, \`PR base sync\` renumbers this PR's migrations first ` +
+        `(or run \`npm run merge:main\`, which renumbers them); re-queue once that push is green. ` +
+        `If the PR ahead leaves the queue without merging, re-queue this PR as it is.`,
     };
   }
 
@@ -365,7 +401,7 @@ export function decideOrderOutcome({ local, results, introduced = [], removed = 
   };
 }
 
-export function buildOrderSummary({ introduced, removed = [], local, results, outcome, baseRef }) {
+export function buildOrderSummary({ introduced, removed = [], local, queue = null, results, outcome, baseRef }) {
   const lines = [
     `## Migration order gate`,
     "",
@@ -383,6 +419,14 @@ export function buildOrderSummary({ introduced, removed = [], local, results, ou
       "",
       `Newest migration already on the base branch: \`${local.floor ?? "none"}\` — ` +
         `${local.offending.length} introduced migration(s) sort before it.`,
+    );
+  }
+  if (queue) {
+    lines.push(
+      "",
+      `Merge queue: this PR adds **${queue.own.length}** of them (vs \`${queue.ref}\`, the commit the ` +
+        `queue built it on). Newest migration on \`main\` or queued ahead: \`${queue.floor ?? "none"}\` — ` +
+        `${queue.offending.length} of this PR's sort before it.`,
     );
   }
   if (results.length > 0) {
@@ -422,6 +466,9 @@ export async function runOrderGate({
   snapshotPath,
   nowMs = Date.now(),
   baseRef = process.env.ORDER_GATE_BASE_REF,
+  // Set only in a merge queue run: `merge_group.base_sha`, the commit the queue
+  // built this entry on (`main` plus every entry ahead of it). Empty elsewhere.
+  queueBaseRef = process.env.ORDER_GATE_QUEUE_BASE_REF || undefined,
   migrationsDir = MIGRATIONS_DIR,
   environments,
   readBase,
@@ -447,21 +494,27 @@ export async function runOrderGate({
     return 2;
   }
 
-  let base;
-  try {
-    base = (readBase ?? ((ref) => readMigrationVersionsAtRef({ ref })))(baseRef);
-  } catch (thrown) {
-    error(`::error::Could not read migrations at \`${baseRef}\`: ${thrown.message}`);
-    return 2;
-  }
-  if (base.length === 0) {
-    error(
-      `::error::No migrations found at \`${baseRef}\`. Every migration would read as newly ` +
-        `introduced, which is a bad ref or a shallow clone rather than a real change. ` +
-        `Ensure the workflow checks out with fetch-depth: 0.`,
-    );
-    return 2;
-  }
+  const readAt = (ref) => {
+    let migrations;
+    try {
+      migrations = (readBase ?? ((r) => readMigrationVersionsAtRef({ ref: r })))(ref);
+    } catch (thrown) {
+      error(`::error::Could not read migrations at \`${ref}\`: ${thrown.message}`);
+      return null;
+    }
+    if (migrations.length === 0) {
+      error(
+        `::error::No migrations found at \`${ref}\`. Every migration would read as newly ` +
+          `introduced, which is a bad ref or a shallow clone rather than a real change. ` +
+          `Ensure the workflow checks out with fetch-depth: 0.`,
+      );
+      return null;
+    }
+    return migrations;
+  };
+
+  const base = readAt(baseRef);
+  if (base === null) return 2;
 
   const introduced = introducedMigrations({ head, base });
   const removed = removedMigrations({ head, base });
@@ -476,11 +529,30 @@ export async function runOrderGate({
   const local = classifyLocalOrder({ introduced, surviving });
   log(`  Newest migration already on the base branch: ${local.floor ?? "none"}.`);
 
+  // Clause 1 again, in the merge queue (#4795). The base above is `main`'s tip,
+  // so the entries ahead of this one read as introduced too, and the rule never
+  // compares them with this PR's. Against the commit the queue built this entry
+  // on, they are base, and this PR's own migrations must sort after them: the
+  // entry ahead merges first, staging applies it, and an earlier version
+  // behind it would be refused.
+  let queue = null;
+  if (queueBaseRef && queueBaseRef !== baseRef) {
+    const queueBase = readAt(queueBaseRef);
+    if (queueBase === null) return 2;
+    const own = introducedMigrations({ head, base: queueBase });
+    const queueSurviving = queueBase.filter((m) => headVersions.has(m.version));
+    queue = { ...classifyLocalOrder({ introduced: own, surviving: queueSurviving }), own, ref: queueBaseRef };
+    log(
+      `  Merge queue: ${own.length} of them added by this PR (vs ${queueBaseRef}); newest on main or ` +
+        `queued ahead: ${queue.floor ?? "none"}.`,
+    );
+  }
+
   // Set once the snapshot is read, so the summary can say how current it is.
   let snapshotNote = null;
   const finish = (results) => {
-    const outcome = decideOrderOutcome({ local, results, introduced, removed });
-    const summary = buildOrderSummary({ introduced, removed, local, results, outcome, baseRef });
+    const outcome = decideOrderOutcome({ local, queue, results, introduced, removed });
+    const summary = buildOrderSummary({ introduced, removed, local, queue, results, outcome, baseRef });
     writeSummary(snapshotNote ? `${summary}\n\n${snapshotNote}` : summary);
     if (!outcome.ok) {
       error(`::error::${outcome.message.split("\n")[0]}`);
@@ -491,7 +563,7 @@ export async function runOrderGate({
     return 0;
   };
 
-  if (local.offending.length > 0) return finish([]);
+  if (local.offending.length > 0 || (queue?.offending.length ?? 0) > 0) return finish([]);
 
   // The property that makes this safe to require: a change that neither adds nor
   // removes a migration makes ZERO network calls, so the gate cannot fail over

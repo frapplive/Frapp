@@ -1,12 +1,17 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -21,9 +26,11 @@ import { RequirePermissions } from '../decorators/permissions.decorator';
 import { RequireModule } from '../decorators/module.decorator';
 import {
   CurrentChapterId,
+  CurrentEnabledModules,
   CurrentUser,
 } from '../decorators/current-user.decorator';
 import {
+  MakeActionItemTaskDto,
   MeetingActionItemTaskDto,
   SeriesOpenActionItemsDto,
 } from '../dtos/meeting-action-item-task.dto';
@@ -72,6 +79,38 @@ export class MeetingActionItemTasksController {
       { withTask },
     );
     return marks.map((mark) => MeetingActionItemTaskDto.from(mark));
+  }
+
+  @Post(':id/action-items/:index/task')
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @RequireModule('tasks')
+  @ApiOperation({
+    summary:
+      'Make an action item of posted minutes a task for these members, when no suggestion is waiting for it (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion. The service also checks Meetings is on',
+  })
+  @ApiCreatedResponse({ type: MeetingActionItemTaskDto })
+  @ApiConflictResponse({
+    description:
+      'The minutes changed since they were read, or the item is a task already (another officer made it at the same moment, or it was accepted up for grabs)',
+  })
+  async makeTask(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentEnabledModules() enabledModules: Record<string, boolean> | null,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('index', ParseIntPipe) index: number,
+    @Body() body: MakeActionItemTaskDto,
+  ): Promise<MeetingActionItemTaskDto> {
+    return MeetingActionItemTaskDto.from(
+      await this.suggestions.makeTask(
+        chapterId,
+        userId,
+        id,
+        index,
+        body,
+        enabledModules,
+      ),
+    );
   }
 
   @Get('series/:key/open-action-items')

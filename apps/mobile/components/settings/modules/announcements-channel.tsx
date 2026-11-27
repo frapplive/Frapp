@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useChannels } from "@repo/hooks";
 import {
   ANNOUNCEMENTS_CHANNEL_COPY,
@@ -20,14 +21,12 @@ type ChannelRow = {
  * way `/announce` and the push worker find it (`isAnnouncementChannel`),
  * where who can post in it is set. Only for a viewer who can open channel
  * settings (`channels:manage`); a chapter with no such channel gets no row.
- *
- * Read-only until the phone's channel settings screen lands (#6112): on
- * `main` its route is still a placeholder that goes back to Chat home, so a
- * press there would be a dead end. Once it lands, this row pushes
- * `/channel-settings?channelId=`, as web's opens the channel's settings.
+ * The row pushes that channel's settings screen, as web's opens the
+ * channel's settings (#6151), and its back control returns here.
  */
 export function AnnouncementsChannelSection({ canOpen }: { canOpen: boolean }) {
   const { tokens } = useFrappTheme();
+  const router = useRouter();
   const channelsQuery = useChannels();
   if (!canOpen) return null;
   const rows = Array.isArray(channelsQuery.data)
@@ -49,6 +48,13 @@ export function AnnouncementsChannelSection({ canOpen }: { canOpen: boolean }) {
           leading={<HashGlyph color={tokens.color.text.mutedForeground} />}
           label={ANNOUNCEMENTS_CHANNEL_COPY.label}
           value={`#${channel.name}`}
+          accessibilityHint="Opens the channel's settings."
+          onPress={() =>
+            router.push({
+              pathname: "/channel-settings",
+              params: { channelId: channel.id },
+            })
+          }
         />
       </ListSection>
     </>

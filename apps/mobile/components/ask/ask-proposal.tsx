@@ -14,10 +14,7 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  BottomSheetModal,
-  BottomSheetTextInput,
-} from "@gorhom/bottom-sheet";
+import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { codeOf } from "@repo/api-sdk";
 import {
   memberFallbackLabel,

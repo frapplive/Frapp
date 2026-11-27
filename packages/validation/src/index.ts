@@ -85,6 +85,7 @@ export * from "./council";
 // Affiliations and PNM records (#5974): link states, offers, codes, copy.
 export * from "./council-chapters";
 // A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-key";
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
@@ -170,6 +171,8 @@ export * from "./meeting-recording";
 export * from "./meeting-start";
 // ── Meeting minutes (#4312) ──────────────────────────────────────────────────
 export * from "./meetings";
+// Both apps' Member fields rules: picker order, a new field's checks and body (#6029).
+export * from "./member-field-rules";
 // Member nudges (#4781): the one card on Activity the AI writes for a member.
 export * from "./member-nudge";
 // ── `@`-mention resolution (C1 of #937) ──────────────────────────────────────

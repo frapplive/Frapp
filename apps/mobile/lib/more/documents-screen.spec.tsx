@@ -39,6 +39,11 @@ let starRows: { folder_ids: string[]; document_ids: string[] } = {
 const setStar = vi.fn(async () => undefined);
 let starsFailed = false;
 const setPin = vi.fn(async () => undefined);
+// Upload a new version (#6055).
+let viewerId: string | null = "u-viewer";
+const requestVersion = vi.fn();
+const replaceFile = vi.fn();
+const pickFile = vi.hoisted(() => vi.fn());
 const LOADED = {
   data: [],
   isPending: false,
@@ -95,6 +100,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
   useSetDocumentStar: () => ({ mutateAsync: setStar }),
   useSetDocumentPin: () => ({ mutateAsync: setPin, isPending: false }),
+  useViewerUserId: () => viewerId,
+  useRequestDocumentVersionUploadUrl: () => ({ mutateAsync: requestVersion }),
+  useReplaceDocumentFile: () => ({ mutateAsync: replaceFile }),
 }));
 
 // The download and the share sheet (#4409) are `document-file.ts`'s, pinned
@@ -113,6 +121,37 @@ async function presentAtOnce(
   return true;
 }
 const shareDocument = vi.fn(presentAtOnce);
+// The picker is native; `document-upload.spec.ts` pins the version's wire
+// steps. This stand-in runs the two calls the screen binds to its document.
+vi.mock("@/lib/more/document-upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/more/document-upload")>()),
+  canPickFiles: () => true,
+  pickDocumentFile: () => pickFile(),
+  uploadDocumentVersion: async (
+    image: { filename: string; contentType: string; byteSize: number },
+    calls: {
+      requestUploadUrl: (body: unknown) => Promise<unknown>;
+      replace: (body: unknown) => Promise<unknown>;
+    },
+  ) => {
+    try {
+      await calls.requestUploadUrl({
+        filename: image.filename,
+        content_type: image.contentType,
+        size_bytes: image.byteSize,
+      });
+      await calls.replace({
+        storage_path: "chapters/c/documents/v2/bylaws-v2.pdf",
+        content_type: image.contentType,
+        byte_size: image.byteSize,
+      });
+      return { status: "uploaded" };
+    } catch {
+      return { status: "refused", reason: "Try again in a moment." };
+    }
+  },
+}));
+
 vi.mock("@/lib/more/document-file", () => ({
   shareDocumentFile: (...args: Parameters<typeof shareDocument>) =>
     shareDocument(...args),
@@ -192,6 +231,10 @@ afterEach(() => {
   setStar.mockReset();
   starsFailed = false;
   setPin.mockReset();
+  viewerId = "u-viewer";
+  requestVersion.mockReset();
+  replaceFile.mockReset();
+  pickFile.mockReset();
   resetListLayoutsForTests();
   presented.length = 0;
   holdSheet = null;
@@ -2071,7 +2114,7 @@ describe("a long library (#6088)", () => {
       created_at: new Date(Date.UTC(2026, 9, 1) - i * 60_000).toISOString(),
     }));
 
-  // The shell's scroll view: the one carrying the handler `useBarScroll`
+  // The shell's scroll view: the one carrying the handler `useScreenScroll`
   // spreads, which reports to the screen's scroll watch.
   const scrollTo = (tree: ReactTestRenderer, y: number, content: number) => {
     const [view] = tree.root.findAll(
@@ -2135,5 +2178,163 @@ describe("a long library (#6088)", () => {
     const tree = render();
 
     expect(tree.root.findAllByType(ListRow)).toHaveLength(12);
+  });
+});
+
+// #6055: a file shared out and changed goes back onto the same document.
+describe("Documents upload a new version (#6055)", () => {
+  const MINE = {
+    id: "d-1",
+    title: "Chapter bylaws",
+    uploaded_by: "u-viewer",
+    created_at: "2026-08-12T14:00:00.000Z",
+  };
+  const THEIRS = {
+    id: "d-2",
+    title: "Budget FY2026",
+    uploaded_by: "u-ana",
+    created_at: "2026-10-01T14:00:00.000Z",
+  };
+  const DRIVE = {
+    id: "d-3",
+    title: "Rush schedule",
+    uploaded_by: "u-viewer",
+    drive_file_id: "drive-3",
+    created_at: "2026-10-02T14:00:00.000Z",
+  };
+  const PICKED = {
+    uri: "file:///bylaws-v2.pdf",
+    filename: "bylaws-v2.pdf",
+    contentType: "application/pdf",
+    byteSize: 2048,
+  };
+
+  const longPress = (tree: ReactTestRenderer, label: string) => {
+    act(() =>
+      tree.root
+        .findAllByType(ListRow)
+        .find((row) => row.props.label === label)!
+        .props.onLongPress(),
+    );
+    return tree.root.findByType(DocumentActionsSheet);
+  };
+  // One long-press, then the sheet's Upload a new version for its target.
+  // The screen's handler starts the upload without returning it, so this
+  // settles what can settle and leaves a held request waiting.
+  const uploadVersion = async (tree: ReactTestRenderer, label: string) => {
+    const sheet = longPress(tree, label);
+    await act(async () => sheet.props.onUploadVersion(sheet.props.target));
+  };
+
+  it("offers it on the member's own upload only, never another's or a Drive file", () => {
+    permissions = ["chapter_docs:upload"];
+    documentRows = [MINE, THEIRS, DRIVE];
+    const tree = render();
+    expect(
+      longPress(tree, "Chapter bylaws").props.target.canUploadVersion,
+    ).toBe(true);
+    expect(longPress(tree, "Budget FY2026").props.target.canUploadVersion).toBe(
+      false,
+    );
+    expect(longPress(tree, "Rush schedule").props.target.canUploadVersion).toBe(
+      false,
+    );
+  });
+
+  it("withholds it from an uploader who has lost upload", () => {
+    documentRows = [MINE];
+    const tree = render();
+    expect(
+      longPress(tree, "Chapter bylaws").props.target.canUploadVersion,
+    ).toBe(false);
+  });
+
+  it("offers it on anyone's upload to whoever manages documents", () => {
+    permissions = ["chapter_docs:manage"];
+    documentRows = [THEIRS];
+    const tree = render();
+    expect(longPress(tree, "Budget FY2026").props.target.canUploadVersion).toBe(
+      true,
+    );
+  });
+
+  it("puts the picked file on the same document", async () => {
+    documentRows = [MINE];
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    requestVersion.mockResolvedValue({});
+    replaceFile.mockResolvedValue({});
+    const tree = render();
+    const sheet = longPress(tree, "Chapter bylaws");
+
+    await act(async () => sheet.props.onUploadVersion(sheet.props.target));
+
+    expect(requestVersion).toHaveBeenCalledWith({
+      id: "d-1",
+      filename: "bylaws-v2.pdf",
+      content_type: "application/pdf",
+      size_bytes: 2048,
+    });
+    expect(replaceFile).toHaveBeenCalledWith({
+      id: "d-1",
+      storage_path: "chapters/c/documents/v2/bylaws-v2.pdf",
+      content_type: "application/pdf",
+      byte_size: 2048,
+    });
+  });
+
+  it("sends nothing when the picker is cancelled, and says so when it fails", async () => {
+    documentRows = [MINE];
+    pickFile.mockResolvedValue({ status: "cancelled" });
+    const tree = render();
+
+    await uploadVersion(tree, "Chapter bylaws");
+    expect(requestVersion).not.toHaveBeenCalled();
+
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    requestVersion.mockRejectedValue(new Error("nope"));
+    await uploadVersion(tree, "Chapter bylaws");
+    expect(replaceFile).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+  });
+
+  it("keeps each upload's spinner and failure to its own file", async () => {
+    permissions = ["chapter_docs:upload"];
+    const SECOND = { ...MINE, id: "d-4", title: "Rush budget" };
+    documentRows = [MINE, SECOND];
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    const tree = render();
+    const busy = (label: string) =>
+      tree.root.findAllByType(ListRow).find((row) => row.props.label === label)!
+        .props.busy;
+
+    // The first fails, and says so.
+    requestVersion.mockRejectedValueOnce(new Error("nope"));
+    await uploadVersion(tree, "Chapter bylaws");
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+
+    // The second starts and waits: its row spins, the first's failure stays.
+    let release!: () => void;
+    requestVersion.mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = () => resolve({});
+      }),
+    );
+    replaceFile.mockResolvedValue({});
+    await uploadVersion(tree, "Rush budget");
+    expect(busy("Rush budget")).toBe(true);
+    expect(busy("Chapter bylaws")).toBe(false);
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+
+    await act(async () => release());
+    expect(busy("Rush budget")).toBe(false);
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
   });
 });

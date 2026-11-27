@@ -226,6 +226,24 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["role-tier"] }}
       />
       <Stack.Screen name="role" options={{ title: SCREEN_TITLES.role }} />
+      {/* Chapter settings' Pledge class and Member fields (#6029), each a
+          list, and one class's or one field's page pushed from it. */}
+      <Stack.Screen
+        name="pledge-classes"
+        options={{ title: SCREEN_TITLES["pledge-classes"] }}
+      />
+      <Stack.Screen
+        name="pledge-class"
+        options={{ title: SCREEN_TITLES["pledge-class"] }}
+      />
+      <Stack.Screen
+        name="member-fields"
+        options={{ title: SCREEN_TITLES["member-fields"] }}
+      />
+      <Stack.Screen
+        name="member-field"
+        options={{ title: SCREEN_TITLES["member-field"] }}
+      />
       {/* The recruitment pipeline (#5924), from its row on You, and one
           prospect from a row of it. */}
       <Stack.Screen name="rush" options={{ title: SCREEN_TITLES.rush }} />

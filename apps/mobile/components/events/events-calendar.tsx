@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
@@ -72,6 +72,7 @@ export function EventsCalendar({
   onOpenDay,
   eventMenuFor,
   taskMenuFor,
+  kindKey,
 }: {
   /** Every occurrence, past ones included (`selectAllEventRows`). */
   events: EventRow[];
@@ -105,6 +106,8 @@ export function EventsCalendar({
   eventMenuFor?: (event: EventRow) => ItemMenuHandle | null;
   /** A task row's (`useCalendarTaskMenu`, #5492). */
   taskMenuFor?: CalendarTaskMenuFor;
+  /** The colour key, drawn between the month and the day (#5948). */
+  kindKey?: ReactNode;
 }) {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
@@ -300,6 +303,8 @@ export function EventsCalendar({
           ))}
         </View>
       </GestureDetector>
+
+      {kindKey}
 
       <View>
         {onOpenDay ? (

@@ -7,6 +7,7 @@ import {
 } from '#domain/constants/postgres-error-codes';
 import { reportCaughtFailure } from '../../observability/report-caught-failure';
 import { SupabaseQueryError } from '../supabase-query-error';
+import type { ChatMessage } from '#domain/entities/chat.entity';
 import type {
   ChatPushClaimOutcome,
   IChatPushDispatchRepository,
@@ -69,5 +70,20 @@ export class SupabaseChatPushDispatchRepository implements IChatPushDispatchRepo
       .lt('dispatched_at', cutoff.toISOString());
     if (error) throw new SupabaseQueryError(error);
     return count ?? 0;
+  }
+
+  /**
+   * The recent messages no instance has claimed, for the push worker's
+   * catch-up (#6123). One RPC: the anti-join against `chat_push_dispatches`
+   * runs in the database (`chat_push_unclaimed_messages`), so a quiet catch-up
+   * costs one call and returns nothing.
+   */
+  async unclaimedSince(since: Date, limit: number): Promise<ChatMessage[]> {
+    const { data, error } = await this.supabase.rpc(
+      'chat_push_unclaimed_messages',
+      { p_since: since.toISOString(), p_limit: limit },
+    );
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
   }
 }

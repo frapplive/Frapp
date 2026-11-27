@@ -1,6 +1,7 @@
 import {
   CHAT_LINK_CHANNEL_PARAM,
   CHAT_LINK_MESSAGE_PARAM,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 
 /**
@@ -15,13 +16,15 @@ import {
  */
 export const CHAT_CHANNEL_PARAM = CHAT_LINK_CHANNEL_PARAM;
 export const CHAT_MESSAGE_PARAM = CHAT_LINK_MESSAGE_PARAM;
+/** The open thread's root message on `/chat` (#6041). */
+export const CHAT_THREAD_PARAM = WEB_ADDRESS_PARAMS.chat.thread;
 /**
  * The two kinds of conversation, and the two lists that hold them: the
  * chapter's channels, which live in the sidebar, and the member's direct and
  * group messages, which the Messages page (`/messages`) lists. A link that
  * names a conversation needs to say neither: the shell follows its kind, so a
  * notification for a DM opens on Messages without knowing it is one
- * (`dashboard-shell.tsx`).
+ * (`chat-shell.tsx`'s address sync).
  */
 export type ChatView = "channels" | "direct";
 

@@ -23,6 +23,7 @@ import {
 import { useCanCreateEvents } from "@/components/events/new-event-sheet";
 import { EventsTimeGrid } from "@/components/events/events-time-grid";
 import { useCalendarItemsByDay } from "@/lib/events/calendar-items";
+import { useHiddenCalendarKinds } from "@/lib/events/calendar-kinds";
 import { calendarHourStart } from "@/lib/events/create-event";
 import { useNewEventAt } from "@/lib/events/use-new-event-at";
 import { useEventMenu } from "@/lib/events/use-event-menu";
@@ -56,11 +57,19 @@ export default function CalendarDayScreen() {
     () => parseCalendarDayParam(raw) ?? new Date(today),
     [raw, today],
   );
+  // The month's colour key decides the day's tasks and birthdays too
+  // (#5948). Not its events: this screen draws no key to turn them back on,
+  // and an event made from an hour here must show where it was made.
+  const { hidden } = useHiddenCalendarKinds();
+  const dayHidden = useMemo(
+    () => new Set([...hidden].filter((kind) => kind !== "events")),
+    [hidden],
+  );
   const allEvents = useMemo(
     () => selectAllEventRows(eventsQuery.data),
     [eventsQuery.data],
   );
-  const tasksByDay = useCalendarItemsByDay(day);
+  const tasksByDay = useCalendarItemsByDay(day, dayHidden);
   const tasksQuery = useTasks();
   const birthdaysQuery = useMemberBirthdays();
   const refresh = useRefetchAll([eventsQuery, tasksQuery, birthdaysQuery]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyFromLabel } from "./key-from-label";
+import { keyFromLabel } from "./custom-field-key";
 
 describe("keyFromLabel", () => {
   it("slugs the name", () => {

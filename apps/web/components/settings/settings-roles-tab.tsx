@@ -27,7 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SETTINGS_VALUE_TRIGGER,
+} from "@/components/shared/settings-row";
 import {
   PresidencyClaimBanner,
   TransferPresidencyRow,
@@ -289,9 +293,6 @@ function PageHead({
  */
 const NO_DEFAULT_INVITE_ROLE = "__no-default__";
 
-const VALUE_TRIGGER =
-  "h-8 w-auto max-w-[14rem] gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground hover:bg-card-hover";
-
 /**
  * Default invite role (#422), a row of Invites and presidency (#6029; a
  * section of its own until then): the role an invite grants when it picks
@@ -363,7 +364,7 @@ function DefaultInviteRoleRow({
         >
           <SelectTrigger
             aria-label={PEOPLE_SETTINGS_COPY.defaultInviteRole}
-            className={VALUE_TRIGGER}
+            className={SETTINGS_VALUE_TRIGGER}
           >
             <SelectValue
               placeholder={

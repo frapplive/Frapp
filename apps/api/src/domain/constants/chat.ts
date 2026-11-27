@@ -42,6 +42,7 @@ export const CHAT_FORM_CARD_PAYLOAD_MAX_CHARS = 65_536;
 
 /**
  * The most people in a group DM, its creator included
- * (`spec/behavior/chat/README.md` § Direct Messages: "up to 10").
+ * (`spec/behavior/chat/README.md` § Direct Messages: "up to 10"). Owned by
+ * `@repo/validation`, so the phone's New message stops at the same count.
  */
-export const MAX_GROUP_DM_MEMBERS = 10;
+export { MAX_GROUP_DM_MEMBERS } from '@repo/validation';

@@ -1,3 +1,5 @@
+import type { ChatMessage } from '../entities/chat.entity';
+
 export const CHAT_PUSH_DISPATCH_REPOSITORY = 'CHAT_PUSH_DISPATCH_REPOSITORY';
 
 /**
@@ -20,4 +22,12 @@ export interface IChatPushDispatchRepository {
   claim(messageId: string): Promise<ChatPushClaimOutcome>;
   /** Delete claims made before `cutoff`, returning how many went. Throws on a failed delete. */
   purgeBefore(cutoff: Date): Promise<number>;
+  /**
+   * The messages created at or after `since` that nothing has claimed yet,
+   * oldest first, at most `limit` (#6123). Leaves out the kinds the worker
+   * never pushes (imported, posted answers) and deleted rows. Reads across
+   * every chapter, as the worker's Realtime subscription does. Throws on a
+   * failed read.
+   */
+  unclaimedSince(since: Date, limit: number): Promise<ChatMessage[]>;
 }

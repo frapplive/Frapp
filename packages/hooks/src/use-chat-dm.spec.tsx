@@ -1,7 +1,7 @@
 import { renderHook, act } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { useGetOrCreateDm } from "./use-chat";
+import { useCreateGroupDm, useGetOrCreateDm } from "./use-chat";
 import { createHookWrapper, createTestQueryClient } from "./test-utils";
 
 const mockPost = vi.fn();
@@ -98,5 +98,49 @@ describe("useGetOrCreateDm channel-cache refresh (#316)", () => {
 
     expect(value).toEqual({ id: "dm-1" });
     expect(refetchChannels).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useCreateGroupDm (#6190)", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("posts the others to /v1/channels/group-dm and refetches the list without waiting on it", async () => {
+    const qc = createTestQueryClient();
+    const refetchChannels = vi.fn(() => new Promise(() => {}));
+    qc.setQueryDefaults(["channels"], { queryFn: refetchChannels });
+    qc.setQueryData(["channels"], [{ id: "general" }]);
+    mockPost.mockResolvedValueOnce({ data: { id: "g-1" }, error: undefined });
+
+    const { result } = renderHook(() => useCreateGroupDm(), {
+      wrapper: makeWrapper(qc),
+    });
+    let created: unknown;
+    await act(async () => {
+      created = await result.current.mutateAsync({ member_ids: ["u2", "u3"] });
+    });
+
+    expect(mockPost).toHaveBeenCalledWith("/v1/channels/group-dm", {
+      body: { member_ids: ["u2", "u3"] },
+    });
+    expect(created).toEqual({ id: "g-1" });
+    expect(refetchChannels).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws the API's error", async () => {
+    const qc = createTestQueryClient();
+    mockPost.mockResolvedValueOnce({
+      data: undefined,
+      error: { statusCode: 404 },
+    });
+    const { result } = renderHook(() => useCreateGroupDm(), {
+      wrapper: makeWrapper(qc),
+    });
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ member_ids: ["u2", "u3"] }),
+      ).rejects.toEqual({ statusCode: 404 });
+    });
   });
 });

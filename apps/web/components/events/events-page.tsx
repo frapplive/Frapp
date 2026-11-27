@@ -26,6 +26,7 @@ import {
 } from "@repo/hooks";
 import {
   ALL_CALENDAR_LAYERS,
+  DEFAULT_HIDDEN_CALENDAR_KINDS,
   calendarTasksByDay,
   type CalendarItem,
   type CalendarKind,
@@ -76,6 +77,7 @@ import {
   eventTakesAttendance,
   eventTimingFieldsOf,
   eventsCount,
+  SECTION_NAMES,
   WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import {
@@ -480,7 +482,8 @@ function AddressedEventsPage() {
   const anchor = (anchorKey ? dateOfKey(anchorKey) : null) ?? todayStart;
   const calendarBirthdays = useCalendarBirthdays(anchor);
   // The colour key's kinds switched off, remembered per user on this
-  // browser (#5560); `null` until read, which shows everything.
+  // browser (#5560); `null` until read or never set, which hides Tasks
+  // (#5948, `DEFAULT_HIDDEN_CALENDAR_KINDS`).
   const [storedHidden, setStoredHidden] = useState<Set<CalendarKind> | null>(
     null,
   );
@@ -490,7 +493,7 @@ function AddressedEventsPage() {
     setStoredHidden(readHiddenKinds(userId));
   }
   const hiddenKinds: ReadonlySet<CalendarKind> = useMemo(
-    () => storedHidden ?? new Set(),
+    () => storedHidden ?? DEFAULT_HIDDEN_CALENDAR_KINDS,
     [storedHidden],
   );
   function toggleKind(kind: CalendarKind) {
@@ -1531,7 +1534,7 @@ function AddressedEventsPage() {
                   onClick={leaveHours}
                 >
                   <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-                  Events
+                  {SECTION_NAMES.calendar}
                 </Button>
                 <h2
                   id="events-hours-label"

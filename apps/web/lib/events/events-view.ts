@@ -20,7 +20,7 @@ export function calendarCreateStart(
 }
 
 /**
- * The kinds the Events colour key has switched off (#5560), on this browser,
+ * The kinds the Calendar's colour key has switched off (#5560), on this browser,
  * per user: a member who turns birthdays off finds them off next time. Not on
  * the server: a phone and a laptop each keep their own, like the last chat
  * channel (`lib/chat/last-channel.ts`).
@@ -30,7 +30,7 @@ export function calendarCreateStart(
  * Assigned by me apart, which the key no longer does.
  *
  * localStorage, best-effort: a private window, blocked site data or a full
- * quota throws or reads empty, and every kind then shows.
+ * quota throws or reads empty, and the default then holds (Tasks off, #5948).
  */
 function hiddenKindsStorageKey(userId: string): string {
   return `frapp.events.hidden-kinds.${userId}`;

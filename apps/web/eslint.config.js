@@ -64,9 +64,7 @@ export default [
       // ActionMenuButton) draws its own ⋯ and context menu.
       moreMenu: [
         "components/shared/row-menu.tsx",
-        // #5739: hand-built ⋯ dropdowns and context menus onto RowMenu /
-        // ActionMenuButton.
-        "components/ai/suggested-tasks.tsx",
+        // #5739: a hand-built ⋯ dropdown onto RowMenu / ActionMenuButton.
         "components/meetings/minutes-page.tsx",
         // Not a list of actions: the header's ⋯ is one popover whose content
         // swaps to Search, Pinned, Saved and Notifications panels in place.

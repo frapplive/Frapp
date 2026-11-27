@@ -13,3 +13,18 @@ export interface ChatPushDispatch {
   message_id: string;
   dispatched_at: string;
 }
+
+/**
+ * The one row of `api_wake` (`20261127184653_api_wake_chat_push_catch_up.sql`,
+ * #6123): the API's public origin, which the API writes at boot, and when the
+ * database last poked it. `wake_api()` reads it to wake a sleeping staging
+ * API when a chat message arrives.
+ *
+ * API-only (service role).
+ */
+export interface ApiWake {
+  id: boolean;
+  url: string | null;
+  poked_at: string | null;
+  updated_at: string;
+}

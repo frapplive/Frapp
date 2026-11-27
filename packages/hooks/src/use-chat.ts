@@ -683,6 +683,38 @@ export function useGetOrCreateDm({
 }
 
 /**
+ * `POST /v1/channels/group-dm`: a new group DM with `member_ids`, the viewer
+ * added by the server (#6190). Not get-or-create: every call makes a new
+ * conversation in each member's list, which is why the API holds it to 10 a
+ * minute. The list refetch is started, not awaited, as the Messages screen
+ * that calls it already watches `["channels"]` (`useGetOrCreateDm`'s
+ * `awaitRefetch: false`).
+ */
+export function useCreateGroupDm() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["channels", "create-group-dm"],
+    mutationFn: async (body: { member_ids: string[] }) => {
+      const { data, error } = await client.POST("/v1/channels/group-dm", {
+        body,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["channels"],
+        refetchType: "all",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: CHANNEL_NOTIFICATION_PREFERENCES_KEY,
+      });
+    },
+  });
+}
+
+/**
  * `POST /v1/channels/{id}/leave`: leave a Group DM, or hide a 1:1 DM from the
  * caller's own list (#2303, `spec/behavior/chat/README.md` § Direct Messages).
  * The server decides which by the channel's type.

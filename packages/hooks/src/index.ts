@@ -53,6 +53,7 @@ export * from "./open-chat-transport";
 export * from "./own-custom-fields";
 export * from "./pay-errors";
 export * from "./permission-preview";
+export * from "./pledge-class-editor";
 export * from "./profile-stats";
 export * from "./put-signed-upload";
 export * from "./read-cursor";

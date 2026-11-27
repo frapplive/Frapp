@@ -903,6 +903,12 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       "user-1",
     );
     tasksRef.current = { items };
+    // Tasks start off on the Calendar (#5948): these cases are a member who
+    // turned the Tasks key on.
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
   }
 
   const today = () => localIsoDate(new Date());
@@ -976,6 +982,38 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     );
   });
 
+  it("hides tasks until the member turns the Tasks key on, and remembers it (#5948)", async () => {
+    withTasksToday();
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const first = render(<EventsPage />);
+
+    const toggle = screen.getByRole("button", { name: /^tasks, \d/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /^dues form/i })).toBeNull();
+    expect(screen.queryByTestId(`events-dot-${today()}-tasks`)).toBeNull();
+    expect(
+      screen.getByRole("group", { name: "Show on Calendar" }),
+    ).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
+      ),
+    ).toEqual({ hidden: [] });
+
+    first.unmount();
+    render(<EventsPage />);
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+  });
+
   it("switches a kind off from its key, hiding rows and dots, and remembers it", async () => {
     withBirthdayToday();
     const user = userEvent.setup();
@@ -995,7 +1033,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       JSON.parse(
         window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
       ),
-    ).toEqual({ hidden: ["birthdays"] });
+    ).toEqual({ hidden: ["tasks", "birthdays"] });
 
     first.unmount();
     render(<EventsPage />);
@@ -1144,6 +1182,10 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
         "user-1",
       ),
     };
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
     render(<EventsPage />);
 
     const headings = screen.getAllByRole("heading", { level: 3 });
@@ -1266,7 +1308,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     expect(days[0]).toHaveAttribute("aria-current", "date");
     // The key sits under the strip, as one row.
     expect(
-      screen.getByRole("group", { name: "Show on Events" }),
+      screen.getByRole("group", { name: "Show on Calendar" }),
     ).toBeInTheDocument();
 
     await user.click(within(strip).getByRole("button", { name: "Next week" }));
@@ -1324,7 +1366,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Events" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
     expect(
       screen.getByRole("region", { name: "Upcoming" }),
     ).toBeInTheDocument();
