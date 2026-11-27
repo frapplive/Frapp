@@ -5,7 +5,7 @@ A "Chapter Files" storage area for organizational documents (bylaws, constitutio
 ## Permissions
 
 - `chapter_docs:upload` — Upload new documents.
-- `chapter_docs:manage` — Delete documents, rename and move any document they see ([§ Rename and move](#rename-and-move)), create/rename/delete folders, add, rename and delete document types, and connect or disconnect the chapter's Google Drive folder.
+- `chapter_docs:manage` — Delete documents, rename and move any document they see ([§ Rename and move](#rename-and-move)), upload a new version of any upload they see ([§ New version](#new-version)), create/rename/delete folders, add, rename and delete document types, and connect or disconnect the chapter's Google Drive folder.
 - Reads are gated on `members:view`, which every seeded role holds (the President holds it from its starting tier, beside the `*` wildcard) — so every member can open Documents, but the controller's class-level gate is a permission rather than an all-members bypass. Upload and management need their own `chapter_docs:*` permissions.
 - Inside Documents, a folder or file can be limited to some tiers, roles and groups ([§ Who can see](#who-can-see)). `chapter_docs:manage` is not a way past that: a manager sees only what a list lets them see.
 
@@ -75,6 +75,17 @@ Officers with `chapter_docs:manage` create, rename, reorder, and delete folders;
 - **Google Drive.** A copy from the connected folder is renamed and moved only in Drive (409). A file added by its link (§ Google Drive file by link) keeps Drive's name (renaming it is a 409, since the next copy would bring Drive's back) but can be moved.
 - **Who sees it after a move.** As [§ Who can see](#who-can-see) says under Moving, so moving a file into a limited folder can narrow who sees it and moving it out can widen it. The screens say so before moving (#5584); the API doesn't ask.
 - A rename re-reads the file for Frapp Intelligence, as any title change does (the corpus trigger on `chapter_documents`).
+
+## New version
+
+*(Added 2026-11-27, [#6055](https://github.com/frapplive/Frapp/issues/6055) part 3; Paul asked "if I download and make changes, what would I do? upload it and rewrite it?")* An uploaded file can take a new version in place, so a file downloaded and changed goes back where it was instead of beside it as a duplicate. Comparable apps: Google Drive's and Dropbox's "Upload new version" ("Manage versions").
+
+- **What it keeps.** The same document: its id, title, folder, type, effective date, description, who can see it, pin, stars, uploader and every link to it (an Ask citation included). Only the file changes, with its declared type and size; the new version may be another type (a PDF for a Word file).
+- **Who.** A file's uploader, or a member with `chapter_docs:manage`, among those who see it: the rule § Rename and move and § Who can see use (`assertUploaderOrManager`). Not on a Google Drive folder copy or a file added by its Drive link (409: Drive owns its bytes, so the change is made in Drive and comes back with the next copy), nor on a meeting's minutes (409).
+- **How.** `POST /v1/documents/{id}/version-upload-url` mints a signed upload link with the same type and size checks as an upload (§ Upload allowlist), then `PUT /v1/documents/{id}/file` with `storage_path`, `content_type` and `byte_size` puts it in place, with the path checks a confirm makes (§ Storage). Sending the path the file already has answers it unchanged, so a retry after a lost answer is safe. Two new versions racing: the first wins, and the second is a 409 that leaves the first in place.
+- **No history.** The earlier file is deleted once the document points at the new one, as a Drive copy's earlier file is when Drive's changes. There is no Manage versions list to go back to.
+- **Frapp Intelligence** re-reads the new file: its new `storage_path` sets off the corpus trigger on `chapter_documents`, as a re-copied Drive file does.
+- **On the screens.** Web: an upload control beside Download in a file's row, and **Upload a new version** in its menu. Phone: **Upload a new version** in s12's long-press sheet. Both open the system file picker at once (no form), and show only to the members the API allows.
 
 ## Document types
 
