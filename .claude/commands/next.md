@@ -62,7 +62,7 @@ in the PR.
 tracker.** The opt-in is `ultracode` in this command's arguments or a session-level ultracode
 reminder; the harness never emits that reminder on a slash-command turn, so the argument alone
 counts. When opted in, run the named fan-out points with the Workflow tool: §1.1, §1.2, and Phase 2's
-narrow exception, sized and set up by the [`multi-agent`](../skills/multi-agent/SKILL.md) skill.
+narrow exception, sized by you, with the mechanics in the [`multi-agent`](../skills/multi-agent/SKILL.md) skill.
 Phase 3's `/diff-review` runs its workflow rounds with the Workflow tool. Everything else stays inline, and without the opt-in the fan-out points
 run inline in the same order. A Workflow launch that prompts or is refused is tool
 unavailability, not an opt-out: run that step inline instead of waiting on an approval. A subagent
@@ -321,7 +321,7 @@ each per its own Exits row.
 
 **1.1 — Blocked-by verification.** `Blocked by #N` lines go stale: blockers merge and nobody edits the
 body. Check each blocker (cap 6) against the repo and git history, not the tracker. Under ultracode
-hand them to [`claim-verifier`](../agents/claim-verifier.md) agents in batches of at most 5 claims "#N
+hand them to [`claim-verifier`](../agents/claim-verifier.md) agents, batched as you judge, with the claim "#N
 still blocks this issue", one `{blockerId, resolved, evidence, confidence}` per blocker. Otherwise run the
 same checks inline and stop at the first confirmed live blocker. A blocker is resolved only
 on evidence (a REFUTED verdict); PLAUSIBLE is still blocked. Still blocked: release
@@ -434,9 +434,9 @@ delete, revert, stash, or gitignore a file to make it pass. If the gate objects 
 file.
 
 Pass every member's acceptance criteria as `acceptance` to every workflow round, so its
-acceptance-and-tests finder checks them. No second review
-goes on top of it ([ADR-23](../../spec/architecture/adr/adr-23.md)): no human reads the diff before
-the PR, so the gate is where the depth goes. A `PLAUSIBLE` finding you can't settle here goes in the
+acceptance-and-tests finder checks them. A second review on
+top of it is your call (ADR-23 amendment 3); weigh it against what the gate covered, and remember no
+human reads the diff before the PR. A `PLAUSIBLE` finding you can't settle here goes in the
 PR body under *Flagged for review*; that valve is what lets a run finish instead of stopping to ask.
 
 The *Flagged for review* block is a record, not an ask. Anything on it that needs Paul to act or

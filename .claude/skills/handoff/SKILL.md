@@ -190,9 +190,9 @@ server), which starts a new Claude Code session at once. Use it in place of the 
   when the user named one.
 
 It starts now, so a handoff that must wait says so in its prompt rather than in its timing. For
-example, a phone PR that builds on a web PR still open builds on that PR's head branch and opens its
-own PR only once the first merges, as [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)'s
-one-open-PR-per-screen rule says.
+example, a phone PR that builds on a web PR still open builds on that PR's head branch and, when
+the overlap is heavy, opens its own PR only once the first merges
+([`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)).
 
 Then tell the user in one line that it's started, with the session's title, and don't also emit the
 block. The new session reports in its own chat; don't poll it. Archive it (`archive_session`) only

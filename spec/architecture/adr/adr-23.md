@@ -5,7 +5,9 @@
 - **`/diff-review` is the only fan-out allowed to be big.** It is the review gate on every push, so
   it runs through the saved workflow [`frapp-review`](../../../.claude/workflows/frapp-review.js),
   whose shape is fixed in code. No other review (a `/next` lens pass, an ad-hoc adversarial
-  re-review of a fix) is layered on top of it. **Corrected 2026-09-24:** only a branch's first
+  re-review of a fix) is layered on top of it. **Corrected 2026-11-27:** a layered review is now the
+  session's call ([amendment 3](#amendment-3-2026-11-27-the-caps-outside-the-review-become-judgment)).
+  **Corrected 2026-09-24:** only a branch's first
   review, and a re-review large enough to count as new work, runs the workflow now; see
   [amendment 1](#adr-23-amendment-1--the-first-round-is-the-thorough-one-2026-09-24).
 - **Finders bundle angles.** One `diff-finder` holds two or more angles: 4 finders at `high` instead
@@ -27,9 +29,11 @@
   tells the model to keep workflows under 10 agents; it is advisory text, not a cap. The repo adds
   at most 5 agents per fan-out step, which nothing enforces. Verification outside the gate is one
   opinion per claim, with up to 5 claims batched into one `claim-verifier`. Ultracode doesn't lift
-  either limit.
+  either limit. **Corrected 2026-11-27:** all of this bullet is removed; sizing is the session's call
+  ([amendment 3](#amendment-3-2026-11-27-the-caps-outside-the-review-become-judgment)).
 - **Every workflow agent sets its effort:** `medium` by default, `high` for finders and hard
-  judgment, never `xhigh`. Procedure: [`multi-agent` skill](../../../.claude/skills/multi-agent/SKILL.md).
+  judgment, never `xhigh`. **Corrected 2026-11-27:** removed outside `frapp-review.js`, which still
+  sets effort on every agent ([amendment 3](#amendment-3-2026-11-27-the-caps-outside-the-review-become-judgment)). Procedure: [`multi-agent` skill](../../../.claude/skills/multi-agent/SKILL.md).
 
 **Rationale:** One ultracode session on 2026-09-22 spent far more than its outputs needed, mostly
 on verification. Per-workflow totals from the harness task notifications:
@@ -221,7 +225,8 @@ now cost more than they save. A session sizes its own fan-outs and sets its own 
 
 - **Removed:** `workflowSizeGuideline: "medium"` from `.claude/settings.json` (each user's `/config`
   setting now applies), the 5-agents-per-step rule, the rule that verification outside the gate is
-  one opinion, and the rule that every workflow `agent()` passes `effort` and never `xhigh`.
+  one opinion (with its 5-claim batches), the rule that no other review is layered on the gate, and
+  the rule that every workflow `agent()` passes `effort` and never `xhigh`.
 - **Kept:** `/diff-review` and its `frapp-review` workflow, and the effort pinned in `diff-finder`'s
   and `claim-verifier`'s frontmatter, which belongs to that review. The measurements above (what
   effort an agent actually runs at, and what each launch costs) still stand and are what a session
