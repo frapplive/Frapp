@@ -21,12 +21,12 @@ export interface IMeetingActionItemTaskRepository {
     staleBefore: string,
   ): Promise<boolean>;
 
-  /** Fills in a claim with the task made for it. */
+  /** Fills in a claim with the task made for it, and its group if any. */
   setTask(
     chapterId: string,
     meetingId: string,
     itemKey: string,
-    taskId: string,
+    task: { id: string; group_id: string | null },
   ): Promise<void>;
 
   /** Gives back a claim whose task could not be made. */

@@ -4163,7 +4163,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft */
+        /** Which action items of posted minutes became tasks: whether each is done, its status, and who has it; the task id only for a viewer who can manage tasks. Empty for a draft */
         get: operations["MeetingActionItemTasksController_list_v1"];
         put?: never;
         post?: never;

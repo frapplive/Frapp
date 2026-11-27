@@ -108,6 +108,17 @@ function taskPhotoPrefix(chapterId: string): string {
   return `chapters/${chapterId.toLowerCase()}/tasks/`;
 }
 
+/** Where a task stands for an action item of minutes (`doneMarks`). */
+export interface TaskDoneMark {
+  done: boolean;
+  /** A task for everyone: how many of its copies are done. */
+  group: { done: number; total: number } | null;
+  /** The display status, a group's read as one. */
+  status: TaskStatus;
+  /** Who has it: its member, or every copy's. */
+  assignee_ids: string[];
+}
+
 const VALID_ASSIGNEE_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS],
   [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED],
@@ -124,17 +135,6 @@ const VALID_ASSIGNEE_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
  * value, so a client holding only `status` cannot tell which transition is
  * legal — and therefore cannot offer the assignee any action at all (#1051).
  */
-/** Where a task stands for an action item of minutes (`doneMarks`). */
-export interface TaskDoneMark {
-  done: boolean;
-  /** A task for everyone: how many of its copies are done. */
-  group: { done: number; total: number } | null;
-  /** The display status, a group's read as one. */
-  status: TaskStatus;
-  /** Who has it: its member, or every copy's. */
-  assignee_ids: string[];
-}
-
 function toDisplayStatus(task: Task, now: Date = new Date()): TaskView {
   return {
     ...task,
@@ -576,6 +576,29 @@ export class TaskService {
     }
     const [view] = await this.withSubtasks(chapterId, [toDisplayStatus(task)]);
     return view;
+  }
+
+  /**
+   * One live copy of each of these groups, by group id: for a link that
+   * names a group whose linked copy was deleted (#6062). A group with no
+   * copy left is left out.
+   */
+  async copyOfGroups(
+    chapterId: string,
+    groupIds: string[],
+  ): Promise<Map<string, string>> {
+    const ids = [...new Set(groupIds)];
+    const copies =
+      ids.length > 0
+        ? await this.taskRepo.findGroupCopyStates(chapterId, ids)
+        : [];
+    const copyOf = new Map<string, string>();
+    for (const copy of copies) {
+      if (copy.group_id && !copyOf.has(copy.group_id)) {
+        copyOf.set(copy.group_id, copy.id);
+      }
+    }
+    return copyOf;
   }
 
   /**

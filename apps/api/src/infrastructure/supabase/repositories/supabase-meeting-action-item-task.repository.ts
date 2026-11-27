@@ -27,8 +27,9 @@ export class SupabaseMeetingActionItemTaskRepository implements IMeetingActionIt
     staleBefore: string,
   ): Promise<boolean> {
     if (await this.insert(row)) return true;
-    // A claim nobody filled in (the API died between the two writes) is
-    // taken over; one with its task, or a fresh one, stands.
+    // A claim nobody filled in (the API died between the two writes), or
+    // one whose single task was deleted since, is taken over; one with its
+    // task or group, or a fresh one, stands.
     const { data, error } = await this.supabase
       .from('meeting_action_item_tasks')
       .update({
@@ -39,6 +40,7 @@ export class SupabaseMeetingActionItemTaskRepository implements IMeetingActionIt
       .eq('meeting_id', row.meeting_id)
       .eq('item_key', row.item_key)
       .is('task_id', null)
+      .is('task_group_id', null)
       .lt('created_at', staleBefore)
       .select('item_key');
     if (error) throw new SupabaseQueryError(error);
@@ -64,11 +66,11 @@ export class SupabaseMeetingActionItemTaskRepository implements IMeetingActionIt
     chapterId: string,
     meetingId: string,
     itemKey: string,
-    taskId: string,
+    task: { id: string; group_id: string | null },
   ): Promise<void> {
     const { error } = await this.supabase
       .from('meeting_action_item_tasks')
-      .update({ task_id: taskId })
+      .update({ task_id: task.id, task_group_id: task.group_id })
       .eq('chapter_id', chapterId)
       .eq('meeting_id', meetingId)
       .eq('item_key', itemKey);
@@ -86,7 +88,8 @@ export class SupabaseMeetingActionItemTaskRepository implements IMeetingActionIt
       .eq('chapter_id', chapterId)
       .eq('meeting_id', meetingId)
       .eq('item_key', itemKey)
-      .is('task_id', null);
+      .is('task_id', null)
+      .is('task_group_id', null);
     if (error) throw new SupabaseQueryError(error);
   }
 

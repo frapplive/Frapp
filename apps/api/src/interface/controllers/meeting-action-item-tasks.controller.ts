@@ -38,10 +38,13 @@ import { RbacService } from '../../application/services/rbac.service';
 
 /**
  * The tasks posted minutes' action items became, for the minutes' checkboxes
- * (`spec/behavior/meetings.md` § Suggested tasks). It lives beside the
+ * and faces, and making an item a task from the minutes (#6062;
+ * `spec/behavior/meetings.md` § Suggested tasks). It lives beside the
  * suggestions, which link an item to its task, rather than in the meetings
- * module, which the suggestions module already imports. The guards and the
- * read rule are the minutes' own.
+ * module, which the suggestions module already imports. The reads take the
+ * minutes' guards and read rule; the write also takes `tasks:manage` and
+ * Tasks on (and the service checks Meetings on, which the guard can't name
+ * beside Tasks).
  */
 @ApiTags('Meetings')
 @ApiBearerAuth()
@@ -59,7 +62,7 @@ export class MeetingActionItemTasksController {
   @VerifySessionLocally()
   @ApiOperation({
     summary:
-      'Which action items of posted minutes became tasks, and whether each is done. Empty for a draft',
+      'Which action items of posted minutes became tasks: whether each is done, its status, and who has it; the task id only for a viewer who can manage tasks. Empty for a draft',
   })
   @ApiOkResponse({ type: MeetingActionItemTaskDto, isArray: true })
   async list(

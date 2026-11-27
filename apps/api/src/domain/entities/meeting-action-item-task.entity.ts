@@ -9,8 +9,14 @@ export interface MeetingActionItemTaskLink {
   /** `actionItemKey` of the item's text. */
   item_key: string;
   chapter_id: string;
-  /** Null only while the task is being made (the claim). */
+  /**
+   * The task, or for one given to several people the copy it was made
+   * with. Null while the task is being made (the claim), and once that copy
+   * is deleted.
+   */
   task_id: string | null;
+  /** The group, for a task given to several people; its copies stand in. */
+  task_group_id: string | null;
   created_by: string | null;
   created_at: string;
 }

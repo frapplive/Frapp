@@ -1228,10 +1228,11 @@ describe('TaskService', () => {
         // Every copy's member, for the minutes' faces (#6062).
         assignee_ids: ['user-1', 'user-2'],
       });
-      expect(marks.get('solo')).toMatchObject({
+      expect(marks.get('solo')).toEqual({
         done: true,
         group: null,
         status: TaskStatus.COMPLETED,
+        assignee_ids: ['user-1'],
       });
 
       mockTaskRepo.findGroupCopies.mockResolvedValue([
@@ -1246,6 +1247,19 @@ describe('TaskService', () => {
         status: TaskStatus.IN_PROGRESS,
         assignee_ids: ['user-1', 'user-2'],
       });
+
+      // An open copy past its day makes the group overdue (#6062).
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1', { status: TaskStatus.COMPLETED }),
+        copyOf('user-2', { due_date: '2000-01-01' }),
+      ]);
+      const late = await service.doneMarks('ch-1', ['copy-user-1']);
+      expect(late.get('copy-user-1')?.status).toBe(TaskStatus.OVERDUE);
+
+      // One live copy stands in for a group whose linked copy is gone.
+      await expect(service.copyOfGroups('ch-1', ['group-1'])).resolves.toEqual(
+        new Map([['group-1', 'copy-user-1']]),
+      );
     });
 
     describe("editing everyone's copy", () => {
