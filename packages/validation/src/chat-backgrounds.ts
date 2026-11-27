@@ -101,6 +101,24 @@ export function isHolidaySeason(date: Date): boolean {
   );
 }
 
+/**
+ * Whether the season's flair shows (#6149, Winston 2026-11-27): a Santa hat
+ * on the crest and on authors' photos, and holly after their names, all over
+ * the app from Dec 1 to 26 while the chapter's season switch is on, whatever
+ * its background. Off until the chapter's setting has loaded, so it never
+ * flashes on for a chapter that turned it off.
+ */
+export function holidayFlairOn(
+  chapterDefault: { holiday_season?: boolean } | null | undefined,
+  now: Date,
+): boolean {
+  return (
+    !!chapterDefault &&
+    chapterDefault.holiday_season !== false &&
+    isHolidaySeason(now)
+  );
+}
+
 /** The officer switch's words, on web and the phone. */
 export const HOLIDAY_SEASON_COPY = {
   label: "Holiday background this season",

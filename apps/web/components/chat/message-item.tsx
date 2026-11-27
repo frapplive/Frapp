@@ -24,6 +24,11 @@ import {
   type MentionPick,
 } from "@repo/validation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  HollySprig,
+  SantaHat,
+  useHolidayFlairOn,
+} from "@/components/chat/holiday-flair";
 import { useMentionChips } from "@repo/hooks/mention-chips";
 import {
   DropdownMenu,
@@ -489,6 +494,7 @@ export function MessageItem({
   // `sender_id` is nullable now: an imported archive message names its author in
   // `author_name` and has no roster entry at all, and the old
   // `message.sender_id.slice(...)` fallbacks below threw on it.
+  const holidayFlair = useHolidayFlairOn();
   const authorName = resolveAuthorName(message, nameFor);
   const authorLabel = resolveAuthorLabel(message, nameFor, viewerId);
   // The name and photo open the author's profile, as Discord's and mobile's
@@ -601,8 +607,7 @@ export function MessageItem({
   // too, so the More button now shows on every forwardable row.
   const canForward = canForwardMessage(message) && !!onForward;
   // Time out (#6006): moderation, so after Report and before Block.
-  const canTimeOut =
-    !!onTimeOut && canTimeOutSender(message, viewerId, true);
+  const canTimeOut = !!onTimeOut && canTimeOutSender(message, viewerId, true);
 
   const [isEditing, setIsEditing] = useState(false);
   // The tokens the row paints as chips, which the editor opens as chips.
@@ -963,8 +968,9 @@ export function MessageItem({
     !trailingOnOwnLine &&
     !flagOnAuthorLine;
 
-  // The run's first row draws the author's 32px photo in the cozy gutter.
-  const authorAvatar = (
+  // The run's first row draws the author's 32px photo in the cozy gutter,
+  // with a Santa hat on it in the Holiday season (#6149).
+  const avatarCircle = (
     <Avatar
       className="h-8 w-8"
       aria-hidden="true"
@@ -990,6 +996,16 @@ export function MessageItem({
       </AvatarFallback>
     </Avatar>
   );
+  const authorAvatar =
+    holidayFlair && !isSystemPost ? (
+      <span className="relative block">
+        {avatarCircle}
+        <SantaHat className="-right-[7px] -top-[10px] h-[19px] w-[23px]" />
+      </span>
+    ) : (
+      avatarCircle
+    );
+  const holly = holidayFlair && !isSystemPost ? <HollySprig /> : null;
   const renderer = (
     <MentionOpenerContext.Provider value={onOpenProfile ? openMention : null}>
       <MessageRenderer
@@ -1586,6 +1602,7 @@ export function MessageItem({
                         {authorLabel}
                       </AuthorName>
                     )}
+                    {mine ? null : holly}
                     <time
                       dateTime={message.created_at}
                       className="shrink-0 text-caption leading-5 text-muted-foreground"
@@ -1850,6 +1867,7 @@ export function MessageItem({
                   >
                     {authorLabel}
                   </AuthorName>
+                  {holly}
                   <time
                     dateTime={message.created_at}
                     className="shrink-0 text-caption leading-5 text-muted-foreground"

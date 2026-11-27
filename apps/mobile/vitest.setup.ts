@@ -708,3 +708,10 @@ vi.mock("react-native-svg", () => ({
   Text: "SvgText",
   Stop: "Stop",
 }));
+
+// The Holiday season's flair (#6149) reads the chapter's season switch; off in
+// every spec unless one turns it on (`holiday-flair.spec.tsx` does).
+vi.mock("@/components/chat/holiday-flair", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/holiday-flair")>()),
+  useHolidayFlairOn: vi.fn(() => false),
+}));

@@ -6,6 +6,7 @@ import { useAccessibleChapters, useCurrentChapter } from "@repo/hooks";
 import type { ChapterMembershipSummary } from "@repo/hooks";
 import type { ChapterMark } from "@repo/validation";
 import { chapterMarkFor, CrestTile } from "@/components/layout/crest-tile";
+import { SantaHat, useHolidayFlairOn } from "@/components/chat/holiday-flair";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useSelectChapter } from "@/lib/auth/select-chapter";
 import { useChapterStore } from "@/lib/stores/chapter-store";
@@ -185,6 +186,7 @@ export function ChapterLabel({
   collapsed: boolean;
 }) {
   const { identity, failed, switchingTo, stranded, memberships } = switcher;
+  const holidayFlair = useHolidayFlairOn();
 
   if (switchingTo) {
     return (
@@ -282,7 +284,13 @@ export function ChapterLabel({
       {loading ? (
         <Skeleton className="h-7 w-7 shrink-0 rounded-[8px]" />
       ) : (
-        <CrestTile mark={mark} />
+        // The Holiday season tips a Santa hat onto the crest (#6149).
+        <span className="relative shrink-0">
+          <CrestTile mark={mark} />
+          {holidayFlair ? (
+            <SantaHat className="-right-[9px] -top-[11px] h-[18px] w-[22px]" />
+          ) : null}
+        </span>
       )}
       {collapsed ? (
         name ? (

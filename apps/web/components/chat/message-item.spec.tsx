@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { useHolidayFlairOn } from "@/components/chat/holiday-flair";
 import { CHAT_DENSITY_STORAGE_KEY } from "@repo/chat-core/density";
 import { memberHashHue } from "@repo/hooks";
 import {
@@ -2946,5 +2947,33 @@ describe("MessageItem thread entry points", () => {
       screen.queryByRole("button", { name: /Open thread/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("2 replies")).toBeInTheDocument();
+  });
+});
+
+/** The Holiday season's flair (#6149): stubbed off in `tests/setup.ts`. */
+describe("MessageItem in the Holiday season", () => {
+  afterEach(() => vi.mocked(useHolidayFlairOn).mockReturnValue(false));
+
+  it("tips a Santa hat onto the author's photo and puts holly after the name", () => {
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    renderItem(message());
+    expect(screen.getByTestId("holiday-santa-hat")).toBeInTheDocument();
+    expect(screen.getByTestId("holiday-holly")).toBeInTheDocument();
+  });
+
+  it("dresses no system post", () => {
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    renderItem(
+      message({ sender_id: SYSTEM_SENDER_ID, kind: "system_audit" }),
+      () => null,
+    );
+    expect(screen.queryByTestId("holiday-santa-hat")).toBeNull();
+    expect(screen.queryByTestId("holiday-holly")).toBeNull();
+  });
+
+  it("draws none of it out of season", () => {
+    renderItem(message());
+    expect(screen.queryByTestId("holiday-santa-hat")).toBeNull();
+    expect(screen.queryByTestId("holiday-holly")).toBeNull();
   });
 });

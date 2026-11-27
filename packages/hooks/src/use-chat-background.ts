@@ -3,6 +3,7 @@ import {
   can,
   channelTakesBackground,
   MAX_UPLOAD_LABEL,
+  holidayFlairOn,
   withHolidaySeason,
   type ChatBackgroundKey,
 } from "@repo/validation";
@@ -378,3 +379,14 @@ const HOLIDAY_SEASON_MUTATION_KEY = [
   "chat-backgrounds",
   "set-holiday-season",
 ] as const;
+
+/**
+ * Whether the Holiday season's flair shows right now (#6149): Dec 1 to 26,
+ * by the viewer's own date, while the chapter's season switch is on
+ * (`holidayFlairOn`). Reads the chapter default, which the first-screen batch
+ * already carries, so it costs no request of its own.
+ */
+export function useHolidayFlair(): boolean {
+  const chapterDefault = useChapterChatBackground();
+  return holidayFlairOn(chapterDefault.data, new Date());
+}

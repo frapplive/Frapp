@@ -28,6 +28,7 @@ vi.mock("@/lib/chapter-branding", () => ({
 }));
 
 import { ChapterMark } from "./chapter-mark";
+import { useHolidayFlairOn } from "@/components/chat/holiday-flair";
 
 function render(): ReactTestRenderer {
   let tree!: ReactTestRenderer;
@@ -97,5 +98,32 @@ describe("ChapterMark", () => {
     const tree = render();
     expect(tree.toJSON()).toBeNull();
     expect(texts(tree)).toEqual([]);
+  });
+
+  it("puts the hat on the name when there is no crest to dress (#6149)", () => {
+    const only = (tree: ReactTestRenderer) =>
+      tree.root.findAll((node) => node.props.testID === "chapter-mark-hat-only")
+        .length;
+    expect(only(render())).toBe(0);
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    try {
+      expect(only(render())).toBeGreaterThan(0);
+    } finally {
+      vi.mocked(useHolidayFlairOn).mockReturnValue(false);
+    }
+  });
+
+  it("tips a Santa hat onto the crest in the Holiday season (#6149)", () => {
+    branding.current.textMark = "FIJI";
+    const hat = (tree: ReactTestRenderer) =>
+      tree.root.findAll((node) => node.props.testID === "holiday-santa-hat")
+        .length;
+    expect(hat(render())).toBe(0);
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    try {
+      expect(hat(render())).toBeGreaterThan(0);
+    } finally {
+      vi.mocked(useHolidayFlairOn).mockReturnValue(false);
+    }
   });
 });

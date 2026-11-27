@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHAT_BACKGROUND_KEYS,
+  holidayFlairOn,
   isHolidaySeason,
   seasonalChapterDefault,
   withHolidaySeason,
@@ -77,6 +78,14 @@ describe("withHolidaySeason", () => {
       seasonalChapterDefault({ ...plain, holiday_season: false }, inSeason),
     ).toBe("plain");
     expect(seasonalChapterDefault(undefined, inSeason)).toBeUndefined();
+  });
+
+  it("shows the flair in the season while the switch is on, whatever the background", () => {
+    expect(holidayFlairOn({ holiday_season: true }, inSeason)).toBe(true);
+    expect(holidayFlairOn({ holiday_season: true }, after)).toBe(false);
+    expect(holidayFlairOn({ holiday_season: false }, inSeason)).toBe(false);
+    // Not until the chapter's setting has loaded.
+    expect(holidayFlairOn(undefined, inSeason)).toBe(false);
   });
 
   it("keeps Holiday selectable by hand all year", () => {
