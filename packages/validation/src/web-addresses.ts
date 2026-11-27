@@ -68,6 +68,7 @@ export const WEB_ADDRESS_PARAMS = {
     tier: "tier",
     role: "role",
     class: "class",
+    field: "field",
     zone: "zone",
     member: "member",
   },

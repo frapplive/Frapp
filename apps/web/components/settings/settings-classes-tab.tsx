@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, X } from "lucide-react";
 import {
   addRow,
   classAssignments,
   fraternalOrderComparator,
   renumberRows,
-  type ClassEditorRow,
   useAssignPledgeClasses,
   useCreatePledgeClass,
   useDeletePledgeClass,
@@ -15,48 +15,58 @@ import {
   usePledgeClasses,
   useRenamePledgeClass,
   useReorderPledgeClasses,
+  type ClassEditorRow,
   type MemberProfile,
   type PledgeClass,
 } from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
 import {
-  hasKeptDraft,
   readKeptDraft,
-  readKeptPanel,
   useKeptDraftKeys,
   useKeptFormDraft,
-  writeKeptPanel,
 } from "@repo/hooks/kept-drafts";
-import { KeptDraftNote } from "@/components/shared/kept-draft-note";
 import {
+  addPledgeClassLabel,
+  deletePledgeClassConfirm,
+  memberCountLabel,
+  moveId,
+  PEOPLE_SETTINGS_COPY,
   PLEDGE_CLASS_ASSIGNMENTS_MAX,
   PLEDGE_CLASS_NAME_MAX_LENGTH,
+  PLEDGE_CLASS_SETTINGS_COPY,
   PLEDGE_CLASSES_MAX,
 } from "@repo/validation";
+import { KeptDraftNote } from "@/components/shared/kept-draft-note";
 import { Button } from "@/components/ui/button";
-import { ProfileSection } from "@/components/profile/profile-section";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   ErrorState,
   OfflineState,
   anyReadUncached,
   pausedRead,
 } from "@/components/shared/async-states";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { MemberSearchField } from "@/components/shared/member-search-field";
-import {
-  PanelBody,
-  Panel,
-  PanelContent,
-  PanelFooter,
-  PanelHeader,
-} from "@/components/shared/panel";
 import { ReorderList } from "@/components/shared/reorder-list";
+import {
+  ActionMenuButton,
+  type RowMenuEntry,
+} from "@/components/shared/row-menu";
+import { SettingsAddRow } from "@/components/shared/settings-add-row";
+import {
+  SettingsGroup,
+  SettingsReorderRow,
+} from "@/components/shared/settings-row";
+import { SectionLabel } from "@/components/shared/section-label";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
+import { SettingsNameField } from "@/components/settings/settings-name-field";
+import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useToastedRun } from "@/lib/hooks/use-toasted-run";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -69,25 +79,12 @@ type Props = {
   orderTerm: string;
 };
 
-function memberCountLabel(count: number): string {
-  return count === 1 ? "1 member" : `${count} members`;
+const BASE = "/settings?tab=classes";
+
+function classHref(id: string): string {
+  return `${BASE}&class=${encodeURIComponent(id)}`;
 }
 
-/**
- * Settings → the chapter's pledge classes (#3939): the place an officer sets
- * them up. The list is the chapter's own order, oldest first, and is put in
- * order by dragging. Each class opens an editor that orders its members in
- * bulk. Behaviour: `spec/behavior/members.md` § Pledge class and order number.
- *
- * Reads need `members:view`; every write needs `roles:manage`, which is also
- * what shows the tab (`settings-access.ts`).
- *
- * **Copy never inflects the chapter's words.** `classTerm` and `orderTerm` are
- * whatever the chapter typed in Settings → vocabulary, so they are drawn as
- * typed, in a heading or a label, and sentences say "it" or "the list". A
- * plural or a lowercased form of a free-text word comes out wrong for "PC" or
- * "Family" (`settings-semester-tab.tsx` words around its term the same way).
- */
 /** One class's kept member draft (`@repo/hooks/kept-drafts`, #4593). */
 function classDraftName(classId: string): string {
   return `pledge-class:${classId}`;
@@ -99,28 +96,44 @@ type ClassDraft = {
   rows: ClassEditorRow[];
 };
 
+/**
+ * Settings → the chapter's pledge classes (#3939; in the settings shape since
+ * #6029, Paul's Discord channel-settings ruling): one group of rows, oldest
+ * first, each a drag grip, the class's name, its member count and a chevron
+ * to its page. "Add pledge class" is the last row. Behaviour:
+ * `spec/behavior/members.md` § Pledge class and order number.
+ *
+ * | URL | Page |
+ * | --- | ---- |
+ * | `?tab=classes` | The list |
+ * | `?tab=classes&class=<id>` | A class: its name, its members in order, ⋯ with Move and Delete (`ClassPage`) |
+ *
+ * The phone draws the same list and page (`apps/mobile/app/(app)/pledge-classes.tsx`)
+ * in the same words (`PLEDGE_CLASS_SETTINGS_COPY`), ordering by Move up and
+ * Move down in the long-press menu until it has a drag list.
+ *
+ * Reads need `members:view`; every write needs `roles:manage`, which is also
+ * what shows the tab (`settings-access.ts`).
+ *
+ * **Copy never inflects the chapter's words.** `classTerm` and `orderTerm` are
+ * whatever the chapter typed in Settings → vocabulary, so they are drawn as
+ * typed, in a heading or a label, and sentences say "it" or "the list".
+ */
 export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const classId = searchParams.get("class");
   const classesQuery = usePledgeClasses();
   const membersQuery = useMembers();
   const reorder = useReorderPledgeClasses();
+  const create = useCreatePledgeClass();
+  const remove = useDeletePledgeClass();
+  const run = useToastedRun();
   const { isOffline } = useNetwork();
   const { toast } = useToast();
   // Above the loading and error branches, so a failed background refetch does
   // not unmount an open delete confirmation (see `SettingsFieldsTab`).
   const { confirm, confirmDialog } = useConfirmDialog();
-  // The class whose members are being edited. A tab left with one open
-  // (#4593) opens it again, on its draft, while it still holds one.
-  const keptKeys = useKeptDraftKeys();
-  const editorPanelKey = keptKeys.panel("pledge-classes");
-  const [editingClassId, setEditingClassId] = useState<string | null>(() => {
-    const left = readKeptPanel<string>(editorPanelKey);
-    return left && hasKeptDraft(keptKeys.draft(classDraftName(left)))
-      ? left
-      : null;
-  });
-  useEffect(() => {
-    writeKeptPanel(editorPanelKey, editingClassId);
-  }, [editorPanelKey, editingClassId]);
   // The order as the officer just dropped it, shown until the save and the
   // re-read answer, so a row never jumps back and then forward again.
   const [pendingOrder, setPendingOrder] = useState<PledgeClass[] | null>(null);
@@ -147,9 +160,8 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
     }
     return counts;
   }, [members]);
-
-  const editingClass =
-    saved.find((entry) => entry.id === editingClassId) ?? null;
+  const countOf = (id: string) =>
+    members ? (countByClass.get(id) ?? 0) : null;
 
   async function handleReorder(next: PledgeClass[]) {
     setPendingOrder(next);
@@ -181,6 +193,31 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
     }
   }
 
+  function move(entry: PledgeClass, by: -1 | 1) {
+    const ids = moveId(
+      classes.map((candidate) => candidate.id),
+      entry.id,
+      by,
+    );
+    if (!ids) return;
+    const byId = new Map(classes.map((candidate) => [candidate.id, candidate]));
+    void handleReorder(ids.map((id) => byId.get(id)!));
+  }
+
+  /** Delete, confirmed with how many members it leaves without one. */
+  async function deleteClass(entry: PledgeClass): Promise<boolean> {
+    const ok = await confirm({
+      ...confirmWords(deletePledgeClassConfirm(entry.name, countOf(entry.id))),
+      tone: "destructive",
+    });
+    if (!ok) return false;
+    return run(
+      () => remove.mutateAsync(entry.id),
+      `Couldn't delete ${entry.name}`,
+      "Retry in a moment.",
+    );
+  }
+
   const paused = pausedRead(classesQuery);
 
   let body: ReactNode;
@@ -202,67 +239,145 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
         onRetry={() => void classesQuery.refetch()}
       />
     );
+  } else if (classId) {
+    const entry = saved.find((candidate) => candidate.id === classId);
+    body = entry ? (
+      <ClassPage
+        key={entry.id}
+        pledgeClass={entry}
+        classes={saved}
+        members={members}
+        membersFailed={membersQuery.isError && !members}
+        onRetryMembers={() => void membersQuery.refetch()}
+        canManage={canManage}
+        classTerm={classTerm}
+        orderTerm={orderTerm}
+        onMove={(by) => move(entry, by)}
+        onDelete={async () => {
+          if (await deleteClass(entry)) router.push(BASE);
+        }}
+      />
+    ) : (
+      <SettingsSubpage backHref={BASE} backLabel={classTerm} title={classTerm}>
+        <InlineNote>
+          It isn&apos;t in the list any more. Someone may have deleted it.
+        </InlineNote>
+      </SettingsSubpage>
+    );
   } else {
+    const full = classes.length >= PLEDGE_CLASSES_MAX;
     body = (
-      <>
-        <ProfileSection
+      <div className="space-y-4">
+        <h2 className="text-title text-foreground">{classTerm}</h2>
+        <SettingsGroup
           id="settings-classes"
-          title={classTerm}
-          hint={
-            <>
-              The chapter&apos;s list, oldest first.
-              {canManage && classes.length > 1 ? " Drag to reorder." : ""}
-            </>
+          label={classTerm}
+          footnote={
+            classes.length > 1 ? PLEDGE_CLASS_SETTINGS_COPY.footnote : undefined
           }
         >
-          <div>
-            {classes.length === 0 ? (
-              <InlineNote>
-                Nothing here yet. Add the oldest one first.
-              </InlineNote>
-            ) : (
+          {classes.length > 0 ? (
+            <li>
               <ReorderList
+                grouped
                 aria-label={classTerm}
                 items={classes}
                 getId={(entry) => entry.id}
                 getLabel={(entry) => entry.name}
                 onReorder={(next) => void handleReorder(next)}
                 disabled={!canManage}
-                renderItem={(entry) => (
-                  <ClassRow
-                    pledgeClass={entry}
-                    memberCount={
-                      members ? (countByClass.get(entry.id) ?? 0) : null
+                renderItem={(entry, index) => (
+                  <SettingsReorderRow
+                    href={classHref(entry.id)}
+                    label={entry.name}
+                    value={
+                      countOf(entry.id) === null
+                        ? null
+                        : memberCountLabel(countOf(entry.id)!)
                     }
-                    canManage={canManage}
-                    confirm={confirm}
-                    onEditMembers={() => setEditingClassId(entry.id)}
+                    menu={
+                      canManage
+                        ? {
+                            label: `More for ${entry.name}`,
+                            entries: [
+                              {
+                                type: "item",
+                                key: "rename",
+                                label: PLEDGE_CLASS_SETTINGS_COPY.rename,
+                                onSelect: () =>
+                                  router.push(classHref(entry.id)),
+                              },
+                              {
+                                type: "item",
+                                key: "up",
+                                label: PEOPLE_SETTINGS_COPY.moveUp,
+                                disabled: index === 0,
+                                onSelect: () => move(entry, -1),
+                              },
+                              {
+                                type: "item",
+                                key: "down",
+                                label: PEOPLE_SETTINGS_COPY.moveDown,
+                                disabled: index === classes.length - 1,
+                                onSelect: () => move(entry, 1),
+                              },
+                              { type: "separator", key: "sep" },
+                              {
+                                type: "item",
+                                key: "delete",
+                                label: `Delete ${entry.name}`,
+                                destructive: true,
+                                onSelect: () => void deleteClass(entry),
+                              },
+                            ],
+                          }
+                        : null
+                    }
                   />
                 )}
               />
-            )}
-            {membersQuery.isError && !members ? (
-              // Without the roster there are no counts and no class editor,
-              // so say why and offer the read again.
-              <InlineNote className="mt-3">
-                Couldn&apos;t load the chapter&apos;s members, so counts and the
-                member editor are unavailable.{" "}
-                <InlineNoteAction onClick={() => void membersQuery.refetch()}>
-                  Retry
-                </InlineNoteAction>
-              </InlineNote>
-            ) : null}
-          </div>
-        </ProfileSection>
-
-        {canManage ? (
-          <AddClassForm full={classes.length >= PLEDGE_CLASSES_MAX} />
-        ) : (
+            </li>
+          ) : (
+            <li className="px-4 py-2.5 text-sm text-muted-foreground">
+              {PLEDGE_CLASS_SETTINGS_COPY.empty}
+            </li>
+          )}
+          {canManage ? (
+            <SettingsAddRow
+              label={addPledgeClassLabel(classTerm)}
+              inputLabel={`New ${classTerm} name`}
+              placeholder="Fall 2026"
+              maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
+              full={
+                full
+                  ? `This chapter has ${PLEDGE_CLASSES_MAX}, the most it can hold.`
+                  : null
+              }
+              onAdd={(name) =>
+                run(
+                  () => create.mutateAsync(name),
+                  `Couldn't add ${name}`,
+                  "Check that no other one has this name, then try again.",
+                )
+              }
+            />
+          ) : null}
+        </SettingsGroup>
+        {membersQuery.isError && !members ? (
+          // Without the roster there are no counts and no member editor, so
+          // say why and offer the read again.
           <InlineNote>
-            Only officers who manage roles can change this list.
+            Couldn&apos;t load the chapter&apos;s members, so counts and members
+            are unavailable.{" "}
+            <InlineNoteAction onClick={() => void membersQuery.refetch()}>
+              Retry
+            </InlineNoteAction>
           </InlineNote>
+        ) : null}
+        {canManage ? null : (
+          <InlineNote>{PLEDGE_CLASS_SETTINGS_COPY.readOnly}</InlineNote>
         )}
-      </>
+      </div>
     );
   }
 
@@ -270,258 +385,7 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
     <div className="space-y-10">
       {confirmDialog}
       {body}
-      <Panel
-        open={editingClass !== null && members !== undefined && canManage}
-        onOpenChange={(open) => {
-          if (!open) setEditingClassId(null);
-        }}
-        docked
-        backLabel={`Back to ${classTerm}`}
-      >
-        {editingClass && members && canManage ? (
-          <ClassMembersEditor
-            // Keyed by class, so a draft never carries over to the next class.
-            key={editingClass.id}
-            pledgeClass={editingClass}
-            classes={saved}
-            members={members}
-            orderTerm={orderTerm}
-            onDone={() => setEditingClassId(null)}
-          />
-        ) : null}
-      </Panel>
     </div>
-  );
-}
-
-function ClassRow({
-  pledgeClass,
-  memberCount,
-  canManage,
-  confirm,
-  onEditMembers,
-}: {
-  pledgeClass: PledgeClass;
-  /** `null` until the member read answers. */
-  memberCount: number | null;
-  canManage: boolean;
-  confirm: ReturnType<typeof useConfirmDialog>["confirm"];
-  onEditMembers: () => void;
-}) {
-  const { toast } = useToast();
-  const rename = useRenamePledgeClass();
-  const remove = useDeletePledgeClass();
-  const [draft, setDraft] = useState<string | null>(null);
-  const busy = rename.isPending || remove.isPending;
-
-  async function saveName(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const name = (draft ?? "").trim();
-    if (!name) return;
-    if (name === pledgeClass.name) {
-      setDraft(null);
-      return;
-    }
-    try {
-      await rename.mutateAsync({ id: pledgeClass.id, name });
-      setDraft(null);
-    } catch (error) {
-      toast({
-        title: `Couldn't rename ${pledgeClass.name}`,
-        description: getErrorMessage(
-          error,
-          "Check that no other one has this name, then try again.",
-        ),
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function handleDelete() {
-    const confirmed = await confirm({
-      title: `Delete ${pledgeClass.name}?`,
-      // `null` is "not known", never "none": the roster read may be pending
-      // or failed, and the class may be full.
-      description:
-        memberCount === null
-          ? "Any members in it are left without one. They keep their number."
-          : memberCount > 0
-            ? `Its ${memberCountLabel(memberCount)} ${memberCount === 1 ? "is" : "are"} left without one. They keep their number.`
-            : "No members are in it.",
-      confirmLabel: `Delete ${pledgeClass.name}`,
-      tone: "destructive",
-    });
-    if (!confirmed) return;
-    try {
-      await remove.mutateAsync(pledgeClass.id);
-      toast({ title: `${pledgeClass.name} deleted` });
-    } catch (error) {
-      toast({
-        title: `Couldn't delete ${pledgeClass.name}`,
-        description: getErrorMessage(error, "Retry in a moment."),
-        variant: "destructive",
-      });
-    }
-  }
-
-  if (draft !== null) {
-    return (
-      <form onSubmit={saveName} className="flex items-center gap-2">
-        <Input
-          autoFocus
-          value={draft}
-          maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              // Only the rename closes, not a surface around it.
-              event.stopPropagation();
-              setDraft(null);
-            }
-          }}
-          aria-label={`Name of ${pledgeClass.name}`}
-          disabled={rename.isPending}
-        />
-        <IconButton
-          type="submit"
-          label="Save name"
-          disabled={rename.isPending || !draft.trim()}
-        >
-          {rename.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Check className="h-4 w-4" />
-          )}
-        </IconButton>
-        <IconButton
-          type="button"
-          label="Cancel rename"
-          disabled={rename.isPending}
-          onClick={() => setDraft(null)}
-        >
-          <X className="h-4 w-4" />
-        </IconButton>
-      </form>
-    );
-  }
-
-  return (
-    // Wraps: with chat docked beside Settings the card can be under 300px
-    // wide, and three icon buttons on the name's line left it one letter.
-    <div className="flex flex-wrap items-center gap-x-2">
-      <div className="min-w-[8rem] flex-1">
-        <p className="break-words text-sm font-semibold">{pledgeClass.name}</p>
-        {memberCount !== null ? (
-          <p className="text-caption text-muted-foreground">
-            {memberCountLabel(memberCount)}
-          </p>
-        ) : null}
-      </div>
-      {canManage ? (
-        <div className="flex shrink-0 items-center">
-          <IconButton
-            label={`Edit members of ${pledgeClass.name}`}
-            // The editor is built from the roster, so it waits for it.
-            disabled={busy || memberCount === null}
-            onClick={onEditMembers}
-          >
-            <Users className="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            label={`Rename ${pledgeClass.name}`}
-            disabled={busy}
-            onClick={() => setDraft(pledgeClass.name)}
-          >
-            <Pencil className="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            label={`Delete ${pledgeClass.name}`}
-            disabled={busy}
-            onClick={() => void handleDelete()}
-          >
-            {remove.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </IconButton>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AddClassForm({
-  full,
-}: {
-  /** The chapter holds as many classes as it may. */
-  full: boolean;
-}) {
-  const { toast } = useToast();
-  const create = useCreatePledgeClass();
-  const [name, setName] = useState("");
-
-  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed || create.isPending) return;
-    try {
-      await create.mutateAsync(trimmed);
-      setName("");
-    } catch (error) {
-      toast({
-        title: `Couldn't add ${trimmed}`,
-        description: getErrorMessage(
-          error,
-          "Check that no other one has this name, then try again.",
-        ),
-        variant: "destructive",
-      });
-    }
-  }
-
-  return (
-    <ProfileSection
-      id="settings-add-to-the-list"
-      title="Add to the list"
-      hint={
-        <>
-          {full
-            ? `This chapter has ${PLEDGE_CLASSES_MAX}, the most it can hold.`
-            : "It goes at the end, as the newest."}
-        </>
-      }
-    >
-      <div>
-        <form
-          onSubmit={handleCreate}
-          className="flex flex-wrap items-end gap-3"
-        >
-          <div className="grid min-w-[10rem] flex-1 gap-1">
-            <Label htmlFor="pledge-class-name">Name</Label>
-            <Input
-              id="pledge-class-name"
-              value={name}
-              maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Alpha, or Fall 2026"
-              disabled={full}
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={full || create.isPending || !name.trim()}
-          >
-            {create.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Add
-          </Button>
-        </form>
-      </div>
-    </ProfileSection>
   );
 }
 
@@ -546,30 +410,132 @@ function rowsOf(
 }
 
 /**
- * One class's members, in the order the Directory will list them. The order
- * is set by dragging a row, or by its grip's arrow keys (#5738): the numbers
- * follow the list (`renumberRows` says how), and there is no number to type
- * here. A chapter-wide roll's first number is set once on a member's profile,
- * and the class keeps counting from it. Nothing is written until Save, which
- * sends every change in one request the API applies whole or not at all.
+ * One class's page (`?tab=classes&class=<id>`): its name on top, saved on its
+ * own; its members in the order the Directory will list them; ⋯ in the
+ * header with Move up, Move down and Delete.
+ *
+ * The members' order is set by dragging a row, or by its grip's arrow keys
+ * (#5738): the numbers follow the list (`renumberRows` says how), and there
+ * is no number to type here. A chapter-wide roll's first number is set once
+ * on a member's profile, and the class keeps counting from it. Nothing is
+ * written until Save, which sends every change in one request the API
+ * applies whole or not at all (Save stays until #6033 makes the settings
+ * pages save on their own).
  *
  * Going back or leaving the page keeps the draft (#4593), with the roster it
  * was worked out against, so Save still sends only what the officer changed.
  * Cancel and Save give it up.
  */
-function ClassMembersEditor({
+function ClassPage({
   pledgeClass,
   classes,
-  members: liveMembers,
+  members,
+  membersFailed,
+  onRetryMembers,
+  canManage,
+  classTerm,
   orderTerm,
-  onDone,
+  onMove,
+  onDelete,
 }: {
   pledgeClass: PledgeClass;
   classes: readonly PledgeClass[];
-  /** The loaded roster; the editor never mounts without it. */
-  members: readonly MemberProfile[];
+  /** `undefined` until the roster read answers. */
+  members: readonly MemberProfile[] | undefined;
+  membersFailed: boolean;
+  onRetryMembers: () => void;
+  canManage: boolean;
+  classTerm: string;
   orderTerm: string;
-  onDone: () => void;
+  onMove: (by: -1 | 1) => void;
+  onDelete: () => void;
+}) {
+  const run = useToastedRun();
+  const rename = useRenamePledgeClass();
+  const index = classes.findIndex((entry) => entry.id === pledgeClass.id);
+  const entries: RowMenuEntry[] = [
+    {
+      type: "item",
+      key: "up",
+      label: PEOPLE_SETTINGS_COPY.moveUp,
+      disabled: index <= 0,
+      onSelect: () => onMove(-1),
+    },
+    {
+      type: "item",
+      key: "down",
+      label: PEOPLE_SETTINGS_COPY.moveDown,
+      disabled: index < 0 || index >= classes.length - 1,
+      onSelect: () => onMove(1),
+    },
+    { type: "separator", key: "sep" },
+    {
+      type: "item",
+      key: "delete",
+      label: `Delete ${pledgeClass.name}`,
+      destructive: true,
+      onSelect: onDelete,
+    },
+  ];
+
+  return (
+    <SettingsSubpage
+      backHref={BASE}
+      backLabel={classTerm}
+      title={pledgeClass.name}
+      actions={
+        canManage ? (
+          <ActionMenuButton
+            entries={entries}
+            label={`More for ${pledgeClass.name}`}
+          />
+        ) : null
+      }
+    >
+      <SettingsNameField
+        value={pledgeClass.name}
+        maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
+        disabled={!canManage}
+        onSave={(name) =>
+          run(
+            () => rename.mutateAsync({ id: pledgeClass.id, name }),
+            `Couldn't rename ${pledgeClass.name}`,
+            "Check that no other one has this name, then try again.",
+          )
+        }
+      />
+      {members ? (
+        <ClassMembers
+          pledgeClass={pledgeClass}
+          classes={classes}
+          members={members}
+          canManage={canManage}
+          orderTerm={orderTerm}
+        />
+      ) : membersFailed ? (
+        <InlineNote>
+          Couldn&apos;t load the chapter&apos;s members.{" "}
+          <InlineNoteAction onClick={onRetryMembers}>Retry</InlineNoteAction>
+        </InlineNote>
+      ) : (
+        <SettingsListCardSkeleton label="Loading members" />
+      )}
+    </SettingsSubpage>
+  );
+}
+
+function ClassMembers({
+  pledgeClass,
+  classes,
+  members: liveMembers,
+  canManage,
+  orderTerm,
+}: {
+  pledgeClass: PledgeClass;
+  classes: readonly PledgeClass[];
+  members: readonly MemberProfile[];
+  canManage: boolean;
+  orderTerm: string;
 }) {
   const { toast } = useToast();
   const assign = useAssignPledgeClasses();
@@ -577,7 +543,7 @@ function ClassMembersEditor({
   const [opening] = useState(() =>
     readKeptDraft<ClassDraft>(keptKeys.draft(classDraftName(pledgeClass.id))),
   );
-  // The roster as it stood when the editor opened. The rows are built from it
+  // The roster as it stood when the page opened. The rows are built from it
   // once, so the save is worked out against the same snapshot: a background
   // re-read that brings in a member another officer just added to this class
   // must not read as "the officer took them out". A kept draft brings its own.
@@ -585,6 +551,13 @@ function ClassMembersEditor({
   const [rows, setRows] = useState<ClassEditorRow[]>(
     () => opening?.rows ?? rowsOf(liveMembers, pledgeClass.id, classes),
   );
+
+  const assignments = classAssignments(pledgeClass.id, rows, members);
+  const invalid = assignments === null;
+  const tooMany =
+    assignments !== null && assignments.length > PLEDGE_CLASS_ASSIGNMENTS_MAX;
+  const dirty = assignments === null || assignments.length > 0;
+
   const kept = useKeptFormDraft<ClassDraft>(
     classDraftName(pledgeClass.id),
     true,
@@ -592,14 +565,8 @@ function ClassMembersEditor({
     { signature: JSON.stringify(rows), restoredAtMount: opening !== undefined },
   );
 
-  /** Cancel: give the draft up and close. */
-  function cancel() {
-    kept.drop();
-    onDone();
-  }
-
-  /** Discard: start over from the roster as it is now. */
-  function discard() {
+  /** Start over from the roster as it is now. */
+  function reset() {
     kept.discard();
     setMembers(liveMembers);
     setRows(rowsOf(liveMembers, pledgeClass.id, classes));
@@ -628,12 +595,6 @@ function ClassMembersEditor({
     [members, inDraft],
   );
 
-  const assignments = classAssignments(pledgeClass.id, rows, members);
-  const invalid = assignments === null;
-  const tooMany =
-    assignments !== null && assignments.length > PLEDGE_CLASS_ASSIGNMENTS_MAX;
-  const dirty = assignments === null || assignments.length > 0;
-
   function addMember(member: MemberProfile) {
     setRows((previous) =>
       addRow(previous, { memberId: member.id, name: rowName(member) }),
@@ -646,8 +607,8 @@ function ClassMembersEditor({
     try {
       await assign.mutateAsync(assignments);
       kept.drop();
+      // The page stays open on what was saved, read back from the roster.
       toast({ title: `${pledgeClass.name} saved` });
-      onDone();
     } catch (error) {
       kept.release();
       toast({
@@ -662,48 +623,54 @@ function ClassMembersEditor({
   }
 
   return (
-    <PanelContent aria-describedby={undefined}>
-      <PanelHeader>{pledgeClass.name}</PanelHeader>
-      <PanelBody>
-        <MemberSearchField
-          label="Add a member"
-          items={addable}
-          nameOf={rowName}
-          keyOf={(member) => member.id}
-          detailOf={(member) => {
-            const from = member.pledge_class_id
-              ? classNameById.get(member.pledge_class_id)
-              : undefined;
-            return from ? `Moves from ${from}` : null;
-          }}
-          onAdd={addMember}
-          emptyText="Everyone is already in it."
-          disabled={assign.isPending}
-        />
+    <div className="space-y-6">
+      {canManage ? (
+        <div className="max-w-md">
+          <MemberSearchField
+            label={PLEDGE_CLASS_SETTINGS_COPY.addMember}
+            items={addable}
+            nameOf={rowName}
+            keyOf={(member) => member.id}
+            detailOf={(member) => {
+              const from = member.pledge_class_id
+                ? classNameById.get(member.pledge_class_id)
+                : undefined;
+              return from ? `Moves from ${from}` : null;
+            }}
+            onAdd={addMember}
+            emptyText={PLEDGE_CLASS_SETTINGS_COPY.everyoneIn}
+            disabled={assign.isPending}
+          />
+        </div>
+      ) : null}
 
-        <div className="space-y-2">
-          <p className="text-label font-semibold text-muted-foreground">
-            {memberCountLabel(rows.length)} · {orderTerm}
-          </p>
-          {rows.length === 0 ? (
-            <InlineNote>Nobody is in it yet.</InlineNote>
-          ) : (
-            <ReorderList
-              aria-label={`Members of ${pledgeClass.name}`}
-              items={rows}
-              getId={(row) => row.memberId}
-              getLabel={(row) => row.name}
-              onReorder={(next) => setRows(renumberRows(next))}
-              disabled={assign.isPending}
-              renderItem={(row) => (
-                <div className="flex items-center gap-2">
-                  {/* The number follows the row's place, not a field. */}
-                  <span className="w-8 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
-                    {row.number}
-                  </span>
-                  <p className="min-w-0 flex-1 break-words text-sm">
-                    {row.name}
-                  </p>
+      <div className="space-y-2">
+        <SectionLabel
+          id="pledge-class-members"
+          count={`${rows.length} · ${orderTerm}`}
+        >
+          {PLEDGE_CLASS_SETTINGS_COPY.members}
+        </SectionLabel>
+        {rows.length === 0 ? (
+          <InlineNote>{PLEDGE_CLASS_SETTINGS_COPY.nobodyYet}</InlineNote>
+        ) : (
+          <ReorderList
+            grouped
+            className="rounded-[14px] border border-border bg-card"
+            aria-label={`Members of ${pledgeClass.name}`}
+            items={rows}
+            getId={(row) => row.memberId}
+            getLabel={(row) => row.name}
+            onReorder={(next) => setRows(renumberRows(next))}
+            disabled={!canManage || assign.isPending}
+            renderItem={(row) => (
+              <div className="flex min-h-control-settings-row items-center gap-3 px-2 py-1 pointer-coarse:min-h-11">
+                {/* The number follows the row's place, not a field. */}
+                <span className="w-8 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
+                  {row.number}
+                </span>
+                <p className="min-w-0 flex-1 truncate text-sm">{row.name}</p>
+                {canManage ? (
                   <IconButton
                     label={`Remove ${row.name} from ${pledgeClass.name}`}
                     disabled={assign.isPending}
@@ -717,37 +684,40 @@ function ClassMembersEditor({
                   >
                     <X className="h-4 w-4" />
                   </IconButton>
-                </div>
-              )}
-            />
-          )}
-          {tooMany ? (
-            <p role="alert" className="text-caption text-destructive-text">
-              That is more than {PLEDGE_CLASS_ASSIGNMENTS_MAX} changes at once.
-              Save a smaller set first.
-            </p>
-          ) : null}
+                ) : null}
+              </div>
+            )}
+          />
+        )}
+        {tooMany ? (
+          <p role="alert" className="text-caption text-destructive-text">
+            That is more than {PLEDGE_CLASS_ASSIGNMENTS_MAX} changes at once.
+            Save a smaller set first.
+          </p>
+        ) : null}
+      </div>
+
+      {canManage && (dirty || kept.restored) ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {kept.restored ? <KeptDraftNote onDiscard={reset} /> : null}
+          <Button
+            variant="secondary"
+            onClick={reset}
+            disabled={assign.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void handleSave()}
+            disabled={!dirty || invalid || tooMany || assign.isPending}
+          >
+            {assign.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Save
+          </Button>
         </div>
-      </PanelBody>
-      <PanelFooter>
-        {kept.restored ? <KeptDraftNote onDiscard={discard} /> : null}
-        <Button
-          variant="secondary"
-          onClick={cancel}
-          disabled={assign.isPending}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={() => void handleSave()}
-          disabled={!dirty || invalid || tooMany || assign.isPending}
-        >
-          {assign.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : null}
-          Save
-        </Button>
-      </PanelFooter>
-    </PanelContent>
+      ) : null}
+    </div>
   );
 }
