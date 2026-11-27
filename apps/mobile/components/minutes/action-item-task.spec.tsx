@@ -98,13 +98,17 @@ function Screen({
   items,
   suggestions,
   tasks = new Map(),
+  posted = true,
 }: {
   items: ReturnType<typeof item>[];
   suggestions: unknown[];
   tasks?: Map<number, MeetingActionItemTask>;
+  posted?: boolean;
 }) {
   const { menuFor, sheet } = useActionItemTaskMenu({
     meetingId: "m-1",
+    posted,
+    marks: tasks,
     items,
     suggestions: suggestions as never,
     handleFor,
@@ -168,7 +172,30 @@ describe("an action item's long-press on the phone (#6051)", () => {
     mocks.sheet.current = null;
     mocks.twins.current = {};
     mocks.kept.length = 0;
-    mocks.make.mockReset().mockResolvedValue({});
+    mocks.make
+      .mockReset()
+      .mockImplementation(
+        ({
+          index,
+          body,
+        }: {
+          index: number;
+          body: { assignee_ids: string[] };
+        }) =>
+          Promise.resolve({
+            index,
+            done: false,
+            group: null,
+            task: {
+              id: `t-${index}`,
+              who: {
+                audience: null,
+                audience_name: null,
+                assignee_ids: body.assignee_ids,
+              },
+            },
+          }),
+      );
     mocks.canManage.current = false;
   });
 
@@ -312,6 +339,8 @@ describe("an action item's long-press on the phone (#6051)", () => {
       expect(seed.who).toEqual({ kind: "person", userId: "u-sam" });
       expect(seed.dueDay).toBe("2026-12-04");
       expect(seed.peopleOnly).toBe(true);
+      // The route takes a day, not a time, and no subtasks.
+      expect((seed as unknown as { dayOnly: boolean }).dayOnly).toBe(true);
       expect(seed.refusalLine("meeting.action_item.already_task")).toBe(
         "This action item is already a task.",
       );
@@ -355,6 +384,62 @@ describe("an action item's long-press on the phone (#6051)", () => {
         }),
       ).rejects.toThrow();
       expect(mocks.make).not.toHaveBeenCalled();
+    });
+
+    it("offers nothing on a draft's items, which the route refuses", () => {
+      mocks.canManage.current = true;
+      const tree = render({
+        items: [item("Book the bus")],
+        suggestions: [],
+        posted: false,
+      });
+      expect(longPressRows(tree)).toHaveLength(0);
+    });
+
+    it("cuts a long item to a title as the server does", () => {
+      mocks.canManage.current = true;
+      const long = `Book the bus ${"and the venue ".repeat(30)}`.trim();
+      const tree = render({ items: [item(long)], suggestions: [] });
+      act(() => longPress(tree, "Book the bus").actions[0]!.run());
+      const seed = mocks.sheet.current?.suggestion as { title: string };
+      expect(seed.title.length).toBeLessThanOrEqual(255);
+      expect(seed.title.endsWith("…")).toBe(true);
+    });
+
+    it("refuses as already a task, and stops offering it, when the route answers with someone else's task", async () => {
+      mocks.canManage.current = true;
+      mocks.make.mockResolvedValue({
+        index: 0,
+        done: false,
+        group: null,
+        task: {
+          id: "t-0",
+          who: {
+            audience: null,
+            audience_name: null,
+            assignee_ids: ["u-jake"],
+          },
+        },
+      });
+      const tree = render({ items: [item("Book the bus")], suggestions: [] });
+      act(() => longPress(tree, "Book the bus").actions[0]!.run());
+      const seed = mocks.sheet.current?.suggestion as {
+        accept: (form: unknown) => Promise<void>;
+      };
+      let caught: unknown;
+      await act(async () => {
+        await seed
+          .accept({
+            title: "Book the bus",
+            who: { kind: "person", userId: "u-sam" },
+            subtasks: [],
+          })
+          .catch((error: unknown) => {
+            caught = error;
+          });
+      });
+      expect(caught).toEqual({ code: "meeting.action_item.already_task" });
+      expect(longPressRows(tree)).toHaveLength(0);
     });
 
     it("offers nothing on an item that is already a task the viewer isn't told about", () => {

@@ -3,13 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { throwUnlessOk, type components } from "@repo/api-sdk";
-import {
-  can,
-  isModuleEnabled,
-  minutesDraftElapsed,
-  normalizeTaskWho,
-  type TaskWho,
-} from "@repo/validation";
+import { can, isModuleEnabled, minutesDraftElapsed } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { aiSuggestionKeys } from "./use-ai-suggestions";
 import { useCurrentChapter } from "./use-chapters";
@@ -204,34 +198,40 @@ export function useCanManageTasks(): boolean {
 }
 
 /**
- * The members an action item's task goes to, as the route takes them: one
- * person, or several each getting a copy. Null for anyone else (a role, a
- * group, everyone, or up for grabs), which the route can't make.
+ * Whether the mark the item's route answered with is a task for these
+ * people (#6178). The route answers an item that is already a task with that
+ * task's mark, unchanged and as a success, so a mark for other people means
+ * nothing was made: someone else made it first.
  */
-export function actionItemAssigneeIds(who: TaskWho | null): string[] | null {
-  const picked = who ? normalizeTaskWho(who) : null;
-  if (!picked) return null;
-  if (picked.kind === "person") return [picked.userId];
-  if (picked.kind === "each" && picked.target.kind === "people") {
-    return picked.target.userIds;
-  }
-  return null;
+export function actionItemTaskIsFor(
+  mark: MeetingActionItemTask,
+  assigneeIds: readonly string[],
+): boolean {
+  const had = new Set(mark.task?.who.assignee_ids ?? []);
+  return (
+    had.size === new Set(assigneeIds).size &&
+    assigneeIds.every((id) => had.has(id))
+  );
 }
 
 /**
  * Makes an action item of posted minutes a task (#6178, over #6176's
  * route): for an item with no suggestion waiting, or one whose suggestion
- * the server accepts in its place. A 409 says the item is a task already
- * or the minutes changed; either way the item's marks are read again.
+ * the server accepts in its place. An item already a task is answered with
+ * its own mark as a success ({@link actionItemTaskIsFor} tells the two
+ * apart); a 409 says the item became a task some other way at that moment
+ * (accepted up for grabs, or being accepted) or the minutes changed. The
+ * answered mark is written to the minutes' marks at once, so the row turns
+ * into Open task before the read comes back.
  */
 export function useMakeActionItemTask() {
   const client = useFrappClient();
   const queryClient = useQueryClient();
   const chapterId = useActiveChapterId();
+  const marksKey = (meetingId: string) =>
+    [...meetingKey(chapterId, meetingId), "action-item-tasks"] as const;
   const refresh = (meetingId: string) => {
-    void queryClient.invalidateQueries({
-      queryKey: [...meetingKey(chapterId, meetingId), "action-item-tasks"],
-    });
+    void queryClient.invalidateQueries({ queryKey: marksKey(meetingId) });
     // A waiting suggestion the server accepted instead leaves the card.
     void queryClient.invalidateQueries({
       queryKey: aiSuggestionKeys.all(chapterId),
@@ -249,16 +249,23 @@ export function useMakeActionItemTask() {
       meetingId: string;
       index: number;
       body: MakeActionItemTaskBody;
-    }) => {
+    }): Promise<MeetingActionItemTask> => {
       const result = await client.POST(
         "/v1/meetings/{id}/action-items/{index}/task",
         { params: { path: { id: meetingId, index } }, body },
       );
       // The status decides: an empty-bodied refusal has no `error`.
       throwUnlessOk(result);
-      return result.data;
+      return result.data as MeetingActionItemTask;
     },
-    onSuccess: (_mark, { meetingId }) => {
+    onSuccess: (mark, { meetingId }) => {
+      queryClient.setQueryData<MeetingActionItemTask[]>(
+        marksKey(meetingId),
+        (marks) =>
+          marks
+            ? [...marks.filter((each) => each.index !== mark.index), mark]
+            : [mark],
+      );
       refresh(meetingId);
       void queryClient.invalidateQueries({ queryKey: taskKeys.all });
     },

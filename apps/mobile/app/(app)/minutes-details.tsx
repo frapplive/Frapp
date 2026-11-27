@@ -396,6 +396,8 @@ function LoadedMinutes({
   // An item with none waiting is made a task from the item itself (#6178).
   const actionItemTask = useActionItemTaskMenu({
     meetingId: meeting.id,
+    posted: !isDraft,
+    marks: actionTasksQuery.isSuccess ? actionTasks : undefined,
     items: content.action_items,
     suggestions: suggestions.data?.items ?? EMPTY_SUGGESTIONS,
     handleFor: menu.handleFor,

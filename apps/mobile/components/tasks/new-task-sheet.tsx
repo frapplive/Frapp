@@ -280,6 +280,11 @@ export interface TaskSuggestionSeed {
    */
   peopleOnly?: boolean;
   /**
+   * A day, with no time of day and no subtasks: the route an action item
+   * with no suggestion waiting goes to takes neither (#6178).
+   */
+  dayOnly?: boolean;
+  /**
    * The words for a refusal `accept` rejects with, in place of a suggestion's
    * own (`aiSuggestionRefusalLine`): an action item's route answers with its
    * own codes (#6178).
@@ -986,7 +991,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               accessibilityLabel="Due date"
             />
 
-            {dueDate ? (
+            {dueDate && !suggestion?.dayOnly ? (
               <View style={styles.field}>
                 <DueTimeField
                   value={dueTime}
@@ -1032,14 +1037,16 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               </Text>
             ) : null}
 
-            <SubtaskDraftField
-              items={subtasks}
-              onChange={setSubtasks}
-              text={subtaskText}
-              onTextChange={setSubtaskText}
-              disabled={pending}
-              fieldStyle={styles.field}
-            />
+            {suggestion?.dayOnly ? null : (
+              <SubtaskDraftField
+                items={subtasks}
+                onChange={setSubtasks}
+                text={subtaskText}
+                onTextChange={setSubtaskText}
+                disabled={pending}
+                fieldStyle={styles.field}
+              />
+            )}
 
             {/* Photos of what the job is, and what Mark done needs (#4635),
               the way Google Classroom and Canvas set what a submission takes.

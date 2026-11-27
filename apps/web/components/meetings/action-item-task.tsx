@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { ExternalLink, ListPlus, Pencil } from "lucide-react";
 import {
-  actionItemAssigneeIds,
+  actionItemTaskIsFor,
   useAcceptAiSuggestion,
   useAiSuggestions,
   useCanManageTasks,
@@ -29,8 +29,10 @@ import {
   MINUTES_READ_COPY,
   SIMILAR_TASK_COPY,
   actionItemTaskRefusalLine,
+  minutesActionMakeable,
   minutesActionSuggestions,
   sameTaskWho,
+  taskWhoPeopleIds,
   type MeetingActionItem,
   type TaskWho,
 } from "@repo/validation";
@@ -126,12 +128,18 @@ export function useActionItemTaskRow({
   items,
   meetingStart,
   enabled,
+  marks,
 }: {
   meetingId: string;
   items: readonly MeetingActionItem[];
   meetingStart: string | null;
   /** Posted minutes, not being edited. */
   enabled: boolean;
+  /**
+   * The items' marks once read (`useMeetingActionItemTasks`), by place;
+   * undefined until then, when no item is offered a create of its own.
+   */
+  marks: ReadonlyMap<number, MeetingActionItemTask> | undefined;
 }): ActionItemTaskRowRenderer | undefined {
   const suggestionsQuery = useAiSuggestions({
     source: { type: "meeting", id: meetingId },
@@ -147,6 +155,13 @@ export function useActionItemTaskRow({
   );
   const similar = useSimilarTasks(enabled ? waiting : NONE);
   const canMake = useCanManageTasks();
+  const makeable = useMemo(
+    () => minutesActionMakeable(items, marks),
+    [items, marks],
+  );
+  // Items the server said are a task already with no mark to show for it
+  // (accepted up for grabs and not yet claimed, #5508): not offered again.
+  const [taken, setTaken] = useState<ReadonlySet<number>>(() => new Set());
   if (!enabled) return undefined;
   return function TaskRow(row, draw) {
     const suggestion = byIndex.get(row.index) ?? null;
@@ -158,12 +173,18 @@ export function useActionItemTaskRow({
         twin={suggestion ? similar.twinOf(suggestion.id) : null}
         onDifferent={() => suggestion && similar.keep(suggestion.id)}
         taskId={row.task?.task?.id ?? null}
-        // Marked done or for everyone without a task named: the item is a
-        // task the viewer isn't told about, never one to make again.
-        made={!!row.task}
         meetingStart={meetingStart}
         draw={draw}
-        make={canMake ? { meetingId, index: row.index } : null}
+        make={
+          canMake && makeable.has(row.index) && !taken.has(row.index)
+            ? {
+                meetingId,
+                index: row.index,
+                onTaken: () =>
+                  setTaken((previous) => new Set(previous).add(row.index)),
+              }
+            : null
+        }
       />
     );
   };
@@ -177,7 +198,6 @@ function ActionItemTaskRow({
   twin,
   onDifferent,
   taskId,
-  made,
   meetingStart,
   draw,
   make,
@@ -188,12 +208,13 @@ function ActionItemTaskRow({
   twin: ExistingTask | null;
   onDifferent: () => void;
   taskId: string | null;
-  /** The minutes' read has a mark for the item: it is a task already. */
-  made: boolean;
   meetingStart: string | null;
   draw: ActionItemRowDraw;
-  /** Where the item's own create goes, for an officer who manages tasks. */
-  make: { meetingId: string; index: number } | null;
+  /**
+   * Where the item's own create goes: for an officer who manages tasks, on
+   * an item with no mark (`minutesActionMakeable`).
+   */
+  make: MakeTarget | null;
 }) {
   const [creating, setCreating] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -215,13 +236,8 @@ function ActionItemTaskRow({
   );
 
   if (!waiting && !taskId) {
-    return make && !made ? (
-      <MakeTaskRow
-        item={item}
-        meetingId={make.meetingId}
-        index={make.index}
-        draw={draw}
-      />
+    return make ? (
+      <MakeTaskRow item={item} make={make} draw={draw} />
     ) : (
       draw(null, null)
     );
@@ -313,69 +329,51 @@ function ActionItemTaskRow({
       {(menuButton) =>
         draw(
           <>
-            <Popover open={creating} onOpenChange={setCreating}>
-              <PopoverTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={cn("shrink-0", ROW_REVEAL)}
-                  aria-label={`${AI_SUGGESTION_COPY.accept}: ${item.text}`}
-                >
-                  {AI_SUGGESTION_COPY.accept}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className={cn("p-3", twin ? "w-[28rem]" : "w-80")}
-                // Opened from the row's ⋯ menu, the menu hands focus back
-                // to its ⋯ as it closes, outside this popover: that is not
-                // the officer leaving it. A click outside still closes it.
-                onFocusOutside={(event) => event.preventDefault()}
-                // Portaled, but React bubbles its events to the row's
-                // context-menu trigger, as `RowMenu`'s own ⋯ menu stops.
-                onContextMenu={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                {twin ? (
-                  <SimilarTaskCard
-                    item={waiting}
-                    existing={twin}
-                    disabled={busy}
-                    pending={busy}
-                    onSame={() => void link(twin)}
-                    onDifferent={onDifferent}
-                    onDismiss={() => void dismissIt()}
-                  />
-                ) : (
-                  <QuickCreate
-                    item={waiting}
-                    values={values}
-                    suggestedWho={
-                      edits.who === undefined &&
-                      !!guess?.who &&
-                      sameTaskWho(values.who, guess.who)
-                    }
-                    suggestedDue={
-                      edits.due === undefined &&
-                      !!guess?.due &&
-                      values.due === guess.due
-                    }
-                    onEdit={(patch) =>
-                      setEdits((previous) => ({ ...previous, ...patch }))
-                    }
-                    pending={accept.isPending}
-                    onCreate={async () => {
-                      await acceptWith(editsFor(waiting, values));
-                      setCreating(false);
-                    }}
-                    onMore={() => {
-                      setCreating(false);
-                      setFormOpen(true);
-                    }}
-                  />
-                )}
-              </PopoverContent>
-            </Popover>
+            <RowCreatePopover
+              open={creating}
+              onOpenChange={setCreating}
+              itemText={item.text}
+              wide={!!twin}
+            >
+              {twin ? (
+                <SimilarTaskCard
+                  item={waiting}
+                  existing={twin}
+                  disabled={busy}
+                  pending={busy}
+                  onSame={() => void link(twin)}
+                  onDifferent={onDifferent}
+                  onDismiss={() => void dismissIt()}
+                />
+              ) : (
+                <QuickCreate
+                  item={waiting}
+                  values={values}
+                  suggestedWho={
+                    edits.who === undefined &&
+                    !!guess?.who &&
+                    sameTaskWho(values.who, guess.who)
+                  }
+                  suggestedDue={
+                    edits.due === undefined &&
+                    !!guess?.due &&
+                    values.due === guess.due
+                  }
+                  onEdit={(patch) =>
+                    setEdits((previous) => ({ ...previous, ...patch }))
+                  }
+                  pending={accept.isPending}
+                  onCreate={async () => {
+                    await acceptWith(editsFor(waiting, values));
+                    setCreating(false);
+                  }}
+                  onMore={() => {
+                    setCreating(false);
+                    setFormOpen(true);
+                  }}
+                />
+              )}
+            </RowCreatePopover>
             {menuButton}
           </>,
           formOpen ? (
@@ -480,25 +478,78 @@ function QuickCreate({
   );
 }
 
+/** Where an item's own create goes, and what to do once it can't be. */
+interface MakeTarget {
+  meetingId: string;
+  index: number;
+  /** The server said the item is a task already, with no mark to show. */
+  onTaken: () => void;
+}
+
+/**
+ * The row's Create task and its small popover: shared by an item with a
+ * suggestion waiting and one without (#6178), so a fix to its guards
+ * reaches both.
+ */
+function RowCreatePopover({
+  open,
+  onOpenChange,
+  itemText,
+  wide = false,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  itemText: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn("shrink-0", ROW_REVEAL)}
+          aria-label={`${AI_SUGGESTION_COPY.accept}: ${itemText}`}
+        >
+          {AI_SUGGESTION_COPY.accept}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className={cn("p-3", wide ? "w-[28rem]" : "w-80")}
+        // Opened from the row's ⋯ menu, the menu hands focus back to its ⋯
+        // as it closes, outside this popover: that is not the officer
+        // leaving it. A click outside still closes it.
+        onFocusOutside={(event) => event.preventDefault()}
+        // Portaled, but React bubbles its events to the row's context-menu
+        // trigger, as `RowMenu`'s own ⋯ menu stops.
+        onContextMenu={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * Create task on an item with no suggestion waiting (#6178): Who (people
- * only) and an optional Due, prefilled from what the minutes said, then
+ * only) and an optional day, prefilled from what the minutes said, then
  * Create task, sent to the item's own route with its text, so an edit to
  * the minutes meanwhile is refused rather than the wrong item made a task.
  */
 function MakeTaskRow({
   item,
-  meetingId,
-  index,
+  make,
   draw,
 }: {
   item: MeetingActionItem;
-  meetingId: string;
-  index: number;
+  make: MakeTarget;
   draw: ActionItemRowDraw;
 }) {
   const [creating, setCreating] = useState(false);
-  const label = `More for ${item.text}`;
   const entries: RowMenuEntry[] = [
     {
       type: "item",
@@ -509,39 +560,21 @@ function MakeTaskRow({
     },
   ];
   return (
-    <RowMenu entries={entries} label={label}>
+    <RowMenu entries={entries} label={`More for ${item.text}`}>
       {(menuButton) =>
         draw(
           <>
-            <Popover open={creating} onOpenChange={setCreating}>
-              <PopoverTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={cn("shrink-0", ROW_REVEAL)}
-                  aria-label={`${AI_SUGGESTION_COPY.accept}: ${item.text}`}
-                >
-                  {AI_SUGGESTION_COPY.accept}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-80 p-3"
-                // As the suggestion's popover: the ⋯ menu hands focus back
-                // to its ⋯ as it closes, and the row's context menu must
-                // not see this popover's events.
-                onFocusOutside={(event) => event.preventDefault()}
-                onContextMenu={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <MakeTaskForm
-                  item={item}
-                  meetingId={meetingId}
-                  index={index}
-                  onDone={() => setCreating(false)}
-                />
-              </PopoverContent>
-            </Popover>
+            <RowCreatePopover
+              open={creating}
+              onOpenChange={setCreating}
+              itemText={item.text}
+            >
+              <MakeTaskForm
+                item={item}
+                make={make}
+                onDone={() => setCreating(false)}
+              />
+            </RowCreatePopover>
             {menuButton}
           </>,
           null,
@@ -553,13 +586,11 @@ function MakeTaskRow({
 
 function MakeTaskForm({
   item,
-  meetingId,
-  index,
+  make: target,
   onDone,
 }: {
   item: MeetingActionItem;
-  meetingId: string;
-  index: number;
+  make: MakeTarget;
   onDone: () => void;
 }) {
   const make = useMakeActionItemTask();
@@ -574,9 +605,9 @@ function MakeTaskForm({
   const kept = useRef<TaskWho | null>(named);
   const [due, setDue] = useState(item.due_date ?? "");
   const [flagged, setFlagged] = useState(false);
-  const assigneeIds = actionItemAssigneeIds(who);
+  const assigneeIds = taskWhoPeopleIds(who);
   const missingWho = flagged && !assigneeIds;
-  const whoId = `action-item-${index}-make-who`;
+  const whoId = `action-item-${target.index}-make-who`;
 
   async function submit() {
     if (!assigneeIds) {
@@ -584,9 +615,9 @@ function MakeTaskForm({
       return;
     }
     try {
-      await make.mutateAsync({
-        meetingId,
-        index,
+      const mark = await make.mutateAsync({
+        meetingId: target.meetingId,
+        index: target.index,
         body: {
           text: item.text,
           assignee_ids: assigneeIds,
@@ -594,12 +625,24 @@ function MakeTaskForm({
         },
       });
       onDone();
-      toast({ title: AI_SUGGESTION_COPY.created, description: item.text });
+      // An item already a task is answered with that task, unchanged.
+      toast(
+        actionItemTaskIsFor(mark, assigneeIds)
+          ? { title: AI_SUGGESTION_COPY.created, description: item.text }
+          : {
+              title: actionItemTaskRefusalLine(
+                "meeting.action_item.already_task",
+              )!,
+              description: item.text,
+            },
+      );
     } catch (error) {
-      const refused = actionItemTaskRefusalLine(codeOf(error));
-      // Already a task, or the minutes changed: the marks are read again,
-      // so the row redraws as it now stands.
+      const code = codeOf(error);
+      const refused = actionItemTaskRefusalLine(code);
+      // Refused for good: the marks are read again, so the row redraws as
+      // it now stands; one the read still can't show isn't offered again.
       if (refused) onDone();
+      if (code === "meeting.action_item.already_task") target.onTaken();
       toast({
         title: AI_SUGGESTION_COPY.acceptFailed,
         description:

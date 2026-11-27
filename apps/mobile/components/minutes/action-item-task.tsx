@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import {
-  actionItemAssigneeIds,
+  actionItemTaskIsFor,
   useAcceptAiSuggestion,
   useCanManageTasks,
   useMakeActionItemTask,
@@ -15,7 +15,10 @@ import {
   MINUTES_READ_COPY,
   SIMILAR_TASK_COPY,
   actionItemTaskRefusalLine,
+  minutesActionMakeable,
   minutesActionSuggestions,
+  taskTitleFrom,
+  taskWhoPeopleIds,
   type MeetingActionItem,
 } from "@repo/validation";
 import {
@@ -60,11 +63,20 @@ type Waiting = AiSuggestion & { task: NonNullable<AiSuggestion["task"]> };
  */
 export function useActionItemTaskMenu({
   meetingId,
+  posted,
+  marks,
   items,
   suggestions,
   handleFor,
 }: {
   meetingId: string;
+  /** Posted minutes: a draft's items can't be made tasks. */
+  posted: boolean;
+  /**
+   * The items' marks once read, by place; undefined until then, when no
+   * item is offered a create of its own.
+   */
+  marks: ReadonlyMap<number, MeetingActionItemTask> | undefined;
   items: readonly MeetingActionItem[];
   /** These minutes' waiting suggestions, as the screen already reads them. */
   suggestions: readonly AiSuggestion[];
@@ -86,6 +98,13 @@ export function useActionItemTaskMenu({
   const similar = useSimilarTasks(waiting);
   const canMake = useCanManageTasks();
   const make = useMakeActionItemTask();
+  const makeable = useMemo(
+    () => minutesActionMakeable(items, posted ? marks : undefined),
+    [items, posted, marks],
+  );
+  // Items the server said are a task already with no mark to show for it
+  // (accepted up for grabs and not yet claimed, #5508): not offered again.
+  const [taken, setTaken] = useState<ReadonlySet<number>>(() => new Set());
   const [formFor, setFormFor] = useState<
     | { kind: "suggestion"; suggestion: Waiting }
     | { kind: "item"; index: number; item: MeetingActionItem }
@@ -127,9 +146,9 @@ export function useActionItemTaskMenu({
       // A task the item already became wins over a suggestion.
       const suggestion = byIndex.get(index);
       if (!suggestion) {
-        // Marked done or for everyone without a task named is a task
-        // already, never one to make again.
-        if (!canMake || task) return null;
+        // Only an item with no mark, the first of any that read the same,
+        // on posted minutes whose marks are read.
+        if (!canMake || !makeable.has(index) || taken.has(index)) return null;
         return handleFor({
           title: item.text,
           actions: [
@@ -189,7 +208,7 @@ export function useActionItemTaskMenu({
         ],
       });
     },
-    [accept, byIndex, canMake, handleFor, router, similar],
+    [accept, byIndex, canMake, handleFor, makeable, router, similar, taken],
   );
 
   const sheet = formFor ? (
@@ -203,8 +222,12 @@ export function useActionItemTaskMenu({
       suggestion={
         formFor.kind === "suggestion"
           ? suggestionSeed(formFor.suggestion, accept.mutateAsync)
-          : itemSeed(formFor.item, (body) =>
-              make.mutateAsync({ meetingId, index: formFor.index, body }),
+          : itemSeed(
+              formFor.item,
+              (body) =>
+                make.mutateAsync({ meetingId, index: formFor.index, body }),
+              () =>
+                setTaken((previous) => new Set(previous).add(formFor.index)),
             )
       }
       offerGroups
@@ -215,10 +238,16 @@ export function useActionItemTaskMenu({
   return { menuFor, sheet };
 }
 
+/** What the item's route refused with, when it made nothing. */
+const ALREADY_TASK = { code: "meeting.action_item.already_task" };
+
 /**
  * The task form opened on an action item with no suggestion waiting
- * (#6178): its words, the member the minutes named and the day they gave,
- * for people only. The route takes a day, not a time of day.
+ * (#6178): its words (cut to a title as the server cuts them), the member
+ * the minutes named and the day they gave. People only, and a day only with
+ * no subtasks, since the route takes nothing else. An item someone else made
+ * a task first is answered with that task: the form says so rather than
+ * report a task it didn't make.
  */
 function itemSeed(
   item: MeetingActionItem,
@@ -227,10 +256,11 @@ function itemSeed(
     assignee_ids: string[];
     title: string;
     due_date: string | null;
-  }) => Promise<unknown>,
+  }) => Promise<MeetingActionItemTask>,
+  onTaken: () => void,
 ): TaskSuggestionSeed {
   return {
-    title: item.text,
+    title: taskTitleFrom(item.text),
     who: item.owner_user_id
       ? { kind: "person", userId: item.owner_user_id }
       : null,
@@ -238,17 +268,26 @@ function itemSeed(
     dueAt: null,
     subtasks: [],
     peopleOnly: true,
+    dayOnly: true,
     refusalLine: actionItemTaskRefusalLine,
     accept: async (form) => {
-      const assigneeIds = actionItemAssigneeIds(form.who);
+      const assigneeIds = taskWhoPeopleIds(form.who);
       // The people-only picker hands back nothing else.
       if (!assigneeIds) throw new Error("Pick who this is for.");
-      await make({
-        text: item.text,
-        assignee_ids: assigneeIds,
-        title: form.title,
-        due_date: form.due_date ?? null,
-      });
+      try {
+        const mark = await make({
+          text: item.text,
+          assignee_ids: assigneeIds,
+          title: form.title,
+          due_date: form.due_date ?? null,
+        });
+        if (!actionItemTaskIsFor(mark, assigneeIds)) throw ALREADY_TASK;
+      } catch (error) {
+        if ((error as { code?: unknown } | null)?.code === ALREADY_TASK.code) {
+          onTaken();
+        }
+        throw error;
+      }
     },
   };
 }
