@@ -40,10 +40,8 @@ import {
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { useToast } from "@/lib/hooks/use-toast";
 import { useToastedRun } from "@/lib/hooks/use-toasted-run";
 import { SettingsAddRow } from "@/components/shared/settings-add-row";
-import { getErrorMessage } from "@/lib/utils";
 import {
   byDisplayOrder,
   addsTiers,
@@ -149,7 +147,7 @@ function TierList({
   onOpenRole: (roleId: string) => void;
 }) {
   const { roles, tiers, memberCounts, reach, canManage, words } = data;
-  const { toast } = useToast();
+  const run = useToastedRun();
   const { confirm, confirmDialog } = useConfirmDialog();
   const createTier = useCreateRoleTier();
   const updateRole = useUpdateRole();
@@ -188,24 +186,6 @@ function TierList({
       ? all.filter((role) => matchesWordStarts(role.name, query))
       : all;
   };
-
-  async function run(
-    action: () => Promise<unknown>,
-    failTitle: string,
-    fallback: string,
-  ) {
-    try {
-      await action();
-      return true;
-    } catch (error) {
-      toast({
-        title: failTitle,
-        description: getErrorMessage(error, fallback),
-        variant: "destructive",
-      });
-      return false;
-    }
-  }
 
   async function removeRole(role: TieredRole) {
     const ok = await confirm({
@@ -415,7 +395,6 @@ function TierList({
   );
 }
 
-/** The shape of an "Add …" row's button, matching `SettingsRow`'s rows. */
 /**
  * "Add role" as the last row of a group: the new role starts with the tier's
  * permissions, so naming it is the whole form. Color, the @mention switch and
