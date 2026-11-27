@@ -101,7 +101,7 @@ const event = (overrides: Partial<Event>): Event =>
 
 function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const taskService = {
-    listRows: jest.fn().mockResolvedValue({ tasks: [], total: 0 }),
+    listRows: jest.fn().mockResolvedValue([]),
     // As `TaskService.withGroupSummaries` gives them: a fixture's group, or
     // null for a one-person task.
     withGroupSummaries: jest.fn((_chapterId: string, tasks: TaskView[]) =>
@@ -425,10 +425,7 @@ function serveTasks(
       options: TaskListOptions = {},
     ) => {
       const rows = matching(isAdmin, options);
-      return Promise.resolve({
-        tasks: rows.slice(0, options.limit ?? rows.length),
-        total: rows.length,
-      });
+      return Promise.resolve(rows.slice(0, options.limit ?? rows.length));
     },
   );
 }

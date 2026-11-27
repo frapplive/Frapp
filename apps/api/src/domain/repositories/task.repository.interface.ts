@@ -41,12 +41,6 @@ export interface TaskListFilter {
   orFollowedBy?: readonly string[];
   /** Only tasks this member created. */
   createdBy?: string;
-  /**
-   * `true`: only one-person tasks, leaving out every copy of a task for
-   * everyone (`group_id` is null), so a list of what someone assigned can
-   * count each group once beside them (#5492).
-   */
-  groupless?: boolean;
   /** Only tasks in this stored status. */
   status?: TaskStatus;
   /** `true`: only confirmed tasks; `false`: only unconfirmed ones. */
@@ -77,16 +71,6 @@ export interface ITaskRepository {
   findByChapter(chapterId: string, query?: TaskListQuery): Promise<Task[]>;
   /** How many of the chapter's tasks match `query`, counted in SQL. */
   countByChapter(chapterId: string, query?: TaskListFilter): Promise<number>;
-  /**
-   * {@link findByChapter}, counting an uncapped read with the request that
-   * reads its first page (#5746), which ends it without an empty page; a
-   * capped read stops at its limit uncounted. `total` is null when the read
-   * was not counted.
-   */
-  findByChapterCounted(
-    chapterId: string,
-    query?: TaskListQuery,
-  ): Promise<{ tasks: Task[]; total: number | null }>;
   /**
    * The chapter's tasks due on or after `dueFrom` (`YYYY-MM-DD`), or made at
    * or after `createdFrom`, every row of them: read in pages, so a chapter

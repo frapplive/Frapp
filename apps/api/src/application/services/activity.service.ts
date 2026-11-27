@@ -1910,7 +1910,7 @@ export class ActivityService {
       userId,
     );
     const completedSince = new Date(since).toISOString();
-    const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
+    const none = Promise.resolve([] as TaskView[]);
     const [own, assigned] = await Promise.all([
       // Each read capped, newest made first, so a busy month never reads
       // hundreds of rows to keep 25. The task's own columns only, as the
@@ -1932,7 +1932,7 @@ export class ActivityService {
         : none,
     ]);
     const byId = new Map<string, TaskView>();
-    for (const task of [...own.tasks, ...assigned.tasks]) {
+    for (const task of [...own, ...assigned]) {
       byId.set(task.id, task);
     }
     // When it last finished: confirmed, or marked done.

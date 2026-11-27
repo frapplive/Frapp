@@ -147,7 +147,6 @@ describe('TaskService', () => {
       findById: jest.fn(),
       findByIds: jest.fn().mockResolvedValue([]),
       findByChapter: jest.fn(),
-      findByChapterCounted: jest.fn(),
       findSince: jest.fn(),
       countByChapter: jest.fn(),
       create: jest.fn(),
@@ -3478,11 +3477,8 @@ describe('TaskService', () => {
       });
     });
 
-    it('listRows: bare rows and their total in one read, a member only their own (#5746)', async () => {
-      mockTaskRepo.findByChapterCounted.mockResolvedValue({
-        tasks: [baseTask],
-        total: 7,
-      });
+    it('listRows: bare rows, a member only their own (#5746)', async () => {
+      mockTaskRepo.findByChapter.mockResolvedValue([baseTask]);
 
       const result = await service.listRows('ch-1', 'user-1', false, {
         // A member's option can't widen the read past their own tasks.
@@ -3490,14 +3486,14 @@ describe('TaskService', () => {
         status: TaskStatus.COMPLETED,
       });
 
-      expect(mockTaskRepo.findByChapterCounted).toHaveBeenCalledWith('ch-1', {
+      expect(mockTaskRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
         createdBy: 'user-2',
         status: TaskStatus.COMPLETED,
         assigneeId: 'user-1',
       });
       // None of what `list` adds to a task: no subtask, photo, series or
       // open-task read.
-      expect(result).toEqual({ tasks: [asView(baseTask)], total: 7 });
+      expect(result).toEqual([asView(baseTask)]);
       expect(mockTaskRepo.findSubtasks).not.toHaveBeenCalled();
       expect(mockTaskRepo.findPhotos).not.toHaveBeenCalled();
       expect(mockTaskRepo.findSeries).not.toHaveBeenCalled();
@@ -3505,14 +3501,11 @@ describe('TaskService', () => {
     });
 
     it('listRows: a tasks:manage holder reads the chapter as asked', async () => {
-      mockTaskRepo.findByChapterCounted.mockResolvedValue({
-        tasks: [],
-        total: 0,
-      });
+      mockTaskRepo.findByChapter.mockResolvedValue([]);
 
       await service.listRows('ch-1', 'user-1', true, { createdBy: 'user-1' });
 
-      expect(mockTaskRepo.findByChapterCounted).toHaveBeenCalledWith('ch-1', {
+      expect(mockTaskRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
         createdBy: 'user-1',
       });
     });

@@ -79,7 +79,6 @@ describe('SupabaseTaskRepository — tenant scope', () => {
       },
     ],
     ['creator', { createdBy: USER_SHARED }],
-    ['one-person', { groupless: true }],
     ['status', { status: TaskStatus.TODO }],
     ['unconfirmed', { confirmed: false }],
     ['page', { limit: 10 }],
@@ -103,30 +102,6 @@ describe('SupabaseTaskRepository — tenant scope', () => {
       expect(tasks.map((t) => t.id)).toEqual([TASK_B]);
     },
   );
-
-  it('findByChapterCounted keeps the chapter predicate and counts only that chapter (#5746)', async () => {
-    const { tasks, total } = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.findByChapterCounted(CHAPTER_B, { assigneeId: USER_SHARED }),
-    );
-
-    expect(tasks.map((t) => t.id)).toEqual([TASK_B]);
-    expect(total).toBe(1);
-    // A list shorter than its page is one request, with no empty page after.
-    expect(harness.ops).toHaveLength(1);
-  });
-
-  it('findByChapterCounted counts an uncapped read, and not a capped one (#5746)', async () => {
-    const uncapped = await repo.findByChapterCounted(CHAPTER_B);
-    expect(uncapped.total).toBe(1);
-    expect(harness.ops).toHaveLength(1);
-
-    harness.reset();
-    // Capped: no count, so a short page reads on to an empty one.
-    const capped = await repo.findByChapterCounted(CHAPTER_B, { limit: 10 });
-    expect(capped.tasks.map((t) => t.id)).toEqual([TASK_B]);
-    expect(capped.total).toBeNull();
-    expect(harness.ops).toHaveLength(2);
-  });
 
   describe('findByChapter filters narrow in SQL (#4037)', () => {
     const OTHER = '0c000000-0000-4000-8000-000000000060';
@@ -203,7 +178,6 @@ describe('SupabaseTaskRepository — tenant scope', () => {
         [3, 2, 1],
       ],
       ['creator', { createdBy: USER_SHARED }, [2, 1]],
-      ['one-person', { groupless: true }, [4, 2, 1]],
       ['status', { status: TaskStatus.TODO }, [1]],
       ['unconfirmed', { confirmed: false }, [3, 2, 1]],
       ['confirmed', { confirmed: true }, [4]],

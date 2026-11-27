@@ -1206,30 +1206,26 @@ export class TaskService {
   }
 
   /**
-   * {@link list}'s tasks as bare rows, with how many match before `limit`
-   * (#5746): one request for a list that fits a page, where `list` makes an
-   * empty one after it and reads each task's subtasks, photos, series, group
-   * and the open task it was claimed from. For a reader that draws only the
-   * task's own columns, such as Activity; add {@link withGroupSummaries} for
-   * `group`. The same rule as `list`: without `tasks:manage`, only the
-   * caller's own tasks.
+   * {@link list}'s tasks as bare rows (#5746), where `list` also reads each
+   * task's subtasks, photos, series, group and the open task it was claimed
+   * from. For a reader that draws
+   * only the task's own columns, such as the Archive; add
+   * {@link withGroupSummaries} for `group`. The same rule as `list`: without
+   * `tasks:manage`, only the caller's own tasks.
    */
   async listRows(
     chapterId: string,
     userId: string,
     isAdmin: boolean,
     query: TaskListOptions = {},
-  ): Promise<{ tasks: TaskView[]; total: number | null }> {
+  ): Promise<TaskView[]> {
     instantOrThrow('before', query.after?.created_at);
-    const { tasks, total } = await this.taskRepo.findByChapterCounted(
-      chapterId,
-      {
-        ...query,
-        // Last, so no option widens a member's read past their own tasks.
-        ...(isAdmin ? {} : { assigneeId: userId }),
-      },
-    );
-    return { tasks: toDisplayStatusList(tasks), total };
+    const tasks = await this.taskRepo.findByChapter(chapterId, {
+      ...query,
+      // Last, so no option widens a member's read past their own tasks.
+      ...(isAdmin ? {} : { assigneeId: userId }),
+    });
+    return toDisplayStatusList(tasks);
   }
 
   /**

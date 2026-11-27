@@ -5,7 +5,7 @@
      lives in ../promotion.md and ../../db-rollback-playbook.md; link to it,
      don't copy it. -->
 
-Adds `activity_task_reads`, one function that returns every task list `GET /v1/activity` draws, so the page's task section is one request instead of up to 13 (#6061 step 1, after #5746).
+Adds `activity_task_reads`, one function that returns every task list `GET /v1/activity` draws, with their groups and copies, so those come from one request instead of 13 for an officer and 4 for a member in `activity.service.reads.spec.ts`'s seed (#6061 step 1, after #5746). Two reads stay apart, as they were before: the live names of a role, chapter group or tier a drawn group went to, and requests for more time when the client asks for them.
 
 ## Promotion
 

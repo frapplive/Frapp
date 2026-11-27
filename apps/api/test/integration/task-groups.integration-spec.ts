@@ -3,12 +3,15 @@
 // against a real Postgres and PostgREST.
 //
 // The unit specs prove what the repository asks for and what the service
-// makes of the answer. This proves what the function does with it: that a
-// group with a copy not yet confirmed is kept and a finished one is not; that
-// every list is capped at the limit asked and ordered as its own read was;
-// that a caller without `tasks:manage` gets their own tasks only; that `own`
-// holds what was done since the week began; that `groupless` leaves out every
-// copy; and that copy states carry their few columns only.
+// makes of the answer. This proves what the function itself returns: that a
+// group with a copy not yet confirmed is kept and a finished one is not, with
+// its lowest-id open copy whole; that every capped list is cut at the limit
+// asked and ordered as its own read was, and `waiting_total` counts past the
+// cap; that one-person tasks leave out every copy; that copy states cover a
+// group the caller made but holds no copy of, in their few columns only; that
+// a caller without `tasks:manage` gets their own tasks only; that `own` holds
+// what was done since the week began; and that rows come back as PostgREST
+// serves them.
 //
 // Run: `npm run test:integration -w apps/api` (needs a local Supabase stack
 // with `20261127184500` applied; skips cleanly without a stack).
@@ -29,21 +32,24 @@ describeIntegration(
     const officerId = randomUUID();
     /** Everyone a group goes to: the officer and three members. */
     const userIds = [officerId, randomUUID(), randomUUID(), randomUUID()];
-    /** Oldest first: Open, Finished, Half. */
+    /** Oldest first: Open, Finished, Half, Others. */
     const groupIds: string[] = [];
 
     const assertOk = (label: string, error: unknown) => {
       if (error) throw new Error(`${label}: ${JSON.stringify(error)}`);
     };
 
-    const makeGroup = async (title: string): Promise<Task[]> =>
+    const makeGroup = async (
+      title: string,
+      assigneeIds = userIds,
+    ): Promise<Task[]> =>
       tasks.createGroup({
         chapter_id: chapterId,
         created_by: officerId,
         audience: 'everyone',
         target_id: null,
         target_name: null,
-        assignee_ids: userIds,
+        assignee_ids: assigneeIds,
         title,
         description: null,
         due_date: '2026-12-01',
@@ -103,6 +109,9 @@ describeIntegration(
         }
         if (title === 'Half') await confirm(copies[0]);
       }
+      // A fourth the officer made for the three members only: no copy of it is
+      // the officer's, so only `made_groups` draws its copies.
+      groupIds.push((await makeGroup('Others', userIds.slice(1)))[0].group_id!);
       assertOk(
         'one-person task',
         (
@@ -116,21 +125,29 @@ describeIntegration(
           })
         ).error,
       );
-      // Done by a member and waiting on an officer's confirm.
-      assertOk(
-        'waiting task',
-        (
-          await supabase.from('tasks').insert({
-            chapter_id: chapterId,
-            title: 'Waiting',
-            assignee_id: userIds[2],
-            created_by: officerId,
-            due_date: '2026-12-01',
-            status: TaskStatus.COMPLETED,
-            completed_at: '2026-11-18T00:00:00.000Z',
-          })
-        ).error,
-      );
+      // Done by members and waiting on an officer's confirm, made in this
+      // order and done on different days: the longest waiting is not the
+      // oldest made, nor the newest.
+      for (const [title, assignee, completedAt] of [
+        ['Waiting', userIds[2], '2026-11-18T00:00:00.000Z'],
+        ['Waiting longest', userIds[3], '2026-11-16T00:00:00.000Z'],
+        ['Waiting newest', userIds[1], '2026-11-19T00:00:00.000Z'],
+      ] as const) {
+        assertOk(
+          'waiting task',
+          (
+            await supabase.from('tasks').insert({
+              chapter_id: chapterId,
+              title,
+              assignee_id: assignee,
+              created_by: officerId,
+              due_date: '2026-12-01',
+              status: TaskStatus.COMPLETED,
+              completed_at: completedAt,
+            })
+          ).error,
+        );
+      }
     });
 
     afterAll(async () => {
@@ -151,14 +168,28 @@ describeIntegration(
         limit,
       });
 
+    const COPY_STATE_COLUMNS = [
+      'assignee_id',
+      'due_at',
+      'due_date',
+      'group_id',
+      'id',
+      'points_awarded',
+      'status',
+    ];
+
     it('keeps only groups with a copy not yet confirmed, newest first, each with one open copy whole', async () => {
-      const [open, finished, half] = groupIds;
+      const [open, finished, half, others] = groupIds;
       const reads = await read(officerId, true);
 
-      expect(reads.made_groups.map((group) => group.id)).toEqual([half, open]);
+      expect(reads.made_groups.map((group) => group.id)).toEqual([
+        others,
+        half,
+        open,
+      ]);
       // One copy not confirmed per live group, the lowest id, read whole.
       expect(reads.shared.map((copy) => copy.group_id).sort()).toEqual(
-        [half, open].sort(),
+        [others, half, open].sort(),
       );
       for (const copy of reads.shared) {
         expect(copy.points_awarded).toBe(false);
@@ -172,38 +203,78 @@ describeIntegration(
           .sort()[0];
         expect(copy.id).toBe(lowest);
       }
-      // Every copy of the groups drawn: the officer holds a copy of all three,
-      // so `own` draws Finished's too.
+      // The groups of every row drawn: the officer holds a copy of the first
+      // three, and made a copy of all four.
       expect(reads.row_groups.map((group) => group.id).sort()).toEqual(
-        [open, finished, half].sort(),
+        [open, finished, half, others].sort(),
       );
-      expect(reads.copy_states).toHaveLength(12);
+      expect(reads.copy_states).toHaveLength(15);
+      for (const state of reads.copy_states) {
+        expect(Object.keys(state).sort()).toEqual(COPY_STATE_COLUMNS);
+      }
     });
 
-    it('caps every list at the limit asked', async () => {
-      const [open, , half] = groupIds;
+    it('draws every copy of a group the caller made but holds no copy of', async () => {
+      const [, , half, others] = groupIds;
+      // At 2, `made` holds only the two newest one-person tasks, so no row
+      // brings Others in: only `made_groups` does.
       const reads = await read(officerId, true, { limit: 2 });
 
-      // Two live groups, each with several open copies: still both.
-      expect(reads.made_groups.map((group) => group.id)).toEqual([half, open]);
-      expect(reads.made).toHaveLength(2);
-      expect(reads.singles).toHaveLength(2);
-      // The newest first, as the page reads them.
+      expect(reads.made_groups.map((group) => group.id)).toEqual([
+        others,
+        half,
+      ]);
+      expect(reads.row_groups.map((group) => group.id)).not.toContain(others);
+      expect(
+        reads.copy_states.filter((state) => state.group_id === others),
+      ).toHaveLength(3);
+      expect(reads.shared.map((copy) => copy.group_id)).toContain(others);
+    });
+
+    it('reads one-person tasks the caller made apart from every copy, newest first', async () => {
+      const reads = await read(officerId, true);
+
       expect(reads.singles.map((task) => task.title)).toEqual([
+        'Waiting newest',
+        'Waiting longest',
         'Waiting',
         'Solo',
       ]);
+      for (const task of reads.singles) expect(task.group_id).toBeNull();
     });
 
-    it('lists finished work waiting on a confirm, with how many wait in all', async () => {
-      const reads = await read(officerId, true, { limit: 1 });
+    it('caps every list at the limit asked', async () => {
+      const reads = await read(officerId, true, { limit: 2 });
 
-      expect(reads.waiting.map((task) => task.title)).toEqual(['Waiting']);
-      expect(reads.waiting_total).toBe(1);
-      // Not the officer's own completion: theirs isn't theirs to confirm.
+      expect(reads.made).toHaveLength(2);
+      expect(reads.made.map((task) => task.title)).toEqual([
+        'Waiting newest',
+        'Waiting longest',
+      ]);
+      expect(reads.singles.map((task) => task.title)).toEqual([
+        'Waiting newest',
+        'Waiting longest',
+      ]);
+      expect(reads.made_groups).toHaveLength(2);
+      expect(reads.waiting).toHaveLength(2);
+    });
+
+    it('lists finished work waiting on a confirm longest first, with how many wait in all', async () => {
+      const reads = await read(officerId, true, { limit: 2 });
+
+      expect(reads.waiting.map((task) => task.title)).toEqual([
+        'Waiting longest',
+        'Waiting',
+      ]);
+      // Counted past the cap.
+      expect(reads.waiting_total).toBe(3);
+      // Not the caller's own completion: theirs isn't theirs to confirm.
       const asAssignee = await read(userIds[2], true);
-      expect(asAssignee.waiting).toEqual([]);
-      expect(asAssignee.waiting_total).toBe(0);
+      expect(asAssignee.waiting.map((task) => task.title)).toEqual([
+        'Waiting longest',
+        'Waiting newest',
+      ]);
+      expect(asAssignee.waiting_total).toBe(2);
     });
 
     it('holds what was done since the week began, confirmed or not, and nothing confirmed before it', async () => {
@@ -263,15 +334,6 @@ describeIntegration(
         copy_states: [],
         shared: [],
       });
-    });
-
-    it('reads one-person tasks apart from every copy', async () => {
-      const solo = await tasks.findByChapter(chapterId, {
-        createdBy: officerId,
-        groupless: true,
-      });
-
-      expect(solo.map((task) => task.title)).toEqual(['Waiting', 'Solo']);
     });
 
     it('reads a group’s copy states as their few columns only', async () => {

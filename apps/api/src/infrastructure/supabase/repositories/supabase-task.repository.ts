@@ -26,11 +26,7 @@ import {
 } from '#domain/entities/task.entity';
 import { reportCaughtFailure } from '../../observability/report-caught-failure';
 import { SupabaseQueryError } from '../supabase-query-error';
-import {
-  escapeFilterValue,
-  fetchAllPages,
-  fetchCountedPages,
-} from '../supabase.utils';
+import { escapeFilterValue, fetchAllPages } from '../supabase.utils';
 
 /** Task ids per subtask read: 100 uuids keep the URL near 4 KB. */
 const SUBTASK_READ_BATCH = 100;
@@ -80,7 +76,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
     // (`fetchAllPages`), so a hosted row cap below `limit` still returns a full
     // page, and a caller can read a short page as the last one.
     return fetchAllPages(
-      (from, to) => this.listQuery(chapterId, query, false).range(from, to),
+      (from, to) => this.listQuery(chapterId, query).range(from, to),
       {
         pageSize: Math.min(query.limit ?? TASK_PAGE_SIZE, TASK_PAGE_SIZE),
         limit: query.limit,
@@ -90,14 +86,11 @@ export class SupabaseTaskRepository implements ITaskRepository {
 
   /**
    * The chapter's tasks that match `query`, filtered, newest first, for
-   * {@link findByChapter} and {@link findByChapterCounted}; `count` asks
-   * PostgREST for the exact number of matching rows.
+   * {@link findByChapter}.
    */
-  private listQuery(chapterId: string, query: TaskListQuery, count: boolean) {
+  private listQuery(chapterId: string, query: TaskListQuery) {
     const q = this.filtered(
-      this.supabase
-        .from('tasks')
-        .select('*', count ? { count: 'exact' } : undefined),
+      this.supabase.from('tasks').select('*'),
       chapterId,
       query,
     );
@@ -125,25 +118,6 @@ export class SupabaseTaskRepository implements ITaskRepository {
           .range(from, to),
       { pageSize: 1000 },
     );
-  }
-
-  async findByChapterCounted(
-    chapterId: string,
-    query: TaskListQuery = {},
-  ): Promise<{ tasks: Task[]; total: number | null }> {
-    // Counted when the read is uncapped, which the count ends without an
-    // empty page; a capped read stops at its limit anyway, and counting it is
-    // a second pass for nothing (`fetchCountedPages`).
-    const { rows, total } = await fetchCountedPages<Task>(
-      (from, to, withCount) =>
-        this.listQuery(chapterId, query, withCount).range(from, to),
-      {
-        pageSize: Math.min(query.limit ?? TASK_PAGE_SIZE, TASK_PAGE_SIZE),
-        limit: query.limit,
-        count: query.limit === undefined,
-      },
-    );
-    return { tasks: rows, total };
   }
 
   async countByChapter(
@@ -184,7 +158,6 @@ export class SupabaseTaskRepository implements ITaskRepository {
       q = q.eq('assignee_id', query.assigneeId);
     }
     if (query.createdBy) q = q.eq('created_by', query.createdBy);
-    if (query.groupless) q = q.is('group_id', null);
     if (query.status) q = q.eq('status', query.status);
     if (query.confirmed === true) q = q.not('confirmed_at', 'is', null);
     if (query.confirmed === false) q = q.is('confirmed_at', null);
