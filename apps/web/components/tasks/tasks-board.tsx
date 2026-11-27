@@ -284,6 +284,7 @@ function LinkedTaskParam({
   onAsked,
   onOpen,
   onMissing,
+  selfOpened,
 }: {
   tasks: Task[];
   /** The board's read has answered; until then a link waits. */
@@ -293,6 +294,11 @@ function LinkedTaskParam({
   onAsked: () => void;
   onOpen: (target: { kind: "task" | "group"; id: string }) => void;
   onMissing: () => void;
+  /**
+   * The `task:<id>`/`group:<id>` the board itself just opened: not a link,
+   * so a copy the member picked opens as itself, not as its group.
+   */
+  selfOpened: { readonly current: string | null };
 }) {
   const searchParams = useSearchParams();
   const groupId = searchParams?.get(TASKS_GROUP_PARAM) ?? null;
@@ -312,6 +318,10 @@ function LinkedTaskParam({
       return;
     }
     if (handled.current === key) return;
+    if (selfOpened.current === key) {
+      handled.current = key;
+      return;
+    }
     latest.current.onAsked();
     if (!ready) return;
     let target: { kind: "task" | "group"; id: string } | null = null;
@@ -338,7 +348,7 @@ function LinkedTaskParam({
     handled.current = key;
     if (target) latest.current.onOpen(target);
     else latest.current.onMissing();
-  }, [key, groupId, taskId, tasks, reread, ready]);
+  }, [key, groupId, taskId, tasks, reread, ready, selfOpened]);
   return null;
 }
 
@@ -399,6 +409,8 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
   );
   // A task link that named a copy of a group task: its group replaces it.
   const linkedCopy = useRef<string | null>(null);
+  // What the board itself opened, which `LinkedTaskParam` leaves alone.
+  const selfOpened = useRef<string | null>(null);
   const setOpened = useCallback(
     (next: OpenedTask | null) => {
       if (next === null) {
@@ -409,6 +421,8 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
         next.kind === "group" &&
         taskParam !== null &&
         linkedCopy.current === taskParam;
+      if (next.kind !== "posting")
+        selfOpened.current = `${next.kind}:${next.id}`;
       openTaskAddress(
         {
           [WEB_ADDRESS_PARAMS.activity.task]:
@@ -1005,6 +1019,42 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
   // Mine draws no board, so it has no board states: Up for grabs says its
   // own, and Activity says its read's. Its links wait for the read below.
   const boardStates = everyone;
+  const postingOpen =
+    opened?.kind === "posting"
+      ? ((openTasksQuery.data ?? []).find(
+          (posting) => posting.id === opened.id,
+        ) ?? null)
+      : null;
+  /*
+    What the panel last showed, so one that leaves the read while open
+    (deleted, claimed) closes through the address too, rather than leaving
+    `task=`, `group=` or `posting=` naming nothing. A link still waiting on
+    the read never showed, so it is `LinkedTaskParam`'s to judge.
+  */
+  const shownOpen = useRef<string | null>(null);
+  const openKey = opened ? `${opened.kind}:${opened.id}` : null;
+  const showing =
+    opened === null
+      ? false
+      : opened.kind === "task"
+        ? tasks.some((row) => row.id === opened.id)
+        : opened.kind === "group"
+          ? tasks.some((row) => row.group_id === opened.id)
+          : postingOpen !== null;
+  useEffect(() => {
+    if (openKey === null) {
+      shownOpen.current = null;
+      return;
+    }
+    if (showing) {
+      shownOpen.current = openKey;
+      return;
+    }
+    if (shownOpen.current === openKey) {
+      shownOpen.current = null;
+      closeTaskAddress();
+    }
+  }, [openKey, showing, closeTaskAddress]);
   if (
     boardStates &&
     isOffline &&
@@ -1191,6 +1241,7 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
           ready={tasksQuery.data !== undefined}
           refetch={tasksQuery.refetch}
           onAsked={() => setLinkAsked(true)}
+          selfOpened={selfOpened}
           onOpen={(target) => {
             linkedCopy.current = taskParam;
             setOpened(target);
@@ -1228,13 +1279,7 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
       />
       {canManage ? (
         <OpenTaskPanel
-          posting={
-            opened?.kind === "posting"
-              ? ((openTasksQuery.data ?? []).find(
-                  (posting) => posting.id === opened.id,
-                ) ?? null)
-              : null
-          }
+          posting={postingOpen}
           gate={gate}
           onClose={() => setOpened(null)}
         />

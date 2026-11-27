@@ -1751,6 +1751,28 @@ describe("TasksBoard editing a task (#4296)", () => {
       await screen.findByRole("dialog", { name: "Sweep the chapter room" }),
     ).toBeInTheDocument();
     expect(row).toHaveAttribute("aria-current", "true");
+    // The open task is the address, pushed (#6044); its close goes Back.
+    expect(window.location.search).toBe("?task=task-todo");
+  });
+
+  it("closes the panel through the address when its task leaves the read (#6044)", async () => {
+    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
+    resetListLayoutForTests();
+    const user = userEvent.setup();
+    const { rerender } = render(<TasksBoard part="everyone" />);
+    const row = screen
+      .getAllByRole("listitem")
+      .find((item) => item.getAttribute("data-task-row") === "task-todo")!;
+    await user.click(
+      within(row).getByRole("button", { name: "Sweep the chapter room" }),
+    );
+    await screen.findByRole("dialog", { name: "Sweep the chapter room" });
+    // Deleted (here, or by someone else): the read no longer holds it.
+    tasksRef.current = tasksRef.current.filter(
+      (task) => task.id !== "task-todo",
+    );
+    rerender(<TasksBoard part="everyone" />);
+    await waitFor(() => expect(window.location.search).not.toContain("task="));
   });
 
   it("offers no Edit without tasks:manage, or on a confirmed task", () => {

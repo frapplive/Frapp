@@ -959,11 +959,10 @@ function SnoozedSection({ rows, kit }: { rows: ActivityRow[]; kit: RowKit }) {
 
 /**
  * Reads `?review=<taskId>` (a "submitted a task" notification, `deepLinkFor`
- * in the bell) and hands it to the page once per link, then drops it from the
- * address so a refresh doesn't reopen the panel. Clicking the same link again
- * later opens it again. Its own component because `useSearchParams` needs a
- * Suspense boundary of its own (as in `chat-page.tsx`), and the page around
- * it must not wait on one.
+ * in the bell) and hands it to the page once per link; the page then puts
+ * the row's `item=` in its place (§ Addresses, #6044), so a refresh reopens
+ * the row, not the review link. Clicking the same link again later opens it
+ * again.
  */
 function ReviewParam({
   open,
@@ -1091,7 +1090,8 @@ export function ActivityPage() {
 }
 
 const A = WEB_ADDRESS_PARAMS.activity;
-const ACTIVITY_ADDRESS = [A.view, A.item] as const;
+// The task panel's own parameters are listed so a view switch can close it.
+const ACTIVITY_ADDRESS = [A.view, A.item, A.task, A.group, A.posting] as const;
 /** `view=archive`: the Archive in place of the page (#5127). */
 const ARCHIVE_VIEW = "archive";
 
@@ -1125,6 +1125,10 @@ function AddressedActivityPage() {
       openActivityAddress({
         [A.view]: next === "everyone" ? EVERYONES_VIEW : null,
         [A.item]: null,
+        // The task panel belongs to the view it was opened in.
+        [A.task]: null,
+        [A.group]: null,
+        [A.posting]: null,
       }),
     [openActivityAddress],
   );
@@ -1187,21 +1191,33 @@ function AddressedActivityPage() {
   const setShowArchive = useCallback(
     (show: boolean) =>
       show
-        ? openActivityAddress({ [A.view]: ARCHIVE_VIEW, [A.item]: null })
+        ? openActivityAddress({
+            [A.view]: ARCHIVE_VIEW,
+            [A.item]: null,
+            [A.task]: null,
+            [A.group]: null,
+            [A.posting]: null,
+          })
         : closeActivityAddress([A.view]),
     [openActivityAddress, closeActivityAddress],
   );
   const showRow = (row: ActivityRow, options?: { replace?: boolean }) => {
+    // Opening a row from here is what reads it (#4405). A reminder row has no
+    // read to record (`readRef` is null) and is never unread.
+    if (row.unread && row.readRef) markRead([row.readRef]);
     setOpened(row);
     openActivityAddress({ [A.item]: row.key }, options);
   };
+  // The address's `item=` now, for a late answer from an action started on
+  // another row: its close must not close the row open since.
+  const itemNow = useRef(itemParam);
+  useEffect(() => {
+    itemNow.current = itemParam;
+  });
   // Dots (#4405): opening a row from here is what reads it; scrolling past
   // doesn't, and neither does acting on the item elsewhere in Frapp.
   const { markRead } = useActivityUnread(activity.data);
   const openFromList = (row: ActivityRow) => {
-    // A reminder row has no read to record (`readRef` is null) and is never
-    // unread.
-    if (row.unread && row.readRef) markRead([row.readRef]);
     // A link opens in a new tab, a sign-up, form or reminder in chat, a
     // task for everyone on the Tasks board, and minutes on their own page
     // (#5949): no panel.
@@ -1215,6 +1231,7 @@ function AddressedActivityPage() {
       row.kind !== "minutes-notes"
     )
       showRow(row);
+    else if (row.unread && row.readRef) markRead([row.readRef]);
   };
   // `/activity?review=<taskId>`: a "submitted a task" notification
   // (`deepLinkFor` in the bell). Opens that task's panel once the read has
@@ -1241,12 +1258,10 @@ function AddressedActivityPage() {
     } else if (row) {
       // The notification's mark becomes the row's address, in place, so the
       // panel closes like any row a link opened (§ Addresses).
-      if (row.unread && row.readRef) markRead([row.readRef]);
-      setOpened(row);
+      showRow(row, { replace: true });
       replaceAddress({
         [A.review]: null,
         [A.extension]: null,
-        [A.item]: row.key,
       });
     } else {
       router.replace(tasksTaskLink(taskId));
@@ -1333,31 +1348,63 @@ function AddressedActivityPage() {
     () => (visible ? activityReviewQueue(visible, now) : []),
     [visible, now],
   );
-  const listedRow = useMemo(
-    () =>
-      itemParam === null
-        ? undefined
-        : [
-            ...(agenda?.rows ?? []),
-            ...(review?.rows ?? []),
-            ...groups.flatMap((group) => group.rows),
-            ...snoozedRows,
-          ].find((row) => row.key === itemParam),
-    [agenda, review, groups, snoozedRows, itemParam],
-  );
+  /*
+    The row `item=` names, wherever it is: the lists as shown first (a fresh
+    row after a re-read), then the whole read unnarrowed (a row the week
+    line filters out, the event on the Now card), then the Archive's rows
+    while the Archive is open. A row the page opened itself and that has
+    since left them all stays open as it was (`opened`).
+  */
+  const archiveRead = useActivityArchive({
+    enabled: showArchive && itemParam !== null,
+  });
+  const listedRow = useMemo(() => {
+    if (itemParam === null) return undefined;
+    const match = (row: ActivityRow) => row.key === itemParam;
+    const shown = [
+      ...(agenda?.rows ?? []),
+      ...(review?.rows ?? []),
+      ...groups.flatMap((group) => group.rows),
+      ...snoozedRows,
+    ].find(match);
+    if (shown || !activity.data) return shown;
+    const whole = activityAwake(activity.data, now);
+    return (
+      activityAgenda(whole, "all", now).rows.find(match) ??
+      activityGroups(whole, now)
+        .flatMap((group) => group.rows)
+        .find(match) ??
+      (showArchive && archiveRead.data
+        ? activityArchiveGroups(archiveRead.data, userId, now)
+            .flatMap((group) => group.rows)
+            .find(match)
+        : undefined)
+    );
+  }, [
+    agenda,
+    review,
+    groups,
+    snoozedRows,
+    itemParam,
+    activity.data,
+    now,
+    showArchive,
+    archiveRead.data,
+    userId,
+  ]);
   const openRow =
     itemParam === null
       ? null
       : (listedRow ?? (opened?.key === itemParam ? opened : null));
   // A row the address names that the read doesn't hold, and this page didn't
   // open (a link, Back or a reload to something finished or gone): said in
-  // its place, and taken out of the address. The Archive reads its own rows,
-  // so a row there is judged by the Archive.
+  // its place, and taken out of the address. Under the Archive it waits for
+  // the Archive's read.
   const deadItem = useDeadAddressParam(
     A.item,
     itemParam,
     activity.data !== undefined &&
-      !showArchive &&
+      (!showArchive || archiveRead.data !== undefined) &&
       itemParam !== null &&
       openRow === null,
   );
@@ -1595,8 +1642,8 @@ function AddressedActivityPage() {
               {deadItem !== null ? (
                 // A row from the address that isn't here (§ Addresses).
                 <p role="status" className="text-sm text-muted-foreground">
-                  That item isn&apos;t on your Activity any more. It may be finished
-                  or removed.
+                  That item isn&apos;t on your Activity any more. It may be
+                  finished or removed.
                 </p>
               ) : null}
               <NowCard />
@@ -1626,7 +1673,7 @@ function AddressedActivityPage() {
             onClose={(key) => {
               // A late answer from one row's action must not close another row
               // the member has since opened.
-              if (key === undefined || itemParam === key) {
+              if (key === undefined || itemNow.current === key) {
                 closeActivityAddress([A.item]);
               }
               // The cards write through their own hooks (a task's status, a
@@ -1647,10 +1694,7 @@ function AddressedActivityPage() {
               },
               // The next review replaces the one done, so Back closes the
               // panel rather than stepping back through the queue.
-              open: (row: ActivityRow) => {
-                if (row.unread && row.readRef) markRead([row.readRef]);
-                showRow(row, { replace: true });
-              },
+              open: (row: ActivityRow) => showRow(row, { replace: true }),
             }}
           />
         </div>

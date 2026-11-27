@@ -196,6 +196,11 @@ vi.mock("@/lib/providers/network-provider", () => ({
   callbacks. What the cards do inside it is chat's own tests' business; what
   this page owes is opening the right row and reacting to close and acted.
 */
+// The panel's `onClose` as each render handed it, so a spec can answer late
+// through an old render's close, as a real panel's pending action does.
+const panelCloses = vi.hoisted(
+  () => [] as { key: string; onClose: (key?: string) => void }[],
+);
 vi.mock("./activity-panel", () => ({
   ActivityPanel: ({
     row,
@@ -206,7 +211,8 @@ vi.mock("./activity-panel", () => ({
     onClose: (key?: string) => void;
     onActed: () => void;
   }) =>
-    row ? (
+    (row && panelCloses.push({ key: row.key, onClose }) && false) ||
+    (row ? (
       <div data-testid="panel">
         <span>{`panel:${row.title}`}</span>
         <button onClick={() => onClose()}>close</button>
@@ -214,7 +220,7 @@ vi.mock("./activity-panel", () => ({
         <button onClick={() => onClose(row.key)}>settled close</button>
         <button onClick={onActed}>acted</button>
       </div>
-    ) : null,
+    ) : null),
 }));
 
 /** The chapter's plan: `state.allowed` false refuses the row actions. */
@@ -2230,6 +2236,47 @@ describe("ActivityPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "late close" }));
 
     expect(screen.getByText("panel:Formal venue?")).toBeInTheDocument();
+  });
+
+  it("does not close a row opened since when an earlier row's action answers late (#6044)", async () => {
+    mockActivity.mockReturnValue(loaded());
+    render(<ActivityPage />);
+    const rows = screen
+      .getAllByRole("button")
+      .filter((button) => button.closest("li"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^(Unread:\s?)?(From .*\.\s?)?Formal venue\?/,
+      }),
+    );
+    // The close an action started on this row will call when it answers.
+    const stale = panelCloses.at(-1)!;
+    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    await waitFor(() => expect(screen.queryByTestId("panel")).toBeNull());
+    const other = rows.find(
+      (button) =>
+        !/Formal venue/.test(button.textContent ?? "") &&
+        button.getAttribute("aria-haspopup") === null,
+    );
+    expect(other).toBeDefined();
+    if (!other) return;
+    fireEvent.click(other);
+    const opened = screen.queryByTestId("panel");
+    expect(opened).not.toBeNull();
+    if (!opened) return;
+    act(() => stale.onClose(stale.key));
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+  });
+
+  it("puts the Archive in the address with a push, and its back arrow goes Back (#6044)", async () => {
+    mockActivity.mockReturnValue(loaded({}));
+    mockArchive.mockReturnValue({ isPending: false, data: undefined });
+    render(<ActivityPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?view=archive");
+    push.mockRestore();
   });
 
   describe("asks on the row (#4402)", () => {
