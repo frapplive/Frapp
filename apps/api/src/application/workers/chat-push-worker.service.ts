@@ -26,7 +26,10 @@ import type { IChatNotificationPreferenceRepository } from '#domain/repositories
 import { CHAT_PUSH_DISPATCH_REPOSITORY } from '#domain/repositories/chat-push-dispatch.repository.interface';
 import type { IChatPushDispatchRepository } from '#domain/repositories/chat-push-dispatch.repository.interface';
 import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.interface';
-import type { ChatThreadFollowRowState } from '#domain/entities/chat.entity';
+import type {
+  ChatMessage,
+  ChatThreadFollowRowState,
+} from '#domain/entities/chat.entity';
 import {
   CHAT_THREAD_REPOSITORY,
   type IChatThreadRepository,
@@ -114,11 +117,44 @@ interface FanOutOutcome {
 const CHAT_PUSH_CLAIM_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * How far back the catch-up reads on each `SUBSCRIBED` (#6123). It covers a
+ * cold start (the message whose insert woke the API was written before this
+ * process could subscribe) and a subscription that dropped and rejoined. A
+ * message older than this is left unpushed: a push that late is noise, and the
+ * member sees the message, unread, when they open the app. Well inside
+ * {@link CHAT_PUSH_CLAIM_RETENTION_MS}, so a message claimed and fanned out
+ * already still has its claim when the catch-up reads it.
+ */
+export const CHAT_PUSH_CATCH_UP_WINDOW_MS = 15 * 60 * 1000;
+
+/** The most messages one catch-up runs through, oldest first. */
+export const CHAT_PUSH_CATCH_UP_LIMIT = 200;
+
+/**
  * The iOS stack a chat push joins (`PushPayload.threadId`): one per channel,
  * which for a DM is one per person.
  */
 function chatPushThreadId(channelId: string): string {
   return `chat:${channelId}`;
+}
+
+/**
+ * A stored message in the shape Realtime delivers it, for the catch-up
+ * (#6123). The table's `kind` is never null; the entity only types it loosely.
+ */
+function catchUpRow(message: ChatMessage): ChatMessageRow {
+  return {
+    id: message.id,
+    channel_id: message.channel_id,
+    sender_id: message.sender_id,
+    content: message.content,
+    kind: message.kind ?? 'text',
+    mentions: message.mentions ?? null,
+    metadata: message.metadata,
+    thread_root_id: message.thread_root_id ?? null,
+    forwarded_from: message.forwarded_from ?? null,
+    created_at: message.created_at,
+  };
 }
 
 /** The placeholder `ChatService.createGroupDm` names a group DM given no name. */
@@ -320,6 +356,9 @@ export class ChatPushWorkerService
     { timer: ReturnType<typeof setTimeout>; status: string }
   >();
   private readonly bundler = new BurstBundler();
+  /** A catch-up is running; another `SUBSCRIBED` meanwhile only asks for a rerun. */
+  private catchingUp = false;
+  private catchUpAgain = false;
 
   constructor(
     @Inject(SUPABASE_CLIENT) private readonly supabase: FrappSupabaseClient,
@@ -380,6 +419,12 @@ export class ChatPushWorkerService
             void this.handleMessage(payload.new);
           },
         ),
+      // Realtime never delivers an insert made while no subscription was
+      // open: before this process booted (the message that woke it, #6123),
+      // or while the subscription was down (#5938). Read those back.
+      onSubscribed: () => {
+        void this.catchUp(new Date());
+      },
     });
     this.messages.start();
   }
@@ -437,6 +482,63 @@ export class ChatPushWorkerService
         message: 'chat-push: dispatch claim purge failed; retrying next hour',
         error: err,
       });
+    }
+  }
+
+  /**
+   * Push the recent messages nothing has claimed (#6123).
+   *
+   * Runs on every `SUBSCRIBED`. Each message goes through
+   * {@link handleMessage}, so its claim is what keeps a message Realtime also
+   * delivered, or another instance already sent, from being pushed twice.
+   * Oldest first, one at a time, so a backlog fans out in the order it was
+   * written. A `SUBSCRIBED` while one runs asks for one more run after it,
+   * rather than a second read racing the first. A failed read is reported and
+   * costs this catch-up only; the subscription carries on. Exposed, with an
+   * injectable clock, for unit tests.
+   */
+  async catchUp(now: Date): Promise<void> {
+    if (this.catchingUp) {
+      this.catchUpAgain = true;
+      return;
+    }
+    this.catchingUp = true;
+    try {
+      let at = now;
+      for (;;) {
+        this.catchUpAgain = false;
+        await this.catchUpOnce(at);
+        if (!this.catchUpAgain) break;
+        at = new Date();
+      }
+    } finally {
+      this.catchingUp = false;
+    }
+  }
+
+  private async catchUpOnce(now: Date): Promise<void> {
+    let missed: ChatMessage[];
+    try {
+      missed = await this.dispatches.unclaimedSince(
+        new Date(now.getTime() - CHAT_PUSH_CATCH_UP_WINDOW_MS),
+        CHAT_PUSH_CATCH_UP_LIMIT,
+      );
+    } catch (err) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'chat-push-catch-up-read',
+        message:
+          'chat-push: catch-up read failed; messages sent while the subscription was down are not pushed',
+        error: err,
+      });
+      return;
+    }
+    if (missed.length === 0) return;
+    this.logger.log(
+      `chat-push: catching up on ${missed.length} unclaimed message(s) from the last ${CHAT_PUSH_CATCH_UP_WINDOW_MS / 60_000} minutes`,
+    );
+    for (const message of missed) {
+      await this.handleMessage(catchUpRow(message));
     }
   }
 

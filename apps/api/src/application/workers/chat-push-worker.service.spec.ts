@@ -10,7 +10,12 @@ const threadRepoStub = {
   findFollowStates: jest.fn().mockResolvedValue(new Map()),
 };
 import { NotificationService } from '../services/notification.service';
-import { ChatPushWorkerService } from './chat-push-worker.service';
+import {
+  CHAT_PUSH_CATCH_UP_LIMIT,
+  CHAT_PUSH_CATCH_UP_WINDOW_MS,
+  ChatPushWorkerService,
+} from './chat-push-worker.service';
+import type { ChatMessage } from '#domain/entities/chat.entity';
 import {
   profilePhotoProviders,
   signedPhotoUrl,
@@ -119,6 +124,7 @@ describe('ChatPushWorkerService', () => {
     dispatches: {
       claim: (messageId: string) => Promise<string>;
       purgeBefore?: jest.Mock;
+      unclaimedSince?: jest.Mock;
     },
     openChannel: jest.Mock = jest.fn(() => ({
       subscribe: jest.fn(),
@@ -1281,6 +1287,202 @@ describe('ChatPushWorkerService', () => {
         level: 'warning',
         tags: { caught_at: 'chat-push-dispatch-claim-purge' },
       });
+    });
+  });
+
+  describe('catch-up after a sleep or a dropped subscription (#6123)', () => {
+    const NOW = new Date('2026-11-27T03:00:00.000Z');
+
+    /** A stored row as `chat_push_unclaimed_messages` returns it. */
+    function stored(
+      id: string,
+      overrides: Partial<ChatMessage> = {},
+    ): ChatMessage {
+      return {
+        id,
+        channel_id: ANNOUNCEMENT_CHANNEL.id,
+        sender_id: 'sender',
+        content: `message ${id}`,
+        type: 'TEXT',
+        kind: 'text',
+        reply_to_id: null,
+        metadata: {},
+        is_pinned: false,
+        pinned_at: null,
+        mentions: [],
+        created_at: '2026-11-27T02:58:00.000Z',
+        ...overrides,
+      } as ChatMessage;
+    }
+
+    it('reads the last 15 minutes and pushes each unclaimed message through the claim', async () => {
+      const unclaimedSince = jest
+        .fn()
+        .mockResolvedValue([stored('m-1'), stored('m-2')]);
+      const worker = await compileWorker({ claim, unclaimedSince });
+      worker.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
+      setMembers(['sender', 'a']);
+
+      await worker.catchUp(NOW);
+
+      expect(unclaimedSince).toHaveBeenCalledWith(
+        new Date(NOW.getTime() - CHAT_PUSH_CATCH_UP_WINDOW_MS),
+        CHAT_PUSH_CATCH_UP_LIMIT,
+      );
+      expect(claim.mock.calls.map((c) => c[0])).toEqual(['m-1', 'm-2']);
+      expect(notifyUser).toHaveBeenCalledTimes(2);
+      expect(notifyUser.mock.calls.every((c) => c[0] === 'a')).toBe(true);
+    });
+
+    it('a message Realtime also delivered is pushed once', async () => {
+      // The subscription joins, Realtime delivers the insert, and the
+      // catch-up reads the same row before its claim lands: the claim decides.
+      const store = (() => {
+        const claimed = new Set<string>();
+        return jest.fn(async (messageId: string) => {
+          if (claimed.has(messageId)) return 'taken';
+          claimed.add(messageId);
+          return 'claimed';
+        });
+      })();
+      const row = stored('m-both');
+      const unclaimedSince = jest.fn().mockResolvedValue([row]);
+      const worker = await compileWorker({ claim: store, unclaimedSince });
+      worker.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
+      setMembers(['sender', 'a']);
+
+      await Promise.all([
+        worker.handleMessage({
+          id: row.id,
+          channel_id: row.channel_id,
+          sender_id: row.sender_id,
+          content: row.content,
+          kind: 'text',
+          mentions: [],
+          created_at: row.created_at,
+        }),
+        worker.catchUp(NOW),
+      ]);
+
+      expect(notifyUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('a failed read is reported and pushes nothing', async () => {
+      const unclaimedSince = jest.fn().mockRejectedValue(new Error('pg down'));
+      const worker = await compileWorker({ claim, unclaimedSince });
+
+      await expect(worker.catchUp(NOW)).resolves.toBeUndefined();
+
+      expect(claim).not.toHaveBeenCalled();
+      expect(
+        jest.mocked(Sentry.captureException).mock.calls.at(-1)?.[1],
+      ).toMatchObject({
+        level: 'warning',
+        tags: { caught_at: 'chat-push-catch-up-read' },
+      });
+    });
+
+    it('a second SUBSCRIBED while one runs reads once more after it, not alongside it', async () => {
+      let release!: (rows: ChatMessage[]) => void;
+      const unclaimedSince = jest
+        .fn()
+        .mockImplementationOnce(
+          () => new Promise<ChatMessage[]>((resolve) => (release = resolve)),
+        )
+        .mockResolvedValue([]);
+      const worker = await compileWorker({ claim, unclaimedSince });
+
+      const first = worker.catchUp(NOW);
+      await worker.catchUp(NOW);
+      expect(unclaimedSince).toHaveBeenCalledTimes(1);
+
+      release([]);
+      await first;
+      expect(unclaimedSince).toHaveBeenCalledTimes(2);
+    });
+
+    it('subscribing runs the catch-up', async () => {
+      const unclaimedSince = jest.fn().mockResolvedValue([]);
+      let onStatus: ((status: string) => void) | undefined;
+      interface FakeChannel {
+        on: jest.Mock;
+        subscribe: jest.Mock;
+        presenceState: () => Record<string, never>;
+      }
+      const openChannel = jest.fn(() => {
+        const ch: FakeChannel = {
+          on: jest.fn((): FakeChannel => ch),
+          subscribe: jest.fn((cb: (status: string) => void): FakeChannel => {
+            onStatus = cb;
+            return ch;
+          }),
+          presenceState: () => ({}),
+        };
+        return ch;
+      });
+      const worker = await compileWorker(
+        { claim, unclaimedSince },
+        openChannel,
+      );
+
+      worker.onApplicationBootstrap();
+      expect(unclaimedSince).not.toHaveBeenCalled();
+      onStatus?.('SUBSCRIBED');
+      await Promise.resolve();
+
+      expect(unclaimedSince).toHaveBeenCalledTimes(1);
+      await worker.onApplicationShutdown();
+    });
+
+    it('a dropped subscription that rejoins pushes each row inserted in the gap exactly once (#5938)', async () => {
+      // The gap's row is unclaimed when the rejoin reads; once pushed, its
+      // claim keeps the next read (and any late Realtime delivery) off it.
+      const store = (() => {
+        const claimed = new Set<string>();
+        return jest.fn(async (messageId: string) => {
+          if (claimed.has(messageId)) return 'taken';
+          claimed.add(messageId);
+          return 'claimed';
+        });
+      })();
+      const gap = stored('m-gap');
+      const unclaimedSince = jest.fn().mockResolvedValue([gap]);
+      let onStatus: ((status: string) => void) | undefined;
+      const openChannel = jest.fn(() => {
+        const ch: {
+          on: jest.Mock;
+          subscribe: jest.Mock;
+          presenceState: () => object;
+        } = {
+          on: jest.fn(() => ch),
+          subscribe: jest.fn((cb: (status: string) => void) => {
+            onStatus = cb;
+            return ch;
+          }),
+          presenceState: () => ({}),
+        };
+        return ch;
+      });
+      const worker = await compileWorker(
+        { claim: store, unclaimedSince },
+        openChannel,
+      );
+      worker.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
+      setMembers(['sender', 'a']);
+
+      worker.onApplicationBootstrap();
+      onStatus?.('SUBSCRIBED');
+      onStatus?.('CHANNEL_ERROR');
+      onStatus?.('SUBSCRIBED');
+      // Let both catch-ups (the second queued behind the first) finish.
+      for (let i = 0; i < 50 && unclaimedSince.mock.calls.length < 2; i++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      await worker.catchUp(new Date());
+
+      expect(unclaimedSince.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(notifyUser).toHaveBeenCalledTimes(1);
+      await worker.onApplicationShutdown();
     });
   });
 

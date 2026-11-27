@@ -98,6 +98,13 @@ export interface WorkerSubscriptionConfig {
    */
   bind: (channel: RealtimeChannel) => RealtimeChannel;
   logger: Logger;
+  /**
+   * Called on every `SUBSCRIBED`: the first join and each rejoin. Inserts made
+   * while the subscription was down are never delivered, so a worker that
+   * must not miss one reads them back here (the push worker's catch-up,
+   * #6123). Errors are the worker's own to handle; this class doesn't wait.
+   */
+  onSubscribed?: () => void;
 }
 
 /**
@@ -255,6 +262,7 @@ export class WorkerSubscription {
       this.reopens = 0;
       if (this.outageTimer) clearTimeout(this.outageTimer);
       this.outageTimer = null;
+      this.config.onSubscribed?.();
       return;
     }
 

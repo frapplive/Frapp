@@ -7,6 +7,7 @@ import type {
   ActivityRecapPush,
   ActivityUnreadStart,
   AiReport,
+  ApiWake,
   AiRun,
   AiSuggestion,
   AiSuggestionChange,
@@ -252,6 +253,8 @@ export interface Database {
       chapter_interest_forms: TableDefinition<ChapterInterestForm>;
       chapter_pledge_classes: TableDefinition<PledgeClass>;
       chapter_points_config: TableDefinition<ChapterPointsConfig>;
+      /** `20261127184653` (#6123): one row, the API's address for `wake_api()`. */
+      api_wake: TableDefinition<ApiWake>;
       chapter_service_config: TableDefinition<ChapterServiceConfig>;
       chapter_workflows: TableDefinition<ChapterWorkflow>;
       chapters: TableDefinition<Chapter>;
@@ -958,6 +961,17 @@ export interface Database {
           /** `20261118173407`: `sent` or `read` on the caller's own DM message (#5519). */
           read_status: string | null;
         }[];
+      };
+      /**
+       * `20261127184653` (#6123). The chat messages created at or after
+       * `p_since` that no instance has claimed in `chat_push_dispatches`,
+       * oldest first, at most `p_limit` (capped at 500). Imported, posted-answer
+       * and deleted rows are left out. Service role only: it reads across
+       * chapters, for the push worker's catch-up.
+       */
+      chat_push_unclaimed_messages: {
+        Args: { p_since: string; p_limit: number };
+        Returns: ChatMessage[];
       };
       /**
        * `20260816190000` (C1 of #937). Unread and mention tallies for every
