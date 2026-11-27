@@ -6,6 +6,7 @@ import { Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ANNOUNCEMENTS_CHANNEL_COPY,
   GOALS_FOOTNOTE,
   MODULE_TOOLS_ON_WEB,
   isBetaOffModule,
@@ -39,6 +40,7 @@ const h = vi.hoisted(() => ({
   formEnabled: [] as (boolean | undefined)[],
   form: { offered: false, form: null } as unknown,
   templateReads: 0,
+  channels: [] as unknown[],
   council: false,
   updateForm: vi.fn(),
   replaceForm: vi.fn(),
@@ -129,7 +131,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useAddInterestFormLabel: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveInterestFormLabel: () => ({ mutate: vi.fn(), isPending: false }),
   useGroups: () => ok([]),
-  useChannels: () => ok([]),
+  useChannels: () => ok(h.channels),
   useGeofences: () => ok([{ id: "z1" }, { id: "z2" }]),
   useChapterChatBackground: () => ok(undefined),
   useUpdateChapter: () => ({
@@ -254,6 +256,7 @@ beforeEach(() => {
   h.setGoals.mockReset().mockResolvedValue({});
   h.setTemplate.mockReset().mockResolvedValue({});
   h.permissions = PRESIDENT;
+  h.channels = [];
   h.chapter = { name: "Sig Ep", enabled_modules: { rush: false } };
   h.config = {
     org_archetype: "ifc",
@@ -384,6 +387,45 @@ describe("a module's screen (#6030)", () => {
       "Your role can't switch modules on or off.",
     );
     expect(toggle(tree, "Events").props.disabled).toBe(true);
+  });
+
+  it("opens the announcements channel's settings from its row (#6151)", () => {
+    h.channels = [
+      { id: "c-general", name: "general", type: "PUBLIC", is_read_only: false },
+      {
+        id: "c-ann",
+        name: "announcements",
+        type: "PUBLIC",
+        is_read_only: true,
+      },
+    ];
+    h.permissions = ["chapter-config:view", "channels:manage"];
+    const tree = screen("announcements");
+    expect(
+      pressable(tree, ANNOUNCEMENTS_CHANNEL_COPY.label).props.accessibilityHint,
+    ).toBe("Opens the channel's settings.");
+    act(() =>
+      pressable(tree, ANNOUNCEMENTS_CHANNEL_COPY.label).props.onPress(),
+    );
+    expect(push()).toHaveBeenCalledWith({
+      pathname: "/channel-settings",
+      params: { channelId: "c-ann" },
+    });
+  });
+
+  it("draws no channel row for a viewer without channels:manage (#6151)", () => {
+    h.channels = [
+      {
+        id: "c-ann",
+        name: "announcements",
+        type: "PUBLIC",
+        is_read_only: true,
+      },
+    ];
+    h.permissions = READER;
+    expect(screenText(screen("announcements"))).not.toContain(
+      ANNOUNCEMENTS_CHANNEL_COPY.label,
+    );
   });
 
   it("says Always on for Chat and Announcements, with no switch", () => {
