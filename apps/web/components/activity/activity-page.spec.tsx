@@ -210,9 +210,10 @@ vi.mock("./activity-panel", () => ({
     row: ActivityRow | null;
     onClose: (key?: string) => void;
     onActed: () => void;
-  }) =>
-    (row && panelCloses.push({ key: row.key, onClose }) && false) ||
-    (row ? (
+  }) => {
+    if (!row) return null;
+    panelCloses.push({ key: row.key, onClose });
+    return (
       <div data-testid="panel">
         <span>{`panel:${row.title}`}</span>
         <button onClick={() => onClose()}>close</button>
@@ -220,7 +221,8 @@ vi.mock("./activity-panel", () => ({
         <button onClick={() => onClose(row.key)}>settled close</button>
         <button onClick={onActed}>acted</button>
       </div>
-    ) : null),
+    );
+  },
 }));
 
 /** The chapter's plan: `state.allowed` false refuses the row actions. */
