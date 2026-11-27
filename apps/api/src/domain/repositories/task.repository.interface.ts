@@ -1,4 +1,5 @@
 import {
+  ActivityTaskReads,
   Task,
   TaskPhoto,
   TaskGroup,
@@ -38,8 +39,6 @@ export interface TaskListFilter {
    * (#5473), so a member's board holds what their groups follow.
    */
   orFollowedBy?: readonly string[];
-  /** Leave out this assignee's tasks. */
-  notAssigneeId?: string;
   /** Only tasks this member created. */
   createdBy?: string;
   /**
@@ -54,26 +53,14 @@ export interface TaskListFilter {
   confirmed?: boolean;
   /** Only tasks marked done at or after this instant (`completed_at`). */
   completedSince?: string;
-  /**
-   * Only tasks not yet confirmed, or marked done at or after this instant
-   * (`completed_at`), confirmed or not: one read that holds a member's open
-   * tasks and what they finished since, for Activity (#5746). Not with `after`.
-   */
-  unconfirmedOrCompletedSince?: string;
 }
 
 /**
- * A read of a chapter's tasks. Both orders are total, so a page never repeats
- * or skips a row.
+ * A read of a chapter's tasks, newest first: `created_at` then `id`, a total
+ * order, so a page never repeats or skips a row.
  */
 export interface TaskListQuery extends TaskListFilter {
-  /**
-   * `newest` (the default): `created_at` then `id`, newest first.
-   * `longest_waiting`: `completed_at`, then `created_at` and `id`, oldest
-   * first, for a list of completions waiting on a confirm.
-   */
-  order?: 'newest' | 'longest_waiting';
-  /** Resume after this row. Only with the `newest` order. */
+  /** Resume after this row. */
   after?: TaskListCursor;
   /**
    * At most this many rows. Omitted: every matching row, read in pages so the
@@ -86,21 +73,19 @@ export interface ITaskRepository {
   findById(id: string, chapterId: string): Promise<Task | null>;
   /** The chapter's tasks among `ids`, in no particular order; missing ids are left out. */
   findByIds(chapterId: string, ids: string[]): Promise<Task[]>;
-  /** The chapter's tasks that match `query`, in its order (newest first by default). */
+  /** The chapter's tasks that match `query`, newest first. */
   findByChapter(chapterId: string, query?: TaskListQuery): Promise<Task[]>;
   /** How many of the chapter's tasks match `query`, counted in SQL. */
   countByChapter(chapterId: string, query?: TaskListFilter): Promise<number>;
   /**
-   * {@link findByChapter}, and with `withTotal` how many rows match before
-   * `limit` (#5746), counted by the request that reads the first page, so a
-   * capped list and its total cost one round trip. An uncapped read is
-   * counted too, which ends it without an empty page. `total` is null when
-   * the read was not counted.
+   * {@link findByChapter}, counting an uncapped read with the request that
+   * reads its first page (#5746), which ends it without an empty page; a
+   * capped read stops at its limit uncounted. `total` is null when the read
+   * was not counted.
    */
   findByChapterCounted(
     chapterId: string,
     query?: TaskListQuery,
-    options?: { withTotal?: boolean },
   ): Promise<{ tasks: Task[]; total: number | null }>;
   /**
    * The chapter's tasks due on or after `dueFrom` (`YYYY-MM-DD`), or made at
@@ -210,15 +195,21 @@ export interface ITaskRepository {
     groupIds: string[],
   ): Promise<TaskGroupCopyState[]>;
   /**
-   * The groups this member made that still have a copy not confirmed, newest
-   * first, at most `limit` (#5492). A group whose every copy is confirmed is
-   * finished, and left out in SQL so it never takes a slot from a live one.
+   * Every task list Activity draws for this member, in one request
+   * (`activity_task_reads`, #6061). `canManage` is the caller's
+   * `tasks:manage`: without it, every list but their own is empty.
    */
-  findUnfinishedGroupsByCreator(
+  readActivityTasks(
     chapterId: string,
-    createdBy: string,
-    limit: number,
-  ): Promise<TaskGroup[]>;
+    query: {
+      userId: string;
+      canManage: boolean;
+      /** The instant the week began, as ISO 8601. */
+      weekStart: string;
+      /** At most this many rows in each capped list. */
+      limit: number;
+    },
+  ): Promise<ActivityTaskReads>;
   /**
    * Delete a group's copies and then its row (#4295 step 3). Photo and
    * subtask rows go with their copies (on delete cascade).

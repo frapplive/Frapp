@@ -1,16 +1,17 @@
-// What a member assigned, a task for everyone counted once (#5492), against a
-// real Postgres and PostgREST.
+// What a member assigned, a task for everyone counted once (#5492), and the
+// one read Activity draws its task lists from (`activity_task_reads`, #6061),
+// against a real Postgres and PostgREST.
 //
-// The unit specs prove what the repository asks for. This proves what
-// PostgREST does with it: that `tasks!inner` with a filter on the embed keeps
-// only the groups with a copy not yet confirmed; that the embed's own limit
-// caps the embedded copies (checked with the same query, the embed kept,
-// since the repository strips it) and never the groups; that `groupless`
-// leaves out every copy; and that the copy-state read returns only its few
-// columns.
+// The unit specs prove what the repository asks for and what the service
+// makes of the answer. This proves what the function does with it: that a
+// group with a copy not yet confirmed is kept and a finished one is not; that
+// every list is capped at the limit asked and ordered as its own read was;
+// that a caller without `tasks:manage` gets their own tasks only; that `own`
+// holds what was done since the week began; that `groupless` leaves out every
+// copy; and that copy states carry their few columns only.
 //
 // Run: `npm run test:integration -w apps/api` (needs a local Supabase stack
-// with `20261118043407` applied; skips cleanly without a stack).
+// with `20261127184500` applied; skips cleanly without a stack).
 
 import { randomUUID } from 'node:crypto';
 import { SupabaseTaskRepository } from '../../src/infrastructure/supabase/repositories/supabase-task.repository';
@@ -115,6 +116,21 @@ describeIntegration(
           })
         ).error,
       );
+      // Done by a member and waiting on an officer's confirm.
+      assertOk(
+        'waiting task',
+        (
+          await supabase.from('tasks').insert({
+            chapter_id: chapterId,
+            title: 'Waiting',
+            assignee_id: userIds[2],
+            created_by: officerId,
+            due_date: '2026-12-01',
+            status: TaskStatus.COMPLETED,
+            completed_at: '2026-11-18T00:00:00.000Z',
+          })
+        ).error,
+      );
     });
 
     afterAll(async () => {
@@ -123,51 +139,130 @@ describeIntegration(
       await supabase.from('users').delete().in('id', userIds);
     });
 
-    it('keeps only groups with a copy not yet confirmed, newest first', async () => {
-      const [open, , half] = groupIds;
-      const groups = await tasks.findUnfinishedGroupsByCreator(
-        chapterId,
-        officerId,
-        25,
-      );
+    const read = (
+      userId: string,
+      canManage: boolean,
+      { weekStart = '2026-11-17T00:00:00.000Z', limit = 25 } = {},
+    ) =>
+      tasks.readActivityTasks(chapterId, {
+        userId,
+        canManage,
+        weekStart,
+        limit,
+      });
 
-      expect(groups.map((group) => group.id)).toEqual([half, open]);
-      for (const group of groups) expect(group).not.toHaveProperty('tasks');
+    it('keeps only groups with a copy not yet confirmed, newest first, each with one open copy whole', async () => {
+      const [open, finished, half] = groupIds;
+      const reads = await read(officerId, true);
+
+      expect(reads.made_groups.map((group) => group.id)).toEqual([half, open]);
+      // One copy not confirmed per live group, the lowest id, read whole.
+      expect(reads.shared.map((copy) => copy.group_id).sort()).toEqual(
+        [half, open].sort(),
+      );
+      for (const copy of reads.shared) {
+        expect(copy.points_awarded).toBe(false);
+        expect(copy).toHaveProperty('title');
+        const lowest = reads.copy_states
+          .filter(
+            (state) =>
+              state.group_id === copy.group_id && !state.points_awarded,
+          )
+          .map((state) => state.id)
+          .sort()[0];
+        expect(copy.id).toBe(lowest);
+      }
+      // Every copy of the groups drawn: the officer holds a copy of all three,
+      // so `own` draws Finished's too.
+      expect(reads.row_groups.map((group) => group.id).sort()).toEqual(
+        [open, finished, half].sort(),
+      );
+      expect(reads.copy_states).toHaveLength(12);
     });
 
-    it('caps the groups at the limit asked, never at the embed’s one copy', async () => {
+    it('caps every list at the limit asked', async () => {
       const [open, , half] = groupIds;
-      // Two live groups, each with several open copies: an embed limit that
-      // reached the groups would return one.
-      const groups = await tasks.findUnfinishedGroupsByCreator(
-        chapterId,
-        officerId,
-        2,
-      );
+      const reads = await read(officerId, true, { limit: 2 });
 
-      expect(groups.map((group) => group.id)).toEqual([half, open]);
+      // Two live groups, each with several open copies: still both.
+      expect(reads.made_groups.map((group) => group.id)).toEqual([half, open]);
+      expect(reads.made).toHaveLength(2);
+      expect(reads.singles).toHaveLength(2);
+      // The newest first, as the page reads them.
+      expect(reads.singles.map((task) => task.title)).toEqual([
+        'Waiting',
+        'Solo',
+      ]);
     });
 
-    it('caps the embedded copies at one per group', async () => {
-      // The repository's query with the embed kept (it strips it from what it
-      // returns): each live group carries one open copy's id, not three or four.
-      const { data, error } = await supabase
-        .from('task_groups')
-        .select('id, tasks!inner(id)')
-        .eq('chapter_id', chapterId)
-        .eq('created_by', officerId)
-        .eq('tasks.points_awarded', false)
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
-        .limit(1, { referencedTable: 'tasks' })
-        .limit(25);
-      assertOk('embed read', error);
+    it('lists finished work waiting on a confirm, with how many wait in all', async () => {
+      const reads = await read(officerId, true, { limit: 1 });
 
-      const rows = (data ?? []) as unknown as {
-        id: string;
-        tasks: { id: string }[];
-      }[];
-      expect(rows.map((row) => row.tasks.length)).toEqual([1, 1]);
+      expect(reads.waiting.map((task) => task.title)).toEqual(['Waiting']);
+      expect(reads.waiting_total).toBe(1);
+      // Not the officer's own completion: theirs isn't theirs to confirm.
+      const asAssignee = await read(userIds[2], true);
+      expect(asAssignee.waiting).toEqual([]);
+      expect(asAssignee.waiting_total).toBe(0);
+    });
+
+    it('holds what was done since the week began, confirmed or not, and nothing confirmed before it', async () => {
+      const [, finished] = groupIds;
+      const inWeek = await read(officerId, true);
+      const after = await read(officerId, true, {
+        weekStart: '2026-11-19T00:00:00.000Z',
+      });
+
+      expect(inWeek.own.some((task) => task.group_id === finished)).toBe(true);
+      expect(after.own.some((task) => task.group_id === finished)).toBe(false);
+      for (const task of [...inWeek.own, ...after.own]) {
+        expect(task.assignee_id).toBe(officerId);
+      }
+    });
+
+    it('gives a member without tasks:manage their own tasks only', async () => {
+      const member = userIds[1];
+      const reads = await read(member, false);
+
+      expect(reads.own.length).toBeGreaterThan(0);
+      for (const task of reads.own) expect(task.assignee_id).toBe(member);
+      expect(reads.own.map((task) => task.title)).toContain('Solo');
+      expect(reads.waiting).toEqual([]);
+      expect(reads.waiting_total).toBe(0);
+      expect(reads.made).toEqual([]);
+      expect(reads.singles).toEqual([]);
+      expect(reads.made_groups).toEqual([]);
+      expect(reads.shared).toEqual([]);
+    });
+
+    it('returns each row and group as PostgREST serves it, every column alike', async () => {
+      const reads = await read(officerId, true);
+      const waiting = reads.waiting[0];
+      const [group] = reads.made_groups;
+
+      expect(waiting).toEqual(await tasks.findById(waiting.id, chapterId));
+      expect(group).toEqual((await tasks.findGroups(chapterId, [group.id]))[0]);
+    });
+
+    it('reads nothing of another chapter', async () => {
+      const reads = await tasks.readActivityTasks(randomUUID(), {
+        userId: officerId,
+        canManage: true,
+        weekStart: '2026-11-17T00:00:00.000Z',
+        limit: 25,
+      });
+
+      expect(reads).toEqual({
+        own: [],
+        waiting: [],
+        waiting_total: 0,
+        made: [],
+        singles: [],
+        made_groups: [],
+        row_groups: [],
+        copy_states: [],
+        shared: [],
+      });
     });
 
     it('reads one-person tasks apart from every copy', async () => {
@@ -176,7 +271,7 @@ describeIntegration(
         groupless: true,
       });
 
-      expect(solo.map((task) => task.title)).toEqual(['Solo']);
+      expect(solo.map((task) => task.title)).toEqual(['Waiting', 'Solo']);
     });
 
     it('reads a group’s copy states as their few columns only', async () => {

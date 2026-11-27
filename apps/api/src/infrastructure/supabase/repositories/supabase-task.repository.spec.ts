@@ -78,7 +78,6 @@ describe('SupabaseTaskRepository — tenant scope', () => {
         orFollowedBy: ['role:0c000000-0000-4000-8000-000000000062'],
       },
     ],
-    ['not-assignee', { notAssigneeId: '0c000000-0000-4000-8000-000000000060' }],
     ['creator', { createdBy: USER_SHARED }],
     ['one-person', { groupless: true }],
     ['status', { status: TaskStatus.TODO }],
@@ -107,15 +106,7 @@ describe('SupabaseTaskRepository — tenant scope', () => {
 
   it('findByChapterCounted keeps the chapter predicate and counts only that chapter (#5746)', async () => {
     const { tasks, total } = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.findByChapterCounted(
-        CHAPTER_B,
-        {
-          assigneeId: USER_SHARED,
-          unconfirmedOrCompletedSince: '2026-11-08T00:00:00.000Z',
-          limit: 10,
-        },
-        { withTotal: true },
-      ),
+      repo.findByChapterCounted(CHAPTER_B, { assigneeId: USER_SHARED }),
     );
 
     expect(tasks.map((t) => t.id)).toEqual([TASK_B]);
@@ -124,13 +115,13 @@ describe('SupabaseTaskRepository — tenant scope', () => {
     expect(harness.ops).toHaveLength(1);
   });
 
-  it('findByChapterCounted counts an uncapped read, and not a capped one unless asked (#5746)', async () => {
+  it('findByChapterCounted counts an uncapped read, and not a capped one (#5746)', async () => {
     const uncapped = await repo.findByChapterCounted(CHAPTER_B);
     expect(uncapped.total).toBe(1);
     expect(harness.ops).toHaveLength(1);
 
     harness.reset();
-    // Capped and not asked: no count, so a short page reads on to an empty one.
+    // Capped: no count, so a short page reads on to an empty one.
     const capped = await repo.findByChapterCounted(CHAPTER_B, { limit: 10 });
     expect(capped.tasks.map((t) => t.id)).toEqual([TASK_B]);
     expect(capped.total).toBeNull();
@@ -211,7 +202,6 @@ describe('SupabaseTaskRepository — tenant scope', () => {
         { assigneeId: USER_SHARED, orFollowedBy: [FOLLOWER, 'tier:x'] },
         [3, 2, 1],
       ],
-      ['not-assignee', { notAssigneeId: USER_SHARED }, [4, 2]],
       ['creator', { createdBy: USER_SHARED }, [2, 1]],
       ['one-person', { groupless: true }, [4, 2, 1]],
       ['status', { status: TaskStatus.TODO }, [1]],
@@ -230,72 +220,14 @@ describe('SupabaseTaskRepository — tenant scope', () => {
       },
     );
 
-    it.each([
-      // Not yet confirmed (1, 2, 3); 4 was confirmed and done before it.
-      ['after the confirmed one was done', '2026-01-02T00:00:00Z', [3, 2, 1]],
-      // Done at or after the instant, confirmed or not.
-      ['at the confirmed one', '2026-01-01T00:00:00Z', [4, 3, 2, 1]],
-    ] as const)(
-      'unconfirmedOrCompletedSince %s keeps only those (#5746)',
-      async (_name, since, expected) => {
-        const { tasks } = await harness.expectTenantScoped(CHAPTER_B, () =>
-          repo.findByChapterCounted(CHAPTER_B, {
-            unconfirmedOrCompletedSince: since,
-          }),
-        );
-
-        expect(tasks.map((t) => t.id)).toEqual(expected.map(id));
-        expect(harness.ops[0].orGroups).toEqual([
-          [
-            expect.objectContaining({
-              column: 'confirmed_at',
-              op: 'is',
-              value: null,
-            }),
-            expect.objectContaining({
-              column: 'completed_at',
-              op: 'gte',
-              value: since,
-            }),
-          ],
-        ]);
-      },
-    );
-
-    it('findByChapterCounted orders a waiting list longest-waiting first and counts it in the same request (#5746)', async () => {
-      const { tasks, total } = await harness.expectTenantScoped(CHAPTER_B, () =>
-        repo.findByChapterCounted(
-          CHAPTER_B,
-          {
-            status: TaskStatus.COMPLETED,
-            confirmed: false,
-            order: 'longest_waiting',
-            limit: 1,
-          },
-          { withTotal: true },
-        ),
-      );
-
-      // Done first, waiting longest: 3, before 2, which the cap leaves out.
-      expect(tasks.map((t) => t.id)).toEqual([id(3)]);
-      expect(total).toBe(2);
-      expect(harness.ops).toHaveLength(1);
-    });
-
-    it('orders a waiting list longest-waiting first, and counts it in SQL', async () => {
-      const waiting = {
-        status: TaskStatus.COMPLETED,
-        confirmed: false,
-      } as const;
-
-      const tasks = await harness.expectTenantScoped(CHAPTER_B, () =>
-        repo.findByChapter(CHAPTER_B, { ...waiting, order: 'longest_waiting' }),
-      );
+    it('counts a filtered list in SQL', async () => {
       const count = await harness.expectTenantScoped(CHAPTER_B, () =>
-        repo.countByChapter(CHAPTER_B, waiting),
+        repo.countByChapter(CHAPTER_B, {
+          status: TaskStatus.COMPLETED,
+          confirmed: false,
+        }),
       );
 
-      expect(tasks.map((t) => t.id)).toEqual([id(3), id(2)]);
       expect(count).toBe(2);
     });
   });
@@ -932,87 +864,68 @@ describe('SupabaseTaskRepository — task photos (#4635)', () => {
   });
 });
 
-describe('SupabaseTaskRepository — a creator’s unfinished groups (#5492)', () => {
-  const OTHER = '0c000000-0000-4000-8000-000000000070';
-  /**
-   * A group row per chapter, twins apart from `id` and `chapter_id`. The
-   * harness resolves no join, so `tasks` is the embed as the seed carries it:
-   * the group's copies, one confirmed and one open, or both confirmed. The
-   * harness applies the embedded filter and `!inner` to it, as PostgREST
-   * would; the live suite (`task-groups.integration-spec.ts`) checks PostgREST
-   * itself.
-   */
-  const group = (
-    n: number,
-    over: { created_by?: string; open?: boolean } = {},
-  ) => {
-    const fields = {
-      created_by: over.created_by ?? USER_SHARED,
-      audience: 'everyone',
-      target_id: null,
-      target_name: null,
-      created_at: `2026-11-0${n}T00:00:00.000Z`,
-      tasks: [
-        { id: `copy-${n}-1`, points_awarded: true },
-        { id: `copy-${n}-2`, points_awarded: !(over.open ?? true) },
-      ],
-    };
-    return [
-      inA({ id: `0a000000-0000-4000-8000-00000000007${n}`, ...fields }),
-      inB({ id: `0b000000-0000-4000-8000-00000000007${n}`, ...fields }),
-    ];
+describe('SupabaseTaskRepository — Activity’s task lists in one read (#6061)', () => {
+  const READS = {
+    own: [{ id: 'own-1' }],
+    waiting: [],
+    waiting_total: 3,
+    made: [],
+    singles: [],
+    made_groups: [],
+    row_groups: [],
+    copy_states: [],
+    shared: [],
   };
-  const idInB = (n: number) => `0b000000-0000-4000-8000-00000000007${n}`;
-  let harness: TenantHarness;
-  let repo: SupabaseTaskRepository;
 
-  beforeEach(() => {
-    harness = createTenantHarness({
-      tables: {
-        task_groups: [
-          ...group(1),
-          ...group(2),
-          // Someone else's.
-          ...group(3, { created_by: OTHER }),
-          // Every copy confirmed: finished.
-          ...group(4, { open: false }),
-          ...group(5),
-        ],
+  it('calls activity_task_reads once, inside the chapter, with the caller’s scope', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: { activity_task_reads: { data: READS } },
+    });
+    const repo = new SupabaseTaskRepository(harness.client);
+
+    const reads = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.readActivityTasks(CHAPTER_B, {
+        userId: USER_SHARED,
+        canManage: false,
+        weekStart: '2026-11-09T00:00:00.000Z',
+        limit: 25,
+      }),
+    );
+
+    expect(reads).toEqual(READS);
+    expect(harness.ops).toHaveLength(0);
+    expect(harness.rpcCalls).toEqual([
+      {
+        fn: 'activity_task_reads',
+        args: {
+          p_chapter_id: CHAPTER_B,
+          p_user_id: USER_SHARED,
+          p_can_manage: false,
+          p_week_start: '2026-11-09T00:00:00.000Z',
+          p_limit: 25,
+        },
+      },
+    ]);
+  });
+
+  it('throws on a database error rather than reading it as no tasks', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: {
+        activity_task_reads: { error: { message: 'boom', code: 'XX000' } },
       },
     });
-    repo = new SupabaseTaskRepository(harness.client);
-  });
+    const repo = new SupabaseTaskRepository(harness.client);
 
-  it('reads the creator’s groups with an open copy, in the chapter, newest first, capped', async () => {
-    const groups = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.findUnfinishedGroupsByCreator(CHAPTER_B, USER_SHARED, 2),
-    );
-
-    expect(groups.map((row) => row.id)).toEqual([idInB(5), idInB(2)]);
-    const read = harness.ops.at(-1)!;
-    expect(read.filters).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          op: 'eq',
-          column: 'created_by',
-          value: USER_SHARED,
-        }),
-        expect.objectContaining({
-          op: 'eq',
-          column: 'tasks.points_awarded',
-          value: false,
-        }),
-      ]),
-    );
-  });
-
-  it('returns the group rows without the copy embedded to filter on', async () => {
-    const groups = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.findUnfinishedGroupsByCreator(CHAPTER_B, USER_SHARED, 25),
-    );
-
-    expect(groups.map((row) => row.id)).toEqual([idInB(5), idInB(2), idInB(1)]);
-    for (const row of groups) expect(row).not.toHaveProperty('tasks');
+    await expect(
+      repo.readActivityTasks(CHAPTER_B, {
+        userId: USER_SHARED,
+        canManage: true,
+        weekStart: '2026-11-09T00:00:00.000Z',
+        limit: 25,
+      }),
+    ).rejects.toThrow('boom');
   });
 });
 

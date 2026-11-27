@@ -15,6 +15,7 @@ import type {
   TaskListQuery,
 } from '#domain/repositories/task.repository.interface';
 import {
+  type ActivityTaskReads,
   Task,
   TaskStatus,
   type TaskGroup,
@@ -88,7 +89,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
   }
 
   /**
-   * The chapter's tasks that match `query`, filtered and in its order, for
+   * The chapter's tasks that match `query`, filtered, newest first, for
    * {@link findByChapter} and {@link findByChapterCounted}; `count` asks
    * PostgREST for the exact number of matching rows.
    */
@@ -100,12 +101,6 @@ export class SupabaseTaskRepository implements ITaskRepository {
       chapterId,
       query,
     );
-    if (query.order === 'longest_waiting') {
-      return q
-        .order('completed_at', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true });
-    }
     return q
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
@@ -135,19 +130,17 @@ export class SupabaseTaskRepository implements ITaskRepository {
   async findByChapterCounted(
     chapterId: string,
     query: TaskListQuery = {},
-    { withTotal = false }: { withTotal?: boolean } = {},
   ): Promise<{ tasks: Task[]; total: number | null }> {
-    // Counted when the caller wants the total, or the read is uncapped, which
-    // the count ends without an empty page; a capped read stops at its limit
-    // anyway, and counting it is a second pass for nothing
-    // (`fetchCountedPages`).
+    // Counted when the read is uncapped, which the count ends without an
+    // empty page; a capped read stops at its limit anyway, and counting it is
+    // a second pass for nothing (`fetchCountedPages`).
     const { rows, total } = await fetchCountedPages<Task>(
       (from, to, withCount) =>
         this.listQuery(chapterId, query, withCount).range(from, to),
       {
         pageSize: Math.min(query.limit ?? TASK_PAGE_SIZE, TASK_PAGE_SIZE),
         limit: query.limit,
-        count: withTotal || query.limit === undefined,
+        count: query.limit === undefined,
       },
     );
     return { tasks: rows, total };
@@ -190,18 +183,12 @@ export class SupabaseTaskRepository implements ITaskRepository {
     } else if (query.assigneeId) {
       q = q.eq('assignee_id', query.assigneeId);
     }
-    if (query.notAssigneeId) q = q.neq('assignee_id', query.notAssigneeId);
     if (query.createdBy) q = q.eq('created_by', query.createdBy);
     if (query.groupless) q = q.is('group_id', null);
     if (query.status) q = q.eq('status', query.status);
     if (query.confirmed === true) q = q.not('confirmed_at', 'is', null);
     if (query.confirmed === false) q = q.is('confirmed_at', null);
     if (query.completedSince) q = q.gte('completed_at', query.completedSince);
-    if (query.unconfirmedOrCompletedSince) {
-      q = q.or(
-        `confirmed_at.is.null,completed_at.gte.${escapeFilterValue(query.unconfirmedOrCompletedSince)}`,
-      );
-    }
     if (query.after) {
       // Strictly after the cursor in (created_at desc, id desc): an earlier
       // `created_at`, or the same one and a lower `id`. Spelled without a
@@ -553,26 +540,25 @@ export class SupabaseTaskRepository implements ITaskRepository {
     return rows;
   }
 
-  async findUnfinishedGroupsByCreator(
+  async readActivityTasks(
     chapterId: string,
-    createdBy: string,
-    limit: number,
-  ): Promise<TaskGroup[]> {
-    // A group with at least one copy not yet confirmed: `!inner` with the
-    // filter on the embed keeps only the groups that have such a copy, and
-    // one is all it takes, so the embed carries at most one id per group.
-    const { data, error } = await this.supabase
-      .from('task_groups')
-      .select('*, tasks!inner(id)')
-      .eq('chapter_id', chapterId)
-      .eq('created_by', createdBy)
-      .eq('tasks.points_awarded', false)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1, { referencedTable: 'tasks' })
-      .limit(limit);
+    query: {
+      userId: string;
+      canManage: boolean;
+      weekStart: string;
+      limit: number;
+    },
+  ): Promise<ActivityTaskReads> {
+    const { data, error } = await this.supabase.rpc('activity_task_reads', {
+      p_chapter_id: chapterId,
+      p_user_id: query.userId,
+      p_can_manage: query.canManage,
+      p_week_start: query.weekStart,
+      p_limit: query.limit,
+    });
     if (error) throw new SupabaseQueryError(error);
-    return (data ?? []).map(withoutCopyEmbed);
+    if (!data) throw new Error('activity_task_reads returned nothing');
+    return data;
   }
 
   async deleteGroup(chapterId: string, groupId: string): Promise<void> {
@@ -805,11 +791,4 @@ export class SupabaseTaskRepository implements ITaskRepository {
     if (error) throw new SupabaseQueryError(error);
     return (data ?? []).length > 0;
   }
-}
-
-/** A group row without the copy its read embedded to filter on. */
-function withoutCopyEmbed(row: TaskGroup & { tasks?: unknown }): TaskGroup {
-  const rest = { ...row };
-  delete rest.tasks;
-  return rest;
 }

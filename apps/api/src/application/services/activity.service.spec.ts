@@ -2,7 +2,11 @@ import { BadRequestException } from '@nestjs/common';
 import * as caughtFailure from '../../infrastructure/observability/report-caught-failure';
 import { ActivityService } from './activity.service';
 import type { ActivityLink } from './activity-link.service';
-import type { AssignedTaskItem, TaskRowListOptions } from './task.service';
+import type {
+  ActivityTaskLists,
+  AssignedTaskItem,
+  TaskListOptions,
+} from './task.service';
 import { TaskStatus } from '#domain/entities/task.entity';
 import type { TaskView } from '#domain/entities/task.entity';
 import type { ChatMessage } from '#domain/entities/chat.entity';
@@ -105,7 +109,9 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
         tasks.map((row) => ({ ...row, group: row.group ?? null })),
       ),
     ),
-    listAssignedItems: jest.fn().mockResolvedValue([]),
+    // As `activity_task_reads` answers, from the fixtures `serveTasks` and
+    // `serveItems` hold: none until a spec serves some.
+    activityLists: jest.fn(activityListsFrom({ own: [], all: [], items: [] })),
     waitingExtensions: jest.fn().mockResolvedValue([]),
   };
   const serviceEntryService = {
@@ -311,16 +317,94 @@ const formCard = (
     ...overrides,
   }) as ChatMessage;
 
+interface TaskFixtures {
+  /** The caller's own tasks. */
+  own: TaskView[];
+  /** The chapter's tasks, as a `tasks:manage` holder reads them. */
+  all: TaskView[];
+  /** What the caller assigned, a task for everyone once (#5492). */
+  items: AssignedTaskItem[];
+}
+
 /**
- * `TaskService.list` answers the caller's own tasks and the chapter-wide list
- * separately, each narrowed as the repository narrows it in SQL (#4037).
+ * `TaskService.activityLists` over fixtures, each list narrowed, ordered and
+ * capped as `activity_task_reads` does it in SQL (#6061), and every list but
+ * the caller's own empty without `tasks:manage`. A row keeps a fixture's
+ * group, or none.
+ */
+function activityListsFrom(fixtures: TaskFixtures) {
+  return (
+    _chapterId: string,
+    userId: string,
+    canManage: boolean,
+    { weekStart, limit }: { weekStart: Date; limit: number },
+  ): Promise<ActivityTaskLists> => {
+    const since = weekStart.toISOString();
+    const withGroup = (row: TaskView) => ({ ...row, group: row.group ?? null });
+    const waiting = canManage
+      ? fixtures.all
+          .filter(
+            (row) =>
+              row.stored_status === TaskStatus.COMPLETED &&
+              row.confirmed_at === null &&
+              row.assignee_id !== userId,
+          )
+          .sort((a, b) =>
+            (a.completed_at ?? '').localeCompare(b.completed_at ?? ''),
+          )
+      : [];
+    return Promise.resolve({
+      own: fixtures.own
+        .filter(
+          (row) =>
+            row.confirmed_at === null ||
+            (row.completed_at !== null && row.completed_at >= since),
+        )
+        .map(withGroup),
+      waiting: waiting.slice(0, limit).map(withGroup),
+      waitingTotal: waiting.length,
+      made: canManage
+        ? fixtures.all
+            .filter((row) => row.created_by === userId)
+            .slice(0, limit)
+            .map(withGroup)
+        : [],
+      items: canManage ? fixtures.items.slice(0, limit) : [],
+    });
+  };
+}
+
+/** The fixtures each spec's task service serves, by its mock. */
+const taskFixtures = new WeakMap<jest.Mock, TaskFixtures>();
+
+function serveFixtures(
+  taskService: { activityLists: jest.Mock },
+  change: Partial<TaskFixtures>,
+) {
+  const fixtures = {
+    ...(taskFixtures.get(taskService.activityLists) ?? {
+      own: [],
+      all: [],
+      items: [],
+    }),
+    ...change,
+  };
+  taskFixtures.set(taskService.activityLists, fixtures);
+  taskService.activityLists.mockImplementation(activityListsFrom(fixtures));
+}
+
+/**
+ * The caller's own tasks and the chapter's, for Activity
+ * (`TaskService.activityLists`) and for the Archive (`TaskService.listRows`),
+ * each narrowed as the repository narrows it in SQL (#4037).
  */
 function serveTasks(
-  taskService: { listRows: jest.Mock },
+  taskService: { listRows: jest.Mock; activityLists: jest.Mock },
   own: TaskView[],
   all: TaskView[] = [],
 ) {
-  const matching = (isAdmin: boolean, options: TaskRowListOptions) =>
+  serveFixtures(taskService, { own, all });
+  const matching = (isAdmin: boolean, options: TaskListOptions) =>
     (isAdmin ? all : own).filter(
       (row) =>
         (options.status === undefined ||
@@ -329,29 +413,18 @@ function serveTasks(
           (row.confirmed_at !== null) === options.confirmed) &&
         (options.createdBy === undefined ||
           row.created_by === options.createdBy) &&
-        (options.notAssigneeId === undefined ||
-          row.assignee_id !== options.notAssigneeId) &&
         (options.completedSince === undefined ||
           (row.completed_at !== null &&
-            row.completed_at >= options.completedSince)) &&
-        (options.unconfirmedOrCompletedSince === undefined ||
-          row.confirmed_at === null ||
-          (row.completed_at !== null &&
-            row.completed_at >= options.unconfirmedOrCompletedSince)),
+            row.completed_at >= options.completedSince)),
     );
   taskService.listRows.mockImplementation(
     (
       _chapterId: string,
       _userId: string,
       isAdmin: boolean,
-      options: TaskRowListOptions = {},
+      options: TaskListOptions = {},
     ) => {
       const rows = matching(isAdmin, options);
-      if (options.order === 'longest_waiting') {
-        rows.sort((a, b) =>
-          (a.completed_at ?? '').localeCompare(b.completed_at ?? ''),
-        );
-      }
       return Promise.resolve({
         tasks: rows.slice(0, options.limit ?? rows.length),
         total: rows.length,
@@ -953,11 +1026,20 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      // One read: their tasks not yet confirmed, with this week's done ones.
-      expect(taskService.listRows).toHaveBeenCalledTimes(1);
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        unconfirmedOrCompletedSince: WEEK_START,
-      });
+      // One read: their tasks not yet confirmed, with this week's done ones,
+      // and nothing of anyone else's.
+      expect(taskService.activityLists).toHaveBeenCalledTimes(1);
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        false,
+        {
+          weekStart: new Date(WEEK_START),
+          limit: 25,
+          now: expect.any(Date),
+        },
+      );
+      expect(taskService.listRows).not.toHaveBeenCalled();
       expect(view.needs_you.tasks.map((row) => row.id)).toEqual([
         'sooner',
         'later',
@@ -1036,24 +1118,19 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      // Two filtered reads, never the chapter's whole history (#4037); the
-      // waiting ones counted by the same read (#5746).
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
-        status: TaskStatus.COMPLETED,
-        confirmed: false,
-        notAssigneeId: ME,
-        order: 'longest_waiting',
-        limit: 25,
-        withTotal: true,
-      });
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
-        createdBy: ME,
-        limit: 25,
-      });
-      // Every chapter-wide read is narrowed and capped.
-      for (const [, , isAdmin, options] of taskService.listRows.mock.calls) {
-        if (isAdmin) expect(options).toHaveProperty('limit', 25);
-      }
+      // One read for every list, each narrowed and capped in SQL, never the
+      // chapter's whole history (#4037, #6061).
+      expect(taskService.activityLists).toHaveBeenCalledTimes(1);
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        true,
+        {
+          weekStart: new Date(WEEK_START),
+          limit: 25,
+          now: expect.any(Date),
+        },
+      );
       expect(view.needs_you.task_confirmations.map((row) => row.id)).toEqual([
         'to-confirm',
       ]);
@@ -1159,8 +1236,7 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, { tasks: false });
 
-      expect(taskService.listRows).not.toHaveBeenCalled();
-      expect(taskService.listAssignedItems).not.toHaveBeenCalled();
+      expect(taskService.activityLists).not.toHaveBeenCalled();
       expect(view.made_by_you.task_items).toEqual([]);
     });
 
@@ -1202,14 +1278,14 @@ describe('ActivityService', () => {
         kind: 'group',
         group: { ...summary, total: copies.length },
         copies,
-        // As `TaskService.listAssignedItems` picks it: a copy not confirmed.
+        // As `TaskService.activityLists` picks it: a copy not confirmed.
         shared: copies.find((one) => !one.points_awarded) ?? copies[0],
         created_at: iso(-HOUR),
       });
       const serveItems = (
-        taskService: { listAssignedItems: jest.Mock },
+        taskService: { activityLists: jest.Mock },
         items: AssignedTaskItem[],
-      ) => taskService.listAssignedItems.mockResolvedValue(items);
+      ) => serveFixtures(taskService, { items });
       const onlyGroup = async (copies: [TaskView, ...TaskView[]]) => {
         const { service, taskService } = build(MANAGER);
         serveItems(taskService, [groupItem(copies)]);
@@ -1233,11 +1309,11 @@ describe('ActivityService', () => {
           now: NOW,
         });
 
-        expect(taskService.listAssignedItems).toHaveBeenCalledWith(
+        expect(taskService.activityLists).toHaveBeenCalledWith(
           CHAPTER,
           ME,
-          25,
-          NOW,
+          true,
+          { weekStart: new Date(WEEK_START), limit: 25, now: NOW },
         );
         expect(view.made_by_you.task_items).toEqual([
           {
@@ -1347,7 +1423,12 @@ describe('ActivityService', () => {
 
         const view = await service.getActivity(CHAPTER, ME, null);
 
-        expect(taskService.listAssignedItems).not.toHaveBeenCalled();
+        expect(taskService.activityLists).toHaveBeenCalledWith(
+          CHAPTER,
+          ME,
+          false,
+          expect.anything(),
+        );
         expect(view.made_by_you.task_items).toEqual([]);
       });
 
@@ -1365,7 +1446,7 @@ describe('ActivityService', () => {
 
       it('serves the tasks section unavailable, not a partial list, when the read fails', async () => {
         const { service, taskService } = build(MANAGER);
-        taskService.listAssignedItems.mockRejectedValue(new Error('db down'));
+        taskService.activityLists.mockRejectedValue(new Error('db down'));
         jest
           .spyOn(caughtFailure, 'reportCaughtFailure')
           .mockImplementation(() => undefined);
@@ -2472,7 +2553,7 @@ describe('ActivityService', () => {
 
   it('serves the other sections when one fails, and names the one that did', async () => {
     const { service, taskService, messageRepo } = build();
-    taskService.listRows.mockRejectedValue(new Error('db down'));
+    taskService.activityLists.mockRejectedValue(new Error('db down'));
     servePolls(messageRepo, [pollCard({ id: 'poll-1' })]);
 
     const view = await service.getActivity(CHAPTER, ME, null);
@@ -2511,12 +2592,10 @@ describe('ActivityService', () => {
 
   it('caps each list at 25 rows and counts what waits before the cap', async () => {
     const { service, taskService } = build();
-    taskService.listRows.mockResolvedValue({
-      tasks: Array.from({ length: 30 }, (_, index) =>
-        task({ id: `task-${index}` }),
-      ),
-      total: 30,
-    });
+    serveTasks(
+      taskService,
+      Array.from({ length: 30 }, (_, index) => task({ id: `task-${index}` })),
+    );
 
     const view = await service.getActivity(CHAPTER, ME, null);
 
@@ -2561,9 +2640,14 @@ describe('ActivityService', () => {
 
       expect(named.week.start).toBe('2026-11-08T05:00:00.000Z');
       expect(named.week.end).toBe('2026-11-15T05:00:00.000Z');
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        unconfirmedOrCompletedSince: '2026-11-08T05:00:00.000Z',
-      });
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        false,
+        expect.objectContaining({
+          weekStart: new Date('2026-11-08T05:00:00.000Z'),
+        }),
+      );
       expect(wide.week.start).toBe(WEEK_START);
     });
 
@@ -2882,7 +2966,7 @@ describe('ActivityService', () => {
 
     it('serves a part that failed null and names it, so it never reads as zero', async () => {
       const { service, taskService, eventService, attendanceRepo } = build();
-      taskService.listRows.mockRejectedValue(new Error('boom'));
+      taskService.activityLists.mockRejectedValue(new Error('boom'));
       eventService.findByChapter.mockResolvedValue([
         event({ id: 'e', start_time: iso(HOUR), end_time: iso(2 * HOUR) }),
       ]);
