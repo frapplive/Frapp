@@ -94,6 +94,8 @@ describe("buildFindResults", () => {
     });
     expect(hit!.group).toBe("Events");
     expect(hit!.hint).toMatch(/^Monday, November 9 · 7:00\sPM$/);
+    // The row opens the event itself (#6043).
+    expect(hit!.href).toBe("/events?event=e1");
   });
 });
 

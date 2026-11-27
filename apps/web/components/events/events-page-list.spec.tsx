@@ -1373,6 +1373,18 @@ describe("EventsPage keeps the editor's draft (#4593)", () => {
     expect(screen.getByLabelText("Event name")).toHaveValue("Formal");
   });
 
+  it("keeps the form it reopens with no edit= in the address (#6043)", async () => {
+    const user = userEvent.setup();
+    const first = render(tree());
+    await startDraft(user);
+    first.unmount();
+    setAddress("/events");
+
+    render(tree());
+    const editor = await screen.findByRole("region", { name: "New event" });
+    expect(within(editor).getByLabelText("Event name")).toHaveValue("Formal");
+  });
+
   it("doesn't reopen the editor for a viewer who can no longer create events", async () => {
     const user = userEvent.setup();
     const first = render(tree());

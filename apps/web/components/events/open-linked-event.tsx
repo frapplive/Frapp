@@ -10,9 +10,7 @@ import { consumeAddressParam } from "@/lib/address/address";
  * or a reload), once the list holds it and once per id while it stays in the
  * address. An id the list does not hold (deleted, or not visible to this
  * member) opens nothing here; the page says so and drops it.
- * Draws nothing; it is its own component so the page around it never waits on
- * the URL (`useSearchParams` wants a Suspense boundary, which the page gives
- * this alone). `excuse` says the link also asked for the sheet's Can't make it
+ * Draws nothing. `excuse` says the link also asked for the sheet's Can't make it
  * line (`&excuse=1`, the chat card's button, #4660). That ask is acted on
  * every time it arrives, even for an id already opened (the page stays
  * mounted beside the docked chat), and then dropped from the URL, so the

@@ -263,12 +263,13 @@ export function EventsPage() {
 const E = WEB_ADDRESS_PARAMS.events;
 const EVENTS_ADDRESS = [E.day, E.event, E.edit, E.hours] as const;
 
-/** A `YYYY-MM-DD` from the address as a local day, or `null`. */
+/** A `YYYY-MM-DD` from the address as a local day, or `null` for one that
+ * isn't a real day. */
 function dayFromParam(value: string | null): Date | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
-  const day = new Date(y, m - 1, d);
-  return Number.isNaN(day.getTime()) ? null : day;
+  const day = dateOfKey(value);
+  // `dateOfKey` rolls an out-of-range part over: 2026-02-31 is not a day.
+  return day && localIsoDate(day) === value ? day : null;
 }
 
 function AddressedEventsPage() {
@@ -695,33 +696,44 @@ function AddressedEventsPage() {
   useEffect(() => {
     if (eventParam === null && detailSheetOpen) setDetailSheetOpen(false);
   }, [eventParam, detailSheetOpen]);
-  // The editor: closed by Back, opened again by Forward or a reload.
+  /*
+    The editor follows `edit=` only when the address moves it (Back closes
+    it, Forward or a reload opens it again), never on a render where the two
+    merely differ: the page's own close goes Back, which lands a moment
+    later, and the form the page was left with (#4593) reopens without it.
+  */
+  const [editWanted, setEditWanted] = useState(editParam);
+  const editSeen = useRef(editParam);
   useEffect(() => {
+    if (editSeen.current === editParam) return;
+    editSeen.current = editParam;
+    setEditWanted(editParam);
     if (!editParam && editorDialog.open && editorMode === "edit") {
       editorDialog.setOpen(false);
       keepEditorOpen(null);
       if (eventParam !== null) setDetailSheetOpen(true);
+    }
+    // Only a move of the address acts here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam]);
+  // Waits for its event, then opens once, for someone who may edit it; an
+  // `edit=1` they may not use is taken out of the address.
+  useEffect(() => {
+    if (!editWanted || !activeEvent || eventIdOf(activeEvent) !== eventParam)
+      return;
+    setEditWanted(false);
+    if (!canMarkAttendance || !eventWriteGate.allowed) {
+      replaceAddress({ [E.edit]: null });
       return;
     }
-    if (
-      editParam &&
-      !editorDialog.open &&
-      activeEvent &&
-      eventIdOf(activeEvent) === eventParam
-    ) {
-      setDetailSheetOpen(false);
-      setEditorMode("edit");
-      keepEditorOpen({
-        mode: "edit",
-        event: activeEvent,
-        plan: null,
-        day: null,
-      });
-      editorDialog.setOpen(true);
-    }
+    if (editorDialog.open) return;
+    setDetailSheetOpen(false);
+    setEditorMode("edit");
+    keepEditorOpen({ mode: "edit", event: activeEvent, plan: null, day: null });
+    editorDialog.setOpen(true);
     // `keepEditorOpen` and the dialog's setter are stable in what they do.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editParam, eventParam, activeEvent, editorDialog.open, editorMode]);
+  }, [editWanted, activeEvent, eventParam]);
   // The picked day, from a link, a reload or Back to another page's entry.
   useEffect(() => {
     if (dayParam === null) {
@@ -732,6 +744,9 @@ function AddressedEventsPage() {
     const day = dayFromParam(dayParam);
     if (!day) return;
     setPickedKey(dayParam);
+    // The month and week strip follow the day the address names.
+    setNavMonth(day);
+    setStripStartKey(dayParam);
     if (!hoursDay) showDayOnAgenda(day);
     // Follows the address only; the page's own picks move both.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -740,8 +755,12 @@ function AddressedEventsPage() {
   useEffect(() => {
     if (hoursParam === null) {
       if (hoursDay) {
+        // Back from the grid: the agenda comes back on its day, as its own
+        // back arrow does.
+        const day = hoursDay;
         setHoursDay(null);
         setHoursSingle(false);
+        showDayOnAgenda(day);
       }
       return;
     }
@@ -758,6 +777,7 @@ function AddressedEventsPage() {
     E.event,
     eventParam,
     Array.isArray(eventsQuery.data) &&
+      !eventsQuery.isFetching &&
       eventParam !== null &&
       !events.some((event) => eventIdOf(event) === eventParam),
   );
@@ -1705,8 +1725,8 @@ function AddressedEventsPage() {
         </div>
       </div>
 
-      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`). In its
-          own boundary: it reads the URL, which must not hold back the page. */}
+      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`), from
+          a link, Back, Forward or a reload. */}
       <Suspense fallback={null}>
         <OpenLinkedEvent
           events={events}
