@@ -1184,8 +1184,7 @@ A From, Date or Has filter searches with no text ("everything Ryan posted this w
 Each row shows the day and time, since hits span days.
 Mobile has no chat search yet; #341 builds it with these filters.
 Picking a hit selects its channel if it is not already open and then jumps, reusing the same in-shell pending-target machinery a `/chat?channel=&message=` deep link resolves through.
-On `/chat` and `/messages` a jump into another conversation pushes `?channel=&message=`, so Back returns to the conversation the member was reading, and `message=` is replaced away once the jump lands or is found unreachable, so a reload doesn't jump again ([#6041](https://github.com/frapplive/Frapp/issues/6041); [`../../ui/web-dashboard/README.md` § Addresses](../../ui/web-dashboard/README.md#addresses)).
-A jump in the open conversation moves no address. Beside another page the docked chat jumps without touching the address.
+On `/chat` and `/messages` a jump into another conversation is a step in the address that Back returns from, and a reload after it doesn't jump again; the history rules are in [`../../ui/web-dashboard/README.md` § Addresses](../../ui/web-dashboard/README.md#addresses) ([#6041](https://github.com/frapplive/Frapp/issues/6041)).
 
 **Three parts of the bullets above are aspirational, and the shipped surface says so rather than pretending otherwise:**
 

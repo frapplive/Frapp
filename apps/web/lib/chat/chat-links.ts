@@ -24,7 +24,7 @@ export const CHAT_THREAD_PARAM = WEB_ADDRESS_PARAMS.chat.thread;
  * group messages, which the Messages page (`/messages`) lists. A link that
  * names a conversation needs to say neither: the shell follows its kind, so a
  * notification for a DM opens on Messages without knowing it is one
- * (`dashboard-shell.tsx`).
+ * (`chat-shell.tsx`'s address sync).
  */
 export type ChatView = "channels" | "direct";
 

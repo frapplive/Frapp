@@ -31,6 +31,7 @@ export const WEB_ADDRESS_PARAMS = {
   },
   messages: {
     channel: CHAT_LINK_CHANNEL_PARAM,
+    thread: "thread",
     message: CHAT_LINK_MESSAGE_PARAM,
   },
   documents: {
@@ -161,6 +162,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
         pathname: "/chat-thread",
         params: {
           [P.messages.channel]: "channelId",
+          [P.messages.thread]: "threadRootId",
           [P.messages.message]: "focusMessageId",
         },
       },

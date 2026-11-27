@@ -94,8 +94,8 @@ export function pushAddress(changes: AddressChanges): void {
  * Moves through something in place (a day, a month, a sort, a one-shot mark
  * acted on, a dead id dropped): merges `changes` and replaces the entry,
  * keeping its mark. When that would make it the same address as the entry
- * this tab pushed it over (a dead record opened from its list, a jump's
- * `message=` dropped inside the open channel), it goes Back instead, so no
+ * this tab pushed it over (a dead record opened from its list), it goes
+ * Back instead, so no
  * Back press lands on an identical address.
  */
 export function replaceAddress(changes: AddressChanges): void {
