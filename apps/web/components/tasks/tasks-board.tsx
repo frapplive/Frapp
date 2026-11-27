@@ -1,7 +1,16 @@
 "use client";
 
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useAddressParams } from "@/lib/address/use-address-params";
+import { replaceAddress } from "@/lib/address/address";
 import { useSearchParams } from "next/navigation";
 import {
   Camera,
@@ -51,6 +60,7 @@ import {
   taskGroupLabel,
   taskNeedsSignOff,
   taskSignedOffAutomatically,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import { ToastAction } from "@/components/ui/toast";
 import { FOCUS_RING } from "@/components/ui/focus";
@@ -259,9 +269,10 @@ function confirmedAt(task: Task): number {
 /**
  * Reads `?group=<group id>` or `?task=<task id>` (`lib/tasks/task-links.ts`,
  * #5538) and opens that group, or that task (its group when it is a copy of
- * one), in the task panel once the board's read holds it. The param then
- * leaves the address so a refresh doesn't reopen it, as the Events and
- * Documents links do. The read in hand can be a cached one that predates
+ * one), in the task panel once the board's read holds it. The address keeps
+ * it while the panel is open (spec § Addresses, #6044): a copy's task link
+ * becomes its group's, and one the viewer can't read is replaced away with a
+ * note. The read in hand can be a cached one that predates
  * the task, so a miss is read again once before the board says it's gone
  * (the task was deleted, or the viewer can't read it). Its own component
  * because `useSearchParams` needs a Suspense boundary of its own.
@@ -273,6 +284,7 @@ function LinkedTaskParam({
   onAsked,
   onOpen,
   onMissing,
+  selfOpened,
 }: {
   tasks: Task[];
   /** The board's read has answered; until then a link waits. */
@@ -282,6 +294,11 @@ function LinkedTaskParam({
   onAsked: () => void;
   onOpen: (target: { kind: "task" | "group"; id: string }) => void;
   onMissing: () => void;
+  /**
+   * The `task:<id>`/`group:<id>` the board itself just opened: not a link,
+   * so a copy the member picked opens as itself, not as its group.
+   */
+  selfOpened: { readonly current: string | null };
 }) {
   const searchParams = useSearchParams();
   const groupId = searchParams?.get(TASKS_GROUP_PARAM) ?? null;
@@ -301,6 +318,10 @@ function LinkedTaskParam({
       return;
     }
     if (handled.current === key) return;
+    if (selfOpened.current === key) {
+      handled.current = key;
+      return;
+    }
     latest.current.onAsked();
     if (!ready) return;
     let target: { kind: "task" | "group"; id: string } | null = null;
@@ -327,29 +348,35 @@ function LinkedTaskParam({
     handled.current = key;
     if (target) latest.current.onOpen(target);
     else latest.current.onMissing();
-    // Next keeps `useSearchParams` in step with the History API, so this
-    // clears the parameter without a navigation. Only the link's own: the
-    // address is Activity's, whose `?view=` stays.
-    const url = new URL(window.location.href);
-    url.searchParams.delete(TASKS_GROUP_PARAM);
-    url.searchParams.delete(TASKS_TASK_PARAM);
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${url.pathname}${url.search}`,
-    );
-  }, [key, groupId, taskId, tasks, reread, ready]);
+  }, [key, groupId, taskId, tasks, reread, ready, selfOpened]);
   return null;
 }
 
-export function TasksBoard({
-  part,
-  onShowEveryone,
-}: {
+interface TasksBoardProps {
   part: TasksBoardPart;
   /** Mine's "Show everyone's" on a task made for someone else. */
   onShowEveryone?: () => void;
-}) {
+}
+
+/** What the task panel shows, from the address (`task=`, `group=`, `posting=`). */
+type OpenedTask = { kind: "task" | "group" | "posting"; id: string };
+const TASK_ADDRESS = [
+  WEB_ADDRESS_PARAMS.activity.task,
+  WEB_ADDRESS_PARAMS.activity.group,
+  WEB_ADDRESS_PARAMS.activity.posting,
+] as const;
+
+export function TasksBoard(props: TasksBoardProps) {
+  // The open panel is read from the address, and `useSearchParams` needs a
+  // boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedTasksBoard {...props} />
+    </Suspense>
+  );
+}
+
+function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
   const everyone = part === "everyone";
   const { toast } = useToast();
   const { isOffline } = useNetwork();
@@ -359,11 +386,64 @@ export function TasksBoard({
   // for GET, and it remains the enforcement either way.
   const gate = useSubscriptionGate();
   const { confirm, confirmDialog } = useConfirmDialog();
+  /*
+    What the panel shows: a task, a group task, or a posting up for grabs.
+    It is the address (#6044): opening one pushes, so Back returns to the
+    one before; its back arrow closes by the address's rule.
+  */
+  const taskAddress = useAddressParams(TASK_ADDRESS);
+  const { open: openTaskAddress, close: closeTaskAddress } = taskAddress;
+  const taskParam = taskAddress.values[WEB_ADDRESS_PARAMS.activity.task];
+  const groupParam = taskAddress.values[WEB_ADDRESS_PARAMS.activity.group];
+  const postingParam = taskAddress.values[WEB_ADDRESS_PARAMS.activity.posting];
+  const opened = useMemo<OpenedTask | null>(
+    () =>
+      groupParam
+        ? { kind: "group", id: groupParam }
+        : postingParam
+          ? { kind: "posting", id: postingParam }
+          : taskParam
+            ? { kind: "task", id: taskParam }
+            : null,
+    [taskParam, groupParam, postingParam],
+  );
+  // A task link that named a copy of a group task: its group replaces it.
+  const linkedCopy = useRef<string | null>(null);
+  // What the board itself opened, which `LinkedTaskParam` leaves alone.
+  const selfOpened = useRef<string | null>(null);
+  const setOpened = useCallback(
+    (next: OpenedTask | null) => {
+      if (next === null) {
+        closeTaskAddress();
+        return;
+      }
+      const replace =
+        next.kind === "group" &&
+        taskParam !== null &&
+        linkedCopy.current === taskParam;
+      if (next.kind !== "posting")
+        selfOpened.current = `${next.kind}:${next.id}`;
+      openTaskAddress(
+        {
+          [WEB_ADDRESS_PARAMS.activity.task]:
+            next.kind === "task" ? next.id : null,
+          [WEB_ADDRESS_PARAMS.activity.group]:
+            next.kind === "group" ? next.id : null,
+          [WEB_ADDRESS_PARAMS.activity.posting]:
+            next.kind === "posting" ? next.id : null,
+        },
+        { replace },
+      );
+    },
+    [openTaskAddress, closeTaskAddress, taskParam],
+  );
   // Mine draws no board, so it reads the tasks only once a `?task=` or
   // `?group=` link asks for one (`LinkedTaskParam`), and keeps reading while
   // the panel it opened is up. Activity's own read holds the member's tasks.
   const [linkAsked, setLinkAsked] = useState(false);
-  const tasksQuery = useTasks({ enabled: part === "everyone" || linkAsked });
+  const tasksQuery = useTasks({
+    enabled: part === "everyone" || linkAsked || opened !== null,
+  });
   // `none`: the server can't scope the read, so `useTasks` never sends it (#4094).
   const chapterScope = useChapterScope();
   const membersQuery = useMembers();
@@ -434,11 +514,6 @@ export function TasksBoard({
     updateStatus.isPending || confirmTask.isPending || rejectTask.isPending;
 
   const [showAllConfirmed, setShowAllConfirmed] = useState(false);
-  // What the panel shows: a task, a group task, or a posting up for grabs.
-  const [opened, setOpened] = useState<{
-    kind: "task" | "group" | "posting";
-    id: string;
-  } | null>(null);
   // New task bumps it, which opens the add line's More (Paul, 2026-11-18).
   const [expandSignal, setExpandSignal] = useState(0);
   // The add line shows once New task is pressed (#5578): at rest the first
@@ -944,6 +1019,42 @@ export function TasksBoard({
   // Mine draws no board, so it has no board states: Up for grabs says its
   // own, and Activity says its read's. Its links wait for the read below.
   const boardStates = everyone;
+  const postingOpen =
+    opened?.kind === "posting"
+      ? ((openTasksQuery.data ?? []).find(
+          (posting) => posting.id === opened.id,
+        ) ?? null)
+      : null;
+  /*
+    What the panel last showed, so one that leaves the read while open
+    (deleted, claimed) closes through the address too, rather than leaving
+    `task=`, `group=` or `posting=` naming nothing. A link still waiting on
+    the read never showed, so it is `LinkedTaskParam`'s to judge.
+  */
+  const shownOpen = useRef<string | null>(null);
+  const openKey = opened ? `${opened.kind}:${opened.id}` : null;
+  const showing =
+    opened === null
+      ? false
+      : opened.kind === "task"
+        ? tasks.some((row) => row.id === opened.id)
+        : opened.kind === "group"
+          ? tasks.some((row) => row.group_id === opened.id)
+          : postingOpen !== null;
+  useEffect(() => {
+    if (openKey === null) {
+      shownOpen.current = null;
+      return;
+    }
+    if (showing) {
+      shownOpen.current = openKey;
+      return;
+    }
+    if (shownOpen.current === openKey) {
+      shownOpen.current = null;
+      closeTaskAddress();
+    }
+  }, [openKey, showing, closeTaskAddress]);
   if (
     boardStates &&
     isOffline &&
@@ -1130,13 +1241,23 @@ export function TasksBoard({
           ready={tasksQuery.data !== undefined}
           refetch={tasksQuery.refetch}
           onAsked={() => setLinkAsked(true)}
-          onOpen={setOpened}
-          onMissing={() =>
+          selfOpened={selfOpened}
+          onOpen={(target) => {
+            linkedCopy.current = taskParam;
+            setOpened(target);
+          }}
+          onMissing={() => {
+            // A task that is gone, or another member's this viewer can't
+            // read: said, and taken out of the address (§ Addresses).
             toast({
               title: "Couldn't find that task",
-              description: "It may have been deleted.",
-            })
-          }
+              description:
+                "It may have been deleted, or it isn't yours to see.",
+            });
+            replaceAddress(
+              Object.fromEntries(TASK_ADDRESS.map((name) => [name, null])),
+            );
+          }}
         />
       </Suspense>
       <TaskPanel
@@ -1158,13 +1279,7 @@ export function TasksBoard({
       />
       {canManage ? (
         <OpenTaskPanel
-          posting={
-            opened?.kind === "posting"
-              ? ((openTasksQuery.data ?? []).find(
-                  (posting) => posting.id === opened.id,
-                ) ?? null)
-              : null
-          }
+          posting={postingOpen}
           gate={gate}
           onClose={() => setOpened(null)}
         />
