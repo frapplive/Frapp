@@ -85,6 +85,7 @@ export * from "./council";
 // Affiliations and PNM records (#5974): link states, offers, codes, copy.
 export * from "./council-chapters";
 // A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-key";
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why

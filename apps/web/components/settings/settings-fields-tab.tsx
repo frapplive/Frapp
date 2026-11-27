@@ -2,11 +2,11 @@
 
 import type { ReactNode } from "react";
 
-import { keyFromLabel } from "@/lib/key-from-label";
 import { useState } from "react";
 import { Loader2, Plus, Trash2, X } from "lucide-react";
-import type {
-  ChapterCustomField,
+import {
+  keyFromLabel,
+  type ChapterCustomField,
   CustomFieldType,
   CustomFieldVisibility,
 } from "@repo/validation";

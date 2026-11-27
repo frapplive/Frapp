@@ -1,5 +1,5 @@
 import { MEMBER_ORDER_NUMBER_MAX, parseOrderNumber } from "@repo/validation";
-import type { PledgeClassAssignment } from "@repo/hooks";
+import type { PledgeClassAssignment } from "./use-pledge-classes";
 
 /** One member in the class editor: who, and the number their place gives them. */
 export type ClassEditorRow = {

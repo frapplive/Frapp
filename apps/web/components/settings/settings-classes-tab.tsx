@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import {
+  addRow,
+  classAssignments,
   fraternalOrderComparator,
+  renumberRows,
+  type ClassEditorRow,
   useAssignPledgeClasses,
   useCreatePledgeClass,
   useDeletePledgeClass,
@@ -54,12 +58,6 @@ import { ReorderList } from "@/components/shared/reorder-list";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useNetwork } from "@/lib/providers/network-provider";
-import {
-  addRow,
-  classAssignments,
-  renumberRows,
-  type ClassEditorRow,
-} from "@/lib/pledge-classes";
 import { getErrorMessage } from "@/lib/utils";
 
 type Props = {
