@@ -23,6 +23,8 @@ describe("chapterSettingsAccess", () => {
       logs: false,
       newChannel: false,
       newRole: true,
+      pledgeClasses: false,
+      memberFields: false,
       any: true,
     });
     expect(chapterSettingsAccess(["chapter-config:view"])).toEqual({
@@ -31,12 +33,29 @@ describe("chapterSettingsAccess", () => {
       logs: false,
       newChannel: false,
       newRole: false,
+      pledgeClasses: false,
+      memberFields: true,
       any: true,
     });
     expect(
       chapterSettingsAccess(["chapter-config:view", "members:view"]).logs,
     ).toBe(true);
     expect(chapterSettingsAccess(["*"]).any).toBe(true);
+  });
+
+  // #6029: each row shows to whoever web's tab shows to, with the reads it takes.
+  it("offers Pledge class to a roles manager and Member fields to a config viewer", () => {
+    expect(
+      chapterSettingsAccess(["roles:manage", "members:view"]).pledgeClasses,
+    ).toBe(true);
+    expect(chapterSettingsAccess(["members:view"]).pledgeClasses).toBe(false);
+    expect(chapterSettingsAccess(["chapter-config:view"]).memberFields).toBe(
+      true,
+    );
+    expect(chapterSettingsAccess(["*"])).toMatchObject({
+      pledgeClasses: true,
+      memberFields: true,
+    });
   });
 
   it("opens Roles and groups to a groups:manage holder alone", () => {
@@ -46,6 +65,8 @@ describe("chapterSettingsAccess", () => {
       logs: false,
       newChannel: false,
       newRole: false,
+      pledgeClasses: false,
+      memberFields: false,
       any: true,
     });
   });

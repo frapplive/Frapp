@@ -144,6 +144,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useAiChapterSettings: () => ok(undefined),
   useUpdateAiChapterSettings: () => ({ mutate: vi.fn(), isPending: false }),
   useCategories: () => ok([]),
+  usePledgeClasses: () => ok([]),
+  useCustomFields: () => ok([]),
   useChannelAccessOptions: () => ok([]),
 }));
 

@@ -465,3 +465,80 @@ export function HashGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
     </Frame>
   );
 }
+
+/** Chapter settings → Member fields (#6029): Lucide's `IdCard`. */
+export function IdCardGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M16 10h2" {...detail} />
+      <Path d="M16 14h2" {...detail} />
+      <Path d="M6.17 15a3 3 0 0 1 5.66 0" {...detail} />
+      <Circle cx={9} cy={11} r={2} {...detail} />
+      <Rect x={2} y={5} width={20} height={14} rx={2} {...detail} />
+    </Frame>
+  );
+}
+
+/*
+ * A member field's type, at the start of its row (#6029): Text is `Type`,
+ * Number is `Hash`, and these four are Lucide's `DecimalsArrowRight`,
+ * `Phone`, `CircleDot` (Pick one) and `ToggleRight` (Yes or no).
+ */
+
+export function DecimalGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M10 18h10" {...detail} />
+      <Path d="m17 21 3-3-3-3" {...detail} />
+      <Path d="M3 11h.01" {...detail} />
+      <Rect x={15} y={3} width={5} height={8} rx={2.5} {...detail} />
+      <Rect x={6} y={3} width={5} height={8} rx={2.5} {...detail} />
+    </Frame>
+  );
+}
+
+export function PhoneGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+export function CircleDotGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Circle cx={12} cy={12} r={10} {...detail} />
+      <Circle cx={12} cy={12} r={1} fill={color} />
+    </Frame>
+  );
+}
+
+export function ToggleGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Circle cx={15} cy={12} r={3} {...detail} />
+      <Rect x={2} y={5} width={20} height={14} rx={7} {...detail} />
+    </Frame>
+  );
+}
