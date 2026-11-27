@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { countUpValue, signatureMoment } from "@repo/theme/signature";
 import { EYEBROW } from "@/components/ui/typography";
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 import { cn } from "@/lib/utils";
 import type { ImportRow } from "./import-progress";
 import type { CategoryTile } from "./category-progress";
@@ -204,6 +205,8 @@ export function ArrivalCategories({
   playing: boolean;
 }) {
   if (tiles.length === 0) return null;
+  // A settings group's frame and rows (#6031), drawn here rather than with
+  // `SettingsRow` because each row carries its own drop-in delay.
   return (
     <section
       aria-labelledby="discord-import-arrived-categories"
@@ -215,12 +218,12 @@ export function ArrivalCategories({
       >
         By Discord category
       </h3>
-      <ul className="grid gap-1.5 @xl:grid-cols-2">
+      <ul className={SETTINGS_GROUP_FRAME}>
         {tiles.map((tile, index) => (
           <li
             key={tile.key}
             className={cn(
-              "flex min-w-0 items-baseline justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm",
+              "flex min-h-control-settings-row min-w-0 items-center justify-between gap-4 px-4 py-1.5 text-sm",
               playing && "motion-safe:animate-signature-drop",
             )}
             style={
@@ -235,7 +238,7 @@ export function ArrivalCategories({
             }
           >
             <span className="truncate font-medium">{tile.name}</span>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
               <span aria-hidden="true">
                 {tile.total.toLocaleString("en-US")}
               </span>

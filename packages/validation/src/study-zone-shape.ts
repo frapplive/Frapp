@@ -134,7 +134,8 @@ export function metersToFeet(meters: number): number {
 
 /**
  * What a study zone pays, in words a member would say: "5 points an hour ·
- * 30 min minimum", "1 point every 30 min". The one line every zone list and
+ * 30 minute minimum", "1 point every 30 minutes", never "min" (rulebook § 6,
+ * #6031). The one line every zone list and
  * the live session card show, on web and phone, so the three never word it
  * three ways. The pause grace and the shape stay in the editor; a list row
  * says what the place is for, as a Places list in Life360 or Google Maps
@@ -156,11 +157,11 @@ export function studyZoneRulesLine(zone: {
     amount && minutes != null
       ? minutes === 60
         ? `${amount} an hour`
-        : `${amount} every ${minutes} min`
+        : `${amount} every ${minutes} ${minutes === 1 ? "minute" : "minutes"}`
       : null;
   const minSession =
     zone.min_session_minutes != null && zone.min_session_minutes > 0
-      ? `${zone.min_session_minutes} min minimum`
+      ? `${zone.min_session_minutes} minute minimum`
       : null;
   return [rate, minSession].filter(Boolean).join(" · ");
 }

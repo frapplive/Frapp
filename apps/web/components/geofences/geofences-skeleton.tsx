@@ -2,16 +2,24 @@ import {
   SectionSkeleton,
   SkeletonRows,
 } from "@/components/shared/page-skeletons";
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 
-/** Zone rows: pin glyph, name and rule line, status badge, three actions. */
+/**
+ * Zone rows in their settings group (#6031): the map-pin glyph, the name over
+ * what it earns, the chevron.
+ */
 function ZoneRows() {
   return (
-    <SkeletonRows
-      rows={3}
-      lead="glyph"
-      trailing={["w-14", "w-12", "w-20", "w-20"]}
-      rowClassName="min-h-11 py-2.5"
-    />
+    <div aria-hidden="true">
+      <SkeletonRows
+        rows={3}
+        lead="glyph"
+        trailing={["w-4"]}
+        trailingHeight="h-4"
+        rowClassName="min-h-control-settings-row px-4 py-2"
+        listClassName={SETTINGS_GROUP_FRAME}
+      />
+    </div>
   );
 }
 

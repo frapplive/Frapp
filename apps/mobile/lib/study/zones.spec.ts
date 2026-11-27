@@ -99,7 +99,9 @@ describe("graceWindowCopy", () => {
 describe("zoneRewardCopy", () => {
   it("says what the zone actually pays", () => {
     const [row] = selectActiveZones([zone()]);
-    expect(zoneRewardCopy(row!)).toBe("1 point every 30 min · 15 min minimum");
+    expect(zoneRewardCopy(row!)).toBe(
+      "1 point every 30 minutes · 15 minute minimum",
+    );
   });
 
   it("pluralises the award", () => {

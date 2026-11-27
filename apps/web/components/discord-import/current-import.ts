@@ -1,5 +1,9 @@
-import { isDiscordImportClearable } from "@repo/validation";
-import type { ImportRow } from "./import-progress";
+import {
+  DISCORD_IMPORT_COPY,
+  discordImportingLabel,
+  isDiscordImportClearable,
+} from "@repo/validation";
+import { importPercent, type ImportRow } from "./import-progress";
 
 /**
  * What the page shows: the chapter's one import (a chapter moves off Discord
@@ -46,4 +50,24 @@ export function importStage(row: ImportRow): ImportStage {
   if (row.status === "ready" || row.status === "running") return "importing";
   if (row.status === "purging") return "deleting";
   return "finished";
+}
+
+/**
+ * The import's state in a few words, at the end of the Chat page's Discord
+ * import row (#6031): "Not started", "Importing 42%", "4,120 messages",
+ * "Stopped on an error".
+ */
+export function importRowState(rows: readonly ImportRow[]): string {
+  const { current } = currentImport(rows);
+  if (!current) return DISCORD_IMPORT_COPY.notStarted;
+  const stage = importStage(current);
+  if (stage === "importing")
+    return discordImportingLabel(importPercent(current));
+  if (stage === "deleting") return "Deleting";
+  if (current.status === "completed") {
+    const messages = current.imported_messages;
+    return `${messages.toLocaleString("en-US")} ${messages === 1 ? "message" : "messages"}`;
+  }
+  if (current.status === "failed") return DISCORD_IMPORT_COPY.stopped;
+  return "Stopped";
 }

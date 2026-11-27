@@ -8,6 +8,8 @@ import { KeptDraftNote } from "@/components/shared/kept-draft-note";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { STUDY_ZONES_COPY } from "@repo/validation";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   Panel,
   PanelBody,
@@ -17,12 +19,7 @@ import {
 } from "@/components/shared/panel";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import { useToast } from "@/lib/hooks/use-toast";
-import {
-  cn,
-  getErrorMessage,
-  guardIntDraft,
-  parseGuardedInt,
-} from "@/lib/utils";
+import { getErrorMessage, guardIntDraft, parseGuardedInt } from "@/lib/utils";
 import { ZonePicker } from "@/components/geofences/zone-picker";
 import {
   draftFromZone,
@@ -64,19 +61,31 @@ const RULE_DEFAULTS: Record<RuleKey, string> = {
   pause_grace_minutes: "5",
 };
 
-/** Read as a sentence: "1 point every 30 minutes". */
-const RULES: readonly { key: RuleKey; label: string; hint?: string }[] = [
-  { key: "points_per_interval", label: "Points" },
-  { key: "minutes_per_point", label: "Every (minutes)" },
+/**
+ * The Earns group's rows, read as a sentence: "1 point every 30 minutes".
+ * Each row's number box sits at its end with its unit after it (#6031), as
+ * iOS Settings puts a value at a row's end.
+ */
+const RULES: readonly { key: RuleKey; label: string; unit: string }[] = [
+  {
+    key: "points_per_interval",
+    label: STUDY_ZONES_COPY.points,
+    unit: STUDY_ZONES_COPY.pointsUnit,
+  },
+  {
+    key: "minutes_per_point",
+    label: STUDY_ZONES_COPY.every,
+    unit: STUDY_ZONES_COPY.minutesUnit,
+  },
   {
     key: "min_session_minutes",
-    label: "Shortest session (minutes)",
-    hint: "Shorter sessions earn nothing.",
+    label: STUDY_ZONES_COPY.shortestSession,
+    unit: STUDY_ZONES_COPY.minutesUnit,
   },
   {
     key: "pause_grace_minutes",
-    label: "Pause grace (minutes)",
-    hint: "How long a session can sit in the background before it ends.",
+    label: STUDY_ZONES_COPY.pauseGrace,
+    unit: STUDY_ZONES_COPY.minutesUnit,
   },
 ];
 
@@ -313,7 +322,9 @@ export function StudyZoneEditor({
       backLabel="Back to Study zones"
     >
       <PanelContent aria-describedby={undefined} {...contentProps}>
-        <PanelHeader>{zone ? `Edit ${zone.name}` : "New study zone"}</PanelHeader>
+        <PanelHeader>
+          {zone ? `Edit ${zone.name}` : "New study zone"}
+        </PanelHeader>
         <PanelBody
           as="form"
           id="study-zone-form"
@@ -325,7 +336,7 @@ export function StudyZoneEditor({
           <div className="flex min-h-0 flex-1 flex-col gap-6 @4xl:flex-row">
             <div className="flex shrink-0 flex-col gap-4 @4xl:w-[300px]">
               <div className="grid gap-1">
-                <Label htmlFor={nameId}>Name</Label>
+                <Label htmlFor={nameId}>{STUDY_ZONES_COPY.name}</Label>
                 <Input
                   id={nameId}
                   value={name}
@@ -335,47 +346,49 @@ export function StudyZoneEditor({
                   required
                 />
               </div>
-              <fieldset className="grid grid-cols-2 gap-3">
-                <legend className="col-span-2 mb-1 text-sm font-semibold text-foreground">
-                  What studying here earns
-                </legend>
+              <SettingsGroup
+                heading={STUDY_ZONES_COPY.earns}
+                footnote={STUDY_ZONES_COPY.earnsFootnote}
+              >
                 {RULES.map((rule) => (
-                  <div
+                  <SettingsRow
                     key={rule.key}
-                    className={cn(
-                      "grid content-start gap-1",
-                      rule.hint && "col-span-2",
-                    )}
-                  >
-                    <Label htmlFor={`${nameId}-${rule.key}`}>{rule.label}</Label>
-                    <Input
-                      id={`${nameId}-${rule.key}`}
-                      type="number"
-                      min={RULE_MIN[rule.key]}
-                      value={rules[rule.key]}
-                      aria-invalid={rulesError ? true : undefined}
-                      onChange={(event) => {
-                        const next = guardIntDraft(event.target.value);
-                        if (next === undefined) return;
-                        setRules((prev) => ({ ...prev, [rule.key]: next }));
-                      }}
-                    />
-                    {rule.hint ? (
-                      <p className="text-caption text-muted-foreground">
-                        {rule.hint}
-                      </p>
-                    ) : null}
-                  </div>
+                    label={rule.label}
+                    control={
+                      <span className="flex items-center gap-2">
+                        <Input
+                          id={`${nameId}-${rule.key}`}
+                          // The row's words name the box, with its unit, as
+                          // the label above each box did.
+                          aria-label={
+                            rule.key === "points_per_interval"
+                              ? rule.label
+                              : `${rule.label} (${rule.unit})`
+                          }
+                          type="number"
+                          min={RULE_MIN[rule.key]}
+                          value={rules[rule.key]}
+                          aria-invalid={rulesError ? true : undefined}
+                          className="h-8 w-16 text-right tabular-nums"
+                          onChange={(event) => {
+                            const next = guardIntDraft(event.target.value);
+                            if (next === undefined) return;
+                            setRules((prev) => ({ ...prev, [rule.key]: next }));
+                          }}
+                        />
+                        <span className="w-14 text-sm text-muted-foreground">
+                          {rule.unit}
+                        </span>
+                      </span>
+                    }
+                  />
                 ))}
-                {rulesError ? (
-                  <p
-                    role="alert"
-                    className="col-span-2 text-caption text-destructive"
-                  >
-                    {rulesError}
-                  </p>
-                ) : null}
-              </fieldset>
+              </SettingsGroup>
+              {rulesError ? (
+                <p role="alert" className="text-caption text-destructive">
+                  {rulesError}
+                </p>
+              ) : null}
             </div>
             <div className="flex min-h-[440px] min-w-0 flex-1 flex-col">
               <ZonePicker

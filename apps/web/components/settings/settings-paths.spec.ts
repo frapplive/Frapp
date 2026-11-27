@@ -65,7 +65,14 @@ describe("settingsSubpageFor", () => {
   it("opens Discord import", () => {
     expect(
       settingsSubpageFor("chat", params({ tool: "discord-import" }), holdsAll),
-    ).toEqual({ kind: "discord-import" });
+    ).toEqual({ kind: "discord-import", page: null });
+    expect(
+      settingsSubpageFor(
+        "chat",
+        params({ tool: "discord-import", page: "issues" }),
+        holdsAll,
+      ),
+    ).toEqual({ kind: "discord-import", page: "issues" });
   });
 
   it("opens nothing for a viewer without the tool, or on another module's page", () => {
@@ -86,7 +93,9 @@ describe("settingsSubpageFor", () => {
 
 describe("the addresses", () => {
   it("builds a channel's, its pages', its description's and the Chat page's", () => {
-    expect(channelSettingsPath("c 1")).toBe("/settings?tab=chat&page=chat-admin&channel=c%201");
+    expect(channelSettingsPath("c 1")).toBe(
+      "/settings?tab=chat&page=chat-admin&channel=c%201",
+    );
     expect(channelSettingsPath("c1", "see")).toBe(
       "/settings?tab=chat&page=see&channel=c1",
     );

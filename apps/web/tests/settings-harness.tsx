@@ -81,6 +81,8 @@ export function settingsHooks({
     useUpdateChapter: idleMutation,
     useCreatePortal: idleMutation,
     useChannels: () => ({ data: [] }),
+    // The Chat page's Discord import row reads the import's state (#6031).
+    useDiscordImports: () => ({ data: [] }),
     useOrgConfig: () => ({
       data: orgConfig(),
       isPending: false,

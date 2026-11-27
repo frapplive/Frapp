@@ -176,7 +176,13 @@ export function SkeletonRows({
   trailingHeight = "h-8",
   rowClassName = "min-h-11 py-2",
   bare = false,
+  listClassName,
 }: {
+  /**
+   * The list's own frame in place of the dense list's hairlines: a settings
+   * group's (`SETTINGS_GROUP_FRAME`), for a page in the settings-rows shape.
+   */
+  listClassName?: string;
   rows?: number;
   lines?: 1 | 2 | 3;
   /** One lead block, or several in order (a checkbox, then an avatar). */
@@ -190,7 +196,10 @@ export function SkeletonRows({
 }) {
   const count = clampCount(rows);
   return (
-    <ul aria-hidden="true" className={bare ? undefined : denseListClassName}>
+    <ul
+      aria-hidden="true"
+      className={listClassName ?? (bare ? undefined : denseListClassName)}
+    >
       {Array.from({ length: count }, (_, index) => (
         <li key={index} className={cn("flex items-center gap-3", rowClassName)}>
           {(Array.isArray(lead) ? lead : [lead]).map((block, slot) => (

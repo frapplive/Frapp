@@ -11,6 +11,14 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
 /**
+ * The group's frame: radius, hairline, fill and the rule between rows. A
+ * skeleton of a settings page draws its rows in it, so the page loads in its
+ * own shape.
+ */
+export const SETTINGS_GROUP_FRAME =
+  "divide-y divide-border rounded-[14px] border border-border bg-card";
+
+/**
  * The one settings row on web, and the group that holds it (rulebook § 9,
  * `spec/ui/design-system/components.md` § Settings rows). The phone draws the
  * same shape with `ListSection` and `ListRow` (`apps/mobile/components/list-section.tsx`).
@@ -63,7 +71,7 @@ export function SettingsGroup({
       aria-label={heading ? undefined : label}
       aria-labelledby={heading ? headingId : undefined}
       className={cn(
-        "divide-y divide-border rounded-[14px] border border-border bg-card",
+        SETTINGS_GROUP_FRAME,
         heading || footnote ? undefined : className,
       )}
     >
@@ -171,6 +179,11 @@ export function SettingsRow(
      * actions lines up with its neighbours that have them.
      */
     menu?: { entries: readonly RowMenuEntry[]; label: string };
+    /**
+     * What explains a disabled button row, such as a subscription gate's
+     * notice (`gate.controlProps()["aria-describedby"]`).
+     */
+    describedBy?: string;
   } & Trailing,
 ) {
   const {
@@ -280,6 +293,7 @@ export function SettingsRow(
         type="button"
         onClick={props.onClick}
         disabled={props.disabled}
+        aria-describedby={props.describedBy}
         className={cn(
           row,
           props.menu ? "min-w-0 flex-1" : "w-full",

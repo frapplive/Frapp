@@ -14,10 +14,8 @@ import { DiscordImportPage } from "@/components/discord-import/discord-import-pa
 import { PointsLedger } from "@/components/points/points-ledger";
 import { ReportsPage } from "@/components/reports/reports-page";
 import { ServiceHistory } from "@/components/service/service-history";
-import { SettingsSubpage as SubpageFrame } from "@/components/settings/settings-subpage";
 import { useSearchParams } from "next/navigation";
 import {
-  CHAT_MODULE_SETTINGS_PATH,
   LEDGER_MEMBER_PARAM,
   type SettingsSubpage,
 } from "@/components/settings/settings-paths";
@@ -90,15 +88,12 @@ export function SettingsToolSubpage({ subpage }: { subpage: SettingsSubpage }) {
   if (subpage.kind === "chat-page") {
     return <ChatSettingsSubpage page={subpage.page} />;
   }
+  // The import draws its own frame, so its header can say its state.
   return (
-    <SubpageFrame
-      backHref={CHAT_MODULE_SETTINGS_PATH}
-      backLabel="Chat"
-      title="Discord import"
-    >
+    <>
       {/* Opening the import reads its finished-or-failed notice. */}
       <MarkScreensSeen screens={[DISCORD_IMPORT_NOTIFICATION_SCREEN]} />
-      <DiscordImportPage />
-    </SubpageFrame>
+      <DiscordImportPage page={subpage.page} />
+    </>
   );
 }

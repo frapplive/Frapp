@@ -1,13 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { formatDay, formatDayTime } from "@repo/formatting";
+import { CircleAlert, Import, Upload } from "lucide-react";
+import { formatDay } from "@repo/formatting";
+import {
+  DISCORD_IMPORT_COPY,
+  discordCategoryDoneLabel,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { EYEBROW } from "@/components/ui/typography";
 import {
   meterFillClassName,
   meterTrackClassName,
 } from "@/components/shared/meter";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import { discordImportPagePath } from "@/components/settings/settings-paths";
 import { cn } from "@/lib/utils";
 import {
   importPercent,
@@ -20,11 +27,10 @@ import {
   importTotals,
   useBotImportProgress,
   type CategoryProgress,
-  type CategoryTile,
 } from "./category-progress";
 import type { ImportProgress } from "./import-watch-panel";
 import { purgeLine } from "./delete-import-copy";
-import { SourceStep, type ImportSource } from "./source-step";
+import type { ImportSource } from "./source-step";
 import {
   ArrivalCategories,
   ArrivalMark,
@@ -32,6 +38,10 @@ import {
   useArrival,
   useCountUp,
 } from "./import-arrival";
+import {
+  DiscordImportFrame,
+  DiscordImportPageFrame,
+} from "./discord-import-frame";
 
 function count(value: number): string {
   return value.toLocaleString("en-US");
@@ -50,47 +60,9 @@ function Meter({ percent }: { percent: number }) {
   );
 }
 
-/** One figure in a row of them: the number large, its label under it. */
-function Figure({
-  value,
-  label,
-  shown,
-}: {
-  value: string;
-  label: string;
-  /** What the screen draws while a number counts up; a reader gets `value`. */
-  shown?: string;
-}) {
-  return (
-    // The term comes first for a screen reader; the number reads first on
-    // screen.
-    <div className="flex flex-col-reverse rounded-lg border border-border p-3">
-      <dt className="text-caption text-muted-foreground">{label}</dt>
-      <dd className="text-title tabular-nums">
-        {shown === undefined || shown === value ? (
-          value
-        ) : (
-          <>
-            <span aria-hidden="true">{shown}</span>
-            <span className="sr-only">{value}</span>
-          </>
-        )}
-      </dd>
-    </div>
-  );
-}
-
-const COMES_OVER = [
-  "Messages, threads and forum posts",
-  "Files and images",
-  "Reaction counts",
-  "Categories, if you want them",
-  "Private channels stay private",
-];
-
 /**
- * State 1: nothing imported yet. What an import brings, and the two ways in,
- * as the wizard's own first step: picking one opens the wizard past it.
+ * State 1: nothing imported yet. The two ways in, as settings rows (#6031):
+ * picking one opens the wizard past its own first step.
  */
 export function ImportLanding({
   botAvailable,
@@ -112,123 +84,109 @@ export function ImportLanding({
   deleting: boolean;
 }) {
   return (
-    <section
-      aria-labelledby="discord-import-start"
-      className="mx-auto max-w-2xl space-y-5"
-    >
-      <div className="space-y-1.5">
-        <h2 id="discord-import-start" className="text-headline">
-          Bring your chapter&apos;s Discord history into Frapp
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Every message, file and thread lands in Frapp chat, searchable, with
-          the same people able to read it. Members can link their Discord later
-          to claim what they wrote.
-        </p>
+    <DiscordImportFrame>
+      <div className="space-y-4">
+        {unfinished ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+            <p className="text-muted-foreground">
+              An import
+              {unfinished.guild_name
+                ? ` from ${unfinished.guild_name}`
+                : ""}{" "}
+              was set up and not started. Delete it to remove anything uploaded
+              for it.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDeleteUnfinished}
+              disabled={deleting}
+            >
+              Delete
+            </Button>
+          </div>
+        ) : null}
+
+        {lastDeleted ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+            <p className="text-muted-foreground">
+              The import from {lastDeleted.guild_name ?? "your Discord server"}{" "}
+              was deleted.
+            </p>
+            <Button variant="ghost" size="sm" onClick={onDismissDeleted}>
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
+
+        <SettingsGroup
+          label={DISCORD_IMPORT_COPY.title}
+          footnote={DISCORD_IMPORT_COPY.startFootnote}
+        >
+          {/*
+            Two genuine ways in, not a primary and a fallback: the upload is
+            the path that keeps working if Discord ever refuses the shared
+            bot, and the only one when a chapter can't install apps. Connect
+            Discord shows dimmed with its reason where the bot isn't usable.
+          */}
+          <SettingsRow
+            icon={Import}
+            label={DISCORD_IMPORT_COPY.connect}
+            description={
+              botAvailable
+                ? DISCORD_IMPORT_COPY.connectLine
+                : DISCORD_IMPORT_COPY.connectUnavailable
+            }
+            value={null}
+            disabled={!botAvailable}
+            onClick={() => onPick("bot")}
+          />
+          <SettingsRow
+            icon={Upload}
+            label={DISCORD_IMPORT_COPY.upload}
+            description={DISCORD_IMPORT_COPY.uploadLine}
+            value={null}
+            onClick={() => onPick("upload")}
+          />
+        </SettingsGroup>
       </div>
-
-      {unfinished ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
-          <p className="text-muted-foreground">
-            An import
-            {unfinished.guild_name ? ` from ${unfinished.guild_name}` : ""} was
-            set up and not started. Delete it to remove anything uploaded for
-            it.
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDeleteUnfinished}
-            disabled={deleting}
-          >
-            Delete
-          </Button>
-        </div>
-      ) : null}
-
-      {lastDeleted ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
-          <p className="text-muted-foreground">
-            The import from {lastDeleted.guild_name ?? "your Discord server"}{" "}
-            was deleted.
-          </p>
-          <Button variant="ghost" size="sm" onClick={onDismissDeleted}>
-            Dismiss
-          </Button>
-        </div>
-      ) : null}
-
-      <SourceStep
-        value={null}
-        onChange={onPick}
-        botAvailable={botAvailable}
-        intro={false}
-      />
-
-      <div className="grid gap-4 @xl:grid-cols-2">
-        <div className="space-y-1.5">
-          <p className={cn(EYEBROW, "text-muted")}>Comes over</p>
-          <ul className="space-y-1 text-sm">
-            {COMES_OVER.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="space-y-1.5">
-          <p className={cn(EYEBROW, "text-muted")}>Stays behind</p>
-          <p className="text-sm">DMs, voice, and who holds which role</p>
-        </div>
-      </div>
-    </section>
+    </DiscordImportFrame>
   );
 }
 
 /**
- * One Discord category on a running import: its name and how many of its
- * channels and threads are done. It turns green when the last one finishes.
+ * The running import's Discord categories as rows (#6031): each one's name
+ * and how many of its channels and threads are done, green once the last one
+ * finishes.
  */
-function Tile({ tile }: { tile: CategoryTile }) {
-  return (
-    <li
-      className={cn(
-        "flex min-w-0 flex-col gap-0.5 rounded-lg border p-2.5 motion-safe:transition-colors",
-        tile.finished ? "border-success/40 bg-success-tint" : "border-border",
-      )}
-    >
-      <span className="truncate text-xs text-muted-foreground">
-        {tile.name}
-      </span>
-      <span
-        className={cn(
-          "text-sm font-semibold tabular-nums",
-          tile.finished ? "text-success" : null,
-        )}
-      >
-        {count(tile.done)}/{count(tile.total)}
-        {tile.failed > 0 ? (
-          <span className="font-normal text-destructive-text">
-            {" "}
-            · {count(tile.failed)} failed
-          </span>
-        ) : null}
-      </span>
-    </li>
-  );
-}
-
-/** The tiles, one per Discord category, read off the progress poll. */
-function CategoryTiles({ categories }: { categories: CategoryProgress[] }) {
+function CategoryRows({ categories }: { categories: CategoryProgress[] }) {
   const tiles = categoryTiles(categories);
   if (tiles.length === 0) return null;
   return (
-    <ul
-      aria-label="Progress by Discord category"
-      className="grid grid-cols-2 gap-2 @xl:grid-cols-4"
-    >
+    <SettingsGroup label="Progress by Discord category">
       {tiles.map((tile) => (
-        <Tile key={tile.key} tile={tile} />
+        <SettingsRow
+          key={tile.key}
+          label={tile.name}
+          control={
+            <span
+              className={cn(
+                "text-sm tabular-nums",
+                tile.finished ? "text-success" : "text-muted-foreground",
+              )}
+            >
+              {discordCategoryDoneLabel(tile.done, tile.total)}
+              {tile.failed > 0 ? (
+                <span className="text-destructive-text">
+                  {" "}
+                  · {count(tile.failed)} failed
+                </span>
+              ) : null}
+            </span>
+          }
+        />
       ))}
-    </ul>
+    </SettingsGroup>
   );
 }
 
@@ -253,56 +211,58 @@ export function ImportRunning({
   // The worker reads one channel or thread at a time.
   const now = row.status === "running" ? progress?.running[0] : undefined;
   return (
-    <section
-      aria-labelledby="discord-import-running"
-      className="mx-auto max-w-2xl space-y-4"
-    >
-      <div className="space-y-1">
-        <p className={cn(EYEBROW, "text-muted")}>
-          {row.status === "ready" ? "Waiting to start" : "Importing"}
-          {row.guild_name ? ` · ${row.guild_name}` : ""}
-        </p>
-        <h2 id="discord-import-running" className="text-headline tabular-nums">
-          {counted(row.imported_messages, "message", "messages")} in so far
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {hasChannelCounts
-            ? `${count(row.channels_done ?? 0)} of ${count(row.channels_total as number)} channels and threads done. `
-            : ""}
-          {/* While the worker waits out a temporary error, its note takes
+    <DiscordImportFrame>
+      <section aria-labelledby="discord-import-running" className="space-y-4">
+        <div className="space-y-1">
+          <p className={cn(EYEBROW, "text-muted")}>
+            {row.status === "ready" ? "Waiting to start" : "Importing"}
+            {row.guild_name ? ` · ${row.guild_name}` : ""}
+          </p>
+          <h2
+            id="discord-import-running"
+            className="text-headline tabular-nums"
+          >
+            {counted(row.imported_messages, "message", "messages")} in so far
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {hasChannelCounts
+              ? `${count(row.channels_done ?? 0)} of ${count(row.channels_total as number)} channels and threads done. `
+              : ""}
+            {/* While the worker waits out a temporary error, its note takes
               this line's place, so the page says "paused" rather than
               looking stalled, and nothing moves (#1692). */}
-          {row.error ??
-            "You can close this tab. You'll get a notification when it finishes."}
-        </p>
-      </div>
-      {percent !== null ? (
-        <div className="space-y-1">
-          <Meter percent={percent} />
-          {/* The bar is aria-hidden; this is the accessible signal. */}
-          <p className="text-caption text-muted-foreground tabular-nums">
-            {percent}%
+            {row.error ??
+              "You can close this tab. You'll get a notification when it finishes."}
           </p>
         </div>
-      ) : null}
-      {now ? (
-        <p className="text-sm">
-          Now importing{" "}
-          <span className="font-semibold">#{now.discord_channel_name}</span>
-          <span className="text-muted-foreground tabular-nums">
-            {" "}
-            · {counted(now.imported_count, "message", "messages")}
-          </span>
-        </p>
-      ) : null}
-      <CategoryTiles categories={progress?.categories ?? []} />
-      {channels}
-      <div className="flex justify-end">
-        <Button variant="secondary" onClick={onStop} disabled={stopping}>
-          Stop import
-        </Button>
-      </div>
-    </section>
+        {percent !== null ? (
+          <div className="space-y-1">
+            <Meter percent={percent} />
+            {/* The bar is aria-hidden; this is the accessible signal. */}
+            <p className="text-caption text-muted-foreground tabular-nums">
+              {percent}%
+            </p>
+          </div>
+        ) : null}
+        {now ? (
+          <p className="text-sm">
+            Now importing{" "}
+            <span className="font-semibold">#{now.discord_channel_name}</span>
+            <span className="text-muted-foreground tabular-nums">
+              {" "}
+              · {counted(now.imported_count, "message", "messages")}
+            </span>
+          </p>
+        ) : null}
+        <CategoryRows categories={progress?.categories ?? []} />
+        {channels}
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onStop} disabled={stopping}>
+            Stop import
+          </Button>
+        </div>
+      </section>
+    </DiscordImportFrame>
   );
 }
 
@@ -310,39 +270,41 @@ export function ImportRunning({
 export function ImportDeleting({ row }: { row: ImportRow }) {
   const progress = purgeProgress(row);
   return (
-    <section
-      aria-labelledby="discord-import-deleting"
-      className="mx-auto max-w-2xl space-y-3"
-    >
-      <h2 id="discord-import-deleting" className="text-headline">
-        Deleting the import
-      </h2>
-      {/* The worker's "paused" note stands in for the count, as it does
+    <DiscordImportFrame>
+      <section aria-labelledby="discord-import-deleting" className="space-y-3">
+        <h2 id="discord-import-deleting" className="text-headline">
+          Deleting the import
+        </h2>
+        {/* The worker's "paused" note stands in for the count, as it does
           while importing (#1692). */}
-      <p className="text-sm text-muted-foreground">
-        {row.error ?? purgeLine(row)}
-      </p>
-      {progress && progress.left > 0 ? (
-        <div className="space-y-1">
-          <Meter percent={progress.percent} />
-          <p className="text-caption text-muted-foreground tabular-nums">
-            {progress.percent}%
-          </p>
-        </div>
-      ) : null}
-    </section>
+        <p className="text-sm text-muted-foreground">
+          {row.error ?? purgeLine(row)}
+        </p>
+        {progress && progress.left > 0 ? (
+          <div className="space-y-1">
+            <Meter percent={progress.percent} />
+            <p className="text-caption text-muted-foreground tabular-nums">
+              {progress.percent}%
+            </p>
+          </div>
+        ) : null}
+      </section>
+    </DiscordImportFrame>
   );
 }
 
 const FINISHED_TITLE: Record<string, string> = {
-  completed: "Your Discord history is in Frapp",
-  failed: "The import stopped on an error",
-  cancelled: "The import was stopped",
+  completed: DISCORD_IMPORT_COPY.finishedDescription,
+  failed: "The import stopped on an error.",
+  cancelled: "The import was stopped.",
 };
 
 /**
- * State 4: done, or stopped part-way. What came over, what didn't and why,
- * and the way back: Resume for an import that failed, Delete for any.
+ * State 4: done, or stopped part-way, in the settings-rows shape (#6031):
+ * the state in the header's line, the Import group's value rows (what came
+ * over, and what didn't as a page of its own), then Delete import alone in
+ * the last group. Resume stays a button under the state line for an import
+ * that failed.
  */
 export function ImportFinished({
   row,
@@ -367,13 +329,12 @@ export function ImportFinished({
   // An import that failed picks up where it stopped when started again; one
   // the admin stopped, or whose deletion failed, does not.
   const resumable = row.status === "failed" && !deletionFailed;
-  const title = deletionFailed
-    ? "The deletion stopped on an error"
-    : (FINISHED_TITLE[row.status] ?? "The import stopped");
-  const groups = groupWarnings(row.warnings ?? []);
+  const stateLine = deletionFailed
+    ? "The deletion stopped on an error."
+    : (FINISHED_TITLE[row.status] ?? "The import stopped.");
   const warned = row.warnings?.length ?? 0;
   const since = formatDay(row.messages_after);
-  const finishedAt = row.completed_at ? formatDayTime(row.completed_at) : null;
+  const finishedOn = row.completed_at ? formatDay(row.completed_at) : null;
   // A completed bot import counts its channels and threads apart; until that
   // read lands, or on an upload, the row's combined count stands in. One
   // stopped part-way counts only what it got through, which the categories
@@ -382,108 +343,181 @@ export function ImportFinished({
   const categories = (progress.data as ImportProgress | undefined)?.categories;
   const totals = done && categories?.length ? importTotals(categories) : null;
   // The landing (#3493): once, on a completed import this browser hasn't
-  // landed yet. Every other time this is the frame it lands on.
-  // A bot import's landing waits for its categories, so none arrive
-  // mid-moment and the figures don't regroup under it; an upload has none.
+  // landed yet. Every other time this is the frame it lands on. A bot
+  // import's landing waits for its categories, so none arrive mid-moment;
+  // an upload has none.
   const arrival = useArrival(row, row.source !== "bot" || !progress.isPending);
   const { playing } = arrival;
   const messages = useCountUp(row.imported_messages, arrival);
   const tiles = done && categories ? categoryTiles(categories) : [];
+  // Done, every channel it read; stopped part-way, the ones it got through,
+  // since the rest never came over.
+  const channelCount = totals
+    ? totals.channels + totals.threads
+    : done && typeof row.channels_total === "number"
+      ? row.channels_total
+      : !done && typeof row.channels_done === "number"
+        ? row.channels_done
+        : null;
   return (
-    <section
-      aria-labelledby="discord-import-finished"
-      className="mx-auto max-w-2xl space-y-5"
+    <DiscordImportFrame
+      titleLeading={done ? <ArrivalMark {...arrival} /> : undefined}
+      description={stateLine}
     >
-      <div className="space-y-1">
-        <div className="flex items-center gap-2.5">
-          {done ? <ArrivalMark {...arrival} /> : null}
-          <h2 id="discord-import-finished" className="text-headline">
-            {title}
-          </h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {[
-            row.guild_name,
-            since ? `messages since ${since}` : null,
-            done && finishedAt ? `finished ${finishedAt}` : null,
-            // A deletion that failed part-way (#2944).
-            purged > 0 ? `${count(purged)} already deleted` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-        {row.error ? (
-          <p className="text-sm text-destructive-text">{row.error}</p>
+      <div className="space-y-8">
+        {row.error || resumable ? (
+          <div className="space-y-3">
+            {row.error ? (
+              <p className="text-sm text-destructive-text">{row.error}</p>
+            ) : null}
+            {resumable ? (
+              <div className="space-y-1.5">
+                <Button onClick={onResume} disabled={resuming}>
+                  {DISCORD_IMPORT_COPY.resumeImport}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  It picks up where it stopped. Nothing already imported comes
+                  in twice.
+                </p>
+              </div>
+            ) : null}
+          </div>
         ) : null}
-      </div>
 
-      <div className="relative isolate overflow-hidden rounded-lg">
-        <ArrivalSweep playing={playing} />
-        <dl
-          className={cn(
-            "grid grid-cols-2 gap-3",
-            totals ? "@xl:grid-cols-4" : "@xl:grid-cols-3",
-          )}
-        >
-          <Figure
-            value={count(row.imported_messages)}
-            shown={count(messages)}
-            label="messages"
-          />
-          <Figure value={count(row.attachments_imported)} label="files" />
-          {/* Done, every channel it read; stopped part-way, the ones it got
-            through, since the rest never came over. */}
-          {totals ? (
-            <>
-              <Figure
-                value={count(totals.channels)}
-                label={totals.channels === 1 ? "channel" : "channels"}
-              />
-              <Figure
-                value={count(totals.threads)}
-                label={totals.threads === 1 ? "thread" : "threads"}
-              />
-            </>
-          ) : done && typeof row.channels_total === "number" ? (
-            <Figure
-              value={count(row.channels_total)}
-              label="channels and threads"
-            />
-          ) : !done && typeof row.channels_done === "number" ? (
-            <Figure
-              value={count(row.channels_done)}
-              label="channels and threads done"
-            />
-          ) : null}
-        </dl>
-      </div>
-
-      <ArrivalCategories tiles={tiles} playing={playing} />
-
-      {done ? (
-        <div>
-          <Button asChild>
-            <Link href="/chat">Open chat</Link>
-          </Button>
-        </div>
-      ) : resumable ? (
-        <div className="space-y-1.5">
-          <Button onClick={onResume} disabled={resuming}>
-            Resume import
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            It picks up where it stopped. Nothing already imported comes in
-            twice.
-          </p>
-        </div>
-      ) : null}
-
-      {groups.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-sm font-semibold">
-            {counted(warned, "thing", "things")} didn&apos;t come over
-          </p>
-          <ul className="space-y-1.5">
+          <div className="relative isolate overflow-hidden rounded-[14px]">
+            <ArrivalSweep playing={playing} />
+            <SettingsGroup heading={DISCORD_IMPORT_COPY.importGroup}>
+              {row.guild_name ? (
+                <SettingsRow
+                  label={DISCORD_IMPORT_COPY.server}
+                  control={<Value>{row.guild_name}</Value>}
+                />
+              ) : null}
+              <SettingsRow
+                label={DISCORD_IMPORT_COPY.messages}
+                description={since ? `Since ${since}` : undefined}
+                control={
+                  <Value
+                    shown={count(messages)}
+                    full={count(row.imported_messages)}
+                  />
+                }
+              />
+              <SettingsRow
+                label={DISCORD_IMPORT_COPY.files}
+                control={<Value>{count(row.attachments_imported)}</Value>}
+              />
+              {channelCount !== null ? (
+                <SettingsRow
+                  label={DISCORD_IMPORT_COPY.channels}
+                  description={
+                    totals
+                      ? `${counted(totals.channels, "channel", "channels")} and ${counted(totals.threads, "thread", "threads")}`
+                      : done
+                        ? undefined
+                        : "Done before it stopped"
+                  }
+                  control={<Value>{count(channelCount)}</Value>}
+                />
+              ) : null}
+              {done && finishedOn ? (
+                <SettingsRow
+                  label={DISCORD_IMPORT_COPY.finished}
+                  control={<Value>{finishedOn}</Value>}
+                />
+              ) : null}
+              {purged > 0 ? (
+                // A deletion that failed part-way (#2944).
+                <SettingsRow
+                  label="Already deleted"
+                  control={<Value>{count(purged)}</Value>}
+                />
+              ) : null}
+              {warned > 0 ? (
+                <SettingsRow
+                  id="discord-import-issues-row"
+                  icon={CircleAlert}
+                  label={DISCORD_IMPORT_COPY.issues}
+                  value={count(warned)}
+                  href={discordImportPagePath("issues")}
+                />
+              ) : null}
+            </SettingsGroup>
+          </div>
+        </div>
+
+        <ArrivalCategories tiles={tiles} playing={playing} />
+
+        {done ? (
+          <div>
+            <Button variant="secondary" asChild>
+              <Link href="/chat">Open chat</Link>
+            </Button>
+          </div>
+        ) : null}
+
+        {channels}
+
+        <SettingsGroup
+          label={DISCORD_IMPORT_COPY.deleteImport}
+          footnote={DISCORD_IMPORT_COPY.deleteFootnote}
+        >
+          <SettingsRow
+            label={DISCORD_IMPORT_COPY.deleteImport}
+            destructive
+            value=""
+            disabled={deleting}
+            onClick={onDelete}
+          />
+        </SettingsGroup>
+      </div>
+    </DiscordImportFrame>
+  );
+}
+
+/** A value row's figure, at the row's end. */
+function Value({
+  children,
+  shown,
+  full,
+}: {
+  children?: React.ReactNode;
+  /** While a number counts up: what the screen draws; a reader gets `full`. */
+  shown?: string;
+  full?: string;
+}) {
+  return (
+    <span className="text-sm tabular-nums text-muted-foreground">
+      {full === undefined ? (
+        children
+      ) : shown === full ? (
+        full
+      ) : (
+        <>
+          <span aria-hidden="true">{shown}</span>
+          <span className="sr-only">{full}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * What didn't come over (`&page=issues`, #6031), opened from a finished
+ * import's row: the import's warnings grouped by reason, each reason's lines
+ * folded under it.
+ */
+export function ImportIssues({ row }: { row: ImportRow }) {
+  const groups = groupWarnings(row.warnings ?? []);
+  const warned = row.warnings?.length ?? 0;
+  return (
+    <DiscordImportPageFrame title={DISCORD_IMPORT_COPY.issues}>
+      {groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Everything came over.</p>
+      ) : (
+        <div className="space-y-2">
+          <ul className="space-y-1.5" aria-label={DISCORD_IMPORT_COPY.issues}>
             {groups.map((group) => (
               <li key={group.key}>
                 <details className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -508,19 +542,7 @@ export function ImportFinished({
             </p>
           ) : null}
         </div>
-      ) : null}
-
-      {channels}
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="max-w-md text-sm text-muted-foreground">
-          Deleting the import removes the messages and files it brought in. The
-          roles and read permissions it made stay.
-        </p>
-        <Button variant="destructive" onClick={onDelete} disabled={deleting}>
-          Delete import
-        </Button>
-      </div>
-    </section>
+      )}
+    </DiscordImportPageFrame>
   );
 }

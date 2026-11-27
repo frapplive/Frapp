@@ -9,7 +9,9 @@ const {
   mockUseEvents,
   mockUseMembers,
   mockUseMyPermissions,
+  mockSemesterStart,
 } = vi.hoisted(() => ({
+  mockSemesterStart: vi.fn(),
   mockCurrentChapter: vi.fn(),
   mockAttendanceReport: vi.fn(),
   mockUseEvents: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("@repo/hooks", () => ({
   useEvents: (options?: { enabled?: boolean }) => mockUseEvents(options),
   useMembers: (options?: { enabled?: boolean }) => mockUseMembers(options),
   useMyPermissions: () => mockUseMyPermissions(),
+  useServiceSemesterStart: () => mockSemesterStart(),
   isReportExportEnvelope: () => false,
 }));
 
@@ -67,6 +70,16 @@ vi.mock("@/lib/utils", async () => {
 vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
+
+/** This semester starts on August 20 unless a case says otherwise. */
+const SEMESTER_START = "2026-08-20";
+beforeEach(() => {
+  mockSemesterStart.mockReturnValue({
+    start: SEMESTER_START,
+    isError: false,
+    refetch: vi.fn(),
+  });
+});
 
 const { ReportsPage } = await import("./reports-page");
 
@@ -260,7 +273,9 @@ describe("ReportsPage preview states", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Couldn't reach Frapp. Check your connection and try again."),
+      screen.queryByText(
+        "Couldn't reach Frapp. Check your connection and try again.",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -590,5 +605,120 @@ describe("ReportsPage event and member pickers", () => {
 
     expect(screen.queryByText(/can't find the event/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/id$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("ReportsPage in the settings-rows shape (#6031)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chapter.active();
+    mockUseEvents.mockReturnValue(emptyList());
+    mockUseMembers.mockReturnValue(emptyList());
+    mockUseMyPermissions.mockReturnValue(grantedPermissions());
+    mockSemesterStart.mockReturnValue({
+      start: SEMESTER_START,
+      isError: false,
+      refetch: vi.fn(),
+    });
+  });
+
+  const resolved = (payload: unknown) =>
+    vi.fn().mockResolvedValue({
+      payload,
+      truncation: { truncated: false, rowLimit: null, note: null },
+    });
+
+  it("runs this semester by default, from the semester's first day", async () => {
+    const user = userEvent.setup();
+    const mutateAsync = resolved([]);
+    mockAttendanceReport.mockReturnValue({ mutateAsync, isPending: false });
+
+    render(<ReportsPage />);
+    expect(screen.getByRole("combobox", { name: /^dates/i })).toHaveTextContent(
+      "This semester",
+    );
+    await user.click(generateButton());
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ start_date: SEMESTER_START }),
+      }),
+    );
+  });
+
+  it("opens two date fields for Custom from the Dates menu", async () => {
+    const user = userEvent.setup();
+    mockAttendanceReport.mockReturnValue(idle());
+    render(<ReportsPage />);
+
+    expect(screen.queryByLabelText(/^from$/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: /^dates/i }));
+    expect(
+      screen.getByRole("option", { name: "All time" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Custom" }));
+
+    expect(screen.getByLabelText(/^from$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^to$/i)).toBeInTheDocument();
+  });
+
+  it("falls back to All time when the semester can't be read", () => {
+    mockAttendanceReport.mockReturnValue(idle());
+    mockSemesterStart.mockReturnValue({
+      start: undefined,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    render(<ReportsPage />);
+
+    expect(screen.getByRole("combobox", { name: /^dates/i })).toHaveTextContent(
+      "All time",
+    );
+    expect(generateButton()).toBeEnabled();
+  });
+
+  it("says what the chosen report holds, and shows only its rows", async () => {
+    const user = userEvent.setup();
+    mockAttendanceReport.mockReturnValue(idle());
+    render(<ReportsPage />);
+
+    expect(
+      screen.getByText("Each member's status and check-in time."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: /^report/i }));
+    await user.click(screen.getByRole("option", { name: "Member roster" }));
+
+    expect(
+      screen.getByText("Every member with their role, join date and balance."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /^dates/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /^member/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("heads the preview with how many rows it shows, Export beside it", async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 132 }, (_, index) => ({
+      member: `Member ${index}`,
+    }));
+    mockAttendanceReport.mockReturnValue({
+      mutateAsync: resolved(rows),
+      isPending: false,
+    });
+    render(<ReportsPage />);
+
+    expect(screen.getByText("Preview")).toBeInTheDocument();
+    await user.click(generateButton());
+
+    expect(
+      await screen.findByText("Preview · 25 of 132 rows"),
+    ).toBeInTheDocument();
+    expect(csvButton()).toBeEnabled();
+    expect(
+      screen.queryByText(/download link works for one hour/i),
+    ).not.toBeInTheDocument();
   });
 });

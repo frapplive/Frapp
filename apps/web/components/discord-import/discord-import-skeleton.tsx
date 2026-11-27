@@ -1,28 +1,28 @@
 import { Skeleton } from "@/components/shared/async-states";
-import { SectionSkeleton } from "@/components/shared/page-skeletons";
+import {
+  SectionSkeleton,
+  SkeletonRows,
+} from "@/components/shared/page-skeletons";
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 
 /**
- * `/discord-import` while its one read loads: the chapter's import in the
- * page's centred column, a heading, a line under it, and a row of figures.
- * Which state the import is in is not known yet, so it draws the shape every
- * state shares rather than any one of them.
+ * Discord import while its one read loads, inside the page's frame: a group
+ * of rows and its footnote (#6031). Which state the import is in is not known
+ * yet, so it draws the shape every state shares, rows in a settings group,
+ * rather than any one of them.
  */
 export function DiscordImportSkeleton() {
   return (
-    <SectionSkeleton
-      label="Loading the import"
-      className="@container mx-auto w-full max-w-2xl space-y-4"
-    >
-      <div aria-hidden="true" className="space-y-2">
-        <Skeleton className="h-[11px] w-28" />
-        <Skeleton className="h-7 w-80 max-w-full" />
-        <Skeleton className="h-[13px] w-96 max-w-full" />
-      </div>
-      <div aria-hidden="true" className="grid grid-cols-2 gap-3 @xl:grid-cols-3">
-        {[0, 1, 2].map((figure) => (
-          <Skeleton key={figure} className="h-[68px] rounded-lg" />
-        ))}
-      </div>
+    <SectionSkeleton label="Loading the import" className="space-y-2">
+      <SkeletonRows
+        rows={2}
+        lead="glyph"
+        trailing={["w-4"]}
+        trailingHeight="h-4"
+        rowClassName="min-h-control-settings-row px-4 py-2"
+        listClassName={SETTINGS_GROUP_FRAME}
+      />
+      <Skeleton aria-hidden="true" className="ml-1 h-[11px] w-[70%]" />
     </SectionSkeleton>
   );
 }

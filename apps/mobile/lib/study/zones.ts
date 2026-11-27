@@ -114,7 +114,7 @@ export function graceWindowCopy(zone: StudyZoneModel | null): string {
   return `Leaving the zone pauses with a ${minutes}-min grace window.`;
 }
 
-/** What a zone pays, "1 point every 30 min · 15 min minimum", as web says it. */
+/** What a zone pays, "1 point every 30 minutes · 15 minute minimum", as web says it. */
 export function zoneRewardCopy(zone: StudyZoneModel): string {
   return studyZoneRulesLine({
     points_per_interval: zone.pointsPerInterval,

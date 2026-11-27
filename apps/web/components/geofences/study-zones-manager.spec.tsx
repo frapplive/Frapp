@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { cardFilledContainers } from "@/tests/card-surfaces";
 import { chapterSubscription } from "@/tests/chapter-subscription";
 import {
   expectClearingEntriesEmpty,
@@ -20,7 +19,10 @@ const {
   mockUpdateMutate,
   mockDeleteMutate,
   mockToast,
+  zoneList,
 } = vi.hoisted(() => ({
+  // The zones the list reads; `null` is the one ZONE below.
+  zoneList: { current: null as unknown[] | null },
   mockCurrentChapter: vi.fn(),
   mockCreateMutate: vi.fn().mockResolvedValue({}),
   mockUpdateMutate: vi.fn().mockResolvedValue({}),
@@ -59,7 +61,7 @@ vi.mock("@repo/hooks", () => ({
     isError: false,
   }),
   useGeofences: () => ({
-    data: [ZONE],
+    data: zoneList.current ?? [ZONE],
     isPending: false,
     isError: false,
     refetch: vi.fn(),
@@ -160,9 +162,9 @@ describe("StudyZonesManager subscription gating", () => {
     expect(createTrigger()).toBeEnabled();
     expect(editButton()).toBeEnabled();
     expect(await turnOffItem()).not.toHaveAttribute("data-disabled");
-    expect(screen.getByRole("menuitem", { name: /delete/i })).not.toHaveAttribute(
-      "data-disabled",
-    );
+    expect(
+      screen.getByRole("menuitem", { name: /delete/i }),
+    ).not.toHaveAttribute("data-disabled");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -307,19 +309,66 @@ describe("StudyZonesManager layout", () => {
     chapter.active();
   });
 
-  it("lists zones flush, with no --card panel", () => {
-    const { container } = render(<StudyZonesManager />);
+  it("lists zones as settings rows, each saying what it earns (#6031)", () => {
+    render(<StudyZonesManager />);
 
-    expect(cardFilledContainers(container)).toEqual([]);
     const rows = within(
       screen.getByRole("list", { name: "Study zones" }),
     ).getAllByRole("listitem");
     expect(rows).toHaveLength(1);
     expect(
-      within(rows[0]!).getByText("1 point every 30 min · 15 min minimum"),
+      within(rows[0]!).getByText(
+        "1 point every 30 minutes · 15 minute minimum",
+      ),
     ).toBeInTheDocument();
-    // Only the exception is marked: an active zone carries no badge.
+    // Only the exception is said: an active zone says nothing at its end.
+    expect(within(rows[0]!).queryByText("Off")).toBeNull();
     expect(within(rows[0]!).queryByText("Active")).toBeNull();
+  });
+
+  it("says Off at the end of a zone that is switched off, not in a badge", () => {
+    zoneList.current = [
+      {
+        ...ZONE,
+        is_active: false,
+        points_per_interval: 5,
+        minutes_per_point: 60,
+        min_session_minutes: 30,
+      },
+    ];
+    try {
+      render(<StudyZonesManager />);
+      const row = within(
+        screen.getByRole("list", { name: "Study zones" }),
+      ).getByRole("listitem");
+      expect(
+        within(row).getByText("5 points an hour · 30 minute minimum"),
+      ).toBeInTheDocument();
+      expect(within(row).getByText("Off")).toBeInTheDocument();
+      expect(within(row).queryByText("Disabled")).toBeNull();
+    } finally {
+      zoneList.current = null;
+    }
+  });
+
+  it("puts the editor's rates in an Earns group with one footnote", async () => {
+    render(<StudyZonesManager />);
+    await userEvent.click(editButton());
+
+    expect(screen.getByText("Earns")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Shorter sessions earn nothing. A session left in the background past its grace ends.",
+      ),
+    ).toBeInTheDocument();
+    for (const label of [
+      "Points",
+      "Every (minutes)",
+      "Shortest session (minutes)",
+      "Pause grace (minutes)",
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
   });
 
   it("keeps coordinates off the row and out of the editor", async () => {
@@ -330,9 +379,10 @@ describe("StudyZonesManager layout", () => {
     // The shape is the map's, never a box of numbers (Paul, 2026-11-12).
     expect(screen.queryByLabelText(/vertices/i)).toBeNull();
     expect(screen.getByTestId("zone-map")).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Outline" }),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Outline" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("puts New study zone beside the Zones heading, with no page h1", () => {
@@ -421,7 +471,9 @@ describe("StudyZonesManager map editor", () => {
     await userEvent.click(createTrigger());
     const search = screen.getByPlaceholderText("Find a building or address");
     await userEvent.type(search, "Folsom");
-    fireEvent.mouseDown(await screen.findByRole("option", { name: /folsom library/i }));
+    fireEvent.mouseDown(
+      await screen.findByRole("option", { name: /folsom library/i }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create study zone" }));
 
     await waitFor(() => expect(mockCreateMutate).toHaveBeenCalledTimes(1));

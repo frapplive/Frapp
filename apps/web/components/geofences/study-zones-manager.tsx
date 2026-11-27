@@ -8,8 +8,7 @@ import {
   writeKeptPanel,
 } from "@repo/hooks/kept-drafts";
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
-import { StudyZonesGlyph } from "@/components/events/chapter-ops-glyphs";
+import { MapPin, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import {
   useCurrentChapter,
   useDeleteGeofence,
@@ -17,23 +16,16 @@ import {
   useMyPermissions,
   useUpdateGeofence,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import { can, STUDY_ZONES_COPY, studyZoneRulesLine } from "@repo/validation";
 import { NewButton } from "@/components/ui/new-button";
-import { FOCUS_RING } from "@/components/ui/focus";
-import { Badge } from "@/components/ui/badge";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
-import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
-import { studyZoneRulesLine } from "@repo/validation";
-import {
-  geofenceStatusKind,
-  geofenceStatusLabel,
-} from "@/components/geofences/geofence-status";
+import { type RowMenuEntry } from "@/components/shared/row-menu";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   anyReadUncached,
   PermissionsOfflineSurface,
 } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
-import { denseListClassName } from "@/components/shared/table-controls";
 import { SectionLabel } from "@/components/shared/section-label";
 import { Can } from "@/components/shared/can";
 import {
@@ -43,7 +35,7 @@ import {
 } from "@/components/shared/subscription-gate";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { asArray, cn, getErrorMessage } from "@/lib/utils";
+import { asArray, getErrorMessage } from "@/lib/utils";
 import { GeofenceRowsSkeleton } from "@/components/geofences/geofences-skeleton";
 import { InlineNote } from "@/components/shared/inline-note";
 import {
@@ -213,7 +205,7 @@ export function StudyZonesManager() {
           id={labelId}
           count={geofencesQuery.isSuccess ? zones.length : null}
         >
-          Zones
+          {STUDY_ZONES_COPY.zones}
         </SectionLabel>
         {canManageZones ? (
           <NewButton
@@ -271,7 +263,12 @@ export function StudyZonesManager() {
               studies, and members can start a session there.
             </InlineNote>
           ) : (
-            <ul aria-label="Study zones" className={denseListClassName}>
+            // One group of settings rows (#6031): a row opens the zone's map
+            // editor, as a row in iOS Settings or Discord's role list opens
+            // its page; turning it off and deleting it sit on the ⋯ menu and
+            // right-click. PATCH and DELETE sit behind the same guard as
+            // create, so they follow the same gate.
+            <SettingsGroup label="Study zones">
               {zones.map((zone) => {
                 const blocked = !gate.allowed;
                 const describedBy = gate.controlProps()["aria-describedby"];
@@ -307,57 +304,22 @@ export function StudyZonesManager() {
                   },
                 ];
                 return (
-                  <RowMenu
+                  <SettingsRow
                     key={zone.id}
-                    entries={entries}
-                    label={`More for ${zone.name}`}
-                  >
-                    {(menuButton) => (
-                      // The row opens the zone, as a row in iOS Settings or
-                      // Discord's role list does; turning it off and deleting
-                      // it sit on the ⋯ menu and right-click, out of the way.
-                      // PATCH and DELETE sit behind the same guard as create,
-                      // so they follow the same gate.
-                      <li className="group flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditor(zone)}
-                          {...gate.controlProps()}
-                          className={cn(
-                            "flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-card-hover disabled:cursor-not-allowed",
-                            FOCUS_RING,
-                          )}
-                        >
-                          <StudyZonesGlyph
-                            aria-hidden="true"
-                            className="h-4 w-4 shrink-0 text-muted-foreground"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-foreground">
-                              {zone.name}
-                            </span>
-                            <span className="block truncate text-caption text-muted-foreground">
-                              {studyZoneRulesLine(zone)}
-                            </span>
-                          </span>
-                          {zone.is_active ? null : (
-                            // Only the exception is marked: a list where
-                            // every row says Active says nothing.
-                            <Badge
-                              className="shrink-0"
-                              variant={geofenceStatusKind(false)}
-                            >
-                              {geofenceStatusLabel(false)}
-                            </Badge>
-                          )}
-                        </button>
-                        {menuButton}
-                      </li>
-                    )}
-                  </RowMenu>
+                    icon={MapPin}
+                    label={zone.name}
+                    description={studyZoneRulesLine(zone) || undefined}
+                    // Only the exception is said: a list where every row
+                    // says On says nothing.
+                    value={zone.is_active ? null : STUDY_ZONES_COPY.off}
+                    onClick={() => openEditor(zone)}
+                    disabled={blocked}
+                    describedBy={describedBy}
+                    menu={{ entries, label: `More for ${zone.name}` }}
+                  />
                 );
               })}
-            </ul>
+            </SettingsGroup>
           )}
 
           <StudyZoneEditor
