@@ -86,7 +86,7 @@ describe("the chapter's AI switches", () => {
   });
 
   it("says what every switch shares in its footnote, and names no AI company (Paul, 2026-11-17)", () => {
-    state.settings = settings({ updated_at: "2026-11-20T15:00:00Z" });
+    state.settings = settings({ updated_at: "2026-11-20T12:00:00Z" });
     render(<SettingsAiTab />);
     expect(
       screen.getByText(

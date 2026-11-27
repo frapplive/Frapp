@@ -276,7 +276,7 @@ describe("Chapter settings → Privacy and AI rows (#6028)", () => {
 
 describe("the AI screen (#6028)", () => {
   it("draws web's rows and footnote, one line each", () => {
-    h.ai = aiSettings({ updated_at: "2026-11-20T15:00:00Z" });
+    h.ai = aiSettings({ updated_at: "2026-11-20T12:00:00Z" });
     const text = screenText(render(<ChapterAiScreen />));
     expect(text).toContain("Minutes from notes");
     expect(text).toContain(
