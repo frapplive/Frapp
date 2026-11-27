@@ -122,6 +122,7 @@ export function ShellCacheSync({
     reopenShellCache();
     const rows = new Map<string, unknown>();
     for (const [part, row] of readShellRows(scope)) rows.set(part, row.data);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage exists only in the browser, after hydration; reading it in render would mismatch the server's markup
     setSnapshot({ scope: `${authUserId}|${chapterId}`, rows });
     return keepShellAnswers(queryClient, scope);
   }, [authUserId, chapterId, queryClient]);
