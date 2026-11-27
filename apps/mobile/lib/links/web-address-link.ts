@@ -1,7 +1,12 @@
-import { phoneAddressFor } from "@repo/validation";
+import {
+  isOnOneOfOrigins,
+  phoneAddressFor,
+  webAddressRow,
+} from "@repo/validation";
 import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
 import {
   notificationHref,
+  threadTarget,
   type NotificationTarget,
 } from "@/lib/notifications/targets";
 
@@ -17,7 +22,11 @@ import {
  * Only this build's own dashboard origin (`webAppOrigin`): on a staging build
  * a production link names records the staging API doesn't have. A web-only
  * page (Backwork, Chapter settings) and a path no page owns are not the
- * app's: `null`, so the link stays a web page.
+ * app's: `null`, so the link stays a web page. So is an address the phone
+ * would open without what it points at (a document, a folder, Alumni, a
+ * message with no channel): a parameter the chosen screen drops, unless it
+ * only picks a less specific screen of the same page (an event link's day).
+ * Ids are trimmed, and an empty one counts as absent.
  *
  * A message thread opens over its channel, as a thread notification does
  * (`under`): the thread screen only listens on its channel's realtime topic,
@@ -33,21 +42,43 @@ export function webLinkTarget(
   } catch {
     return null;
   }
-  if (!sameOriginAsOneOf(url, origins)) return null;
-  const screen = phoneAddressFor(url.pathname, url.searchParams);
+  if (!isOnOneOfOrigins(url, origins)) return null;
+  const row = webAddressRow(url.pathname);
+  if (!row?.phone) return null;
+  const query = new URLSearchParams();
+  for (const [name, value] of url.searchParams) {
+    if (row.params.includes(name) && value.trim()) {
+      query.set(name, value.trim());
+    }
+  }
+  const screen = phoneAddressFor(url.pathname, query);
   if (!screen) return null;
-  const target: NotificationTarget = {
+  const chosen = row.phone.find(
+    (candidate) =>
+      candidate.pathname === screen.pathname &&
+      (candidate.when ?? []).every((name) => query.get(name)),
+  );
+  const kept = new Set(Object.keys(chosen?.params ?? {}));
+  const context = new Set(
+    row.phone
+      .slice(chosen ? row.phone.indexOf(chosen) + 1 : 0)
+      .flatMap((candidate) => candidate.when ?? []),
+  );
+  for (const name of query.keys()) {
+    if (!kept.has(name) && !context.has(name)) return null;
+  }
+  const { channelId, threadRootId } = screen.params;
+  if (screen.pathname === "/chat-thread" && channelId && threadRootId) {
+    return threadTarget(
+      channelId,
+      threadRootId,
+      screen.params.focusMessageId ?? null,
+    );
+  }
+  return {
     pathname: screen.pathname,
     ...(Object.keys(screen.params).length > 0 ? { params: screen.params } : {}),
   };
-  const { channelId, threadRootId } = screen.params;
-  if (screen.pathname === "/chat-thread" && channelId && threadRootId) {
-    return {
-      ...target,
-      under: { pathname: "/chat-thread", params: { channelId } },
-    };
-  }
-  return target;
 }
 
 /**
@@ -72,15 +103,5 @@ export function systemPathForWebLink(
       ...target.under.params,
       ...(threadRootId ? { focusMessageId: threadRootId } : {}),
     },
-  });
-}
-
-function sameOriginAsOneOf(url: URL, origins: readonly string[]): boolean {
-  return origins.some((origin) => {
-    try {
-      return new URL(origin).origin === url.origin;
-    } catch {
-      return false;
-    }
   });
 }

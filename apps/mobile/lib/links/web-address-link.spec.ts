@@ -31,21 +31,64 @@ describe("a web address opens its phone screen (#6050)", () => {
     }
   });
 
-  it("resolves every row the phone has, through the system's handler, to an existing route", () => {
+  it("resolves every row the phone has, through the system's handler, to that row's screen", () => {
     for (const row of WEB_ADDRESSES) {
       if (!row.phone || row.path.includes("[")) continue;
       for (const screen of row.phone) {
-        const query = new URLSearchParams(
-          (screen.when ?? []).map((name) => [name, "x1"]),
-        );
+        // Every parameter the screen reads, so each mapping is exercised.
+        const names = new Set([
+          ...(screen.when ?? []),
+          ...Object.keys(screen.params ?? {}),
+        ]);
+        const query = new URLSearchParams([...names].map((n) => [n, "x1"]));
         const search = query.toString();
         const link = `${ORIGIN}${row.path}${search ? `?${search}` : ""}`;
+        const target = webLinkTarget(link, [ORIGIN]);
+        expect(target, link).not.toBeNull();
+        expect(target!.pathname, link).toBe(screen.pathname);
+        for (const phoneName of Object.values(screen.params ?? {})) {
+          expect(target!.params?.[phoneName], `${link} → ${phoneName}`).toBe(
+            "x1",
+          );
+        }
         const out = redirectSystemPath({ path: link, initial: true });
-        const pathname = out.split("?")[0]!;
-        expect(out, link).not.toBe(link);
-        expect(routeExists(pathname), `${link} → ${out}`).toBe(true);
+        expect(routeExists(out.split("?")[0]!), `${link} → ${out}`).toBe(true);
       }
     }
+  });
+
+  it("opens the views the phone reads: Minutes, and a time-extension request", () => {
+    expect(
+      systemPathForWebLink(`${ORIGIN}/documents?type=minutes`, [ORIGIN]),
+    ).toBe("/documents?type=minutes");
+    expect(
+      systemPathForWebLink(`${ORIGIN}/activity?extension=t1`, [ORIGIN]),
+    ).toBe("/activity?extension=t1");
+  });
+
+  it("leaves an address in the browser when the phone would drop what it points at", () => {
+    for (const link of [
+      `${ORIGIN}/documents?document=d1`,
+      `${ORIGIN}/documents?folder=Finance`,
+      `${ORIGIN}/members?tab=alumni`,
+      `${ORIGIN}/activity?posting=p1`,
+      `${ORIGIN}/chat?message=m1`,
+    ]) {
+      expect(webLinkTarget(link, [ORIGIN]), link).toBeNull();
+    }
+    // A less specific screen's parameter is context, not a record.
+    expect(
+      systemPathForWebLink(`${ORIGIN}/events?day=2026-11-30&event=e1`, [ORIGIN]),
+    ).toBe("/event-details?id=e1");
+  });
+
+  it("trims ids, and treats an empty one as absent", () => {
+    expect(
+      systemPathForWebLink(`${ORIGIN}/chat?channel=%20c1%20`, [ORIGIN]),
+    ).toBe("/chat-thread?channelId=c1");
+    expect(webLinkTarget(`${ORIGIN}/chat?channel=%20`, [ORIGIN])).toEqual({
+      pathname: "/",
+    });
   });
 
   it("opens the most specific screen, with the phone's parameter names", () => {
@@ -57,10 +100,9 @@ describe("a web address opens its phone screen (#6050)", () => {
     expect(systemPathForWebLink(`${ORIGIN}/members?member=u1`, [ORIGIN])).toBe(
       "/member?userId=u1",
     );
-    // A page's list screen for an address it has no screen for.
-    expect(
-      systemPathForWebLink(`${ORIGIN}/documents?folder=Finance`, [ORIGIN]),
-    ).toBe("/documents");
+    expect(systemPathForWebLink(`${ORIGIN}/documents`, [ORIGIN])).toBe(
+      "/documents",
+    );
   });
 
   it("opens a thread link on its channel at the thread's first message, from the system", () => {

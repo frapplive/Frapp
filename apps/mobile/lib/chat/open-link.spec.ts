@@ -4,9 +4,14 @@ import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const route = vi.hoisted(() => ({ pathname: undefined as string | undefined }));
+const route = vi.hoisted(() => ({
+  pathname: undefined as string | undefined,
+  threadRootId: undefined as string | undefined,
+}));
+// The real rule over the stand-in route: a thread is never replaceable.
 vi.mock("@/lib/current-pathname", () => ({
-  currentPathname: () => route.pathname,
+  currentReplaceablePathname: () =>
+    route.threadRootId ? undefined : route.pathname,
 }));
 import {
   LINK_OPEN_FAILED_BODY,
@@ -65,6 +70,7 @@ describe("openMessageLink", () => {
       vi.mocked(router.replace).mockClear();
       delete process.env.EXPO_PUBLIC_APP_URL;
       route.pathname = undefined;
+      route.threadRootId = undefined;
     });
 
     it("replaces an open channel rather than stacking a second", async () => {
@@ -110,6 +116,28 @@ describe("openMessageLink", () => {
         2,
         "/chat-thread?channelId=c1&threadRootId=t1",
       );
+    });
+
+    it("pushes over a thread a link is tapped in, never replacing it", async () => {
+      route.pathname = "/chat-thread";
+      route.threadRootId = "t0";
+      await openMessageLink(LINK, IN_APP);
+      expect(router.replace).not.toHaveBeenCalled();
+      expect(router.push).toHaveBeenCalledWith(
+        "/chat-thread?channelId=c1&focusMessageId=m1",
+      );
+    });
+
+    it("keeps the browser for an address the phone would open without its record", async () => {
+      for (const link of [
+        "https://app.frapp.live/documents?document=d1",
+        "https://app.frapp.live/members?tab=alumni",
+        "https://app.frapp.live/chat?message=m1",
+      ]) {
+        await openMessageLink(link, IN_APP);
+        expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith(link);
+      }
+      expect(router.push).not.toHaveBeenCalled();
     });
 
     it("keeps the browser for a web-only page", async () => {

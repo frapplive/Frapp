@@ -3,7 +3,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
 import { isOpenableHref } from "@repo/chat-core/links";
-import { currentPathname } from "@/lib/current-pathname";
+import { currentReplaceablePathname } from "@/lib/current-pathname";
 import { webLinkTarget } from "@/lib/links/web-address-link";
 import { openNotificationTarget } from "@/lib/notifications/targets";
 
@@ -40,7 +40,7 @@ export async function openMessageLink(
   if (!isOpenableHref(href)) return;
   const target = options.dashboardLinksInApp ? webLinkTarget(href) : null;
   if (target) {
-    openNotificationTarget(router, target, currentPathname());
+    openNotificationTarget(router, target, currentReplaceablePathname());
     return;
   }
   try {

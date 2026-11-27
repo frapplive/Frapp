@@ -1,4 +1,3 @@
-import { PRODUCTION_APP_ORIGIN } from "./invite-token";
 
 /**
  * A message's link (#3723): `https://app.frapp.live/chat?channel=…&message=…`.
@@ -15,7 +14,7 @@ import { PRODUCTION_APP_ORIGIN } from "./invite-token";
  * dashboard's own relative `/chat` links, reads its names from here too.
  */
 
-/** The path the app claims and the web serves. Listed in `APP_LINK_PATHS`. */
+/** The path the web serves a message's link on. Not claimed by the app yet (#6185). */
 export const CHAT_LINK_PATH = "/chat";
 export const CHAT_LINK_CHANNEL_PARAM = "channel";
 export const CHAT_LINK_MESSAGE_PARAM = "message";

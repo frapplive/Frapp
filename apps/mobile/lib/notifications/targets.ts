@@ -226,12 +226,27 @@ export function resolveNotificationTarget(
       ? { ...resolved, params: { ...resolved.params, focusMessageId } }
       : resolved;
   }
+  return threadTarget(value, threadRootId, focusMessageId);
+}
+
+/**
+ * A message thread (#3785): the channel's route pushed again with the root,
+ * over the channel, never alone. The thread screen only listens on its
+ * channel's realtime topic and never attaches it, so with nothing under it
+ * it would get no live replies or typing, and its back would skip the
+ * channel (#4054). One rule for a push and a link (`lib/links`).
+ */
+export function threadTarget(
+  channelId: string,
+  threadRootId: string,
+  focusMessageId: string | null = null,
+): NotificationTarget {
   return {
-    pathname: route.pathname,
+    pathname: "/chat-thread",
     params: focusMessageId
-      ? { channelId: value, threadRootId, focusMessageId }
-      : { channelId: value, threadRootId },
-    under: resolved,
+      ? { channelId, threadRootId, focusMessageId }
+      : { channelId, threadRootId },
+    under: { pathname: "/chat-thread", params: { channelId } },
   };
 }
 

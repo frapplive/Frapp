@@ -1266,7 +1266,7 @@ Comparables: Slack web and Discord web keep the open channel and thread in the a
 - **A dead or forbidden id** opens the page with a short inline note in place of the record, and its parameter is replaced away.
 
 The web reads and moves these through one hook, [`use-address-params.ts`](../../../apps/web/lib/address/use-address-params.ts) over [`address.ts`](../../../apps/web/lib/address/address.ts): open pushes, close goes Back or replaces, replace mode is for days and sorts, `consumeAddressParam` takes a one-shot mark off, and `useDeadAddressParam` drops a dead id and keeps its note.
-The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts): the web's own names (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from it, and the phone reads it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands.
+The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts): the web's own names (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from it, and the phone reads it ([#6050](https://github.com/frapplive/Frapp/issues/6050); [`../mobile/navigation.md` § Deep links](../mobile/navigation.md#deep-links)).
 
 ### The table
 
@@ -1297,9 +1297,9 @@ A route kept only to send old links on (`/tasks`, `/points`, `/billing`, `/chat-
 ### The phone
 
 `web-addresses.ts` maps each web address to its phone screen and the phone's parameter names.
-Three things read it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands: a `+native-intent` handler, the phone's notification targets (`apps/mobile/lib/notifications/targets.ts`) and Copy link.
-Its paths then join `APP_LINK_PATHS`; web-only pages are not claimed.
-iOS reads the claimed paths from the web; Android's intent filters need a new store build.
+The phone reads it in two places since [#6050](https://github.com/frapplive/Frapp/issues/6050): a link tapped inside a message, and the `+native-intent` handler for a link another app hands over ([`../mobile/navigation.md` § Deep links](../mobile/navigation.md#deep-links) owns how).
+Two readers are still to come: the phone's notification targets ([#6191](https://github.com/frapplive/Frapp/issues/6191)) and Copy link on the phone's records ([#6186](https://github.com/frapplive/Frapp/issues/6186)).
+The app doesn't claim these paths yet; when it does is Paul's call ([#6185](https://github.com/frapplive/Frapp/issues/6185)). Web-only pages are never claimed.
 
 ## Gating & routing semantics
 
