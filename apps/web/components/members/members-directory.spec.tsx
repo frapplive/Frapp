@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
+import { setAddress } from "@/tests/address-search-params";
 import { networkMock } from "@/tests/network";
 
 /**
@@ -205,15 +206,15 @@ const standings = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 const modules = vi.hoisted(() => ({ off: new Set<string>() }));
-const search = vi.hoisted(() => ({ value: "" }));
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   useChapterModuleGateState: () => ({
     status: "ready",
     isModuleEnabled: (key: string) => !modules.off.has(key),
   }),
 }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(search.value),
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 const customLines = vi.hoisted(() => ({ value: {} as Record<string, string> }));
@@ -311,7 +312,7 @@ beforeEach(() => {
   standings.isError = false;
   standings.refetch.mockClear();
   modules.off = new Set();
-  search.value = "";
+  setAddress("/members");
   phoneReachRead.value = null;
   tenant.council = false;
   permissionsRead.data = { permissions: [] };
@@ -1458,7 +1459,7 @@ describe("MembersDirectory standings (#5950)", () => {
   });
 
   it("opens on the standing a link names", () => {
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     render(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Most points · This semester" }),
@@ -1468,7 +1469,7 @@ describe("MembersDirectory standings (#5950)", () => {
   it("offers no standing, and no points on rows, while its module is off", async () => {
     const user = userEvent.setup();
     modules.off = new Set(["points", "hours"]);
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     render(<MembersDirectory />);
     // A link to a standing whose module is off opens on the name instead.
     await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
@@ -1509,13 +1510,13 @@ describe("MembersDirectory standings (#5950)", () => {
     expect(
       screen.getByRole("button", { name: "Sort: Name A to Z" }),
     ).toBeInTheDocument();
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     rerender(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Most points · This semester" }),
     ).toBeInTheDocument();
     // The sidebar's plain Directory link drops the param, and the sort with it.
-    search.value = "";
+    setAddress("/members");
     rerender(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Name A to Z" }),

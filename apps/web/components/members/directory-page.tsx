@@ -1,7 +1,9 @@
 "use client";
 
 import { Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
+import { pushAddress } from "@/lib/address/address";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MembersDirectory } from "@/components/members/members-directory";
 import { AlumniDirectory } from "@/components/alumni/alumni-directory";
@@ -41,7 +43,6 @@ const DIRECTORY_TAB_VALUES: readonly string[] = ["members", "alumni"];
 const DEFAULT_TAB = "members";
 
 function DirectoryPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
@@ -61,11 +62,12 @@ function DirectoryPageContent() {
   const isCouncil = useIsCouncil();
 
   function selectTab(next: string) {
-    const params = new URLSearchParams(searchParams);
-    params.set("tab", next);
-    // `replace`, not `push`: flipping a tab is not a navigation a member
-    // expects the back button to unwind one step at a time.
-    router.replace(`?${params.toString()}`, { scroll: false });
+    // Pushed (#6046, spec § Addresses): Alumni is a step Back returns from.
+    // Members is the bare address; a member open on one tab closes with it.
+    pushAddress({
+      [WEB_ADDRESS_PARAMS.members.tab]: next === DEFAULT_TAB ? null : next,
+      [WEB_ADDRESS_PARAMS.members.member]: null,
+    });
   }
 
   if (isCouncil) {

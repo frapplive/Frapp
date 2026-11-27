@@ -1,6 +1,9 @@
 "use client";
 
-import { DIRECTORY_COPY } from "@repo/validation";
+import { useAddressParams } from "@/lib/address/use-address-params";
+import { closeAddress, pushAddress } from "@/lib/address/address";
+
+import { DIRECTORY_COPY, WEB_ADDRESS_PARAMS } from "@repo/validation";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { useMemo, useState } from "react";
 import { SearchGlyph } from "@/components/members/directory-glyphs";
@@ -66,6 +69,8 @@ type AlumniRow = {
  * way on web to correct a mistaken Alumni role or remove an alumnus. Mobile's
  * s13 already opens its sheet from both tabs.
  */
+
+const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
 export function AlumniDirectory() {
   const { isOffline } = useNetwork();
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
@@ -82,7 +87,13 @@ export function AlumniDirectory() {
   // list without the member in it — a lookup would empty the sheet mid-edit.
   // The sheet re-reads the member by id itself, so the snapshot only seeds it.
   const [openAlumnus, setOpenAlumnus] = useState<AlumniRow | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // Open is the address's `member=` (#6046, spec § Addresses), pushed, so
+  // Back returns to the list; the snapshot above only seeds the sheet.
+  const memberParam = useAddressParams([MEMBER_PARAM]).values[MEMBER_PARAM];
+  const sheetOpen = memberParam !== null;
+  const setSheetOpen = (open: boolean) => {
+    if (!open) closeAddress([MEMBER_PARAM]);
+  };
   const [committed, setCommitted] = useState<{
     graduation_year?: string;
     city?: string;
@@ -311,7 +322,7 @@ export function AlumniDirectory() {
               .join(" · ");
             const open = () => {
               setOpenAlumnus(alum);
-              setSheetOpen(true);
+              pushAddress({ [MEMBER_PARAM]: alum.user_id });
             };
             const label = [name, meta || null, alum.bio || null]
               .filter(Boolean)
@@ -428,8 +439,12 @@ export function AlumniDirectory() {
       <MemberDetailSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        userId={openAlumnus?.user_id ?? null}
-        initialMember={openAlumnus}
+        userId={memberParam}
+        initialMember={
+          openAlumnus?.user_id === memberParam
+            ? openAlumnus
+            : (alumni.find((alum) => alum.user_id === memberParam) ?? null)
+        }
         // Alumni accrue no points (`spec/behavior/alumni.md`), and the
         // leaderboard this would come from ranks actives, so the sheet draws
         // no Points row.

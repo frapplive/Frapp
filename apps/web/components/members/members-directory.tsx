@@ -107,7 +107,15 @@ import {
   phoneReachStateLabel,
   type PhoneReach,
   type PhoneReachFilter,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { closeAddress, pushAddress } from "@/lib/address/address";
+
+const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
 import { asArray, cn, initials } from "@/lib/utils";
 import { stateMicrocopy } from "@/lib/state-microcopy";
 import {
@@ -315,8 +323,21 @@ export function MembersDirectory() {
   const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
   // The sheet reads the profile by `users.id` itself (#3726), so it keeps its
   // member even once a role save moves them off this tab's list.
-  const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [popoutUserId, setPopoutUserId] = useState<string | null>(null);
+  /*
+    The member open in place of the list is the address's `member=` (#6046,
+    spec § Addresses): View profile pushes it, so Back returns to the list,
+    and its back arrow closes by the address's rule. The card from a row is
+    a popout, not a place, so it has no address.
+  */
+  const memberParam = useAddressParams([MEMBER_PARAM]).values[MEMBER_PARAM];
+  const detailSheetOpen = memberParam !== null;
+  const activeUserId = memberParam ?? popoutUserId;
+  const setDetailSheetOpen = (open: boolean) => {
+    if (open) {
+      if (popoutUserId) pushAddress({ [MEMBER_PARAM]: popoutUserId });
+    } else closeAddress([MEMBER_PARAM]);
+  };
   const [popoutOpen, setPopoutOpen] = useState(false);
   const [popoutAnchor, setPopoutAnchor] = useState<MemberPopoutAnchor | null>(
     null,
@@ -349,6 +370,15 @@ export function MembersDirectory() {
   const presence = useChapterPresenceContext();
   const usingSearch = deferredQuery.length > 0;
   const activeQuery = usingSearch ? searchQuery : membersQuery;
+  // A member the address names who isn't on the chapter's list (left, or
+  // hidden from this viewer): said, and taken out of the address.
+  const deadMember = useDeadAddressParam(
+    MEMBER_PARAM,
+    memberParam,
+    membersQuery.data !== undefined &&
+      memberParam !== null &&
+      !membersQuery.data.some((member) => member.user_id === memberParam),
+  );
 
   // The Actives tab is the chapter minus its alumni (#2484), who are listed on
   // the Alumni tab beside it. `GET /v1/members` returns the whole chapter, so
@@ -791,10 +821,12 @@ export function MembersDirectory() {
   // unknown one with its roles cleared.
   const activeMember = useMemo(
     () =>
-      (activeQuery.data ?? []).find(
-        (member) => memberId(member) === activeMemberId,
+      (activeQuery.data ?? []).find((member) =>
+        memberParam !== null
+          ? member.user_id === memberParam
+          : memberId(member) === activeMemberId,
       ) ?? null,
-    [activeMemberId, activeQuery.data],
+    [activeMemberId, activeQuery.data, memberParam],
   );
   // A filter or a search term is the difference between "this chapter has no
   // members" and "nothing matched what you asked for" — two different states on
@@ -899,7 +931,7 @@ export function MembersDirectory() {
     side: "right" | "bottom" = "bottom",
   ) {
     setActiveMemberId(memberId(member));
-    setActiveUserId(typeof member.user_id === "string" ? member.user_id : null);
+    setPopoutUserId(typeof member.user_id === "string" ? member.user_id : null);
     setPopoutAnchor(anchorFor(opener));
     setPopoutSide(side);
     setPopoutOpen(true);
@@ -1640,6 +1672,13 @@ export function MembersDirectory() {
         }
         onViewProfile={() => setDetailSheetOpen(true)}
       />
+      {deadMember !== null ? (
+        // A member from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That member isn&apos;t in the directory. They may have left the
+          chapter, or you may not have access.
+        </p>
+      ) : null}
       <MemberDetailSheet
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
