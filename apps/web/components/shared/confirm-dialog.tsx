@@ -94,6 +94,23 @@ export type ConfirmRequest = {
 
 export type ConfirmResult = { comment: string; alternative?: true };
 
+/**
+ * A confirm's words shared with the phone (`@repo/validation`'s
+ * `{ title, body, action }`, which the phone's alert takes) as this
+ * dialog's fields.
+ */
+export function confirmWords(words: {
+  title: string;
+  body: string;
+  action: string;
+}): Pick<ConfirmRequest, "title" | "description" | "confirmLabel"> {
+  return {
+    title: words.title,
+    description: words.body,
+    confirmLabel: words.action,
+  };
+}
+
 type PendingRequest = ConfirmRequest & {
   resolve: (result: ConfirmResult | null) => void;
 };

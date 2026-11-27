@@ -95,6 +95,13 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "module",
   // A page opened from one of the Chapter tab's or a module page's rows.
   "page",
+  // Roles and groups' pages: a tier, a role, a group, the automatic groups,
+  // and where a group's page was opened from (#6029).
+  "tier",
+  "role",
+  "group",
+  "groups",
+  "from",
   // The points ledger's member, from a member's card.
   LEDGER_MEMBER_PARAM,
 ] as const;

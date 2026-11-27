@@ -223,6 +223,8 @@ export * from "./ops-nudges";
 export * from "./order-number";
 // s02's "Already in a chapter?" line, shared by web `/join` and the phone.
 export * from "./other-account";
+// The People settings pages' words, web and the phone (#6029).
+export * from "./people-settings-copy";
 // What each system permission is called and which module it belongs to. The
 // API serves it at `GET /v1/roles/permissions-catalog`; web and mobile read
 // the same list from here (#4069).

@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { groupPermissionsByModule } from "@repo/validation";
 import { permissionRows } from "@repo/hooks/role-tiers";
 import { Switch } from "@/components/ui/switch";
+import { SettingsGroup } from "@/components/shared/settings-row";
 import { cn } from "@/lib/utils";
 import { useIsPermissionHidden } from "@repo/hooks";
 
@@ -28,6 +29,7 @@ export function PermissionSwitchList({
   rowNote,
   rowLockedReason,
   pendingPermission,
+  footnote,
 }: {
   /** Prefix for element ids, unique on the page. */
   idPrefix: string;
@@ -45,6 +47,8 @@ export function PermissionSwitchList({
   rowLockedReason?: (permission: string, currentlyOn: boolean) => string | null;
   /** The permission whose write is in flight, if any. */
   pendingPermission?: string | null;
+  /** The one muted line under the first module's group (#6029). */
+  footnote?: string;
 }) {
   const isHidden = useIsPermissionHidden();
   const groups = useMemo(
@@ -57,73 +61,67 @@ export function PermissionSwitchList({
       {lockedReason ? (
         <p className="text-sm text-muted-foreground">{lockedReason}</p>
       ) : null}
-      {groups.map((group) => {
-        const groupId = `${idPrefix}-${group.label.replace(/\W+/g, "-").toLowerCase()}`;
+      {groups.map((group, groupIndex) => {
         return (
-          <section
+          <SettingsGroup
             key={group.label}
-            aria-labelledby={groupId}
-            className="space-y-2"
+            heading={group.label}
+            footnote={groupIndex === 0 ? footnote : undefined}
           >
-            <h3 id={groupId} className="text-sm font-semibold text-foreground">
-              {group.label}
-            </h3>
-            <ul className="divide-y divide-border rounded-[14px] border border-border bg-card">
-              {group.entries.map((row) => {
-                const on = isOn(row.permission);
-                const rowReason = rowLockedReason?.(row.permission, on) ?? null;
-                const disabled =
-                  Boolean(lockedReason) ||
-                  rowReason !== null ||
-                  pendingPermission === row.permission;
-                const switchId = `${idPrefix}-${row.permission.replace(/\W+/g, "-")}`;
-                const note = rowNote?.(row.permission);
-                return (
-                  <li
-                    key={row.permission}
-                    className="flex items-start justify-between gap-6 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <label
-                        htmlFor={switchId}
-                        className={cn(
-                          "text-sm font-medium",
-                          disabled && !lockedReason
-                            ? "text-muted-foreground"
-                            : "text-foreground",
-                        )}
-                      >
-                        {row.label}
-                      </label>
-                      {row.description ? (
-                        <p className="mt-0.5 text-caption text-muted-foreground">
-                          {row.description}
-                        </p>
-                      ) : null}
-                      {note ? (
-                        <p className="mt-0.5 text-caption text-accent-text">
-                          {note}
-                        </p>
-                      ) : null}
-                      {rowReason && !lockedReason ? (
-                        <p className="mt-0.5 text-caption text-muted-foreground">
-                          {rowReason}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Switch
-                      id={switchId}
-                      checked={on}
-                      disabled={disabled}
-                      aria-label={`${row.label} for ${holderName}`}
-                      onCheckedChange={() => onToggle(row.permission, on)}
-                      className="mt-0.5 shrink-0"
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+            {group.entries.map((row) => {
+              const on = isOn(row.permission);
+              const rowReason = rowLockedReason?.(row.permission, on) ?? null;
+              const disabled =
+                Boolean(lockedReason) ||
+                rowReason !== null ||
+                pendingPermission === row.permission;
+              const switchId = `${idPrefix}-${row.permission.replace(/\W+/g, "-")}`;
+              const note = rowNote?.(row.permission);
+              return (
+                <li
+                  key={row.permission}
+                  className="flex items-start justify-between gap-6 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <label
+                      htmlFor={switchId}
+                      className={cn(
+                        "text-sm font-medium",
+                        disabled && !lockedReason
+                          ? "text-muted-foreground"
+                          : "text-foreground",
+                      )}
+                    >
+                      {row.label}
+                    </label>
+                    {row.description ? (
+                      <p className="mt-0.5 text-caption text-muted-foreground">
+                        {row.description}
+                      </p>
+                    ) : null}
+                    {note ? (
+                      <p className="mt-0.5 text-caption text-accent-text">
+                        {note}
+                      </p>
+                    ) : null}
+                    {rowReason && !lockedReason ? (
+                      <p className="mt-0.5 text-caption text-muted-foreground">
+                        {rowReason}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Switch
+                    id={switchId}
+                    checked={on}
+                    disabled={disabled}
+                    aria-label={`${row.label} for ${holderName}`}
+                    onCheckedChange={() => onToggle(row.permission, on)}
+                    className="mt-0.5 shrink-0"
+                  />
+                </li>
+              );
+            })}
+          </SettingsGroup>
         );
       })}
     </div>
