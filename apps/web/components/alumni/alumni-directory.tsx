@@ -1,7 +1,14 @@
 "use client";
 
-import { useAddressParams } from "@/lib/address/use-address-params";
-import { closeAddress, pushAddress } from "@/lib/address/address";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
 
 import { DIRECTORY_COPY, WEB_ADDRESS_PARAMS } from "@repo/validation";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
@@ -50,6 +57,8 @@ type AlumniRow = {
   email: string | null;
 };
 
+const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
+
 /**
  * The alumni half of the Directory.
  *
@@ -70,7 +79,6 @@ type AlumniRow = {
  * s13 already opens its sheet from both tabs.
  */
 
-const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
 export function AlumniDirectory() {
   const { isOffline } = useNetwork();
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
@@ -107,6 +115,20 @@ export function AlumniDirectory() {
   });
 
   const alumni = useMemo(() => asArray<AlumniRow>(query.data), [query.data]);
+  // An alumnus the address names who isn't on the unfiltered list (left, or
+  // hidden from this viewer): said, and taken out of the address.
+  const deadAlumnus = useDeadAddressParam(
+    MEMBER_PARAM,
+    memberParam,
+    query.data !== undefined &&
+      !query.isFetching &&
+      !committed.graduation_year &&
+      !committed.city &&
+      !committed.company &&
+      memberParam !== null &&
+      openAlumnus?.user_id !== memberParam &&
+      !alumni.some((alum) => alum.user_id === memberParam),
+  );
   // A committed filter is the difference between "this chapter has no alumni"
   // and "nothing matched what you asked for" — the two states the board draws
   // separately (`3b`), which this screen used to answer with one string.
@@ -178,6 +200,13 @@ export function AlumniDirectory() {
 
   return (
     <section aria-labelledby="alumni-list-label" className="space-y-3">
+      {deadAlumnus !== null ? (
+        // An alumnus from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That member isn&apos;t in the directory. They may have left the
+          chapter, or you may not have access.
+        </p>
+      ) : null}
       {/*
         One toolbar row: the list's name and count on the left, its filter form
         on the right, on the page surface. `1f` pin 2.
@@ -440,6 +469,7 @@ export function AlumniDirectory() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         userId={memberParam}
+        onLeaveForMessage={() => replaceAddress({ [MEMBER_PARAM]: null })}
         initialMember={
           openAlumnus?.user_id === memberParam
             ? openAlumnus

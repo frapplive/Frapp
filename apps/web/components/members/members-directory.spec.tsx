@@ -140,6 +140,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     // The List/Grid pick is kept per viewer (#4175).
     useViewerUserId: () => "viewer-1",
     useMembers: () => membersRead,
+    // A member= the roster lacks is looked for among the alumni (#6046).
+    useAlumni: () => ({ data: [], isFetching: false }),
     useMemberSearch: (q: string) => (q ? searchRead : membersRead),
     useRoles: () => rolesRead,
     useRoleTiers: () => tiersRead,
@@ -411,6 +413,37 @@ describe("Directory on the greenfield shell", () => {
       "data-user-id",
       "u-1",
     );
+  });
+
+  it("puts the open member in the address with View profile's push (#6046)", async () => {
+    const user = userEvent.setup();
+    render(<MembersDirectory />);
+    await user.click(screen.getByRole("button", { name: /^Ada Lovelace,/ }));
+    const push = vi.spyOn(window.history, "pushState");
+    await user.click(screen.getByRole("button", { name: "View profile" }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?member=u-1");
+    push.mockRestore();
+  });
+
+  it("opens the member a link names, and says one who isn't here is gone (#6046)", async () => {
+    setAddress("/members?member=u-1");
+    const { unmount } = render(<MembersDirectory />);
+    expect(screen.getByTestId("detail-sheet")).toHaveAttribute(
+      "data-user-id",
+      "u-1",
+    );
+    unmount();
+
+    membersRead.refetch = vi.fn(() => Promise.resolve());
+    setAddress("/members?member=nobody");
+    render(<MembersDirectory />);
+    expect(
+      await screen.findByText(/That member isn't in the directory/),
+    ).toBeInTheDocument();
+    // Read again once before it is called gone.
+    expect(membersRead.refetch).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("");
   });
 
   it("drops an absent field from the meta line instead of rendering an em dash", () => {
@@ -1528,9 +1561,9 @@ describe("MembersDirectory standings (#5950)", () => {
     standings.isError = true;
     render(<MembersDirectory />);
     await pick(user, /^Sort:/, "Most points");
-    expect(
-      screen.getByText("Couldn't load the standings"),
-    ).toBeInTheDocument();
-    expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(0);
+    expect(screen.getByText("Couldn't load the standings")).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(
+      0,
+    );
   });
 });

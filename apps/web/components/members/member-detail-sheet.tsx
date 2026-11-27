@@ -138,6 +138,12 @@ type MemberDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
+   * Message opened a DM and is leaving for chat: what to do with the sheet
+   * instead of closing it (`onOpenChange(false)`). A page whose sheet is an
+   * address passes a replace, so no Back races the move to chat.
+   */
+  onLeaveForMessage?: () => void;
+  /**
    * Whose profile, by `users.id`, or `null` while nobody is selected; the
    * sheet stays mounted regardless. Read through
    * `GET /v1/members/by-user/{userId}`, which also hands back the membership
@@ -230,6 +236,7 @@ type MemberDetailSheetProps = {
 export function MemberDetailSheet({
   open,
   onOpenChange,
+  onLeaveForMessage,
   userId,
   initialMember,
   identity,
@@ -326,7 +333,9 @@ export function MemberDetailSheet({
     currentUserId,
     startMessage: handleMessage,
     isPending: dmPending,
-  } = useMessageMember(dmTargetUserId, () => onOpenChange(false));
+  } = useMessageMember(dmTargetUserId, () =>
+    onLeaveForMessage ? onLeaveForMessage() : onOpenChange(false),
+  );
 
   // The API's answer, read from the profile itself (never the directory row
   // that seeded the sheet, which carries none): it applies the rank rules the

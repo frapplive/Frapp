@@ -44,7 +44,7 @@ const DEFAULT_TAB = "members";
 
 function DirectoryPageContent() {
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab");
+  const tabParam = searchParams.get(WEB_ADDRESS_PARAMS.members.tab);
 
   // The URL is the tab, rather than a seed for local state that then drifts
   // from it. `/alumni` is now the only legacy entry point into the alumni list

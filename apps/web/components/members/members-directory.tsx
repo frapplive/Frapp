@@ -28,6 +28,7 @@ import {
   DEFAULT_STANDINGS_WINDOW,
   useStandings,
   type StandingsMetric,
+  useAlumni,
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -113,7 +114,11 @@ import {
   useAddressParams,
   useDeadAddressParam,
 } from "@/lib/address/use-address-params";
-import { closeAddress, pushAddress } from "@/lib/address/address";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
 
 const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
 import { asArray, cn, initials } from "@/lib/utils";
@@ -370,14 +375,48 @@ export function MembersDirectory() {
   const presence = useChapterPresenceContext();
   const usingSearch = deferredQuery.length > 0;
   const activeQuery = usingSearch ? searchQuery : membersQuery;
-  // A member the address names who isn't on the chapter's list (left, or
-  // hidden from this viewer): said, and taken out of the address.
+  /*
+    A member the address names who isn't on the chapter's list: the list is
+    read again once (the one in hand can be cached from before they joined),
+    then an alumnus moves to the Alumni tab, and anyone else (left, or hidden
+    from this viewer) is said and taken out of the address.
+  */
+  const memberListed =
+    memberParam !== null &&
+    (membersQuery.data ?? []).some((member) => member.user_id === memberParam);
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  const memberMissing =
+    memberParam !== null &&
+    membersQuery.data !== undefined &&
+    !membersQuery.isFetching &&
+    !memberListed;
+  useEffect(() => {
+    if (!memberMissing || recheckedFor === memberParam) return;
+    void membersQuery.refetch().finally(() => setRecheckedFor(memberParam));
+  }, [memberMissing, recheckedFor, memberParam, membersQuery]);
+  const alumniRead = useAlumni(undefined, {
+    enabled:
+      tenantKind === "chapter" && memberMissing && recheckedFor === memberParam,
+  });
+  const isAlumnus =
+    memberParam !== null &&
+    asArray<{ user_id?: unknown }>(alumniRead.data).some(
+      (alum) => alum.user_id === memberParam,
+    );
+  useEffect(() => {
+    if (isAlumnus) {
+      replaceAddress({ [WEB_ADDRESS_PARAMS.members.tab]: "alumni" });
+    }
+  }, [isAlumnus]);
   const deadMember = useDeadAddressParam(
     MEMBER_PARAM,
     memberParam,
-    membersQuery.data !== undefined &&
-      memberParam !== null &&
-      !membersQuery.data.some((member) => member.user_id === memberParam),
+    memberMissing &&
+      recheckedFor === memberParam &&
+      (tenantKind !== "chapter" ||
+        (alumniRead.data !== undefined &&
+          !alumniRead.isFetching &&
+          !isAlumnus)),
   );
 
   // The Actives tab is the chapter minus its alumni (#2484), who are listed on
@@ -1079,6 +1118,13 @@ export function MembersDirectory() {
 
   return (
     <section aria-labelledby="members-list-label" className="space-y-3">
+      {deadMember !== null ? (
+        // A member from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That member isn&apos;t in the directory. They may have left the
+          chapter, or you may not have access.
+        </p>
+      ) : null}
       {/*
       One toolbar row, not a card header: the list's own name and count on the
       left, its search, filters and sort on the right, sitting directly on the
@@ -1672,18 +1718,12 @@ export function MembersDirectory() {
         }
         onViewProfile={() => setDetailSheetOpen(true)}
       />
-      {deadMember !== null ? (
-        // A member from the address who isn't here (§ Addresses).
-        <p role="status" className="text-sm text-muted-foreground">
-          That member isn&apos;t in the directory. They may have left the
-          chapter, or you may not have access.
-        </p>
-      ) : null}
       <MemberDetailSheet
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         userId={activeUserId}
         initialMember={activeMember}
+        onLeaveForMessage={() => replaceAddress({ [MEMBER_PARAM]: null })}
         points={activeMember && pointsOn ? pointsOf(activeMember) : null}
         docked
         backLabel="Back to directory"
