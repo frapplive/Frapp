@@ -10,6 +10,7 @@ import {
   useMemberBirthdays,
   useNowDate,
   useTasks,
+  useViewerUserId,
 } from "@repo/hooks";
 import { BACK_TO_EVENTS } from "@/components/back-row";
 import { useRefetchAll } from "@/components/pull-to-refresh";
@@ -23,6 +24,7 @@ import {
 import { useCanCreateEvents } from "@/components/events/new-event-sheet";
 import { EventsTimeGrid } from "@/components/events/events-time-grid";
 import { useCalendarItemsByDay } from "@/lib/events/calendar-items";
+import { useHiddenCalendarKinds } from "@/lib/events/calendar-hidden-kinds";
 import { calendarHourStart } from "@/lib/events/create-event";
 import { useNewEventAt } from "@/lib/events/use-new-event-at";
 import { useEventMenu } from "@/lib/events/use-event-menu";
@@ -56,11 +58,15 @@ export default function CalendarDayScreen() {
     () => parseCalendarDayParam(raw) ?? new Date(today),
     [raw, today],
   );
+  // The Calendar's key decides what the day draws too (#5948): one choice
+  // for the month and its days.
+  const { hidden } = useHiddenCalendarKinds(useViewerUserId());
+  const eventsHidden = hidden.has("events");
   const allEvents = useMemo(
-    () => selectAllEventRows(eventsQuery.data),
-    [eventsQuery.data],
+    () => (eventsHidden ? [] : selectAllEventRows(eventsQuery.data)),
+    [eventsQuery.data, eventsHidden],
   );
-  const tasksByDay = useCalendarItemsByDay(day);
+  const tasksByDay = useCalendarItemsByDay(day, hidden);
   const tasksQuery = useTasks();
   const birthdaysQuery = useMemberBirthdays();
   const refresh = useRefetchAll([eventsQuery, tasksQuery, birthdaysQuery]);

@@ -27,6 +27,8 @@ import {
 import {
   ALL_CALENDAR_LAYERS,
   calendarTasksByDay,
+  hiddenCalendarKindsOrDefault,
+  toggleCalendarKind,
   type CalendarItem,
   type CalendarKind,
 } from "@repo/hooks/calendar-tasks";
@@ -480,7 +482,9 @@ function AddressedEventsPage() {
   const anchor = (anchorKey ? dateOfKey(anchorKey) : null) ?? todayStart;
   const calendarBirthdays = useCalendarBirthdays(anchor);
   // The colour key's kinds switched off, remembered per user on this
-  // browser (#5560); `null` until read, which shows everything.
+  // browser (#5560); `null` until read or with nothing stored, which is the
+  // defaults: tasks off, so the Calendar opens on the chapter's events and a
+  // member's tasks wait on Activity until the key turns them on (#5948).
   const [storedHidden, setStoredHidden] = useState<Set<CalendarKind> | null>(
     null,
   );
@@ -489,14 +493,9 @@ function AddressedEventsPage() {
     setHiddenReadFor(userId);
     setStoredHidden(readHiddenKinds(userId));
   }
-  const hiddenKinds: ReadonlySet<CalendarKind> = useMemo(
-    () => storedHidden ?? new Set(),
-    [storedHidden],
-  );
+  const hiddenKinds = hiddenCalendarKindsOrDefault(storedHidden);
   function toggleKind(kind: CalendarKind) {
-    const next = new Set(hiddenKinds);
-    if (next.has(kind)) next.delete(kind);
-    else next.add(kind);
+    const next = toggleCalendarKind(hiddenKinds, kind);
     setStoredHidden(next);
     writeHiddenKinds(userId, next);
   }

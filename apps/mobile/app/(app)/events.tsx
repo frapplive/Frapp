@@ -33,9 +33,15 @@ import { SuggestedEventsEntry } from "@/components/events/suggested-events-entry
 import { CalendarSubscribeSheet } from "@/components/events/calendar-subscribe-sheet";
 import { CalendarPlusGlyph } from "@/components/control-glyphs";
 import { HeaderButton } from "@/components/header-button";
-import { useCalendarItemsByDay } from "@/lib/events/calendar-items";
+import {
+  useAllCalendarItems,
+  useCalendarItemsByDay,
+} from "@/lib/events/calendar-items";
+import { useHiddenCalendarKinds } from "@/lib/events/calendar-hidden-kinds";
+import { monthKindCounts } from "@/lib/events/event-days";
+import { CalendarKindKey } from "@/components/events/calendar-kind-key";
 import { isCurrentOrUpcoming } from "@/lib/events/format";
-import { selectAllEventRows } from "@/lib/events/select";
+import { selectAllEventRows, type EventRow } from "@/lib/events/select";
 import { useFrappTheme } from "@/lib/theme";
 
 /**
@@ -50,9 +56,10 @@ import { useFrappTheme } from "@/lib/theme";
  * #3792, #4144, #4818). Paul (2026-11-17): "I hate the calendar page ... the
  * list and the calendar and like all of those options ... bars up top is not
  * great." Activity's To do is the list now; the month is the one view, and
- * it shows every kind: events (a series on each of its days, Mandatory in
- * the accent), the member's tasks and the ones they assigned on their due
- * day, and birthdays all day. One day's hour grid survives as its own
+ * it shows events (a series on each of its days, Mandatory in the accent)
+ * and birthdays all day, and, once the key under the month turns them on
+ * (#5948: off by default, since Activity is where a member's tasks live),
+ * the member's tasks and the ones they assigned on their due day. One day's hour grid survives as its own
  * screen, opened from the picked day's heading (`app/(app)/calendar-day.tsx`).
  *
  * A member who can create events (`events:create`, every member by default
@@ -70,6 +77,8 @@ import { useFrappTheme } from "@/lib/theme";
  * has no server model yet (`spec/behavior/events.md`), and they come back with
  * the endpoint (#1035), as on s07.
  */
+
+const NO_EVENTS: EventRow[] = [];
 
 export default function EventsScreen() {
   const chapterId = useActiveChapterId();
@@ -112,9 +121,18 @@ export default function EventsScreen() {
   const monthAnchor = pickedMonth ?? startOfMonth(now);
   const selectedDay = pickedDay ?? startOfDay(now);
 
-  const tasksByDay = useCalendarItemsByDay(selectedDay);
-  const rosterQuery = useChapterRoster();
   const viewerUserId = useViewerUserId();
+  // The key under the month (#5948): tasks start off, and what the member
+  // switches is kept per member, for this month and its Day screen.
+  const kinds = useHiddenCalendarKinds(viewerUserId);
+  const eventsHidden = kinds.hidden.has("events");
+  const tasksByDay = useCalendarItemsByDay(selectedDay, kinds.hidden);
+  const allItems = useAllCalendarItems(selectedDay);
+  const kindCounts = useMemo(
+    () => monthKindCounts(monthAnchor, allEvents, allItems),
+    [monthAnchor, allEvents, allItems],
+  );
+  const rosterQuery = useChapterRoster();
   const nameOf = useMemo(() => {
     const names = new Map(
       (rosterQuery.data ?? []).map((member) => [
@@ -168,7 +186,14 @@ export default function EventsScreen() {
 
     return (
       <EventsCalendar
-        events={allEvents}
+        events={eventsHidden ? NO_EVENTS : allEvents}
+        kindKey={
+          <CalendarKindKey
+            hidden={kinds.hidden}
+            counts={kindCounts}
+            onToggle={kinds.toggle}
+          />
+        }
         tasksByDay={tasksByDay}
         nameOf={nameOf}
         onOpenTask={(taskId) =>

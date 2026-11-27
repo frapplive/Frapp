@@ -4,9 +4,12 @@ import {
   calendarKindOf,
   calendarTaskAccessibleLabel,
   calendarTasksByDay,
+  DEFAULT_HIDDEN_CALENDAR_KINDS,
+  hiddenCalendarKindsOrDefault,
   parseHiddenCalendarKinds,
   selectCalendarTasks,
   serializeHiddenCalendarKinds,
+  toggleCalendarKind,
   type CalendarAssignedTask,
   type CalendarTask,
   type CalendarKind,
@@ -186,6 +189,26 @@ describe("colour key kinds (#5560)", () => {
     expect(parseHiddenCalendarKinds('["events"]')).toBeNull();
     expect(parseHiddenCalendarKinds("{")).toBeNull();
     expect(parseHiddenCalendarKinds(null)).toBeNull();
+  });
+
+  it("starts with tasks off, and a stored choice stands (#5948)", () => {
+    expect([...DEFAULT_HIDDEN_CALENDAR_KINDS]).toEqual(["tasks"]);
+    expect(hiddenCalendarKindsOrDefault(null)).toBe(
+      DEFAULT_HIDDEN_CALENDAR_KINDS,
+    );
+    // A member who turned Tasks on stored an empty set: tasks stay on.
+    expect(
+      hiddenCalendarKindsOrDefault(parseHiddenCalendarKinds('{"hidden":[]}')),
+    ).toEqual(new Set());
+  });
+
+  it("toggles one kind without touching the set it was given", () => {
+    const hidden = DEFAULT_HIDDEN_CALENDAR_KINDS;
+    expect(toggleCalendarKind(hidden, "tasks")).toEqual(new Set());
+    expect(toggleCalendarKind(hidden, "birthdays")).toEqual(
+      new Set(["tasks", "birthdays"]),
+    );
+    expect(hidden).toEqual(new Set(["tasks"]));
   });
 });
 

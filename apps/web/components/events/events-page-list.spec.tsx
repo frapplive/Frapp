@@ -876,8 +876,20 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     );
   }
 
+  /**
+   * The member has turned the key's Tasks on: tasks start off (#5948), so a
+   * test about task rows stores the choice a member makes with the key.
+   */
+  function withTasksOn() {
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
+  }
+
   /** Tasks due today: one of the viewer's, one handed to three members. */
   function withTasksToday() {
+    withTasksOn();
     const due = localIsoDate(new Date());
     const base = { due_date: due, points_awarded: false, confirmed_at: null };
     const items = selectCalendarTasks(
@@ -995,7 +1007,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       JSON.parse(
         window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
       ),
-    ).toEqual({ hidden: ["birthdays"] });
+    ).toEqual({ hidden: ["tasks", "birthdays"] });
 
     first.unmount();
     render(<EventsPage />);
@@ -1003,6 +1015,44 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     expect(
       screen.getByRole("button", { name: /^birthdays, \d/i }),
     ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("starts with tasks off, and the key's Tasks turns them on and remembers it (#5948)", async () => {
+    withTasksToday();
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const first = render(<EventsPage />);
+
+    const toggle = screen.getByRole("button", { name: /^tasks, \d/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /^dues form/i })).toBeNull();
+    expect(screen.queryByTestId(`events-dot-${today()}-tasks`)).toBeNull();
+    // Off, the key still counts what the agenda holds back.
+    expect(toggle).toHaveTextContent("2");
+    // Events and birthdays start on.
+    expect(
+      screen.getByRole("button", { name: /^events, \d/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^birthdays, \d/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
+      ),
+    ).toEqual({ hidden: [] });
+
+    first.unmount();
+    render(<EventsPage />);
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
   });
 
   it("draws today and the picked day apart: the accent disc and a ring", async () => {
@@ -1119,6 +1169,10 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
   };
 
   it("gathers unfinished tasks due before today under Overdue, above Today, counted as Tasks", () => {
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
     const due = (days: number) => localIsoDate(fromToday(days));
     tasksRef.current = {
       items: selectCalendarTasks(

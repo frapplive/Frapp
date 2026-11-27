@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventDayKeys, eventsByDay } from "./event-days";
+import { eventDayKeys, eventsByDay, monthKindCounts } from "./event-days";
 
 /** A timed event at a local wall-clock time, so the spec reads in any zone. */
 const timed = (id: string, day: number, hour: number) => ({
@@ -49,5 +49,30 @@ describe("which days an event sits on (#6098)", () => {
       "formal",
     ]);
     expect(byDay.has("2026-11-23")).toBe(false);
+  });
+});
+
+describe("what the Calendar's key counts for a month (#5948)", () => {
+  it("counts each event once, and each task and birthday in the month", () => {
+    const counts = monthKindCounts(
+      new Date(2026, 10, 1),
+      [
+        timed("a", 9, 19),
+        // Its three days all fall in November: counted once.
+        formal,
+        tbd,
+        {
+          ...timed("dec", 1, 19),
+          start_time: new Date(2026, 11, 1, 19).toISOString(),
+        },
+      ],
+      [
+        { kind: "mine", day: "2026-11-03" },
+        { kind: "assigned", day: "2026-11-30" },
+        { kind: "mine", day: "2026-12-01" },
+        { kind: "birthdays", day: "2026-11-12" },
+      ],
+    );
+    expect(counts).toEqual({ events: 3, tasks: 2, birthdays: 1 });
   });
 });

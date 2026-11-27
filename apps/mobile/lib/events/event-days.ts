@@ -47,3 +47,30 @@ export function eventsByDay<
   for (const event of events) if (!eventIsDated(event)) file(event);
   return map;
 }
+
+/**
+ * What the Calendar's key counts for the month on screen (#5948): its events
+ * (each once, however many of its days fall in the month), and its task and
+ * birthday items, each once. Counted before the key hides anything, so a
+ * kind switched off still says how many it holds back.
+ */
+export function monthKindCounts(
+  month: Date,
+  events: readonly (EventTimingFields & { id: string; start_time?: unknown })[],
+  items: readonly { kind: string; day: string }[],
+): { events: number; tasks: number; birthdays: number } {
+  const prefix = localIsoDate(month).slice(0, 7);
+  const inMonth = (day: string) => day.startsWith(prefix);
+  let eventCount = 0;
+  for (const event of events) {
+    if (eventDayKeys(event).some(inMonth)) eventCount += 1;
+  }
+  let tasks = 0;
+  let birthdays = 0;
+  for (const item of items) {
+    if (!inMonth(item.day)) continue;
+    if (item.kind === "birthdays") birthdays += 1;
+    else tasks += 1;
+  }
+  return { events: eventCount, tasks, birthdays };
+}

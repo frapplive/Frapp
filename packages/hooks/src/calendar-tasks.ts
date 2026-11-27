@@ -25,8 +25,9 @@ import { useViewerUserId } from "./use-user";
  * the rows they created are theirs to follow. No new endpoint.
  *
  * A due date is a calendar date (`tasks.due_date` is a `date` column), so a
- * task sits on that day for every viewer, with no time zone shift. Every
- * task has one: the column is `NOT NULL`, so there is no "no due date" case.
+ * task sits on that day for every viewer, with no time zone shift. A task
+ * with no due date (the column is nullable since #5761, "No due date") has no
+ * day, so the calendar leaves it out; Activity lists it.
  *
  * A task due at a time (`tasks.due_at`, #4003) sits on that moment's local
  * day instead, as the Tasks page files it (`taskDueBucket`), and says its
@@ -42,8 +43,8 @@ export type CalendarTaskState = "open" | "overdue" | "waiting" | "confirmed";
 
 /**
  * The calendar's per-item layers: `calendarTasksByDay` files a task by whose
- * it is. The phone's Calendar reads every layer; the web Events colour key
- * switches whole kinds ({@link CalendarKind}), not layers.
+ * it is. Both apps read every layer, and their colour keys switch whole
+ * kinds ({@link CalendarKind}), not layers.
  */
 export type CalendarLayer = "events" | "mine" | "assigned" | "birthdays";
 
@@ -55,7 +56,7 @@ export const ALL_CALENDAR_LAYERS: ReadonlySet<CalendarLayer> = new Set([
 ]);
 
 /**
- * A kind of thing on the web Events agenda (#5560): each has one hue
+ * A kind of thing on the Calendar (#5560; the phone's key since #5948): each has one hue
  * (`CALENDAR_KIND_HUE` in `activity-agenda.ts`), drawn the same on its rows,
  * its navigator dots and its colour key swatch. My tasks and Assigned by me
  * are both Tasks.
@@ -82,9 +83,42 @@ export function calendarKindOf(item: CalendarItem): CalendarKind {
 }
 
 /**
+ * The kinds off until a member chooses (#5948, Paul's pick "Two homes",
+ * 2026-11-24): the Calendar is the chapter's, so it opens on events and
+ * birthdays, and the key's Tasks turns the member's tasks on. Activity is
+ * where a member's own tasks live. Both apps' keys start from this.
+ */
+export const DEFAULT_HIDDEN_CALENDAR_KINDS: ReadonlySet<CalendarKind> =
+  new Set<CalendarKind>(["tasks"]);
+
+/**
+ * The kinds switched off for a member: what they stored, or
+ * {@link DEFAULT_HIDDEN_CALENDAR_KINDS} when nothing readable is stored. A
+ * stored choice stands, so a member who turned Tasks on, or any kind off,
+ * keeps it.
+ */
+export function hiddenCalendarKindsOrDefault(
+  stored: ReadonlySet<CalendarKind> | null | undefined,
+): ReadonlySet<CalendarKind> {
+  return stored ?? DEFAULT_HIDDEN_CALENDAR_KINDS;
+}
+
+/** `hidden` with `kind` switched: off if it was on, on if it was off. */
+export function toggleCalendarKind(
+  hidden: ReadonlySet<CalendarKind>,
+  kind: CalendarKind,
+): Set<CalendarKind> {
+  const next = new Set(hidden);
+  if (next.has(kind)) next.delete(kind);
+  else next.add(kind);
+  return next;
+}
+
+/**
  * The kinds a member switched off, read back from storage as
  * `{ "hidden": [...] }`, so a kind added later starts on. Unknown names are
- * dropped; `null` when nothing readable is stored, which means all on.
+ * dropped; `null` when nothing readable is stored, which means the
+ * defaults ({@link hiddenCalendarKindsOrDefault}).
  */
 export function parseHiddenCalendarKinds(
   raw: string | null | undefined,

@@ -15,6 +15,11 @@ import {
   type ReactTestRenderer,
 } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  resetHiddenCalendarKindsForTests,
+  seedHiddenCalendarKindsForTests,
+} from "@/lib/events/calendar-hidden-kinds";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
@@ -286,6 +291,11 @@ const skeletons = (tree: ReactTestRenderer) =>
   tree.root.findAll((node) => node.props.accessibilityRole === "progressbar");
 
 beforeEach(() => {
+  // Tasks start off on the Calendar (#5948). Most specs here are about task
+  // rows, so they run as a member who turned the key's Tasks on; the key's
+  // own specs reset to the defaults.
+  resetHiddenCalendarKindsForTests();
+  seedHiddenCalendarKindsForTests("me", new Set());
   dayParam = undefined;
   vi.mocked(vi.mocked(expoRouter.useRouter)().push).mockClear();
   newEventSheet.props = null;
@@ -689,7 +699,7 @@ describe("Calendar month", () => {
     expect(shell.props.back).toEqual(BACK_TO_ACTIVITY);
   });
 
-  it("draws no switcher and no chips above the month", () => {
+  it("draws no view switcher and nothing above the month; the key under it is the one control (#5948)", () => {
     tasks = [
       {
         id: "t-mine",
@@ -701,14 +711,106 @@ describe("Calendar month", () => {
       },
     ];
     const tree = render();
-    for (const role of ["radio", "radiogroup", "switch", "toolbar"]) {
+    for (const role of ["radio", "radiogroup"]) {
       expect(
         tree.root.findAll((node) => node.props.accessibilityRole === role),
       ).toHaveLength(0);
     }
-    for (const label of ["List", "3 days", "Day", "My tasks", "Events"]) {
+    // One key, whole kinds only: no layer chips (My tasks, Assigned by me).
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === "toolbar" &&
+          node.props.accessibilityLabel === "Show on Calendar",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      tree.root
+        .findAll(
+          (node) =>
+            node.props.accessibilityRole === "switch" &&
+            typeof node.props.testID === "string",
+        )
+        .map((node) => node.props.testID),
+    ).toEqual(
+      expect.arrayContaining([
+        "calendar-key-events",
+        "calendar-key-tasks",
+        "calendar-key-birthdays",
+      ]),
+    );
+    for (const label of ["List", "3 days", "Day", "My tasks"]) {
       expect(screenText(tree)).not.toMatch(new RegExp(`^${label}$`, "m"));
     }
+  });
+
+  it("starts with tasks off; the key's Tasks turns them on and keeps the choice (#5948)", () => {
+    resetHiddenCalendarKindsForTests();
+    tasks = [
+      {
+        id: "t-mine",
+        title: "Clean the kitchen",
+        assignee_id: "me",
+        created_by: "m1",
+        due_date: localIsoDate(MOUNTED_AT),
+        status: "TODO",
+      },
+    ];
+    const keyItem = (tree: ReactTestRenderer, kind: string) =>
+      tree.root.find(
+        (node) =>
+          node.props.testID === `calendar-key-${kind}` &&
+          node.props.accessibilityState !== undefined,
+      );
+    const first = render();
+    expect(keyItem(first, "tasks").props.accessibilityState).toEqual({
+      checked: false,
+    });
+    expect(keyItem(first, "events").props.accessibilityState).toEqual({
+      checked: true,
+    });
+    expect(keyItem(first, "birthdays").props.accessibilityState).toEqual({
+      checked: true,
+    });
+    // Off, the key still counts what it holds back.
+    expect(keyItem(first, "tasks").props.accessibilityLabel).toBe("Tasks, 1");
+    expect(screenText(first)).not.toContain("Clean the kitchen");
+
+    act(() => keyItem(first, "tasks").props.onPress());
+    expect(keyItem(first, "tasks").props.accessibilityState).toEqual({
+      checked: true,
+    });
+    expect(screenText(first)).toContain("Clean the kitchen");
+    expect(vi.mocked(AsyncStorage.setItem)).toHaveBeenCalledWith(
+      "frapp.calendar.hidden-kinds.me",
+      JSON.stringify({ hidden: [] }),
+    );
+
+    // The Day screen follows the same choice.
+    const day = renderDay(MOUNTED_AT);
+    expect(screenText(day)).toContain("Clean the kitchen");
+  });
+
+  it("hides events from the month and the Day screen when the key turns Events off", () => {
+    const tree = render();
+    const events = () =>
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "Text" &&
+          String(node.props.testID).startsWith("event-title-"),
+      );
+    expect(events()).toHaveLength(1);
+    act(() =>
+      tree.root
+        .find(
+          (node) =>
+            node.props.testID === "calendar-key-events" &&
+            node.props.accessibilityState !== undefined,
+        )
+        .props.onPress(),
+    );
+    expect(events()).toHaveLength(0);
+    expect(screenText(renderDay(START))).not.toContain("Chapter meeting");
   });
 
   it("marks event days on a month calendar", () => {
