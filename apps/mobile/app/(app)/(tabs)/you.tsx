@@ -8,6 +8,7 @@ import {
   useEvents,
   useHiddenUnsetFeatures,
   useInvoices,
+  useLeaderboard,
   useListChapters,
   useMyPermissions,
   useMyProfileStats,
@@ -45,6 +46,8 @@ import {
 } from "@/components/profile/edit-profile-sheet";
 import { ErrorState } from "@/components/state-block";
 import { StandingCards } from "@/components/activity/standing-cards";
+import { PointsSummaryLine } from "@/components/tasks/points-summary-line";
+import { selectHouseRank } from "@/lib/tasks/points-card";
 import {
   PointsLabel,
   ProfileDetails,
@@ -260,6 +263,20 @@ function YouScreen() {
     stats.visible &&
     (stats.pointsFailed || (stats.points !== null && stats.points !== 0));
 
+  // The house rank, "#3 of 42 in the house" (#5948): the Tasks screen's
+  // points line until it folded into Activity. Under the profile's head,
+  // over the standing it belongs with; the semester's points are already on
+  // This semester's gauge and the all-time balance at the top right, so the
+  // line says only the rank. Read only where the gauges are.
+  const semesterOn = pointsOn && stats.visible && stats.hasChapter;
+  const semesterBoard = useLeaderboard("semester", undefined, {
+    enabled: semesterOn,
+  });
+  const houseRank = useMemo(
+    () => selectHouseRank(semesterBoard.data, viewerUserId),
+    [semesterBoard.data, viewerUserId],
+  );
+
   const duesDue = useMemo(() => {
     if (!invoicesQuery.data || !viewerUserId) return null;
     const next = selectNextDueInvoice(
@@ -282,6 +299,10 @@ function YouScreen() {
       }
     >
       <YouHead you={you} />
+
+      {semesterOn ? (
+        <PointsSummaryLine summary={null} rank={houseRank} />
+      ) : null}
 
       {/* Last week and This semester (#5779): only with a chapter, whose
           reads they are. Each gauge is the door to what is behind its number

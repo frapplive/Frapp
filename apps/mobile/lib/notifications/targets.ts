@@ -67,7 +67,8 @@ const ROUTES: Record<
 > = {
   chat: { pathname: "/chat-thread", param: "channelId" },
   events: { pathname: "/event-details", param: "eventId", as: "id" },
-  tasks: { pathname: "/tasks" },
+  // The Tasks screen folded into Activity (#5948).
+  tasks: { pathname: "/activity" },
   // "Points awarded" and "deducted" open the member's own points (#5950;
   // the task board until then, when the phone had no points screen).
   points: { pathname: "/points" },
@@ -94,12 +95,13 @@ const MINUTES: NotificationTarget = { pathname: "/minutes-details" };
  * Where a task push opens. "Submitted a task" (`view: "review"`) opens the
  * review: Activity (`/activity?review=`), which pushes the task's screen
  * with Confirm and Send back over it (#5513), since
- * the board under Tasks lists only the viewer's own tasks and an officer's
- * review was never on it. Every other task push opens the board
- * (`/tasks?task=`), which pushes the task's screen over it (#5492): the
- * reader's own (assigned, confirmed, sent back, overdue), or one they
- * assigned (Overdue also reaches the assigner). A task the reader can't read
- * opens nothing over the board. "Asks for more time" (`view: "extension"`,
+ * the Tasks screen listed only the viewer's own tasks. Every other task push
+ * pushes the task's own screen (#5492) over wherever the member is, so Back
+ * returns them there; it went through the Tasks screen (`/tasks?task=`) until
+ * that folded into Activity (#5948), and a tab would pop the member's place
+ * away. The reader's own (assigned, confirmed, sent back, overdue), or one
+ * they assigned (Overdue also reaches the assigner). A task the reader can't
+ * read says so on its screen. "Asks for more time" (`view: "extension"`,
  * #6096) opens the request in Activity (`/activity?extension=`), where the
  * officer approves or declines it.
  */
@@ -111,7 +113,7 @@ function taskTarget(taskId: string, view: string | null): NotificationTarget {
   if (view === "extension") {
     return { pathname: "/activity", params: { extension: taskId } };
   }
-  return { pathname: "/tasks", params: { task: taskId } };
+  return { pathname: "/task-details", params: { id: taskId } };
 }
 
 /**

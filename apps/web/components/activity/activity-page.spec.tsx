@@ -55,6 +55,7 @@ const mockLayout = vi.fn<
   }
 >(() => ({ data: { card_order: [], hidden_cards: [], saved: false } }));
 const mockSaveLayout = vi.fn();
+const mockEveryoneOffered = vi.fn(() => false);
 const mockResetLayout = vi.fn();
 
 const eventsNow = vi.hoisted(() => ({
@@ -67,6 +68,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     // Running (`activity-agenda.ts`, `activity-rows.ts`). Only the reads are
     // stood in for.
     ACTIVITY_GLYPH_NAV: actual.ACTIVITY_GLYPH_NAV,
+    // Who is offered Everyone's (#5948): stubbed, as the board's parts are.
+    useEveryoneOffered: (tasksOn: boolean) =>
+      tasksOn && mockEveryoneOffered(),
     // The Now card's read (#5777): nothing on unless a test says so.
     useEventsOnNow: () => eventsNow.value,
     withoutEvents: actual.withoutEvents,
@@ -153,10 +157,6 @@ vi.mock("next/navigation", async () => ({
 }));
 // The Tasks board's two parts (#5948) are stubbed to which part was asked
 // for; `tasks-board.spec.tsx` owns what each draws.
-const mockEveryoneOffered = vi.fn(() => false);
-vi.mock("@/components/tasks/everyones-tasks", () => ({
-  useEveryoneOffered: (tasksOn: boolean) => tasksOn && mockEveryoneOffered(),
-}));
 vi.mock("@/components/tasks/tasks-board", () => ({
   TasksBoard: ({
     part,

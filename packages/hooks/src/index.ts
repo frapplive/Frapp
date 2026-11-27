@@ -30,6 +30,7 @@ export * from "./document-download";
 export * from "./error-copy";
 export * from "./event-roster";
 export * from "./event-series";
+export * from "./everyones-tasks";
 export * from "./field-reveal";
 export * from "./find-results";
 export * from "./fraternal-order";

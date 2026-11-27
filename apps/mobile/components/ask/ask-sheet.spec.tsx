@@ -798,9 +798,10 @@ describe("AskSheet", () => {
       const onClosed = vi.fn();
       const tree = render(onClosed);
       expect(screenText(tree)).toContain(ACT_COPY.done_task);
-      act(() => byLabel(tree, ACT_COPY.open_tasks)[0].props.onPress());
+      act(() => byLabel(tree, ACT_COPY.open_activity)[0].props.onPress());
       expect(modal.dismiss).toHaveBeenCalled();
-      expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/tasks");
+      // Activity is a tab: the sheet goes back to it, never stacks it.
+      expect(vi.mocked(useRouter)().dismissTo).toHaveBeenCalledWith("/activity");
       act(() => sheet(tree).props.onDismiss());
       expect(onClosed).toHaveBeenLastCalledWith(true);
     });

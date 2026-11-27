@@ -27,9 +27,10 @@ export type UpdateOpenTaskBody = components["schemas"]["UpdateOpenTaskDto"];
 /**
  * The postings the caller may claim now. A `tasks:manage` holder gets every
  * open posting, with `viewer_can_claim` saying which they may claim
- * themselves; the server decides, as it does for `useTasks`.
+ * themselves; the server decides, as it does for `useTasks`. `enabled: false`
+ * holds it, as Activity does while the chapter has Tasks off (#5948).
  */
-export function useOpenTasks() {
+export function useOpenTasks(options: { enabled?: boolean } = {}) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   const scope = useChapterScope();
@@ -41,7 +42,7 @@ export function useOpenTasks() {
       return data ?? [];
     },
     staleTime: 30_000,
-    enabled: scope === "chapter",
+    enabled: scope === "chapter" && (options.enabled ?? true),
   });
 }
 

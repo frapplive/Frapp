@@ -70,13 +70,14 @@ export const BACK_TO_EVENTS: BackTarget = {
   href: "/events",
 };
 
-/** The task board's way back when nothing is under it: the Activity tab (#4610). */
+/**
+ * The Activity tab (#4610): the way back from a task's screen, Suggested and
+ * a posting, since the Tasks screen folded into Activity (#5948).
+ */
 export const BACK_TO_ACTIVITY: BackTarget = {
   label: SECTION_NAMES.activity,
   href: "/activity",
 };
-/** A task's screen (#5492) and Suggested, opened from the task board. */
-export const BACK_TO_TASKS: BackTarget = { label: "Tasks", href: "/tasks" };
 /**
  * s14. The board draws `‹ More`, but the inbox's entry is the bell on Chat
  * home since #3362, so its way back is Chat.

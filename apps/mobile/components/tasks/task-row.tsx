@@ -101,6 +101,12 @@ export interface TaskRowProps {
    * offered by name too. Omitted, the row has no long press.
    */
   menu?: ItemMenuHandle | null;
+  /**
+   * Whose task it is, first on its meta line (#5948): Activity's Everyone's
+   * lists the chapter's tasks, where the assignee is the fact read first,
+   * as web's Everyone's rows lead with them. Omitted on the member's own.
+   */
+  who?: string | null;
 }
 
 /** The checkbox's hit area past its drawn 24pt, to a 44pt target. */
@@ -110,7 +116,7 @@ const CHECKBOX_SLOP = 10;
  * What a task says, read once for its row and its Grid card alike (#4175), so
  * the two layouts can't drift on a status word, the red, or the points.
  */
-function taskFacts(row: TaskRowModel, now: Date) {
+function taskFacts(row: TaskRowModel, now: Date, who: string | null = null) {
   const chip = formatPointsChip(row.pointReward, row.pointsAwarded);
   const started = row.storedStatus === "IN_PROGRESS";
   const confirmed = row.isDone && row.pointsAwarded;
@@ -155,6 +161,7 @@ function taskFacts(row: TaskRowModel, now: Date) {
     : null;
   const lineOf = (extra: string | null) =>
     [
+      who,
       sentBack ? TASK_NEEDS_CHANGES_LABEL : null,
       statusLine,
       audience,
@@ -280,10 +287,11 @@ export function TaskRow({
   isPending = false,
   isFirst = false,
   menu,
+  who = null,
 }: TaskRowProps) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
-  const facts = taskFacts(row, now);
+  const facts = taskFacts(row, now, who);
   const { subtitle, urgent, confirmed } = facts;
 
   const body = (
@@ -385,10 +393,11 @@ export function TaskTile({
   onOpen,
   isPending = false,
   menu,
+  who = null,
 }: Omit<TaskRowProps, "isFirst" | "onOpen"> & { onOpen: () => void }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
-  const facts = taskFacts(row, now);
+  const facts = taskFacts(row, now, who);
   const { subtitle, urgent, confirmed } = facts;
 
   return (

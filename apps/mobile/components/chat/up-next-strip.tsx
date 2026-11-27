@@ -343,8 +343,8 @@ export function UpNextStrip({
             onCard
             accessibilityRole="button"
             accessibilityLabel={`${task.title}, ${taskDue}`}
-            accessibilityHint="Open the task board."
-            onPress={() => router.navigate("/tasks")}
+            accessibilityHint="Opens Activity, where your tasks are."
+            onPress={() => router.navigate("/activity")}
             style={styles.row}
           >
             <LeadTile size="lead" on="card" testID="up-next-task-tile">
