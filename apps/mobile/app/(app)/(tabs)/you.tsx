@@ -8,8 +8,10 @@ import {
   useEvents,
   useHiddenUnsetFeatures,
   useInvoices,
+  useLeaderboard,
   useListChapters,
   useMyPermissions,
+  useMyPoints,
   useMyProfileStats,
   useNowDate,
   usePermissionList,
@@ -45,6 +47,8 @@ import {
 } from "@/components/profile/edit-profile-sheet";
 import { ErrorState } from "@/components/state-block";
 import { StandingCards } from "@/components/activity/standing-cards";
+import { PointsSummaryLine } from "@/components/tasks/points-summary-line";
+import { selectHouseRank, selectPointsSummary } from "@/lib/tasks/points-card";
 import {
   PointsLabel,
   ProfileDetails,
@@ -260,6 +264,26 @@ function YouScreen() {
     stats.visible &&
     (stats.pointsFailed || (stats.points !== null && stats.points !== 0));
 
+  // The semester line, "1,240 semester points · #3 of 42 in the house"
+  // (#5948): the Tasks screen's head until it folded into Activity. Under
+  // the profile's head, beside the standing it belongs with; the figure at
+  // the top right is the all-time balance. Read only where the gauges are.
+  const semesterOn = pointsOn && stats.visible && stats.hasChapter;
+  const semesterPoints = useMyPoints("semester", undefined, {
+    enabled: semesterOn,
+  });
+  const semesterBoard = useLeaderboard("semester", undefined, {
+    enabled: semesterOn,
+  });
+  const semesterSummary = useMemo(
+    () => selectPointsSummary(semesterPoints.data),
+    [semesterPoints.data],
+  );
+  const houseRank = useMemo(
+    () => selectHouseRank(semesterBoard.data, viewerUserId),
+    [semesterBoard.data, viewerUserId],
+  );
+
   const duesDue = useMemo(() => {
     if (!invoicesQuery.data || !viewerUserId) return null;
     const next = selectNextDueInvoice(
@@ -282,6 +306,10 @@ function YouScreen() {
       }
     >
       <YouHead you={you} />
+
+      {semesterOn ? (
+        <PointsSummaryLine summary={semesterSummary} rank={houseRank} />
+      ) : null}
 
       {/* Last week and This semester (#5779): only with a chapter, whose
           reads they are. Each gauge is the door to what is behind its number

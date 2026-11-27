@@ -465,3 +465,89 @@ export function selectTaskRows(
       groups.none.length,
   };
 }
+
+/**
+ * Everyone's lanes on the phone (#5948 slice 3), in the order web's List
+ * draws its status groups (`tasks-board.tsx` `LIST_STATUS_ORDER`): late
+ * first, then To do, In progress, what waits on an officer's sign-off, and
+ * what was confirmed in the last week.
+ */
+export const EVERYONES_TASK_LANES = [
+  "overdue",
+  "todo",
+  "in_progress",
+  "completed",
+  "confirmed",
+] as const;
+export type EveryonesTaskLane = (typeof EVERYONES_TASK_LANES)[number];
+
+export interface EveryonesTasks {
+  lanes: Record<EveryonesTaskLane, TaskRowModel[]>;
+  total: number;
+}
+
+/**
+ * The chapter's tasks by status, for Activity's Everyone's view (#5948).
+ *
+ * Every row the viewer's read holds: a `tasks:manage` holder's read is the
+ * chapter's whole board, and a member who follows tasks (#5473) reads their
+ * own and the followed ones (`everyoneOffered`). A lane is the shown status
+ * (the server's synthesized `OVERDUE` included); a finished task waits under
+ * Completed until an officer confirms it (or it needed no sign-off), then
+ * sits under Confirmed for `COMPLETED_RETENTION_DAYS`, as on My tasks.
+ */
+export function selectEveryonesTasks(
+  data: unknown,
+  now: Date,
+): EveryonesTasks {
+  const lanes: Record<EveryonesTaskLane, RankedRow[]> = {
+    overdue: [],
+    todo: [],
+    in_progress: [],
+    completed: [],
+    confirmed: [],
+  };
+  for (const raw of records(data)) {
+    const row = toTaskRow(raw);
+    if (!row) continue;
+    let lane: EveryonesTaskLane;
+    if (row.isDone) {
+      const confirmed = row.pointsAwarded || rowSignedOffAutomatically(row);
+      if (confirmed) {
+        const sinceDone = daysSinceCompletion(
+          row.confirmedAt ?? row.completedAt,
+          now,
+        );
+        if (sinceDone !== null && sinceDone > COMPLETED_RETENTION_DAYS) {
+          continue;
+        }
+        lane = "confirmed";
+      } else {
+        lane = "completed";
+      }
+    } else if (row.isOverdue || row.displayStatus === "OVERDUE") {
+      lane = "overdue";
+    } else if (
+      row.displayStatus === "IN_PROGRESS" ||
+      row.storedStatus === "IN_PROGRESS"
+    ) {
+      lane = "in_progress";
+    } else {
+      lane = "todo";
+    }
+    lanes[lane].push({ row, days: dueInDays(row, now) });
+  }
+  const sorted = (rows: RankedRow[]) =>
+    rows.sort(compareRows).map((entry) => entry.row);
+  const out = {
+    overdue: sorted(lanes.overdue),
+    todo: sorted(lanes.todo),
+    in_progress: sorted(lanes.in_progress),
+    completed: sorted(lanes.completed),
+    confirmed: sorted(lanes.confirmed),
+  };
+  return {
+    lanes: out,
+    total: EVERYONES_TASK_LANES.reduce((n, lane) => n + out[lane].length, 0),
+  };
+}

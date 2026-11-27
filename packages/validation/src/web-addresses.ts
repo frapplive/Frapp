@@ -195,7 +195,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
     phone: [
       {
         when: [P.activity.task],
-        pathname: "/tasks",
+        pathname: "/activity",
         params: { [P.activity.task]: "task" },
       },
       {

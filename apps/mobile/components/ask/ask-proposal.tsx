@@ -154,7 +154,7 @@ export type ActLink = { href: string; label: string };
  */
 const RESULT_LINKS: Record<string, ActLink> = {
   points: { href: "/directory?sort=points", label: ACT_COPY.open_standings },
-  tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
+  tasks: { href: "/activity", label: ACT_COPY.open_activity },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
 

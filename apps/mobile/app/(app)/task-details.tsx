@@ -33,7 +33,7 @@ import {
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
-import { BACK_TO_TASKS } from "@/components/back-row";
+import { BACK_TO_ACTIVITY } from "@/components/back-row";
 import { ErrorState } from "@/components/state-block";
 import { InlineNote } from "@/components/inline-note";
 import { StatusChip } from "@/components/status-chip";
@@ -248,7 +248,7 @@ function TaskDetailsScreen() {
 
   if (!taskId) {
     return (
-      <ScreenShell back={BACK_TO_TASKS} title="Task">
+      <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
         <InlineNote>Open a task from Tasks.</InlineNote>
       </ScreenShell>
     );
@@ -256,7 +256,7 @@ function TaskDetailsScreen() {
 
   if (taskQuery.isPending) {
     return (
-      <ScreenShell back={BACK_TO_TASKS} title="Task">
+      <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
         <TaskDetailSkeleton />
       </ScreenShell>
     );
@@ -264,7 +264,7 @@ function TaskDetailsScreen() {
 
   if (!row) {
     return (
-      <ScreenShell back={BACK_TO_TASKS} title="Task">
+      <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
         <ErrorState
           title="Couldn't load this task"
           body={describeLoadFailure(taskQuery.error)}
@@ -369,7 +369,7 @@ function TaskScreen({
 
   // Back where the member came from (the board, the Calendar), or to the
   // board on a cold link with nothing under this screen.
-  const leave = () => leaveScreen(router, BACK_TO_TASKS.href);
+  const leave = () => leaveScreen(router, BACK_TO_ACTIVITY.href);
   const startSelecting = () => {
     setPeopleNote(null);
     setPicked(new Set());
@@ -527,7 +527,7 @@ function TaskScreen({
       onSuccess: () => {
         AccessibilityInfo.announceForAccessibility(RELEASED_LINE);
         goBackTo(router, {
-          pathname: "/tasks",
+          pathname: "/activity",
           params: { [RELEASED_PARAM]: "1" },
         });
       },
@@ -736,7 +736,7 @@ function TaskScreen({
   return (
     <View style={styles.frame}>
       <ScreenShell
-        back={BACK_TO_TASKS}
+        back={BACK_TO_ACTIVITY}
         // In edit mode the title is the first field, so the heading names
         // the mode instead of saying the title twice.
         title={editing ? "Edit task" : row.title}

@@ -54,6 +54,8 @@ import {
   useCurrentChapter,
   useActivityNudge,
   useActivityNudgeActions,
+  useEveryoneOffered,
+  useOpenTasks,
   useMyPermissions,
   useSetActivityNudgesEnabled,
   type ActivityNudge,
@@ -115,7 +117,9 @@ import { AskSheet } from "@/components/ask/ask-sheet";
 import { InlineNote } from "@/components/inline-note";
 import { SectionCount, SectionHeader } from "@/components/list-section";
 import { useRefetchAll } from "@/components/pull-to-refresh";
-import { ScreenShell } from "@/components/screen-shell";
+import { ScreenShell, type ScreenViews } from "@/components/screen-shell";
+import { EveryonesTasks } from "@/components/tasks/everyones-tasks";
+import { UpForGrabs } from "@/components/tasks/up-for-grabs";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { activityRowActionsAllowed } from "@/lib/activity/row-action";
 import { useActivityReread } from "@/lib/activity/use-activity-reread";
@@ -124,7 +128,6 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { useTenantKind } from "@/lib/tenant-kind";
 import { useRemindMessage } from "@/lib/chat/message-reminder";
 import { alertFailure } from "@/lib/failure-alert";
-import { pageSurfaces } from "@/lib/surfaces";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import type { ActivityCardKey } from "@repo/validation";
 
@@ -132,7 +135,16 @@ import type { ActivityCardKey } from "@repo/validation";
  * Activity: what the member still has to do, and what they have running
  * (#3897, `spec/behavior/activity.md`). An inbox beside chat, not a home.
  * Tab 2 since 2026-11-12 (#4610), whose icon carries the count of what needs
- * the member; the task board's door and the week ring are on the title row.
+ * the member; the week ring is on the title row.
+ *
+ * Mine and Everyone's (#5948 slice 3; Paul's "two homes" of 2026-11-24):
+ * the phone's Tasks screen folded in here, as web's Tasks page folded into
+ * its Activity. Mine is the page below, with Up for grabs a card of its own
+ * (`UpForGrabs`); the member's own tasks are To do's rows. Everyone's is the
+ * chapter's tasks by status (`EveryonesTasks`), offered beside the title as
+ * plain words (`ViewLabels`) to whoever `everyoneOffered` lets see it; anyone
+ * else sees no labels. `/tasks` only sends its links here (`?task=` opens
+ * that task's screen over the tab), and its points line is on You.
  *
  * Cut to one home per question on 2026-11-20 (#5779, Paul's direction A):
  * the week strip, the week card, This semester, Last week, Links and the
@@ -183,6 +195,14 @@ export default function ActivityTab() {
 }
 
 /** Activity's loading rows, under its title, while the kind is unknown. */
+/** Activity's two views (#5948): the member's own, and the chapter's tasks. */
+type ActivityView = "mine" | "everyone";
+
+const ACTIVITY_VIEWS = [
+  { value: "mine", label: "Mine" },
+  { value: "everyone", label: "Everyone's" },
+] as const satisfies readonly { value: ActivityView; label: string }[];
+
 function ActivityHold() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -267,8 +287,12 @@ function ActivityScreen() {
     [layout.data, cardRole],
   );
   const shows = (key: ActivityCardKey) => arrangement.shown.includes(key);
+  // Up for grabs' read (#5948), here so a pull reads it too; the card reads
+  // the same query.
+  const tasksOn = moduleOn("tasks");
+  const openTasks = useOpenTasks({ enabled: tasksOn });
   // Pull to refresh reads the arrangement too, so an edit made on web shows.
-  const refreshPage = useRefetchAll([activity, layout]);
+  const refreshPage = useRefetchAll([activity, layout, tasksOn ? openTasks : null]);
   const refreshArchive = useRefetchAll([archive]);
   const refresh = showArchive ? refreshArchive : refreshPage;
   const saveLayout = useSaveActivityLayout();
@@ -588,6 +612,25 @@ function ActivityScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extensionTaskId, refetchActivity, router]);
 
+  // `/activity?task=<taskId>`: a task push, or a link the Tasks screen used
+  // to take (`/tasks?task=` sends it here, #5948). The task's screen opens
+  // over the tab, which says where it stands if the viewer can't read it,
+  // and the param is dropped so coming back doesn't open it again.
+  const { task: taskParam } = useLocalSearchParams<{ task?: string }>();
+  const linkedTaskId =
+    typeof taskParam === "string" && taskParam !== "" ? taskParam : null;
+  useEffect(() => {
+    if (linkedTaskId === null) return;
+    router.setParams({ task: undefined });
+    router.push({ pathname: "/task-details", params: { id: linkedTaskId } });
+  }, [linkedTaskId, router]);
+
+  // Mine or Everyone's (#5948 slice 3). Never stored: the tab opens on the
+  // member's own, as web's bare `/activity` does.
+  const [viewPick, setViewPick] = useState<ActivityView>("mine");
+  const everyoneOffered = useEveryoneOffered(tasksOn);
+  const view: ActivityView = everyoneOffered ? viewPick : "mine";
+
   const ai = useAiSurfaces();
   const setNudgesEnabled = useSetActivityNudgesEnabled();
   const askRef = useRef<BottomSheetModal>(null);
@@ -609,9 +652,12 @@ function ActivityScreen() {
           activity.data && id
             ? findActivityTaskRow(activity.data, id, new Date())
             : null;
-        // Past the read's cap, or finished since: the board has every task.
+        // Past the read's cap, or finished since: its own screen says where
+        // it stands.
         if (row) open(row);
-        else router.push("/tasks");
+        else if (id) {
+          router.push({ pathname: "/task-details", params: { id } });
+        } else return false;
         return true;
       }
       case "event":
@@ -640,7 +686,9 @@ function ActivityScreen() {
             : null) ??
           rows[0];
         if (row) open(row);
-        else router.push("/tasks");
+        else if (id) {
+          router.push({ pathname: "/task-details", params: { id } });
+        } else return false;
         return true;
       }
       case "meeting":
@@ -654,6 +702,10 @@ function ActivityScreen() {
         return false;
     }
   };
+
+  // Up for grabs, a card of Mine's (#5948): after Now, before the member's
+  // cards, as on web. Drawn while the page's read loads or fails too.
+  const upForGrabs = tasksOn ? <UpForGrabs now={now} /> : null;
 
   function renderBody() {
     if (editing) {
@@ -691,6 +743,7 @@ function ActivityScreen() {
       return (
         <>
           <NowCard />
+          {upForGrabs}
           <SkeletonRegion label="Loading activity" flush>
             <View style={styles.body}>
               <View>
@@ -716,6 +769,7 @@ function ActivityScreen() {
       return (
         <>
           <NowCard />
+          {upForGrabs}
           <ErrorState
             title="Couldn't load your activity"
             body={describeLoadFailure(activity.error)}
@@ -768,6 +822,7 @@ function ActivityScreen() {
     return (
       <View style={styles.body}>
         <NowCard />
+        {upForGrabs}
         {arrangement.shown.map((key) => (
           <Fragment key={key}>{cards[key]}</Fragment>
         ))}
@@ -793,7 +848,20 @@ function ActivityScreen() {
   ) : activity.isPending ? (
     <WeekRingSkeleton />
   ) : null;
-  const board = moduleOn("tasks") ? <TaskBoardLink /> : null;
+  // The views beside the title, on the page itself (not over the editor or
+  // the Archive, which are Mine's).
+  const views: ScreenViews<ActivityView> | undefined =
+    everyoneOffered && onPage
+      ? {
+          accessibilityLabel: "Whose tasks",
+          options: ACTIVITY_VIEWS,
+          value: view,
+          onChange: setViewPick,
+        }
+      : undefined;
+  if (view === "everyone" && views) {
+    return <EveryonesTasks views={views} refreshAlso={[activity, layout]} />;
+  }
 
   return (
     <ActivityFaces.Provider value={faceFor}>
@@ -801,15 +869,9 @@ function ActivityScreen() {
         <ActivityRowMenuContext.Provider value={rowMenu.menuFor}>
           <ScreenShell
             title={SECTION_NAMES.activity}
+            views={views}
             refresh={refresh}
-            headerAction={
-              ring || board ? (
-                <View style={styles.headerActions}>
-                  {ring}
-                  {board}
-                </View>
-              ) : undefined
-            }
+            headerAction={ring ?? undefined}
           >
             {renderBody()}
             <ActivitySheet
@@ -850,31 +912,6 @@ function ActivityScreen() {
         </ActivityRowMenuContext.Provider>
       </ActivityMinutesContext.Provider>
     </ActivityFaces.Provider>
-  );
-}
-
-/**
- * The task board's door (#4610): the board (List and Grid, the points line)
- * is a pushed screen now that Activity and Calendar hold a member's tasks.
- * Drawn only while the chapter has Tasks on, since the whole board is behind
- * that module. A plain neutral control on the title row, never the accent, which marks
- * only the one primary action (foundations.md § Where the accent goes).
- */
-function TaskBoardLink() {
-  const router = useRouter();
-  const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Task board"
-      accessibilityHint="Opens all of your tasks as a list or a grid."
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      onPress={() => router.push("/tasks")}
-      style={({ pressed }) => [styles.boardLink, pressed && styles.pressed]}
-    >
-      <Text style={styles.boardLinkText}>Task board</Text>
-    </Pressable>
   );
 }
 
@@ -1442,25 +1479,6 @@ function createStyles(tokens: SignetTokens) {
     // gap, as web spaces its sections.
     body: {
       gap: tokens.spacing.lg,
-    },
-    boardLink: {
-      minHeight: 36,
-      paddingHorizontal: tokens.spacing.md,
-      borderRadius: 18,
-      borderWidth: 1,
-      borderColor: tokens.color.border.input,
-      // The header round's fill (`HeaderButton`), in a worded capsule.
-      backgroundColor: pageSurfaces(tokens).card,
-      justifyContent: "center",
-    },
-    headerActions: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing.sm,
-    },
-    boardLinkText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.foreground,
     },
     pressed: { opacity: 0.7 },
     group: {

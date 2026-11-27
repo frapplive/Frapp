@@ -1,11 +1,17 @@
 import { useMemo } from "react";
-import { useCurrentUser, useMyPermissions, useTasks } from "@repo/hooks";
 import { can } from "@repo/validation";
-import { asArray } from "@/lib/utils";
-import type { BoardTask } from "./board-task";
+import { useTasks } from "./use-tasks";
+import { useCurrentUser, useMyPermissions } from "./use-user";
+
+/** What `everyoneOffered` reads off each task in the viewer's read. */
+export interface EveryoneOfferedTask {
+  assignee_id: string | null;
+  followed_by?: string | null;
+}
 
 /**
- * Whether Activity offers Everyone's beside Mine (#5948): the chapter's task
+ * Whether Activity offers Everyone's beside Mine (#5948), on web and the
+ * phone alike: the chapter's task
  * board, by status or by person.
  *
  * - A `tasks:manage` holder: `GET /v1/tasks` serves them the chapter's whole
@@ -29,7 +35,7 @@ export function everyoneOffered({
   canManage: boolean;
   permissionsKnown: boolean;
   viewerId: string;
-  tasks: readonly Pick<BoardTask, "assignee_id" | "followed_by">[];
+  tasks: readonly EveryoneOfferedTask[];
 }): boolean {
   if (canManage) return true;
   if (!permissionsKnown || viewerId === "") return false;
@@ -56,7 +62,13 @@ export function useEveryoneOffered(tasksOn: boolean): boolean {
   });
   const viewerId = (currentUser.data as { id?: string } | undefined)?.id ?? "";
   const tasks = useMemo(
-    () => asArray<BoardTask>(tasksQuery.data),
+    () =>
+      Array.isArray(tasksQuery.data)
+        ? (tasksQuery.data as unknown[]).filter(
+            (task): task is EveryoneOfferedTask =>
+              !!task && typeof task === "object" && "assignee_id" in task,
+          )
+        : [],
     [tasksQuery.data],
   );
   if (!tasksOn) return false;

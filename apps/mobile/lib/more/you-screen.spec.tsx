@@ -63,6 +63,11 @@ let profileStats = {
   serviceFailed: false,
 };
 const invoiceReadOptions: ({ enabled?: boolean } | undefined)[] = [];
+/** The semester line's reads (#5948): the balance and the house board. */
+let semesterRead: { points: unknown; board: unknown } = {
+  points: undefined,
+  board: undefined,
+};
 /** The standing read behind This semester (#5779), and Last week's. */
 let standingRead: { data: unknown; isPending: boolean } = {
   data: undefined,
@@ -148,6 +153,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     return { data: invoices };
   },
   useCurrentUser: () => currentUser,
+  useMyPoints: () => ({ data: semesterRead.points }),
+  useLeaderboard: () => ({ data: semesterRead.board }),
   useMyProfileStats: (wanted?: { points?: boolean; service?: boolean }) => {
     statsWanted.push(wanted ?? {});
     return profileStats;
@@ -286,6 +293,31 @@ describe("You tab clock (#2101)", () => {
 
     expect(screenText(tree)).toContain("Rush dinner");
     expect(screenText(tree)).not.toContain("Chapter meeting");
+  });
+});
+
+describe("You's semester line (#5948)", () => {
+  afterEach(() => {
+    semesterRead = { points: undefined, board: undefined };
+  });
+
+  it("says the semester points and the house rank under the head, the Tasks screen's line", () => {
+    semesterRead = {
+      points: { balance: 1240, transactions: [] },
+      board: [
+        { user_id: "someone", total: 2000 },
+        { user_id: "user-1", total: 1240 },
+      ],
+    };
+    const tree = render();
+    expect(screenText(tree)).toContain(
+      "1,240 semester points · #2 of 2 in the house",
+    );
+  });
+
+  it("draws nothing before either read answers", () => {
+    const tree = render();
+    expect(screenText(tree)).not.toContain("semester points");
   });
 });
 

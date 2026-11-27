@@ -531,7 +531,7 @@ describe("Suggested tasks", () => {
     expect(
       tree.root.findAll((node) => (node.type as unknown) === "Redirect")[0]
         .props.href,
-    ).toBe("/tasks");
+    ).toBe("/activity");
     expect(state.source).toBe("untouched");
   });
 

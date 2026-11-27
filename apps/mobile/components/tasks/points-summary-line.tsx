@@ -4,15 +4,15 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 import type { HouseRank, PointsSummary } from "@/lib/tasks/points-card";
 
 /**
- * The member's semester points and house rank, one muted line at the top of
- * the task board: "1,240 semester points · #3 of 42 in the house".
+ * The member's semester points and house rank, one muted line under the
+ * profile's head on You: "1,240 semester points · #3 of 42 in the house".
+ * It led the phone's Tasks screen until that screen folded into Activity
+ * (#5948 slice 3), which made You, beside the standing, its home.
  *
  * It was a card with a 32pt balance (`canvas-screens.dc.html:282-288`) until
  * #5570 (Paul, 2026-11-19): the card sat above the tasks and was bigger than
  * any of them, on a screen whose job is the tasks. Things 3 and Todoist keep
- * a list's own figures to one quiet line over the to-dos, and so does this.
- * It is still the landing site of the deleted `points.tsx` /
- * `points-details.tsx` routes (`spec/ui/mobile/screens.md`).
+ * a list's own figures to one quiet line, and so does this.
  *
  * A half whose read hasn't answered, or that has nothing to report, is left
  * out rather than drawn as a dash or a "0": a "0" said to a member who has

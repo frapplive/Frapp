@@ -46,7 +46,7 @@ import {
   useAiReport,
   type AiReportTarget,
 } from "@/components/ai/report-ai-sheet";
-import { BACK_TO_TASKS } from "@/components/back-row";
+import { BACK_TO_ACTIVITY } from "@/components/back-row";
 import {
   BackGlyph,
   CloseGlyph,
@@ -166,7 +166,7 @@ export default function SuggestedTasksScreen() {
   // Every way in is drawn only where the server has AI; this catches one
   // that skips them, such as an old notification after AI was turned off.
   const available = useAiSurfaces().available;
-  if (available === false) return <Redirect href="/tasks" />;
+  if (available === false) return <Redirect href="/activity" />;
   return <SuggestedTasks />;
 }
 
@@ -539,7 +539,7 @@ function SuggestedTasks() {
   return (
     <>
       <ScreenShell
-        back={BACK_TO_TASKS}
+        back={BACK_TO_ACTIVITY}
         title={AI_SUGGESTION_COPY.listHeading}
         refresh={refresh}
       >

@@ -450,10 +450,10 @@ describe("a proposal in the Ask conversation", () => {
     const text = screenText(tree);
     expect(text).toContain("Book the bus");
     expect(text).toContain(ACT_COPY.done_task);
-    act(() => byLabel(tree, ACT_COPY.open_tasks).props.onPress());
+    act(() => byLabel(tree, ACT_COPY.open_activity).props.onPress());
     expect(onOpen).toHaveBeenCalledWith({
-      href: "/tasks",
-      label: ACT_COPY.open_tasks,
+      href: "/activity",
+      label: ACT_COPY.open_activity,
     });
   });
 
