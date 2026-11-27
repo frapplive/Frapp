@@ -4,6 +4,8 @@ import {
   calendarKindOf,
   calendarTaskAccessibleLabel,
   calendarTasksByDay,
+  calendarLayersShowing,
+  DEFAULT_HIDDEN_CALENDAR_KINDS,
   parseHiddenCalendarKinds,
   selectCalendarTasks,
   serializeHiddenCalendarKinds,
@@ -320,5 +322,25 @@ describe("tasks due at a time (#5116)", () => {
     expect(calendarTaskAccessibleLabel(item as CalendarTask)).toBe(
       "Dues form, due 5 PM, your task, to do",
     );
+  });
+});
+
+describe("the Calendar's default and layers (#5948)", () => {
+  it("hides Tasks for a member who never touched the key", () => {
+    expect([...DEFAULT_HIDDEN_CALENDAR_KINDS]).toEqual(["tasks"]);
+  });
+
+  it("turns the kinds on into the layers they cover", () => {
+    expect([...calendarLayersShowing(new Set())].sort()).toEqual(
+      ["assigned", "birthdays", "events", "mine"].sort(),
+    );
+    expect(
+      [...calendarLayersShowing(DEFAULT_HIDDEN_CALENDAR_KINDS)].sort(),
+    ).toEqual(["birthdays", "events"]);
+    expect(
+      [
+        ...calendarLayersShowing(new Set(["events", "birthdays"] as const)),
+      ].sort(),
+    ).toEqual(["assigned", "mine"]);
   });
 });

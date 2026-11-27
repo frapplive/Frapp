@@ -25,8 +25,9 @@ import { useViewerUserId } from "./use-user";
  * the rows they created are theirs to follow. No new endpoint.
  *
  * A due date is a calendar date (`tasks.due_date` is a `date` column), so a
- * task sits on that day for every viewer, with no time zone shift. Every
- * task has one: the column is `NOT NULL`, so there is no "no due date" case.
+ * task sits on that day for every viewer, with no time zone shift. A task
+ * with no due date (#5761, "No due date") has no day, so the calendar leaves
+ * it out.
  *
  * A task due at a time (`tasks.due_at`, #4003) sits on that moment's local
  * day instead, as the Tasks page files it (`taskDueBucket`), and says its
@@ -42,8 +43,8 @@ export type CalendarTaskState = "open" | "overdue" | "waiting" | "confirmed";
 
 /**
  * The calendar's per-item layers: `calendarTasksByDay` files a task by whose
- * it is. The phone's Calendar reads every layer; the web Events colour key
- * switches whole kinds ({@link CalendarKind}), not layers.
+ * it is. Both Calendars switch whole kinds ({@link CalendarKind}), not
+ * layers: {@link calendarLayersShowing} turns the kinds on into layers.
  */
 export type CalendarLayer = "events" | "mine" | "assigned" | "birthdays";
 
@@ -55,7 +56,7 @@ export const ALL_CALENDAR_LAYERS: ReadonlySet<CalendarLayer> = new Set([
 ]);
 
 /**
- * A kind of thing on the web Events agenda (#5560): each has one hue
+ * A kind of thing on the Calendar (#5560; the phone's too since #5948): each has one hue
  * (`CALENDAR_KIND_HUE` in `activity-agenda.ts`), drawn the same on its rows,
  * its navigator dots and its colour key swatch. My tasks and Assigned by me
  * are both Tasks.
@@ -82,9 +83,33 @@ export function calendarKindOf(item: CalendarItem): CalendarKind {
 }
 
 /**
+ * The kinds the Calendar hides for a member who has never touched its key:
+ * Tasks (Paul, 2026-11-24, decision 1 on #5943: "Calendar is the chapter's
+ * events and birthdays, tasks off unless their key is turned on"; #5948).
+ * Activity is where a member's own tasks live. Before #5948 every kind showed.
+ */
+export const DEFAULT_HIDDEN_CALENDAR_KINDS: ReadonlySet<CalendarKind> =
+  new Set<CalendarKind>(["tasks"]);
+
+/** The item layers the kinds still on cover, for `calendarTasksByDay`. */
+export function calendarLayersShowing(
+  hidden: ReadonlySet<CalendarKind>,
+): ReadonlySet<CalendarLayer> {
+  const layers = new Set<CalendarLayer>();
+  if (!hidden.has("events")) layers.add("events");
+  if (!hidden.has("tasks")) {
+    layers.add("mine");
+    layers.add("assigned");
+  }
+  if (!hidden.has("birthdays")) layers.add("birthdays");
+  return layers;
+}
+
+/**
  * The kinds a member switched off, read back from storage as
  * `{ "hidden": [...] }`, so a kind added later starts on. Unknown names are
- * dropped; `null` when nothing readable is stored, which means all on.
+ * dropped; `null` when nothing readable is stored, which means
+ * {@link DEFAULT_HIDDEN_CALENDAR_KINDS}.
  */
 export function parseHiddenCalendarKinds(
   raw: string | null | undefined,

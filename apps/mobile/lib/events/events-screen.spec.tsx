@@ -15,6 +15,7 @@ import {
   type ReactTestRenderer,
 } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetCalendarKindsForTests } from "@/lib/events/calendar-kinds";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
@@ -286,6 +287,9 @@ const skeletons = (tree: ReactTestRenderer) =>
   tree.root.findAll((node) => node.props.accessibilityRole === "progressbar");
 
 beforeEach(() => {
+  // Most cases here are a member who turned the Calendar's Tasks key on;
+  // the default (Tasks off, #5948) has its own cases.
+  resetCalendarKindsForTests(undefined, { me: new Set() });
   dayParam = undefined;
   vi.mocked(vi.mocked(expoRouter.useRouter)().push).mockClear();
   newEventSheet.props = null;
@@ -689,7 +693,7 @@ describe("Calendar month", () => {
     expect(shell.props.back).toEqual(BACK_TO_ACTIVITY);
   });
 
-  it("draws no switcher and no chips above the month", () => {
+  it("draws no switcher and no chips above the month: only the colour key under it (#5948)", () => {
     tasks = [
       {
         id: "t-mine",
@@ -701,14 +705,58 @@ describe("Calendar month", () => {
       },
     ];
     const tree = render();
-    for (const role of ["radio", "radiogroup", "switch", "toolbar"]) {
+    for (const role of ["radio", "radiogroup"]) {
       expect(
         tree.root.findAll((node) => node.props.accessibilityRole === role),
       ).toHaveLength(0);
     }
-    for (const label of ["List", "3 days", "Day", "My tasks", "Events"]) {
+    for (const label of ["List", "3 days", "Day", "My tasks"]) {
       expect(screenText(tree)).not.toMatch(new RegExp(`^${label}$`, "m"));
     }
+    // The key's three words, each a switch, and nothing else is one.
+    const switches = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === "switch" &&
+        typeof node.props.testID === "string",
+    );
+    expect(switches.map((node) => node.props.accessibilityLabel)).toEqual([
+      "Events",
+      "Tasks",
+      "Birthdays",
+    ]);
+  });
+
+  it("leaves tasks off until the member turns Tasks on in the key, and keeps the choice per member", async () => {
+    const stored = new Map<string, string>();
+    resetCalendarKindsForTests({
+      getItem: async (key: string) => stored.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        stored.set(key, value);
+      },
+    });
+    tasks = [
+      {
+        id: "t-mine",
+        title: "Clean the kitchen",
+        assignee_id: "me",
+        created_by: "m1",
+        due_date: localIsoDate(MOUNTED_AT),
+        status: "TODO",
+      },
+    ];
+    const tree = render();
+    await act(async () => {});
+    const tasksKey = () =>
+      tree.root.find((node) => node.props.testID === "calendar-key-tasks");
+    expect(tasksKey().props.accessibilityState).toEqual({ checked: false });
+    expect(screenText(tree)).not.toContain("Clean the kitchen");
+
+    act(() => tasksKey().props.onPress());
+    expect(tasksKey().props.accessibilityState).toEqual({ checked: true });
+    expect(screenText(tree)).toContain("Clean the kitchen");
+    expect(
+      JSON.parse(stored.get("frapp.mobile.calendar-hidden-kinds:me")!),
+    ).toEqual({ hidden: [] });
   });
 
   it("marks event days on a month calendar", () => {
