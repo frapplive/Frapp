@@ -9,8 +9,10 @@ import { dashboardRoutes } from "@/components/layout/dashboard-routes";
  * what that arrow does (rulebook § 8, Paul 2026-11-25, #6034). Walks every
  * route under `app/(dashboard)` against the address table in
  * `@repo/validation` (`web-addresses.ts`, which the phone maps links from),
- * and that table against the spec's § Addresses, so a new page, or a new
- * panel's parameter, fails here until all three name it.
+ * and that table against the spec's § Addresses, so a new page fails here
+ * until both name it, and a parameter the table lists fails until the
+ * spec's Address cell names it. It doesn't read page code: a family's PR
+ * lists the parameters its pages read in the table.
  */
 
 const SPEC = readFileSync(
@@ -18,7 +20,7 @@ const SPEC = readFileSync(
   "utf8",
 );
 
-/** The spec's § Addresses table: each row's path and the parameters it names. */
+/** The spec's § Addresses table: each row's paths and its Address cell. */
 function specTable(): Map<string, string> {
   const start = SPEC.indexOf("\n## Addresses\n");
   const end = SPEC.indexOf("\n## ", start + 1);
@@ -27,7 +29,7 @@ function specTable(): Map<string, string> {
     // The first cell's paths: `/events?day=&…`, or several in one row.
     const cell = /^\| (`\/[^|]*)\|/.exec(line)?.[1] ?? "";
     for (const match of cell.matchAll(/`(\/[^`?]*)/g)) {
-      rows.set((match[1] ?? "").replace(/<(\w+)>/g, "[$1]"), line);
+      rows.set((match[1] ?? "").replace(/<(\w+)>/g, "[$1]"), cell);
     }
   }
   return rows;
@@ -56,10 +58,10 @@ describe("every dashboard page has an address", () => {
   it.each(WEB_ADDRESSES.map((row) => [row.path, row.params] as const))(
     "%s is in the spec's § Addresses with each of its parameters",
     (route, params) => {
-      const line = TABLE.get(route);
-      expect(line, `no row for ${route}`).toBeDefined();
+      const cell = TABLE.get(route);
+      expect(cell, `no row for ${route}`).toBeDefined();
       for (const name of params) {
-        expect(line, `${route} ${name}`).toMatch(new RegExp(`\\b${name}=`));
+        expect(cell, `${route} ${name}`).toMatch(new RegExp(`[?&]${name}=`));
       }
     },
   );

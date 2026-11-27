@@ -19,6 +19,7 @@ import { vocab } from "@repo/org-archetypes";
 import {
   isRushFollowUpForViewer,
   rushFollowUpsDueCount,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { HeaderSearch } from "@/components/shared/header-search";
@@ -90,7 +91,7 @@ const VIEW_OPTIONS = [
 ] as const satisfies readonly { value: RushView; label: string }[];
 
 /** The notification's deep link: `/rush?prospect=<candidate id>`. */
-export const RUSH_PROSPECT_PARAM = "prospect";
+export const RUSH_PROSPECT_PARAM = WEB_ADDRESS_PARAMS.rush.prospect;
 
 /**
  * The recruitment page (#5924): every prospect the chapter is working, as a

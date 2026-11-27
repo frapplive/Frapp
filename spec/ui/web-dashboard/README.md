@@ -720,7 +720,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   The members column and the side sheets (event, member, upload panels) already closed: the people button toggles the column, and every sheet has its close button and Escape.
   _(2026-11-12: those panels now open docked in place of their page, and close with a back arrow and Escape, [`components.md` § Surface size](../design-system/components.md#surface-size).)_
   Panels open with Signet's `context` duration and `entrance` ease and close with `standard` and `exit`, gliding 16px from the right edge, the side chat docks to (from the nav side until #5575); a page load or a link paints them in place, and reduced motion makes it instant.
-  State: the open tool is the URL, so links and Back work as before; `/chat` means "no tool", the conversation alone, and `/messages` the Messages page; chat open or closed beside a page is a cookie (`frapp_chat_open`).
+  State: the open tool is the path, and what opens inside it is the query ([§ Addresses](#addresses)), so links and Back work; `/chat` means "no tool", the conversation alone, and `/messages` the Messages page; chat open or closed beside a page is a cookie (`frapp_chat_open`).
   Any arrival at `/chat` or `/messages` (a link, a notification, a Find result, or the shell's own move there when a page closes) shows the conversation.
   Widths and the single-page fallback: [§ Responsive contract](#responsive-contract); the state model: [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts).
   Tool pages lay out by their own width beside chat, not the window's ([§ Responsive contract](#responsive-contract), #4022, #4033).
@@ -1261,25 +1261,26 @@ Comparables: Slack web and Discord web keep the open channel and thread in the a
 - **A dead or forbidden id** opens the page with a short inline note in place of the record, and its parameter is replaced away.
 
 The web reads and moves these through one hook, [`use-address-params.ts`](../../../apps/web/lib/address/use-address-params.ts) over [`address.ts`](../../../apps/web/lib/address/address.ts): open pushes, close goes Back or replaces, replace mode is for days and sorts, `consumeAddressParam` takes a one-shot mark off, and `useDeadAddressParam` drops a dead id and keeps its note.
-The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts), which both apps import.
+The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts): the web's own names (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from it, and the phone reads it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands.
 
 ### The table
 
 Rows marked "planned" are built by the sub-issue named; until it merges the page keeps the behaviour it has today.
-[`every-page-has-an-address.spec.ts`](../../../apps/web/components/layout/every-page-has-an-address.spec.ts) fails for a dashboard route missing from `web-addresses.ts` and for a row or parameter of it missing here.
+[`every-page-has-an-address.spec.ts`](../../../apps/web/components/layout/every-page-has-an-address.spec.ts) fails for a dashboard route missing from `web-addresses.ts`, and for a row of it, or a parameter in its Address cell, missing here.
+It can't see a parameter a page reads without listing it there, so each family's PR adds its own.
 
 | Address | History | Phone screen |
 |---|---|---|
 | `/chat?channel=&thread=&message=` | Conversation and thread push; a search or bookmark jump pushes `channel=` with `message=`, which is replaced away once the jump lands. Planned, #6041 | `/chat-thread` (`channelId`, `threadRootId`, `focusMessageId`); bare: Chat home |
-| `/messages?channel=` | Push. Planned, #6041 | `/chat-thread` (`channelId`); bare: Messages |
+| `/messages?channel=&message=` | Push; a search jump as on `/chat`. Planned, #6041 | `/chat-thread` (`channelId`); bare: Messages |
 | `/documents?folder=&document=&access=&type=` | Push; `type=minutes` is a live view. Planned, #6042 | Documents |
-| `/events?day=&event=&edit=&hours=` | `day=YYYY-MM-DD` replaces; `event=`, `edit=1`, `new=1` and `hours=YYYY-MM-DD` push. Planned, #6043 | `/event-details` (`id`), `/calendar-day` (`day`), Events |
-| `/activity?view=&task=&group=&posting=&item=&review=` | Push; `view=archive`. Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Planned, #6044 | `/tasks` (`task`), `/activity` (`review`) |
+| `/events?day=&event=&edit=&hours=&excuse=` | `day=YYYY-MM-DD` replaces; `event=`, `edit=1`, `new=1` and `hours=YYYY-MM-DD` push; `excuse=1` (a chat card's Can't make it) is one-shot. Planned, #6043 | `/event-details` (`id`, `excuse`), `/calendar-day` (`day`), Events |
+| `/activity?view=&task=&group=&posting=&item=&review=&extension=` | Push; `view=archive`; `extension=` is a notification's request for more time (#6096). Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Planned, #6044 | `/tasks` (`task`), `/activity` (`review`) |
 | `/members?tab=&member=&sort=` | `tab=` pushes (was replace), `member=` pushes, `sort=` replaces, `new=1`. Planned, #6046 | `/member` (`userId`), `/directory` (`sort`) |
 | `/rush?view=&prospect=` | Push. Planned, #6047 | `/rush-prospect` (`candidateId`), Recruitment |
 | `/profile?open=` | Closing goes Back instead of replacing. Planned, #6048 | You |
 | `/preferences?section=` | Push. Planned, #6048 | Preferences |
-| `/settings?tab=&page=&channel=&tool=&tier=&role=&class=&zone=` | Rail rows push `tab=`; `channel=` adds Chat admin's picked channel. Still full width, with chat hidden. Planned, #6049 | Web only |
+| `/settings?tab=&page=&channel=&tool=&tier=&role=&class=&zone=&member=` | Rail rows push `tab=`; `channel=` adds Chat admin's picked channel; `member=` is the points ledger's member. Still full width, with chat hidden. Planned, #6049 | Web only |
 | `/ask` | No change until conversations get ids (#4704) | Frapp Intelligence |
 | `/whats-new` | Path only | What's new |
 | `/meetings/<id>`, `/meetings/<id>/notes`, `/meetings/<id>/transcript` | Paths | Web only |

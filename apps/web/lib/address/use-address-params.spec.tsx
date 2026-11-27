@@ -23,9 +23,9 @@ describe("useAddressParams", () => {
     act(() => result.current.open({ task: "t1" }));
     expect(push).toHaveBeenCalledTimes(1);
     expect(window.location.search).toBe("?view=mine&task=t1");
-    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
     act(() => result.current.close(["task"]));
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(go).toHaveBeenCalledWith(-1);
   });
 
   it("opens in place in replace mode", () => {

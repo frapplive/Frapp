@@ -1,3 +1,4 @@
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * Where the officer tools live on web: inside Chapter settings, on the page
  * of the module each belongs to (#3837).
@@ -59,7 +60,7 @@ export const POINTS_SETTINGS_PATH = moduleSettingsHref(
 );
 
 /** `?member=` narrows the ledger to one member's transactions. */
-export const LEDGER_MEMBER_PARAM = "member";
+export const LEDGER_MEMBER_PARAM = WEB_ADDRESS_PARAMS.settings.member;
 
 /** The ledger on one member, from the Points row on their card. */
 export function pointsLedgerPath(userId: string): string {

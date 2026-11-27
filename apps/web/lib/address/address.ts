@@ -13,13 +13,20 @@
  * own back on.
  */
 
-/** A change to the query: a value sets the parameter, `null` removes it. */
-export type AddressChanges = Readonly<Record<string, string | null>>;
+/**
+ * A change to the query: a value sets the parameter; `null`, `undefined` or
+ * an empty string removes it.
+ */
+export type AddressChanges = Readonly<
+  Record<string, string | null | undefined>
+>;
 
 /**
- * The state key that marks an entry this tab pushed to open something, and
- * the address it was pushed from. Closing that thing from that entry goes
- * Back to it, so Forward reopens it.
+ * The state key that marks an entry this tab pushed to open something: the
+ * addresses of the entries under it that this tab pushed it over, oldest
+ * first, the last being the entry right under it. Closing to one of them goes
+ * Back that many entries, so Forward reopens what was closed, even when two
+ * layers close at once (an event with its editor open).
  */
 export const ADDRESS_FROM_KEY = "frappAddressFrom";
 
@@ -32,14 +39,29 @@ function relative(url: URL): string {
 export function addressWith(href: string, changes: AddressChanges): string {
   const url = new URL(href, "http://frapp.invalid");
   for (const [name, value] of Object.entries(changes)) {
-    if (value === null || value === "") url.searchParams.delete(name);
-    else url.searchParams.set(name, value);
+    if (value === null || value === undefined || value === "") {
+      url.searchParams.delete(name);
+    } else url.searchParams.set(name, value);
   }
+  // Re-serialized even with no change, so two spellings compare equal.
+  url.search = url.searchParams.toString();
   return relative(url);
 }
 
+/**
+ * The current address, serialized the way `addressWith` writes one (`+` for a
+ * space, `?flag=`), so the two compare equal.
+ */
 function currentAddress(): string {
-  return relative(new URL(window.location.href));
+  return addressWith(relative(new URL(window.location.href)), {});
+}
+
+/** The addresses this tab pushed the current entry over (`ADDRESS_FROM_KEY`). */
+function pushedOver(state: Record<string, unknown>): string[] {
+  const chain = state[ADDRESS_FROM_KEY];
+  return Array.isArray(chain)
+    ? chain.filter((entry): entry is string => typeof entry === "string")
+    : [];
 }
 
 /** The current entry's own state, without Next's marks (see the header). */
@@ -61,24 +83,37 @@ export function pushAddress(changes: AddressChanges): void {
   const to = addressWith(from, changes);
   if (to === from) return;
   const state = ownState();
-  window.history.pushState({ ...state, [ADDRESS_FROM_KEY]: from }, "", to);
+  window.history.pushState(
+    { ...state, [ADDRESS_FROM_KEY]: [...pushedOver(state), from] },
+    "",
+    to,
+  );
 }
 
 /**
  * Moves through something in place (a day, a month, a sort, a one-shot mark
- * acted on): merges `changes` and replaces the entry, keeping its mark.
+ * acted on, a dead id dropped): merges `changes` and replaces the entry,
+ * keeping its mark. When that would make it the same address as the entry
+ * this tab pushed it over (a dead record opened from its list, a jump's
+ * `message=` dropped inside the open channel), it goes Back instead, so no
+ * Back press lands on an identical address.
  */
 export function replaceAddress(changes: AddressChanges): void {
   const from = currentAddress();
   const to = addressWith(from, changes);
   if (to === from) return;
-  window.history.replaceState(ownState(), "", to);
+  const state = ownState();
+  if (pushedOver(state).at(-1) === to) {
+    window.history.back();
+    return;
+  }
+  window.history.replaceState(state, "", to);
 }
 
 /**
  * Closes something (its back arrow, X or Escape): the address without
- * `names`. When this tab pushed the current entry from exactly that address,
- * it goes Back, so Forward reopens what was closed. Otherwise (it arrived
+ * `names`. When this tab pushed the current entry over that address, one
+ * entry down or more, it goes Back to it, so Forward reopens what was closed. Otherwise (it arrived
  * from a link, a notification or another tab) it replaces the entry with
  * that address, so Back leaves the page as it would have.
  */
@@ -89,12 +124,13 @@ export function closeAddress(names: readonly string[]): void {
     Object.fromEntries(names.map((name) => [name, null])),
   );
   if (to === from) return;
-  if (ownState()[ADDRESS_FROM_KEY] === to) {
-    window.history.back();
+  const state = ownState();
+  const chain = pushedOver(state);
+  const at = chain.lastIndexOf(to);
+  if (at !== -1) {
+    window.history.go(at - chain.length);
     return;
   }
-  const state = ownState();
-  delete state[ADDRESS_FROM_KEY];
   window.history.replaceState(state, "", to);
 }
 

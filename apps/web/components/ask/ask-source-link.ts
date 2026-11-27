@@ -1,4 +1,8 @@
-import { askSourceTarget, type AskSource } from "@repo/validation";
+import {
+  askSourceTarget,
+  type AskSource,
+  WEB_ADDRESS_PARAMS,
+} from "@repo/validation";
 import { chatDeepLink } from "@/lib/chat/chat-links";
 import {
   POINTS_STANDINGS_HREF,
@@ -6,7 +10,7 @@ import {
 } from "@/components/standing/standing-doors";
 
 /** `/documents?document=<id>` opens that file in the viewer (`documents-page.tsx`). */
-export const DOCUMENT_LINK_PARAM = "document";
+export const DOCUMENT_LINK_PARAM = WEB_ADDRESS_PARAMS.documents.document;
 
 /** The dashboard route each live-data source opens. Dues has no web page in the beta. */
 const PAGE_ROUTES: Record<string, string | null> = {

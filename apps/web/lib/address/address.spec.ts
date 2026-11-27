@@ -40,7 +40,7 @@ describe("moving the address", () => {
     // Our own state, without Next's `__NA`, so Next's router hears of it.
     expect(window.history.state).toEqual({
       kept: 1,
-      [ADDRESS_FROM_KEY]: "/events?day=d",
+      [ADDRESS_FROM_KEY]: ["/events?day=d"],
     });
   });
 
@@ -52,11 +52,32 @@ describe("moving the address", () => {
 
   it("closing an entry this tab pushed goes Back", () => {
     pushAddress({ event: "e1" });
-    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
     const replace = vi.spyOn(window.history, "replaceState");
     closeAddress(["event"]);
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(go).toHaveBeenCalledWith(-1);
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("closing two layers this tab pushed goes Back two entries", () => {
+    pushAddress({ event: "e1" });
+    pushAddress({ edit: "1" });
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeAddress(["event", "edit"]);
+    expect(go).toHaveBeenCalledWith(-2);
+  });
+
+  it("compares addresses however the query was spelled", () => {
+    window.history.replaceState({}, "", "/activity?x=a%20b");
+    pushAddress({ task: "t1" });
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeAddress(["task"]);
+    expect(go).toHaveBeenCalledWith(-1);
+  });
+
+  it("treats undefined as removing the parameter", () => {
+    pushAddress({ day: undefined });
+    expect(here()).toBe("/events");
   });
 
   it("closing an entry that came from a link replaces it with the parent", () => {
@@ -74,7 +95,6 @@ describe("moving the address", () => {
     closeAddress(["event"]);
     expect(back).not.toHaveBeenCalled();
     expect(here()).toBe("/events?day=d2");
-    expect(window.history.state[ADDRESS_FROM_KEY]).toBeUndefined();
   });
 
   it("replace mode replaces, keeps the other parameters and the mark", () => {
@@ -83,15 +103,27 @@ describe("moving the address", () => {
     replaceAddress({ day: "d2" });
     expect(push).not.toHaveBeenCalled();
     expect(here()).toBe("/events?day=d2&event=e1");
-    expect(window.history.state[ADDRESS_FROM_KEY]).toBe("/events?day=d");
+    expect(window.history.state[ADDRESS_FROM_KEY]).toEqual(["/events?day=d"]);
+    // Our own state, without Next's `__NA`, so Next's router hears of it.
+    expect(window.history.state.__NA).toBeUndefined();
+  });
+
+  it("dropping a parameter back to the entry underneath goes Back", () => {
+    pushAddress({ event: "gone" });
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, "replaceState");
+    replaceAddress({ event: null });
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("one-shot removal replaces and keeps the other parameters", () => {
-    window.history.replaceState({}, "", "/events?day=d&new=1");
+    window.history.replaceState({ __NA: true }, "", "/events?day=d&new=1");
     const replace = vi.spyOn(window.history, "replaceState");
     const push = vi.spyOn(window.history, "pushState");
     consumeAddressParam("new");
     expect(replace).toHaveBeenCalledTimes(1);
+    expect(window.history.state.__NA).toBeUndefined();
     expect(push).not.toHaveBeenCalled();
     expect(here()).toBe("/events?day=d");
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ONE_SHOT_ADDRESS_PARAMS } from "@repo/validation";
+import { NEW_INTENT_PARAM, type NewIntent } from "./new-intent-href";
 import { consumeAddressParam } from "@/lib/address/address";
 
 /**
@@ -24,22 +24,13 @@ import { consumeAddressParam } from "@/lib/address/address";
  * panel is the exception, mounted on every route, so it passes what its own
  * search-params read says (`asked`).
  */
-export const NEW_INTENT_PARAM = ONE_SHOT_ADDRESS_PARAMS.new;
-
-/**
- * Which form the mark asks for, where a page holds more than one: Documents
- * holds Upload (`"1"`, its own button's) and New minutes (`"minutes"`), since
- * minutes are filed there (#5949).
- */
-export type NewIntent = "1" | "minutes";
-
-/**
- * The address that opens `href`'s create form. `href` may carry a query of
- * its own (`/profile?open=service`, a panel that holds the form, #5950).
- */
-export function newIntentHref(href: string, intent: NewIntent = "1"): string {
-  return `${href}${href.includes("?") ? "&" : "?"}${NEW_INTENT_PARAM}=${intent}`;
-}
+// The mark's name and `newIntentHref` live in a module without "use client",
+// so the server redirect pages (`/service`, `/meetings`) read real values.
+export {
+  NEW_INTENT_PARAM,
+  newIntentHref,
+  type NewIntent,
+} from "./new-intent-href";
 
 function addressAsks(intent: NewIntent): boolean {
   if (typeof window === "undefined") return false;

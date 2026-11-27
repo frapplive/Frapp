@@ -50,6 +50,15 @@ describe("web addresses", () => {
     });
   });
 
+  it("keeps the message on a thread link", () => {
+    expect(
+      phoneAddressFor("/chat", "?channel=c1&thread=t1&message=m1"),
+    ).toEqual({
+      pathname: "/chat-thread",
+      params: { channelId: "c1", threadRootId: "t1", focusMessageId: "m1" },
+    });
+  });
+
   it("maps a message link to the channel at that message", () => {
     expect(phoneAddressFor("/chat", "?channel=c1&message=m2")).toEqual({
       pathname: "/chat-thread",
@@ -61,6 +70,10 @@ describe("web addresses", () => {
     expect(phoneAddressFor("/events", "?day=2026-11-30&event=e1")).toEqual({
       pathname: "/event-details",
       params: { id: "e1" },
+    });
+    expect(phoneAddressFor("/events", "?event=e1&excuse=1")).toEqual({
+      pathname: "/event-details",
+      params: { id: "e1", excuse: "1" },
     });
     expect(phoneAddressFor("/events", "?day=2026-11-30")).toEqual({
       pathname: "/calendar-day",

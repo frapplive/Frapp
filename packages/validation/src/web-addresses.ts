@@ -12,9 +12,10 @@ import {
  * of that page (a folder, a record, an editor, a Settings page, a named
  * view). Typing, filter chips, menus and dialogs are never in the address.
  *
- * The parameter names live here, not in `apps/web`: the web writes and reads
- * them (`apps/web/lib/address/`), and the phone maps a web link to its own
- * screen from the same rows (#6050), so a rename can't split the two apps.
+ * The parameter names live here, not in `apps/web`: the web's own names
+ * (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from here, and
+ * the phone maps a web link to its own screen from the same rows once #6050
+ * lands, so a rename can't split the two apps.
  * The chat names stay `CHAT_LINK_*` (`./message-link`), which the phone
  * already mints in copied message links.
  */
@@ -26,14 +27,23 @@ export const WEB_ADDRESS_PARAMS = {
     thread: "thread",
     message: CHAT_LINK_MESSAGE_PARAM,
   },
-  messages: { channel: CHAT_LINK_CHANNEL_PARAM },
+  messages: {
+    channel: CHAT_LINK_CHANNEL_PARAM,
+    message: CHAT_LINK_MESSAGE_PARAM,
+  },
   documents: {
     folder: "folder",
     document: "document",
     access: "access",
     type: "type",
   },
-  events: { day: "day", event: "event", edit: "edit", hours: "hours" },
+  events: {
+    day: "day",
+    event: "event",
+    edit: "edit",
+    hours: "hours",
+    excuse: "excuse",
+  },
   // Tasks folded into Activity with #5948 (`/tasks` only redirects here).
   activity: {
     view: "view",
@@ -42,6 +52,7 @@ export const WEB_ADDRESS_PARAMS = {
     posting: "posting",
     item: "item",
     review: "review",
+    extension: "extension",
   },
   members: { tab: "tab", member: "member", sort: "sort" },
   rush: { view: "view", prospect: "prospect" },
@@ -56,6 +67,7 @@ export const WEB_ADDRESS_PARAMS = {
     role: "role",
     class: "class",
     zone: "zone",
+    member: "member",
   },
 } as const;
 
@@ -113,6 +125,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
         params: {
           [P.chat.channel]: "channelId",
           [P.chat.thread]: "threadRootId",
+          [P.chat.message]: "focusMessageId",
         },
       },
       {
@@ -138,7 +151,10 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
       {
         when: [P.messages.channel],
         pathname: "/chat-thread",
-        params: { [P.messages.channel]: "channelId" },
+        params: {
+          [P.messages.channel]: "channelId",
+          [P.messages.message]: "focusMessageId",
+        },
       },
       { pathname: "/messages" },
     ],
@@ -155,7 +171,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
       {
         when: [P.events.event],
         pathname: "/event-details",
-        params: { [P.events.event]: "id" },
+        params: { [P.events.event]: "id", [P.events.excuse]: "excuse" },
       },
       {
         when: [P.events.day],
