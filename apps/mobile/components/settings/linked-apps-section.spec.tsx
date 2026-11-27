@@ -18,6 +18,13 @@ const state = vi.hoisted(() => ({
   discordConfirm: vi.fn(),
   discordUnlink: vi.fn(),
   sheetReturnPaths: [] as (string | undefined)[],
+  identities: [] as Record<string, unknown>[],
+  linkProvider: vi.fn(),
+  unlinkIdentity: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-session", () => ({
+  useAuthSession: () => ({ linkOAuthProvider: state.linkProvider }),
 }));
 
 vi.mock("expo-web-browser", () => ({
@@ -67,17 +74,11 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: () => ({
     auth: {
       getUserIdentities: async () => ({
-        data: {
-          identities: [
-            {
-              provider: "apple",
-              identity_data: { email: "x@privaterelay.appleid.com" },
-            },
-          ],
-        },
+        data: { identities: state.identities },
         error: null,
       }),
       getUser: async () => ({ data: { user: { email: "me@frapp.live" } } }),
+      unlinkIdentity: state.unlinkIdentity,
     },
   }),
 }));
@@ -90,6 +91,21 @@ import {
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText as screenTextOf } from "@/test/screen-text";
 import { LinkedAppsSection, SignInSection } from "./linked-apps-section";
+
+const APPLE = {
+  id: "i-apple",
+  provider: "apple",
+  identity_data: { email: "x@privaterelay.appleid.com" },
+};
+
+/** The sign-in methods load through a query that settles a few ticks later. */
+async function settle() {
+  for (let i = 0; i < 5; i++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+}
 
 const OFF = {
   available: true,
@@ -143,6 +159,10 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     state.discordConfirm.mockReset();
     state.discordUnlink.mockReset();
     state.sheetReturnPaths = [];
+    state.identities = [APPLE];
+    state.linkProvider.mockReset();
+    state.unlinkIdentity.mockReset();
+    state.unlinkIdentity.mockResolvedValue({ data: {}, error: null });
     vi.spyOn(Alert, "alert").mockImplementation(() => {});
     vi.mocked(Alert.alert).mockClear();
   });
@@ -201,15 +221,63 @@ describe("Phone Settings → Linked apps (#5407)", () => {
 
   it("marks each sign-in method by whether the account has it, on Account", async () => {
     const tree = await render(<SignInSection />);
-    // The sign-in methods load through a query that settles a few ticks later.
-    for (let i = 0; i < 5; i++) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-    }
+    await settle();
     expect(row(tree, "Apple").props.accessibilityValue).toBe("Connected");
     expect(row(tree, "Google").props.accessibilityValue).toBe("Not connected");
     expect(row(tree, "Email").props.accessibilityValue).toBe("Not connected");
+  });
+
+  it("links a missing Google from Account, then rereads the methods (#2223)", async () => {
+    state.linkProvider.mockResolvedValue("linked");
+    const tree = await render(<SignInSection />);
+    await settle();
+    // Email only shows its state; the last way in offers nothing.
+    expect(row(tree, "Email").props.onPress).toBeUndefined();
+    expect(row(tree, "Apple").props.onPress).toBeUndefined();
+    await act(async () => {
+      row(tree, "Google").props.onPress();
+    });
+    expect(state.linkProvider).toHaveBeenCalledWith("google");
+    expect(Alert.alert).toHaveBeenCalledWith("Google linked");
+  });
+
+  it("says why a link was refused, in Frapp's words", async () => {
+    state.linkProvider.mockRejectedValue({ code: "identity_already_exists" });
+    const tree = await render(<SignInSection />);
+    await settle();
+    await act(async () => {
+      row(tree, "Google").props.onPress();
+    });
+    const [title, body] = vi.mocked(Alert.alert).mock.calls[0]!;
+    expect(title).toBe("Couldn't link Google");
+    expect(body).toMatch(/That Google account already signs in to a different Frapp account/);
+  });
+
+  it("says nothing when the member closes the sheet", async () => {
+    state.linkProvider.mockResolvedValue("cancelled");
+    const tree = await render(<SignInSection />);
+    await settle();
+    await act(async () => {
+      row(tree, "Google").props.onPress();
+    });
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it("offers Unlink on Apple once another way in exists, confirmed first", async () => {
+    state.identities = [{ id: "i-email", provider: "email" }, APPLE];
+    const tree = await render(<SignInSection />);
+    await settle();
+    await act(async () => {
+      row(tree, "Apple").props.onPress();
+    });
+    const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
+    expect(title).toBe("Unlink Apple?");
+    expect(state.unlinkIdentity).not.toHaveBeenCalled();
+    await act(async () => {
+      buttons!.find((button) => button.text === "Unlink")!.onPress!();
+    });
+    expect(state.unlinkIdentity).toHaveBeenCalledWith(APPLE);
+    expect(Alert.alert).toHaveBeenLastCalledWith("Apple unlinked");
   });
 
   it("links Discord in the auth sheet and has it come back to Settings (#5414)", async () => {

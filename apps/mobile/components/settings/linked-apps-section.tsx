@@ -8,15 +8,18 @@ import {
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useQuery } from "@tanstack/react-query";
+import type { UserIdentity } from "@supabase/supabase-js";
 import {
   discordLinkedState,
   googleCalendarLinkedState,
+  isLinkableSignInMethod,
   linkedStatusLabel,
   loadSignInMethods,
   signInMethodsQueryKey,
   useCurrentChapter,
   type LinkedAppState,
   type LinkedAppTone,
+  type SignInMethod,
   type SignInMethodKey,
 } from "@repo/hooks";
 import type { SignetTokens } from "@repo/theme/signet";
@@ -33,6 +36,7 @@ import {
   useGoogleCalendarConnection,
 } from "@/lib/events/google-calendar-connect";
 import { useDiscordLinkConnection } from "@/lib/settings/discord-link-connect";
+import { useSignInMethodLinking } from "@/lib/settings/sign-in-link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useFrappTheme } from "@/lib/theme";
 
@@ -215,39 +219,67 @@ export function LinkedAppsSection() {
  * Settings → Account → Sign in: email and password, Google, Apple, as the
  * account has them, each with its state drawn at the end (#5407; on Linked
  * apps until #6032 moved them beside Sign out, as web's Account page and
- * Google Account's "Ways you sign in" keep them). Status only: adding a
- * second method needs Supabase's manual identity linking, a follow-up.
+ * Google Account's "Ways you sign in" keep them).
+ *
+ * Google and Apple link and unlink here (#2223), as on web: a tap on a
+ * missing one links it through the system auth sheet; a tap on a linked one
+ * asks to unlink it, as the Discord row does, while the account keeps another
+ * way in. Email
+ * only shows its state, and so does the last way in.
  */
 export function SignInSection() {
   const { tokens } = useFrappTheme();
+  const linking = useSignInMethodLinking();
   const signIn = useQuery({
     queryKey: signInMethodsQueryKey,
     queryFn: async () => {
       // No client is a build without Supabase settings: no account to read.
       const supabase = getSupabaseClient();
-      return supabase ? loadSignInMethods(supabase.auth) : [];
+      return supabase ? loadSignInMethods<UserIdentity>(supabase.auth) : [];
     },
     staleTime: 60_000,
   });
+
+  // As the Discord row: a tap on a missing one links it, a tap on a linked
+  // one asks to unlink it. One choice each, so no menu between.
+  function press(method: SignInMethod<UserIdentity>) {
+    if (!isLinkableSignInMethod(method.key)) return;
+    if (method.canLink) void linking.link(method.key);
+    else void linking.confirmUnlink(method);
+  }
+
   if (!signIn.data || signIn.data.length === 0) return null;
   return (
     <>
       <SectionHeader>{PERSONAL_SETTINGS_COPY.signIn}</SectionHeader>
       <ListSection>
-        {signIn.data.map((method) => (
-          <ListRow
-            key={method.key}
-            label={method.label}
-            leading={
-              <AppTile tokens={tokens} off={method.tone === "off"}>
-                <SignInGlyph method={method.key} tokens={tokens} />
-              </AppTile>
-            }
-            description={method.detail}
-            trailing={<LinkedStatusMark tone={method.tone} />}
-            accessibilityValue={linkedStatusLabel(method.tone)}
-          />
-        ))}
+        {signIn.data.map((method) => {
+          const actionable = method.canLink || method.canUnlink;
+          return (
+            <ListRow
+              key={method.key}
+              label={method.label}
+              leading={
+                <AppTile tokens={tokens} off={method.tone === "off"}>
+                  <SignInGlyph method={method.key} tokens={tokens} />
+                </AppTile>
+              }
+              description={method.detail}
+              trailing={<LinkedStatusMark tone={method.tone} />}
+              accessibilityValue={linkedStatusLabel(method.tone)}
+              {...(actionable
+                ? {
+                    accessibilityHint: method.canLink
+                      ? `Links ${method.label} so you can sign in with it too.`
+                      : `Unlinks ${method.label}.`,
+                    busy: linking.busy === method.key,
+                    action: true,
+                    onPress: () => press(method),
+                  }
+                : {})}
+            />
+          );
+        })}
       </ListSection>
     </>
   );

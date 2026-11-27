@@ -137,6 +137,19 @@ type AuthSessionContextValue = {
    * auth session opens the provider and the returned URL is exchanged here.
    */
   signInWithOAuthProvider: (provider: OAuthProvider) => Promise<void>;
+  /**
+   * Links Google or Apple to the account already signed in (Settings →
+   * Account, #2223): Supabase's manual identity linking, through the same
+   * system auth sheet and code exchange as the browser sign-in. Resolves
+   * `"linked"` when this call finished the link, `"cancelled"` when the member
+   * closed the sheet, and `"returned"` when the app's link listener took the
+   * same return first (the caller rereads the identities). Throws GoTrue's
+   * error (its `code` says why: `identity_already_exists`,
+   * `manual_linking_disabled`) or a `MemberFacingError`.
+   */
+  linkOAuthProvider: (
+    provider: OAuthProvider,
+  ) => Promise<"linked" | "cancelled" | "returned">;
   signOut: () => Promise<void>;
 };
 
@@ -671,6 +684,53 @@ export function AuthSessionProvider({
     [supabase],
   );
 
+  const linkOAuthProvider = useCallback(
+    async (provider: OAuthProvider) => {
+      if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
+      // The browser flow for both providers, never the native sheets: one path,
+      // and it doesn't match addresses, so a Hide My Email Apple ID links too.
+      const redirectTo = appRedirectTo();
+      const { data, error } = await supabase.auth.linkIdentity({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams:
+            provider === "google" ? { prompt: "select_account" } : undefined,
+        },
+      });
+      if (error) throw error;
+      if (!data.url) throw new MemberFacingError(START_FAILED_COPY);
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectTo,
+      );
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return "cancelled";
+      }
+      if (result.type !== "success") {
+        throw new MemberFacingError(FINISH_FAILED_COPY);
+      }
+      // The same claim the sign-in makes: `Linking.useURL` can deliver this
+      // URL too, and a code exchanged twice fails the second time.
+      if (lastHandledCallbackUrl.current === result.url) return "returned";
+      lastHandledCallbackUrl.current = result.url;
+      const { code, errorCode, error: errorIdentifier } = readAuthParams(
+        result.url,
+      );
+      if (errorCode || errorIdentifier) {
+        throw { code: errorCode ?? errorIdentifier };
+      }
+      if (!code) throw new MemberFacingError(FINISH_FAILED_COPY);
+      const { error: exchangeError } =
+        await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) throw exchangeError;
+      return "linked";
+    },
+    [supabase],
+  );
+
   const signOut = useCallback(async () => {
     try {
       if (supabase) {
@@ -727,6 +787,7 @@ export function AuthSessionProvider({
       verifyEmailCode,
       resendConfirmation,
       signInWithOAuthProvider,
+      linkOAuthProvider,
       signOut,
     }),
     [
@@ -739,6 +800,7 @@ export function AuthSessionProvider({
       session?.user?.email,
       signInWithPassword,
       signInWithOAuthProvider,
+      linkOAuthProvider,
       signOut,
       status,
       userId,

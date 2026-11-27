@@ -155,6 +155,7 @@ vi.mock("./supabase", async () => {
           return mockState.signInWithOAuthResult;
         },
       ),
+      linkIdentity: vi.fn(async () => mockState.signInWithOAuthResult),
       signOut: vi.fn(async () => {
         mockState.signOutCalls += 1;
         return { error: null };
@@ -1541,5 +1542,76 @@ describe("sessionStorageAdapter", () => {
 
     expect(mockState.secureStore.size).toBe(0);
     await expect(sessionStorageAdapter.getItem("sb-auth")).resolves.toBeNull();
+  });
+});
+
+describe("AuthSessionProvider — linking Google or Apple (#2223)", () => {
+  async function client() {
+    const { getSupabaseClient } = await import("./supabase");
+    return vi.mocked(getSupabaseClient)()!;
+  }
+
+  it("links through the browser sheet and exchanges the returned code", async () => {
+    // An earlier spec queues a one-shot refusal it never spends.
+    vi.mocked((await client()).auth.exchangeCodeForSession)
+      .mockReset()
+      .mockResolvedValue({ data: {}, error: null } as never);
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.linkOAuthProvider("apple");
+    });
+    expect(outcome).toBe("linked");
+    const auth = (await client()).auth;
+    expect(auth.linkIdentity).toHaveBeenCalledWith({
+      provider: "apple",
+      options: {
+        redirectTo: "frapp:///?",
+        skipBrowserRedirect: true,
+        queryParams: undefined,
+      },
+    });
+    // Never the native sheets: they sign in, they don't link.
+    expect(mockAppleAuth.signInWithNativeApple).not.toHaveBeenCalled();
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledWith("oauth-code");
+  });
+
+  it("throws GoTrue's code from a refused return, without exchanging", async () => {
+    mockState.authSessionResult = {
+      type: "success",
+      url: "frapp:///?error=server_error&error_code=identity_already_exists",
+    };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await expect(
+      act(() => result.current.linkOAuthProvider("google")),
+    ).rejects.toEqual({ code: "identity_already_exists" });
+    expect((await client()).auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  it("throws the start's error, such as Manual linking off", async () => {
+    mockState.signInWithOAuthResult = {
+      data: { url: null },
+      error: { message: "Manual linking is disabled", code: "manual_linking_disabled" },
+    };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await expect(
+      act(() => result.current.linkOAuthProvider("google")),
+    ).rejects.toMatchObject({ code: "manual_linking_disabled" });
+    const WebBrowser = await import("expo-web-browser");
+    expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+  });
+
+  it("is cancelled, quietly, when the member closes the sheet", async () => {
+    mockState.authSessionResult = { type: "cancel" };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.linkOAuthProvider("google");
+    });
+    expect(outcome).toBe("cancelled");
   });
 });

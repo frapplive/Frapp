@@ -24,6 +24,10 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/**", "http://localhost:3001", "exp://localhost:8081"]
 jwt_expiry = 3600
 enable_signup = true
+# Settings → Account links Google or Apple to the signed-in account (#2223),
+# which GoTrue refuses (`manual_linking_disabled`) unless this is on. Hosted
+# projects carry the same switch (docs/ops/deployment/supabase.md § Auth).
+enable_manual_linking = true
 
 [auth.email]
 enable_signup = true
