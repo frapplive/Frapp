@@ -127,6 +127,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "You can ask for more time on a task with a reason, and up to a day with a good reason is granted right away; officers can mark a task's deadline as fixed.",
       "Section titles such as Pinned and Committees are smaller and quieter, in plain sentence case instead of capital letters.",
       "Events can now be all day or span several days, have a time to be decided, be marked tentative, or sit on the calendar only for information, with no check-in or points.",
+      "Roles and groups settings read as simple lists now, the same in the app and on the web, and officers can add, rename, reorder and delete roles and tiers, and make, fill and delete groups, from either.",
     ],
     web: [
       "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, and officers see the chapter's board under Everyone's.",
