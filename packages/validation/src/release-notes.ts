@@ -131,6 +131,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "In Recruitment, Back now returns to the view or prospect you had open, and a shared link to a prospect opens them.",
       "In the Directory, Back now returns to the tab or member profile you had open, and a shared link to a member's profile opens it.",
       "On your profile, closing Points, Service hours or Study now goes Back, so Forward reopens it.",
+      "In the Calendar, Back now closes the event or the hour grid you opened, and a reload or a shared link lands on the same day and event.",
     ],
   },
   {
