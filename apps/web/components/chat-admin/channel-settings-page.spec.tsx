@@ -40,7 +40,7 @@ const {
   router,
   search,
 } = vi.hoisted(() => ({
-  router: { push: vi.fn(), replace: vi.fn() },
+  router: { push: vi.fn(), replace: vi.fn(), close: vi.fn() },
   search: { current: new URLSearchParams() },
   toast: vi.fn(),
   mockOffline: { value: false },
@@ -61,6 +61,12 @@ const {
     accessOptions: {} as Record<string, unknown>,
     reports: {} as Record<string, unknown>,
   },
+}));
+
+// Saving and deleting close the page through the address (#6049).
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  closeToAddress: router.close,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -871,7 +877,7 @@ describe("ChannelSettingsPage — the who can see and who can post pages", () =>
       body: { who_can_post: [BROTHER_ROLE] },
     });
     await waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith(
+      expect(router.close).toHaveBeenCalledWith(
         "/settings?tab=chat&page=chat-admin&channel=ch-1",
       ),
     );
@@ -910,7 +916,7 @@ describe("ChannelSettingsPage — the who can see and who can post pages", () =>
       }),
     );
     expect(spy).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
+    expect(router.close).not.toHaveBeenCalled();
   });
 
   it("stays on the page when the save fails", async () => {
@@ -926,7 +932,7 @@ describe("ChannelSettingsPage — the who can see and who can post pages", () =>
         expect.objectContaining({ variant: "destructive" }),
       ),
     );
-    expect(router.push).not.toHaveBeenCalled();
+    expect(router.close).not.toHaveBeenCalled();
   });
 
   it("keeps a chosen list's names through a failed options refresh", () => {
@@ -1003,7 +1009,7 @@ describe("ChannelSettingsPage — Delete channel", () => {
 
     await waitFor(() => expect(mockDeleteChannel).toHaveBeenCalledWith("ch-1"));
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
+      expect(router.close).toHaveBeenCalledWith(
         "/settings?tab=chat&page=chat-admin",
       ),
     );

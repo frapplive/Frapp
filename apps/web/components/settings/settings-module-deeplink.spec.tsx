@@ -110,6 +110,22 @@ describe("settings ?module= deep link", () => {
     );
   });
 
+  it("takes ?module= off the address once its switch has focus (one-shot)", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=modules&module=events",
+    );
+    searchParams = new URLSearchParams("tab=modules&module=events");
+    render(<SettingsPage />);
+
+    expect(eventsSwitch()).toHaveFocus();
+    // The old Modules link's tab becomes the module's own, in place.
+    expect(`${window.location.pathname}${window.location.search}`).toBe(
+      "/settings?tab=events",
+    );
+  });
+
   it("opens the same page from a link made for the old Modules list", () => {
     searchParams = new URLSearchParams("tab=modules&module=events");
     render(<SettingsPage />);

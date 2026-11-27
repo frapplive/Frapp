@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { cardFilledContainers } from "@/tests/card-surfaces";
 import { chapterSubscription } from "@/tests/chapter-subscription";
+import { setAddress } from "@/tests/address-search-params";
 import {
   expectClearingEntriesEmpty,
   expectRefusedEntriesKeep,
@@ -48,6 +49,12 @@ const ZONE = {
   created_at: "2026-08-01T00:00:00Z",
 };
 
+// The open editor is the address's `zone=` (#6049).
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
+}));
+
 vi.mock("@repo/hooks", () => ({
   useCurrentChapter: () => mockCurrentChapter(),
   // Drives the New study zone button. Read as a boolean rather than through
@@ -62,7 +69,7 @@ vi.mock("@repo/hooks", () => ({
     data: [ZONE],
     isPending: false,
     isError: false,
-    refetch: vi.fn(),
+    refetch: vi.fn(() => Promise.resolve()),
   }),
   useCreateGeofence: () => ({
     mutateAsync: mockCreateMutate,
@@ -149,6 +156,11 @@ async function menuItem(name: RegExp) {
 }
 const turnOffItem = () => menuItem(/turn off/i);
 const deleteItem = () => menuItem(/delete/i);
+
+// Each test starts on the zone list, with no editor in the address.
+beforeEach(() => {
+  setAddress("/settings?tab=geofences&page=study-zones");
+});
 
 describe("StudyZonesManager subscription gating", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -689,5 +701,56 @@ describe("StudyZonesManager keeps the editor's draft (#4593)", () => {
 
     expect(nameField()).toHaveValue("Main library");
     expect(screen.queryByText("Draft restored")).toBeNull();
+  });
+});
+
+describe("StudyZonesManager: the editor's address (#6049)", () => {
+  const LIST = "/settings?tab=geofences&page=study-zones";
+  const here = () => `${window.location.pathname}${window.location.search}`;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    chapter.active();
+  });
+
+  it("opens a zone's editor with a push, and Cancel goes Back to the list", async () => {
+    const push = vi.spyOn(window.history, "pushState");
+    render(<StudyZonesManager />);
+    await userEvent.click(editButton());
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(here()).toBe(`${LIST}&zone=gf-1`);
+    expect(screen.getByLabelText(/^name$/i)).toHaveValue("Main library");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(go).toHaveBeenCalledWith(-1);
+  });
+
+  it("opens New study zone as zone=new", async () => {
+    render(<StudyZonesManager />);
+    await userEvent.click(createTrigger());
+    expect(here()).toBe(`${LIST}&zone=new`);
+    expect(screen.getByLabelText(/^name$/i)).toHaveValue("");
+  });
+
+  it("opens the zone a link names, and closing it replaces the address with the list", async () => {
+    setAddress(`${LIST}&zone=gf-1`);
+    render(<StudyZonesManager />);
+    expect(await screen.findByLabelText(/^name$/i)).toHaveValue(
+      "Main library",
+    );
+    const go = vi.spyOn(window.history, "go");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(go).not.toHaveBeenCalled();
+    expect(here()).toBe(LIST);
+  });
+
+  it("says a zone the list lacks is gone, after one more read, and drops it from the address", async () => {
+    setAddress(`${LIST}&zone=gf-gone`);
+    render(<StudyZonesManager />);
+    expect(
+      await screen.findByText(/that study zone isn.t here anymore/i),
+    ).toBeInTheDocument();
+    expect(here()).toBe(LIST);
+    expect(screen.queryByLabelText(/^name$/i)).toBeNull();
   });
 });

@@ -58,7 +58,10 @@ export function webLinkTarget(
       candidate.pathname === screen.pathname &&
       (candidate.when ?? []).every((name) => query.get(name)),
   );
-  const kept = new Set(Object.keys(chosen?.params ?? {}));
+  const kept = new Set([
+    ...Object.keys(chosen?.params ?? {}),
+    ...(chosen?.implied ?? []),
+  ]);
   const context = new Set(
     row.phone
       .slice(chosen ? row.phone.indexOf(chosen) + 1 : 0)

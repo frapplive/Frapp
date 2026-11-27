@@ -3,8 +3,10 @@ import {
   ADDRESS_FROM_KEY,
   addressWith,
   closeAddress,
+  closeToAddress,
   consumeAddressParam,
   pushAddress,
+  pushAddressHref,
   replaceAddress,
 } from "./address";
 
@@ -132,5 +134,44 @@ describe("moving the address", () => {
     window.history.replaceState({}, "", "/settings?setting=b");
     consumeAddressParam("setting", "a");
     expect(here()).toBe("/settings?setting=b");
+  });
+});
+
+describe("a page addressed in full (Chapter settings)", () => {
+  beforeEach(() => {
+    window.history.replaceState({ __NA: true }, "", "/settings?tab=roles");
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opening pushes the whole address, marked with where it came from", () => {
+    pushAddressHref("/settings?tab=roles&tier=t1");
+    expect(here()).toBe("/settings?tab=roles&tier=t1");
+    expect(window.history.state).toEqual({
+      [ADDRESS_FROM_KEY]: ["/settings?tab=roles"],
+    });
+  });
+
+  it("opening the address already shown pushes nothing", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    pushAddressHref("/settings?tab=roles");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("closing to an address this tab pushed over goes Back that many entries", () => {
+    pushAddressHref("/settings?tab=roles&tier=t1");
+    pushAddressHref("/settings?tab=roles&tier=t1&role=r1");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeToAddress("/settings?tab=roles");
+    expect(go).toHaveBeenCalledWith(-2);
+    closeToAddress("/settings?tab=roles&tier=t1");
+    expect(go).toHaveBeenLastCalledWith(-1);
+  });
+
+  it("closing a page that arrived from a link replaces it with its parent", () => {
+    window.history.replaceState(null, "", "/settings?tab=roles&role=r1");
+    const go = vi.spyOn(window.history, "go");
+    closeToAddress("/settings?tab=roles");
+    expect(go).not.toHaveBeenCalled();
+    expect(here()).toBe("/settings?tab=roles");
   });
 });

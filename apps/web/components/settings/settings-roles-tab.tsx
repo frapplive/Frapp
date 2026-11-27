@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeToAddress, pushAddressHref } from "@/lib/address/address";
 import { Search, UserPlus } from "lucide-react";
 import { defaultInviteRoleChoices } from "@repo/hooks/chapter-roles";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -98,7 +99,6 @@ export function SettingsRolesTab({
   isSavingConfig,
 }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { data: permissionsPayload } = useMyPermissions();
   const permissions = permissionsPayload?.permissions;
   const [query, setQuery] = useState("");
@@ -125,7 +125,9 @@ export function SettingsRolesTab({
     }),
     [],
   );
-  const backToRoles = () => router.push(BASE);
+  // A page closes by the address's rule (#6049): Back when this tab opened
+  // it, else a replace. A row opens its page with a marked push.
+  const backToRoles = () => closeToAddress(BASE);
 
   if (tierId) {
     return (
@@ -159,7 +161,7 @@ export function SettingsRolesTab({
             ? PEOPLE_SETTINGS_COPY.autoGroupsRow
             : PEOPLE_SETTINGS_COPY.pageTitle
         }
-        onDone={() => router.push(backHref)}
+        onDone={() => closeToAddress(backHref)}
       />
     );
   }
@@ -185,7 +187,7 @@ export function SettingsRolesTab({
         <RolesOverview
           query={query}
           links={links}
-          onOpenRole={(id) => router.push(links.role(id))}
+          onOpenRole={(id) => pushAddressHref(links.role(id))}
         />
       ) : null}
       {/*
@@ -197,7 +199,7 @@ export function SettingsRolesTab({
         canManage={canManageGroups}
         query={query}
         links={links}
-        onCreated={(id) => router.push(links.group(id))}
+        onCreated={(id) => pushAddressHref(links.group(id))}
       />
       {normalizeWords(query).length === 0 &&
       (!configUnavailable || isPresident) ? (

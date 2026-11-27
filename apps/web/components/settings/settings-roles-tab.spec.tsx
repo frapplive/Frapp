@@ -10,7 +10,13 @@ const mockPermissions = vi.fn();
 // into (#1830).
 const mockInvitableRoleIds = vi.fn<() => string[] | undefined>();
 const mockParams = { value: new URLSearchParams("tab=roles") };
-const mockPush = vi.fn();
+// The page opens and closes through the History API (#6049): the address is
+// both what the page reads and where its opens and closes land.
+function at(query: string) {
+  mockParams.value = new URLSearchParams(query);
+  window.history.replaceState(null, "", `/settings?${query}`);
+}
+const here = () => `${window.location.pathname}${window.location.search}`;
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -26,7 +32,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockParams.value,
-  useRouter: () => ({ push: mockPush }),
 }));
 
 // The page head's count and search read the roles pages' data; the pages
@@ -136,7 +141,7 @@ import { SettingsRolesTab } from "./settings-roles-tab";
 /** The hook mocks every test in this file renders against. */
 function primeMocks() {
   vi.clearAllMocks();
-  mockParams.value = new URLSearchParams("tab=roles");
+  at("tab=roles");
   mockUseRoles.mockReturnValue({
     data: [
       {
@@ -190,7 +195,7 @@ describe("SettingsRolesTab", () => {
     );
     // Non-chapter business's Add role opens the new role's page.
     await user.click(screen.getByRole("button", { name: "open role" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles&role=role-1");
+    expect(here()).toBe("/settings?tab=roles&role=role-1");
   });
 
   it("lists the groups under the roles, on the same page (2026-11-19)", async () => {
@@ -208,7 +213,7 @@ describe("SettingsRolesTab", () => {
     );
     // A new group opens its page to pick members.
     await user.click(screen.getByRole("button", { name: "created" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles&group=group-1");
+    expect(here()).toBe("/settings?tab=roles&group=group-1");
   });
 
   it("shows only the groups to a member who can manage groups and nothing else", () => {
@@ -224,7 +229,7 @@ describe("SettingsRolesTab", () => {
 
   it("opens a tier's page from ?tier=, and goes back to the list once it's deleted", async () => {
     const user = userEvent.setup();
-    mockParams.value = new URLSearchParams("tab=roles&tier=tier-9");
+    at("tab=roles&tier=tier-9");
     render(tab());
     const page = screen.getByTestId("tier-page");
     expect(page).toHaveTextContent("tier-9");
@@ -235,23 +240,23 @@ describe("SettingsRolesTab", () => {
     );
     expect(screen.queryByTestId("overview")).toBeNull();
     await user.click(screen.getByRole("button", { name: "deleted" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(here()).toBe("/settings?tab=roles");
   });
 
   it("opens a role from ?role=, and goes back to the list once it's deleted", async () => {
     const user = userEvent.setup();
-    mockParams.value = new URLSearchParams("tab=roles&role=role-3");
+    at("tab=roles&role=role-3");
     render(tab());
     const page = screen.getByTestId("role-page");
     expect(page).toHaveTextContent("role-3");
     expect(page).toHaveAttribute("data-back", "/settings?tab=roles");
     await user.click(screen.getByRole("button", { name: "deleted" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(here()).toBe("/settings?tab=roles");
   });
 
   it("opens a group from ?group=, back to Roles and groups", async () => {
     const user = userEvent.setup();
-    mockParams.value = new URLSearchParams("tab=roles&group=group-2");
+    at("tab=roles&group=group-2");
     render(tab());
     const page = screen.getByTestId("group-page");
     expect(page).toHaveTextContent("group-2");
@@ -259,12 +264,12 @@ describe("SettingsRolesTab", () => {
     expect(page).toHaveAttribute("data-back-label", "Roles and groups");
     expect(page).toHaveAttribute("data-can-manage", "false");
     await user.click(screen.getByRole("button", { name: "done" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(here()).toBe("/settings?tab=roles");
   });
 
   it("opens the automatic groups, and a group from there goes back to them", async () => {
     const user = userEvent.setup();
-    mockParams.value = new URLSearchParams("tab=roles&groups=automatic");
+    at("tab=roles&groups=automatic");
     const { unmount } = render(tab());
     expect(screen.getByTestId("automatic-page")).toHaveAttribute(
       "data-back",
@@ -276,9 +281,7 @@ describe("SettingsRolesTab", () => {
     );
     unmount();
 
-    mockParams.value = new URLSearchParams(
-      "tab=roles&group=group-7&from=automatic",
-    );
+    at("tab=roles&group=group-7&from=automatic");
     render(tab());
     const page = screen.getByTestId("group-page");
     expect(page).toHaveAttribute(
@@ -290,9 +293,7 @@ describe("SettingsRolesTab", () => {
       "Pledge classes, class years and majors",
     );
     await user.click(screen.getByRole("button", { name: "done" }));
-    expect(mockPush).toHaveBeenCalledWith(
-      "/settings?tab=roles&groups=automatic",
-    );
+    expect(here()).toBe("/settings?tab=roles&groups=automatic");
   });
 
   it("offers Transfer presidency only to the caller who holds everything", () => {

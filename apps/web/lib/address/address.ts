@@ -163,3 +163,41 @@ export function replacePushedCopy(changes: AddressChanges): void {
     to,
   );
 }
+
+/**
+ * Opens a page of the same route addressed in full (`href`, a Chapter
+ * settings row's link): pushes it, marked with the address it was pushed
+ * from, as `pushAddress` does for a change. Does nothing when `href` is the
+ * address already.
+ */
+export function pushAddressHref(href: string): void {
+  const from = currentAddress();
+  const to = addressWith(href, {});
+  if (to === from) return;
+  const state = ownState();
+  window.history.pushState(
+    { ...state, [ADDRESS_FROM_KEY]: [...pushedOver(state), from] },
+    "",
+    to,
+  );
+}
+
+/**
+ * Closes a page to its parent addressed in full (`href`, a back arrow's
+ * link): Back to it when this tab pushed the current entry over it, one
+ * entry down or more, so Forward reopens what was closed; otherwise a
+ * replace with it, so Back leaves as it would have. Same route only.
+ */
+export function closeToAddress(href: string): void {
+  const from = currentAddress();
+  const to = addressWith(href, {});
+  if (to === from) return;
+  const state = ownState();
+  const chain = pushedOver(state);
+  const at = chain.lastIndexOf(to);
+  if (at !== -1) {
+    window.history.go(at - chain.length);
+    return;
+  }
+  window.history.replaceState(state, "", to);
+}

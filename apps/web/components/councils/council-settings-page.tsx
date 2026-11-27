@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { closeAddress, pushAddress } from "@/lib/address/address";
+import { pushSameRouteLink } from "@/lib/address/address-links";
+import { SETTINGS_SUBPAGE_PARAMS } from "@/components/settings/settings-paths";
 import {
   useCouncil,
   useCurrentChapter,
@@ -95,19 +98,21 @@ export function CouncilSettingsPage() {
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
   const tabParam = rawTab ? (TAB_ALIASES[rawTab] ?? rawTab) : null;
-  const [activeTab, setActiveTab] = useState(tabParam ?? "council");
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- follow `?tab=` deep links, as Chapter settings does
-    if (tabParam) setActiveTab(tabParam);
-  }, [tabParam]);
+  // The row on screen is the address's, and a row is a step Back returns
+  // from, as on Chapter settings (#6049).
+  const activeTab = tabParam ?? "council";
   const changeTab = useCallback((next: string) => {
-    setActiveTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    url.searchParams.delete("tier");
-    url.searchParams.delete("role");
-    window.history.replaceState(null, "", url.toString());
+    pushAddress({
+      tab: next,
+      ...Object.fromEntries(
+        SETTINGS_SUBPAGE_PARAMS.map((param) => [param, null]),
+      ),
+    });
+    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
   }, []);
+  const onSubpage = SETTINGS_SUBPAGE_PARAMS.some((param) =>
+    searchParams.has(param),
+  );
 
   if (chapterQuery.isError && !chapterQuery.data) {
     return (
@@ -140,8 +145,17 @@ export function CouncilSettingsPage() {
         visibleTabs={visibleTabs}
         groupLabels={{ chapter: COPY.group }}
         search={false}
+        onRowClick={(value) => {
+          // The lit row closes a page opened inside it (a tier, a role).
+          if (value === shownTab && onSubpage) {
+            closeAddress(SETTINGS_SUBPAGE_PARAMS);
+          }
+        }}
       />
-      <div className="w-full min-w-0 max-w-[960px] flex-1">
+      <div
+        className="w-full min-w-0 max-w-[960px] flex-1"
+        onClickCapture={pushSameRouteLink}
+      >
         <TabsContent value="council" className="mt-0">
           <CouncilProfileTab />
         </TabsContent>

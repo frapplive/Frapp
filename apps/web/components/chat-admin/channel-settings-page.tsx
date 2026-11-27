@@ -2,7 +2,9 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeToAddress } from "@/lib/address/address";
+import { ADDRESS_CLOSE_ATTR, closeToLink } from "@/lib/address/address-links";
 import {
   ArrowLeft,
   Bell,
@@ -242,7 +244,11 @@ function ChannelSettingsBody({
           This channel isn&apos;t here anymore. It may have been deleted.
         </InlineNote>
         <Button asChild variant="secondary" size="sm" className="gap-1.5">
-          <Link href={CHAT_SETTINGS_PATH}>
+          <Link
+            href={CHAT_SETTINGS_PATH}
+            {...{ [ADDRESS_CLOSE_ATTR]: "" }}
+            onClick={closeToLink}
+          >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Chat admin
           </Link>
@@ -272,7 +278,6 @@ function ChannelSettings({
   page: ChannelSettingsPage | null;
 }) {
   const { toast } = useToast();
-  const router = useRouter();
   const { confirm, confirmDialog } = useConfirmDialog();
   const deleteChannelFlow = useDeleteChannelFlow(confirm);
   const updateChannel = useUpdateChannel();
@@ -419,7 +424,8 @@ function ChannelSettings({
       delete next[question];
       return next;
     });
-    router.push(channelSettingsPath(channel.id));
+    // Saved: the page closes to the channel by the address's rule.
+    closeToAddress(channelSettingsPath(channel.id));
   }
 
   const backToChannel = channelSettingsPath(channel.id);
@@ -766,7 +772,7 @@ function ChannelSettings({
             value=""
             onClick={() =>
               void deleteChannelFlow(channel, () =>
-                router.replace(CHAT_SETTINGS_PATH),
+                closeToAddress(CHAT_SETTINGS_PATH),
               )
             }
           />

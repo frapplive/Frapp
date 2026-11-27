@@ -17,7 +17,7 @@ import {
   useMyPermissions,
   useUpdateGeofence,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import { can, WEB_ADDRESS_PARAMS } from "@repo/validation";
 import { NewButton } from "@/components/ui/new-button";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Badge } from "@/components/ui/badge";
@@ -47,10 +47,18 @@ import { asArray, cn, getErrorMessage } from "@/lib/utils";
 import { GeofenceRowsSkeleton } from "@/components/geofences/geofences-skeleton";
 import { InlineNote } from "@/components/shared/inline-note";
 import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
   StudyZoneEditor,
   zoneDraftName,
   type StudyZone,
 } from "@/components/geofences/study-zone-editor";
+
+/** The open editor's zone (`zone=<id>`, or `zone=new`), #6049. */
+const ZONE_PARAM = WEB_ADDRESS_PARAMS.settings.zone;
+const NEW_ZONE = "new";
 
 /**
  * The chapter's study zones, inside Chapter settings' Study zones page.
@@ -84,20 +92,21 @@ export function StudyZonesManager() {
     [geofencesQuery.data],
   );
 
-  // One editor for New and Edit; `editingId` null is a new zone. Whether it
-  // is open belongs to the gate, so a revoke mid-edit closes it.
+  // One editor for New and Edit, open while the address names it (#6049):
+  // `zone=<id>` edits that zone and `zone=new` draws a new one, so Back
+  // closes it, Forward reopens it, and a reload or a shared link lands on it.
+  // Whether it may open belongs to the gate, so a revoke mid-edit closes it.
+  const { values, open: openZone, close: closeZone } = useAddressParams([
+    ZONE_PARAM,
+  ]);
+  const zoneParam = values[ZONE_PARAM];
+  const editingId = zoneParam === NEW_ZONE ? null : zoneParam;
   const editor = useGatedDialog(gate);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const editing = useMemo(
     () => zones.find((zone) => zone.id === editingId) ?? null,
     [zones, editingId],
   );
-  // A zone deleted elsewhere while its editor is open closes the editor,
-  // rather than turning it into a blank New study zone.
   const { open: editorOpen, setOpen: setEditorOpen } = editor;
-  useEffect(() => {
-    if (editorOpen && editingId && !editing) setEditorOpen(false);
-  }, [editorOpen, setEditorOpen, editingId, editing]);
 
   // The New button reads the permission as a boolean: the screen gate below
   // is this file's one `<Can permission="geofences:manage">`, which
@@ -107,6 +116,47 @@ export function StudyZonesManager() {
     "geofences:manage",
     permissionsPayload?.permissions,
   );
+
+  /*
+    A zone the address names that the list in hand doesn't hold is read again
+    once (the list can be cached from before it was drawn); only a settled,
+    successful read without it calls it gone, and it is said and taken out of
+    the address. One the role can't manage is taken out too: the page already
+    says the role can't manage zones.
+  */
+  const zoneMissing =
+    editingId !== null &&
+    geofencesQuery.data !== undefined &&
+    !geofencesQuery.isFetching &&
+    !geofencesQuery.isError &&
+    geofencesQuery.fetchStatus !== "paused" &&
+    editing === null;
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!zoneMissing || recheckedFor === editingId) return;
+    void geofencesQuery.refetch().finally(() => setRecheckedFor(editingId));
+  }, [zoneMissing, recheckedFor, editingId, geofencesQuery]);
+  const zoneForbidden =
+    zoneParam !== null && permissionsPayload !== undefined && !canManageZones;
+  const deadZone = useDeadAddressParam(
+    ZONE_PARAM,
+    zoneParam,
+    zoneForbidden || (zoneMissing && recheckedFor === editingId),
+  );
+
+  // The editor is shown while the address names a zone the officer may
+  // edit: a new one, or one the list holds. Until a missing zone is settled
+  // it stays shut rather than turning into a blank New study zone.
+  const zoneShown =
+    zoneParam !== null &&
+    canManageZones &&
+    (zoneParam === NEW_ZONE || editing !== null);
+  useEffect(() => {
+    // Refused while the gate blocks writes, so a revoke keeps it shut.
+    if (zoneShown && !editorOpen) setEditorOpen(true);
+    if (!zoneShown && editorOpen) setEditorOpen(false);
+  }, [zoneShown, editorOpen, setEditorOpen]);
+  const shownOpen = editorOpen && zoneShown;
 
   // The editor the page was left with open (#4593): reopened on its draft
   // once the officer may still open it and, for an edit, the zone is still
@@ -124,18 +174,22 @@ export function StudyZonesManager() {
   const zonesLoaded = geofencesQuery.data !== undefined;
   useEffect(() => {
     if (!leftEditor || !canManageZones || !gate.allowed) return;
+    if (zoneParam !== null) {
+      // The address already names an editor (a reload, a link): it wins.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the address opened one, so there is nothing to reopen
+      setLeftEditor(null);
+      return;
+    }
     if (leftEditor.id !== null) {
       if (!zonesLoaded) return;
       if (!zones.some((zone) => zone.id === leftEditor.id)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- its zone is gone, so there is nothing to reopen
         setLeftEditor(null);
         writeKeptPanel(editorPanelKey, null);
         return;
       }
     }
     setLeftEditor(null);
-    setEditingId(leftEditor.id);
-    setEditorOpen(true);
+    openZone({ [ZONE_PARAM]: leftEditor.id ?? NEW_ZONE });
   }, [
     leftEditor,
     canManageZones,
@@ -143,16 +197,17 @@ export function StudyZonesManager() {
     zonesLoaded,
     zones,
     editorPanelKey,
-    setEditorOpen,
+    zoneParam,
+    openZone,
   ]);
   useEffect(() => {
-    if (leftEditor && !editorOpen) return;
-    writeKeptPanel(editorPanelKey, editorOpen ? { id: editingId } : null);
-  }, [editorPanelKey, editorOpen, editingId, leftEditor]);
+    if (leftEditor && !shownOpen) return;
+    writeKeptPanel(editorPanelKey, shownOpen ? { id: editingId } : null);
+  }, [editorPanelKey, shownOpen, editingId, leftEditor]);
 
   function openEditor(zone: StudyZone | null) {
-    setEditingId(zone?.id ?? null);
-    editor.setOpen(true);
+    if (!gate.allowed) return;
+    openZone({ [ZONE_PARAM]: zone?.id ?? NEW_ZONE });
   }
 
   async function toggleActive(zone: StudyZone) {
@@ -246,6 +301,12 @@ export function StudyZonesManager() {
         */}
         <div className="@container space-y-4">
           <SubscriptionNotice gate={gate} feature="managing study zones" />
+          {deadZone !== null && !zoneForbidden ? (
+            <InlineNote>
+              That study zone isn&apos;t here anymore. It may have been
+              deleted.
+            </InlineNote>
+          ) : null}
 
           {isOffline && anyReadUncached(geofencesQuery) ? (
             <NestedOffline
@@ -361,8 +422,10 @@ export function StudyZonesManager() {
           )}
 
           <StudyZoneEditor
-            open={editor.open}
-            onOpenChange={editor.setOpen}
+            open={shownOpen}
+            onOpenChange={(next) => {
+              if (!next) closeZone();
+            }}
             zone={editing}
             zones={zones}
             campus={chapterQuery.data?.university ?? null}
