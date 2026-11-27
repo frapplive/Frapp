@@ -1,3 +1,4 @@
+import { DOCUMENTS_TYPE_PARAM } from "./document-links";
 import {
   CHAT_LINK_CHANNEL_PARAM,
   CHAT_LINK_MESSAGE_PARAM,
@@ -35,7 +36,7 @@ export const WEB_ADDRESS_PARAMS = {
     folder: "folder",
     document: "document",
     access: "access",
-    type: "type",
+    type: DOCUMENTS_TYPE_PARAM,
   },
   events: {
     day: "day",
