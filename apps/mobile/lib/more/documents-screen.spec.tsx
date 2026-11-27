@@ -2218,8 +2218,16 @@ describe("Documents upload a new version (#6055)", () => {
     );
     return tree.root.findByType(DocumentActionsSheet);
   };
+  // One long-press, then the sheet's Upload a new version for its target.
+  // The screen's handler starts the upload without returning it, so this
+  // settles what can settle and leaves a held request waiting.
+  const uploadVersion = async (tree: ReactTestRenderer, label: string) => {
+    const sheet = longPress(tree, label);
+    await act(async () => sheet.props.onUploadVersion(sheet.props.target));
+  };
 
   it("offers it on the member's own upload only, never another's or a Drive file", () => {
+    permissions = ["chapter_docs:upload"];
     documentRows = [MINE, THEIRS, DRIVE];
     const tree = render();
     expect(
@@ -2231,6 +2239,14 @@ describe("Documents upload a new version (#6055)", () => {
     expect(longPress(tree, "Rush schedule").props.target.canUploadVersion).toBe(
       false,
     );
+  });
+
+  it("withholds it from an uploader who has lost upload", () => {
+    documentRows = [MINE];
+    const tree = render();
+    expect(
+      longPress(tree, "Chapter bylaws").props.target.canUploadVersion,
+    ).toBe(false);
   });
 
   it("offers it on anyone's upload to whoever manages documents", () => {
@@ -2270,15 +2286,53 @@ describe("Documents upload a new version (#6055)", () => {
     documentRows = [MINE];
     pickFile.mockResolvedValue({ status: "cancelled" });
     const tree = render();
-    const sheet = () => longPress(tree, "Chapter bylaws");
 
-    await act(async () => sheet().props.onUploadVersion(sheet().props.target));
+    await uploadVersion(tree, "Chapter bylaws");
     expect(requestVersion).not.toHaveBeenCalled();
 
     pickFile.mockResolvedValue({ status: "picked", image: PICKED });
     requestVersion.mockRejectedValue(new Error("nope"));
-    await act(async () => sheet().props.onUploadVersion(sheet().props.target));
+    await uploadVersion(tree, "Chapter bylaws");
     expect(replaceFile).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+  });
+
+  it("keeps each upload's spinner and failure to its own file", async () => {
+    permissions = ["chapter_docs:upload"];
+    const SECOND = { ...MINE, id: "d-4", title: "Rush budget" };
+    documentRows = [MINE, SECOND];
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    const tree = render();
+    const busy = (label: string) =>
+      tree.root.findAllByType(ListRow).find((row) => row.props.label === label)!
+        .props.busy;
+
+    // The first fails, and says so.
+    requestVersion.mockRejectedValueOnce(new Error("nope"));
+    await uploadVersion(tree, "Chapter bylaws");
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+
+    // The second starts and waits: its row spins, the first's failure stays.
+    let release!: () => void;
+    requestVersion.mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = () => resolve({});
+      }),
+    );
+    replaceFile.mockResolvedValue({});
+    await uploadVersion(tree, "Rush budget");
+    expect(busy("Rush budget")).toBe(true);
+    expect(busy("Chapter bylaws")).toBe(false);
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
+
+    await act(async () => release());
+    expect(busy("Rush budget")).toBe(false);
     expect(screenText(tree)).toContain(
       "Couldn't upload a new version of “Chapter bylaws”.",
     );

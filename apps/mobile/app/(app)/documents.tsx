@@ -357,16 +357,19 @@ export default function DocumentsScreen() {
     chapterId: string | null;
     message: string;
   } | null>(null);
-  // A new version of a file (#6055): the row it is going onto spins while it
-  // uploads, and a failure is held with its chapter, as `deleteFailure` is.
+  // A new version of a file (#6055): each row a version is going onto spins
+  // while it uploads, as `deletingIds` does, and each file's failure is held
+  // with its chapter, so one upload starting or landing never clears
+  // another's.
   const viewerId = useViewerUserId();
   const requestVersionUpload = useRequestDocumentVersionUploadUrl();
   const replaceFile = useReplaceDocumentFile();
-  const [versioningId, setVersioningId] = useState<string | null>(null);
-  const [versionFailure, setVersionFailure] = useState<{
-    chapterId: string | null;
-    message: string;
-  } | null>(null);
+  const [versioningIds, setVersioningIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [versionFailures, setVersionFailures] = useState<
+    ReadonlyMap<string, { chapterId: string | null; message: string }>
+  >(() => new Map());
   const starredFolders = useMemo(
     () => new Set(starsQuery.data?.folder_ids ?? []),
     [starsQuery.data],
@@ -649,7 +652,10 @@ export default function DocumentsScreen() {
       fromDrive: isDriveCopy(doc),
       driveUrl: driveLink(doc),
       minutes: isMinutesDocument(doc),
-      canUploadVersion: mayUploadNewVersion(doc, viewerId, canManage),
+      canUploadVersion: mayUploadNewVersion(doc, viewerId, {
+        uploads: canUpload,
+        manages: canManage,
+      }),
     };
   }
 
@@ -659,19 +665,24 @@ export default function DocumentsScreen() {
    * keeps its name, folder, who can see it, pin and stars.
    */
   async function uploadVersion(target: DocumentActionsTarget) {
-    setVersionFailure(null);
+    const failedIn = chapterId ?? null;
+    const setFailure = (message: string | null) =>
+      setVersionFailures((current) => {
+        const next = new Map(current);
+        if (message === null) next.delete(target.id);
+        else next.set(target.id, { chapterId: failedIn, message });
+        return next;
+      });
+    setFailure(null);
     const picked = canPickFiles()
       ? await pickDocumentFile()
       : await pickDocumentPhoto();
     if (picked.status === "cancelled") return;
     if (picked.status === "refused") {
-      setVersionFailure({
-        chapterId: chapterId ?? null,
-        message: picked.reason,
-      });
+      setFailure(picked.reason);
       return;
     }
-    setVersioningId(target.id);
+    setVersioningIds((current) => new Set(current).add(target.id));
     const result = await uploadDocumentVersion(picked.image, {
       requestUploadUrl: ({ filename, content_type, size_bytes }) =>
         requestVersionUpload.mutateAsync({
@@ -682,17 +693,20 @@ export default function DocumentsScreen() {
         }),
       replace: (body) => replaceFile.mutateAsync({ id: target.id, ...body }),
     });
-    setVersioningId(null);
+    setVersioningIds((current) => {
+      const next = new Set(current);
+      next.delete(target.id);
+      return next;
+    });
     if (result.status === "uploaded") {
       AccessibilityInfo.announceForAccessibility(
         `A new version of “${target.name}” is in the library.`,
       );
       return;
     }
-    setVersionFailure({
-      chapterId: chapterId ?? null,
-      message: `Couldn't upload a new version of “${target.name}”. ${result.reason}`,
-    });
+    setFailure(
+      `Couldn't upload a new version of “${target.name}”. ${result.reason}`,
+    );
   }
 
   // `mutateAsync`, not `mutate` with per-call callbacks: TanStack runs a
@@ -758,10 +772,9 @@ export default function DocumentsScreen() {
     deleteFailure && deleteFailure.chapterId === (chapterId ?? null)
       ? deleteFailure.message
       : null;
-  const versionFailed =
-    versionFailure && versionFailure.chapterId === (chapterId ?? null)
-      ? versionFailure.message
-      : null;
+  const versionFailed = [...versionFailures].filter(
+    ([, failure]) => failure.chapterId === (chapterId ?? null),
+  );
 
   // The empty state's way out (web's Clear filters): the search too.
   function clearFilters() {
@@ -1021,7 +1034,7 @@ export default function DocumentsScreen() {
             isLimited={isLimited}
             busyIds={
               new Set(
-                [...deletingIds, openingId, versioningId].filter(
+                [...deletingIds, ...versioningIds, openingId].filter(
                   (id): id is string => id !== null,
                 ),
               )
@@ -1051,7 +1064,7 @@ export default function DocumentsScreen() {
             // them (`open`).
             busy={
               row.doc.id === openingId ||
-              row.doc.id === versioningId ||
+              versioningIds.has(row.doc.id) ||
               deletingIds.has(row.doc.id)
             }
             onPress={() => void open(row.doc)}
@@ -1231,11 +1244,15 @@ export default function DocumentsScreen() {
             {deleteFailed}
           </Text>
         ) : null}
-        {versionFailed ? (
-          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-            {versionFailed}
+        {versionFailed.map(([id, failure]) => (
+          <Text
+            key={id}
+            accessibilityLiveRegion="polite"
+            style={styles.errorNote}
+          >
+            {failure.message}
           </Text>
-        ) : null}
+        ))}
 
         {showCards &&
         !documentsQuery.isPending &&

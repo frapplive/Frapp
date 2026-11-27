@@ -2,18 +2,13 @@
 
 import { Download, FileUp, Loader2, Trash2, Users } from "lucide-react";
 import { formatDay, formatWeekdayDay } from "@repo/formatting";
-import {
-  memberAvatarTint,
-  useMyPermissions,
-  useViewerUserId,
-} from "@repo/hooks";
+import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
 import { can } from "@repo/validation";
 import {
   effectiveLine,
   driveLink,
   isDriveCopy,
   isMinutesDocument,
-  mayUploadNewVersion,
   minutesDocumentFacts,
   uploadedLine,
 } from "@repo/hooks/document-library";
@@ -142,7 +137,40 @@ const ROW_CONTROLS_CLASS = [
   "pointer-fine:group-focus-within/row:pointer-events-auto pointer-fine:group-focus-within/row:opacity-100",
 ].join(" ");
 
-export function DocumentRow({
+type DocumentRowProps = Omit<
+  Parameters<typeof DocumentRowView>[0],
+  "newVersion"
+> & {
+  /**
+   * The member may upload a new version of this file (#6055), as the page
+   * decides once (`mayUploadNewVersion`): its uploader or a documents
+   * manager, while they hold upload or manage. Never a Drive file or
+   * minutes. Absent rather than offered and refused.
+   */
+  canUploadVersion?: boolean;
+};
+
+/**
+ * One file in the list. Only a row that offers Upload a new version mounts
+ * its picker and mutations, so a Drive file, minutes, or a member who may
+ * not carries none of it.
+ */
+export function DocumentRow({ canUploadVersion, ...props }: DocumentRowProps) {
+  return canUploadVersion ? (
+    <DocumentRowWithNewVersion {...props} />
+  ) : (
+    <DocumentRowView {...props} />
+  );
+}
+
+function DocumentRowWithNewVersion(
+  props: Omit<DocumentRowProps, "canUploadVersion">,
+) {
+  const newVersion = useDocumentNewVersion(props.doc);
+  return <DocumentRowView {...props} newVersion={newVersion} />;
+}
+
+function DocumentRowView({
   doc,
   uploader,
   hue,
@@ -156,6 +184,7 @@ export function DocumentRow({
   onTogglePin,
   limited = false,
   onSetAccess,
+  newVersion,
 }: {
   doc: ChapterDocument;
   /** Who uploaded it, when the roster can name them (#3852). */
@@ -177,18 +206,11 @@ export function DocumentRow({
   limited?: boolean;
   /** Opens Who can see; absent for a member who may not set it. */
   onSetAccess?: (doc: ChapterDocument) => void;
+  /** Upload a new version (#6055), with its hidden picker; absent when not offered. */
+  newVersion?: ReturnType<typeof useDocumentNewVersion>;
 }) {
   const facts = documentFacts(doc, uploader);
   const pinned = !!doc.pinned_at;
-  const viewerId = useViewerUserId();
-  const permissions = useMyPermissions().data?.permissions;
-  const manages = !!permissions && can("chapter_docs:manage", permissions);
-  const version = useDocumentNewVersion(doc);
-  // Its uploader's or a documents manager's, never a Drive file's or
-  // minutes' (#6055): absent rather than offered and refused.
-  const newVersion = mayUploadNewVersion(doc, viewerId, manages)
-    ? version
-    : undefined;
   const entries = useRowActions({
     doc,
     gate,

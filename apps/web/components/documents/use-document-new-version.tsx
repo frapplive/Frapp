@@ -2,16 +2,14 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import {
-  putSignedUpload,
   useReplaceDocumentFile,
   useRequestDocumentVersionUploadUrl,
 } from "@repo/hooks";
+import { acceptAttribute } from "@repo/validation";
 import {
-  acceptAttribute,
-  inspectUploadFile,
-  readSignedUpload,
-} from "@repo/validation";
-import { uploadRejectionDescription } from "@/components/documents/upload-document-panel";
+  inspectDocumentFile,
+  putDocumentFile,
+} from "@/lib/documents/document-upload";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -22,8 +20,9 @@ import { getErrorMessage } from "@/lib/utils";
  * keeps its name, folder, who can see it, pin, stars and links. No panel:
  * there is nothing to fill in.
  *
- * The same three steps and checks as an upload (`useDocumentUpload`): the
- * shared allowlist first, then a signed link, the bytes, and the confirm,
+ * The same three steps and checks as an upload (`useDocumentUpload`), shared
+ * through `lib/documents/document-upload`: the allowlist first, then a
+ * signed link and the bytes (`putDocumentFile`), and this route's confirm,
  * which refreshes the library and the open viewer. A refusal or a failure
  * is a toast, since there is no field to put it under; `busy` spins the
  * control meanwhile.
@@ -43,11 +42,11 @@ export function useDocumentNewVersion(doc: { id: string; title: string }): {
   const [busy, setBusy] = useState(false);
 
   async function upload(file: File) {
-    const inspected = inspectUploadFile("document", file);
+    const inspected = inspectDocumentFile(file);
     if (!inspected.ok) {
       toast({
         title: "Couldn't upload a new version",
-        description: uploadRejectionDescription(inspected.reason, file.name),
+        description: inspected.description,
         variant: "destructive",
       });
       return;
@@ -55,21 +54,14 @@ export function useDocumentNewVersion(doc: { id: string; title: string }): {
     const contentType = inspected.contentType;
     setBusy(true);
     try {
-      const signed = await requestUpload.mutateAsync({
-        id: doc.id,
-        filename: file.name,
-        content_type: contentType,
-        size_bytes: file.size,
-      });
-      const { signedUrl, storagePath } = readSignedUpload(signed);
-      await putSignedUpload({
-        signedUrl,
-        body: file,
-        contentType,
-        upsert: true,
-        describeRejection: () =>
-          "The file didn't upload. Check its size and try again.",
-      });
+      const storagePath = await putDocumentFile(file, contentType, () =>
+        requestUpload.mutateAsync({
+          id: doc.id,
+          filename: file.name,
+          content_type: contentType,
+          size_bytes: file.size,
+        }),
+      );
       await replaceFile.mutateAsync({
         id: doc.id,
         storage_path: storagePath,

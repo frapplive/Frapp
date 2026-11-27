@@ -1453,6 +1453,51 @@ describe("DocumentsPage upload a new version", () => {
     expect(control()).not.toBeInTheDocument();
   });
 
+  it("is not offered to an uploader who has lost upload", () => {
+    canGate.granted = false;
+    documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
+    try {
+      render(<DocumentsPage />);
+      expect(control()).not.toBeInTheDocument();
+    } finally {
+      canGate.granted = true;
+    }
+  });
+
+  it("is in the row's More and right-click menus for its uploader, and not on a Drive file", async () => {
+    const user = userEvent.setup();
+    const menuItems = async () =>
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
+    documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
+    const { unmount } = render(<DocumentsPage />);
+    await user.click(
+      screen.getByRole("button", { name: "More for Chapter bylaws" }),
+    );
+    expect(await menuItems()).toContain("Upload a new version");
+    await user.keyboard("{Escape}");
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /^Chapter bylaws/ }),
+    );
+    expect(await menuItems()).toContain("Upload a new version");
+    unmount();
+
+    documentsQuery.data = [
+      {
+        ...BYLAWS,
+        uploaded_by: "viewer-1",
+        drive_file_id: "drive-1",
+        drive_url: "https://drive.google.com/file/d/drive-1/view",
+      },
+    ];
+    render(<DocumentsPage />);
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /^Chapter bylaws/ }),
+    );
+    const driveItems = await menuItems();
+    expect(driveItems).toContain("Download");
+    expect(driveItems).not.toContain("Upload a new version");
+  });
+
   it("refuses a file type the library can't take before anything is sent", async () => {
     documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
     render(<DocumentsPage />);

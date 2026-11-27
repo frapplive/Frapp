@@ -65,6 +65,7 @@ export function DocumentList({
   onHoldRow,
   isLimited,
   canSetAccess,
+  canUploadVersion,
   onSetAccess,
   folderPicker,
   folderLine,
@@ -123,6 +124,8 @@ export function DocumentList({
   isLimited?: (doc: ChapterDocument) => boolean;
   /** The member may set who can see this file. */
   canSetAccess?: (doc: ChapterDocument) => boolean;
+  /** The member may upload a new version of this file (#6055). */
+  canUploadVersion?: (doc: ChapterDocument) => boolean;
   /** Opens Who can see for a file. */
   onSetAccess?: (doc: ChapterDocument) => void;
   /**
@@ -408,6 +411,7 @@ export function DocumentList({
                     onSetAccess && canSetAccess?.(doc)
                       ? onSetAccess
                       : undefined,
+                  canUploadVersion: canUploadVersion?.(doc) ?? false,
                 };
                 return <DocumentRow key={doc.id} {...props} />;
               })}
