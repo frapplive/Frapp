@@ -18,7 +18,8 @@ import {
  * Read once per member per app process and held in memory after that, so the
  * month and the Day screen agree without a second read. Best-effort: a
  * storage error reads as the default, and a failed write keeps the choice
- * until the app restarts. A choice made before the stored read lands wins.
+ * until the app restarts. A tap made before the stored read lands is applied
+ * once it has, on top of what was kept.
  */
 
 const KEY_PREFIX = "frapp.mobile.calendar-hidden-kinds:";
@@ -74,21 +75,27 @@ export function useHiddenCalendarKinds(): {
   const hidden = useSyncExternalStore(subscribe, read, read);
   const toggle = useCallback(
     (kind: CalendarKind) => {
-      const current =
-        (userId ? values.get(userId) : undefined) ??
-        DEFAULT_HIDDEN_CALENDAR_KINDS;
-      const next = new Set(current);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
       if (!userId) return;
-      chosen.add(userId);
-      values.set(userId, next);
-      notify();
-      storage
-        .setItem(KEY_PREFIX + userId, serializeHiddenCalendarKinds(next))
-        .catch(() => {
-          /* Best-effort: the choice holds until the app restarts. */
-        });
+      const apply = () => {
+        const next = new Set(
+          values.get(userId) ?? DEFAULT_HIDDEN_CALENDAR_KINDS,
+        );
+        if (next.has(kind)) next.delete(kind);
+        else next.add(kind);
+        chosen.add(userId);
+        values.set(userId, next);
+        notify();
+        storage
+          .setItem(KEY_PREFIX + userId, serializeHiddenCalendarKinds(next))
+          .catch(() => {
+            /* Best-effort: the choice holds until the app restarts. */
+          });
+      };
+      // A tap before the stored choice is read waits for it, so it changes
+      // what the member kept rather than the default.
+      const read = reads.get(userId);
+      if (read) void read.then(apply);
+      else apply();
     },
     [userId],
   );

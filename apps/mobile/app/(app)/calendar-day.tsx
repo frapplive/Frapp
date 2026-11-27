@@ -57,13 +57,19 @@ export default function CalendarDayScreen() {
     () => parseCalendarDayParam(raw) ?? new Date(today),
     [raw, today],
   );
-  // The month's colour key decides the day too (#5948).
+  // The month's colour key decides the day's tasks and birthdays too
+  // (#5948). Not its events: this screen draws no key to turn them back on,
+  // and an event made from an hour here must show where it was made.
   const { hidden } = useHiddenCalendarKinds();
-  const allEvents = useMemo(
-    () => (hidden.has("events") ? [] : selectAllEventRows(eventsQuery.data)),
-    [eventsQuery.data, hidden],
+  const dayHidden = useMemo(
+    () => new Set([...hidden].filter((kind) => kind !== "events")),
+    [hidden],
   );
-  const tasksByDay = useCalendarItemsByDay(day, hidden);
+  const allEvents = useMemo(
+    () => selectAllEventRows(eventsQuery.data),
+    [eventsQuery.data],
+  );
+  const tasksByDay = useCalendarItemsByDay(day, dayHidden);
   const tasksQuery = useTasks();
   const birthdaysQuery = useMemberBirthdays();
   const refresh = useRefetchAll([eventsQuery, tasksQuery, birthdaysQuery]);

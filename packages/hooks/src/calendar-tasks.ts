@@ -43,8 +43,8 @@ export type CalendarTaskState = "open" | "overdue" | "waiting" | "confirmed";
 
 /**
  * The calendar's per-item layers: `calendarTasksByDay` files a task by whose
- * it is. Both Calendars switch whole kinds ({@link CalendarKind}), not
- * layers: {@link calendarLayersShowing} turns the kinds on into layers.
+ * it is. Both Calendars read every layer and switch whole kinds
+ * ({@link CalendarKind}, through {@link calendarKindOf}), not layers.
  */
 export type CalendarLayer = "events" | "mine" | "assigned" | "birthdays";
 
@@ -90,20 +90,6 @@ export function calendarKindOf(item: CalendarItem): CalendarKind {
  */
 export const DEFAULT_HIDDEN_CALENDAR_KINDS: ReadonlySet<CalendarKind> =
   new Set<CalendarKind>(["tasks"]);
-
-/** The item layers the kinds still on cover, for `calendarTasksByDay`. */
-export function calendarLayersShowing(
-  hidden: ReadonlySet<CalendarKind>,
-): ReadonlySet<CalendarLayer> {
-  const layers = new Set<CalendarLayer>();
-  if (!hidden.has("events")) layers.add("events");
-  if (!hidden.has("tasks")) {
-    layers.add("mine");
-    layers.add("assigned");
-  }
-  if (!hidden.has("birthdays")) layers.add("birthdays");
-  return layers;
-}
 
 /**
  * The kinds a member switched off, read back from storage as

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useCalendarBirthdays, useCalendarTasks } from "@repo/hooks";
 import {
-  calendarLayersShowing,
+  ALL_CALENDAR_LAYERS,
+  calendarKindOf,
   calendarTasksByDay,
   type CalendarItem,
   type CalendarKind,
@@ -28,8 +29,10 @@ export function useCalendarItemsByDay(
   return useMemo(
     () =>
       calendarTasksByDay(
-        [...calendarTasks.items, ...birthdays],
-        calendarLayersShowing(hidden),
+        [...calendarTasks.items, ...birthdays].filter(
+          (item) => !hidden.has(calendarKindOf(item)),
+        ),
+        ALL_CALENDAR_LAYERS,
       ),
     [calendarTasks.items, birthdays, hidden],
   );

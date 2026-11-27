@@ -77,6 +77,7 @@ import {
   eventTakesAttendance,
   eventTimingFieldsOf,
   eventsCount,
+  SECTION_NAMES,
   WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import {
@@ -1533,7 +1534,7 @@ function AddressedEventsPage() {
                   onClick={leaveHours}
                 >
                   <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-                  Events
+                  {SECTION_NAMES.calendar}
                 </Button>
                 <h2
                   id="events-hours-label"

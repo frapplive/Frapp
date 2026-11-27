@@ -1366,7 +1366,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Events" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
     expect(
       screen.getByRole("region", { name: "Upcoming" }),
     ).toBeInTheDocument();
