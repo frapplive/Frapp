@@ -357,7 +357,7 @@ export function SettingsReorderRow({
     <Link
       href={href}
       className={cn(
-        "flex min-h-control-settings-row min-w-0 flex-1 items-center gap-4 rounded-md px-2 py-1.5 pointer-coarse:min-h-11 transition hover:bg-card-hover",
+        "flex min-h-control-settings-row min-w-0 flex-1 items-center gap-4 rounded-md py-1.5 pl-2 pr-4 pointer-coarse:min-h-11 transition hover:bg-card-hover",
         FOCUS_RING,
       )}
     >

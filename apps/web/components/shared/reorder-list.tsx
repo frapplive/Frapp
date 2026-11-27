@@ -135,7 +135,7 @@ export function ReorderList<T>({
               }}
               className={cn(
                 grouped
-                  ? "flex items-center gap-1 pl-2 pr-1"
+                  ? "flex items-center gap-1 pl-2 pr-2"
                   : "flex items-center gap-2 rounded-md border border-border p-2",
                 draggingId === id && "opacity-50",
                 overId === id &&
