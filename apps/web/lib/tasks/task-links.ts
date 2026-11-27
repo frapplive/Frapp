@@ -6,8 +6,9 @@ import { WEB_ADDRESS_PARAMS } from "@repo/validation";
  * panel is the one place on web that shows a group
  * (`spec/behavior/tasks.md` § Tasks for everyone), and
  * `/activity?task=<task id>` opens that task, or its group when it is a copy
- * of one. The board's parts read either param once their read holds the task
- * (`TasksBoard`'s `LinkedTaskParam`) and drop it from the address.
+ * of one. The board's parts open either once their read holds the task
+ * (`TasksBoard`'s `LinkedTaskParam`), and the param stays in the address
+ * while the panel is open (spec § Addresses, #6044).
  *
  * `/tasks` only redirects here, keeping either param
  * (`app/(dashboard)/tasks/page.tsx`), so an old link, bookmark or
