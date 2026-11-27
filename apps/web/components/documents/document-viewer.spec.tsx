@@ -234,6 +234,13 @@ describe("DocumentViewer", () => {
     }
     expect(within(viewer).getAllByRole("button", { name: "Download" })).toHaveLength(2);
     expect(within(viewer).queryByText("Download it to open it on your device.")).toBeNull();
+    // On the card, Drive comes first and takes the outline; Download is second.
+    const card = within(viewer).getByText("Excel spreadsheets can't be previewed yet.").parentElement!;
+    const [first, second] = Array.from(card.querySelectorAll<HTMLElement>("a, button"));
+    expect(first).toHaveAccessibleName("Open in Google Drive");
+    expect(first!.className).toContain("border-white/25");
+    expect(second).toHaveAccessibleName("Download");
+    expect(second!.className).not.toContain("border-white/25");
   });
 
   it("links no Drive page that isn't https", () => {

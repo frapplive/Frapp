@@ -123,6 +123,20 @@ describe("selectDocuments", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps a Drive file's page in Google Drive (#6055)", () => {
+    const [doc] = selectDocuments([
+      {
+        id: "d-1",
+        title: "Brother info",
+        drive_file_id: "g-1",
+        drive_url: "https://docs.google.com/spreadsheets/d/g-1/edit",
+      },
+    ]);
+    expect(doc!.drive_url).toBe(
+      "https://docs.google.com/spreadsheets/d/g-1/edit",
+    );
+  });
+
   it("keeps the Drive folder a synced folder came from", () => {
     expect(
       selectDocumentFolders([
