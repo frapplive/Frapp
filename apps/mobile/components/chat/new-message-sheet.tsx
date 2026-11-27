@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
+  DM_SEARCH_BLOCK_LIST_FAILED,
+  DM_SEARCH_CHECKING_BLOCK_LIST,
+  DM_SEARCH_MEMBERS_WAITING,
+  messageableMembers,
   NEW_MESSAGE_MAX_PEOPLE,
+  NEW_MESSAGE_MEMBERS_FAILED,
   NEW_MESSAGE_TITLE,
   newMessageButton,
-  newMessageRecipients,
   useBlockedUserIds,
   useChapterRoster,
   useViewerUserId,
@@ -29,9 +33,12 @@ const NONE: ReadonlySet<string> = new Set();
  * button in the footer, "Message" for one person and "Message 3 people" for
  * more. The screen opens the DM or starts the group (`onStart`).
  *
- * Who is offered is `newMessageRecipients`: the roster, never the viewer, the
- * system actor or a member the viewer blocked, and nobody until the block
- * list is read. Alumni are offered, as the search offers them.
+ * Who is offered is `messageableMembers`, the search's rule: the roster, never
+ * the viewer, the system actor or a member the viewer blocked, and nobody
+ * until the block list is read, which a line says, with Try again once a read
+ * failed. Alumni are offered, as the search offers them. Unlike the search,
+ * a member the viewer already has a DM with is offered too: picking them
+ * opens it, and they can join a group.
  *
  * The screen mounts it when the pencil is tapped, so the roster is read only
  * then; it opens itself, and `onClose` fires once it has closed, however it
@@ -58,7 +65,7 @@ export function NewMessageSheet({
   const blockListReady = blockList.status === "ready";
   const recipients = useMemo(
     () =>
-      newMessageRecipients({
+      messageableMembers({
         roster: (rosterQuery.data ?? []) as DmSearchMember[],
         viewerId,
         blockedIds: blockList.ids,
@@ -66,19 +73,50 @@ export function NewMessageSheet({
       }),
     [rosterQuery.data, viewerId, blockList.ids, blockListReady],
   );
-  // From the roster alone: `GET /v1/members` needs `members:view`, which a
-  // member may not hold, and would drop alumni, whom a DM may reach.
+  // From the roster, the list the search reads, with alumni kept on purpose:
+  // the picker leaves them out for a task, but alumni may be messaged.
   const directory = useMemo(
-    () => buildWhoDirectory({ roster: recipients, viewerUserId: viewerId }),
+    () =>
+      buildWhoDirectory({
+        roster: recipients,
+        viewerUserId: viewerId,
+        alumni: true,
+      }),
     [recipients, viewerId],
   );
+  const rosterFailed = rosterQuery.isError && rosterQuery.data === undefined;
+  const blockListFailed =
+    blockList.status === "unavailable" && !blockList.isRetrying;
   const people: WhoReadState =
     rosterQuery.data !== undefined && blockListReady && viewerId !== null
       ? "ready"
-      : (rosterQuery.isError && rosterQuery.data === undefined) ||
-          (blockList.status === "unavailable" && !blockList.isRetrying)
+      : rosterFailed || blockListFailed
         ? "error"
         : "loading";
+  // Why nobody is listed yet, in the search's words: the block list first,
+  // since nobody may be offered until it is read.
+  const tryAgain = (onPress: () => void) => ({ label: "Try again", onPress });
+  const peopleNote =
+    people === "ready"
+      ? undefined
+      : rosterFailed
+        ? {
+            text: NEW_MESSAGE_MEMBERS_FAILED,
+            action: rosterQuery.isFetching
+              ? undefined
+              : tryAgain(() => void rosterQuery.refetch()),
+          }
+        : blockListFailed
+          ? {
+              text: DM_SEARCH_BLOCK_LIST_FAILED,
+              action: blockList.isPaused ? undefined : tryAgain(blockList.retry),
+            }
+          : rosterQuery.data === undefined &&
+              rosterQuery.fetchStatus === "paused"
+            ? { text: DM_SEARCH_MEMBERS_WAITING }
+            : rosterQuery.data !== undefined
+              ? { text: DM_SEARCH_CHECKING_BLOCK_LIST }
+              : undefined;
 
   const start = () => {
     const ids = peopleToAdd(picked, directory, NONE);
@@ -100,6 +138,7 @@ export function NewMessageSheet({
       onChange={setPicked}
       directory={directory}
       people={people}
+      peopleNote={peopleNote}
       sets="ready"
       onDismiss={onClose}
       add={{

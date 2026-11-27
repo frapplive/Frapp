@@ -7,12 +7,19 @@ import type { TaskWho } from "@repo/validation";
 
 const state = vi.hoisted(() => ({
   presented: 0,
-  roster: [] as { user_id: string; display_name: string }[] | undefined,
+  roster: [] as
+    | { user_id: string; display_name: string; is_alumni?: boolean }[]
+    | undefined,
   rosterFailed: false,
+  rosterPaused: false,
+  rosterRefetch: vi.fn(),
+  blockRetry: vi.fn(),
   blockList: {
     ids: new Set<string>() as ReadonlySet<string>,
     status: "ready" as "ready" | "loading" | "unavailable",
     isRetrying: false,
+    isPaused: false,
+    retry: () => {},
   },
 }));
 
@@ -22,6 +29,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useChapterRoster: () => ({
     data: state.roster,
     isError: state.rosterFailed,
+    isFetching: false,
+    fetchStatus: state.rosterPaused ? "paused" : "idle",
+    refetch: state.rosterRefetch,
   }),
   useBlockedUserIds: () => state.blockList,
 }));
@@ -54,6 +64,7 @@ type SheetProps = {
   onDismiss: () => void;
   directory: WhoDirectory;
   people: "loading" | "ready" | "error";
+  peopleNote?: { text: string; action?: { label: string; onPress: () => void } };
   add: {
     label: (count: number) => string;
     limit: number;
@@ -86,10 +97,15 @@ describe("NewMessageSheet (#6190)", () => {
     state.presented = 0;
     state.roster = ROSTER;
     state.rosterFailed = false;
+    state.rosterPaused = false;
+    state.rosterRefetch.mockReset();
+    state.blockRetry.mockReset();
     state.blockList = {
       ids: new Set(["u-blocked"]),
       status: "ready",
       isRetrying: false,
+      isPaused: false,
+      retry: state.blockRetry,
     };
   });
 
@@ -104,22 +120,81 @@ describe("NewMessageSheet (#6190)", () => {
     ]);
   });
 
-  it("offers nobody until the block list is read", () => {
+  it("offers alumni, whom a DM may reach though a task never does", () => {
+    state.roster = [
+      ...ROSTER,
+      { user_id: "u-alum", display_name: "Alum Ni", is_alumni: true },
+    ];
+    expect(
+      mount()
+        .sheet()
+        .directory.people.map((person) => person.userId),
+    ).toContain("u-alum");
+  });
+
+  it("offers nobody until the block list is read, and says it is checking", () => {
     state.blockList = { ...state.blockList, status: "loading" };
     const { sheet } = mount();
     expect(sheet().people).toBe("loading");
     expect(sheet().directory.people).toEqual([]);
+    expect(sheet().peopleNote?.text).toBe(
+      "Checking your block list before listing other members.",
+    );
   });
 
-  it("says it failed when the roster or the block list couldn't be read", () => {
+  it("blames the block list, not the members, when that read failed, with Try again", () => {
+    state.blockList = { ...state.blockList, status: "unavailable" };
+    const { sheet } = mount();
+    expect(sheet().people).toBe("error");
+    expect(sheet().peopleNote?.text).toBe(
+      "Couldn't check your block list, so other members aren't listed.",
+    );
+    act(() => sheet().peopleNote!.action!.onPress());
+    expect(state.blockRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the members couldn't load when the roster failed, with Try again", () => {
     state.roster = undefined;
     state.rosterFailed = true;
-    expect(mount().sheet().people).toBe("error");
+    const { sheet } = mount();
+    expect(sheet().people).toBe("error");
+    expect(sheet().peopleNote?.text).toBe(
+      "Couldn't load your chapter's members.",
+    );
+    act(() => sheet().peopleNote!.action!.onPress());
+    expect(state.rosterRefetch).toHaveBeenCalledTimes(1);
+  });
 
-    state.roster = ROSTER;
-    state.rosterFailed = false;
-    state.blockList = { ...state.blockList, status: "unavailable" };
-    expect(mount().sheet().people).toBe("error");
+  it("says it is waiting for the network while the roster read is paused", () => {
+    state.roster = undefined;
+    state.rosterPaused = true;
+    const { sheet } = mount();
+    expect(sheet().people).toBe("loading");
+    expect(sheet().peopleNote?.text).toBe(
+      "Your chapter's members will load when you're back online.",
+    );
+  });
+
+  it("starts nobody past a group DM's size", () => {
+    state.roster = [
+      { user_id: "u-me", display_name: "Shawn Klein" },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        user_id: `u-${i}`,
+        display_name: `Person ${i}`,
+      })),
+    ];
+    const { sheet, onStart } = mount();
+    act(() =>
+      sheet().onChange({
+        kind: "each",
+        target: {
+          kind: "people",
+          userIds: Array.from({ length: 10 }, (_, i) => `u-${i}`),
+        },
+      }),
+    );
+    act(() => sheet().add.onAdd());
+    expect(onStart).not.toHaveBeenCalled();
   });
 
   it("starts with the one person picked", () => {

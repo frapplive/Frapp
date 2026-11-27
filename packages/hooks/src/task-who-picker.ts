@@ -12,6 +12,10 @@
  * whether each of them does it (a copy each) or one of them claims it (Up for
  * grabs).
  *
+ * The phone's New message (#6190) uses the same sheet for people only, to
+ * start a DM or group DM: it builds the directory from the roster with
+ * `alumni` kept, since alumni may be messaged though they never get a task.
+ *
  * Pure, with no React and no request: each app reads the chapter with its own
  * hooks and hands the rows to {@link buildWhoDirectory}. The value is a
  * `TaskWho` (`@repo/validation`), which also turns it into the create
@@ -181,6 +185,12 @@ export function buildWhoDirectory(input: {
   tiers?: unknown;
   groups?: readonly WhoGroupSource[] | null;
   viewerUserId: string | null | undefined;
+  /**
+   * Keep alumni among the people. Off for a task, which an alumnus never
+   * gets; on for New message (#6190), since alumni may post in direct
+   * conversations (`spec/behavior/alumni.md`).
+   */
+  alumni?: boolean;
 }): WhoDirectory {
   const source = input.members ?? input.roster ?? [];
   const seen = new Set<string>();
@@ -188,7 +198,8 @@ export function buildWhoDirectory(input: {
   const roleIdsOf = new Map<string, readonly string[]>();
   for (const row of source) {
     const userId = row.user_id ? String(row.user_id) : "";
-    if (!userId || seen.has(userId) || row.is_alumni === true) continue;
+    if (!userId || seen.has(userId)) continue;
+    if (row.is_alumni === true && !input.alumni) continue;
     seen.add(userId);
     const name = memberLabel(row.display_name, userId);
     people.push({

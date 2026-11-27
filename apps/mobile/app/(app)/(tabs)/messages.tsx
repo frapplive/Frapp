@@ -24,6 +24,7 @@ import {
   useViewerUserId,
   sidebarMutedChannelIds,
   DM_SEARCH_BLOCK_LIST_FAILED,
+  DM_SEARCH_MEMBERS_WAITING,
   DM_SEARCH_CHECKING_BLOCK_LIST,
   DM_SEARCH_MEMBERS_HEADING,
   DM_SEARCH_PLACEHOLDER,
@@ -31,6 +32,7 @@ import {
   dmChannelIdOf,
   dmSearchNoMatches,
   NEW_GROUP_FAILED_TITLE,
+  newGroupFailedBody,
   type DmSearchMember,
 } from "@repo/hooks";
 import {
@@ -78,9 +80,6 @@ import { SECTION_NAMES } from "@repo/validation";
 
 /** Under the search while the roster is still being read. */
 const MEMBERS_LOADING = "Loading your chapter's members…";
-/** The same, while that read waits for the network. */
-const MEMBERS_WAITING_FOR_NETWORK =
-  "Your chapter's members will load when you're back online.";
 
 /**
  * Messages: the member's direct and group messages, the third tab since
@@ -159,12 +158,12 @@ export default function MessagesScreen() {
   const blockList = useBlockedUserIds();
   const [showHidden, setShowHidden] = useState(false);
   const [query, setQuery] = useState("");
-  // The member whose DM is being opened, so no second start runs meanwhile,
-  // and a count of picks: any later pick (another row, another member) or
-  // leaving the screen bumps it, so a slow start that lands after it opens
+  // The pick whose conversation is being opened, so no second start runs
+  // meanwhile, and a count of picks: any later pick (another row, another
+  // member, the pencil) or leaving the screen bumps it, so a slow start that lands after it opens
   // nothing (web's search and the member profile guard the same way). A tab is
   // never unmounted, so leaving is a blur: switching tabs or pushing a screen.
-  const startingRef = useRef<string | null>(null);
+  const startingRef = useRef<number | null>(null);
   const pickSeq = useRef(0);
   useFocusEffect(
     useCallback(() => {
@@ -275,7 +274,7 @@ export default function MessagesScreen() {
     // network, which can be a long time, so it says so.
     heldNote =
       rosterQuery.fetchStatus === "paused"
-        ? MEMBERS_WAITING_FOR_NETWORK
+        ? DM_SEARCH_MEMBERS_WAITING
         : MEMBERS_LOADING;
   }
 
@@ -285,7 +284,7 @@ export default function MessagesScreen() {
     if (members.length === 0 || startingRef.current !== null) return;
     const seq = ++pickSeq.current;
     const one = members.length === 1 ? members[0] : null;
-    startingRef.current = members.map((member) => member.user_id).join(",");
+    startingRef.current = seq;
     try {
       const channelId = dmChannelIdOf(
         one
@@ -298,15 +297,31 @@ export default function MessagesScreen() {
       if (!channelId) throw new Error("No channel id returned");
       setQuery("");
       openChannel(channelId);
-    } catch {
+    } catch (error) {
       if (seq !== pickSeq.current) return;
-      Alert.alert(
-        one ? startDmFailedTitle(one.display_name) : NEW_GROUP_FAILED_TITLE,
-        START_DM_FAILED_BODY,
-      );
+      if (one) {
+        Alert.alert(startDmFailedTitle(one.display_name), START_DM_FAILED_BODY);
+      } else {
+        // A member who left, or the API's 10 a minute, isn't fixed by a
+        // better connection, so the group's alert says which.
+        Alert.alert(
+          NEW_GROUP_FAILED_TITLE,
+          newGroupFailedBody(error, START_DM_FAILED_BODY),
+        );
+      }
     } finally {
-      startingRef.current = null;
+      // Only this start's own hold: New message may have let another go.
+      if (startingRef.current === seq) startingRef.current = null;
     }
+  }
+
+  // The pencil drops a search start still on its way, as any later pick
+  // does, so it can't open its thread under New message, and lets the
+  // sheet's own start go.
+  function openNewMessage() {
+    pickSeq.current += 1;
+    startingRef.current = null;
+    setComposing(true);
   }
 
   // Thread rows go under the list's rows, not under a search result (#5277).
@@ -388,7 +403,7 @@ export default function MessagesScreen() {
         <HeaderButton
           label="New message"
           hint="Pick one or more people to message."
-          onPress={() => setComposing(true)}
+          onPress={openNewMessage}
         >
           <PencilGlyph color={tokens.color.text.foreground} />
         </HeaderButton>

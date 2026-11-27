@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { SYSTEM_SENDER_ID } from "@repo/validation";
 import {
   dmChannelIdOf,
+  NEW_GROUP_NOT_MEMBERS,
   NEW_MESSAGE_MAX_PEOPLE,
+  newGroupFailedBody,
   newMessageButton,
-  newMessageRecipients,
+  messageableMembers,
   normalizeDmSearchText,
   searchDirectMessages,
   type DmSearchConversation,
@@ -174,7 +176,7 @@ describe("New message (#6190)", () => {
 
   it("offers the roster but you, the system actor and who you blocked, once each", () => {
     expect(
-      newMessageRecipients({
+      messageableMembers({
         roster,
         viewerId: VIEWER,
         blockedIds: new Set(["blocked"]),
@@ -186,10 +188,10 @@ describe("New message (#6190)", () => {
   it("offers nobody until the viewer and the block list are known", () => {
     const base = { roster, blockedIds: new Set<string>() };
     expect(
-      newMessageRecipients({ ...base, viewerId: null, blockListReady: true }),
+      messageableMembers({ ...base, viewerId: null, blockListReady: true }),
     ).toEqual([]);
     expect(
-      newMessageRecipients({ ...base, viewerId: VIEWER, blockListReady: false }),
+      messageableMembers({ ...base, viewerId: VIEWER, blockListReady: false }),
     ).toEqual([]);
   });
 
@@ -199,5 +201,21 @@ describe("New message (#6190)", () => {
     expect(newMessageButton(2)).toBe("Message 2 people");
     expect(newMessageButton(NEW_MESSAGE_MAX_PEOPLE)).toBe("Message 9 people");
     expect(newMessageButton(NEW_MESSAGE_MAX_PEOPLE + 1)).toBe("Up to 9 people");
+  });
+
+  it("says who left on a 404, to wait on a 429, and the fallback otherwise", () => {
+    expect(newGroupFailedBody({ statusCode: 404 }, "fallback")).toBe(
+      NEW_GROUP_NOT_MEMBERS,
+    );
+    expect(newGroupFailedBody({ statusCode: 429 }, "fallback")).toMatch(
+      /Wait a minute/,
+    );
+    expect(newGroupFailedBody({ statusCode: 500 }, "fallback")).not.toBe(
+      NEW_GROUP_NOT_MEMBERS,
+    );
+  });
+
+  it("stops at a group DM's size, the creator included", () => {
+    expect(NEW_MESSAGE_MAX_PEOPLE).toBe(9);
   });
 });

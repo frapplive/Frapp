@@ -137,6 +137,7 @@ So a member's own open task offers Mark done, and Ask for more time where § Ask
 - **Each or someone.** Once the value reaches more than one person, a switch picks **Each gets a copy** (§ Tasks for everyone) or **Someone takes it** (§ Up for grabs). The switch keeps its choice while the value passes through one person.
 - **Add people** (#5905, 2026-11-23). On a group task the picker opens for people only: no Roles and groups tab, no Everyone row and no mode switch, since each person added gets a copy. Everyone who already has a copy is ticked, can't be unticked, and says "has it"; the button reads "Add N" for the new picks (§ Tasks for everyone, Add members).
 - **Alumni** aren't listed, so none can be ticked into a copy each or a posting ([`alumni.md`](alumni.md)). A single task for an alumnus, which the API still accepts, has no way in from the picker yet ([#5501](https://github.com/frapplive/Frapp/issues/5501)).
+- **New message** (#6190, 2026-11-27). The phone's Messages pencil opens the same picker for people only, as Add people does, to start a DM or a group DM ([`chat/README.md` § Direct Messages](chat/README.md#direct-messages)). It is not about a task: it lists the roster by the messaging rule (`messageableMembers` in `@repo/hooks/dm-search`), and keeps alumni (`buildWhoDirectory`'s `alumni`), since alumni may be messaged.
 
 ## Following a task
 

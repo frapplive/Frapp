@@ -685,6 +685,61 @@ describe("Messages header, empty and error states", () => {
       expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
       alert.mockRestore();
     });
+
+    it("says who left on a 404, not to check the connection", async () => {
+      const alert = vi.spyOn(Alert, "alert").mockImplementation(() => {});
+      groupMutateAsync.mockRejectedValue({ statusCode: 404 });
+      const { sheet } = openNewMessage();
+      await act(async () =>
+        sheet().onStart([
+          { user_id: ALICE, display_name: "Alice Chen" },
+          { user_id: CAROL, display_name: "Carol Alvarez" },
+        ]),
+      );
+      expect(alert).toHaveBeenCalledWith(
+        "Couldn't start the group",
+        "Someone you picked isn't in your chapter anymore. Pick again.",
+      );
+      alert.mockRestore();
+    });
+
+    it("drops a search start still on its way, and lets the sheet's own go", async () => {
+      let resolve!: (value: unknown) => void;
+      startMutateAsync.mockReturnValueOnce(
+        new Promise((r) => (resolve = r)),
+      );
+      groupMutateAsync.mockResolvedValue({ id: "c-new-group" });
+      const tree = render();
+      act(() =>
+        tree.root.findByType(SearchField).props.onChangeText("carol"),
+      );
+      act(() => void rowNamed(tree, "Carol Alvarez").props.onPress());
+      const pencil = tree.root.find(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "New message",
+      );
+      act(() => pencil.props.onPress());
+      const sheet = tree.root.find(
+        (node) => (node.type as unknown) === "NewMessageSheet",
+      ).props as NewMessageProps;
+      await act(async () =>
+        sheet.onStart([
+          { user_id: ALICE, display_name: "Alice Chen" },
+          { user_id: BOB, display_name: "Bob Diaz" },
+        ]),
+      );
+      expect(groupMutateAsync).toHaveBeenCalledWith({
+        member_ids: [ALICE, BOB],
+      });
+      // The search's DM lands late and opens nothing.
+      await act(async () => resolve({ id: "c-dm-carol" }));
+      expect(vi.mocked(useRouter)().push).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith({
+        pathname: "/chat-thread",
+        params: { channelId: "c-new-group" },
+      });
+    });
   });
 
   it("says there are no messages, and where to start one", () => {

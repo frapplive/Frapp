@@ -29,7 +29,9 @@
  * only contains it; within a rank a 1:1 DM leads a group DM, then the order
  * the conversations came in holds.
  */
-import { SYSTEM_SENDER_ID } from "@repo/validation";
+import { responseStatusOf, statusOf } from "@repo/api-sdk";
+import { MAX_GROUP_DM_MEMBERS, SYSTEM_SENDER_ID } from "@repo/validation";
+import { errorCopy } from "./error-copy";
 import { foldForSearch, NAME_SEPARATORS } from "./channel-members";
 import { resolveDisplayName, type DisplayNameMap } from "./display-names";
 
@@ -167,13 +169,13 @@ export function searchDirectMessages<C extends DmSearchConversation>({
   }
 
   const members: Array<{ member: DmSearchMember; rank: number }> = [];
-  const seen = new Set<string>();
-  for (const member of roster) {
-    const id = member.user_id;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    if (id === viewerId || id === SYSTEM_SENDER_ID) continue;
-    if (blockedIds.has(id) || inList.has(id)) continue;
+  for (const member of messageableMembers({
+    roster,
+    viewerId,
+    blockedIds,
+    blockListReady,
+  })) {
+    if (inList.has(member.user_id)) continue;
     const r = rank(member.display_name ?? "", needle);
     if (r !== null) members.push({ member, rank: r });
   }
@@ -221,11 +223,10 @@ export const DM_SEARCH_ROSTER_FAILED =
 export const NEW_MESSAGE_TITLE = "New message";
 
 /**
- * The most people the viewer can pick: a group DM holds up to 10, the viewer
- * included (the API's `MAX_GROUP_DM_MEMBERS`, `spec/behavior/chat/README.md`
- * § Direct Messages).
+ * The most people the viewer can pick: a group DM holds up to
+ * `MAX_GROUP_DM_MEMBERS`, the viewer included.
  */
-export const NEW_MESSAGE_MAX_PEOPLE = 9;
+export const NEW_MESSAGE_MAX_PEOPLE = MAX_GROUP_DM_MEMBERS - 1;
 
 /** The picker's one button, by how many people are picked. */
 export function newMessageButton(count: number): string {
@@ -235,17 +236,44 @@ export function newMessageButton(count: number): string {
   return count > 1 ? `Message ${count} people` : "Message";
 }
 
+/** New message's line when the roster couldn't be read, with Try again. */
+export const NEW_MESSAGE_MEMBERS_FAILED =
+  "Couldn't load your chapter's members.";
+/** The search's and New message's line while the roster read waits for the network. */
+export const DM_SEARCH_MEMBERS_WAITING =
+  "Your chapter's members will load when you're back online.";
+
 /** The alert's title when a group DM couldn't be started. */
 export const NEW_GROUP_FAILED_TITLE = "Couldn't start the group";
 
 /**
- * Who New message offers: the roster by the search's member rule (never the
- * viewer, the system actor or a member the viewer blocked), and nobody until
- * the viewer and the block list are known, since a list still loading can be
- * missing a block. Unlike the search, a member the viewer already has a DM
- * with is offered too: picking them opens it, and they can join a group.
+ * Its body when the API answered 404: someone picked isn't a member of the
+ * chapter any more (the roster read can be a minute old). The server's own
+ * sentence says the same.
  */
-export function newMessageRecipients({
+export const NEW_GROUP_NOT_MEMBERS =
+  "Someone you picked isn't in your chapter anymore. Pick again.";
+
+/**
+ * The group failure's body: who isn't a member on a 404, the throttle's
+ * "wait a minute" on a 429, being offline when the request never left, and
+ * `fallback` otherwise, so a refusal retrying can't fix is never sent to
+ * "check your connection".
+ */
+export function newGroupFailedBody(error: unknown, fallback: string): string {
+  if ((statusOf(error) ?? responseStatusOf(error)) === 404) {
+    return NEW_GROUP_NOT_MEMBERS;
+  }
+  return errorCopy(error, fallback);
+}
+
+/**
+ * Who may be messaged, the rule the search and New message share: the roster
+ * once each, never the viewer, the system actor or a member the viewer
+ * blocked, and nobody until the viewer and the block list are known, since a
+ * list still loading can be missing a block.
+ */
+export function messageableMembers({
   roster,
   viewerId,
   blockedIds,

@@ -17,7 +17,13 @@ vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => ({ accent: "#DDB844" }),
 }));
 
-import { WhoPickerBody, WhoPickerFooter } from "./who-picker-sheet";
+import {
+  WhoPickerBody,
+  WhoPickerFooter,
+  WhoPickerSheet,
+} from "./who-picker-sheet";
+import { TaskBarPill } from "./task-action-bar";
+import { InlineNote } from "@/components/inline-note";
 
 /**
  * The Assign to picker's sheet (tasks.md § The Who picker). Its rules have
@@ -225,5 +231,88 @@ describe("WhoPickerFooter", () => {
     expect(text).toContain("Recruitment · 2 members");
     expect(text).toContain(TASK_AUDIENCE_COPY.someoneHint(2));
     expect(text).toContain(WHO_PICKER_COPY.each);
+  });
+});
+
+describe("WhoPickerSheet's add footer", () => {
+  // New message (#6190) stops at a group DM's size; the button is off past it.
+  function footerPill(value: TaskWho | null, limit?: number) {
+    const tree = render(
+      <WhoPickerSheet
+        value={value}
+        onChange={() => undefined}
+        directory={directory}
+        people="ready"
+        sets="ready"
+        add={{
+          marked: new Set(),
+          alreadyNote: "",
+          label: (count) => `Message ${count}`,
+          limit,
+          onAdd: () => undefined,
+        }}
+      />,
+    );
+    const modal = tree.root.find(
+      (node) => (node.type as unknown) === "BottomSheetModal",
+    );
+    const footer = render(modal.props.footerComponent({}));
+    return footer.root.findByType(TaskBarPill).props;
+  }
+  const two: TaskWho = {
+    kind: "each",
+    target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+  };
+
+  it("is off with nobody picked, and on within the limit", () => {
+    expect(footerPill(null, 2).disabled).toBe(true);
+    expect(footerPill(two, 2).disabled).toBe(false);
+    expect(footerPill(two).disabled).toBe(false);
+  });
+
+  it("is off past the limit", () => {
+    const pill = footerPill(two, 1);
+    expect(pill.disabled).toBe(true);
+    expect(pill.label).toBe("Message 2");
+  });
+});
+
+describe("WhoPickerBody's people-only lines", () => {
+  const empty = buildWhoDirectory({ members: [], viewerUserId: "u-me" });
+  const emptyLine = (tree: ReactTestRenderer) => {
+    const list = tree.root.find(
+      (node) => (node.type as unknown) === "BottomSheetFlatList",
+    );
+    return render(list.props.ListEmptyComponent);
+  };
+  const people = (over: Partial<React.ComponentProps<typeof WhoPickerBody>>) =>
+    body(null, () => undefined, { single: true, directory: empty, ...over });
+
+  it("says the members couldn't load, not the roles and groups", () => {
+    const text = JSON.stringify(emptyLine(people({ people: "error" })).toJSON());
+    expect(text).toContain(WHO_PICKER_COPY.peopleFailed);
+    expect(text).not.toContain(WHO_PICKER_COPY.setsFailed);
+  });
+
+  it("says nobody else is in the chapter, not that it has no roles", () => {
+    const text = JSON.stringify(emptyLine(people({})).toJSON());
+    expect(text).toContain(WHO_PICKER_COPY.noPeople);
+    expect(text).not.toContain(WHO_PICKER_COPY.noSets);
+  });
+
+  it("says the caller's line, with its action, while the people aren't ready", () => {
+    const onPress = vi.fn();
+    const note = emptyLine(
+      people({
+        people: "error",
+        peopleNote: {
+          text: "Couldn't check your block list.",
+          action: { label: "Try again", onPress },
+        },
+      }),
+    ).root.findByType(InlineNote);
+    expect(note.props.children).toBe("Couldn't check your block list.");
+    act(() => note.props.action.onPress());
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,6 +24,7 @@ import {
 import { Segmented } from "@/components/segmented";
 import { ViewLabels } from "@/components/view-labels";
 import { DisclosureGlyph, PlusGlyph } from "@/components/control-glyphs";
+import { InlineNote } from "@/components/inline-note";
 import { TaskBarPill } from "@/components/tasks/task-action-bar";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
 import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
@@ -67,10 +68,12 @@ export interface WhoPickerSheetProps {
    */
   single?: boolean;
   /**
-   * Add people to a group task (#5905): several people, no roles, groups or
-   * Everyone. Who already has a copy is ticked and fixed, `alreadyNote`
-   * beside them; the footer's button is `label(count)` of the new picks and
-   * calls `onAdd`, which closes the sheet.
+   * Several people, no roles, groups or Everyone, with one button in the
+   * footer: Add people to a group task (#5905), and New message's people
+   * (#6190, `components/chat/new-message-sheet.tsx`, which marks nobody).
+   * Who is in `marked` (a task's copy holders) is ticked and fixed,
+   * `alreadyNote` beside them; the footer's button is `label(count)` of the
+   * new picks and calls `onAdd`, which closes the sheet.
    */
   add?: {
     marked: ReadonlySet<string>;
@@ -83,6 +86,12 @@ export interface WhoPickerSheetProps {
     limit?: number;
   };
   title?: string;
+  /**
+   * What to say while the people aren't ready, in place of the picker's own
+   * loading and failure lines, with an action such as Try again: New message
+   * says it is checking the block list, or waiting for the network.
+   */
+  peopleNote?: { text: string; action?: { label: string; onPress: () => void } };
   /** Fired once the sheet has closed, however it closed. */
   onDismiss?: () => void;
 }
@@ -282,6 +291,7 @@ export function WhoPickerBody({
   single = false,
   add,
   title = WHO_PICKER_COPY.title,
+  peopleNote,
   mode,
   onPick,
   onDone,
@@ -502,7 +512,15 @@ export function WhoPickerBody({
       keyboardDismissMode="on-drag"
       ListHeaderComponent={header}
       stickyHeaderIndices={[0]}
-      ListEmptyComponent={<Text style={styles.empty}>{empty}</Text>}
+      ListEmptyComponent={
+        peopleNote && onPeople && state !== "ready" ? (
+          <View style={styles.emptyNote}>
+            <InlineNote action={peopleNote.action}>{peopleNote.text}</InlineNote>
+          </View>
+        ) : (
+          <Text style={styles.empty}>{empty}</Text>
+        )
+      }
       renderItem={({ item }: { item: WhoRow }) => renderRow(item)}
     />
   );
@@ -634,6 +652,10 @@ function createStyles(tokens: SignetTokens, accent: string) {
     empty: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
+      paddingHorizontal: tokens.spacing.lg,
+      paddingTop: tokens.spacing.sm,
+    },
+    emptyNote: {
       paddingHorizontal: tokens.spacing.lg,
       paddingTop: tokens.spacing.sm,
     },
