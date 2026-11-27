@@ -147,6 +147,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, officers see the chapter's tasks under Everyone's, and your house rank is on You.",
       "A link to an event, task, member, prospect or conversation on the web, tapped in a message, now opens that screen in the app.",
       "Chapter settings now has Pledge class and Member fields, so you can add a class, move members into it and set up the chapter's own questions without a computer.",
+      "The pencil at the top of Messages now opens New message, where you pick one person to message or several to start a group.",
     ],
   },
   {
