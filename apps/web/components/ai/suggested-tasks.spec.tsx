@@ -101,6 +101,16 @@ vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   }),
 }));
 
+// The report sheet stands in as one button that reports, so the menu's
+// hide-once-sent rule is testable without the report hooks.
+vi.mock("@/components/ai/report-ai", () => ({
+  ReportAiDialog: ({ onReported }: { onReported: () => void }) => (
+    <button type="button" onClick={onReported}>
+      Send test report
+    </button>
+  ),
+}));
+
 vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
@@ -366,6 +376,38 @@ describe("SuggestedTasks (#4313)", () => {
       key: "Enter",
     });
     expect(screen.getByRole("menuitem", { name: "Report this" })).toBeTruthy();
+  });
+
+  it("lists the menu's answers in one order: Change, agenda, Dismiss, Report (#5739)", () => {
+    mocks.items.current = [suggestion("1")];
+    render(
+      <SuggestedTasks source={{ type: "meeting", id: "m-1" }} headingId="s" />,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "More: Task 1" }), {
+      key: "Enter",
+    });
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual([
+      "Change before creating",
+      "Add to next meeting's agenda",
+      "Dismiss",
+      "Report this",
+    ]);
+  });
+
+  it("takes Report this out of the menu once the report is sent", () => {
+    mocks.items.current = [suggestion("1")];
+    render(
+      <SuggestedTasks source={{ type: "meeting", id: "m-1" }} headingId="s" />,
+    );
+    menuItem("Task 1", "Report this");
+    fireEvent.click(screen.getByRole("button", { name: "Send test report" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "More: Task 1" }), {
+      key: "Enter",
+    });
+    expect(screen.getByRole("menuitem", { name: "Dismiss" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Report this" })).toBeNull();
   });
 
   it("offers no Report this to a member who can't use AI", () => {
@@ -766,6 +808,13 @@ describe("SuggestedTasks (#4313)", () => {
     );
     fireEvent.click(acceptButtons()[0]!);
     expect(screen.getByRole("button", { name: "Creating…" })).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "More: Task 1",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(
       (
         screen.getByRole("button", {
