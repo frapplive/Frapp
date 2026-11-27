@@ -1,12 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsIn,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CHAT_BACKGROUND_KEYS, type ChatBackgroundKey } from '@repo/validation';
+import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 
 export class ChatBackgroundPhotoUrlDto {
   @ApiProperty({ description: 'Original filename (e.g. house.jpg)' })
@@ -118,6 +113,6 @@ export class SetChatBackgroundHolidaySeasonDto {
     description:
       'On: a Plain default shows Holiday from Dec 1 to 26. Off: it stays Plain.',
   })
-  @IsBoolean()
+  @IsStrictBoolean()
   enabled: boolean;
 }
