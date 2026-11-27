@@ -743,29 +743,40 @@ describe("documentFolderHues (#5576)", () => {
   });
 });
 
-// #6055: who gets "Upload a new version", as the API's replaceFile decides.
+// #6055: who gets "Upload a new version", as the API's routes decide.
 describe("mayUploadNewVersion", () => {
   const upload = { uploaded_by: "me", drive_file_id: null, meeting_id: null };
+  const uploads = { uploads: true, manages: false };
+  const manages = { uploads: false, manages: true };
+  const neither = { uploads: false, manages: false };
 
-  it("offers it to the uploader and to whoever manages documents", () => {
-    expect(mayUploadNewVersion(upload, "me", false)).toBe(true);
-    expect(mayUploadNewVersion(upload, "someone", true)).toBe(true);
+  it("offers it to the uploader who can upload and to whoever manages documents", () => {
+    expect(mayUploadNewVersion(upload, "me", uploads)).toBe(true);
+    expect(mayUploadNewVersion(upload, "someone", manages)).toBe(true);
   });
 
   it("withholds it from anyone else", () => {
-    expect(mayUploadNewVersion(upload, "someone", false)).toBe(false);
-    expect(mayUploadNewVersion(upload, null, false)).toBe(false);
+    expect(mayUploadNewVersion(upload, "someone", uploads)).toBe(false);
+    expect(mayUploadNewVersion(upload, null, uploads)).toBe(false);
+  });
+
+  it("withholds it from an uploader who has lost upload", () => {
+    expect(mayUploadNewVersion(upload, "me", neither)).toBe(false);
   });
 
   it("never offers it on a Drive file or a meeting's minutes", () => {
     expect(
-      mayUploadNewVersion({ ...upload, drive_file_id: "drive-1" }, "me", true),
+      mayUploadNewVersion(
+        { ...upload, drive_file_id: "drive-1" },
+        "me",
+        manages,
+      ),
     ).toBe(false);
     expect(
       mayUploadNewVersion(
         { uploaded_by: null, drive_file_id: null, meeting_id: "mtg-1" },
         "me",
-        true,
+        manages,
       ),
     ).toBe(false);
   });

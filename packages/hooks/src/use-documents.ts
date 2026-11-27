@@ -533,7 +533,10 @@ export function useRequestDocumentVersionUploadUrl() {
 /**
  * Puts a new version's uploaded file in place of a document's (#6055): the
  * same document, id, folder, list, pin and stars, with the new file. The
- * library and the open viewer refetch, so both show it.
+ * library and the open viewer refetch, so both show it. The document's own
+ * read (`useDocument`) is reset, not only invalidated: its signed links name
+ * the deleted file, and the viewer's Download reuses links in hand while
+ * they are fresh, so none may outlive the version.
  */
 export function useReplaceDocumentFile() {
   const client = useFrappClient();
@@ -551,7 +554,11 @@ export function useReplaceDocumentFile() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { id }) => {
+      void queryClient.resetQueries({
+        queryKey: ["documents", id],
+        exact: true,
+      });
       void queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
   });

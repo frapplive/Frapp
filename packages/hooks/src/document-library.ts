@@ -858,9 +858,10 @@ export function isDriveCopy(doc: { drive_file_id?: string | null }): boolean {
 
 /**
  * Whether `userId` may upload a new version of this file (#6055), as the API
- * decides (`ChapterDocumentService.replaceFile`): its uploader, or a member
- * who manages documents. Never a Drive file, which is changed in Drive, nor a
- * meeting's minutes, which have no file.
+ * decides (`PUT /v1/documents/{id}/file`): its uploader, or a member who
+ * manages documents, and either way only while they hold upload or manage,
+ * since storing a new file is an upload. Never a Drive file, which is changed
+ * in Drive, nor a meeting's minutes, which have no file.
  */
 export function mayUploadNewVersion(
   doc: {
@@ -869,11 +870,12 @@ export function mayUploadNewVersion(
     meeting_id?: string | null;
   },
   userId: string | null,
-  manages: boolean,
+  access: { uploads: boolean; manages: boolean },
 ): boolean {
   if (isDriveCopy(doc) || isMinutesDocument({ meeting_id: doc.meeting_id }))
     return false;
-  return manages || (!!userId && doc.uploaded_by === userId);
+  if (access.manages) return true;
+  return access.uploads && !!userId && doc.uploaded_by === userId;
 }
 
 /**

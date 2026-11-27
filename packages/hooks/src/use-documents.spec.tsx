@@ -6,6 +6,8 @@ import {
   useCreateDocumentFolder,
   useDeleteDocumentFolder,
   useRequestDocumentUploadUrl,
+  useRequestDocumentVersionUploadUrl,
+  useReplaceDocumentFile,
   useDocuments,
   useUpdateDocumentFolder,
   useDocumentStars,
@@ -43,7 +45,9 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: "finance", search: undefined, minutes: undefined } },
+      params: {
+        query: { folder: "finance", search: undefined, minutes: undefined },
+      },
     });
   });
 
@@ -64,7 +68,9 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: "bylaws", minutes: undefined } },
+      params: {
+        query: { folder: undefined, search: "bylaws", minutes: undefined },
+      },
     });
   });
 
@@ -85,7 +91,9 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: undefined, minutes: undefined } },
+      params: {
+        query: { folder: undefined, search: undefined, minutes: undefined },
+      },
     });
   });
 
@@ -106,7 +114,9 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: undefined, minutes: "true" } },
+      params: {
+        query: { folder: undefined, search: undefined, minutes: "true" },
+      },
     });
   });
 });
@@ -245,6 +255,130 @@ describe("useRequestDocumentUploadUrl", () => {
     });
 
     expect(result.current.error).toEqual(mockError);
+  });
+});
+
+// #6055: a new version is minted on the document's own route and confirmed
+// with PUT /v1/documents/{id}/file.
+describe("new version mutations", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    queryClient = createTestQueryClient();
+  });
+
+  it("asks for the version link on the document's route, with the rest as the body", async () => {
+    const ticket = {
+      upload_url: "https://storage.example.com/upload",
+      storage_path: "chapters/ch-1/documents/up-1/bylaws.pdf",
+      document_id: "up-1",
+    };
+    const mockPost = vi.fn().mockResolvedValue({ data: ticket, error: null });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useRequestDocumentVersionUploadUrl(), {
+      wrapper: createWrapper(queryClient, { POST: mockPost }),
+    });
+
+    const data = await result.current.mutateAsync({
+      id: "doc-1",
+      filename: "bylaws.pdf",
+      content_type: "application/pdf",
+      size_bytes: 10,
+    });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/v1/documents/{id}/version-upload-url",
+      {
+        params: { path: { id: "doc-1" } },
+        body: {
+          filename: "bylaws.pdf",
+          content_type: "application/pdf",
+          size_bytes: 10,
+        },
+      },
+    );
+    expect(data).toEqual(ticket);
+    // Minting changes nothing, so nothing refetches.
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("throws the API's refusal of a version link", async () => {
+    const refusal = { message: "Forbidden" };
+    const mockPost = vi.fn().mockResolvedValue({ data: null, error: refusal });
+    const { result } = renderHook(() => useRequestDocumentVersionUploadUrl(), {
+      wrapper: createWrapper(queryClient, { POST: mockPost }),
+    });
+    await expect(
+      result.current.mutateAsync({
+        id: "doc-1",
+        filename: "bylaws.pdf",
+        content_type: "application/pdf",
+      }),
+    ).rejects.toEqual(refusal);
+  });
+
+  it("confirms with PUT on the document's file, and drops its signed links", async () => {
+    const row = {
+      id: "doc-1",
+      storage_path: "chapters/ch-1/documents/up-1/v2.pdf",
+    };
+    const mockPut = vi.fn().mockResolvedValue({ data: row, error: null });
+    // The open viewer's read, holding links to the file being replaced, and
+    // another document's, which keeps its links.
+    queryClient.setQueryData(["documents", "doc-1"], {
+      downloadUrl: "https://storage.example.com/old",
+    });
+    queryClient.setQueryData(["documents", "doc-2"], {
+      downloadUrl: "https://storage.example.com/other",
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useReplaceDocumentFile(), {
+      wrapper: createWrapper(queryClient, { PUT: mockPut }),
+    });
+
+    await expect(
+      result.current.mutateAsync({
+        id: "doc-1",
+        storage_path: row.storage_path,
+        content_type: "application/pdf",
+        byte_size: 10,
+      }),
+    ).resolves.toEqual(row);
+
+    expect(mockPut).toHaveBeenCalledWith("/v1/documents/{id}/file", {
+      params: { path: { id: "doc-1" } },
+      body: {
+        storage_path: row.storage_path,
+        content_type: "application/pdf",
+        byte_size: 10,
+      },
+    });
+    expect(queryClient.getQueryData(["documents", "doc-1"])).toBeUndefined();
+    expect(queryClient.getQueryData(["documents", "doc-2"])).toEqual({
+      downloadUrl: "https://storage.example.com/other",
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["documents"] });
+  });
+
+  it("leaves the cache alone when the version is refused", async () => {
+    const refusal = { message: "Conflict" };
+    const mockPut = vi.fn().mockResolvedValue({ data: null, error: refusal });
+    queryClient.setQueryData(["documents", "doc-1"], { downloadUrl: "x" });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useReplaceDocumentFile(), {
+      wrapper: createWrapper(queryClient, { PUT: mockPut }),
+    });
+    await expect(
+      result.current.mutateAsync({
+        id: "doc-1",
+        storage_path: "chapters/ch-1/documents/up-1/v2.pdf",
+        content_type: "application/pdf",
+      }),
+    ).rejects.toEqual(refusal);
+    expect(queryClient.getQueryData(["documents", "doc-1"])).toEqual({
+      downloadUrl: "x",
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
 
