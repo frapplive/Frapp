@@ -61,19 +61,12 @@ export function TaskRow({
   gate,
   lifecycleWritePending,
   selected,
-  audience = null,
   onOpen,
   onChangeStatus,
   onConfirm,
 }: {
   task: BoardTask;
   person: RowPerson;
-  /**
-   * Under My tasks, a copy of a group task names who it went to in place of
-   * the viewer's own face (#5699): it is theirs to finish, but the chapter
-   * got it too, with how far everyone is.
-   */
-  audience?: CopyAudience | null;
   /** The viewer's own task: its circle is the next step. */
   isMine: boolean;
   /** Say where it stands: no heading above it says so. */
@@ -195,14 +188,7 @@ export function TaskRow({
           className="hidden max-w-[10rem] shrink @lg:inline-flex"
         />
       ) : null}
-      {audience ? (
-        <>
-          <AudienceText label={audience.label} glyphNarrow />
-          <MiniProgress done={audience.done} total={audience.total} title={task.title} />
-        </>
-      ) : (
-        <PersonChip person={person} />
-      )}
+      <PersonChip person={person} />
       <DueText
         task={task}
         due={due}
@@ -315,23 +301,11 @@ export function copyAudience(task: BoardTask): CopyAudience | null {
  * "Everyone" with the people glyph, the label from `@lg` up and read aloud
  * always. `truncate` is restated at `@lg` because `not-sr-only` resets
  * overflow and white-space, as `top-bar.tsx` notes. A group row draws nothing
- * below `@lg`, as before; a copy's row keeps the glyph there (`glyphNarrow`),
- * where it stands in for the person's face.
+ * below `@lg`.
  */
-function AudienceText({
-  label,
-  glyphNarrow = false,
-}: {
-  label: string;
-  glyphNarrow?: boolean;
-}) {
+function AudienceText({ label }: { label: string }) {
   return (
-    <span
-      className={cn(
-        "min-w-0 max-w-[14rem] shrink items-center gap-1.5 text-caption text-muted-foreground",
-        glyphNarrow ? "inline-flex" : "hidden @lg:inline-flex",
-      )}
-    >
+    <span className="hidden min-w-0 max-w-[14rem] shrink items-center gap-1.5 text-caption text-muted-foreground @lg:inline-flex">
       <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       <span className="sr-only @lg:not-sr-only @lg:truncate">{label}</span>
     </span>
