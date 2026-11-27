@@ -17,6 +17,11 @@ import { reportSwallowed } from '../../infrastructure/observability/report-swall
  */
 export const WORKER_SUBSCRIPTION_DOWN_AFTER_MS = 60_000;
 
+/** Every worker channel's options: see the `channel()` call in `open()`. */
+export const WORKER_CHANNEL_CONFIG = {
+  config: { postgres_changes_options: { wait: true } },
+} as const;
+
 /** The first reopen after a server close waits this long. */
 const WORKER_REOPEN_BASE_DELAY_MS = 1_000;
 
@@ -218,7 +223,12 @@ export class WorkerSubscription {
     const { topic, worker, impact, logger } = this.config;
     let ch: RealtimeChannel | null = null;
     try {
-      const fresh = this.supabase.channel(topic);
+      // `wait: true` holds `SUBSCRIBED` until the server's postgres_changes
+      // subscription is streaming, not just until the channel has joined
+      // (realtime-js `postgres_changes_options`). Without it, a worker that
+      // catches up on `SUBSCRIBED` (#6123) could read before the stream starts
+      // and miss an insert that lands in between, on both paths.
+      const fresh = this.supabase.channel(topic, WORKER_CHANNEL_CONFIG);
       ch = fresh;
       this.config.bind(fresh);
       // Held before `subscribe()`, so a status that arrives at once finds it.
@@ -296,7 +306,7 @@ export class WorkerSubscription {
         ? 'this worker reopens it'
         : 'realtime-js rejoins it';
     logger.warn(
-      `${worker}: ${topic} ${status}${detail}; ${impact} stop until ${next}, and inserts meanwhile are not replayed (${this.failures} failed in a row)`,
+      `${worker}: ${topic} ${status}${detail}; ${impact} stop until ${next}, and inserts meanwhile are ${this.config.onSubscribed ? 'read back when it rejoins' : 'not replayed'} (${this.failures} failed in a row)`,
     );
     if (dropped) this.recordDrop(status);
   }
@@ -322,7 +332,9 @@ export class WorkerSubscription {
     this.lastUnstableReportAt = now;
     const drops = String(this.dropsAt.length);
     reportSwallowed(logger, `the ${worker} subscription dropping`, () => ({
-      message: `${worker} realtime subscription keeps dropping; ${impact} are lost each time`,
+      // A worker that catches up on `SUBSCRIBED` (#6123) loses nothing to a
+      // short drop; its inserts are only late.
+      message: `${worker} realtime subscription keeps dropping; ${impact} are ${this.config.onSubscribed ? 'late' : 'lost'} each time`,
       level: 'warning',
       tags: { worker, realtime_status: status, drops },
       fingerprint: ['worker-subscription-unstable', worker],

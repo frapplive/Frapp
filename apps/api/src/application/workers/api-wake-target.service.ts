@@ -10,22 +10,23 @@ import {
   type IApiWakeRepository,
 } from '#domain/repositories/api-wake.repository.interface';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
+import { apiBaseUrl } from '../services/discord-oauth.service';
 
 /**
- * The origin `wake_api()` may poke, from `API_URL`: an https origin, with any
- * path (the `/v1` some environments carry) dropped. Null for anything else,
- * so a laptop's `http://localhost:3001` is never written and a local database
- * never sends a request.
+ * The base `wake_api()` pokes (it appends `/health`), from `API_URL`: the
+ * same base every other reader of `API_URL` uses ({@link apiBaseUrl}: trailing
+ * slashes and a stale `/v1` dropped), kept only when it is https. Null for
+ * anything else, so a laptop's `http://localhost:3001` is never written and a
+ * local database never sends a request.
  */
 export function wakeOrigin(apiUrl: string | undefined): string | null {
-  if (!apiUrl) return null;
-  let parsed: URL;
+  const base = apiBaseUrl(apiUrl);
+  if (base === null) return null;
   try {
-    parsed = new URL(apiUrl.trim());
+    return new URL(base).protocol === 'https:' ? base : null;
   } catch {
     return null;
   }
-  return parsed.protocol === 'https:' ? parsed.origin : null;
 }
 
 /**

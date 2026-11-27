@@ -12,6 +12,8 @@
 -- 3. `wake_api()`: sends `GET <url>/health` through `pg_net`, at most once a
 --    minute. `pg_net` queues the request and sends it after the transaction
 --    commits, so nothing waits on it, and a failure never fails the caller.
+--    Its timeout outlasts a cold start (about 10 to 20 seconds), so the
+--    response row says whether the wake landed.
 -- 4. A statement trigger on `chat_messages` that calls it. Cloud Run starts an
 --    instance for the request, and the push worker catches up on boot (5).
 -- 5. `chat_push_unclaimed_messages(since, limit)`: the recent messages with
@@ -22,7 +24,17 @@
 -- Production runs at min 1, so its API is always awake and the poke is a
 -- request it answers; the code path is the same on both.
 
-create extension if not exists pg_net with schema extensions;
+-- Only where the server ships it. Hosted Supabase and the local stack do; the
+-- migration replays in CI (PGlite, and the plain Postgres image the role-lock
+-- race check uses) don't, and can't, since pg_net needs a background worker.
+-- Without it `wake_api()` reaches its exception handler and does nothing.
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    create extension if not exists pg_net with schema extensions;
+  end if;
+end
+$$;
 
 create table if not exists public.api_wake (
   -- One row only.
@@ -69,7 +81,7 @@ begin
   -- process is up. The request is what matters; its answer is never read.
   perform net.http_get(
     url := rtrim(v_url, '/') || '/health',
-    timeout_milliseconds := 10000
+    timeout_milliseconds := 30000
   );
 exception
   when others then
@@ -105,7 +117,18 @@ begin
 end;
 $$;
 
+-- A trigger needs no grant, so nobody gets one (#830).
 revoke execute on function public.chat_messages_wake_api() from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke execute on function public.chat_messages_wake_api() from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke execute on function public.chat_messages_wake_api() from authenticated;
+  end if;
+end
+$$;
 
 -- Per statement, not per row: a Discord import inserting thousands of rows in
 -- one statement pokes at most once.

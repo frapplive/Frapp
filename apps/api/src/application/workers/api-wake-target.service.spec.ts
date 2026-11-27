@@ -13,7 +13,7 @@ function serviceWith(apiUrl: string | undefined, setUrl: jest.Mock) {
 }
 
 describe('wakeOrigin (#6123)', () => {
-  it('keeps an https origin and drops the path', () => {
+  it('keeps an https base and drops a stale /v1', () => {
     expect(wakeOrigin('https://api-staging.frapp.live/v1')).toBe(
       'https://api-staging.frapp.live',
     );

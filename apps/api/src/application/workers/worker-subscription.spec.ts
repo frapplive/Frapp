@@ -89,7 +89,11 @@ describe('WorkerSubscription', () => {
     it('opens its topic with its listeners, then subscribes', () => {
       sub.start();
 
-      expect(realtime.channel).toHaveBeenCalledWith(TOPIC);
+      // Held until postgres_changes streams, so a catch-up on SUBSCRIBED
+      // can't read before the stream starts (#6123).
+      expect(realtime.channel).toHaveBeenCalledWith(TOPIC, {
+        config: { postgres_changes_options: { wait: true } },
+      });
       expect(latest().subscribe).toHaveBeenCalledWith(expect.any(Function));
       expect(latest().insert('things', { id: 'r1' })).toBe(1);
       expect(rows).toEqual([{ id: 'r1' }]);
@@ -111,6 +115,59 @@ describe('WorkerSubscription', () => {
       );
       expect(logger.warn).not.toHaveBeenCalled();
       expect(captured()).toHaveLength(0);
+    });
+  });
+
+  describe('a worker that catches up on SUBSCRIBED (#6123)', () => {
+    let onSubscribed: jest.Mock;
+    let catching: WorkerSubscription;
+
+    beforeEach(() => {
+      onSubscribed = jest.fn();
+      catching = new WorkerSubscription(
+        {
+          channel: realtime.channel,
+          removeChannel: realtime.removeChannel,
+        } as unknown as FrappSupabaseClient,
+        {
+          topic: 'catching-topic',
+          worker: 'catching-worker',
+          impact: 'test rows',
+          logger: logger as unknown as Logger,
+          bind: (channel) => channel,
+          onSubscribed,
+        },
+      );
+    });
+
+    afterEach(async () => {
+      await catching.stop();
+    });
+
+    it('is told on the first join and on every rejoin, not on a failure', () => {
+      catching.start();
+      const ch = realtime.onTopic('catching-topic')[0];
+      ch.status('SUBSCRIBED');
+      expect(onSubscribed).toHaveBeenCalledTimes(1);
+
+      ch.status('CHANNEL_ERROR');
+      expect(onSubscribed).toHaveBeenCalledTimes(1);
+
+      ch.status('SUBSCRIBED');
+      expect(onSubscribed).toHaveBeenCalledTimes(2);
+    });
+
+    it('says a drop leaves its inserts late, not lost', () => {
+      catching.start();
+      const ch = realtime.onTopic('catching-topic')[0];
+      ch.status('SUBSCRIBED');
+      ch.status('CHANNEL_ERROR');
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'inserts meanwhile are read back when it rejoins',
+        ),
+      );
     });
   });
 
