@@ -7814,4 +7814,34 @@ describe("ChatShell's address (#6041)", () => {
     );
     expect(push).not.toHaveBeenCalled();
   });
+
+  it("takes the address's channel when Back moves from Messages to /chat, not the remembered one", async () => {
+    // Found by the browser walk: after a reload on `/messages`, the list
+    // switch dropped the adopted channel and the landing overwrote the entry.
+    channelsQueryState.value = {
+      data: [
+        ...CHANNELS,
+        {
+          id: "chan-dm",
+          name: "dm-viewer-other",
+          type: "DM",
+          member_ids: ["viewer-1", "other-1"],
+        },
+      ],
+    };
+    window.history.replaceState({}, "", "/messages?channel=chan-dm");
+    const { rerender } = render(
+      <ChatShell {...fromAddress()} view="direct" addressed />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-dm"),
+    );
+    // The landing would be #general; the address names #random.
+    window.history.replaceState({}, "", "/chat?channel=chan-random");
+    rerender(<ChatShell {...fromAddress()} view="channels" addressed />);
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-random"),
+    );
+    expect(here()).toBe("/chat?channel=chan-random");
+  });
 });

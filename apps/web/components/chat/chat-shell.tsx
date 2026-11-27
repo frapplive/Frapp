@@ -1270,6 +1270,11 @@ export function ChatShell({
     nothing here; a `message=` taken off once its jump landed is not a new
     target either.
   */
+  // Set when this render took the address's conversation, so the list switch
+  // below (`seenView`) doesn't drop it: the address moving between `/chat` and
+  // `/messages` changes the view in the same render, and that block still
+  // reads the selection from before it.
+  let adoptedThisRender = false;
   if (
     seenTarget.channelId !== initialChannelId ||
     seenTarget.messageId !== initialMessageId ||
@@ -1301,6 +1306,7 @@ export function ChatShell({
       (channelMoved && !channelShown) ||
       (messageArrived && initialMessageId !== pendingMessageId);
     if (adopt) {
+      adoptedThisRender = true;
       setAdoption((a) => ({
         count: a.count + 1,
         channel: initialChannelId !== null,
@@ -1376,7 +1382,12 @@ export function ChatShell({
           (ch) => ch.id === selectedChannelId || ch.name === selectedChannelId,
         )
       : undefined;
-    if (selected && isDirectChannel(selected) !== directView && !toolBeside) {
+    if (
+      !adoptedThisRender &&
+      selected &&
+      isDirectChannel(selected) !== directView &&
+      !toolBeside
+    ) {
       setSelectedChannelId(null);
     }
   }
