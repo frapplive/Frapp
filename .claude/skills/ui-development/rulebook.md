@@ -293,6 +293,10 @@ These cause most of the iterations, so they come first.
   allowing stuff like this to slip through?" (11-20). Checked on every route by
   `apps/web/components/layout/every-page-has-a-way-back.spec.ts` and
   `apps/mobile/lib/every-screen-has-a-way-back.spec.ts`: a new page fails there until it has both.
+- **Everything that draws its own back arrow or X has an address; Back does what that arrow does.** A folder, a
+  record, an editor, a Settings page or a named view is in the web address's query, so Back, a reload and a shared
+  link land on it (Paul, 2026-11-25, #6034; `spec/ui/web-dashboard/README.md` § Addresses). Every route and
+  its listed parameters are checked against the spec by `apps/web/components/layout/every-page-has-an-address.spec.ts`.
 - **Opening a notification doesn't stack the screen on itself.** (11-07)
 - **On a phone, the app is the only way in.** An invite link opened in a phone's browser leads to the app
   (open it, or get it), never to signing in on the web, so a new member signs in once and is asked each
