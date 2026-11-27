@@ -177,7 +177,6 @@ export * from "./member-nudge";
 // client-supplied list would be forgeable.
 export * from "./mentions";
 export * from "./message-link";
-export * from "./web-addresses";
 export * from "./message-text";
 // The minutes' section editor, shared by the web and the phone (#4412).
 export * from "./minutes-edit";
@@ -342,6 +341,7 @@ export {
   normalizeExtension,
   type UploadKind,
 } from "./upload-allowlists";
+export * from "./web-addresses";
 export * from "./week-start";
 export * from "./welcome-card";
 // Point-in-polygon, shared by the API's geofence check and the phone's s10 screen.
