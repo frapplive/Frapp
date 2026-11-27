@@ -122,6 +122,13 @@ type Trailing =
     };
 
 /**
+ * A picker trigger at a row's end (`control`) drawn as the row's quiet value,
+ * the way a `value` row's words read, until it's hovered.
+ */
+export const SETTINGS_VALUE_TRIGGER =
+  "h-8 w-auto max-w-[14rem] gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground hover:bg-card-hover";
+
+/**
  * foundations §9's Settings row step: 36 to a mouse (44 until #6115), 44 to a
  * finger. A row with its muted line grows past it.
  */

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import { ChevronDown, Loader2, Palette, Plus, Users, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, Loader2, Palette, Users, X } from "lucide-react";
 import {
   groupFollowsLabel,
   useCreateGroup,
@@ -65,6 +65,8 @@ import {
   SettingsSubpage,
 } from "@/components/settings/settings-subpage";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useToastedRun } from "@/lib/hooks/use-toasted-run";
+import { SettingsAddRow } from "@/components/shared/settings-add-row";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { cn, getErrorMessage } from "@/lib/utils";
 
@@ -235,9 +237,6 @@ export function GroupsGroup({
   );
 }
 
-const ADD_ROW =
-  "flex min-h-11 w-full items-center gap-4 px-4 py-2.5 text-left text-sm font-medium text-foreground transition hover:bg-card-hover disabled:opacity-50 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
-
 /** New group: name it in place, then its page opens to pick who's in it. */
 function NewGroupRow({
   full,
@@ -246,95 +245,31 @@ function NewGroupRow({
   full: boolean;
   onCreated: (groupId: string) => void;
 }) {
-  const { toast } = useToast();
+  const run = useToastedRun();
   const create = useCreateGroup();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed || create.isPending) return;
-    try {
-      const group = await create.mutateAsync({ name: trimmed });
-      setName("");
-      setOpen(false);
-      if (group) onCreated(group.id);
-    } catch (error) {
-      toast({
-        title: `Couldn't add ${trimmed}`,
-        description: getErrorMessage(
-          error,
-          "Pick a name no role, tier or group already has, then try again.",
-        ),
-        variant: "destructive",
-      });
-    }
-  }
-
-  if (!open) {
-    return (
-      <li className="group">
-        <button
-          type="button"
-          disabled={full}
-          onClick={() => setOpen(true)}
-          className={cn(ADD_ROW, FOCUS_RING)}
-        >
-          <Plus
-            className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            {PEOPLE_SETTINGS_COPY.newGroup}
-            {full ? (
-              <span className="text-caption font-normal text-muted-foreground">
-                This chapter has {GROUPS_MAX} groups, the most it can hold.
-              </span>
-            ) : null}
-          </span>
-        </button>
-      </li>
-    );
-  }
   return (
-    <li className="px-4 py-2">
-      <form
-        onSubmit={handleCreate}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <Input
-          autoFocus
-          aria-label="New group name"
-          value={name}
-          maxLength={GROUP_NAME_MAX_LENGTH}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
-          placeholder="Third floor"
-          className="max-w-xs"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={create.isPending || !name.trim()}
-        >
-          {create.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : null}
-          Add group
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </Button>
-      </form>
-    </li>
+    <SettingsAddRow
+      label={PEOPLE_SETTINGS_COPY.newGroup}
+      inputLabel="New group name"
+      placeholder="Third floor"
+      maxLength={GROUP_NAME_MAX_LENGTH}
+      submitLabel="Add group"
+      full={
+        full
+          ? `This chapter has ${GROUPS_MAX} groups, the most it can hold.`
+          : null
+      }
+      onAdd={(name) =>
+        run(
+          async () => {
+            const group = await create.mutateAsync({ name });
+            if (group) onCreated(group.id);
+          },
+          `Couldn't add ${name}`,
+          "Pick a name no role, tier or group already has, then try again.",
+        )
+      }
+    />
   );
 }
 
