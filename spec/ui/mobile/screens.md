@@ -285,7 +285,8 @@ a roster still loading, waiting for the network or failed says so the same way, 
 Equal matches are newest first, without the list's pins, as on web.
 One start runs at a time, and one that finishes after the member picked something else or left Messages opens nothing; a tap on a result works with the keyboard up.
 Comparable apps: Instagram's and iMessage's inbox search.
-The pencil at the top right focuses that field, as iMessage's and Instagram's open a "To:" search (until #4668 it opened the Directory), and an empty list says "No messages yet.
+The pencil at the top right opens **New message** ([#6190](https://github.com/pdcarlson/Frapp/issues/6190), asked by Shawn 2026-11-27), as iMessage's, Instagram's and WhatsApp's compose button opens a "To:" list: the shared Who picker for people only (the sheet Add people uses), a search and a tick per person, and one footer button, "Message" for one person and "Message 3 people" for more, off past 9 ("Up to 9 people", a group DM's 10 with you). One person opens your DM with them through `POST /v1/channels/dm`, as a search pick does; two or more start a group DM through `POST /v1/channels/group-dm`; a failure says so in an alert ("Couldn't start the group" for a group). It offers the roster by the search's rule (`newMessageRecipients` in `@repo/hooks/dm-search`: never you, the system actor or a member you blocked, nobody until the block list is read, alumni included), people you already have a DM with too. `components/chat/new-message-sheet.tsx`.
+Changed in #6190: until then the pencil focused the search right under it (#4668; before that it opened the Directory), which read as a button that did nothing. An empty list says "No messages yet.
 Search for someone above to start one."
 `lib/chat/messages-screen.spec.tsx`
 

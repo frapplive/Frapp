@@ -1,10 +1,6 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Alert, StyleSheet, Text, View } from "react-native";
-// Only the ref's type: the field is `SearchField`, at the top of the screen as
-// on the Directory, so it needs no keyboard avoidance (#3354 guards fields a
-// route draws itself).
-import type { TextInput } from "react-native";
 import {
   canHideConversation,
   compareLatestFirst,
@@ -19,6 +15,7 @@ import {
   useChapterRoster,
   useChannelNotificationPreferences,
   useChannels,
+  useCreateGroupDm,
   useGetOrCreateDm,
   useLeaveChannel,
   useMemberDisplayNames,
@@ -33,6 +30,7 @@ import {
   DM_SEARCH_ROSTER_FAILED,
   dmChannelIdOf,
   dmSearchNoMatches,
+  NEW_GROUP_FAILED_TITLE,
   type DmSearchMember,
 } from "@repo/hooks";
 import {
@@ -59,6 +57,7 @@ import { InlineNote } from "@/components/inline-note";
 import { HeaderButton } from "@/components/header-button";
 import { PencilGlyph } from "@/components/control-glyphs";
 import { SearchField } from "@/components/filter-chips";
+import { NewMessageSheet } from "@/components/chat/new-message-sheet";
 import {
   START_DM_FAILED_BODY,
   startDmFailedTitle,
@@ -108,9 +107,13 @@ const MEMBERS_WAITING_FOR_NETWORK =
  * and iMessage's inbox search and the Directory's own field do: a name narrows
  * the screen to the member's conversations, then everyone else it matches
  * under "Start a conversation", and tapping one of those opens the DM,
- * creating it if needed. The pencil focuses it rather than leaving for the
- * Directory. What it finds is web's people search exactly
+ * creating it if needed. What it finds is web's people search exactly
  * (`searchDirectMessages` in `@repo/hooks/dm-search`).
+ *
+ * The pencil opens New message (#6190, Shawn, 2026-11-27): the shared people
+ * picker, one person for a DM, two or more for a group DM, as iMessage's,
+ * Instagram's and WhatsApp's compose button does. Until then it only focused
+ * the search right under it, which read as a button that did nothing.
  */
 export default function MessagesScreen() {
   const { tokens } = useFrappTheme();
@@ -150,11 +153,12 @@ export default function MessagesScreen() {
   // A tap on a member opens the thread as soon as the DM exists; this screen
   // already watches `["channels"]` (the member profile's Message does the same).
   const startDm = useGetOrCreateDm({ awaitRefetch: false });
+  const startGroup = useCreateGroupDm();
+  const [composing, setComposing] = useState(false);
   const rosterQuery = useChapterRoster();
   const blockList = useBlockedUserIds();
   const [showHidden, setShowHidden] = useState(false);
   const [query, setQuery] = useState("");
-  const searchRef = useRef<TextInput>(null);
   // The member whose DM is being opened, so no second start runs meanwhile,
   // and a count of picks: any later pick (another row, another member) or
   // leaving the screen bumps it, so a slow start that lands after it opens
@@ -275,13 +279,20 @@ export default function MessagesScreen() {
         : MEMBERS_LOADING;
   }
 
-  async function startConversation(member: DmSearchMember) {
-    if (startingRef.current !== null) return;
+  // A search pick, or New message's people: one opens (or reopens) the DM
+  // with them, two or more start a group DM.
+  async function startConversation(members: DmSearchMember[]) {
+    if (members.length === 0 || startingRef.current !== null) return;
     const seq = ++pickSeq.current;
-    startingRef.current = member.user_id;
+    const one = members.length === 1 ? members[0] : null;
+    startingRef.current = members.map((member) => member.user_id).join(",");
     try {
       const channelId = dmChannelIdOf(
-        await startDm.mutateAsync({ member_id: member.user_id }),
+        one
+          ? await startDm.mutateAsync({ member_id: one.user_id })
+          : await startGroup.mutateAsync({
+              member_ids: members.map((member) => member.user_id),
+            }),
       );
       if (seq !== pickSeq.current) return;
       if (!channelId) throw new Error("No channel id returned");
@@ -290,7 +301,7 @@ export default function MessagesScreen() {
     } catch {
       if (seq !== pickSeq.current) return;
       Alert.alert(
-        startDmFailedTitle(member.display_name),
+        one ? startDmFailedTitle(one.display_name) : NEW_GROUP_FAILED_TITLE,
         START_DM_FAILED_BODY,
       );
     } finally {
@@ -371,23 +382,22 @@ export default function MessagesScreen() {
       keyboardShouldPersistTaps="handled"
       title={SECTION_NAMES.messages}
       refresh={refresh}
-      // New message, where iMessage and Instagram keep it. It focuses the
-      // search below, as their pencil opens a "To:" field (#4668).
+      // New message, where iMessage and Instagram keep it: their pencil
+      // opens a "To:" list of people, and so does this one (#6190).
       headerAction={
         <HeaderButton
           label="New message"
-          hint="Opens the search to find someone."
-          onPress={() => searchRef.current?.focus()}
+          hint="Pick one or more people to message."
+          onPress={() => setComposing(true)}
         >
           <PencilGlyph color={tokens.color.text.foreground} />
         </HeaderButton>
       }
     >
-      {/* Drawn in every state, so the pencil always has a field to focus:
-          a member can still be found and messaged while the list loads or
-          after it failed, as the Directory's Message could before. */}
+      {/* Drawn in every state: a member can still be found and messaged
+          while the list loads or after it failed, as the Directory's Message
+          could before. */}
       <SearchField
-        inputRef={searchRef}
         value={query}
         onChangeText={setQuery}
         placeholder={DM_SEARCH_PLACEHOLDER}
@@ -431,7 +441,7 @@ export default function MessagesScreen() {
                         avatarTint={avatarTintFor(member.user_id)}
                         unreadCount={0}
                         mentionCount={0}
-                        onPress={() => void startConversation(member)}
+                        onPress={() => void startConversation([member])}
                       />
                     ))}
                   </View>
@@ -504,6 +514,12 @@ export default function MessagesScreen() {
             </>
           )}
         </>
+      ) : null}
+      {composing ? (
+        <NewMessageSheet
+          onStart={(members) => void startConversation(members)}
+          onClose={() => setComposing(false)}
+        />
       ) : null}
     </ScreenShell>
   );

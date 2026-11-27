@@ -33,10 +33,12 @@ const {
   reopenMutate,
   refetches,
   startMutateAsync,
+  groupMutateAsync,
   blockListState,
   rosterState,
 } = vi.hoisted(() => ({
   startMutateAsync: vi.fn(),
+  groupMutateAsync: vi.fn(),
   rosterState: {
     failed: false,
     // A first read still out: `pending`, or `paused` waiting for the network.
@@ -181,6 +183,16 @@ vi.mock("@repo/hooks", async () => {
       options?.awaitRefetch === false
         ? { mutateAsync: startMutateAsync }
         : { mutate: reopenMutate },
+    useCreateGroupDm: () => ({ mutateAsync: groupMutateAsync }),
+  };
+});
+
+// New message's picker has its own spec; here it records its props.
+vi.mock("@/components/chat/new-message-sheet", async () => {
+  const { createElement } = await import("react");
+  return {
+    NewMessageSheet: (props: object) =>
+      createElement("NewMessageSheet", props),
   };
 });
 
@@ -590,29 +602,89 @@ describe("Messages header, empty and error states", () => {
     expect(labels).toEqual(["New message"]);
   });
 
-  it("offers New message, which focuses the search rather than the Directory (#4668)", () => {
-    const focus = vi.fn();
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(
-        <FrappThemeProvider>
-          <MessagesScreen />
-        </FrappThemeProvider>,
-        {
-          createNodeMock: (element) =>
-            (element.type as unknown) === "TextInput" ? { focus } : null,
-        },
+  // #6190: until then the pencil only focused the search under it, which
+  // read as a button that did nothing.
+  describe("New message (#6190)", () => {
+    type NewMessageProps = {
+      onStart: (members: { user_id: string; display_name: string }[]) => void;
+      onClose: () => void;
+    };
+    const newMessage = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) => (node.type as unknown) === "NewMessageSheet",
       );
-    });
-    const button = tree.root.find(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        node.props.accessibilityLabel === "New message",
-    );
-    act(() => button.props.onPress());
+    function openNewMessage() {
+      const tree = render();
+      const button = tree.root.find(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "New message",
+      );
+      expect(newMessage(tree)).toHaveLength(0);
+      act(() => button.props.onPress());
+      expect(newMessage(tree)).toHaveLength(1);
+      return {
+        tree,
+        sheet: () => newMessage(tree)[0]!.props as NewMessageProps,
+      };
+    }
 
-    expect(focus).toHaveBeenCalled();
-    expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
+    it("opens the people picker from the pencil, and drops it once closed", () => {
+      const { tree, sheet } = openNewMessage();
+      act(() => sheet().onClose());
+      expect(newMessage(tree)).toHaveLength(0);
+    });
+
+    it("opens the DM with one person picked", async () => {
+      startMutateAsync.mockResolvedValue({ id: "c-dm-carol" });
+      const { sheet } = openNewMessage();
+      await act(async () =>
+        sheet().onStart([{ user_id: CAROL, display_name: "Carol Alvarez" }]),
+      );
+      expect(startMutateAsync).toHaveBeenCalledWith({ member_id: CAROL });
+      expect(groupMutateAsync).not.toHaveBeenCalled();
+      expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith({
+        pathname: "/chat-thread",
+        params: { channelId: "c-dm-carol" },
+      });
+    });
+
+    it("starts a group DM with two or more picked", async () => {
+      groupMutateAsync.mockResolvedValue({ id: "c-new-group" });
+      const { sheet } = openNewMessage();
+      await act(async () =>
+        sheet().onStart([
+          { user_id: ALICE, display_name: "Alice Chen" },
+          { user_id: CAROL, display_name: "Carol Alvarez" },
+        ]),
+      );
+      expect(groupMutateAsync).toHaveBeenCalledWith({
+        member_ids: [ALICE, CAROL],
+      });
+      expect(startMutateAsync).not.toHaveBeenCalled();
+      expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith({
+        pathname: "/chat-thread",
+        params: { channelId: "c-new-group" },
+      });
+    });
+
+    it("says a group that couldn't be started in an alert", async () => {
+      const alert = vi.spyOn(Alert, "alert").mockImplementation(() => {});
+      groupMutateAsync.mockRejectedValue(new Error("offline"));
+      const { sheet } = openNewMessage();
+      await act(async () =>
+        sheet().onStart([
+          { user_id: ALICE, display_name: "Alice Chen" },
+          { user_id: CAROL, display_name: "Carol Alvarez" },
+        ]),
+      );
+      expect(alert).toHaveBeenCalledWith(
+        "Couldn't start the group",
+        expect.any(String),
+      );
+      expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
+      alert.mockRestore();
+    });
   });
 
   it("says there are no messages, and where to start one", () => {

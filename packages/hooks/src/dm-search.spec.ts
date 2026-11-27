@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { SYSTEM_SENDER_ID } from "@repo/validation";
 import {
   dmChannelIdOf,
+  NEW_MESSAGE_MAX_PEOPLE,
+  newMessageButton,
+  newMessageRecipients,
   normalizeDmSearchText,
   searchDirectMessages,
   type DmSearchConversation,
@@ -156,5 +159,45 @@ describe("dmChannelIdOf", () => {
     ["a non-string id", { id: 42 }],
   ])("returns null for %s", (_, body) => {
     expect(dmChannelIdOf(body)).toBeNull();
+  });
+});
+
+describe("New message (#6190)", () => {
+  const roster = [
+    { user_id: VIEWER, display_name: "Shawn Klein" },
+    { user_id: "paul", display_name: "Paul Carlson" },
+    { user_id: SYSTEM_SENDER_ID, display_name: "Frapp" },
+    { user_id: "blocked", display_name: "Paula Blocked" },
+    { user_id: "paul", display_name: "Paul Carlson" },
+    { user_id: "winston", display_name: "Winston Lee" },
+  ];
+
+  it("offers the roster but you, the system actor and who you blocked, once each", () => {
+    expect(
+      newMessageRecipients({
+        roster,
+        viewerId: VIEWER,
+        blockedIds: new Set(["blocked"]),
+        blockListReady: true,
+      }).map((member) => member.user_id),
+    ).toEqual(["paul", "winston"]);
+  });
+
+  it("offers nobody until the viewer and the block list are known", () => {
+    const base = { roster, blockedIds: new Set<string>() };
+    expect(
+      newMessageRecipients({ ...base, viewerId: null, blockListReady: true }),
+    ).toEqual([]);
+    expect(
+      newMessageRecipients({ ...base, viewerId: VIEWER, blockListReady: false }),
+    ).toEqual([]);
+  });
+
+  it("names its button by the count, up to a group DM's size", () => {
+    expect(newMessageButton(0)).toBe("Message");
+    expect(newMessageButton(1)).toBe("Message");
+    expect(newMessageButton(2)).toBe("Message 2 people");
+    expect(newMessageButton(NEW_MESSAGE_MAX_PEOPLE)).toBe("Message 9 people");
+    expect(newMessageButton(NEW_MESSAGE_MAX_PEOPLE + 1)).toBe("Up to 9 people");
   });
 });

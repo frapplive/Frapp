@@ -156,7 +156,9 @@ export const WHO_PICKER_COPY = {
   loading: "Loading your chapter…",
   noMatch: "Nothing matches that search.",
   setsFailed: "Couldn't load your chapter's roles and groups.",
+  peopleFailed: "Couldn't load your chapter's members.",
   noSets: "Your chapter has no roles or groups to pick yet.",
+  noPeople: "No one else is in your chapter yet.",
 } as const;
 
 /** A chapter with more roles than this starts its tiers folded. */

@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useState } from "react";
+import { forwardRef, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   BottomSheetFooter,
@@ -77,6 +77,10 @@ export interface WhoPickerSheetProps {
     alreadyNote: string;
     label: (count: number) => string;
     onAdd: () => void;
+    /** The button's glyph in its ink; a plus unless given. */
+    glyph?: (ink: string) => ReactNode;
+    /** The most new picks the button takes; past it, it is off. */
+    limit?: number;
   };
   title?: string;
   /** Fired once the sheet has closed, however it closed. */
@@ -156,7 +160,11 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
                 <BottomSheetFooter {...footer}>
                   <AddFooter
                     label={add.label(addCount)}
-                    disabled={addCount === 0}
+                    glyph={add.glyph}
+                    disabled={
+                      addCount === 0 ||
+                      (add.limit !== undefined && addCount > add.limit)
+                    }
                     onPress={() => {
                       add.onAdd();
                       close();
@@ -202,10 +210,12 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
  */
 function AddFooter({
   label,
+  glyph = (ink) => <PlusGlyph color={ink} />,
   disabled,
   onPress,
 }: {
   label: string;
+  glyph?: (ink: string) => ReactNode;
   disabled: boolean;
   onPress: () => void;
 }) {
@@ -216,7 +226,7 @@ function AddFooter({
     <View style={[styles.footer, styles.addFooter]}>
       <TaskBarPill
         label={label}
-        glyph={(ink) => <PlusGlyph color={ink} />}
+        glyph={glyph}
         fill={brand.accent}
         ink={tokens.color.gold.onHouse}
         disabled={disabled}
@@ -306,7 +316,8 @@ export function WhoPickerBody({
       }),
     [directory, tab, search, peopleOnly, expanded, openTiers],
   );
-  const state = peopleOnly || tab === "people" || search.trim() ? people : sets;
+  const onPeople = peopleOnly || tab === "people" || search.trim() !== "";
+  const state = onPeople ? people : sets;
 
   const flip = (set: Set<string>, key: string) => {
     const next = new Set(set);
@@ -354,10 +365,14 @@ export function WhoPickerBody({
     state === "loading"
       ? WHO_PICKER_COPY.loading
       : state === "error"
-        ? WHO_PICKER_COPY.setsFailed
+        ? onPeople
+          ? WHO_PICKER_COPY.peopleFailed
+          : WHO_PICKER_COPY.setsFailed
         : search.trim()
           ? WHO_PICKER_COPY.noMatch
-          : WHO_PICKER_COPY.noSets;
+          : onPeople
+            ? WHO_PICKER_COPY.noPeople
+            : WHO_PICKER_COPY.noSets;
 
   function renderRow(item: WhoRow) {
     switch (item.kind) {

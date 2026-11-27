@@ -212,6 +212,59 @@ export const DM_SEARCH_ROSTER_FAILED =
   "Couldn't load your chapter's members, so only your conversations are listed.";
 
 /**
+ * New message (#6190, asked by Shawn 2026-11-27): the phone Messages pencil's
+ * people picker, as iMessage's, Instagram's and WhatsApp's compose button
+ * open a "To:" list. One person picked opens the DM with them
+ * (`POST /v1/channels/dm`); two or more start a group DM
+ * (`POST /v1/channels/group-dm`).
+ */
+export const NEW_MESSAGE_TITLE = "New message";
+
+/**
+ * The most people the viewer can pick: a group DM holds up to 10, the viewer
+ * included (the API's `MAX_GROUP_DM_MEMBERS`, `spec/behavior/chat/README.md`
+ * § Direct Messages).
+ */
+export const NEW_MESSAGE_MAX_PEOPLE = 9;
+
+/** The picker's one button, by how many people are picked. */
+export function newMessageButton(count: number): string {
+  if (count > NEW_MESSAGE_MAX_PEOPLE) {
+    return `Up to ${NEW_MESSAGE_MAX_PEOPLE} people`;
+  }
+  return count > 1 ? `Message ${count} people` : "Message";
+}
+
+/** The alert's title when a group DM couldn't be started. */
+export const NEW_GROUP_FAILED_TITLE = "Couldn't start the group";
+
+/**
+ * Who New message offers: the roster by the search's member rule (never the
+ * viewer, the system actor or a member the viewer blocked), and nobody until
+ * the viewer and the block list are known, since a list still loading can be
+ * missing a block. Unlike the search, a member the viewer already has a DM
+ * with is offered too: picking them opens it, and they can join a group.
+ */
+export function newMessageRecipients({
+  roster,
+  viewerId,
+  blockedIds,
+  blockListReady,
+}: Pick<
+  DmSearchInput<DmSearchConversation>,
+  "roster" | "viewerId" | "blockedIds" | "blockListReady"
+>): DmSearchMember[] {
+  if (viewerId === null || !blockListReady) return [];
+  const seen = new Set<string>();
+  return roster.filter((member) => {
+    const id = member.user_id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return id !== viewerId && id !== SYSTEM_SENDER_ID && !blockedIds.has(id);
+  });
+}
+
+/**
  * The channel id out of a `POST /v1/channels/dm` response, or `null` when the
  * body has none, so a caller reports a failure instead of opening a thread
  * with no id. Every door that opens a DM by member reads it here, on web and
