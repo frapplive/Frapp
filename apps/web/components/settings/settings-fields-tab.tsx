@@ -342,6 +342,9 @@ export function SettingsFieldsTab({ canManage }: Props) {
               icon={Plus}
               label={MEMBER_FIELDS_COPY.addField}
               href={fieldHref(NEW)}
+              // Keeps the ⋯'s room the field rows above have, so the
+              // chevrons line up.
+              menu={{ entries: [], label: MEMBER_FIELDS_COPY.addField }}
             />
           ) : null}
         </SettingsGroup>
