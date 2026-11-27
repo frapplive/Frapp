@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useIsPermissionHidden, useUpdateRole } from "@repo/hooks";
@@ -12,28 +12,42 @@ import {
   isWildcardRole,
   mayGrant,
   permissionRows,
+  permissionsAfterMove,
+  reachesOutside,
   reachesRole,
+  reachesTier,
   type TieredRole,
   type TierRow,
 } from "@repo/hooks/role-tiers";
 import {
   groupPermissionsByModule,
+  isActiveRole,
+  isEveryoneRole,
+  memberCountLabel,
+  outsideTiersHeading,
+  PEOPLE_SETTINGS_COPY,
+  ROLE_NAME_MAX_LENGTH,
+  roleColorOrNull,
+  rolePermissionsFootnote,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
-  roleColorOrNull,
-  SELF_ASSIGNABLE_TIERED_CODE,
   selfAssignableRefusal,
-  type SelfAssignableRefusal,
+  setApartLabel,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_ROLES } from "@/components/back-row";
+import { HeaderButton } from "@/components/header-button";
+import { MoreGlyph } from "@/components/control-glyphs";
+import { openItemMenu } from "@/components/item-actions-menu";
 import {
   ListRow,
   ListRowSkeleton,
   ListSection,
+  SectionHeader,
 } from "@/components/list-section";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
+import { OptionSheet } from "@/components/option-sheet";
 import {
   PermissionGroup,
   PermissionToggleList,
@@ -42,11 +56,16 @@ import {
   OverrideSheet,
   type OverrideTarget,
 } from "@/components/roles/override-sheet";
-import {
-  RoleColorRow,
-  usePendingColors,
-} from "@/components/roles/role-color-row";
+import { RoleColorRow } from "@/components/roles/role-color-row";
+import { useRoleActions } from "@/components/roles/role-actions";
 import { Toggle } from "@/components/toggle";
+import {
+  ChapterTextField,
+  FormCommitRow,
+  FormFields,
+  FormHint,
+  useFormSaveStatus,
+} from "@/components/settings/chapter-form";
 import { describeError } from "@/lib/roles/save-error";
 import {
   CANT_GIVE,
@@ -54,35 +73,32 @@ import {
   useRolesData,
   type RolesData,
 } from "@/lib/roles/use-roles-data";
-import { typeRole, useFrappTheme } from "@/lib/theme";
+import { useFrappTheme } from "@/lib/theme";
 
 type Failure = { permission: string; message: string } | null;
 
+/** The Tier picker's value for "outside the tiers". */
+const OUTSIDE = "__outside__";
+
 /**
- * One role on the phone (#4074), web's role page (#3990, #4072) for what it
- * can do. Its tier and how many hold it lead; then its permissions.
+ * One role's page on the phone (#4074; web's in the same rows and words
+ * since #6029): its name on top, then the Role group (its tier, color, how
+ * many hold it, its @mention switch and, for a role the chapter made,
+ * Non-chapter business), saved together by Save role, as on web until #6033;
+ * then what it can do. Move up, Move down and Delete role sit in the
+ * header's ⋯, never beside Save (rulebook § 2), as on web.
  *
  * - **In a tier**, each permission row shows what the role ends up with (On
  *   or Off), and a row set apart from the tier says so on its second line
- *   ("Set for this role. Officers has it off."). A tap opens the three answers web gives, Same as tier, On, and Off
- *   (`components/roles/override-sheet.tsx`). Same as tier keeps following the
- *   tier when the tier changes; On or Off keeps the role's own answer.
- * - **Outside the tiers**, there is no tier to follow, so each permission is
- *   a plain switch, as on a tier's page.
+ *   (`setApartLabel`). A tap opens the three answers web gives
+ *   (`overrideChoiceLabels`, `components/roles/override-sheet.tsx`); each
+ *   saves on its own.
+ * - **Outside the tiers**, each permission is a plain switch.
  * - **The President's role** (`*`) can do everything and shows every switch
- *   on and still; it moves only through Transfer presidency, on web.
+ *   on and still; it moves only through Transfer presidency.
  *
- * - **Non-chapter business** (#4958): on a role without a `system_key`, the
- *   switch that lets members add and remove it themselves, as web's role
- *   page has. It saves at once, like every switch on this screen, and is
- *   disabled with the rule's words on a role that can't be marked.
- *
- * - **Color** (#5966): the same picker as web's role page, saved on each
- *   pick (`components/roles/role-color-row.tsx`).
- *
- * Name, @mention and moving a role between tiers stay on web with
- * the rest of a role's setup; giving a member a role is the Directory's
- * member profile, as it has been (#3676).
+ * View as a role stays on web: the phone has no preview mode. Giving a
+ * member a role is the Directory's member profile (#3676).
  */
 export default function RoleScreen() {
   const { tokens } = useFrappTheme();
@@ -131,84 +147,244 @@ export default function RoleScreen() {
       <ScreenShell back={BACK_TO_ROLES} title="Role">
         <ErrorState
           title="This role is gone"
-          body={`Someone may have deleted it. Go back to Roles to see the ${words.plural} as they are now.`}
+          body={`Someone may have deleted it. Go back to ${PEOPLE_SETTINGS_COPY.pageTitle} to see the ${words.plural} as they are now.`}
         />
       </ScreenShell>
     );
   }
-  // Keyed by role so a failure line never carries over to another role.
+  // Keyed by role so the drafts and a failure line start over for another.
   return <RoleBody key={role.id} role={role} data={data} />;
 }
 
 function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const router = useRouter();
   const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
   const { tiers, reach, canManage, words, memberCounts } = data;
+  const updateRole = useUpdateRole();
+  const actions = useRoleActions(data);
+  const status = useFormSaveStatus();
+  const tierSheetRef = useRef<BottomSheetModal>(null);
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
+  // The Everyone role (#4191): its permissions and @everyone switch change
+  // here; its name and tier are fixed, as the API holds them.
+  const everyone = isEveryoneRole(role);
+  // Actives (#5802) stays in its tier: presidency's claim walk stops there.
+  const tierFixed = everyone || isActiveRole(role);
   const wildcard = isWildcardRole(role);
-  const count = memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
   const editable = canManage && reachesRole(reach, role, tiers);
+  const count = memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
   const lockedReason = wildcard
     ? "This role can do everything. That only moves through Transfer presidency."
     : lockedReasonFor(data, editable, "role");
 
+  const [name, setName] = useState(role.name);
+  // A stored value that may not paint reads as none, as every client paints it.
+  const [color, setColor] = useState<string | null>(
+    roleColorOrNull(role.color),
+  );
+  const [colorTouched, setColorTouched] = useState(false);
+  const [placement, setPlacement] = useState(role.tier_id ?? OUTSIDE);
+  const [mentionable, setMentionable] = useState(role.mentionable);
+  const [pickable, setPickable] = useState(role.self_assignable);
+  const [saving, setSaving] = useState(false);
+  const draftTierId = placement === OUTSIDE ? null : placement;
+  // Non-chapter business (#4958) is judged against the drafted placement,
+  // since a move into a tier is what most often rules it out.
+  const pickRefusal = selfAssignableRefusal({
+    system_key: role.system_key,
+    tier_id: draftTierId,
+    permissions:
+      draftTierId === (role.tier_id ?? null)
+        ? role.permissions
+        : permissionsAfterMove(
+            tiers.find((candidate) => candidate.id === draftTierId)
+              ?.permissions ?? [],
+            role.permission_overrides,
+          ),
+  });
+
+  const trimmed = name.trim();
+  const changes = {
+    name: trimmed && trimmed !== role.name ? trimmed : undefined,
+    // `null` clears the color; sent only when the officer picked one.
+    color: colorTouched && color !== (role.color ?? null) ? color : undefined,
+    mentionable: mentionable !== role.mentionable ? mentionable : undefined,
+    self_assignable: pickable !== role.self_assignable ? pickable : undefined,
+    tier_id: draftTierId !== role.tier_id ? draftTierId : undefined,
+  };
+  const dirty = Object.values(changes).some((value) => value !== undefined);
+
+  function edited<T>(set: (next: T) => void) {
+    return (next: T) => {
+      status.clear();
+      set(next);
+    };
+  }
+
+  async function save() {
+    if (!dirty) return;
+    setSaving(true);
+    try {
+      // **No `permissions` key.** The rows below save on their own; sending
+      // a list here would roll back a pick made since this page opened.
+      await updateRole.mutateAsync({ id: role.id, body: changes });
+      setColorTouched(false);
+      status.saved();
+    } catch (error) {
+      status.failed(error, "Your change wasn't saved. Try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const placementName =
+    placement === OUTSIDE
+      ? outsideTiersHeading(words.plural)
+      : (tiers.find((candidate) => candidate.id === placement)?.name ?? "");
+  const tierOptions = [
+    ...tiers
+      .filter(
+        (candidate) =>
+          candidate.id === role.tier_id || reachesTier(reach, candidate),
+      )
+      .map((candidate) => ({ value: candidate.id, label: candidate.name })),
+    ...(role.tier_id === null || reachesOutside(reach)
+      ? [{ value: OUTSIDE, label: outsideTiersHeading(words.plural) }]
+      : []),
+  ];
+  const menuActions = [
+    ...actions.stepActions(role),
+    ...actions.deleteActions(role, () => router.back()),
+  ];
+
   return (
-    <ScreenShell back={BACK_TO_ROLES} title={role.name}>
-      <ListSection>
-        {tier ? (
-          <ListRow
-            label={words.Singular}
-            value={tier.name}
-            accessibilityHint={`Opens what every role in ${tier.name} can do.`}
+    <ScreenShell
+      back={BACK_TO_ROLES}
+      title={role.name}
+      headerAction={
+        editable && !everyone && menuActions.length > 0 ? (
+          <HeaderButton
+            label={`More for ${role.name}`}
             onPress={() =>
-              router.push({
-                pathname: "/role-tier",
-                params: { tierId: tier.id },
-              })
+              openItemMenu({ title: role.name, actions: menuActions })
             }
-          />
-        ) : (
-          <ListRow
-            label={words.Singular}
-            value={`Outside the ${words.plural}`}
-            variant="detail"
-          />
-        )}
+          >
+            <MoreGlyph color={tokens.color.text.foreground} />
+          </HeaderButton>
+        ) : undefined
+      }
+    >
+      {everyone ? (
+        <FormHint>
+          Every member holds it, including someone who has just joined and has
+          no base role yet.
+        </FormHint>
+      ) : null}
+
+      <FormFields>
+        <ChapterTextField
+          label={PEOPLE_SETTINGS_COPY.name}
+          value={name}
+          onChangeText={edited(setName)}
+          editable={editable && !everyone && !saving}
+          maxLength={ROLE_NAME_MAX_LENGTH}
+          error={actions.failure?.message ?? null}
+        />
+      </FormFields>
+
+      <SectionHeader>{PEOPLE_SETTINGS_COPY.roleHeading}</SectionHeader>
+      <ListSection>
         <ListRow
-          label="Members"
-          value={count === null ? "—" : String(count)}
+          label={words.Singular}
+          value={placementName}
+          disabled={!editable || tierFixed}
+          onPress={
+            editable && !tierFixed
+              ? () => tierSheetRef.current?.present()
+              : undefined
+          }
+          accessibilityHint={`Opens the ${words.plural}.`}
+        />
+        <RoleColorRow
+          label={PEOPLE_SETTINGS_COPY.color}
+          value={color}
+          subject={role.id}
+          name={trimmed || role.name}
+          onChange={(next) => {
+            status.clear();
+            setColor(next);
+            setColorTouched(true);
+          }}
+          disabled={!editable}
+        />
+        <ListRow
+          label={PEOPLE_SETTINGS_COPY.members}
+          value={count === null ? "" : memberCountLabel(count)}
           variant="detail"
         />
-        <RoleColor
-          role={role}
-          editable={editable}
-          rolesUpdatedAt={data.rolesQuery.dataUpdatedAt}
+        {/*
+          Owner, 2026-11-06: "anyone can ping any role by default. officers
+          can change defaults." (spec/behavior/chat/README.md § Role mentions)
+        */}
+        <ListRow
+          label={
+            everyone
+              ? "Anyone can use @everyone and @here"
+              : PEOPLE_SETTINGS_COPY.mentionRole
+          }
+          trailing={
+            <Toggle
+              value={mentionable}
+              disabled={!editable || saving}
+              onValueChange={edited(setMentionable)}
+              accessibilityLabel={`@mention for ${role.name}`}
+            />
+          }
         />
+        {/*
+          Non-chapter business (#4958): interest roles members pick
+          themselves. Built-in roles never are, so they don't show it.
+          spec/behavior/rbac.md § Self-assignable roles.
+        */}
+        {role.system_key ? null : (
+          <ListRow
+            label="Non-chapter business"
+            description={
+              pickRefusal
+                ? SELF_ASSIGNABLE_REFUSAL_COPY[pickRefusal]
+                : SELF_ASSIGNABLE_SWITCH_DESCRIPTION
+            }
+            trailing={
+              <Toggle
+                value={pickable}
+                disabled={
+                  !editable || saving || (pickRefusal !== null && !pickable)
+                }
+                onValueChange={edited(setPickable)}
+                accessibilityLabel={`Non-chapter business for ${role.name}`}
+              />
+            }
+          />
+        )}
       </ListSection>
-
-      {role.system_key ? null : (
-        <PickableSwitch
-          role={role}
-          lockedReason={lockedReason}
-          rolesUpdatedAt={data.rolesQuery.dataUpdatedAt}
+      {editable ? (
+        <FormCommitRow
+          label="Save role"
+          canSave
+          readOnlyLine=""
+          disabled={!dirty || saving}
+          busy={saving}
+          status={status.status}
+          onPress={() => void save()}
         />
-      )}
-
-      {wildcard ? null : (
-        <Text style={styles.hint}>
-          {tier
-            ? `Starts from ${tier.name}. Rows set apart from it say so; tap one to change it.`
-            : `Outside the ${words.plural}, so its permissions are its own.`}
-        </Text>
-      )}
+      ) : null}
 
       {tier && !wildcard ? (
         <OverrideList
           role={role}
           tier={tier}
-          tierWord={words.singular}
           lockedReason={lockedReason}
+          footnote={rolePermissionsFootnote(tier.name, words.plural)}
           mayGrant={(permission) => mayGrant(reach, permission)}
         />
       ) : (
@@ -216,152 +392,27 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           role={role}
           wildcard={wildcard}
           lockedReason={lockedReason}
+          footnote={
+            wildcard ? null : rolePermissionsFootnote(null, words.plural)
+          }
           mayGrant={(permission) => mayGrant(reach, permission)}
         />
       )}
+
+      {editable && !tierFixed ? (
+        <OptionSheet
+          ref={tierSheetRef}
+          title={words.Singular}
+          options={tierOptions}
+          selected={placement}
+          onSelect={(value) => {
+            status.clear();
+            setPlacement(value ?? OUTSIDE);
+          }}
+        />
+      ) : null}
     </ScreenShell>
   );
-}
-
-/**
- * The role's color (#5966, #5791), set here as on web's role page with the
- * same picker; a swatch saves on the tap and Custom when its sheet closes,
- * like every switch on this screen saving on its own. Read-only for an
- * officer who can't edit this role.
- */
-function RoleColor({
-  role,
-  editable,
-  rolesUpdatedAt,
-}: {
-  role: TieredRole;
-  editable: boolean;
-  rolesUpdatedAt: number;
-}) {
-  const updateRole = useUpdateRole();
-  const colors = usePendingColors(rolesUpdatedAt);
-  const [failure, setFailure] = useState<string | null>(null);
-
-  async function save(next: string | null) {
-    setFailure(null);
-    const error = await colors.save(role.id, next, () =>
-      updateRole.mutateAsync({ id: role.id, body: { color: next } }),
-    );
-    if (error) {
-      setFailure(
-        describeError(
-          role.name,
-          error,
-          "The color was not changed. Try again in a moment.",
-        ),
-      );
-    }
-  }
-
-  return (
-    <RoleColorRow
-      value={colors.shown(role.id, roleColorOrNull(role.color))}
-      subject={role.id}
-      name={role.name}
-      onChange={(next) => void save(next)}
-      disabled={!editable}
-      failure={failure}
-    />
-  );
-}
-
-/**
- * Non-chapter business (#4958, Shawn 2026-11-14): whether members add and
- * remove this role themselves. Only a safe role can be marked
- * (`spec/behavior/rbac.md` § Self-assignable roles), so on one that isn't the
- * switch says why and only turns off. A marked role that became unsafe some
- * other way can still be unmarked.
- */
-function PickableSwitch({
-  role,
-  lockedReason,
-  rolesUpdatedAt,
-}: {
-  role: TieredRole;
-  lockedReason: string | null;
-  /** When the roles read last landed (`dataUpdatedAt`). */
-  rolesUpdatedAt: number;
-}) {
-  const updateRole = useUpdateRole();
-  // The value saved, shown until the roles read after the save lands, so the
-  // switch doesn't flick back between the save and the refetch. Dropped on
-  // the first read after the save whatever it says, so a value another
-  // officer wrote meanwhile shows rather than this one sticking.
-  const [wanted, setWanted] = useState<boolean | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  if (
-    wanted !== null &&
-    savedAt !== null &&
-    (rolesUpdatedAt > savedAt || wanted === role.self_assignable)
-  ) {
-    setWanted(null);
-    setSavedAt(null);
-  }
-  const inFlight = wanted !== null && savedAt === null;
-  const value = wanted ?? role.self_assignable;
-  const refusal = selfAssignableRefusal(role);
-  const description =
-    failure ??
-    (refusal ? refusalOnPhone(refusal) : SELF_ASSIGNABLE_SWITCH_DESCRIPTION);
-
-  async function save(next: boolean) {
-    setWanted(next);
-    setSavedAt(null);
-    setFailure(null);
-    try {
-      await updateRole.mutateAsync({
-        id: role.id,
-        body: { self_assignable: next },
-      });
-      setSavedAt(Date.now());
-    } catch (error) {
-      setWanted(null);
-      setFailure(
-        describeError(
-          role.name,
-          error,
-          "Non-chapter business was not changed. Try again in a moment.",
-        ),
-      );
-    }
-  }
-
-  return (
-    <ListSection>
-      <ListRow
-        label="Non-chapter business"
-        description={description}
-        descriptionTone={failure ? "destructive" : "default"}
-        trailing={
-          <Toggle
-            value={value}
-            disabled={
-              Boolean(lockedReason) || inFlight || (refusal !== null && !value)
-            }
-            onValueChange={(next) => void save(next)}
-            accessibilityLabel={`Non-chapter business for ${role.name}`}
-          />
-        }
-      />
-    </ListSection>
-  );
-}
-
-/**
- * Why a role can't be marked, in the phone's words. Web's tiered refusal says
- * to move the role out of its tier, which the phone can't do (moving roles
- * stays on web), so the phone says where.
- */
-function refusalOnPhone(refusal: SelfAssignableRefusal): string {
-  return refusal === SELF_ASSIGNABLE_TIERED_CODE
-    ? "Roles members pick themselves sit outside the tiers, since a tier carries rank. Move it out of its tier on the web dashboard first."
-    : SELF_ASSIGNABLE_REFUSAL_COPY[refusal];
 }
 
 /** A role outside the tiers, or the President's: one switch per permission. */
@@ -369,11 +420,13 @@ function OwnPermissions({
   role,
   wildcard,
   lockedReason,
+  footnote,
   mayGrant: canGive,
 }: {
   role: TieredRole;
   wildcard: boolean;
   lockedReason: string | null;
+  footnote: string | null;
   mayGrant: (permission: string) => boolean;
 }) {
   const updateRole = useUpdateRole();
@@ -398,6 +451,7 @@ function OwnPermissions({
       }}
       extraPermissions={wildcard ? [] : held}
       lockedReason={lockedReason}
+      footnote={footnote}
       rowLockedReason={(permission, on) =>
         !on && !canGive(permission) ? CANT_GIVE : null
       }
@@ -415,18 +469,16 @@ function OwnPermissions({
 function OverrideList({
   role,
   tier,
-  tierWord,
   lockedReason,
+  footnote,
   mayGrant: canGive,
 }: {
   role: TieredRole;
   tier: TierRow;
-  tierWord: string;
   lockedReason: string | null;
+  footnote: string;
   mayGrant: (permission: string) => boolean;
 }) {
-  const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
   const updateRole = useUpdateRole();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [target, setTarget] = useState<OverrideTarget | null>(null);
@@ -459,9 +511,13 @@ function OverrideList({
 
   return (
     <>
-      {lockedReason ? <Text style={styles.hint}>{lockedReason}</Text> : null}
-      {groups.map((group) => (
-        <PermissionGroup key={group.label} label={group.label}>
+      {lockedReason ? <FormHint>{lockedReason}</FormHint> : null}
+      {groups.map((group, index) => (
+        <PermissionGroup
+          key={group.label}
+          label={group.label}
+          footnote={index === 0 ? footnote : null}
+        >
           {group.entries.map((row) => {
             const tierHas = tier.permissions.includes(row.permission);
             const override = overrideOf(row.permission);
@@ -475,14 +531,10 @@ function OverrideList({
             const tierRefused = !allowed && tierHas && !holds;
             const failed =
               failure?.permission === row.permission ? failure.message : null;
-            // Only a row set apart says so. Following the tier is the
-            // default every row starts on, and "Same as <tier>" under all
-            // forty rows was a wall that hid the few that differ; the line
-            // above the list says where they start from.
+            // Only a row set apart says so; the footnote says where the
+            // rest start from.
             const source =
-              override === null
-                ? null
-                : `Set for this role. ${tier.name} has it ${tierHas ? "on" : "off"}.`;
+              override === null ? null : setApartLabel(tier.name, tierHas);
             const locked = Boolean(lockedReason) || pending === row.permission;
             return (
               <ListRow
@@ -492,7 +544,9 @@ function OverrideList({
                 description={failed ?? source}
                 descriptionTone={failed ? "destructive" : "default"}
                 accessibilityHint={
-                  locked ? undefined : "Choose same as tier, on, or off."
+                  locked
+                    ? undefined
+                    : `Choose same as ${tier.name}, on, or off.`
                 }
                 onPress={
                   locked
@@ -503,7 +557,6 @@ function OverrideList({
                           label: row.label,
                           roleName: role.name,
                           tierName: tier.name,
-                          tierWord,
                           tierHas,
                           current: override,
                           onRefused,
@@ -533,10 +586,5 @@ function OverrideList({
 function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     skeleton: { gap: tokens.spacing.lg },
-    hint: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
-      paddingHorizontal: tokens.spacing.xs,
-    },
   });
 }

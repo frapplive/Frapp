@@ -20,8 +20,21 @@ export function permissionsOnLabel(count: number): string {
   return count === 0 ? "None on" : `${count} on`;
 }
 
+/**
+ * The words that name a tier, in the chapter's own word for one (`tier`, its
+ * vocabulary's singular as the sentence needs it): "Add tier", "Delete
+ * level", "Anyone can @mention this tier".
+ */
 export function addTierLabel(tier: string): string {
   return `Add ${tier}`;
+}
+
+export function deleteTierLabel(tier: string): string {
+  return `Delete ${tier}`;
+}
+
+export function mentionTierLabel(tier: string): string {
+  return `Anyone can @mention this ${tier}`;
 }
 
 export const PEOPLE_SETTINGS_COPY = {
@@ -29,7 +42,6 @@ export const PEOPLE_SETTINGS_COPY = {
   search: "Find a role or group",
   permissionsRow: "Permissions",
   addRole: "Add role",
-  addTier: "Add tier",
   groupsHeading: "Groups",
   newGroup: "New group",
   autoGroupsRow: "Pledge classes, class years and majors",
@@ -45,12 +57,10 @@ export const PEOPLE_SETTINGS_COPY = {
   addMember: "Add a member",
   noneYet: "None yet",
   mentionRole: "Anyone can @mention this role",
-  mentionTier: "Anyone can @mention this tier",
   mentionGroup: "Anyone can @mention this group",
   moveUp: "Move up",
   moveDown: "Move down",
   deleteRole: "Delete role",
-  deleteTier: "Delete tier",
   deleteGroup: "Delete group",
 } as const;
 
@@ -124,7 +134,49 @@ export function transferPresidencyConfirm(name: string): {
 } {
   return {
     title: `Transfer presidency to ${name}?`,
-    body: "You lose the President role when they get it.",
+    body: "You lose the President role when they get it. Only the new President can move it again.",
     action: "Transfer presidency",
+  };
+}
+
+/** The confirm for deleting a role, from its row's menu or its page. */
+export function deleteRoleConfirm(name: string): {
+  title: string;
+  body: string;
+  action: string;
+} {
+  return {
+    title: `Delete ${name}?`,
+    body: "Members holding this role lose what it gives them right away. This can't be undone.",
+    action: PEOPLE_SETTINGS_COPY.deleteRole,
+  };
+}
+
+/**
+ * The confirm for deleting a tier, which only an empty tier allows.
+ * `tierName` is the tier's own name; `tier` and `tiers` the chapter's word.
+ */
+export function deleteTierConfirm(
+  tierName: string,
+  tier: string,
+  tiers: string,
+): { title: string; body: string; action: string } {
+  return {
+    title: `Delete ${tierName}?`,
+    body: `It has no roles left, so nobody loses anything. The other ${tiers} keep their order.`,
+    action: deleteTierLabel(tier),
+  };
+}
+
+/** The confirm for deleting one of the chapter's own groups. */
+export function deleteGroupConfirm(name: string): {
+  title: string;
+  body: string;
+  action: string;
+} {
+  return {
+    title: `Delete ${name}?`,
+    body: "Its members stay in the chapter. A channel that lists it stops letting them in through it.",
+    action: `Delete ${name}`,
   };
 }

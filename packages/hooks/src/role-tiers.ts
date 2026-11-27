@@ -369,3 +369,22 @@ export function permissionRows(
   }
   return rows;
 }
+
+/**
+ * A role's permissions after a move to another tier (or out of the tiers,
+ * `[]`): the tier's, plus its overrides that are on, minus those that are
+ * off. The API's `effectivePermissions` rule, which the database applies on
+ * the write; both apps' role pages judge Non-chapter business against it
+ * before the move is saved (#6029).
+ */
+export function permissionsAfterMove(
+  tierPermissions: readonly string[],
+  overrides: Readonly<Record<string, boolean>>,
+): string[] {
+  const result = new Set(tierPermissions);
+  for (const [permission, on] of Object.entries(overrides)) {
+    if (on) result.add(permission);
+    else result.delete(permission);
+  }
+  return [...result];
+}

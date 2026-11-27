@@ -426,8 +426,10 @@ It is drawn only for `points:view_all`, so it has no denied or permission-check 
 | Permission denied | — | `Your role can't manage roles. Ask your chapter president for access.` |
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage roles.` |
 | Offline | `Roles unavailable offline` | `Reconnect to load the chapter's roles and edit their permissions.` |
-| Delete role confirmation | `Delete <name>?` | `Members assigned this role lose its permissions immediately. This cannot be undone.` · confirm `Delete role` |
-| Transfer presidency confirmation | `Transfer presidency to Jordan Reyes?` | `You lose the President role when they get it.` · confirm `Transfer presidency` (#6029: it names who gets it, on web and the phone, `transferPresidencyConfirm`) |
+| Delete role confirmation | `Delete <name>?` | `Members holding this role lose what it gives them right away. This can't be undone.` · confirm `Delete role` (on web and the phone, `deleteRoleConfirm`) |
+| Delete tier confirmation | `Delete <name>?` | `It has no roles left, so nobody loses anything. The other tiers keep their order.` · confirm `Delete tier`, in the chapter's word for a tier (`deleteTierConfirm`) |
+| Delete group confirmation | `Delete <name>?` | `Its members stay in the chapter. A channel that lists it stops letting them in through it.` · confirm `Delete <name>` (`deleteGroupConfirm`) |
+| Transfer presidency confirmation | `Transfer presidency to Jordan Reyes?` | `You lose the President role when they get it. Only the new President can move it again.` · confirm `Transfer presidency` (#6029: it names who gets it, on web and the phone, `transferPresidencyConfirm`) |
 
 The confirmation rows below and under Roles & Permissions are what is left of the five `window.confirm` strings the Settings & Roles slice converted (the custom-role delete went with #4075) to [`confirm-dialog.tsx`](../../../apps/web/components/shared/confirm-dialog.tsx).
 A browser dialog's text was never in this table because it was never the product's; an in-product one is, and `writing.md` §2's verb-plus-object CTA rule governs the button.
