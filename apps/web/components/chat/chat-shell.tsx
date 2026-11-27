@@ -117,6 +117,7 @@ import {
   type MentionCandidate,
   type MentionChipTargets,
   SECTION_NAMES,
+  seasonalChapterDefault,
   spacedMentionNames,
 } from "@repo/validation";
 import { MentionChipTargetsContext } from "@repo/hooks/mention-chips";
@@ -4059,7 +4060,11 @@ export function ChatShell({
                         channelBackground.data?.source === "channel"
                           ? channelBackground.data.background
                           : null,
-                      inheritPreview: chapterBackground.data?.background,
+                      // The season applied, as the thread draws it (#6149).
+                      inheritPreview: seasonalChapterDefault(
+                        chapterBackground.data,
+                        new Date(),
+                      ),
                       letters: chapterLetters,
                       saving: setChannelBackground.isPending,
                       error: setChannelBackground.error

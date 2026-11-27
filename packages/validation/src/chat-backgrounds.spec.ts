@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHAT_BACKGROUND_KEYS,
   isHolidaySeason,
+  seasonalChapterDefault,
   withHolidaySeason,
 } from "./chat-backgrounds";
 
@@ -66,6 +67,16 @@ describe("withHolidaySeason", () => {
       withHolidaySeason({ ...plainDefault, holiday_season: false }, inSeason)
         .background,
     ).toBe("plain");
+  });
+
+  it("previews a Plain chapter default as Holiday in the season, for the pickers", () => {
+    const plain = { background: "plain", holiday_season: true };
+    expect(seasonalChapterDefault(plain, inSeason)).toBe("holiday");
+    expect(seasonalChapterDefault(plain, after)).toBe("plain");
+    expect(
+      seasonalChapterDefault({ ...plain, holiday_season: false }, inSeason),
+    ).toBe("plain");
+    expect(seasonalChapterDefault(undefined, inSeason)).toBeUndefined();
   });
 
   it("keeps Holiday selectable by hand all year", () => {

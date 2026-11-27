@@ -104,10 +104,29 @@ export function isHolidaySeason(date: Date): boolean {
 /** The officer switch's words, on web and the phone. */
 export const HOLIDAY_SEASON_COPY = {
   label: "Holiday background this season",
-  description: "Dec 1 to 26, channels on Plain show Holiday.",
+  description:
+    "Dec 1 to 26, channels that follow a Plain chapter default show Holiday.",
   /** In place of the description when a flip didn't save (it flips back). */
   saveFailed: "Couldn't save. Try again.",
 } as const;
+
+/**
+ * What the chapter default looks like right now, season applied:
+ * the key the channel pickers' "Chapter default" swatch previews, so it
+ * matches what a channel that follows the default draws.
+ */
+export function seasonalChapterDefault<K extends string>(
+  chapterDefault:
+    { background: K; holiday_season?: boolean } | null | undefined,
+  now: Date,
+): K | "holiday" | undefined {
+  if (!chapterDefault) return undefined;
+  return withHolidaySeason<{
+    background: K | "holiday";
+    source: "chapter";
+    holiday_season?: boolean;
+  }>({ ...chapterDefault, source: "chapter" }, now).background;
+}
 
 /**
  * What a member sees, season applied: the API's resolved background with

@@ -3,8 +3,10 @@
  * read: web turns it into CSS (`apps/web/components/chat/chat-background.tsx`)
  * and mobile into SVG (`apps/mobile/components/chat/chat-background.tsx`). The
  * values come from the chat concept page's backgrounds (Plain, Gold glow,
- * Midnight, Game day, Letters), and Holiday (#6149), which every chapter on
- * Plain shows from Dec 1 to 26; the keys are `CHAT_BACKGROUND_BUILT_INS` in
+ * Midnight, Game day, Letters), and Holiday (#6149), which a channel that
+ * follows a Plain chapter default shows from Dec 1 to 26 unless an officer
+ * turned the season off (`withHolidaySeason` in `@repo/validation`); the
+ * keys are `CHAT_BACKGROUND_BUILT_INS` in
  * `@repo/validation`.
  *
  * Every one is dark, because Signet is dark-only and the thread's text tokens

@@ -323,7 +323,9 @@ export function useSetChatBackgroundHolidaySeason() {
   const chapterId = useActiveChapterId();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationKey: ["chat-backgrounds", "set-holiday-season"],
+    mutationKey: HOLIDAY_SEASON_MUTATION_KEY,
+    // Flips run in order, so the last one an officer makes is the one stored.
+    scope: { id: "chat-backgrounds:holiday-season" },
     mutationFn: async (enabled: boolean) => {
       const result = await client.PUT(
         "/v1/chat-backgrounds/default/holiday-season",
@@ -356,7 +358,14 @@ export function useSetChatBackgroundHolidaySeason() {
       }
     },
     onSettled: () => {
-      if (chapterId) {
+      // While a later flip is still queued, a refetch would bring back the
+      // stored value and undo that flip's optimistic one: the last flip to
+      // settle reads everything again.
+      if (
+        chapterId &&
+        queryClient.isMutating({ mutationKey: HOLIDAY_SEASON_MUTATION_KEY }) <=
+          1
+      ) {
         void queryClient.invalidateQueries({
           queryKey: chatBackgroundKeys.chapter(chapterId),
         });
@@ -364,3 +373,8 @@ export function useSetChatBackgroundHolidaySeason() {
     },
   });
 }
+
+const HOLIDAY_SEASON_MUTATION_KEY = [
+  "chat-backgrounds",
+  "set-holiday-season",
+] as const;

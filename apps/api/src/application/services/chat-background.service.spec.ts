@@ -130,7 +130,7 @@ describe('ChatBackgroundService (#3973)', () => {
         background: 'photo',
         source: 'channel',
         photo_url: 'https://signed',
-        holiday_season: true,
+        holiday_season: false,
       });
     });
 
@@ -429,6 +429,16 @@ describe('ChatBackgroundService (#3973)', () => {
         source: 'chapter',
         holiday_season: false,
       });
+    });
+
+    it("reads no chapter for a channel's own background, which the season never swaps", async () => {
+      const { service, chapterRepo } = setup({
+        channels: [channel({ background: 'game-day' })],
+      });
+      await expect(
+        service.getForChannel('ch-1', CHAPTER, 'u'),
+      ).resolves.toMatchObject({ source: 'channel', holiday_season: false });
+      expect(chapterRepo.findById).not.toHaveBeenCalled();
     });
 
     it('never swaps the key itself: the clients apply the season by date', async () => {

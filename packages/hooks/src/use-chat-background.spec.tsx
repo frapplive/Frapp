@@ -13,6 +13,7 @@ import {
   canSetChannelBackground,
   chatBackgroundErrorCopy,
   chatBackgroundKeys,
+  useChapterChatBackground,
   useChatBackground,
   useRequestChatBackgroundPhotoUrl,
   useSetChannelBackground,
@@ -332,7 +333,7 @@ describe("the Holiday season", () => {
     await waitFor(() => expect(result.current.data?.background).toBe("plain"));
   });
 
-  it("saves the switch, showing it at once and putting it back on a failure", async () => {
+  function setup() {
     const queryClient = createTestQueryClient();
     const key = chatBackgroundKeys.detail("chapter-1", "default");
     queryClient.setQueryData(key, {
@@ -340,20 +341,59 @@ describe("the Holiday season", () => {
       photo_url: null,
       holiday_season: true,
     });
+    const answers: ((ok: boolean) => void)[] = [];
     const client = {
-      PUT: vi.fn().mockResolvedValue({
-        data: undefined,
-        error: { message: "nope" },
-        response: { ok: false, status: 500 },
-      }),
+      GET: vi
+        .fn()
+        .mockResolvedValue(
+          ok({ background: "plain", photo_url: null, holiday_season: true }),
+        ),
+      PUT: vi.fn<
+        (path: string, init: { body: { enabled: boolean } }) => Promise<unknown>
+      >(
+        () =>
+          new Promise((resolve) =>
+            answers.push((saved) =>
+              resolve(
+                saved
+                  ? ok({})
+                  : {
+                      data: undefined,
+                      error: { message: "nope" },
+                      response: { ok: false, status: 500 },
+                    },
+              ),
+            ),
+          ),
+      ),
     };
-    const { result } = renderHook(() => useSetChatBackgroundHolidaySeason(), {
-      wrapper: createHookWrapper({
-        client,
-        queryClient,
-        chapterId: "chapter-1",
+    // The switch's own read is mounted, as on screen, so a refetch would run.
+    const { result: both } = renderHook(
+      () => ({
+        save: useSetChatBackgroundHolidaySeason(),
+        read: useChapterChatBackground(),
       }),
-    });
+      {
+        wrapper: createHookWrapper({
+          client,
+          queryClient,
+          chapterId: "chapter-1",
+        }),
+      },
+    );
+    const result = {
+      get current() {
+        return both.current.save;
+      },
+    };
+    const shown = () =>
+      queryClient.getQueryData<{ holiday_season: boolean }>(key)
+        ?.holiday_season;
+    return { result, client, answers, shown };
+  }
+
+  it("shows a flip at once, and puts it back when the save fails", async () => {
+    const { result, client, answers, shown } = setup();
     act(() => result.current.mutate(false));
     await waitFor(() =>
       expect(client.PUT).toHaveBeenCalledWith(
@@ -361,10 +401,28 @@ describe("the Holiday season", () => {
         { body: { enabled: false } },
       ),
     );
+    // Before the save answers, the switch already reads off.
+    expect(shown()).toBe(false);
+    await act(async () => answers[0]!(false));
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(
-      queryClient.getQueryData<{ holiday_season: boolean }>(key)
-        ?.holiday_season,
-    ).toBe(true);
+    expect(shown()).toBe(true);
+  });
+
+  it("sends quick flips in order and doesn't read the stored value back between them", async () => {
+    const { result, client, answers, shown } = setup();
+    act(() => result.current.mutate(false));
+    act(() => result.current.mutate(true));
+    await waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(1));
+    await act(async () => answers[0]!(true));
+    // The second flip goes only after the first settled, and the first's
+    // settle doesn't refetch over the second's optimistic value.
+    await waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(2));
+    expect(client.PUT.mock.calls.map((c) => c[1])).toEqual([
+      { body: { enabled: false } },
+      { body: { enabled: true } },
+    ]);
+    expect(client.GET).not.toHaveBeenCalled();
+    expect(shown()).toBe(true);
+    await act(async () => answers[1]!(true));
   });
 });

@@ -10528,7 +10528,7 @@ export interface components {
             source: "channel" | "chapter" | "none";
             /** @description A signed URL for the photo when `background` is `photo`; null otherwise, or when signing failed (draw plain). */
             photo_url: string | null;
-            /** @description Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key. */
+            /** @description Whether the Holiday season (#6149) may swap this background: the chapter's switch when `source` is `chapter`, false for a channel's own choice or a DM. The clients show Holiday in place of a Plain chapter default from Dec 1 to 26 by the viewer's local date; the API never swaps the key. */
             holiday_season: boolean;
         };
         SetChannelBackgroundDto: {

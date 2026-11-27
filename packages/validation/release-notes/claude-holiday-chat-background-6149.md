@@ -1,1 +1,1 @@
-There's a new Holiday chat background with gentle falling snow, and your chats may look a little more festive come December.
+There's a new Holiday chat background, deep green with a soft red glow and gentle falling snow.

@@ -36,7 +36,6 @@ import {
   type IStorageProvider,
 } from '#domain/adapters/storage.interface';
 import type { ChatChannel } from '#domain/entities/chat.entity';
-import type { Chapter } from '#domain/entities/chapter.entity';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { ChannelAccessService } from './channel-access.service';
 
@@ -57,9 +56,12 @@ export interface ResolvedChatBackground {
   source: 'channel' | 'chapter' | 'none';
   photo_url: string | null;
   /**
-   * The chapter's Holiday season switch (#6149). The clients swap a Plain
-   * chapter default for Holiday from Dec 1 to 26 by the viewer's own date
-   * (`withHolidaySeason` in `@repo/validation`); the API never swaps it.
+   * Whether the Holiday season (#6149) may swap this background: the
+   * chapter's switch on a chapter-default read, and always false for a
+   * channel's own choice or a DM, which the season never touches. The
+   * clients swap a Plain chapter default for Holiday from Dec 1 to 26 by the
+   * viewer's own date (`withHolidaySeason` in `@repo/validation`); the API
+   * never swaps it.
    */
   holiday_season: boolean;
 }
@@ -74,7 +76,9 @@ export interface ChapterChatBackground {
  * The chapter's Holiday season switch (#6149). A row from before the column,
  * or a projection without it, reads as on: the column's own default.
  */
-function holidaySeasonOn(chapter: Chapter | null): boolean {
+function holidaySeasonOn(
+  chapter: { chat_background_holiday?: boolean } | null,
+): boolean {
   return chapter?.chat_background_holiday !== false;
 }
 
@@ -293,34 +297,23 @@ export class ChatBackgroundService {
         holiday_season: false,
       };
     }
-    const chapter = await this.chapterRepo.findById(chapterId);
     if (channel.background) {
       const own = await this.resolveStored({
         key: channel.background,
         photoPath: channel.background_photo_path,
         messageId: channel.background_message_id,
       });
-      // A withdrawn photo falls through to the chapter default.
-      if (own) {
-        return {
-          ...own,
-          source: 'channel',
-          holiday_season: holidaySeasonOn(chapter),
-        };
-      }
+      // A withdrawn photo falls through to the chapter default. A channel's
+      // own choice is never swapped by the season, so it reads no chapter.
+      if (own) return { ...own, source: 'channel', holiday_season: false };
     }
-    return this.resolveDefaultOf(chapter);
+    return this.resolveChapterDefault(chapterId);
   }
 
   private async resolveChapterDefault(
     chapterId: string,
   ): Promise<ResolvedChatBackground> {
-    return this.resolveDefaultOf(await this.chapterRepo.findById(chapterId));
-  }
-
-  private async resolveDefaultOf(
-    chapter: Chapter | null,
-  ): Promise<ResolvedChatBackground> {
+    const chapter = await this.chapterRepo.findById(chapterId);
     const stored = chapter
       ? await this.resolveStored({
           key: chapter.chat_background,
