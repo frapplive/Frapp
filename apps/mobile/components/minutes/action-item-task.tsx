@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import {
+  actionItemAssigneeIds,
   useAcceptAiSuggestion,
+  useCanManageTasks,
+  useMakeActionItemTask,
   useSimilarTasks,
   type AiSuggestion,
   type MeetingActionItemTask,
@@ -11,6 +14,7 @@ import {
   AI_SUGGESTION_COPY,
   MINUTES_READ_COPY,
   SIMILAR_TASK_COPY,
+  actionItemTaskRefusalLine,
   minutesActionSuggestions,
   type MeetingActionItem,
 } from "@repo/validation";
@@ -21,7 +25,10 @@ import {
 } from "@/components/control-glyphs";
 import type { ItemMenu, ItemMenuHandle } from "@/components/item-actions-menu";
 import type { ActionItemMenuFor } from "@/components/minutes/minutes-body";
-import { NewTaskSheet } from "@/components/tasks/new-task-sheet";
+import {
+  NewTaskSheet,
+  type TaskSuggestionSeed,
+} from "@/components/tasks/new-task-sheet";
 import { suggestionSeed } from "@/components/tasks/suggestion-seed";
 import { alertFailure } from "@/lib/failure-alert";
 
@@ -39,15 +46,25 @@ type Waiting = AiSuggestion & { task: NonNullable<AiSuggestion["task"]> };
  * Web's row does the same from its Create task and ⋯ menu
  * (`apps/web/components/meetings/action-item-task.tsx`).
  *
+ * An item with no suggestion waiting (it was reviewed or dismissed, it
+ * expired, or suggestions were off) offers Create task too, to an officer
+ * who manages tasks (#6178; Winston, 2026-11-25: "i cant assign anyone to
+ * anything"). The form opens on the item, its owner and its day, picks
+ * people only, and creates through the item's own route
+ * (`POST /v1/meetings/:id/action-items/:index/task`, #6176), which accepts
+ * a suggestion that turned up meanwhile rather than make a second task.
+ *
  * The server lists a suggestion only to someone who could accept it, and
  * names an item's task only to someone who manages tasks, so a member's
  * rows have no menu at all.
  */
 export function useActionItemTaskMenu({
+  meetingId,
   items,
   suggestions,
   handleFor,
 }: {
+  meetingId: string;
   items: readonly MeetingActionItem[];
   /** These minutes' waiting suggestions, as the screen already reads them. */
   suggestions: readonly AiSuggestion[];
@@ -67,7 +84,13 @@ export function useActionItemTaskMenu({
     [items, waiting],
   );
   const similar = useSimilarTasks(waiting);
-  const [formFor, setFormFor] = useState<Waiting | null>(null);
+  const canMake = useCanManageTasks();
+  const make = useMakeActionItemTask();
+  const [formFor, setFormFor] = useState<
+    | { kind: "suggestion"; suggestion: Waiting }
+    | { kind: "item"; index: number; item: MeetingActionItem }
+    | null
+  >(null);
   const formRef = useRef<BottomSheetModal>(null);
   useEffect(() => {
     if (formFor) formRef.current?.present();
@@ -103,7 +126,22 @@ export function useActionItemTaskMenu({
       }
       // A task the item already became wins over a suggestion.
       const suggestion = byIndex.get(index);
-      if (!suggestion) return null;
+      if (!suggestion) {
+        // Marked done or for everyone without a task named is a task
+        // already, never one to make again.
+        if (!canMake || task) return null;
+        return handleFor({
+          title: item.text,
+          actions: [
+            {
+              key: "create-task",
+              label: AI_SUGGESTION_COPY.accept,
+              glyph: (color) => <PlusGlyph color={color} />,
+              run: () => setFormFor({ kind: "item", index, item }),
+            },
+          ],
+        });
+      }
       const twin = similar.twinOf(suggestion.id);
       if (twin) {
         return handleFor({
@@ -133,7 +171,7 @@ export function useActionItemTaskMenu({
               glyph: (color) => <PlusGlyph color={color} />,
               run: () => {
                 similar.keep(suggestion.id);
-                setFormFor(suggestion);
+                setFormFor({ kind: "suggestion", suggestion });
               },
             },
           ],
@@ -146,23 +184,71 @@ export function useActionItemTaskMenu({
             key: "create-task",
             label: AI_SUGGESTION_COPY.accept,
             glyph: (color) => <PlusGlyph color={color} />,
-            run: () => setFormFor(suggestion),
+            run: () => setFormFor({ kind: "suggestion", suggestion }),
           },
         ],
       });
     },
-    [accept, byIndex, handleFor, router, similar],
+    [accept, byIndex, canMake, handleFor, router, similar],
   );
 
   const sheet = formFor ? (
     <NewTaskSheet
-      key={formFor.id}
+      key={
+        formFor.kind === "suggestion"
+          ? formFor.suggestion.id
+          : `item-${formFor.index}`
+      }
       ref={formRef}
-      suggestion={suggestionSeed(formFor, accept.mutateAsync)}
+      suggestion={
+        formFor.kind === "suggestion"
+          ? suggestionSeed(formFor.suggestion, accept.mutateAsync)
+          : itemSeed(formFor.item, (body) =>
+              make.mutateAsync({ meetingId, index: formFor.index, body }),
+            )
+      }
       offerGroups
       onClosed={() => setFormFor(null)}
     />
   ) : null;
 
   return { menuFor, sheet };
+}
+
+/**
+ * The task form opened on an action item with no suggestion waiting
+ * (#6178): its words, the member the minutes named and the day they gave,
+ * for people only. The route takes a day, not a time of day.
+ */
+function itemSeed(
+  item: MeetingActionItem,
+  make: (body: {
+    text: string;
+    assignee_ids: string[];
+    title: string;
+    due_date: string | null;
+  }) => Promise<unknown>,
+): TaskSuggestionSeed {
+  return {
+    title: item.text,
+    who: item.owner_user_id
+      ? { kind: "person", userId: item.owner_user_id }
+      : null,
+    dueDay: item.due_date ?? null,
+    dueAt: null,
+    subtasks: [],
+    peopleOnly: true,
+    refusalLine: actionItemTaskRefusalLine,
+    accept: async (form) => {
+      const assigneeIds = actionItemAssigneeIds(form.who);
+      // The people-only picker hands back nothing else.
+      if (!assigneeIds) throw new Error("Pick who this is for.");
+      await make({
+        text: item.text,
+        assignee_ids: assigneeIds,
+        title: form.title,
+        due_date: form.due_date ?? null,
+      });
+    },
+  };
 }

@@ -1,25 +1,38 @@
 "use client";
 
-import { useMemo, useState, type ReactElement, type ReactNode } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { ExternalLink, ListPlus, Pencil } from "lucide-react";
 import {
+  actionItemAssigneeIds,
   useAcceptAiSuggestion,
   useAiSuggestions,
+  useCanManageTasks,
   useDismissAiSuggestion,
+  useMakeActionItemTask,
   useMembers,
   useSimilarTasks,
   type ExistingTask,
   type MeetingActionItemTask,
   type TaskSuggestionEdits,
 } from "@repo/hooks";
+import { codeOf } from "@repo/api-sdk";
+import { dueEntryFields } from "@repo/formatting";
 import {
   AI_SUGGESTION_COPY,
   MINUTES_READ_COPY,
   SIMILAR_TASK_COPY,
+  actionItemTaskRefusalLine,
   minutesActionSuggestions,
   sameTaskWho,
   type MeetingActionItem,
+  type TaskWho,
 } from "@repo/validation";
 import {
   SimilarTaskCard,
@@ -40,6 +53,8 @@ import {
   RowMenu,
   type RowMenuEntry,
 } from "@/components/shared/row-menu";
+import { DueChip } from "@/components/tasks/due-date-field";
+import { WhoPicker } from "@/components/tasks/who-picker";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -48,7 +63,7 @@ import {
 } from "@/components/ui/popover";
 import { useToast } from "@/lib/hooks/use-toast";
 import { tasksTaskLink } from "@/lib/tasks/task-links";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 /**
  * Create task from any action item of posted minutes (#6051; Winston,
@@ -69,6 +84,15 @@ import { cn } from "@/lib/utils";
  * someone who could accept it, so a member who can't manage tasks sees
  * nothing. An item already made a task offers Open task to an officer, who
  * may read it.
+ *
+ * An item with no suggestion waiting (an officer already went through the
+ * review or dismissed it, it expired, or suggestions were off) offers the
+ * same Create task to an officer who manages tasks (#6178; Winston,
+ * 2026-11-25: "i cant assign anyone to anything"). Its popover picks people
+ * only, one or several each getting a copy, since the item's own route
+ * (`POST /v1/meetings/:id/action-items/:index/task`, #6176) takes members,
+ * with an optional day; the route accepts a suggestion that turned up
+ * meanwhile rather than make a second task.
  *
  * Its controls: a small popover anchored to the row (Who, an optional Due,
  * Create task, and Change before creating, which opens the board's task form
@@ -122,6 +146,7 @@ export function useActionItemTaskRow({
     [items, waiting],
   );
   const similar = useSimilarTasks(enabled ? waiting : NONE);
+  const canMake = useCanManageTasks();
   if (!enabled) return undefined;
   return function TaskRow(row, draw) {
     const suggestion = byIndex.get(row.index) ?? null;
@@ -133,8 +158,12 @@ export function useActionItemTaskRow({
         twin={suggestion ? similar.twinOf(suggestion.id) : null}
         onDifferent={() => suggestion && similar.keep(suggestion.id)}
         taskId={row.task?.task?.id ?? null}
+        // Marked done or for everyone without a task named: the item is a
+        // task the viewer isn't told about, never one to make again.
+        made={!!row.task}
         meetingStart={meetingStart}
         draw={draw}
+        make={canMake ? { meetingId, index: row.index } : null}
       />
     );
   };
@@ -148,8 +177,10 @@ function ActionItemTaskRow({
   twin,
   onDifferent,
   taskId,
+  made,
   meetingStart,
   draw,
+  make,
 }: {
   item: MeetingActionItem;
   suggestion: WaitingSuggestion | null;
@@ -157,8 +188,12 @@ function ActionItemTaskRow({
   twin: ExistingTask | null;
   onDifferent: () => void;
   taskId: string | null;
+  /** The minutes' read has a mark for the item: it is a task already. */
+  made: boolean;
   meetingStart: string | null;
   draw: ActionItemRowDraw;
+  /** Where the item's own create goes, for an officer who manages tasks. */
+  make: { meetingId: string; index: number } | null;
 }) {
   const [creating, setCreating] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -179,7 +214,18 @@ function ActionItemTaskRow({
     [waiting, members, meetingStart],
   );
 
-  if (!waiting && !taskId) return draw(null, null);
+  if (!waiting && !taskId) {
+    return make && !made ? (
+      <MakeTaskRow
+        item={item}
+        meetingId={make.meetingId}
+        index={make.index}
+        draw={draw}
+      />
+    ) : (
+      draw(null, null)
+    );
+  }
 
   const label = `More for ${item.text}`;
   if (!waiting) {
@@ -428,6 +474,193 @@ function QuickCreate({
         </Button>
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? AI_SUGGESTION_COPY.accepting : AI_SUGGESTION_COPY.accept}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Create task on an item with no suggestion waiting (#6178): Who (people
+ * only) and an optional Due, prefilled from what the minutes said, then
+ * Create task, sent to the item's own route with its text, so an edit to
+ * the minutes meanwhile is refused rather than the wrong item made a task.
+ */
+function MakeTaskRow({
+  item,
+  meetingId,
+  index,
+  draw,
+}: {
+  item: MeetingActionItem;
+  meetingId: string;
+  index: number;
+  draw: ActionItemRowDraw;
+}) {
+  const [creating, setCreating] = useState(false);
+  const label = `More for ${item.text}`;
+  const entries: RowMenuEntry[] = [
+    {
+      type: "item",
+      key: "create-task",
+      label: AI_SUGGESTION_COPY.accept,
+      icon: ListPlus,
+      onSelect: () => setCreating(true),
+    },
+  ];
+  return (
+    <RowMenu entries={entries} label={label}>
+      {(menuButton) =>
+        draw(
+          <>
+            <Popover open={creating} onOpenChange={setCreating}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cn("shrink-0", ROW_REVEAL)}
+                  aria-label={`${AI_SUGGESTION_COPY.accept}: ${item.text}`}
+                >
+                  {AI_SUGGESTION_COPY.accept}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-80 p-3"
+                // As the suggestion's popover: the ⋯ menu hands focus back
+                // to its ⋯ as it closes, and the row's context menu must
+                // not see this popover's events.
+                onFocusOutside={(event) => event.preventDefault()}
+                onContextMenu={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <MakeTaskForm
+                  item={item}
+                  meetingId={meetingId}
+                  index={index}
+                  onDone={() => setCreating(false)}
+                />
+              </PopoverContent>
+            </Popover>
+            {menuButton}
+          </>,
+          null,
+        )
+      }
+    </RowMenu>
+  );
+}
+
+function MakeTaskForm({
+  item,
+  meetingId,
+  index,
+  onDone,
+}: {
+  item: MeetingActionItem;
+  meetingId: string;
+  index: number;
+  onDone: () => void;
+}) {
+  const make = useMakeActionItemTask();
+  const { toast } = useToast();
+  // Who the minutes named, and the day they gave, as the fields start.
+  const named: TaskWho | null = item.owner_user_id
+    ? { kind: "person", userId: item.owner_user_id }
+    : null;
+  const [who, setWho] = useState<TaskWho | null>(named);
+  // The people picker drops its picks when closed without Done; here that
+  // keeps what was there before it opened, the minutes' owner included.
+  const kept = useRef<TaskWho | null>(named);
+  const [due, setDue] = useState(item.due_date ?? "");
+  const [flagged, setFlagged] = useState(false);
+  const assigneeIds = actionItemAssigneeIds(who);
+  const missingWho = flagged && !assigneeIds;
+  const whoId = `action-item-${index}-make-who`;
+
+  async function submit() {
+    if (!assigneeIds) {
+      setFlagged(true);
+      return;
+    }
+    try {
+      await make.mutateAsync({
+        meetingId,
+        index,
+        body: {
+          text: item.text,
+          assignee_ids: assigneeIds,
+          due_date: due ? dueEntryFields(due).due_date : null,
+        },
+      });
+      onDone();
+      toast({ title: AI_SUGGESTION_COPY.created, description: item.text });
+    } catch (error) {
+      const refused = actionItemTaskRefusalLine(codeOf(error));
+      // Already a task, or the minutes changed: the marks are read again,
+      // so the row redraws as it now stands.
+      if (refused) onDone();
+      toast({
+        title: AI_SUGGESTION_COPY.acceptFailed,
+        description:
+          refused ?? getErrorMessage(error, AI_SUGGESTION_COPY.tryAgain),
+        variant: "destructive",
+      });
+    }
+  }
+
+  return (
+    <form
+      aria-label={`${AI_SUGGESTION_COPY.accept}: ${item.text}`}
+      aria-busy={make.isPending || undefined}
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <p className="line-clamp-2 break-words text-sm font-medium">
+        {item.text}
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <WhoPicker
+          chip
+          allow="people"
+          label={`Assignee for ${item.text}`}
+          placeholder={AI_SUGGESTION_COPY.who}
+          value={who}
+          onChange={(next) => setWho(next ?? kept.current)}
+          doneLabel={() => "Done"}
+          onDone={() => {
+            kept.current = who;
+          }}
+          disabled={make.isPending}
+          invalid={missingWho}
+          aria-describedby={missingWho ? whoId : undefined}
+        />
+        <DueChip
+          withoutTime
+          label={`Due date for ${item.text}`}
+          placeholder={AI_SUGGESTION_COPY.when}
+          value={due}
+          onChange={setDue}
+          disabled={make.isPending}
+        />
+      </div>
+      {missingWho ? (
+        <p
+          id={whoId}
+          role="alert"
+          className="text-caption text-destructive-text"
+        >
+          {AI_SUGGESTION_COPY.missingWho}
+        </p>
+      ) : null}
+      <div className="flex items-center justify-end">
+        <Button type="submit" size="sm" disabled={make.isPending}>
+          {make.isPending
+            ? AI_SUGGESTION_COPY.accepting
+            : AI_SUGGESTION_COPY.accept}
         </Button>
       </div>
     </form>

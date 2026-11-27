@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   EVENT_CREATE_PERMISSIONS,
-  can,
   canAll,
   comingUpPostReview,
   comingUpTracking,
@@ -19,6 +18,7 @@ import { useChapterRoster } from "./use-members";
 import { useCreateTask, useTasks } from "./use-tasks";
 import { useCurrentChapter } from "./use-chapters";
 import { usePermissionList } from "./use-user";
+import { useCanManageTasks } from "./use-meetings";
 
 /**
  * What already tracks each of a minutes' Coming up dates (#5672), for both
@@ -52,6 +52,7 @@ export function useComingUpTracking(
   const eventsQuery = useEvents({ enabled });
   const tasksQuery = useTasks({ enabled });
   const permissions = usePermissionList();
+  const canManageTasks = useCanManageTasks();
   const modules = useCurrentChapter().data?.enabled_modules;
   const tracking = useMemo(
     () =>
@@ -66,10 +67,7 @@ export function useComingUpTracking(
     canCreateEvents:
       isModuleEnabled(modules, "events") &&
       canAll(EVENT_CREATE_PERMISSIONS, permissions),
-    canManageTasks:
-      isModuleEnabled(modules, "tasks") &&
-      can("tasks:manage", permissions) &&
-      can("members:view", permissions),
+    canManageTasks,
     // Fetching, not pending: a read its own rule holds off (no chapter
     // scope) never answers, and must not hold the review forever.
     ready: !eventsQuery.isFetching && !tasksQuery.isFetching,

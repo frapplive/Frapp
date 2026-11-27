@@ -21,6 +21,23 @@ import { TASK_AUDIENCE_COPY, taskGroupLabel } from "./task-audience";
  * feels like two systems (Paul, 2026-11-19).
  */
 
+/**
+ * Why making an action item a task was refused (#6178), in words an officer
+ * can act on; null for a code this build has no words for.
+ */
+export function actionItemTaskRefusalLine(
+  code: string | null | undefined,
+): string | null {
+  switch (code) {
+    case "meeting.action_item.already_task":
+      return "This action item is already a task.";
+    case "meeting.action_item.changed":
+      return "These minutes changed. Check the item and try again.";
+    default:
+      return null;
+  }
+}
+
 /** The words of the read view and its ⋯ menu, the same on web and phone. */
 export const MINUTES_READ_COPY = {
   readSummary: "Read the full summary",

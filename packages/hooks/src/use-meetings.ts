@@ -2,10 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { components } from "@repo/api-sdk";
-import { minutesDraftElapsed } from "@repo/validation";
+import { throwUnlessOk, type components } from "@repo/api-sdk";
+import {
+  can,
+  isModuleEnabled,
+  minutesDraftElapsed,
+  normalizeTaskWho,
+  type TaskWho,
+} from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { aiSuggestionKeys } from "./use-ai-suggestions";
+import { useCurrentChapter } from "./use-chapters";
+import { taskKeys } from "./use-tasks";
+import { usePermissionList } from "./use-user";
 
 /** One row of the Minutes list (`GET /v1/meetings`), with what the list shows on it (#5290). */
 export type MeetingSummary = components["schemas"]["MeetingListItemDto"];
@@ -171,6 +180,89 @@ export function useMeetingActionItemTasks(
     enabled: (options?.enabled ?? true) && !!chapterId && !!id,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+/** The body `POST /v1/meetings/:id/action-items/:index/task` takes. */
+export type MakeActionItemTaskBody =
+  components["schemas"]["MakeActionItemTaskDto"];
+
+/**
+ * Whether the viewer may make tasks from the minutes: a Coming up date's
+ * task (#5672) and an action item's (#6178). These are the task routes' own
+ * checks, the tasks module and `tasks:manage` under the controllers'
+ * `members:view`, so no menu offers a form whose save is refused.
+ */
+export function useCanManageTasks(): boolean {
+  const permissions = usePermissionList();
+  const modules = useCurrentChapter().data?.enabled_modules;
+  return (
+    isModuleEnabled(modules, "tasks") &&
+    can("tasks:manage", permissions) &&
+    can("members:view", permissions)
+  );
+}
+
+/**
+ * The members an action item's task goes to, as the route takes them: one
+ * person, or several each getting a copy. Null for anyone else (a role, a
+ * group, everyone, or up for grabs), which the route can't make.
+ */
+export function actionItemAssigneeIds(who: TaskWho | null): string[] | null {
+  const picked = who ? normalizeTaskWho(who) : null;
+  if (!picked) return null;
+  if (picked.kind === "person") return [picked.userId];
+  if (picked.kind === "each" && picked.target.kind === "people") {
+    return picked.target.userIds;
+  }
+  return null;
+}
+
+/**
+ * Makes an action item of posted minutes a task (#6178, over #6176's
+ * route): for an item with no suggestion waiting, or one whose suggestion
+ * the server accepts in its place. A 409 says the item is a task already
+ * or the minutes changed; either way the item's marks are read again.
+ */
+export function useMakeActionItemTask() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  const refresh = (meetingId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: [...meetingKey(chapterId, meetingId), "action-item-tasks"],
+    });
+    // A waiting suggestion the server accepted instead leaves the card.
+    void queryClient.invalidateQueries({
+      queryKey: aiSuggestionKeys.all(chapterId),
+    });
+  };
+  return useMutation({
+    mutationKey: ["meetings", "make-action-item-task"],
+    // Two at once would answer 409; never sent twice by itself.
+    retry: false,
+    mutationFn: async ({
+      meetingId,
+      index,
+      body,
+    }: {
+      meetingId: string;
+      index: number;
+      body: MakeActionItemTaskBody;
+    }) => {
+      const result = await client.POST(
+        "/v1/meetings/{id}/action-items/{index}/task",
+        { params: { path: { id: meetingId, index } }, body },
+      );
+      // The status decides: an empty-bodied refusal has no `error`.
+      throwUnlessOk(result);
+      return result.data;
+    },
+    onSuccess: (_mark, { meetingId }) => {
+      refresh(meetingId);
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+    onError: (_error, { meetingId }) => refresh(meetingId),
   });
 }
 

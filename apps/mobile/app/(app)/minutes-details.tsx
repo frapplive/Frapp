@@ -393,7 +393,9 @@ function LoadedMinutes({
   );
   // An action item's long-press: Create task from its waiting suggestion,
   // or Open task once it is one (#6051).
+  // An item with none waiting is made a task from the item itself (#6178).
   const actionItemTask = useActionItemTaskMenu({
+    meetingId: meeting.id,
     items: content.action_items,
     suggestions: suggestions.data?.items ?? EMPTY_SUGGESTIONS,
     handleFor: menu.handleFor,
