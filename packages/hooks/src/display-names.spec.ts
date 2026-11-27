@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   actorLabel,
+  authorAwaitsRoster,
   authorInitialsFallback,
   directChannelDisplayName,
   displayNameOrNull,
@@ -330,6 +331,51 @@ describe("directChannelDisplayName", () => {
         names,
       ),
     ).toBe("Direct message");
+  });
+});
+
+describe("authorAwaitsRoster (#6127)", () => {
+  const nameFor = (id: string) => resolveDisplayName(names, id);
+  const none = () => null;
+
+  it("is true for a member the loading roster hasn't named yet", () => {
+    expect(authorAwaitsRoster({ sender_id: "user-z" }, none, true)).toBe(true);
+  });
+
+  it("covers the viewer's own row, whose avatar would draw id initials", () => {
+    expect(authorAwaitsRoster({ sender_id: VIEWER }, none, true)).toBe(true);
+  });
+
+  it("is false once the roster stops loading, so the fallback label returns", () => {
+    expect(authorAwaitsRoster({ sender_id: "user-z" }, none, false)).toBe(
+      false,
+    );
+    expect(resolveAuthorLabel({ sender_id: "user-z" }, none, null)).toBe(
+      memberFallbackLabel("user-z"),
+    );
+  });
+
+  it("is false for a named member, the system actor and imported rows", () => {
+    expect(authorAwaitsRoster({ sender_id: "user-a" }, nameFor, true)).toBe(
+      false,
+    );
+    expect(
+      authorAwaitsRoster({ sender_id: SYSTEM_SENDER_ID }, none, true),
+    ).toBe(false);
+    expect(
+      authorAwaitsRoster(
+        { sender_id: null, author_name: "old_handle" },
+        none,
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      authorAwaitsRoster(
+        { sender_id: "user-z", author_name: "old_handle" },
+        none,
+        true,
+      ),
+    ).toBe(false);
   });
 });
 

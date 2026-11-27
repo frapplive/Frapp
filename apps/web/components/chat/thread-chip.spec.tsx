@@ -143,6 +143,33 @@ describe("ThreadChip (#3785)", () => {
     ).toBeInTheDocument();
   });
 
+  it("draws a name placeholder for the replier while the roster loads (#6127)", () => {
+    render(
+      <ThreadChip
+        summary={summary}
+        nameFor={() => null}
+        rosterLoading
+        preview={{
+          id: "r1",
+          sender_id: "2f4a1c99-0000-4000-8000-000000000000",
+          content: "see you there",
+          kind: "text",
+          attachment_count: 0,
+          created_at: summary.last_reply_at,
+          sender_blocked: false,
+        }}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/Member 2f4a1c/)).not.toBeInTheDocument();
+    expect(screen.queryByText("2F")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /latest: see you there\. Open thread$/,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("draws no preview line without one", () => {
     const { container } = render(
       <ThreadChip summary={summary} nameFor={nameFor} onOpen={vi.fn()} />,

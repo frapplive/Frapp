@@ -214,6 +214,15 @@ export interface MemberDisplayNames {
    * visitor; prefer degrading to {@link memberFallbackLabel} over waiting.
    */
   isPending: boolean;
+  /**
+   * True only while the first roster read is in flight (TanStack's
+   * `isLoading`): no data yet *and* a fetch running. Unlike {@link isPending}
+   * it goes false when the read fails or is disabled (no active chapter), so a
+   * row that draws a name placeholder on it falls back to
+   * {@link memberFallbackLabel} then rather than holding a skeleton forever
+   * (#6127). Pass it to `authorAwaitsRoster`.
+   */
+  rosterLoading: boolean;
   isError: boolean;
   /**
    * Whether a roster read has ever landed. TanStack keeps the last good data
@@ -316,6 +325,7 @@ export function useMemberDisplayNames(): MemberDisplayNames {
     roleColorFor,
     avatarTintFor,
     isPending: query.isPending,
+    rosterLoading: query.isLoading,
     isError: query.isError,
     hasData: query.data !== undefined,
     isFetching: query.isFetching,

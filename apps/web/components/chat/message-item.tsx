@@ -101,6 +101,7 @@ import { blockActionLabel } from "@repo/chat-core/block-copy";
 import type { ChatMessage, ReplayRequest } from "@repo/chat-core/types";
 import type { ClosableCardKind } from "@repo/chat-core/chat-client";
 import {
+  authorAwaitsRoster,
   authorInitialsFallback,
   memberAvatarHue,
   memberAvatarTint,
@@ -110,6 +111,7 @@ import {
 import { formatTimeOfDay, formatTimeOfDayShort } from "@repo/formatting";
 import { cn, initials } from "@/lib/utils";
 import { useChatDensity } from "@/lib/chat/chat-density";
+import { NamePlaceholder } from "./name-placeholder";
 
 /**
  * The crest at 180², synced from `@repo/brand-assets` by `SYNCED` in
@@ -194,6 +196,14 @@ export interface MessageItemProps {
    * a truncated uuid by forgetting it.
    */
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is still in flight
+   * (`useMemberDisplayNames().rosterLoading`). An author it hasn't named yet
+   * draws a name-shaped placeholder and a neutral avatar disc, not
+   * `Member 2f4a1c` and id initials (#6127). Optional; without it the row
+   * draws the fallback label at once.
+   */
+  rosterLoading?: boolean;
   onReact: (messageId: string, emoji: string) => void;
   onUnreact: (messageId: string, emoji: string) => void;
   /**
@@ -449,6 +459,7 @@ export function MessageItem({
   endsRun = true,
   runStartedAt,
   nameFor,
+  rosterLoading = false,
   onReact,
   onUnreact,
   onReply,
@@ -490,13 +501,24 @@ export function MessageItem({
   // `author_name` and has no roster entry at all, and the old
   // `message.sender_id.slice(...)` fallbacks below threw on it.
   const authorName = resolveAuthorName(message, nameFor);
-  const authorLabel = resolveAuthorLabel(message, nameFor, viewerId);
+  // While the roster is loading, an author it hasn't named yet draws a
+  // placeholder name and a neutral avatar disc rather than a fake identity
+  // built from their id (#6127). The viewer's own row keeps "You"; only its
+  // avatar waits.
+  const awaitingName = authorAwaitsRoster(message, nameFor, rosterLoading);
+  const authorLabel: React.ReactNode =
+    awaitingName && message.sender_id !== viewerId ? (
+      <NamePlaceholder />
+    ) : (
+      resolveAuthorLabel(message, nameFor, viewerId)
+    );
   // The name and photo open the author's profile, as Discord's and mobile's
   // do; Frapp's own posts, an imported author and a member who left open
   // nothing (`authorProfileUserId`).
-  const authorUserId = onOpenProfile
-    ? authorProfileUserId(message, nameFor)
-    : null;
+  const authorUserId =
+    onOpenProfile && !awaitingName
+      ? authorProfileUserId(message, nameFor)
+      : null;
   const openAuthor =
     onOpenProfile && authorUserId
       ? (event: React.MouseEvent<HTMLElement>) =>
@@ -566,7 +588,7 @@ export function MessageItem({
   // when it has one, so the two always match, otherwise their hashed hue. An
   // imported message with no sender keeps the neutral circle.
   const avatarTint =
-    !isSystemPost && message.sender_id
+    !isSystemPost && message.sender_id && !awaitingName
       ? memberAvatarTint(memberAvatarHue(message.sender_id, authorColor))
       : null;
   const isPending = message._status === "pending";
@@ -601,8 +623,7 @@ export function MessageItem({
   // too, so the More button now shows on every forwardable row.
   const canForward = canForwardMessage(message) && !!onForward;
   // Time out (#6006): moderation, so after Report and before Block.
-  const canTimeOut =
-    !!onTimeOut && canTimeOutSender(message, viewerId, true);
+  const canTimeOut = !!onTimeOut && canTimeOutSender(message, viewerId, true);
 
   const [isEditing, setIsEditing] = useState(false);
   // The tokens the row paints as chips, which the editor opens as chips.
@@ -861,9 +882,18 @@ export function MessageItem({
         />
         <QuotedMessage
           author={
-            replyParent
-              ? resolveAuthorLabel(replyParent, nameFor, viewerId)
-              : null
+            replyParent ? (
+              authorAwaitsRoster(replyParent, nameFor, rosterLoading) &&
+              replyParent.sender_id !== viewerId ? (
+                // The parent's author, while the roster loads (#6127).
+                <NamePlaceholder
+                  className="h-auto"
+                  barClassName="h-[11px] w-16"
+                />
+              ) : (
+                resolveAuthorLabel(replyParent, nameFor, viewerId)
+              )
+            ) : null
           }
           preview={
             replyParent
@@ -982,7 +1012,7 @@ export function MessageItem({
         tint={avatarTint}
         style={isSystemPost ? { backgroundColor: CREST_FIELD } : undefined}
       >
-        {isSystemPost
+        {isSystemPost || awaitingName
           ? null
           : authorName
             ? initials(authorName)
@@ -1637,6 +1667,7 @@ export function MessageItem({
                     <ThreadChip
                       summary={message.thread}
                       nameFor={nameFor}
+                      rosterLoading={rosterLoading}
                       avatarFor={avatarFor}
                       roleColorFor={roleColorFor}
                       unread={threadUnread}
@@ -1911,6 +1942,7 @@ export function MessageItem({
                 <ThreadChip
                   summary={message.thread}
                   nameFor={nameFor}
+                  rosterLoading={rosterLoading}
                   avatarFor={avatarFor}
                   roleColorFor={roleColorFor}
                   unread={threadUnread}

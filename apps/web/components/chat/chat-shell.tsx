@@ -669,6 +669,7 @@ export function ChatShell({
     roleColorFor,
     avatarTintFor,
     isPending: rosterPending,
+    rosterLoading,
     isError: rosterError,
   } = useMemberDisplayNames();
   // Per-channel notification levels, from their own endpoint rather than the
@@ -3714,6 +3715,7 @@ export function ChatShell({
           rootId={threadRootId}
           viewerId={userId}
           nameFor={nameFor}
+          rosterLoading={rosterLoading}
           typistLabelFor={typistLabelFor}
           avatarFor={avatarFor}
           roleColorFor={roleColorFor}
@@ -4449,6 +4451,7 @@ export function ChatShell({
                   ref={timeline}
                   channelId={activeChannel?.id}
                   nameFor={nameFor}
+                  rosterLoading={rosterLoading}
                   roleColorFor={roleColorFor}
                   avatarFor={avatarFor}
                   messages={channel.messages}

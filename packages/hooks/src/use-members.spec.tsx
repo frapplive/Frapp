@@ -255,6 +255,9 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     await waitFor(() => expect(result.current.nameFor("user-1")).toBeNull());
 
     expect(result.current.isPending).toBe(true);
+    // A disabled read never loads, so a row never holds a name placeholder
+    // for it (#6127): it draws the fallback label instead.
+    expect(result.current.rosterLoading).toBe(false);
     expect(mockGet).not.toHaveBeenCalled();
   });
 
@@ -366,7 +369,10 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
       wrapper: createWrapper(queryClient),
     });
 
+    // In flight: the rows draw name placeholders (#6127).
+    expect(result.current.rosterLoading).toBe(true);
     await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.rosterLoading).toBe(false);
 
     expect(result.current.nameFor("user-1")).toBe("Marcus Reid");
     // display_name is NOT NULL DEFAULT '', so '' must not render as a name.
@@ -389,6 +395,8 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.nameFor("user-1")).toBeNull();
+    // A failed read stops the placeholders: rows fall back to the label.
+    expect(result.current.rosterLoading).toBe(false);
   });
 });
 
@@ -610,9 +618,7 @@ describe("membership writes refetch the alumni list", () => {
       params: { path: { id: "member-1" } },
       body: { display_name: "Ada" },
     });
-    expect(keys()).toEqual(
-      expect.arrayContaining([["members"], ["alumni"]]),
-    );
+    expect(keys()).toEqual(expect.arrayContaining([["members"], ["alumni"]]));
     expect(keys()).not.toContainEqual(["user", "me"]);
   });
 

@@ -110,6 +110,7 @@ export interface ThreadRowWrites {
 export interface ThreadPanelProps extends Pick<
   MessageTimelineProps,
   | "nameFor"
+  | "rosterLoading"
   | "avatarFor"
   | "roleColorFor"
   | "onUnblock"
@@ -242,6 +243,7 @@ export function ThreadPanel({
   rootId,
   viewerId,
   nameFor,
+  rosterLoading,
   typistLabelFor,
   avatarFor,
   roleColorFor,
@@ -572,6 +574,7 @@ export function ThreadPanel({
                 blockState={blockState}
                 showHeader
                 nameFor={nameFor}
+                rosterLoading={rosterLoading}
                 avatarUrl={
                   resolveAuthorAvatar(root, avatarFor, undefined) ?? undefined
                 }
@@ -710,6 +713,7 @@ export function ThreadPanel({
           maskedRefresh={maskedRefresh}
           viewerId={viewerId}
           nameFor={nameFor}
+          rosterLoading={rosterLoading}
           avatarFor={avatarFor}
           roleColorFor={roleColorFor}
           isLoading={thread.isLoading || !root}

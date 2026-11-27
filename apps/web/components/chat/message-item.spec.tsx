@@ -192,6 +192,43 @@ describe("MessageItem author rendering", () => {
     expect(screen.getByText("Member 222222")).toBeInTheDocument();
   });
 
+  // #6127: rows painted from the device cache before the roster answers.
+  it("draws a name placeholder, not the id, while the roster loads", () => {
+    renderItemWithProps({ nameFor: () => null, rosterLoading: true });
+
+    expect(screen.queryByText(/^Member /)).not.toBeInTheDocument();
+    expect(screen.queryByText("22")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading name")).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="name-placeholder"]'),
+    ).not.toBeNull();
+  });
+
+  it("keeps You on the viewer's own row while the roster loads, with no id initials", () => {
+    renderItemWithProps({
+      message: message({ sender_id: VIEWER }),
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+
+    expect(screen.queryByText("Loading name")).not.toBeInTheDocument();
+    expect(screen.queryByText("11")).not.toBeInTheDocument();
+  });
+
+  it("draws a name the loading roster already has", () => {
+    renderItemWithProps({ rosterLoading: true });
+
+    expect(screen.getByText("Alice Chen")).toBeInTheDocument();
+    expect(screen.queryByText("Loading name")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the truncated id once the roster has loaded or failed", () => {
+    renderItemWithProps({ nameFor: () => null, rosterLoading: false });
+
+    expect(screen.getByText("Member 222222")).toBeInTheDocument();
+    expect(screen.queryByText("Loading name")).not.toBeInTheDocument();
+  });
+
   it("treats an empty resolved name as unresolvable rather than blank", () => {
     // users.display_name is NOT NULL DEFAULT '', so '' is the real missing case.
     renderItem(message(), () => "");
