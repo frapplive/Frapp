@@ -30,7 +30,9 @@ export function calendarCreateStart(
  * Assigned by me apart, which the key no longer does.
  *
  * localStorage, best-effort: a private window, blocked site data or a full
- * quota throws or reads empty, and every kind then shows.
+ * quota throws or reads empty, and the key then starts from its defaults
+ * (tasks off, `DEFAULT_HIDDEN_CALENDAR_KINDS`, #5948); a choice made there
+ * holds until the page reloads.
  */
 function hiddenKindsStorageKey(userId: string): string {
   return `frapp.events.hidden-kinds.${userId}`;

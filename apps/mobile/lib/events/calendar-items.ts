@@ -24,13 +24,20 @@ export function useCalendarItemsByDay(
   hidden: ReadonlySet<CalendarKind>,
 ): Map<string, CalendarItem[]> {
   const all = useAllCalendarItems(anchor);
-  return useMemo(
-    () =>
-      calendarTasksByDay(
-        all.filter((item) => !hidden.has(calendarKindOf(item))),
-        ALL_CALENDAR_LAYERS,
-      ),
-    [all, hidden],
+  return useMemo(() => shownCalendarItemsByDay(all, hidden), [all, hidden]);
+}
+
+/**
+ * `items` less the kinds `hidden` holds, by day: for a screen that already
+ * read every item for the key's counts, so it doesn't read them twice.
+ */
+export function shownCalendarItemsByDay(
+  items: readonly CalendarItem[],
+  hidden: ReadonlySet<CalendarKind>,
+): Map<string, CalendarItem[]> {
+  return calendarTasksByDay(
+    items.filter((item) => !hidden.has(calendarKindOf(item))),
+    ALL_CALENDAR_LAYERS,
   );
 }
 

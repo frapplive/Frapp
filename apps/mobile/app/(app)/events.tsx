@@ -34,8 +34,8 @@ import { CalendarSubscribeSheet } from "@/components/events/calendar-subscribe-s
 import { CalendarPlusGlyph } from "@/components/control-glyphs";
 import { HeaderButton } from "@/components/header-button";
 import {
+  shownCalendarItemsByDay,
   useAllCalendarItems,
-  useCalendarItemsByDay,
 } from "@/lib/events/calendar-items";
 import { useHiddenCalendarKinds } from "@/lib/events/calendar-hidden-kinds";
 import { monthKindCounts } from "@/lib/events/event-days";
@@ -126,8 +126,11 @@ export default function EventsScreen() {
   // switches is kept per member, for this month and its Day screen.
   const kinds = useHiddenCalendarKinds(viewerUserId);
   const eventsHidden = kinds.hidden.has("events");
-  const tasksByDay = useCalendarItemsByDay(selectedDay, kinds.hidden);
   const allItems = useAllCalendarItems(selectedDay);
+  const tasksByDay = useMemo(
+    () => shownCalendarItemsByDay(allItems, kinds.hidden),
+    [allItems, kinds.hidden],
+  );
   const kindCounts = useMemo(
     () => monthKindCounts(monthAnchor, allEvents, allItems),
     [monthAnchor, allEvents, allItems],

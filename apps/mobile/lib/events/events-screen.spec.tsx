@@ -744,7 +744,24 @@ describe("Calendar month", () => {
     }
   });
 
-  it("starts with tasks off; the key's Tasks turns them on and keeps the choice (#5948)", () => {
+  it("leaves tasks off the Day screen too until the key turns them on (#5948)", () => {
+    resetHiddenCalendarKindsForTests();
+    tasks = [
+      {
+        id: "t-mine",
+        title: "Clean the kitchen",
+        assignee_id: "me",
+        created_by: "m1",
+        due_date: localIsoDate(MOUNTED_AT),
+        status: "TODO",
+      },
+    ];
+    expect(screenText(renderDay(MOUNTED_AT))).not.toContain(
+      "Clean the kitchen",
+    );
+  });
+
+  it("starts with tasks off; the key's Tasks turns them on and keeps the choice (#5948)", async () => {
     resetHiddenCalendarKindsForTests();
     tasks = [
       {
@@ -776,7 +793,13 @@ describe("Calendar month", () => {
     expect(keyItem(first, "tasks").props.accessibilityLabel).toBe("Tasks, 1");
     expect(screenText(first)).not.toContain("Clean the kitchen");
 
-    act(() => keyItem(first, "tasks").props.onPress());
+    // The tap switches against the member's stored choice, so it lands once
+    // that read has (none is stored here: the defaults).
+    await act(async () => {
+      keyItem(first, "tasks").props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(keyItem(first, "tasks").props.accessibilityState).toEqual({
       checked: true,
     });
@@ -1594,6 +1617,28 @@ describe("Tasks on the Calendar", () => {
       ];
     }
 
+    it("takes them off the month and the day when the key turns Birthdays off (#5948)", () => {
+      withBirthday();
+      const tree = render();
+      const key = localIsoDate(MOUNTED_AT);
+      act(() =>
+        tree.root
+          .find(
+            (node) =>
+              node.props.testID === "calendar-key-birthdays" &&
+              node.props.accessibilityState !== undefined,
+          )
+          .props.onPress(),
+      );
+      expect(screenText(tree)).not.toContain("Dana Lowe");
+      expect(
+        tree.root.findAll(
+          (node) => node.props.testID === `birthday-mark-${key}`,
+        ),
+      ).toHaveLength(0);
+      expect(screenText(renderDay(MOUNTED_AT))).not.toContain("Dana Lowe");
+    });
+
     it("lists a shared birthday on its day and marks the day", () => {
       withBirthday();
       const tree = render();
@@ -1609,7 +1654,8 @@ describe("Tasks on the Calendar", () => {
     });
   });
 
-  // #5310: no layer chips, so every kind shows, always.
+  // #5310: no layer chips; with the key's Tasks on (this file's beforeEach,
+  // #5948), every kind shows together.
   it("shows the member's tasks, the ones they assigned and birthdays together", () => {
     withTasks();
     birthdays = [

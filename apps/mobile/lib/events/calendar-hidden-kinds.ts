@@ -17,9 +17,13 @@ import {
  *
  * One store for the process, so the month and the Day screen pushed over it
  * read the same choice the moment it changes. Read once per member, then
- * held in memory. Best-effort both ways, like `createStoredPreference`: a
- * storage error reads as the defaults, a failed write keeps the choice until
- * the app restarts, and a choice made before the stored read lands wins.
+ * held in memory. Best-effort both ways: a storage error reads as the
+ * defaults, and a failed write keeps the choice until the app restarts.
+ *
+ * Not built on `createStoredPreference` (`lib/stored-preference.ts`), which
+ * holds one string per key and lets a choice made before its read win
+ * outright. This holds a set per member, and a tap waits on the member's
+ * stored read so it switches only the kind tapped.
  */
 
 function storageKey(userId: string): string {
@@ -35,20 +39,22 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-function hydrate(userId: string): void {
-  if (reads.has(userId)) return;
-  reads.set(
-    userId,
-    AsyncStorage.getItem(storageKey(userId))
-      .then((raw) => {
-        if (chosen.has(userId)) return;
-        chosen.set(userId, parseHiddenCalendarKinds(raw));
-        notify();
-      })
-      .catch(() => {
-        /* The defaults stand. */
-      }),
-  );
+/** Reads the member's stored choice once; later calls return the same read. */
+function hydrate(userId: string): Promise<void> {
+  const pending = reads.get(userId);
+  if (pending) return pending;
+  const read = AsyncStorage.getItem(storageKey(userId))
+    .then((raw) => {
+      if (chosen.has(userId)) return;
+      chosen.set(userId, parseHiddenCalendarKinds(raw));
+      notify();
+    })
+    .catch(() => {
+      // The defaults stand, and count as read, so a toggle has a base.
+      if (!chosen.has(userId)) chosen.set(userId, null);
+    });
+  reads.set(userId, read);
+  return read;
 }
 
 function subscribe(listener: () => void) {
@@ -67,7 +73,7 @@ export function useHiddenCalendarKinds(userId: string | null | undefined): {
   hidden: ReadonlySet<CalendarKind>;
   toggle: (kind: CalendarKind) => void;
 } {
-  if (userId) hydrate(userId);
+  if (userId) void hydrate(userId);
   const stored = useSyncExternalStore(
     subscribe,
     () => (userId ? (chosen.get(userId) ?? null) : null),
@@ -77,18 +83,26 @@ export function useHiddenCalendarKinds(userId: string | null | undefined): {
   const toggle = useCallback(
     (kind: CalendarKind) => {
       if (!userId) return;
-      const next = toggleCalendarKind(
-        hiddenCalendarKindsOrDefault(chosen.get(userId) ?? null),
-        kind,
-      );
-      chosen.set(userId, next);
-      notify();
-      AsyncStorage.setItem(
-        storageKey(userId),
-        serializeHiddenCalendarKinds(next),
-      ).catch(() => {
-        /* Best-effort: the choice holds until the app restarts. */
-      });
+      // Switched against what the member has stored, never against the
+      // defaults standing in for it: a tap before the read lands waits for
+      // it (milliseconds), so switching Birthdays can't also write Tasks
+      // back off for a member who had turned them on.
+      const apply = () => {
+        const next = toggleCalendarKind(
+          hiddenCalendarKindsOrDefault(chosen.get(userId) ?? null),
+          kind,
+        );
+        chosen.set(userId, next);
+        notify();
+        AsyncStorage.setItem(
+          storageKey(userId),
+          serializeHiddenCalendarKinds(next),
+        ).catch(() => {
+          /* Best-effort: the choice holds until the app restarts. */
+        });
+      };
+      if (chosen.has(userId)) apply();
+      else void hydrate(userId).then(apply);
     },
     [userId],
   );
