@@ -44,6 +44,8 @@ const {
   mockDeleteType,
   accessQuery,
   mockSetAccess,
+  mockRequestVersion,
+  mockReplaceFile,
 } = vi.hoisted(() => ({
   // Who can see (#3642 piece 1): unread by default, so no field shows and
   // every write sends what it did before lists existed.
@@ -54,6 +56,9 @@ const {
     isError: false,
   },
   mockSetAccess: vi.fn().mockResolvedValue({}),
+  // Upload a new version (#6055).
+  mockRequestVersion: vi.fn(),
+  mockReplaceFile: vi.fn(),
   // The chapter's document types (#3642). Unread by default, so the panel
   // falls back to the common types plus the library's own, as before.
   typesQuery: { data: undefined as unknown[] | undefined, isSuccess: false },
@@ -185,6 +190,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
   useRequestDocumentUploadUrl: () => ({ mutateAsync: mockRequestUpload }),
   useConfirmDocumentUpload: () => ({ mutateAsync: mockConfirmUpload }),
+  useRequestDocumentVersionUploadUrl: () => ({
+    mutateAsync: mockRequestVersion,
+  }),
+  useReplaceDocumentFile: () => ({ mutateAsync: mockReplaceFile }),
   useDeleteDocument: () => ({ mutateAsync: mockDeleteDoc }),
   useCreateDocumentFolder: () => ({ mutateAsync: mockCreateFolder }),
   useUpdateDocumentFolder: () => ({ mutateAsync: mockUpdateFolder }),
@@ -1352,6 +1361,114 @@ describe("DocumentsPage upload metadata", () => {
       ),
     );
     expect(mockConfirmUpload).not.toHaveBeenCalled();
+  });
+});
+
+// #6055: a downloaded file, changed, goes back onto the same row.
+describe("DocumentsPage upload a new version", () => {
+  const NEW_PATH = "chapters/chap-1/documents/v2/bylaws-v2.pdf";
+  const control = () =>
+    screen.queryByRole("button", {
+      name: "Upload a new version of Chapter bylaws",
+    });
+  const pick = (name: string, type: string) => {
+    const file = new File(["%PDF-1.4"], name, { type });
+    fireEvent.change(screen.getByTestId("new-version-input-doc-1"), {
+      target: { files: [file] },
+    });
+    return file;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOffline.value = false;
+    chapter.active();
+    resolvedDocumentsQuery();
+    mockRequestVersion.mockResolvedValue({
+      upload_url: "https://storage.example/v2",
+      storage_path: NEW_PATH,
+    });
+    mockReplaceFile.mockResolvedValue({});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true } as Response));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("puts the picked file on the same document for its uploader", async () => {
+    documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
+    render(<DocumentsPage />);
+    expect(control()).toBeInTheDocument();
+
+    const file = pick("bylaws-v2.pdf", "application/pdf");
+
+    await waitFor(() => expect(mockReplaceFile).toHaveBeenCalledTimes(1));
+    expect(mockRequestVersion).toHaveBeenCalledWith({
+      id: "doc-1",
+      filename: "bylaws-v2.pdf",
+      content_type: "application/pdf",
+      size_bytes: file.size,
+    });
+    expect(fetch).toHaveBeenCalledWith("https://storage.example/v2", {
+      method: "PUT",
+      body: file,
+      headers: { "content-type": "application/pdf", "x-upsert": "true" },
+    });
+    // The same id: a new version, never a second document.
+    expect(mockReplaceFile).toHaveBeenCalledWith({
+      id: "doc-1",
+      storage_path: NEW_PATH,
+      content_type: "application/pdf",
+      byte_size: file.size,
+    });
+    expect(mockConfirmUpload).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "New version uploaded" }),
+    );
+  });
+
+  it("is not offered to a member who neither uploaded it nor manages documents", () => {
+    render(<DocumentsPage />);
+    expect(control()).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("new-version-input-doc-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is offered to whoever manages documents, but never on a Drive file", () => {
+    manageGate.granted = true;
+    const { unmount } = render(<DocumentsPage />);
+    expect(control()).toBeInTheDocument();
+    unmount();
+
+    documentsQuery.data = [
+      {
+        ...BYLAWS,
+        drive_file_id: "drive-1",
+        drive_url: "https://drive.google.com/file/d/drive-1/view",
+      },
+    ];
+    render(<DocumentsPage />);
+    expect(control()).not.toBeInTheDocument();
+  });
+
+  it("refuses a file type the library can't take before anything is sent", async () => {
+    documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
+    render(<DocumentsPage />);
+
+    pick("logo.svg", "image/svg+xml");
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Couldn't upload a new version",
+          variant: "destructive",
+        }),
+      ),
+    );
+    expect(mockRequestVersion).not.toHaveBeenCalled();
+    expect(mockReplaceFile).not.toHaveBeenCalled();
   });
 });
 
@@ -3571,7 +3688,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
       screen.getByRole("link", { name: "Open Synced minutes in Google Drive" }),
     ).toHaveAttribute("href", "https://drive.google.com/file/d/drive-1/view");
     expect(
-      screen.queryByRole("link", { name: "Open Chapter bylaws in Google Drive" }),
+      screen.queryByRole("link", {
+        name: "Open Chapter bylaws in Google Drive",
+      }),
     ).not.toBeInTheDocument();
   });
 

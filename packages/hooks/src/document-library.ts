@@ -857,6 +857,26 @@ export function isDriveCopy(doc: { drive_file_id?: string | null }): boolean {
 }
 
 /**
+ * Whether `userId` may upload a new version of this file (#6055), as the API
+ * decides (`ChapterDocumentService.replaceFile`): its uploader, or a member
+ * who manages documents. Never a Drive file, which is changed in Drive, nor a
+ * meeting's minutes, which have no file.
+ */
+export function mayUploadNewVersion(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    meeting_id?: string | null;
+  },
+  userId: string | null,
+  manages: boolean,
+): boolean {
+  if (isDriveCopy(doc) || isMinutesDocument({ meeting_id: doc.meeting_id }))
+    return false;
+  return manages || (!!userId && doc.uploaded_by === userId);
+}
+
+/**
  * A Drive file's page in Google Drive (#6055), where its working copy is, or
  * null. Only an https link: the address goes in a link both apps open, and
  * Drive's `webViewLink` is always one.

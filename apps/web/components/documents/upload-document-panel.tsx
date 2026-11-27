@@ -75,7 +75,7 @@ import {
   Each string names the verdict, because it is the whole inline error under the
   file field rather than a toast body under a title that named it.
 */
-function uploadRejectionDescription(
+export function uploadRejectionDescription(
   reason: "type" | "size",
   filename: string,
 ): string {

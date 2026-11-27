@@ -19,6 +19,7 @@ import {
   kindOptions,
   isMarkFiltering,
   limitedDocumentCheck,
+  mayUploadNewVersion,
 } from "./document-library";
 
 type ChapterDocument = {
@@ -739,5 +740,33 @@ describe("documentFolderHues (#5576)", () => {
   it("still colours a folder the list doesn't hold", () => {
     expect(ROLE_COLOR_HEXES).toContain(hue("Archive"));
     expect(hue("Archive")).not.toBe(roleColor("slate"));
+  });
+});
+
+// #6055: who gets "Upload a new version", as the API's replaceFile decides.
+describe("mayUploadNewVersion", () => {
+  const upload = { uploaded_by: "me", drive_file_id: null, meeting_id: null };
+
+  it("offers it to the uploader and to whoever manages documents", () => {
+    expect(mayUploadNewVersion(upload, "me", false)).toBe(true);
+    expect(mayUploadNewVersion(upload, "someone", true)).toBe(true);
+  });
+
+  it("withholds it from anyone else", () => {
+    expect(mayUploadNewVersion(upload, "someone", false)).toBe(false);
+    expect(mayUploadNewVersion(upload, null, false)).toBe(false);
+  });
+
+  it("never offers it on a Drive file or a meeting's minutes", () => {
+    expect(
+      mayUploadNewVersion({ ...upload, drive_file_id: "drive-1" }, "me", true),
+    ).toBe(false);
+    expect(
+      mayUploadNewVersion(
+        { uploaded_by: null, drive_file_id: null, meeting_id: "mtg-1" },
+        "me",
+        true,
+      ),
+    ).toBe(false);
   });
 });

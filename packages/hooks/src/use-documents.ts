@@ -504,6 +504,59 @@ export function useConfirmDocumentUpload() {
   });
 }
 
+/**
+ * A signed upload link for a new version of one uploaded file (#6055): the
+ * same check as an upload's, for the file's uploader or whoever manages
+ * documents, never a Drive file or minutes. Nothing changes until
+ * {@link useReplaceDocumentFile} confirms it.
+ */
+export function useRequestDocumentVersionUploadUrl() {
+  const client = useFrappClient();
+  return useMutation({
+    mutationKey: ["documents", "request-document-version-upload-url"],
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & components["schemas"]["RequestDocumentUploadUrlDto"]) => {
+      const { data, error } = await client.POST(
+        "/v1/documents/{id}/version-upload-url",
+        { params: { path: { id } }, body },
+      );
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Puts a new version's uploaded file in place of a document's (#6055): the
+ * same document, id, folder, list, pin and stars, with the new file. The
+ * library and the open viewer refetch, so both show it.
+ */
+export function useReplaceDocumentFile() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["documents", "replace-document-file"],
+    mutationFn: async ({
+      id,
+      ...body
+    }: { id: string } & components["schemas"]["ReplaceDocumentFileDto"]) => {
+      const { data, error } = await client.PUT("/v1/documents/{id}/file", {
+        params: { path: { id } },
+        body,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+
 export function useDeleteDocument() {
   const client = useFrappClient();
   const queryClient = useQueryClient();
