@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, RefreshCw, Unplug } from "lucide-react";
+import { RefreshCw, Unplug } from "lucide-react";
+import { DriveGlyph } from "@/components/documents/resources-glyphs";
 import {
   driveFolderActions,
   driveFolderLine,
@@ -113,7 +114,8 @@ export function DriveFolderLine({
       type: "item",
       key: "open",
       label: "Open in Google Drive",
-      icon: ExternalLink,
+      // Drive's mark, as a file's Open in Google Drive draws it (#6055).
+      icon: DriveMenuIcon,
       href: driveFolderUrl(driveId),
       external: true,
     },
@@ -167,8 +169,8 @@ export function DriveFolderLine({
               target="_blank"
               rel="noopener noreferrer"
             >
+              <DriveGlyph className="h-3.5 w-3.5" />
               Open in Google Drive
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </Button>
         )}
@@ -184,3 +186,5 @@ export function DriveFolderLine({
     </div>
   );
 }
+
+const DriveMenuIcon = () => <DriveGlyph className="h-4 w-4" />;

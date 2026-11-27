@@ -85,16 +85,13 @@ import {
   DocumentActionsSheet,
   type DocumentActionsTarget,
 } from "@/components/documents/document-actions-sheet";
-import {
-  DriveGlyph,
-  PinGlyph,
-  StarGlyph,
-} from "@/components/documents/document-glyphs";
+import { PinGlyph, StarGlyph } from "@/components/documents/document-glyphs";
 import {
   LIMITED_LABEL,
   LimitedMark,
 } from "@/components/documents/limited-mark";
 import { MarkedCards } from "@/components/documents/marked-cards";
+import { DocumentMarks } from "@/components/documents/document-marks";
 import { DocumentTiles } from "@/components/documents/document-tiles";
 import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
@@ -994,25 +991,12 @@ export default function DocumentsScreen() {
               canManage ? "Star, pin or delete" : "Star or unstar"
             }
             trailing={
-              row.doc.pinned_at ||
-              starredDocuments.has(row.doc.id) ||
-              isLimited(row.doc) ||
-              isDriveCopy(row.doc) ? (
-                <View style={styles.marks}>
-                  {isLimited(row.doc) ? (
-                    <LimitedMark color={tokens.color.text.mutedForeground} />
-                  ) : null}
-                  {/* Drive's mark (#6055): the working copy is in Drive.
-                      The row's description says "From Google Drive". */}
-                  {isDriveCopy(row.doc) ? <DriveGlyph size={14} /> : null}
-                  {row.doc.pinned_at ? (
-                    <PinGlyph color={accent} on size={14} />
-                  ) : null}
-                  {starredDocuments.has(row.doc.id) ? (
-                    <StarGlyph color={accent} on size={14} />
-                  ) : null}
-                </View>
-              ) : undefined
+              <DocumentMarks
+                limited={isLimited(row.doc)}
+                fromDrive={isDriveCopy(row.doc)}
+                pinned={!!row.doc.pinned_at}
+                starred={starredDocuments.has(row.doc.id)}
+              />
             }
             accessibilityValue={
               [

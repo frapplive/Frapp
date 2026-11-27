@@ -19,8 +19,8 @@ import {
   documentOpenHint,
   type MobileDocument,
 } from "@/lib/more/documents";
-import { DriveGlyph, PinGlyph, StarGlyph } from "./document-glyphs";
-import { LIMITED_LABEL, LimitedMark } from "./limited-mark";
+import { DocumentMarks } from "./document-marks";
+import { LIMITED_LABEL } from "./limited-mark";
 
 type DocumentRowData = LibraryDocument<MobileDocument>;
 
@@ -139,21 +139,13 @@ export function DocumentTiles({
                   <Text style={styles.type} numberOfLines={1}>
                     {classifyFile(doc).label}
                   </Text>
-                  {pinned || starred || limited || fromDrive ? (
-                    <View style={styles.marks}>
-                      {limited ? (
-                        <LimitedMark
-                          color={tokens.color.text.mutedForeground}
-                        />
-                      ) : null}
-                      {/* Drive's mark (#6055), as the list row draws it. */}
-                      {fromDrive ? <DriveGlyph size={14} /> : null}
-                      {pinned ? <PinGlyph color={accent} on size={14} /> : null}
-                      {starred ? (
-                        <StarGlyph color={accent} on size={14} />
-                      ) : null}
-                    </View>
-                  ) : null}
+                  <DocumentMarks
+                    limited={limited}
+                    fromDrive={fromDrive}
+                    pinned={pinned}
+                    starred={starred}
+                    style={styles.marks}
+                  />
                 </View>
                 <Text style={styles.title} numberOfLines={2}>
                   {doc.title}

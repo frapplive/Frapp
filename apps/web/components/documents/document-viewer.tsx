@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import {
   selectDownloadUrl,
@@ -283,8 +283,17 @@ function DocumentPreview({
       return (
         <Notice
           title={title}
-          action={{ label: "Open in Google Drive", href: drive }}
-          secondary={{ label: "Download", onClick: onSave, busy: saving }}
+          action={{
+            label: "Open in Google Drive",
+            href: drive,
+            icon: <DriveGlyph className="size-4" />,
+          }}
+          secondary={{
+            label: "Download",
+            onClick: onSave,
+            busy: saving,
+            icon: DOWNLOAD_ICON,
+          }}
         />
       );
     }
@@ -292,7 +301,7 @@ function DocumentPreview({
       <Notice
         title={title}
         detail="Download it to open it on your device."
-        action={{ label: "Download", onClick: onSave, busy: saving }}
+        action={{ label: "Download", onClick: onSave, busy: saving, icon: DOWNLOAD_ICON }}
       />
     );
   }
@@ -470,7 +479,7 @@ function PdfPages({
         <Notice
           title={`Showing the first ${state.pages.length} of ${state.total} pages.`}
           detail="Download the file to read the rest."
-          action={{ label: "Download", onClick: onDownload }}
+          action={{ label: "Download", onClick: onDownload, icon: DOWNLOAD_ICON }}
         />
       ) : null}
     </div>
@@ -488,9 +497,13 @@ function PageSkeleton() {
   );
 }
 
-type NoticeAction =
-  | { label: string; onClick: () => void; busy?: boolean; href?: never }
-  | { label: string; href: string; onClick?: never; busy?: never };
+/** A notice's button, or a link out; `icon` leads the label when given. */
+type NoticeAction = { label: string; icon?: ReactNode } & (
+  | { onClick: () => void; busy?: boolean; href?: never }
+  | { href: string; onClick?: never; busy?: never }
+);
+
+const DOWNLOAD_ICON = <Download aria-hidden="true" className="size-4" />;
 
 function Notice({
   title,
@@ -527,7 +540,7 @@ function NoticeButton({ action, primary = false }: { action: NoticeAction; prima
   if (action.href !== undefined) {
     return (
       <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
-        <DriveGlyph className="size-4" />
+        {action.icon}
         {action.label}
       </a>
     );
@@ -540,7 +553,7 @@ function NoticeButton({ action, primary = false }: { action: NoticeAction; prima
       aria-busy={action.busy}
       className={className}
     >
-      {action.label === "Download" ? <Download aria-hidden="true" className="size-4" /> : null}
+      {action.icon}
       {action.label}
     </button>
   );

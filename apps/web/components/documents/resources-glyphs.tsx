@@ -4,10 +4,12 @@
  * fourth screen until #3871 retired it.)
  *
  * Every glyph here draws the shared two-tone set (`@repo/theme/nav-glyphs`,
- * `spec/ui/design-system/iconography.md` §1.1) except three: the re-exported
+ * `spec/ui/design-system/iconography.md` §1.1) except four: the re-exported
  * `SearchGlyph`, which keeps the §1 stroke recipe until #3491; `PinGlyph`,
- * chat's pin re-exported (#4292); and `StarGlyph`, drawn here from
- * `MARK_GLYPH_PATHS` (#3934) because the set has no star. Pin and star fill
+ * chat's pin re-exported (#4292); `StarGlyph`, drawn here from
+ * `MARK_GLYPH_PATHS` (#3934) because the set has no star; and `DriveGlyph`,
+ * Google Drive's mark in Drive's own colours, a trademark rather than a
+ * Signet glyph (iconography.md §1 rule 4, #6055). Pin and star fill
  * solid while on (#4289, #4292). The
  * intent → glyph map lives in `iconography.md` §6.2.5 and MUST be updated in
  * the same PR as any change here (§6.3).
