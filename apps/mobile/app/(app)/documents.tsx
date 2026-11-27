@@ -26,6 +26,9 @@ import {
   useMarkFilterHold,
   useDocuments,
   useDocumentStars,
+  useReplaceDocumentFile,
+  useRequestDocumentVersionUploadUrl,
+  useViewerUserId,
   useGoogleDriveStatus,
   useMemberDisplayNames,
   useSetDocumentPin,
@@ -44,6 +47,7 @@ import {
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
+  mayUploadNewVersion,
   markedItems,
   NO_MARK_FILTER,
   tierRows,
@@ -130,6 +134,12 @@ import {
   type MobileDocument,
 } from "@/lib/more/documents";
 import { shareDocumentFile } from "@/lib/more/document-file";
+import {
+  canPickFiles,
+  pickDocumentFile,
+  pickDocumentPhoto,
+  uploadDocumentVersion,
+} from "@/lib/more/document-upload";
 import { firstParam } from "@/lib/route-params";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -344,6 +354,16 @@ export default function DocumentsScreen() {
     useState<DocumentActionsTarget | null>(null);
   // Held with the chapter it failed in, as `deleteFailure` is.
   const [markFailure, setMarkFailure] = useState<{
+    chapterId: string | null;
+    message: string;
+  } | null>(null);
+  // A new version of a file (#6055): the row it is going onto spins while it
+  // uploads, and a failure is held with its chapter, as `deleteFailure` is.
+  const viewerId = useViewerUserId();
+  const requestVersionUpload = useRequestDocumentVersionUploadUrl();
+  const replaceFile = useReplaceDocumentFile();
+  const [versioningId, setVersioningId] = useState<string | null>(null);
+  const [versionFailure, setVersionFailure] = useState<{
     chapterId: string | null;
     message: string;
   } | null>(null);
@@ -629,7 +649,50 @@ export default function DocumentsScreen() {
       fromDrive: isDriveCopy(doc),
       driveUrl: driveLink(doc),
       minutes: isMinutesDocument(doc),
+      canUploadVersion: mayUploadNewVersion(doc, viewerId, canManage),
     };
+  }
+
+  /**
+   * Upload a new version (#6055): the system file picker (Photos on a build
+   * without it), then the picked file goes onto this same document, which
+   * keeps its name, folder, who can see it, pin and stars.
+   */
+  async function uploadVersion(target: DocumentActionsTarget) {
+    setVersionFailure(null);
+    const picked = canPickFiles()
+      ? await pickDocumentFile()
+      : await pickDocumentPhoto();
+    if (picked.status === "cancelled") return;
+    if (picked.status === "refused") {
+      setVersionFailure({
+        chapterId: chapterId ?? null,
+        message: picked.reason,
+      });
+      return;
+    }
+    setVersioningId(target.id);
+    const result = await uploadDocumentVersion(picked.image, {
+      requestUploadUrl: ({ filename, content_type, size_bytes }) =>
+        requestVersionUpload.mutateAsync({
+          id: target.id,
+          filename,
+          content_type,
+          size_bytes,
+        }),
+      replace: (body) => replaceFile.mutateAsync({ id: target.id, ...body }),
+    });
+    setVersioningId(null);
+    if (result.status === "uploaded") {
+      AccessibilityInfo.announceForAccessibility(
+        `A new version of “${target.name}” is in the library.`,
+      );
+      return;
+    }
+    setVersionFailure({
+      chapterId: chapterId ?? null,
+      message: `Couldn't upload a new version of “${target.name}”. ${result.reason}`,
+    });
   }
 
   // `mutateAsync`, not `mutate` with per-call callbacks: TanStack runs a
@@ -694,6 +757,10 @@ export default function DocumentsScreen() {
   const deleteFailed =
     deleteFailure && deleteFailure.chapterId === (chapterId ?? null)
       ? deleteFailure.message
+      : null;
+  const versionFailed =
+    versionFailure && versionFailure.chapterId === (chapterId ?? null)
+      ? versionFailure.message
       : null;
 
   // The empty state's way out (web's Clear filters): the search too.
@@ -954,7 +1021,7 @@ export default function DocumentsScreen() {
             isLimited={isLimited}
             busyIds={
               new Set(
-                [...deletingIds, openingId].filter(
+                [...deletingIds, openingId, versioningId].filter(
                   (id): id is string => id !== null,
                 ),
               )
@@ -982,7 +1049,11 @@ export default function DocumentsScreen() {
             // Only the row being opened, or deleted, shows it. The others
             // stay as they are and take a tap, which moves the spinner to
             // them (`open`).
-            busy={row.doc.id === openingId || deletingIds.has(row.doc.id)}
+            busy={
+              row.doc.id === openingId ||
+              row.doc.id === versioningId ||
+              deletingIds.has(row.doc.id)
+            }
             onPress={() => void open(row.doc)}
             // Star for everyone; Pin and Delete for `chapter_docs:manage`
             // (#3934). The row's pin or star shows in its label's tail.
@@ -1160,6 +1231,11 @@ export default function DocumentsScreen() {
             {deleteFailed}
           </Text>
         ) : null}
+        {versionFailed ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            {versionFailed}
+          </Text>
+        ) : null}
 
         {showCards &&
         !documentsQuery.isPending &&
@@ -1280,6 +1356,7 @@ export default function DocumentsScreen() {
           onToggleStar={(target) => void toggleStar(target)}
           onTogglePin={(target) => void togglePin(target)}
           onDelete={(target) => confirmDelete(target.id, target.name)}
+          onUploadVersion={(target) => void uploadVersion(target)}
           // The Drive app when it's installed (its links are universal
           // links), the browser otherwise.
           onOpenInDrive={(url) =>

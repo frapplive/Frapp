@@ -192,6 +192,19 @@ export function DownloadGlyph({
 }
 
 /**
+ * Upload a new version (#6055): Download turned over, an arrow up from the
+ * line, as Lucide's `Upload` and Drive's "Upload new version" draw it.
+ */
+export function UploadGlyph({ color, size = DEFAULT_SIZE }: ControlGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M12 21V9M7 14l5-5 5 5M4 3h16" {...detail} />
+    </Frame>
+  );
+}
+
+/**
  * Take out: the task screen's Remove people (#5492). Web draws Lucide's
  * `UserMinus` for a member taken out; on a 40pt round button the minus alone
  * reads as the verb, as Reminders' and Mail's edit modes draw it.

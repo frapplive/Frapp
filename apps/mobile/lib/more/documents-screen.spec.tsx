@@ -39,6 +39,11 @@ let starRows: { folder_ids: string[]; document_ids: string[] } = {
 const setStar = vi.fn(async () => undefined);
 let starsFailed = false;
 const setPin = vi.fn(async () => undefined);
+// Upload a new version (#6055).
+let viewerId: string | null = "u-viewer";
+const requestVersion = vi.fn();
+const replaceFile = vi.fn();
+const pickFile = vi.hoisted(() => vi.fn());
 const LOADED = {
   data: [],
   isPending: false,
@@ -95,6 +100,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
   useSetDocumentStar: () => ({ mutateAsync: setStar }),
   useSetDocumentPin: () => ({ mutateAsync: setPin, isPending: false }),
+  useViewerUserId: () => viewerId,
+  useRequestDocumentVersionUploadUrl: () => ({ mutateAsync: requestVersion }),
+  useReplaceDocumentFile: () => ({ mutateAsync: replaceFile }),
 }));
 
 // The download and the share sheet (#4409) are `document-file.ts`'s, pinned
@@ -113,6 +121,37 @@ async function presentAtOnce(
   return true;
 }
 const shareDocument = vi.fn(presentAtOnce);
+// The picker is native; `document-upload.spec.ts` pins the version's wire
+// steps. This stand-in runs the two calls the screen binds to its document.
+vi.mock("@/lib/more/document-upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/more/document-upload")>()),
+  canPickFiles: () => true,
+  pickDocumentFile: () => pickFile(),
+  uploadDocumentVersion: async (
+    image: { filename: string; contentType: string; byteSize: number },
+    calls: {
+      requestUploadUrl: (body: unknown) => Promise<unknown>;
+      replace: (body: unknown) => Promise<unknown>;
+    },
+  ) => {
+    try {
+      await calls.requestUploadUrl({
+        filename: image.filename,
+        content_type: image.contentType,
+        size_bytes: image.byteSize,
+      });
+      await calls.replace({
+        storage_path: "chapters/c/documents/v2/bylaws-v2.pdf",
+        content_type: image.contentType,
+        byte_size: image.byteSize,
+      });
+      return { status: "uploaded" };
+    } catch {
+      return { status: "refused", reason: "Try again in a moment." };
+    }
+  },
+}));
+
 vi.mock("@/lib/more/document-file", () => ({
   shareDocumentFile: (...args: Parameters<typeof shareDocument>) =>
     shareDocument(...args),
@@ -192,6 +231,10 @@ afterEach(() => {
   setStar.mockReset();
   starsFailed = false;
   setPin.mockReset();
+  viewerId = "u-viewer";
+  requestVersion.mockReset();
+  replaceFile.mockReset();
+  pickFile.mockReset();
   resetListLayoutsForTests();
   presented.length = 0;
   holdSheet = null;
@@ -2135,5 +2178,109 @@ describe("a long library (#6088)", () => {
     const tree = render();
 
     expect(tree.root.findAllByType(ListRow)).toHaveLength(12);
+  });
+});
+
+// #6055: a file shared out and changed goes back onto the same document.
+describe("Documents upload a new version (#6055)", () => {
+  const MINE = {
+    id: "d-1",
+    title: "Chapter bylaws",
+    uploaded_by: "u-viewer",
+    created_at: "2026-08-12T14:00:00.000Z",
+  };
+  const THEIRS = {
+    id: "d-2",
+    title: "Budget FY2026",
+    uploaded_by: "u-ana",
+    created_at: "2026-10-01T14:00:00.000Z",
+  };
+  const DRIVE = {
+    id: "d-3",
+    title: "Rush schedule",
+    uploaded_by: "u-viewer",
+    drive_file_id: "drive-3",
+    created_at: "2026-10-02T14:00:00.000Z",
+  };
+  const PICKED = {
+    uri: "file:///bylaws-v2.pdf",
+    filename: "bylaws-v2.pdf",
+    contentType: "application/pdf",
+    byteSize: 2048,
+  };
+
+  const longPress = (tree: ReactTestRenderer, label: string) => {
+    act(() =>
+      tree.root
+        .findAllByType(ListRow)
+        .find((row) => row.props.label === label)!
+        .props.onLongPress(),
+    );
+    return tree.root.findByType(DocumentActionsSheet);
+  };
+
+  it("offers it on the member's own upload only, never another's or a Drive file", () => {
+    documentRows = [MINE, THEIRS, DRIVE];
+    const tree = render();
+    expect(
+      longPress(tree, "Chapter bylaws").props.target.canUploadVersion,
+    ).toBe(true);
+    expect(longPress(tree, "Budget FY2026").props.target.canUploadVersion).toBe(
+      false,
+    );
+    expect(longPress(tree, "Rush schedule").props.target.canUploadVersion).toBe(
+      false,
+    );
+  });
+
+  it("offers it on anyone's upload to whoever manages documents", () => {
+    permissions = ["chapter_docs:manage"];
+    documentRows = [THEIRS];
+    const tree = render();
+    expect(longPress(tree, "Budget FY2026").props.target.canUploadVersion).toBe(
+      true,
+    );
+  });
+
+  it("puts the picked file on the same document", async () => {
+    documentRows = [MINE];
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    requestVersion.mockResolvedValue({});
+    replaceFile.mockResolvedValue({});
+    const tree = render();
+    const sheet = longPress(tree, "Chapter bylaws");
+
+    await act(async () => sheet.props.onUploadVersion(sheet.props.target));
+
+    expect(requestVersion).toHaveBeenCalledWith({
+      id: "d-1",
+      filename: "bylaws-v2.pdf",
+      content_type: "application/pdf",
+      size_bytes: 2048,
+    });
+    expect(replaceFile).toHaveBeenCalledWith({
+      id: "d-1",
+      storage_path: "chapters/c/documents/v2/bylaws-v2.pdf",
+      content_type: "application/pdf",
+      byte_size: 2048,
+    });
+  });
+
+  it("sends nothing when the picker is cancelled, and says so when it fails", async () => {
+    documentRows = [MINE];
+    pickFile.mockResolvedValue({ status: "cancelled" });
+    const tree = render();
+    const sheet = () => longPress(tree, "Chapter bylaws");
+
+    await act(async () => sheet().props.onUploadVersion(sheet().props.target));
+    expect(requestVersion).not.toHaveBeenCalled();
+
+    pickFile.mockResolvedValue({ status: "picked", image: PICKED });
+    requestVersion.mockRejectedValue(new Error("nope"));
+    await act(async () => sheet().props.onUploadVersion(sheet().props.target));
+    expect(replaceFile).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "Couldn't upload a new version of “Chapter bylaws”.",
+    );
   });
 });
