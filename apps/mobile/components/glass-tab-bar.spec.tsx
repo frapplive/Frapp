@@ -486,6 +486,15 @@ describe("Frapp Intelligence", () => {
     expect(panel(tree.root)).toBeUndefined();
   });
 
+  it("names Frapp Intelligence in the +'s hint only for a member who has Ask", () => {
+    const hint = () => plus(render().root)!.props.accessibilityHint as string;
+    expect(hint()).toBe("Opens shortcuts to create and log things.");
+    quick.hasAsk = true;
+    expect(hint()).toBe(
+      "Opens Frapp Intelligence and shortcuts to create and log things.",
+    );
+  });
+
   it("is not in the panel for a member without Ask", () => {
     const tree = render();
     act(() => plus(tree.root)!.props.onPress());

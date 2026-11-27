@@ -15,6 +15,7 @@ import { SignetTokens } from "@repo/theme/signet";
 import { AskEntry } from "@/components/ask/ask-entry";
 import { GLASS_EDGE, GlassSurface } from "@/components/glass-surface";
 import { NavGlyph } from "@/components/nav-glyph";
+import { GLASS_RAISED, GLASS_RAISED_PRESSED } from "@/lib/glass-paint";
 import { selectionHaptic } from "@/lib/haptics";
 import {
   addableQuickActions,
@@ -609,11 +610,11 @@ function createStyles(tokens: SignetTokens) {
       justifyContent: "center",
       // A step of white over the glass, as the board draws a raised control
       // on chrome: no fill of its own, so the glass reads through.
-      backgroundColor: "rgba(255,255,255,0.07)",
+      backgroundColor: GLASS_RAISED,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: "rgba(255,255,255,0.08)",
     },
-    discPressed: { backgroundColor: "rgba(255,255,255,0.14)" },
+    discPressed: { backgroundColor: GLASS_RAISED_PRESSED },
     label: {
       ...typeRole(tokens.typography.role.caption),
       fontSize: 13,

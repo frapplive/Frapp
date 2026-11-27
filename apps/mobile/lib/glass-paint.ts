@@ -12,6 +12,12 @@ export const GLASS_SCRIM = "rgba(0,0,0,0.40)";
 /** A control pressed on glass: white at 8%. */
 export const GLASS_PRESSED = "rgba(255,255,255,0.08)";
 
+/** A raised control on glass, the + panel's action discs and its Frapp Intelligence field: white at 7%. */
+export const GLASS_RAISED = "rgba(255,255,255,0.07)";
+
+/** That raised control pressed: white at 14%. */
+export const GLASS_RAISED_PRESSED = "rgba(255,255,255,0.14)";
+
 /** The thicker break above a glass menu's last group: black at 18%. */
 export const GLASS_GROUP_BREAK = "rgba(0,0,0,0.18)";
 

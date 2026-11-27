@@ -1,7 +1,7 @@
-# Device pass: the tab bar's + opens the quick-actions panel and closes it
+# Device pass: the tab bar's + (New, #5983) opens its panel and closes it
 # (#3603). Tapped by id: open, the + shares its label with the scrim.
 appId: live.frapp.mobile
-name: "Quick actions open and close"
+name: "New (the +) opens and closes"
 tags:
   - smoke
 ---
@@ -13,5 +13,7 @@ tags:
 - takeScreenshot: quick-actions
 - tapOn:
     id: "tab-plus"
-- assertVisible: "New"
+- assertVisible:
+    id: "tab-plus"
+    text: "New"
 - assertNotVisible: "Close New"

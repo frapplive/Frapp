@@ -388,7 +388,9 @@ export function GlassTabBar({
           accessibilityHint={
             open
               ? undefined
-              : "Opens Frapp Intelligence and shortcuts to create and log things."
+              : hasAsk
+                ? "Opens Frapp Intelligence and shortcuts to create and log things."
+                : "Opens shortcuts to create and log things."
           }
           accessibilityState={{ expanded: open }}
           onPress={open ? closePanel : () => openPanel()}

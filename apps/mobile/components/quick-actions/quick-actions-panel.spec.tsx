@@ -312,41 +312,6 @@ describe("editing in place", () => {
 });
 
 /**
- * Frapp Intelligence left the panel for a bar above the tab bar (#4702, Paul
- * 2026-11-13: "not only when you open the plus menu"), so the panel is the
- * actions and nothing else.
- */
-describe("Frapp Intelligence", () => {
-  it("has no row in the panel", () => {
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(
-        <FrappThemeProvider>
-          <QuickActionsPanel
-            shown={["message"]}
-            available={OFFICER}
-            width={374}
-            editing={false}
-            canEdit
-            {...props}
-          />
-        </FrappThemeProvider>,
-      );
-    });
-    expect(
-      tree.root.findAll(
-        (node) =>
-          typeof node.props.accessibilityLabel === "string" &&
-          // Every name the entry has had: a row put back would carry one.
-          /Ask|Frapp Intelligence|What do you need/.test(
-            node.props.accessibilityLabel,
-          ),
-      ),
-    ).toHaveLength(0);
-  });
-});
-
-/**
  * WCAG 2.2 relative-luminance contrast of two opaque `#RRGGBB` colours.
  * `@repo/color`'s `contrastRatio` is the repo's one implementation, but
  * `apps/mobile/package.json` (a frozen hotspot) doesn't declare that package,

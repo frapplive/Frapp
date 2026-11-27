@@ -5,6 +5,7 @@ import { ASK_COPY } from "@repo/validation";
 import { AskSendGlyph } from "@/components/ask/ask-send-glyph";
 import { FrappCrest } from "@/components/frapp-crest";
 import { useChapterBranding } from "@/lib/chapter-branding";
+import { GLASS_RAISED, GLASS_RAISED_PRESSED } from "@/lib/glass-paint";
 import { selectionHaptic } from "@/lib/haptics";
 import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -106,9 +107,9 @@ function createStyles(tokens: SignetTokens) {
       paddingLeft: tokens.spacing.lg,
       paddingRight: tokens.spacing.sm,
       // A step of white over the glass, as the panel's action discs.
-      backgroundColor: "rgba(255,255,255,0.07)",
+      backgroundColor: GLASS_RAISED,
     },
-    pressed: { backgroundColor: "rgba(255,255,255,0.14)" },
+    pressed: { backgroundColor: GLASS_RAISED_PRESSED },
     words: {
       flex: 1,
       ...typeRole(tokens.typography.role.body),

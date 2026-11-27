@@ -248,8 +248,8 @@ export function ScreenShell<V extends string = string>({
             {back ? <PinnedBackRow back={back} trailing={backAction} /> : null}
             <ScrollView
               ref={scrollRef}
-              // Folds the floating bar while the member reads down a tab
-              // screen (#4904); nothing off the tab bar.
+              // Reports every move to a screen that watches its own scroll
+              // (`ScreenScrollWatchProvider`), tab or not; nothing otherwise.
               {...screenScroll}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps={keyboardShouldPersistTaps}
