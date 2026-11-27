@@ -483,16 +483,16 @@ this observation did not do.
 
 ### Auth OAuth providers (Google and Apple)
 
-Provider client ids and secrets live in the **Supabase dashboard** (Authentication → Providers), not Infisical. Do not invent values here. The web and mobile clients call `signInWithOAuth`, and mobile also signs in natively (SIWA, and Google per [Native Google Sign-In](#native-google-sign-in-2126)) through `signInWithIdToken`, against whatever the hosted project has enabled. Until a provider is enabled, the UI maps `provider is not enabled` to member-facing copy and magic-link still works.
+Provider client ids and secrets live in the **Supabase dashboard** (Authentication → Providers), not Infisical. Do not invent values here. The web and mobile clients call `signInWithOAuth`, and Settings → Account's Link calls `linkIdentity` for the same providers (#2223, which also needs Manual linking, row below); mobile also signs in natively (SIWA, and Google per [Native Google Sign-In](#native-google-sign-in-2126)) through `signInWithIdToken`, against whatever the hosted project has enabled. Until a provider is enabled, the UI maps `provider is not enabled` to member-facing copy and magic-link still works.
 
 **Redirect URLs the clients send** (must stay on the allow list in § Auth settings — the `/**` and `frapp://**` wildcards already cover them; confirm rather than adding a second copy of the origin):
 
 | Surface | Redirect the app asks GoTrue to use |
 | --- | --- |
-| Web staging | `https://app.staging.frapp.live/auth/callback?next=<guarded path>` (the sign-in screen's OAuth adds `&intent=sign-in`, #3786) |
+| Web staging | `https://app.staging.frapp.live/auth/callback?next=<guarded path>` (the sign-in screen's OAuth adds `&intent=sign-in`, #3786; Settings → Account's Link sends `next=/preferences?section=account&linking=<provider>` and `&intent=link`, #2223) |
 | Web production | `https://app.frapp.live/auth/callback?next=<guarded path>` (same) |
 | Desktop app (Google and Apple only) | `https://app.frapp.live/auth/desktop?next=<guarded path>&flow=<random>`, or the staging origin when the app was launched on staging. It is a route of the web app, opened in the member's browser, so the web origin's `/**` covers it and the allow list needs no `frapp-desktop://` entry (#4841) |
-| Mobile (release / dev-client) | `frapp:///?` (`Linking.createURL("/")` plus a trailing `?`) |
+| Mobile (release / dev-client) | `frapp:///?` (`Linking.createURL("/")` plus a trailing `?`); Settings → Account's Link returns to `frapp://preferences?page=account` (#2223) |
 | Mobile Expo Go | `exp://<host>:8081/--/?` — same per-machine gap as magic-link (#765) |
 
 GoTrue's own provider callback (what you paste into Google Cloud / Apple, **not** the app URL) is `https://<project-ref>.supabase.co/auth/v1/callback` per hosted project.

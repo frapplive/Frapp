@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   discordUnlink: vi.fn(),
   sheetReturnPaths: [] as (string | undefined)[],
   identities: [] as Record<string, unknown>[],
+  identityReads: 0,
   linkProvider: vi.fn(),
   unlinkIdentity: vi.fn(),
 }));
@@ -73,10 +74,10 @@ vi.mock("@/components/events/calendar-subscribe-sheet", () => ({
 vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: () => ({
     auth: {
-      getUserIdentities: async () => ({
-        data: { identities: state.identities },
-        error: null,
-      }),
+      getUserIdentities: async () => {
+        state.identityReads += 1;
+        return { data: { identities: state.identities }, error: null };
+      },
       getUser: async () => ({ data: { user: { email: "me@frapp.live" } } }),
       unlinkIdentity: state.unlinkIdentity,
     },
@@ -160,6 +161,7 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     state.discordUnlink.mockReset();
     state.sheetReturnPaths = [];
     state.identities = [APPLE];
+    state.identityReads = 0;
     state.linkProvider.mockReset();
     state.unlinkIdentity.mockReset();
     state.unlinkIdentity.mockResolvedValue({ data: {}, error: null });
@@ -239,6 +241,8 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     });
     expect(state.linkProvider).toHaveBeenCalledWith("google");
     expect(Alert.alert).toHaveBeenCalledWith("Google linked");
+    await settle();
+    expect(state.identityReads).toBe(2);
   });
 
   it("says why a link was refused, in Frapp's words", async () => {
@@ -278,6 +282,8 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     });
     expect(state.unlinkIdentity).toHaveBeenCalledWith(APPLE);
     expect(Alert.alert).toHaveBeenLastCalledWith("Apple unlinked");
+    await settle();
+    expect(state.identityReads).toBe(2);
   });
 
   it("links Discord in the auth sheet and has it come back to Settings (#5414)", async () => {

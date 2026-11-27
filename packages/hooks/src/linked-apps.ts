@@ -114,6 +114,11 @@ const SIGN_IN_METHODS: readonly { key: SignInMethodKey; label: string }[] = [
   { key: "apple", label: "Apple" },
 ];
 
+/** A method's name as every row, toast, alert and confirm says it. */
+export function signInMethodLabel(key: SignInMethodKey): string {
+  return SIGN_IN_METHODS.find((method) => method.key === key)?.label ?? key;
+}
+
 /** Whether a row's key is Google or Apple, the two a member links and unlinks. */
 export function isLinkableSignInMethod(
   key: SignInMethodKey,

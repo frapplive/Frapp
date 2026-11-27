@@ -5,6 +5,7 @@ import type { UserIdentity } from "@supabase/supabase-js";
 import {
   isLinkableSignInMethod,
   SIGN_IN_LINK_COPY,
+  signInMethodLabel,
   signInMethodsQueryKey,
   type LinkableSignInMethodKey,
   type SignInMethod,
@@ -14,11 +15,6 @@ import { MemberFacingError } from "@repo/hooks/error-copy";
 import { useAuthSession } from "@/lib/auth-session";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import { getSupabaseClient } from "@/lib/supabase";
-
-const LABELS: Record<LinkableSignInMethodKey, string> = {
-  google: "Google",
-  apple: "Apple",
-};
 
 function describe(error: unknown, label: string): string {
   return error instanceof MemberFacingError
@@ -42,7 +38,7 @@ export function useSignInMethodLinking() {
     void queryClient.invalidateQueries({ queryKey: signInMethodsQueryKey });
 
   async function link(provider: LinkableSignInMethodKey) {
-    const label = LABELS[provider];
+    const label = signInMethodLabel(provider);
     setBusy(provider);
     try {
       const outcome = await linkOAuthProvider(provider);
@@ -62,7 +58,7 @@ export function useSignInMethodLinking() {
 
   async function confirmUnlink(method: SignInMethod<UserIdentity>) {
     if (!isLinkableSignInMethod(method.key) || !method.identity) return;
-    const label = LABELS[method.key];
+    const label = method.label;
     const ok = await confirmAlert({
       title: SIGN_IN_LINK_COPY.unlinkTitle(label),
       body: SIGN_IN_LINK_COPY.unlinkBody(label),

@@ -393,7 +393,10 @@ export function isSessionOver(result: {
  * - `validation_failed` "provider is not enabled": the project has no Google
  *   or Apple provider set up (a local stack, say).
  *
- * Each code above was read off a local GoTrue on 2026-11-27.
+ * Read off a local GoTrue on 2026-11-27: `manual_linking_disabled`,
+ * `single_identity_not_deletable` and `validation_failed`. From GoTrue's
+ * source, not observed (a local stack has no Google or Apple to return an
+ * identity): `identity_already_exists` and `identity_not_found`.
  */
 export function describeIdentityLinkError(
   error: unknown,

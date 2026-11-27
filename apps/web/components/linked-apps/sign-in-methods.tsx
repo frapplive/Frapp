@@ -8,6 +8,7 @@ import {
   isLinkableSignInMethod,
   loadSignInMethods,
   SIGN_IN_LINK_COPY,
+  signInMethodLabel,
   signInMethodsQueryKey,
   type LinkableSignInMethodKey,
   type SignInMethod,
@@ -30,11 +31,6 @@ const ICONS: Record<SignInMethodKey, React.ReactNode> = {
   email: <Mail className="text-foreground" />,
   google: <GoogleMark />,
   apple: <AppleMark />,
-};
-
-const LABELS: Record<LinkableSignInMethodKey, string> = {
-  google: "Google",
-  apple: "Apple",
 };
 
 /**
@@ -81,7 +77,7 @@ export function SignInMethodRows() {
     if (!provider && !failure) return;
     const label =
       provider === "google" || provider === "apple"
-        ? LABELS[provider]
+        ? signInMethodLabel(provider)
         : "that account";
     if (failure) {
       toast({
@@ -100,25 +96,34 @@ export function SignInMethodRows() {
   const onDesktop = desktopBridge() !== null;
 
   async function link(provider: LinkableSignInMethodKey) {
+    const label = signInMethodLabel(provider);
     setBusy(provider);
-    const { error } = await startWebLink(
-      createSupabaseBrowserClient(),
-      provider,
-      window.location.origin,
-    );
-    // Without an error the page is on its way to the provider.
-    if (!error) return;
+    let failure: unknown;
+    try {
+      const { error } = await startWebLink(
+        createSupabaseBrowserClient(),
+        provider,
+        window.location.origin,
+      );
+      // Without an error the page is on its way to the provider.
+      if (!error) return;
+      failure = error;
+    } catch (error) {
+      // Supabase rethrows what isn't an Auth error (a lock timeout): the
+      // buttons must still come back.
+      failure = error;
+    }
     setBusy(null);
     toast({
       variant: "destructive",
-      title: SIGN_IN_LINK_COPY.linkFailedTitle(LABELS[provider]),
-      description: describeIdentityLinkError(error, LABELS[provider]),
+      title: SIGN_IN_LINK_COPY.linkFailedTitle(label),
+      description: describeIdentityLinkError(failure, label),
     });
   }
 
   async function unlink(method: SignInMethod<UserIdentity>) {
     if (!isLinkableSignInMethod(method.key) || !method.identity) return;
-    const label = LABELS[method.key];
+    const label = method.label;
     const answer = await confirm({
       title: SIGN_IN_LINK_COPY.unlinkTitle(label),
       description: SIGN_IN_LINK_COPY.unlinkBody(label),

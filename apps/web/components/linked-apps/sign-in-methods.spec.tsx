@@ -118,6 +118,23 @@ describe("Settings → Account → Sign in: link and unlink (#2223)", () => {
     ).toBeEnabled();
   });
 
+  it("gives the buttons back when the link start throws", async () => {
+    linkIdentity.mockRejectedValue(new Error("lock timeout"));
+    renderRows();
+    await screen.findByText("g@gmail.com");
+    await userEvent.click(
+      within(row("Apple")).getByRole("button", { name: "Link Apple" }),
+    );
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Couldn't link Apple" }),
+      ),
+    );
+    expect(
+      within(row("Apple")).getByRole("button", { name: "Link Apple" }),
+    ).toBeEnabled();
+  });
+
   it("disables Link in the desktop app, which can't show the provider's page", async () => {
     bridge.current = { openExternal: vi.fn() };
     renderRows();
