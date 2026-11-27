@@ -1769,7 +1769,7 @@ describe("TasksBoard editing a task (#4296)", () => {
     await screen.findByRole("dialog", { name: "Sweep the chapter room" });
     // Deleted (here, or by someone else): the read no longer holds it.
     tasksRef.current = tasksRef.current.filter(
-      (task) => task.id !== "task-todo",
+      (task) => (task as { id: string }).id !== "task-todo",
     );
     rerender(<TasksBoard part="everyone" />);
     await waitFor(() => expect(window.location.search).not.toContain("task="));
