@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { settingEntryById } from "@repo/hooks/settings-search";
+import { ONE_SHOT_ADDRESS_PARAMS } from "@repo/validation";
+import { consumeAddressParam } from "@/lib/address/address";
 
 /** How long to wait for the field to draw, for a tab whose reads are slow. */
 const WAIT_MS = 4000;
@@ -32,16 +34,12 @@ export function settingHighlightTarget(anchor: HTMLElement): HTMLElement {
  * button doesn't light it again; the rest of the address stays as it was.
  */
 export function useSettingJump() {
-  const settingId = useSearchParams().get("setting");
+  const settingId = useSearchParams().get(ONE_SHOT_ADDRESS_PARAMS.setting);
   useEffect(() => {
     const entry = settingEntryById(settingId);
     if (!settingId) return;
-    const clearParam = () => {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get("setting") !== settingId) return;
-      url.searchParams.delete("setting");
-      window.history.replaceState(null, "", url.toString());
-    };
+    const clearParam = () =>
+      consumeAddressParam(ONE_SHOT_ADDRESS_PARAMS.setting, settingId);
     const anchorId = entry?.web?.anchor;
     if (!anchorId) {
       clearParam();

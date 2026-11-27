@@ -678,7 +678,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
 - **One sidebar, then the page and the open conversation** (#5946, Paul, 2026-11-24, epic [#5943](https://github.com/pdcarlson/Frapp/issues/5943); [`dashboard-shell.tsx`](../../../apps/web/components/layout/dashboard-shell.tsx), the state model in [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts)).
   The chapter's channel list is in the sidebar ([§ Navigation map](#navigation-map)).
   It is chat's own list, drawn there through a portal ([`channel-list-slot.tsx`](../../../apps/web/components/layout/channel-list-slot.tsx)), never a copy, so nothing is read or subscribed twice; its filters open from a control on its first category heading.
-  So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows:
+  So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows (the path is the page; what opens inside a page is in its query, [§ Addresses](#addresses)):
   - **`/chat`** is the open conversation alone, with the member column beside it from 1280px (below).
   - **`/messages`** is the Messages page, which the Messages row opens: the member's direct and group conversations in a 240px list pane titled "Messages", with the New message pencil and the people search, beside the open conversation.
   - **Beside a page** (any other route) the open conversation docks on the right at the member's width, with no list and no back-to-list arrow; the divider, the X and the 375px floors are as below.
@@ -1238,6 +1238,62 @@ These are the places it departs from the board, recorded here so they read as de
   It wears the shared New button's outlined accent ([`new-button.tsx`](../../../apps/web/components/ui/new-button.tsx)), so "New" looks the same in the sidebar as on every page; every other row is neutral until it is the open page's ([`components.md` § Sidebar item](../design-system/components.md#sidebar-item)).
   The More row is a grid glyph, not `⋯`, which is the app's action menu.
   Nothing sits over the channel list: no heading, switcher or button (Paul, 2026-11-24: no switcher over a list); its filters open from a control on its first category heading.
+
+## Addresses
+
+Every screen the shell opens on web has an address, so Back, Forward, a reload and a shared link each land on it, and the phone opens the same screen from the same link (epic [#6034](https://github.com/frapplive/Frapp/issues/6034); scheme approved by Paul, 2026-11-25, on [its decision comment](https://github.com/frapplive/Frapp/issues/6034#issuecomment-7149459567)).
+Comparables: Slack web and Discord web keep the open channel and thread in the address, and Linear and Notion give an opened record its own link.
+
+- **The path is the page whose sidebar row is lit** (`/events`, `/documents`, `/settings`, `/meetings/<id>`), unchanged.
+- **The query is anything that draws its own back arrow or X in place of the page**: a folder, a record, an editor, a Settings page, a named view.
+  Query parameters, not deeper paths. Back does exactly what that arrow does.
+- **The conversation** is in the address only where it is the page: `/chat?channel=<id>&thread=<id>` and `/messages?channel=<id>`.
+  Beside any other page it is remembered, not addressed, so Back keeps moving through that page (#5575).
+- **Never in the address:** typing, filter chips, menus, popovers, centred dialogs, Find, the bell, What's new, the image viewer.
+
+### History rules
+
+- **Push:** a page; a named view; a folder, record or editor, or anything docked with a back arrow; a conversation or thread on `/chat` and `/messages`, and a search jump there.
+- **Replace:** moving through days and months, and changing the sort.
+- **Closing.** A back arrow, X or Escape on something opened in this tab goes Back, so Forward reopens it.
+  On something that arrived from a link, a notification or a reload, it replaces the address with its parent.
+- **One-shot marks erase themselves** with a replace once acted on: `?new=1`, `&message=` once the jump lands, `&excuse=1`, `?setting=`.
+- **A dead or forbidden id** opens the page with a short inline note in place of the record, and its parameter is replaced away.
+
+The web reads and moves these through one hook, [`use-address-params.ts`](../../../apps/web/lib/address/use-address-params.ts) over [`address.ts`](../../../apps/web/lib/address/address.ts): open pushes, close goes Back or replaces, replace mode is for days and sorts, `consumeAddressParam` takes a one-shot mark off, and `useDeadAddressParam` drops a dead id and keeps its note.
+The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts), which both apps import.
+
+### The table
+
+Rows marked "planned" are built by the sub-issue named; until it merges the page keeps the behaviour it has today.
+[`every-page-has-an-address.spec.ts`](../../../apps/web/components/layout/every-page-has-an-address.spec.ts) fails for a dashboard route missing from `web-addresses.ts` and for a row or parameter of it missing here.
+
+| Address | History | Phone screen |
+|---|---|---|
+| `/chat?channel=&thread=&message=` | Conversation and thread push; a search or bookmark jump pushes `channel=` with `message=`, which is replaced away once the jump lands. Planned, #6041 | `/chat-thread` (`channelId`, `threadRootId`, `focusMessageId`); bare: Chat home |
+| `/messages?channel=` | Push. Planned, #6041 | `/chat-thread` (`channelId`); bare: Messages |
+| `/documents?folder=&document=&access=&type=` | Push; `type=minutes` is a live view. Planned, #6042 | Documents |
+| `/events?day=&event=&edit=&hours=` | `day=YYYY-MM-DD` replaces; `event=`, `edit=1`, `new=1` and `hours=YYYY-MM-DD` push. Planned, #6043 | `/event-details` (`id`), `/calendar-day` (`day`), Events |
+| `/activity?view=&task=&group=&posting=&item=&review=` | Push; `view=archive`. Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Planned, #6044 | `/tasks` (`task`), `/activity` (`review`) |
+| `/members?tab=&member=&sort=` | `tab=` pushes (was replace), `member=` pushes, `sort=` replaces, `new=1`. Planned, #6046 | `/member` (`userId`), `/directory` (`sort`) |
+| `/rush?view=&prospect=` | Push. Planned, #6047 | `/rush-prospect` (`candidateId`), Recruitment |
+| `/profile?open=` | Closing goes Back instead of replacing. Planned, #6048 | You |
+| `/preferences?section=` | Push. Planned, #6048 | Preferences |
+| `/settings?tab=&page=&channel=&tool=&tier=&role=&class=&zone=` | Rail rows push `tab=`; `channel=` adds Chat admin's picked channel. Still full width, with chat hidden. Planned, #6049 | Web only |
+| `/ask` | No change until conversations get ids (#4704) | Frapp Intelligence |
+| `/whats-new` | Path only | What's new |
+| `/meetings/<id>`, `/meetings/<id>/notes`, `/meetings/<id>/transcript` | Paths | Web only |
+| `/backwork`, `/backwork/upload` | Paths | Web only |
+| `/affiliations`, `/chapters` | Path only | Web only |
+
+A route kept only to send old links on (`/tasks`, `/points`, `/billing`, `/chat-admin` and the rest) never draws, so it has no row; it keeps the parameters it forwards.
+
+### The phone
+
+`web-addresses.ts` maps each web address to its phone screen and the phone's parameter names.
+Three things read it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands: a `+native-intent` handler, the phone's notification targets (`apps/mobile/lib/notifications/targets.ts`) and Copy link.
+Its paths then join `APP_LINK_PATHS`; web-only pages are not claimed.
+iOS reads the claimed paths from the web; Android's intent filters need a new store build.
 
 ## Gating & routing semantics
 

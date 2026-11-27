@@ -177,6 +177,7 @@ export * from "./member-nudge";
 // client-supplied list would be forgeable.
 export * from "./mentions";
 export * from "./message-link";
+export * from "./web-addresses";
 export * from "./message-text";
 // The minutes' section editor, shared by the web and the phone (#4412).
 export * from "./minutes-edit";

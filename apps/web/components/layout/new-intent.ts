@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ONE_SHOT_ADDRESS_PARAMS } from "@repo/validation";
+import { consumeAddressParam } from "@/lib/address/address";
 
 /**
  * How New's actions open a page's own form (#5946).
@@ -22,7 +24,7 @@ import { useEffect, useRef } from "react";
  * panel is the exception, mounted on every route, so it passes what its own
  * search-params read says (`asked`).
  */
-export const NEW_INTENT_PARAM = "new";
+export const NEW_INTENT_PARAM = ONE_SHOT_ADDRESS_PARAMS.new;
 
 /**
  * Which form the mark asks for, where a page holds more than one: Documents
@@ -44,16 +46,6 @@ function addressAsks(intent: NewIntent): boolean {
   return (
     new URLSearchParams(window.location.search).get(NEW_INTENT_PARAM) === intent
   );
-}
-
-/**
- * Takes the mark off the address in place. Next keeps its search params in
- * step with the History API, so no navigation runs and nothing remounts.
- */
-function clearAddress(): void {
-  const url = new URL(window.location.href);
-  url.searchParams.delete(NEW_INTENT_PARAM);
-  window.history.replaceState(window.history.state, "", url);
 }
 
 export function useNewIntent(
@@ -81,7 +73,8 @@ export function useNewIntent(
     if (asked !== undefined && !asked) done.current = false;
     if (!wanted || !ready || done.current) return;
     done.current = true;
-    clearAddress();
+    // In place: Next keeps its search params in step, so nothing remounts.
+    consumeAddressParam(NEW_INTENT_PARAM);
     openRef.current();
   }, [ready, asked, intent]);
 }
