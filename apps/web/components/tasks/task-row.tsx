@@ -203,7 +203,12 @@ export function TaskRow({
       ) : (
         <PersonChip person={person} />
       )}
-      <DueText task={task} due={due} />
+      <DueText
+        task={task}
+        due={due}
+        // A fixed deadline reads urgent to whoever has it (#6096).
+        urgent={isMine && !!task.fixed_deadline && status !== "COMPLETED"}
+      />
       <TaskFacts task={task} done={status === "COMPLETED"} part="shown" />
       <PointsTag points={task.point_reward} />
       {waiting && canConfirm ? (
@@ -422,16 +427,20 @@ function PersonChip({ person }: { person: RowPerson }) {
 function DueText({
   task,
   due,
+  urgent = false,
 }: {
   task: BoardTask;
   due: { text: string; overdue: boolean } | null;
+  urgent?: boolean;
 }) {
   if (!due) return null;
   return (
     <span
       className={cn(
         "min-w-0 truncate text-caption",
-        due.overdue ? "text-destructive-text" : "text-muted-foreground",
+        due.overdue || urgent
+          ? "text-destructive-text"
+          : "text-muted-foreground",
       )}
       title={
         (task.due_at ? formatDayTime(task.due_at) : formatWeekdayDay(task.due_date)) ??

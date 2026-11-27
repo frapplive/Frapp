@@ -211,6 +211,12 @@ export default function AppLayout() {
         name="chapter-logs"
         options={{ title: SCREEN_TITLES["chapter-logs"] }}
       />
+      {/* A module's screen and its own screens (#6030), from Chapter
+          settings' Modules group, as web's module pages open behind `?page=`. */}
+      <Stack.Screen
+        name="module-settings"
+        options={{ title: SCREEN_TITLES["module-settings"] }}
+      />
       <Stack.Screen
         name="chapter-roles"
         options={{ title: SCREEN_TITLES["chapter-roles"] }}

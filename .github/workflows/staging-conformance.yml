@@ -14,7 +14,10 @@ name: Staging conformance
 # ACTIVE_HEALTHY, SMTP, the Magic Link template, leaked-password
 # protection and required email confirmations are a sibling: production-auth-conformance.yml, own alert
 # title, 07:45 UTC. Empty production SMTP fails there as it does here, and so
-# do the burned apex From and a Magic Link template without token_hash. Infisical /
+# does the burned apex From. Here the Magic Link and Confirm signup templates
+# must print the 6-digit code and no link (#6134); production requires the code
+# too, but allows a token_hash link beside it until Paul pastes the code-only
+# templates there. Infisical /
 # smoke stay production-unwatched. Remaining parity moved from #1384 to #2505.
 # The API's host is not checked here: it runs on Cloud Run since #5228, and
 # Deploy staging checks each revision before it takes traffic. Doc pointer:

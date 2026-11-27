@@ -507,12 +507,12 @@ vi.mock("@repo/hooks", async (importOriginal) => {
   const { useQuery } = await import("@tanstack/react-query");
   return {
     ...actual,
-  // Chat timeouts (#6006): the viewer's own, read through
-  // `chatTimeout`, and the sheet's reads and writes.
-  useMyChatTimeout: () => ({ data: chatTimeout.current }),
-  useMemberByUserId: () => ({ data: undefined }),
-  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
-  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
+    // Chat timeouts (#6006): the viewer's own, read through
+    // `chatTimeout`, and the sheet's reads and writes.
+    useMyChatTimeout: () => ({ data: chatTimeout.current }),
+    useMemberByUserId: () => ({ data: undefined }),
+    useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+    useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
     // Dictation's cleanup needs the API client; nothing here dictates.
     useCleanDictation: () => async () => null,
     // The real hook's shape, minus the API client this spec doesn't provide:
@@ -693,6 +693,13 @@ vi.mock("@/components/ask/ask-in-channel", async () => {
         : null,
   };
 });
+
+// Recently opened channels for Search (#6053): spied, so a direct message
+// can be shown not to land there.
+vi.mock("@/lib/chat/last-channel", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/chat/last-channel")>()),
+  rememberRecentChannel: vi.fn(),
+}));
 
 vi.mock("@/lib/connection/use-connection", () => ({
   useConnection: () => ({ isOffline: false, writeBlockedReason: null }),
@@ -3920,6 +3927,203 @@ describe("The unread counts the screen observes (#4885)", () => {
     expect(noQueryFn).toEqual([]);
     // Observed, never asked for from here.
     expect(unreadCountsFetch).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+});
+
+describe("chat thread records a recently opened channel (#6053)", () => {
+  it("remembers a channel on focus, for Search", async () => {
+    const { rememberRecentChannel } = await import("@/lib/chat/last-channel");
+    render();
+    expect(rememberRecentChannel).toHaveBeenCalledWith(
+      VIEWER,
+      expect.anything(),
+      CHANNEL,
+    );
+  });
+
+  it("never remembers a direct message", async () => {
+    const { rememberRecentChannel } = await import("@/lib/chat/last-channel");
+    channelType = "DM";
+    render();
+    expect(rememberRecentChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat thread New messages divider and pill (#6052)", () => {
+  const at = (minute: number, second = 0) =>
+    new Date(2026, 8, 28, 17, minute, second).toISOString();
+  /** What Chat home held when the channel was opened. */
+  const arriveWith = (unread: number, lastReadAt: string | null) =>
+    queryClient.setQueryData(CHANNEL_UNREAD_COUNTS_KEY, [
+      {
+        channel_id: CHANNEL,
+        unread_count: unread,
+        mention_count: 0,
+        last_read_at: lastReadAt,
+      },
+    ]);
+  const withRows = () => {
+    channel = channelState({
+      messages: [
+        message("m1", { created_at: at(0) }),
+        message("m2", { created_at: at(1) }),
+        message("m3", { created_at: at(2) }),
+        message("m4", { created_at: at(3) }),
+      ],
+    });
+  };
+  const dividedRows = (tree: ReactTestRenderer) =>
+    rows(tree)
+      .filter((row) => row.props.newMessagesAbove)
+      .map((row) => (row.props.row as ThreadRow).message.id);
+  const pills = (tree: ReactTestRenderer) =>
+    tree.root.findAll(
+      (node) =>
+        node.type === ("Pressable" as never) &&
+        typeof node.props.accessibilityLabel === "string" &&
+        /new messages? (above|below)/.test(node.props.accessibilityLabel),
+    );
+  function renderList(scrollToIndex = vi.fn()) {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<Screen />, {
+        createNodeMock: (element) =>
+          element.type === "FlatList"
+            ? { scrollToOffset: vi.fn(), scrollToIndex }
+            : null,
+      });
+    });
+    return tree;
+  }
+  /** Reports the inverted list's rows `indices` (newest is 0) on screen. */
+  function showInverted(tree: ReactTestRenderer, indices: number[]) {
+    const data = lists(tree)[0]!.props.data as ThreadRow[];
+    act(() =>
+      lists(tree)[0]!.props.onViewableItemsChanged({
+        viewableItems: indices.map((index) => ({ item: data[index], index })),
+      }),
+    );
+  }
+
+  it("draws the divider above the first message after the cursor, and opens on it", () => {
+    withRows();
+    arriveWith(2, at(1, 30));
+    const scrollToIndex = vi.fn();
+    const tree = renderList(scrollToIndex);
+
+    expect(dividedRows(tree)).toEqual(["m3"]);
+    // m3 is second newest: index 1 on the inverted list, at the screen's top.
+    expect(scrollToIndex).toHaveBeenCalledWith({
+      index: 1,
+      animated: true,
+      viewPosition: 1,
+    });
+    act(() => tree.unmount());
+  });
+
+  it("starts a run at the divider, so the first new message names its author", () => {
+    withRows();
+    arriveWith(2, at(1, 30));
+    const tree = renderList();
+    const m3 = rows(tree).find(
+      (row) => (row.props.row as ThreadRow).message.id === "m3",
+    );
+    const m4 = rows(tree).find(
+      (row) => (row.props.row as ThreadRow).message.id === "m4",
+    );
+    // One member wrote all four, a minute apart: one run, but for the line.
+    expect(m3!.props.startsRun).toBe(true);
+    expect(m4!.props.startsRun).toBe(false);
+    act(() => tree.unmount());
+  });
+
+  it("draws nothing in a channel never opened, or with nothing new", () => {
+    withRows();
+    arriveWith(4, null);
+    const tree = renderList();
+    expect(dividedRows(tree)).toEqual([]);
+    expect(pills(tree)).toHaveLength(0);
+    act(() => tree.unmount());
+  });
+
+  it("points up at the divider while it is above the screen, and goes back to it", () => {
+    withRows();
+    arriveWith(3, at(0, 30));
+    const scrollToIndex = vi.fn();
+    const tree = renderList(scrollToIndex);
+    scrollToIndex.mockClear();
+
+    // Only the newest message on screen; the divider is above m2.
+    showInverted(tree, [0]);
+    const [pill] = pills(tree);
+    expect(pill!.props.accessibilityLabel).toBe(
+      "3 new messages above. Jump to the first one",
+    );
+
+    act(() => pill!.props.onPress());
+    expect(scrollToIndex).toHaveBeenCalledWith({
+      index: 2,
+      animated: true,
+      viewPosition: 1,
+    });
+
+    // On screen: no pill.
+    showInverted(tree, [2]);
+    expect(pills(tree)).toHaveLength(0);
+    act(() => tree.unmount());
+  });
+
+  it("Mark as read takes the pill and the divider away", () => {
+    withRows();
+    arriveWith(3, at(0, 30));
+    const tree = renderList();
+    showInverted(tree, [0]);
+    expect(pills(tree)).toHaveLength(1);
+
+    act(() => byLabel(tree, "Mark as read").props.onPress());
+    expect(pills(tree)).toHaveLength(0);
+    expect(dividedRows(tree)).toEqual([]);
+    act(() => tree.unmount());
+  });
+
+  it("reads the screen again when an older page lands above it", () => {
+    // Everything loaded is new: the divider is in history not loaded yet.
+    channel = channelState({
+      messages: [
+        message("m3", { created_at: at(2) }),
+        message("m4", { created_at: at(3) }),
+      ],
+    });
+    arriveWith(3, at(0, 30));
+    const tree = renderList();
+    showInverted(tree, [0, 1]);
+    // An older page lands past the top: no row on screen moves, so the list
+    // reports nothing, but the divider (above m2) is now loaded and above.
+    channel = channelState({
+      messages: [
+        message("m1", { created_at: at(0) }),
+        message("m2", { created_at: at(1) }),
+        message("m3", { created_at: at(2) }),
+        message("m4", { created_at: at(3) }),
+      ],
+    });
+    rerender(tree);
+    expect(dividedRows(tree)).toEqual(["m2"]);
+    expect(pills(tree)[0]?.props.accessibilityLabel).toBe(
+      "3 new messages above. Jump to the first one",
+    );
+    act(() => tree.unmount());
+  });
+
+  it("keeps the divider where the open put it when the counts move on", () => {
+    withRows();
+    arriveWith(2, at(1, 30));
+    const tree = renderList();
+    // The open's read stamp re-reads the counts: nothing unread now.
+    act(() => arriveWith(0, at(5)));
+    rerender(tree);
+    expect(dividedRows(tree)).toEqual(["m3"]);
     act(() => tree.unmount());
   });
 });

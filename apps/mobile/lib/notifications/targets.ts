@@ -99,12 +99,19 @@ const MINUTES: NotificationTarget = { pathname: "/minutes-details" };
  * (`/tasks?task=`), which pushes the task's screen over it (#5492): the
  * reader's own (assigned, confirmed, sent back, overdue), or one they
  * assigned (Overdue also reaches the assigner). A task the reader can't read
- * opens nothing over the board.
+ * opens nothing over the board. "Asks for more time" (`view: "extension"`,
+ * #6096) opens the request in Activity (`/activity?extension=`), where the
+ * officer approves or declines it.
  */
 function taskTarget(taskId: string, view: string | null): NotificationTarget {
-  return view === "review"
-    ? { pathname: "/activity", params: { review: taskId } }
-    : { pathname: "/tasks", params: { task: taskId } };
+  if (view === "review") {
+    return { pathname: "/activity", params: { review: taskId } };
+  }
+  // "Sam asks for more time" (#6096): the request, decided in Activity.
+  if (view === "extension") {
+    return { pathname: "/activity", params: { extension: taskId } };
+  }
+  return { pathname: "/tasks", params: { task: taskId } };
 }
 
 /**

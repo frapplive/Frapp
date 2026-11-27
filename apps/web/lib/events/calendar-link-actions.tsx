@@ -11,8 +11,9 @@ import { useToast } from "@/lib/hooks/use-toast";
 /**
  * The private calendar link's Copy and Reset (`spec/behavior/events.md`
  * § Calendar subscription), for the two web screens that offer it: the Events
- * Subscribe menu and Settings → Calendar (#5407). One copy, so the two say
- * the same thing.
+ * Subscribe menu and Settings → Linked apps' Calendar apps row
+ * (`components/linked-apps/calendar-apps-row.tsx`; #5407, #6032). One copy,
+ * so the two say the same thing.
  *
  * `enabled` is whether the link is wanted yet: it is made the first time a
  * member asks for it, so pass true only once they open the menu or press

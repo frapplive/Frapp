@@ -83,6 +83,17 @@ describe("resolveNotificationTarget", () => {
     ).toBe("/activity?review=t1");
   });
 
+  it("opens a request for more time in Activity, where it is decided (#6096)", () => {
+    expect(
+      resolveNotificationTarget(
+        payload({ screen: "tasks", taskId: "t1", view: "extension" }),
+      ),
+    ).toEqual({ pathname: "/activity", params: { extension: "t1" } });
+    expect(
+      notificationHref({ pathname: "/activity", params: { extension: "t1" } }),
+    ).toBe("/activity?extension=t1");
+  });
+
   it("opens the board for a task up for grabs, where Up for grabs sits on top", () => {
     // "New task up for grabs" (tasks.md § Up for grabs) carries the posting's
     // id; the board lists it above Today, so the board is the place.

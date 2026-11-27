@@ -9,6 +9,7 @@ import {
   settingPhoneTarget,
 } from "./settings-search";
 import { buildFindResults } from "./find-results";
+import { PERSONAL_SETTINGS_PAGES } from "@repo/validation";
 
 const PRESIDENT: SettingsSearchContext = {
   permissions: ["*"],
@@ -85,12 +86,18 @@ describe("settings search", () => {
     expect(ids("nudges", MEMBER)).not.toContain("nudges");
     expect(ids("nudges", { ...MEMBER, platform: "phone" })).toContain("nudges");
     // A setting only web changes is still listed on the phone, marked so.
-    const phone = searchSettings("points goal", {
+    const phone = searchSettings("discord import", {
       ...PRESIDENT,
       platform: "phone",
     });
-    const webOnly = phone.find((m) => m.entry.id === "points-goal");
+    const webOnly = phone.find((m) => m.entry.id === "discord-import");
     expect(webOnly?.opensHere).toBe(false);
+    // A module's goal opens its phone screen since #6030.
+    const goal = searchSettings("points goal", {
+      ...PRESIDENT,
+      platform: "phone",
+    }).find((m) => m.entry.id === "points-goal");
+    expect(goal?.opensHere).toBe(true);
     const quiet = searchSettings("quiet hours", {
       ...MEMBER,
       platform: "phone",
@@ -191,5 +198,37 @@ describe("the phone's Chapter tab targets (#6027)", () => {
         chapterFeatures: false,
       }),
     ).toBeDefined();
+  });
+});
+
+/**
+ * Personal Settings' pages (#6032): every entry opens a page both apps have,
+ * so a mistyped or retired address can't send a search to the wrong page.
+ */
+describe("personal settings search addresses", () => {
+  const pages = new Set<string>(PERSONAL_SETTINGS_PAGES.map((p) => p.value));
+  const personal = SETTINGS_INDEX.filter((entry) => entry.area === "personal");
+
+  it("opens a page web's rail lists", () => {
+    for (const entry of personal) {
+      if (entry.web) expect(pages, entry.id).toContain(entry.web.page);
+    }
+  });
+
+  it("opens a page the phone pushes, or its first page", () => {
+    for (const entry of personal) {
+      const page = entry.phone?.page;
+      if (page === undefined) continue;
+      expect(pages, entry.id).toContain(page);
+      expect(["blocked", "invoices"], entry.id).not.toContain(page);
+    }
+  });
+
+  it("puts each entry on the same page on both apps", () => {
+    for (const entry of personal) {
+      if (entry.web && entry.phone?.page) {
+        expect(entry.phone.page, entry.id).toBe(entry.web.page);
+      }
+    }
   });
 });

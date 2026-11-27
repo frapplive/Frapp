@@ -36,6 +36,7 @@ import { ROLE_TIER_REPOSITORY } from '#domain/repositories/role-tier.repository.
 import type { IRoleTierRepository } from '#domain/repositories/role-tier.repository.interface';
 import { accessHolderFromRoles } from '#domain/utils/channel-access';
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
+import { TASK_EXTENSION_REQUEST_REPOSITORY } from '#domain/repositories/task-extension-request.repository.interface';
 import type { IOpenTaskRepository } from '#domain/repositories/open-task.repository.interface';
 import {
   STORAGE_PROVIDER,
@@ -83,6 +84,7 @@ describe('TaskService', () => {
       'findByChapter' | 'findMemberIds' | 'findById'
     >
   >;
+  let mockExtensionRepo: Record<string, jest.Mock>;
   let mockOpenTaskRepo: jest.Mocked<
     Pick<IOpenTaskRepository, 'findClaimedFrom'>
   >;
@@ -122,6 +124,7 @@ describe('TaskService', () => {
     meeting_id: null,
     followed_by: null,
     attachments: [],
+    fixed_deadline: false,
     created_at: '2026-02-26T00:00:00.000Z',
   };
 
@@ -247,6 +250,12 @@ describe('TaskService', () => {
       }),
     };
 
+    mockExtensionRepo = {
+      latestForTasks: jest.fn().mockResolvedValue(new Map()),
+      standing: jest.fn().mockResolvedValue(null),
+      withdrawPending: jest.fn().mockResolvedValue(undefined),
+      listPending: jest.fn().mockResolvedValue([]),
+    };
     linkRepos = frappLinkRepoMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -263,6 +272,10 @@ describe('TaskService', () => {
         { provide: CHAPTER_GROUP_REPOSITORY, useValue: mockGroupRepo },
         { provide: ROLE_TIER_REPOSITORY, useValue: mockTierRepo },
         { provide: OPEN_TASK_REPOSITORY, useValue: mockOpenTaskRepo },
+        {
+          provide: TASK_EXTENSION_REQUEST_REPOSITORY,
+          useValue: mockExtensionRepo,
+        },
         FrappLinkChecker,
         ...linkRepos.providers,
       ],
@@ -862,6 +875,7 @@ describe('TaskService', () => {
         subtask_titles: ['Open it'],
         followed_by: null,
         attachments: [],
+        fixed_deadline: false,
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -2047,6 +2061,7 @@ describe('TaskService', () => {
         latest_due_at: '2026-11-17T02:00:00.000Z',
         next_due_date: '2026-11-23',
         attachments: [],
+        fixed_deadline: false,
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -3356,6 +3371,8 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
+        extension_requests_blocked: false,
       });
     });
 
@@ -3376,6 +3393,8 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
+        extension_requests_blocked: false,
       });
     });
 
@@ -3652,6 +3671,7 @@ describe('TaskService', () => {
         group: null,
         open_task_id: null,
         followed_by_name: null,
+        extension: null,
       });
     });
 
@@ -5326,6 +5346,155 @@ describe('TaskService', () => {
         ).rejects.toThrow(NotFoundException);
         expect(mockStorage.getSignedDownloadUrl).not.toHaveBeenCalled();
       });
+    });
+  });
+  describe('asking for more time and fixed deadlines (#6096)', () => {
+    const request = (over: Record<string, unknown> = {}) => ({
+      id: 'req-1',
+      task_id: 'task-1',
+      requester_id: baseTask.assignee_id,
+      reason: 'Shift ran late',
+      status: 'declined',
+      from_due_date: '2099-03-15',
+      from_due_at: null,
+      to_due_date: '2099-03-16',
+      to_due_at: null,
+      needs_officer: 'over_a_day',
+      auto_approved: false,
+      decline_reason: 'No',
+      decided_at: '2099-03-14T00:00:00.000Z',
+      created_at: '2099-03-13T00:00:00.000Z',
+      ...over,
+    });
+
+    it('creates a task with a fixed deadline', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue({
+        ...baseTask,
+        fixed_deadline: true,
+      });
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Book the venue',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        due_date: '2099-03-15',
+        fixed_deadline: true,
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ fixed_deadline: true }),
+      );
+    });
+
+    it('fixes a deadline on an edit and closes the request waiting on it', async () => {
+      mockTaskRepo.findById.mockResolvedValue(baseTask);
+      mockTaskRepo.updateUnconfirmed.mockImplementation((_id, _ch, patch) =>
+        Promise.resolve({ ...baseTask, ...patch }),
+      );
+
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        fixed_deadline: true,
+      });
+
+      expect(mockTaskRepo.updateUnconfirmed).toHaveBeenCalledWith(
+        'task-1',
+        'ch-1',
+        { fixed_deadline: true },
+      );
+      expect(mockExtensionRepo.withdrawPending).toHaveBeenCalledWith(
+        'ch-1',
+        'task-1',
+      );
+    });
+
+    it('closes the waiting request when an officer moves the due', async () => {
+      mockTaskRepo.findById.mockResolvedValue(baseTask);
+      mockTaskRepo.updateUnconfirmed.mockImplementation((_id, _ch, patch) =>
+        Promise.resolve({ ...baseTask, ...patch }),
+      );
+
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        due_date: '2099-03-20',
+      });
+
+      expect(mockExtensionRepo.withdrawPending).toHaveBeenCalledWith(
+        'ch-1',
+        'task-1',
+      );
+    });
+
+    it('closes the waiting request when the task is marked done', async () => {
+      const inProgress: Task = { ...baseTask, status: TaskStatus.IN_PROGRESS };
+      mockTaskRepo.findById.mockResolvedValue(inProgress);
+      mockTaskRepo.updateIfMatches.mockResolvedValue({
+        ...baseTask,
+        status: TaskStatus.COMPLETED,
+        completed_at: '2026-02-26T18:30:00.000Z',
+      });
+
+      await service.updateStatus(
+        'task-1',
+        'ch-1',
+        baseTask.assignee_id,
+        false,
+        TaskStatus.COMPLETED,
+      );
+
+      expect(mockExtensionRepo.withdrawPending).toHaveBeenCalledWith(
+        'ch-1',
+        'task-1',
+      );
+    });
+
+    it("carries the assignee's latest request, never a follower's read of it", async () => {
+      mockTaskRepo.findById.mockResolvedValue(baseTask);
+      mockExtensionRepo.latestForTasks.mockResolvedValue(
+        new Map([['task-1', request()]]),
+      );
+
+      const view = await service.findById('task-1', 'ch-1');
+
+      expect(view.extension).toMatchObject({
+        status: 'declined',
+        reason: 'Shift ran late',
+      });
+      expect(service.asReadBy(view, 'follower-1', false).extension).toBeNull();
+    });
+
+    it("hides a previous assignee's request from the new one", async () => {
+      mockTaskRepo.findById.mockResolvedValue(baseTask);
+      mockExtensionRepo.latestForTasks.mockResolvedValue(
+        new Map([['task-1', request({ requester_id: 'someone-before' })]]),
+      );
+
+      const view = await service.findById('task-1', 'ch-1');
+
+      expect(view.extension).toBeNull();
+    });
+
+    it('tells a blocked assignee so on their own tasks only', async () => {
+      mockTaskRepo.findByChapter.mockResolvedValue([
+        baseTask,
+        { ...baseTask, id: 'task-2', assignee_id: 'someone-else' },
+      ]);
+      mockExtensionRepo.standing.mockResolvedValue({
+        blocked_at: '2099-03-01T00:00:00.000Z',
+        restored_at: null,
+      });
+
+      const views = await service.list('ch-1', baseTask.assignee_id, true);
+
+      expect(views[0].extension_requests_blocked).toBe(true);
+      expect(views[1].extension_requests_blocked).toBeUndefined();
+    });
+
+    it('still reads tasks when the requests cannot be read', async () => {
+      mockTaskRepo.findById.mockResolvedValue(baseTask);
+      mockExtensionRepo.latestForTasks.mockRejectedValue(new Error('down'));
+
+      const view = await service.findById('task-1', 'ch-1');
+
+      expect(view.extension).toBeNull();
     });
   });
 });

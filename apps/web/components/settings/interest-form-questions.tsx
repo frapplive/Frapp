@@ -8,9 +8,15 @@ import {
   FORM_QUESTION_TITLE_MAX_LENGTH,
   INTEREST_FORM_QUESTIONS_MAX,
   INTEREST_FORM_SETTINGS_COPY as COPY,
-  interestFormSensitiveLine,
-  interestFormSensitiveTopic,
 } from "@repo/validation";
+import {
+  INTEREST_QUESTION_TYPES,
+  interestQuestionProblem,
+  interestQuestionsToSave,
+  isChoiceQuestion,
+  newInterestFormId,
+  withQuestionType,
+} from "@repo/hooks/interest-form-questions";
 import { ActionMenuButton } from "@/components/shared/row-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,28 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-
-/**
- * The kinds of question the interest form asks (`ifc-recruitment.md`
- * § Fields): the chat form card's types (#3926), named as a person reads
- * them, in the spec's order.
- */
-export const INTEREST_QUESTION_TYPES: readonly {
-  type: InterestFormQuestion["type"];
-  label: string;
-}[] = [
-  { type: "short_answer", label: "Short answer" },
-  { type: "paragraph", label: "Paragraph" },
-  { type: "multiple_choice", label: "One choice" },
-  { type: "checkboxes", label: "Several choices" },
-  { type: "yes_no", label: "Yes or no" },
-];
-
-const CHOICE = new Set(["multiple_choice", "checkboxes", "dropdown"]);
-
-function newId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 /**
  * The chapter's own questions, after the fixed fields. Each change saves the
@@ -63,39 +47,13 @@ export function InterestFormQuestionsEditor({
 }) {
   const [questions, setQuestions] = useState(saved);
 
-  function problemOf(question: InterestFormQuestion): string | null {
-    const topic = interestFormSensitiveTopic(
-      [question.title, ...(question.options ?? []).map((o) => o.label)].join(
-        " ",
-      ),
-    );
-    return topic ? interestFormSensitiveLine(topic) : null;
-  }
+  const problemOf = interestQuestionProblem;
 
   /** Saves when every question is complete and on an allowed topic. */
   function commit(next: InterestFormQuestion[]) {
     setQuestions(next);
-    const ready = next.every(
-      (question) =>
-        question.title.trim() &&
-        !problemOf(question) &&
-        (!CHOICE.has(question.type) ||
-          (question.options ?? []).some((option) => option.label.trim())),
-    );
-    if (!ready) return;
-    onSave(
-      next.map((question) => ({
-        ...question,
-        title: question.title.trim(),
-        ...(CHOICE.has(question.type)
-          ? {
-              options: (question.options ?? [])
-                .map((option) => ({ ...option, label: option.label.trim() }))
-                .filter((option) => option.label),
-            }
-          : { options: undefined }),
-      })),
-    );
+    const ready = interestQuestionsToSave(next);
+    if (ready) onSave(ready);
   }
 
   const edit = (index: number, patch: Partial<InterestFormQuestion>) =>
@@ -131,14 +89,14 @@ export function InterestFormQuestionsEditor({
                     disabled={disabled}
                     onValueChange={(type) =>
                       commit(
-                        edit(index, {
-                          type: type as InterestFormQuestion["type"],
-                          options: CHOICE.has(type)
-                            ? question.options?.length
-                              ? question.options
-                              : [{ id: newId(), label: "" }]
-                            : undefined,
-                        }),
+                        questions.map((each, at) =>
+                          at === index
+                            ? withQuestionType(
+                                each,
+                                type as InterestFormQuestion["type"],
+                              )
+                            : each,
+                        ),
                       )
                     }
                   >
@@ -176,7 +134,7 @@ export function InterestFormQuestionsEditor({
                     {problem}
                   </p>
                 ) : null}
-                {CHOICE.has(question.type) ? (
+                {isChoiceQuestion(question.type) ? (
                   <ul className="space-y-1.5 pl-3">
                     {(question.options ?? []).map((option, at) => (
                       <li key={option.id} className="flex items-center gap-2">
@@ -233,7 +191,7 @@ export function InterestFormQuestionsEditor({
                             edit(index, {
                               options: [
                                 ...(question.options ?? []),
-                                { id: newId(), label: "" },
+                                { id: newInterestFormId(), label: "" },
                               ],
                             }),
                           )
@@ -270,7 +228,7 @@ export function InterestFormQuestionsEditor({
             setQuestions([
               ...questions,
               {
-                id: newId(),
+                id: newInterestFormId(),
                 type: "short_answer",
                 title: "",
                 required: false,

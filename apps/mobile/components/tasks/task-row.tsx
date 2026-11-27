@@ -171,11 +171,13 @@ function taskFacts(row: TaskRowModel, now: Date) {
   // someone speaking to you.
   // Red once overdue (#4133): past the local due day, or already OVERDUE by
   // the server's clock, which the task screen and web also read. A task
-  // with no due date (#5761) is never late.
+  // with no due date (#5761) is never late. A fixed deadline (#6096) is red
+  // from the start: the board lists only the viewer's own tasks, and a
+  // fixed deadline reads urgent to its assignee.
   const urgent =
     !row.isDone &&
     !!row.dueDate &&
-    (row.isOverdue || isDueUrgent(row.dueDate, now));
+    (row.isOverdue || row.fixedDeadline || isDueUrgent(row.dueDate, now));
 
   const toggleLabel = row.isDone
     ? TASK_ACTION_LABELS.reopen

@@ -1,9 +1,10 @@
-import { MODULE_CATALOG } from "@repo/org-archetypes";
 import {
   CHAPTER_LOGS_PERMISSIONS,
   canAll,
   isBetaOffModule,
+  type PhoneSettingsPage,
 } from "@repo/validation";
+import { MODULE_SETTINGS } from "./module-settings";
 
 /**
  * Settings search: one list of every setting a member can change, with the
@@ -47,6 +48,7 @@ export type SettingPhoneScreen =
   | "/chapter-vocabulary"
   | "/chapter-roles"
   | "/chapter-logs"
+  | "/module-settings"
   | "/preferences";
 
 export type SettingEntry = {
@@ -74,9 +76,17 @@ export type SettingEntry = {
     /** More params the row needs, such as `tool=discord-import`. */
     params?: Readonly<Record<string, string>>;
   };
+  /**
+   * `page` is a page pushed inside the screen (the phone Settings screen's
+   * `?page=`, the same address as web's `?section=`); without one the row is
+   * on the screen's first page.
+   */
   phone?: {
     screen: SettingPhoneScreen;
+    page?: PhoneSettingsPage;
     anchor?: string;
+    /** More params the screen needs, such as a module's `module=points`. */
+    params?: Readonly<Record<string, string>>;
     /**
      * Drawn only for a chapter: the phone's Chapter tab parts that read the
      * chapter's config, which a council's routes refuse (#5933). A council
@@ -103,73 +113,35 @@ export const SETTINGS_AREA_LABELS: Readonly<Record<SettingsArea, string>> = {
   personal: "Settings",
 };
 
-type ModuleWords = {
-  key: string;
-  label: string;
-  keywords: readonly string[];
+/**
+ * Other words for each module page. Its key, name and rail order are
+ * `MODULE_SETTINGS`'s (`module-settings.ts`), so search can't drift from the
+ * page.
+ */
+const MODULE_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
+  chat: ["messages", "messaging"],
+  announcements: ["announce", "broadcast", "news", "officer posts"],
+  events: ["calendar", "rsvp", "attendance", "check in", "check-in"],
+  points: ["leaderboard", "ledger"],
+  hours: ["service", "study hours", "volunteer", "community service"],
+  geofences: ["geofence", "study", "library", "map"],
+  tasks: ["todo", "to do", "assignments", "chores"],
+  polls: ["vote", "voting", "survey"],
+  meetings: ["minutes", "agenda", "notes", "chapter meeting"],
+  documents: ["files", "bylaws", "drive", "docs", "forms"],
+  backwork: ["coursework", "tests", "exams", "old tests", "test bank"],
+  reports: ["export", "csv", "spreadsheet"],
+  rush: ["rush", "prospects", "pnm", "bids", "intake"],
+  dues: ["payments", "fees", "money", "late fee", "payment plan"],
 };
 
-/** The module pages of Chapter settings, in rail order (`settings-modules.ts`). */
-const MODULE_WORDS: readonly ModuleWords[] = [
-  { key: "chat", label: "Chat", keywords: ["messages", "messaging"] },
-  {
-    key: "announcements",
-    label: "Announcements",
-    keywords: ["announce", "broadcast", "news", "officer posts"],
-  },
-  {
-    key: "events",
-    label: "Events",
-    keywords: ["calendar", "rsvp", "attendance", "check in", "check-in"],
-  },
-  { key: "points", label: "Points", keywords: ["leaderboard", "ledger"] },
-  {
-    key: "hours",
-    label: "Service hours",
-    keywords: ["service", "study hours", "volunteer", "community service"],
-  },
-  {
-    key: "geofences",
-    label: "Study zones",
-    keywords: ["geofence", "study", "library", "map"],
-  },
-  {
-    key: "tasks",
-    label: "Tasks",
-    keywords: ["todo", "to do", "assignments", "chores"],
-  },
-  { key: "polls", label: "Polls", keywords: ["vote", "voting", "survey"] },
-  {
-    key: "meetings",
-    label: "Meetings",
-    keywords: ["minutes", "agenda", "notes", "chapter meeting"],
-  },
-  {
-    key: "documents",
-    label: "Documents",
-    keywords: ["files", "bylaws", "drive", "docs", "forms"],
-  },
-  {
-    key: "backwork",
-    label: "Backwork",
-    keywords: ["coursework", "tests", "exams", "old tests", "test bank"],
-  },
-  {
-    key: "reports",
-    label: "Reports",
-    keywords: ["export", "csv", "spreadsheet"],
-  },
-  {
-    key: "rush",
-    label: "Recruitment",
-    keywords: ["rush", "prospects", "pnm", "bids", "intake"],
-  },
-  {
-    key: "dues",
-    label: "Dues",
-    keywords: ["payments", "fees", "money", "late fee", "payment plan"],
-  },
-];
+/** The module pages of Chapter settings, in rail order. */
+const MODULE_WORDS = MODULE_SETTINGS.map((module) => ({
+  key: module.key,
+  label: module.label,
+  alwaysOn: module.alwaysOn,
+  keywords: MODULE_KEYWORDS[module.key] ?? [],
+}));
 
 const MODULE_SWITCH_WORDS = [
   "module",
@@ -602,9 +574,14 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["receipts", "billing history", "payments", "invoice"],
     // Viewing alone changes nothing there, and search lists what can change.
     requires: ["billing:view", "billing:manage"],
-    // The list is drawn only while dues is on (off for the beta).
+    // The list is drawn only while dues is on (off for the beta), on its
+    // own page of Plan and billing (#6031).
     betaModule: "dues",
-    web: { page: "billing", anchor: "invoice-list-heading" },
+    web: {
+      page: "billing",
+      anchor: "invoice-list-heading",
+      params: { page: "invoices" },
+    },
   },
   {
     id: "cancel-chapter",
@@ -726,9 +703,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
   ...MODULE_WORDS.map((module): SettingEntry => {
     // An always-on module (Chat, Announcements) has no switch to light or
     // turn off, so its page opens at the top and offers no switch words.
-    const alwaysOn =
-      MODULE_CATALOG.find((entry) => entry.key === module.key)?.alwaysOn ??
-      false;
+    const alwaysOn = module.alwaysOn;
     return {
       id: `module-${module.key}`,
       label: module.label,
@@ -742,6 +717,13 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       web: alwaysOn
         ? { page: module.key }
         : { page: module.key, anchor: `settings-module-${module.key}-switch` },
+      // The module's screen on the phone (#6030), which reads the chapter's
+      // config, so a council is sent to the web dashboard.
+      phone: {
+        screen: "/module-settings",
+        params: { module: module.key },
+        chapterOnly: true,
+      },
     };
   }),
   {
@@ -799,6 +781,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "hours",
     web: { page: "hours", anchor: "settings-module-hours-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours" },
+      chapterOnly: true,
+    },
   },
   {
     id: "service-goals",
@@ -813,6 +800,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-module-service-goals",
       params: { page: "goal-service" },
     },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-service" },
+      chapterOnly: true,
+    },
   },
   {
     id: "study-goals",
@@ -826,6 +818,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "hours",
       anchor: "settings-module-study-goals",
       params: { page: "goal-study" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-study" },
+      chapterOnly: true,
     },
   },
   {
@@ -851,6 +848,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "points",
     web: { page: "points", anchor: "settings-module-points-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points" },
+      chapterOnly: true,
+    },
   },
   {
     id: "points-goal",
@@ -864,6 +866,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "points",
       anchor: "settings-module-points-goals",
       params: { page: "goal-points" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points", page: "goal-points" },
+      chapterOnly: true,
     },
   },
   {
@@ -879,6 +886,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "meetings",
       anchor: "settings-module-meetings-rules",
       params: { page: "sections" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "meetings", page: "sections" },
+      chapterOnly: true,
     },
   },
   {
@@ -919,7 +931,7 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     area: "personal",
     section: "Notifications",
     keywords: ["notifications", "alerts", "notify", "sounds"],
-    phone: { screen: "/preferences", anchor: "push" },
+    phone: { screen: "/preferences", page: "notifications", anchor: "push" },
   },
   {
     id: "quiet-hours",
@@ -928,13 +940,17 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     section: "Notifications",
     keywords: ["do not disturb", "dnd", "sleep", "mute", "silence", "night"],
     web: { page: "notifications", anchor: "quiet-hours" },
-    phone: { screen: "/preferences", anchor: "quiet-hours" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "quiet-hours",
+    },
   },
   {
     id: "chat-notifications",
     label: "Chat messages",
     area: "personal",
-    section: "Chapter alerts",
+    section: "Notifications",
     keywords: [
       "chat notifications",
       "mentions only",
@@ -942,49 +958,60 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
       "notify",
       "notification level",
     ],
-    web: { page: "alerts", anchor: "chat-level-legend" },
-    phone: { screen: "/preferences", anchor: "chat-messages" },
+    web: { page: "notifications", anchor: "chat-level-legend" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "chat-messages",
+    },
   },
   {
     id: "chapter-alerts",
-    label: "Chapter alerts",
+    label: "Chapter notifications",
     area: "personal",
-    section: "Chapter alerts",
+    section: "Notifications",
     keywords: [
       "notifications",
+      "alerts",
       "event reminders",
       "task reminders",
+      "points",
+      "weekly recap",
       "alert types",
     ],
-    web: { page: "alerts", anchor: "chapter-alerts" },
-    phone: { screen: "/preferences", anchor: "chapter-alerts" },
+    web: { page: "notifications", anchor: "chapter-alerts" },
+    phone: {
+      screen: "/preferences",
+      page: "notifications",
+      anchor: "chapter-alerts",
+    },
+  },
+  {
+    // The Activity card's switch is phone only: web's Activity has no nudge card.
+    id: "nudges",
+    label: "Nudges on Activity",
+    area: "personal",
+    section: "Notifications",
+    keywords: ["nudges", "reminders", "activity card"],
+    phone: { screen: "/preferences", page: "notifications", anchor: "nudges" },
   },
   {
     id: "chat-density",
     label: "Chat density",
     area: "personal",
-    section: "Appearance and chat",
+    section: "Chat",
     keywords: ["compact", "cozy", "spacing", "layout", "dense", "appearance"],
-    web: { page: "appearance", anchor: "chat-density" },
-    phone: { screen: "/preferences", anchor: "chat-density" },
+    web: { page: "chat", anchor: "chat-density" },
+    phone: { screen: "/preferences", page: "chat", anchor: "chat-density" },
   },
   {
     id: "read-receipts",
     label: "Read receipts",
     area: "personal",
-    section: "Appearance and chat",
+    section: "Chat",
     keywords: ["seen", "read status", "privacy"],
-    web: { page: "appearance", anchor: "read-receipts" },
-    phone: { screen: "/preferences", anchor: "read-receipts" },
-  },
-  {
-    // The Activity card's switch sits only in the phone's Settings.
-    id: "nudges",
-    label: "Nudges on Activity",
-    area: "personal",
-    section: "Activity",
-    keywords: ["nudges", "reminders", "activity card"],
-    phone: { screen: "/preferences", anchor: "nudges" },
+    web: { page: "chat", anchor: "read-receipts" },
+    phone: { screen: "/preferences", page: "chat", anchor: "read-receipts" },
   },
   {
     id: "linked-apps",
@@ -993,14 +1020,15 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     section: "Linked apps",
     keywords: ["discord", "google", "connect", "integrations", "link account"],
     web: { page: "apps", anchor: "linked-apps" },
-    phone: { screen: "/preferences", anchor: "linked-apps" },
+    phone: { screen: "/preferences", page: "apps", anchor: "linked-apps" },
   },
   {
     id: "calendar",
-    label: "Calendar",
+    label: "Calendar apps",
     area: "personal",
-    section: "Calendar",
+    section: "Linked apps",
     keywords: [
+      "calendar",
       "google calendar",
       "subscribe",
       "ical",
@@ -1009,19 +1037,49 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
       "outlook",
       "apple calendar",
     ],
-    web: { page: "calendar", anchor: "calendar" },
-    // On the phone, Google Calendar and Calendar apps are Linked apps rows.
-    phone: { screen: "/preferences", anchor: "linked-apps" },
+    web: { page: "apps", anchor: "linked-apps" },
+    phone: { screen: "/preferences", page: "apps", anchor: "linked-apps" },
   },
   {
     id: "frapp-ai",
     label: "Frapp Intelligence",
     area: "personal",
-    section: "AI",
+    section: "Frapp Intelligence",
     keywords: ["ai", "ask frapp", "assistant", "consent"],
     needsAi: true,
     web: { page: "ai", anchor: "ai" },
-    phone: { screen: "/preferences", anchor: "ai" },
+    phone: { screen: "/preferences", page: "ai", anchor: "ai" },
+  },
+  {
+    id: "sign-in",
+    label: "Sign in",
+    area: "personal",
+    section: "Account",
+    keywords: ["password", "email", "google sign in", "apple sign in", "login"],
+    web: { page: "account", anchor: "account" },
+    phone: { screen: "/preferences", page: "account", anchor: "sign-in" },
+  },
+  {
+    id: "sign-out",
+    label: "Sign out",
+    area: "personal",
+    section: "Account",
+    keywords: ["log out", "logout", "sign off"],
+    web: { page: "account", anchor: "account" },
+    phone: { screen: "/preferences", page: "account", anchor: "sign-out" },
+  },
+  {
+    id: "delete-account",
+    label: "Delete account",
+    area: "personal",
+    section: "Account",
+    keywords: ["remove account", "close account", "deactivate", "erase data"],
+    web: { page: "account", anchor: "account" },
+    phone: {
+      screen: "/preferences",
+      page: "account",
+      anchor: "delete-account",
+    },
   },
   {
     id: "blocked-members",
@@ -1040,24 +1098,6 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
     keywords: ["dues", "pay", "payments", "bills", "receipts"],
     betaModule: "dues",
     web: { page: "invoices", anchor: "my-invoices" },
-  },
-  {
-    id: "sign-out",
-    label: "Sign out",
-    area: "personal",
-    section: "Account",
-    keywords: ["log out", "logout", "sign off"],
-    web: { page: "account", anchor: "account" },
-    phone: { screen: "/preferences", anchor: "sign-out" },
-  },
-  {
-    id: "delete-account",
-    label: "Delete account",
-    area: "personal",
-    section: "Account",
-    keywords: ["remove account", "close account", "deactivate", "erase data"],
-    web: { page: "account", anchor: "account" },
-    phone: { screen: "/preferences", anchor: "delete-account" },
   },
 ];
 

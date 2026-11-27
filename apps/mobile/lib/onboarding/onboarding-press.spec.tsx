@@ -33,7 +33,7 @@ vi.mock("@/lib/auth-session", () => ({
     email: "brother@westfield.edu",
     isConfigured: true,
     callbackError: null,
-    sendMagicLink: vi.fn(),
+    sendEmailCode: vi.fn(),
     signInWithOAuthProvider: vi.fn(),
     signInWithPassword: vi.fn(),
     signOut: vi.fn().mockResolvedValue(undefined),
@@ -324,7 +324,7 @@ const ROWS: [string, Kind, () => Promise<Node>][] = [
       return control(root, "Other ways to sign in");
     },
   ],
-  ...(["Password", "Magic link"] as const).map(
+  ...(["Password", "Email code"] as const).map(
     (label): [string, Kind, () => Promise<Node>] => [
       `sign-in: the ${label} mode button`,
       FILLED,

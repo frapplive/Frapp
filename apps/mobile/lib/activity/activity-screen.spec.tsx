@@ -344,6 +344,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeleteEvent: () => ({ mutate: menuReads.deleteEvent }),
   useConfirmTask: () => ({ mutateAsync: writes.confirm }),
   useRejectTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useApproveTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeclineTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useReviewServiceEntry: () => ({ mutateAsync: writes.review }),
   useCheckIn: () => ({ mutateAsync: writes.checkIn }),
   useMyPermissions: () => ({ data: { permissions: links.permissions } }),
@@ -3207,13 +3210,14 @@ describe("Activity screen (#3897)", () => {
     const statusWrites = () =>
       menuReads.updateStatus.mock.calls.map(([input]) => input);
 
-    it("offers a member their task's Mark done, Start and Snooze", async () => {
+    it("offers a member their task's Mark done, Start, Ask for more time and Snooze", async () => {
       links.permissions = ["members:view"];
       menuReads.tasks = [listed()];
       const tree = render();
       expect(longPress(tree, "Book the venue")).toEqual([
         "Mark done",
         "Start",
+        "Ask for more time",
         "Snooze",
       ]);
       await act(async () => pick(tree, "Mark done"));

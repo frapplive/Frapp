@@ -28,7 +28,8 @@ const GOOGLE_CALENDAR_CONNECTED_TOAST = {
 
 /**
  * Google Calendar's connect and disconnect for one web screen: the Events
- * Subscribe menu, Settings → Linked apps, or Settings → Calendar (#5407).
+ * Subscribe menu or Settings → Linked apps (#5407; Settings → Calendar until
+ * #6032 folded it into Linked apps).
  * `webReturn` is that screen, so Google's sign-in comes back to it and the
  * member sees the row they pressed now reading Connected.
  */

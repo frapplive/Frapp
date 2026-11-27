@@ -333,19 +333,7 @@ export function taskSubmittedCopy(
       ? 'resubmitted'
       : 'submitted';
   const note = task.completion_note?.trim() || null;
-  // Cut by character, not UTF-16 unit, so the cut never splits an emoji
-  // (as `chat-push-preview.ts` cuts).
-  const chars = note ? Array.from(note) : [];
-  const quoted = note
-    ? `"${
-        chars.length > SUBMITTED_REPLY_MAX
-          ? `${chars
-              .slice(0, SUBMITTED_REPLY_MAX - 1)
-              .join('')
-              .trimEnd()}…`
-          : note
-      }"`
-    : null;
+  const quoted = note ? quotedLine(note, SUBMITTED_REPLY_MAX) : null;
   const points = task.point_reward ?? 0;
   return {
     title: `${name} ${verb}: ${task.title}`,
@@ -359,5 +347,69 @@ export function taskSubmittedCopy(
       // push never goes out blank (#3846).
       !needsSignOff && 'Done',
     ),
+  };
+}
+
+/** The iOS stack every "asks for more time" push joins (#6096). */
+export const TASK_EXTENSION_PUSH_THREAD = 'tasks:extension';
+
+/** The longest reason an "asks for more time" push quotes before it is cut. */
+const EXTENSION_REASON_MAX = 60;
+
+/**
+ * Quotes a member's words for a push, cut at `max` characters. Cut by
+ * character, not UTF-16 unit, so the cut never splits an emoji (as
+ * `chat-push-preview.ts` cuts).
+ */
+function quotedLine(text: string, max: number): string {
+  const chars = Array.from(text.trim());
+  return `"${
+    chars.length > max
+      ? `${chars
+          .slice(0, max - 1)
+          .join('')
+          .trimEnd()}…`
+      : chars.join('')
+  }"`;
+}
+
+/**
+ * A member asks for more time on a task an officer can decide (#6096):
+ * "Sam asks for more time: Sweep the porch" / "To Sat, Nov 28 · "Shift ran
+ * late"". `due` is the asked-for due, already formatted for the reader.
+ */
+export function taskExtensionAskedCopy(
+  name: string,
+  task: { title: string },
+  request: { reason: string },
+  due: string,
+): { title: string; body: string } {
+  return {
+    title: `${name} asks for more time: ${task.title}`,
+    body: joinFacts(
+      `To ${due}`,
+      quotedLine(request.reason, EXTENSION_REASON_MAX),
+    ),
+  };
+}
+
+/**
+ * An officer answered a member's request (#6096): "Sweep the porch" / "More
+ * time granted · now due Sat, Nov 28", or "Not extended · "The event is
+ * Friday"".
+ */
+export function taskExtensionDecidedCopy(
+  task: { title: string },
+  decision:
+    { approved: true; due: string } | { approved: false; reason: string },
+): { title: string; body: string } {
+  return {
+    title: task.title,
+    body: decision.approved
+      ? joinFacts('More time granted', `now due ${decision.due}`)
+      : joinFacts(
+          'Not extended',
+          quotedLine(decision.reason, EXTENSION_REASON_MAX),
+        ),
   };
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { MODULE_TOOLS_ON_WEB } from "@repo/validation";
 import {
+  SETTINGS_TOOLS,
   hasSettingsDestination,
   isSettingsTabVisible,
   visibleSettingsTools,
@@ -179,5 +181,17 @@ describe("hasSettingsDestination", () => {
 
   it("is true when the offline dashboard can't ask (null)", () => {
     expect(hasSettingsDestination(null, () => true)).toBe(true);
+  });
+});
+
+describe("the phone's officer-tool line (#6030)", () => {
+  it("names the modules and gates web's tools have, so it reaches the same holders", () => {
+    const pages = new Set(SETTINGS_TOOLS.map((tool) => tool.page));
+    expect(new Set(Object.keys(MODULE_TOOLS_ON_WEB))).toEqual(pages);
+    for (const tool of SETTINGS_TOOLS) {
+      expect(MODULE_TOOLS_ON_WEB[tool.page]?.permission, tool.id).toBe(
+        tool.permission,
+      );
+    }
   });
 });

@@ -46,14 +46,11 @@ vi.mock("@/components/profile/blocked-members-card", () => ({
 vi.mock("@/components/personal-settings/ai-section", () => ({
   AiSection: () => <p>ai section</p>,
 }));
-vi.mock("@/components/personal-settings/read-receipts-section", () => ({
-  ReadReceiptsSection: () => <p>read receipts section</p>,
+vi.mock("@/components/personal-settings/chat-section", () => ({
+  ChatSection: () => <p>chat section</p>,
 }));
 vi.mock("@/components/linked-apps/linked-apps-section", () => ({
   LinkedAppsSection: () => <p>linked apps section</p>,
-}));
-vi.mock("@/components/personal-settings/calendar-section", () => ({
-  CalendarSection: () => <p>calendar section</p>,
 }));
 
 import { PersonalSettingsPage } from "./personal-settings-page";
@@ -87,7 +84,7 @@ describe("PersonalSettingsPage (#3856)", () => {
     mocks.aiFailures = 1;
     render(<PersonalSettingsPage />);
     expect(rail()).toBeInTheDocument();
-    expect(within(rail()).queryByText("AI")).toBeNull();
+    expect(within(rail()).queryByText("Frapp Intelligence")).toBeNull();
   });
 
   it("groups the rail by what a setting belongs to, the chapter group by name", () => {
@@ -101,11 +98,9 @@ describe("PersonalSettingsPage (#3856)", () => {
         .map((link) => link.textContent),
     ).toEqual([
       "Notifications",
-      "Appearance and chat",
+      "Chat",
       "Linked apps",
-      "Calendar",
       "Account",
-      "Chapter alerts",
       "Blocked members",
     ]);
   });
@@ -116,10 +111,14 @@ describe("PersonalSettingsPage (#3856)", () => {
     expect(within(rail()).getByText("In your chapter")).toBeInTheDocument();
   });
 
-  it("opens on Notifications and marks it as the current page", () => {
+  it("opens on Notifications, quiet hours then the chapter's alerts, and marks it current (#6032)", () => {
     render(<PersonalSettingsPage />);
 
     expect(screen.getByText("quiet hours section")).toBeInTheDocument();
+    expect(screen.getByText("chapter alerts section")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Notifications" }),
+    ).toBeInTheDocument();
     const current = within(rail()).getByRole("link", { current: "page" });
     expect(current).toHaveTextContent("Notifications");
     expect(current).toHaveAttribute("href", "/preferences");
@@ -127,10 +126,9 @@ describe("PersonalSettingsPage (#3856)", () => {
 
   it.each([
     ["account", "account section"],
-    ["alerts", "chapter alerts section"],
+    ["chat", "chat section"],
     ["blocked", "blocked members section"],
     ["apps", "linked apps section"],
-    ["calendar", "calendar section"],
   ])("mounts only the section `?section=%s` names", (section, text) => {
     mocks.section = section;
     render(<PersonalSettingsPage />);
@@ -142,20 +140,28 @@ describe("PersonalSettingsPage (#3856)", () => {
     ).toHaveAttribute("href", `/preferences?section=${section}`);
   });
 
-  it("offers Cozy and Compact under Appearance and chat (#2252)", () => {
-    mocks.section = "appearance";
-    render(<PersonalSettingsPage />);
+  it.each([
+    ["alerts", "notifications", "chapter alerts section"],
+    ["appearance", "chat", "chat section"],
+    ["calendar", "apps", "linked apps section"],
+  ])(
+    "opens the page that took in the retired `?section=%s` (#6032)",
+    (retired, page, text) => {
+      mocks.section = retired;
+      render(<PersonalSettingsPage />);
+      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(
+        within(rail()).getByRole("link", { current: "page" }),
+      ).toHaveAttribute(
+        "href",
+        page === "notifications"
+          ? "/preferences"
+          : `/preferences?section=${page}`,
+      );
+    },
+  );
 
-    expect(
-      screen.getByRole("heading", { name: "Chat density" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /cozy/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /compact/i })).toBeInTheDocument();
-    // The Read receipts switch sits under density (#5519).
-    expect(screen.getByText("read receipts section")).toBeInTheDocument();
-  });
-
-  it("adds AI to My account only while the server has AI (#4308)", () => {
+  it("adds Frapp Intelligence to My account only while the server has AI (#4308)", () => {
     mocks.aiConsent = { answer: null };
     mocks.section = "ai";
     render(<PersonalSettingsPage />);
@@ -166,12 +172,10 @@ describe("PersonalSettingsPage (#3856)", () => {
         .map((link) => link.textContent),
     ).toEqual([
       "Notifications",
-      "Appearance and chat",
+      "Chat",
       "Linked apps",
-      "Calendar",
+      "Frapp Intelligence",
       "Account",
-      "AI",
-      "Chapter alerts",
       "Blocked members",
     ]);
   });
@@ -186,7 +190,9 @@ describe("PersonalSettingsPage (#3856)", () => {
       mocks.section = "ai";
       render(<PersonalSettingsPage />);
       expect(screen.getByText("quiet hours section")).toBeInTheDocument();
-      expect(within(rail()).queryByRole("link", { name: "AI" })).toBeNull();
+      expect(
+        within(rail()).queryByRole("link", { name: "Frapp Intelligence" }),
+      ).toBeNull();
     },
   );
 
@@ -203,12 +209,10 @@ describe("personal settings sections", () => {
       PERSONAL_SETTINGS_SECTIONS.map((s) => personalSettingsHref(s.value)),
     ).toEqual([
       "/preferences",
-      "/preferences?section=appearance",
+      "/preferences?section=chat",
       "/preferences?section=apps",
-      "/preferences?section=calendar",
-      "/preferences?section=account",
       "/preferences?section=ai",
-      "/preferences?section=alerts",
+      "/preferences?section=account",
       "/preferences?section=blocked",
       "/preferences?section=invoices",
     ]);

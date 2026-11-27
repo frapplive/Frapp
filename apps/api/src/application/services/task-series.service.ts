@@ -124,6 +124,12 @@ export class TaskSeriesService {
     ) {
       patch.proof_kind = input.proof_kind;
     }
+    if (
+      input.fixed_deadline !== undefined &&
+      input.fixed_deadline !== series.fixed_deadline
+    ) {
+      patch.fixed_deadline = input.fixed_deadline;
+    }
     // Checked against the template's own list; the open copy then takes the
     // same list as a task edit.
     const attachments = await this.taskService.checkedAttachments(
@@ -231,6 +237,7 @@ export class TaskSeriesService {
         assignee_id: input.assignee_id,
         point_reward: input.point_reward,
         proof_kind: input.proof_kind,
+        fixed_deadline: input.fixed_deadline,
         attachments: input.attachments,
       };
       if ('due_time' in patch) {

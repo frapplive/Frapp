@@ -30,7 +30,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     ]),
 }));
 
-const { RushBidExpiryRow, RushRecruitmentPicks, namesList } =
+const { RushBidExpiryRow, RushRecruitmentPicks } =
   await import("./rush-recruitment-picks");
 
 const BASE = {
@@ -113,10 +113,5 @@ describe("RushRecruitmentPicks (#5973)", () => {
     expect(
       screen.getAllByText("Your role can't change this.").length,
     ).toBeGreaterThan(0);
-  });
-
-  it("lists names the way a sentence does", () => {
-    expect(namesList(["Ana"])).toBe("Ana");
-    expect(namesList(["Ana", "Ben", "Cal"])).toBe("Ana, Ben and Cal");
   });
 });

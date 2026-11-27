@@ -83,11 +83,12 @@ import {
  * render an accurate switch before the first `GET` lands, not to encode a policy
  * of its own.
  *
- * Both surfaces now draw from here — mobile's s16 grid and web's Profile
- * Notifications card — which is what #564 closed. Anything that renders these
- * switches maps this array; nothing hand-writes a second list of keys. Web
- * draws each as a switch with its label and `description`; mobile s16 draws
- * the label only (`apps/mobile/app/(app)/preferences.tsx` says why).
+ * Both surfaces now draw from here — the Notifications page of personal
+ * Settings on each app — which is what #564 closed. Anything that renders these
+ * switches maps this array; nothing hand-writes a second list of keys. Both
+ * draw each as a switch with its label and `description` (the phone drew the
+ * label only until #6032 gave Notifications a page of its own:
+ * `apps/mobile/components/settings/personal/notifications-page.tsx`).
  */
 
 /** One member-facing category: a switch's key, label and hint. */
@@ -97,8 +98,8 @@ export interface NotificationCategory {
   /** Switch label. Sentence case, per `spec/ui/design-system/writing.md`. */
   label: string;
   /**
-   * One line naming what actually arrives, drawn under the label on web's
-   * Profile card. Mobile s16 leaves it off.
+   * One line naming what actually arrives, drawn under the label on both
+   * apps' Settings → Notifications.
    */
   description: string;
   /**

@@ -7,6 +7,7 @@ import { TaskService } from '../../application/services/task.service';
 import { TaskSeriesService } from '../../application/services/task-series.service';
 import { RbacService } from '../../application/services/rbac.service';
 import { OpenTaskService } from '../../application/services/open-task.service';
+import { TaskExtensionService } from '../../application/services/task-extension/task-extension.service';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -24,6 +25,7 @@ describe('TaskController', () => {
   let taskSeriesService: { update: jest.Mock; delete: jest.Mock };
   let rbacService: jest.Mocked<RbacService>;
   let openTaskService: { release: jest.Mock };
+  let extensionService: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     taskService = {
@@ -46,6 +48,9 @@ describe('TaskController', () => {
         ),
       ),
       asReadBy: jest.fn(TaskService.prototype.asReadBy),
+      withViewerStanding: jest.fn((_chapterId, _userId, views) =>
+        Promise.resolve(views),
+      ),
       followEntriesOf: jest.fn().mockResolvedValue([]),
     } as any;
 
@@ -55,6 +60,13 @@ describe('TaskController', () => {
       memberHasAnyPermission: jest.fn(),
     } as any;
     openTaskService = { release: jest.fn() };
+    extensionService = {
+      request: jest.fn(),
+      approve: jest.fn(),
+      decline: jest.fn(),
+      restore: jest.fn(),
+      listBlocked: jest.fn(),
+    };
 
     const module: TestingModule = await createUnguardedTestingModule({
       controllers: [TaskController],
@@ -63,6 +75,7 @@ describe('TaskController', () => {
         { provide: TaskSeriesService, useValue: taskSeriesService },
         { provide: RbacService, useValue: rbacService },
         { provide: OpenTaskService, useValue: openTaskService },
+        { provide: TaskExtensionService, useValue: extensionService },
       ],
     }).compile();
 
@@ -757,6 +770,76 @@ describe('TaskController', () => {
 
       expect(taskService.delete).toHaveBeenCalledWith(taskId, chapterId);
       expect(result).toEqual({ success: true });
+    });
+  });
+  describe('asking for more time (#6096)', () => {
+    const TASK = '11111111-1111-4111-8111-111111111111';
+    const REQUEST = '22222222-2222-4222-8222-222222222222';
+
+    it('passes the ask through as the caller', async () => {
+      extensionService.request.mockResolvedValue({
+        extension: { id: REQUEST },
+        now_blocked: false,
+      });
+
+      await controller.requestExtension('ch-1', 'user-1', TASK, {
+        due_date: '2026-11-28',
+        reason: 'Shift ran late',
+      });
+
+      expect(extensionService.request).toHaveBeenCalledWith({
+        chapterId: 'ch-1',
+        userId: 'user-1',
+        taskId: TASK,
+        dueDate: '2026-11-28',
+        dueAt: null,
+        reason: 'Shift ran late',
+      });
+    });
+
+    it('approves and declines as the officer, with the reason', async () => {
+      extensionService.approve.mockResolvedValue({ id: REQUEST });
+      extensionService.decline.mockResolvedValue({ id: REQUEST });
+
+      await expect(
+        controller.approveExtension('ch-1', 'officer-1', TASK, REQUEST),
+      ).resolves.toEqual({ extension: { id: REQUEST } });
+      await controller.declineExtension('ch-1', 'officer-1', TASK, REQUEST, {
+        reason: 'The event is Friday',
+      });
+
+      expect(extensionService.approve).toHaveBeenCalledWith(
+        'ch-1',
+        TASK,
+        REQUEST,
+        'officer-1',
+      );
+      expect(extensionService.decline).toHaveBeenCalledWith(
+        'ch-1',
+        TASK,
+        REQUEST,
+        'officer-1',
+        'The event is Friday',
+      );
+    });
+
+    it('keeps deciding and restoring to tasks:manage, asking to every member', () => {
+      const required = (name: keyof TaskController) =>
+        Reflect.getMetadata(PERMISSIONS_KEY, TaskController.prototype[name]) as
+          string[] | undefined;
+      expect(required('approveExtension')).toEqual([
+        SystemPermissions.TASKS_MANAGE,
+      ]);
+      expect(required('declineExtension')).toEqual([
+        SystemPermissions.TASKS_MANAGE,
+      ]);
+      expect(required('restoreExtensions')).toEqual([
+        SystemPermissions.TASKS_MANAGE,
+      ]);
+      expect(required('listBlockedFromExtensions')).toEqual([
+        SystemPermissions.TASKS_MANAGE,
+      ]);
+      expect(required('requestExtension')).toBeUndefined();
     });
   });
 });

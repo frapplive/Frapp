@@ -11,10 +11,8 @@ import {
   invoiceStatusKind,
   subscriptionStatusKind,
 } from "@/components/billing/invoice-status";
-import {
-  moduleTierKind,
-  moduleTierLabel,
-} from "@/components/settings/settings-status";
+import { moduleTierKind } from "@/components/settings/settings-status";
+import { moduleTierLabel } from "@repo/validation";
 
 /**
  * The defect this file exists for.
@@ -196,9 +194,9 @@ describe("a task's status, as the phone draws it (#4133)", () => {
   });
 
   it("keeps a completed task amber until its points are awarded", () => {
-    expect(
-      taskStatusKind({ status: "COMPLETED", points_awarded: false }),
-    ).toBe("warning");
+    expect(taskStatusKind({ status: "COMPLETED", points_awarded: false })).toBe(
+      "warning",
+    );
     expect(taskStatusKind({ status: "COMPLETED", points_awarded: true })).toBe(
       "success",
     );

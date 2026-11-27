@@ -6,19 +6,18 @@ import {
 import { stateMicrocopy } from "@/lib/state-microcopy";
 
 /**
- * The plan panel in its own frame: `--surface-1`, radius 16, hairline, which
- * is what the loaded panel paints (it is the page's one framed block). Plan
- * name and badge, the meta line, and the button column.
+ * The plan row in its group's frame, which is what the loaded row paints:
+ * plan name and badge, the meta line, and the action at the row's end.
  */
 function PlanPanelFrame() {
   return (
     <div
       aria-hidden="true"
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface-1 p-5 @xl:flex-row @xl:items-center @xl:gap-6"
+      className="flex flex-col gap-3 rounded-[14px] border border-border bg-card px-4 py-3 @xl:flex-row @xl:items-center @xl:gap-6"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-center gap-2.5">
-          <Skeleton className="h-[22px] w-20" />
+          <Skeleton className="h-4 w-20" />
           <Skeleton className="h-5 w-14 rounded-md" />
         </div>
         <Skeleton className="h-[11px] w-16" />

@@ -41,7 +41,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 const { ModuleSettingsPage } = await import("./module-settings-page");
 const { PointsRules, ServiceHoursRules } = await import("./module-rules");
-const { moduleSettingsFor } = await import("./settings-modules");
+const { moduleSettingsFor } = await import("@repo/hooks/module-settings");
 
 const hours = moduleSettingsFor("hours")!;
 

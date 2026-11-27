@@ -60,9 +60,11 @@ import {
   resolveSettingsTabParam,
 } from "@/components/settings/settings-rail";
 import {
+  MODULE_GOAL_METRICS,
+  goalPageId,
   isModuleSettingsTab,
   shownModuleSettings,
-} from "@/components/settings/settings-modules";
+} from "@repo/hooks/module-settings";
 import {
   chapterProfileSaveBody,
   readChapterBranding,
@@ -109,7 +111,6 @@ import {
 import {
   ModuleGoals,
   ModuleGoalsGroup,
-  goalPageId,
   goalPageTitle,
 } from "@/components/settings/module-goals";
 import {
@@ -247,9 +248,12 @@ function SettingsPageContent() {
   const toolParam = searchParams.get("tool");
   // A search result (`?setting=`) on one of the Chapter tab's pages opens that
   // page even from a link made before the pages existed, and the old Accent
-  // tab (`?tab=theme`) opens Accent color.
+  // tab (`?tab=theme`) opens Accent color. `?page=` is the Chapter tab's only
+  // on that tab: another row's page (Plan and billing's, #6031) is that row's.
+  const onChapterTab =
+    rawTabParam === null || rawTabParam === "org" || rawTabParam === "theme";
   const pageParam =
-    searchParams.get("page") ??
+    (onChapterTab ? searchParams.get("page") : null) ??
     chapterPageOfSetting(searchParams.get("setting")) ??
     (rawTabParam === "theme" ? "accent" : null);
   const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
@@ -621,7 +625,7 @@ function SettingsPageContent() {
           onPatch={patchRules}
         />,
       );
-      goalsFor(["service", "study"]);
+      goalsFor(MODULE_GOAL_METRICS.hours!);
     } else if (key === "points" && canViewConfig) {
       rules = renderConfigGated(
         <PointsRules
@@ -631,7 +635,7 @@ function SettingsPageContent() {
           onPatch={patchRules}
         />,
       );
-      goalsFor(["points"]);
+      goalsFor(MODULE_GOAL_METRICS.points!);
     } else if (key === "dues" && canViewConfig) {
       rules = renderConfigGated(
         <div className="space-y-4">
@@ -817,10 +821,11 @@ function SettingsPageContent() {
           visibleTabs={visibleTabs}
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import) and goes back to the row's own page.
+            // settings, Discord import, the plan table) and goes back to the
+            // row's own page.
             if (
               value === shownTab &&
-              (channelParam || toolParam || chapterPage)
+              (channelParam || toolParam || searchParams.get("page"))
             ) {
               changeTab(value);
             }
@@ -928,7 +933,7 @@ function SettingsPageContent() {
             it reads the billing record and invoices, not chapter config.
           */}
           <TabsContent value="billing" className="mt-0">
-            <PlanAndBilling />
+            <PlanAndBilling page={searchParams.get("page")} />
           </TabsContent>
 
           {/*

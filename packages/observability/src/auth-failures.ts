@@ -73,15 +73,21 @@ type AuthFailureFlow =
   | "password_sign_in"
   /** Web's sign-up form. Mobile has none: its first sign-in creates the account. */
   | "sign_up"
-  /** Asking for a magic link or email code. */
+  /**
+   * Asking for a sign-in code. Named for the magic link that email carried
+   * until #6134; kept so one series spans the builds still installed.
+   */
   | "magic_link_send"
-  /** Typing the email's six-digit code (#5625). */
+  /** Typing an email's six-digit code (#5625; every Auth email since #6134). */
   | "email_code_verify"
-  /** Resending the sign-up confirmation email. */
+  /** Sending the sign-up confirmation code again. */
   | "confirmation_resend"
   /** Starting Google or Apple, in the browser or natively. */
   | "oauth_start"
-  /** A link or provider return that didn't become a session: web's `/auth/callback`, mobile's deep link. */
+  /**
+   * A provider return, or an email link from before #6134, that didn't become
+   * a session: web's `/auth/callback`, mobile's deep link.
+   */
   | "auth_callback"
   /** A session the API stopped accepting, read back from Auth before signing out. */
   | "session_check";
