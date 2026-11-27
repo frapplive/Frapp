@@ -655,7 +655,11 @@ function NewFieldPage({
     ? MEMBER_FIELDS_COPY.needsName
     : type === "select" && choices.length === 0
       ? MEMBER_FIELDS_COPY.needsOption
-      : null;
+      : type === "text" &&
+          maxLength !== "" &&
+          parseGuardedInt(maxLength, 1) === undefined
+        ? MEMBER_FIELDS_COPY.maxLengthFloor
+        : null;
 
   async function submit() {
     if (missing || create.isPending) return;

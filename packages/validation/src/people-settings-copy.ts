@@ -265,6 +265,7 @@ export const MEMBER_FIELDS_COPY = {
   sensitive: "Sensitive",
   maxLength: "Longest answer",
   noLimit: "No limit",
+  maxLengthFloor: "Longest answer starts at 1",
   deleteField: "Delete field",
 } as const;
 

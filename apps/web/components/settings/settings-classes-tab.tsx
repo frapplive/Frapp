@@ -540,8 +540,14 @@ function ClassMembers({
   const { toast } = useToast();
   const assign = useAssignPledgeClasses();
   const keptKeys = useKeptDraftKeys();
+  // A viewer who can't change the class (one who lost `roles:manage` since
+  // leaving a draft) reads the roster, never their own unsaved draft.
   const [opening] = useState(() =>
-    readKeptDraft<ClassDraft>(keptKeys.draft(classDraftName(pledgeClass.id))),
+    canManage
+      ? readKeptDraft<ClassDraft>(
+          keptKeys.draft(classDraftName(pledgeClass.id)),
+        )
+      : undefined,
   );
   // The roster as it stood when the page opened. The rows are built from it
   // once, so the save is worked out against the same snapshot: a background
