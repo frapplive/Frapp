@@ -123,6 +123,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     date: "2026-11-27",
     title: "New in this update",
     changes: [
+      "A channel's settings now open as one page of rows, with its access, defaults, pinned messages and reports each a tap away, and each change saves as you make it.",
     ],
     web: [
       "In Documents, Back now returns to the folder or file you had open, and a reload or a shared link lands on the same folder and file.",
