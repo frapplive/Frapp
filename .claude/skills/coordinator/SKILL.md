@@ -80,8 +80,8 @@ isn't reading its chat. The first chains (2026-11-25 to 11-27) stalled four ways
 
 - **A merge woke nothing.** Workers unsubscribed once a PR was green with auto-merge on, as
   [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions) step 5 says, so when Paul
-  merged it nothing woke them. The PR-activity webhook isn't recorded as delivering a merge at all
-  ([wake coverage](../../../docs/ci-cd/pr-babysitting.md#wake-coverage)), so no rule may count on one.
+  merged it nothing was listening for the merge that would have woken them
+  ([wake coverage](../../../docs/ci-cd/pr-babysitting.md#wake-coverage)).
 - **Work died unpushed.** Workers that hit the usage limit mid-step lost everything they hadn't
   pushed.
 - **Questions waited in a chat nobody read.**
@@ -101,10 +101,9 @@ Paste this block into a chain's brief, after its steps:
 >    open PR holds builds on that PR's branch and opens its PR only after that one merges
 >    (`npm run merge:main`).
 > 3. **Waiting on a merge.** Stay subscribed to every PR the chain still waits on; unsubscribe only
->    once it has merged or nothing left waits on it. Every event on it (CI, a review, a base-sync
->    comment) wakes you, so check then whether it merged. But a merge itself may not wake you, so
->    when only merges are left to wait on, mark those steps "waiting: #N to merge" in the ledger and
->    end with "blocked: waiting for #N to merge". The coordinator wakes you when Paul says it merged.
+>    once it has merged or nothing left waits on it. The merge wakes you, as CI and reviews do. A
+>    delivery can be lost, so mark each such step "waiting: #N to merge" in the ledger before you
+>    end the turn, and check what has merged whenever anything wakes you.
 > 4. **Push as you go.** Commit and push each working chunk to the step's branch. A branch's first
 >    push before its PR exists is a parking push (`git push --no-verify`); run `/diff-review` before
 >    opening the PR, and say in the PR that the first push bypassed the gate and why.
@@ -125,7 +124,8 @@ On every wake, read each chain's ledger and session:
 - **"handed off to <session>":** archive the worker; its successor is running.
 - **"handoff":** archive the worker, and start its successor with the same brief plus "Continue from
   the Chain status comment on #<epic>. First subscribe to every open PR it lists."
-- **"blocked: waiting for #N to merge", and #N has merged:** message the worker to continue.
+- **"waiting: #N to merge", and #N merged a while ago with nothing since:** the wake was lost;
+  message the worker to continue.
 - **Waiting on Paul, and the `[human] Decide` issue is answered:** message the worker to continue.
 - **Stopped with steps left** (failed, or the usage limit): once the limit has reset, start a
   successor from the ledger.
