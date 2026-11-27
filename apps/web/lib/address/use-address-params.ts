@@ -45,7 +45,8 @@ export function useAddressParams<Name extends string>(
   const values = useMemo(() => {
     const out = {} as Record<Name, string | null>;
     for (const name of key.split("\u0000") as Name[]) {
-      out[name] = search.get(name) || null;
+      // Null outside a Next router (a spec rendering a page bare).
+      out[name] = search?.get(name) || null;
     }
     return out;
   }, [search, key]);

@@ -296,9 +296,10 @@ board folds into its Activity tab in a later slice.
 - **Who sees the views.** They are plain words beside the title
   ([`components.md` § View labels](../ui/design-system/components.md)), offered to a `tasks:manage`
   holder and to a member who follows someone else's task (whose Everyone's is what their read
-  holds), while the chapter has Tasks on. Anyone else sees no labels. The page always opens on
-  Mine; `?view=everyone` opens Everyone's (a suggested-task notification with no minutes behind
-  it uses this), and the pick lasts the visit.
+  holds), while the chapter has Tasks on. Anyone else sees no labels. Mine is the bare address;
+  Everyone's is `?view=everyone`, pushed when picked, so Back returns to Mine and a reload or a
+  link lands on it (a suggested-task notification with no minutes behind it uses this; on web,
+  [`web-dashboard/README.md` § Addresses](../ui/web-dashboard/README.md#addresses), #6044).
 - **Task links.** `?task=<id>` and `?group=<id>` open that task or group in the task panel on
   whichever view is showing ([`tasks.md` § Tasks for everyone](tasks.md#tasks-for-everyone)).
   `/tasks` redirects here with either kept, so an old link, bookmark or notification still opens
