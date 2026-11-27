@@ -122,6 +122,13 @@ type Trailing =
     };
 
 /**
+ * A picker trigger at a row's end (`control`) drawn as the row's quiet value,
+ * the way a `value` row's words read, until it's hovered.
+ */
+export const SETTINGS_VALUE_TRIGGER =
+  "h-8 w-auto max-w-[14rem] gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground hover:bg-card-hover";
+
+/**
  * foundations §9's Settings row step: 36 to a mouse (44 until #6115), 44 to a
  * finger. A row with its muted line grows past it.
  */
@@ -320,5 +327,76 @@ export function SettingsRow(
         <div className="shrink-0">{props.control}</div>
       </div>
     </li>
+  );
+}
+
+/**
+ * A settings row a person can drag into order (the chapter's pledge classes,
+ * its member fields): the body a `ReorderList grouped` row draws beside its
+ * grip. The same anatomy as a `SettingsRow` that opens a page (glyph, label,
+ * one muted line, value, chevron, and its ⋯), but no `<li>` of its own,
+ * since the list's row is one.
+ */
+export function SettingsReorderRow({
+  href,
+  label,
+  description,
+  value,
+  icon: Icon,
+  menu,
+}: {
+  href: string;
+  label: string;
+  description?: ReactNode;
+  value?: ReactNode;
+  icon?: LucideIcon;
+  /** Right-click and ⋯; null for a viewer who can't change it. */
+  menu: { entries: readonly RowMenuEntry[]; label: string } | null;
+}) {
+  const link = (
+    <Link
+      href={href}
+      className={cn(
+        "flex min-h-control-settings-row min-w-0 flex-1 items-center gap-4 rounded-md py-1.5 pl-2 pr-4 pointer-coarse:min-h-11 transition hover:bg-card-hover",
+        FOCUS_RING,
+      )}
+    >
+      {Icon ? (
+        <Icon
+          className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      ) : null}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-sm font-medium text-foreground">
+          {label}
+        </span>
+        {description ? (
+          <span className="truncate text-caption text-muted-foreground">
+            {description}
+          </span>
+        ) : null}
+      </span>
+      {value !== undefined && value !== null ? (
+        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+          {value}
+        </span>
+      ) : null}
+      <ChevronRight
+        className="h-4 w-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+    </Link>
+  );
+  if (!menu) return link;
+  return (
+    <RowMenu entries={menu.entries} label={menu.label}>
+      {(menuButton) => (
+        <div className="group flex min-w-0 items-center">
+          {link}
+          {menuButton}
+        </div>
+      )}
+    </RowMenu>
   );
 }

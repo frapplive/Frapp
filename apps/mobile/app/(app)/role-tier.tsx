@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -37,10 +37,7 @@ import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { Toggle } from "@/components/toggle";
 import { PermissionToggleList } from "@/components/roles/permission-toggle-list";
 import { ColorDot } from "@/components/roles/groups-section";
-import {
-  ChapterTextField,
-  FormFields,
-} from "@/components/settings/chapter-form";
+import { SavedTextField } from "@/components/settings/saved-text-field";
 import { describeError } from "@/lib/roles/save-error";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import {
@@ -251,7 +248,9 @@ export default function RoleTierScreen() {
         ) : undefined
       }
     >
-      <TierNameField
+      <SavedTextField
+        label={PEOPLE_SETTINGS_COPY.name}
+        maxLength={ROLE_TIER_NAME_MAX_LENGTH}
         value={tier.name}
         editable={editable}
         failure={pageFailure}
@@ -337,70 +336,6 @@ export default function RoleTierScreen() {
         pendingPermission={pending?.id === tier.id ? pending.permission : null}
       />
     </ScreenShell>
-  );
-}
-
-/**
- * The tier's name, saved on its own when the field is left, as web's
- * `SettingsNameField`: a blank name puts the saved one back, and a rename
- * made elsewhere replaces what it shows while it isn't being edited.
- */
-function TierNameField({
-  value,
-  editable,
-  failure,
-  onSave,
-}: {
-  value: string;
-  editable: boolean;
-  failure: string | null;
-  onSave: (next: string) => Promise<boolean>;
-}) {
-  // What the officer is typing, or `null` while the field shows the saved name.
-  const [draft, setDraft] = useState<string | null>(null);
-  const committing = useRef(false);
-  const latest = useRef({ draft, value, onSave });
-  useEffect(() => {
-    latest.current = { draft, value, onSave };
-  });
-  // Leaving the screen with the field still focused may unmount it before
-  // it blurs: save what was typed then too, so Back never drops a rename.
-  useEffect(
-    () => () => {
-      const { draft: left, value: saved, onSave: save } = latest.current;
-      const next = left?.trim();
-      if (next && next !== saved && !committing.current) void save(next);
-    },
-    [],
-  );
-
-  async function commit() {
-    if (draft === null || committing.current) return;
-    const next = draft.trim();
-    if (!next || next === value) {
-      setDraft(null);
-      return;
-    }
-    // Held until saved, so the field doesn't flick back to the old name;
-    // a failed save keeps it for another try.
-    committing.current = true;
-    const ok = await onSave(next);
-    committing.current = false;
-    if (ok) setDraft(null);
-  }
-
-  return (
-    <FormFields>
-      <ChapterTextField
-        label={PEOPLE_SETTINGS_COPY.name}
-        value={draft ?? value}
-        onChangeText={setDraft}
-        onBlur={() => void commit()}
-        editable={editable}
-        maxLength={ROLE_TIER_NAME_MAX_LENGTH}
-        error={failure}
-      />
-    </FormFields>
   );
 }
 

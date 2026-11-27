@@ -52,11 +52,13 @@ export function useCreateCustomField() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
+    // Returned, so `mutateAsync` settles once the list is re-read: a page
+    // that opens the new field, or drops an order it drew while saving,
+    // reads the saved list, not the one before it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({
         queryKey: ["custom-fields", chapterId],
-      });
-    },
+      }),
   });
 }
 
@@ -81,11 +83,13 @@ export function useUpdateCustomField() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
+    // Returned, so `mutateAsync` settles once the list is re-read: a page
+    // that opens the new field, or drops an order it drew while saving,
+    // reads the saved list, not the one before it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({
         queryKey: ["custom-fields", chapterId],
-      });
-    },
+      }),
   });
 }
 
@@ -103,10 +107,12 @@ export function useDeleteCustomField() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
+    // Returned, so `mutateAsync` settles once the list is re-read: a page
+    // that opens the new field, or drops an order it drew while saving,
+    // reads the saved list, not the one before it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({
         queryKey: ["custom-fields", chapterId],
-      });
-    },
+      }),
   });
 }

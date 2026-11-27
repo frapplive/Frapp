@@ -24,6 +24,12 @@ type ReorderListProps<T> = {
   disabled?: boolean;
   "aria-label": string;
   className?: string;
+  /**
+   * Rows of a settings group (`SettingsGroup`'s divided list): no box per
+   * row, the grip inside the row, and the drop target lit with the row hover
+   * fill. The caller draws the group's border around the list.
+   */
+  grouped?: boolean;
 };
 
 /**
@@ -51,6 +57,7 @@ export function ReorderList<T>({
   disabled = false,
   "aria-label": ariaLabel,
   className,
+  grouped = false,
 }: ReorderListProps<T>) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -99,7 +106,10 @@ export function ReorderList<T>({
       <ol
         ref={listRef}
         aria-label={ariaLabel}
-        className={cn("space-y-2", className)}
+        className={cn(
+          grouped ? "divide-y divide-border" : "space-y-2",
+          className,
+        )}
       >
         {items.map((item, index) => {
           const id = getId(item);
@@ -124,9 +134,13 @@ export function ReorderList<T>({
                 move(from, index);
               }}
               className={cn(
-                "flex items-center gap-2 rounded-md border border-border p-2",
+                grouped
+                  ? "flex items-center gap-1 pl-2 pr-2"
+                  : "flex items-center gap-2 rounded-md border border-border p-2",
                 draggingId === id && "opacity-50",
-                overId === id && draggingId !== id && "border-accent-text",
+                overId === id &&
+                  draggingId !== id &&
+                  (grouped ? "bg-card-hover" : "border-accent-text"),
               )}
             >
               {disabled ? null : (

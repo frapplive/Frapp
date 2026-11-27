@@ -15,8 +15,7 @@ import {
   ROLE_TIER_NAME_MAX_LENGTH,
   tierPermissionsFootnote,
 } from "@repo/validation";
-import { useToast } from "@/lib/hooks/use-toast";
-import { getErrorMessage } from "@/lib/utils";
+import { useToastedRun } from "@/lib/hooks/use-toasted-run";
 import { ErrorState } from "@/components/shared/async-states";
 import {
   confirmWords,
@@ -74,7 +73,7 @@ export function TierPermissionsPage({
   const reorderTiers = useReorderRoleTiers();
   const deleteTier = useDeleteRoleTier();
   const { confirm, confirmDialog } = useConfirmDialog();
-  const { toast } = useToast();
+  const run = useToastedRun();
   const tierRoles = useMemo(
     () => roles.filter((role) => role.tier_id === tierId).sort(byDisplayOrder),
     [roles, tierId],
@@ -122,24 +121,6 @@ export function TierPermissionsPage({
   const index = tiers.findIndex((candidate) => candidate.id === tier.id);
   const above = tiers[index - 1];
   const below = tiers[index + 1];
-
-  async function run(
-    action: () => Promise<unknown>,
-    failTitle: string,
-    fallback: string,
-  ) {
-    try {
-      await action();
-      return true;
-    } catch (error) {
-      toast({
-        title: failTitle,
-        description: getErrorMessage(error, fallback),
-        variant: "destructive",
-      });
-      return false;
-    }
-  }
 
   function move(by: -1 | 1) {
     const target = index + by;
