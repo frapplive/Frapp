@@ -79,7 +79,7 @@ export function MinutesAudienceField({
               const checked = roleIds.includes(role.id);
               return (
                 <li key={role.id}>
-                  <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-card-hover pointer-coarse:min-h-11">
+                  <label className="flex min-h-control-list-row cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-card-hover pointer-coarse:min-h-11">
                     <input
                       type="checkbox"
                       checked={checked}

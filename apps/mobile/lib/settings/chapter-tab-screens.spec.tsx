@@ -87,9 +87,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useRequestChapterLogoUploadUrl: () => ({ mutateAsync: vi.fn() }),
   useConfirmChapterLogo: () => ({ mutateAsync: vi.fn() }),
   useRemoveChapterLogo: () => ({ mutate: h.removeLogo, isPending: false }),
-  // The Recruitment module is off here, so #6039's interest form stays hidden.
-  useInterestFormSettings: () => ok(undefined),
-  useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/components/settings/accent-sheet", async () => {
@@ -240,9 +237,11 @@ describe("Chapter settings → Chapter (#6027)", () => {
       "Vocabulary",
       "Birthday posts",
       "Members can change their own name",
-      "Study zones",
       // The row, not the About footnote's mention of it.
       "\nLogs",
+      // Modules last, in web's rail order (#6030).
+      "\nModules",
+      "\nStudy zones",
     ].map((needle) => at(text, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(text).toContain("Chapter mark\nSig Ep");
@@ -562,7 +561,11 @@ describe("Settings search lands on the Chapter tab's rows (#6027)", () => {
   } as const;
 
   it("finds every chapter-only entry's anchor on its screen", () => {
-    const entries = SETTINGS_INDEX.filter((e) => e.phone?.chapterOnly);
+    // The module screens' entries carry no anchor: they open the screen
+    // (`module-settings-screens.spec.tsx`).
+    const entries = SETTINGS_INDEX.filter(
+      (e) => e.phone?.chapterOnly && e.phone.anchor,
+    );
     expect(entries.length).toBeGreaterThan(0);
     for (const entry of entries) {
       const Screen = SCREENS[entry.phone!.screen as keyof typeof SCREENS];

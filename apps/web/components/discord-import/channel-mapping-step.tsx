@@ -608,7 +608,7 @@ function CategoryGroup({
             <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
           )}
           <span className="min-w-0">
-            <span className={cn(EYEBROW, "block text-muted-foreground")}>
+            <span className={cn(EYEBROW, "block text-muted")}>
               {group.name}
             </span>
             <span className="text-sm">
@@ -919,9 +919,7 @@ function BulkRestrictPanel({
   if (!bulk.restricting) return null;
   return (
     <div className="basis-full border-t border-border pt-3">
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-        Restrict {scope}
-      </Label>
+      <Label className={cn(EYEBROW, "text-muted")}>Restrict {scope}</Label>
       <p className="mt-1 text-xs text-muted-foreground">
         A member needs at least one of these permissions to read them.
       </p>

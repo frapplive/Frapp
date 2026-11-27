@@ -20,7 +20,7 @@ interface ComingSoonCardProps {
 export function ComingSoonCard({ message, label }: ComingSoonCardProps) {
   return (
     <div className={cn(MESSAGE_CARD, "border border-dashed border-border")}>
-      <p className={cn(EYEBROW, "text-muted-foreground")}>
+      <p className={cn(EYEBROW, "text-muted")}>
         {label ?? message.kind} · not built yet
       </p>
       {message.content ? (

@@ -252,7 +252,7 @@ export function EventAgendaSection({
               ref={sortable.rowRef(index)}
               style={sortable.rowStyle(index)}
               className={cn(
-                "group flex min-h-9 items-center gap-1.5 rounded-md bg-background pointer-coarse:min-h-11",
+                "group flex min-h-control-list-row items-center gap-1.5 rounded-md bg-background pointer-coarse:min-h-11",
                 sortable.dragging === index &&
                   "bg-surface-1 shadow-lg ring-1 ring-border",
               )}
@@ -262,7 +262,7 @@ export function EventAgendaSection({
                   type="button"
                   {...sortable.handleProps(index, item.text)}
                   className={cn(
-                    "-ml-1 flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-default pointer-coarse:h-11 pointer-coarse:opacity-100",
+                    "-ml-1 flex h-control-row w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-default pointer-coarse:h-11 pointer-coarse:opacity-100",
                     sortable.dragging === index && "opacity-100",
                     FOCUS_RING_OFFSET,
                   )}
@@ -355,7 +355,7 @@ export function EventAgendaSection({
             maxLength={EVENT_AGENDA_ITEM_MAX}
             enterKeyHint="done"
             className={cn(
-              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
+              "flex min-h-control-list-row w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           />
@@ -502,7 +502,7 @@ function AgendaSuggestions({
           {list.suggestions.map((row) => (
             <li
               key={row.id}
-              className="flex min-h-9 items-center gap-2 pointer-coarse:min-h-11"
+              className="flex min-h-control-list-row items-center gap-2 pointer-coarse:min-h-11"
             >
               <span className="min-w-0 flex-1 break-words text-sm">
                 {row.text}

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { cardFilledContainers } from "@/tests/card-surfaces";
 import userEvent from "@testing-library/user-event";
+import { setAddress } from "@/tests/address-search-params";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { chapterSubscription } from "@/tests/chapter-subscription";
 import { TASK_AUDIENCE_COPY } from "@repo/validation";
@@ -43,7 +44,7 @@ const {
   assignMutate,
   releaseMutate,
   toastSpy,
-  searchRef,
+
   routerReplace,
   tasksRefetch,
   tasksEnabled,
@@ -51,7 +52,7 @@ const {
   // Every `enabled` the board passed to `useTasks`: Mine reads only for a link.
   tasksEnabled: [] as boolean[],
   // The address's query (`?group=<id>`, `?task=<id>`, #5538).
-  searchRef: { current: new URLSearchParams() },
+
   routerReplace: vi.fn(),
   // The tasks read taken again, before a linked task is called missing.
   tasksRefetch: vi.fn(() => Promise.resolve()),
@@ -255,6 +256,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useRejectTask: () => ({ mutateAsync: rejectTaskMutate, isPending: false }),
   useDeleteTask: () => ({ mutateAsync: deleteTaskMutate, isPending: false }),
   useUpdateTask: () => ({ mutateAsync: updateTaskMutate, isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAddSubtask: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteSubtask: () => ({ mutate: vi.fn(), isPending: false }),
   useSetSubtaskDone: () => ({ mutate: vi.fn(), isPending: false }),
@@ -287,8 +289,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeleteOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchRef.current,
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
   useRouter: () => ({ replace: routerReplace }),
 }));
 
@@ -389,7 +392,7 @@ const deleteButtons = () =>
   screen.getAllByRole("button", { name: /^delete /i });
 
 beforeEach(() => {
-  searchRef.current = new URLSearchParams();
+  setAddress("/activity");
   tasksEnabled.length = 0;
   routerReplace.mockClear();
   tasksRefetch.mockReset();
@@ -1056,6 +1059,8 @@ describe("TasksBoard List / Grid", () => {
     ).toBeInTheDocument();
 
     unmount();
+    // A fresh visit, not a reload of the open panel's address.
+    setAddress("/activity");
     render(<TasksBoard part="everyone" />);
     expect(await viewChecked("Grid")).toBe(true);
   });
@@ -1603,6 +1608,59 @@ describe("TasksBoard editing a task (#4296)", () => {
     );
   });
 
+  it("saves Fixed deadline the moment it is switched (#6096)", async () => {
+    const user = userEvent.setup();
+    render(<TasksBoard part="everyone" />);
+
+    const panel = await openPanel(user, "Sweep the chapter room");
+    await user.click(
+      within(panel).getByRole("switch", { name: "Fixed deadline" }),
+    );
+    await waitFor(() =>
+      expect(updateTaskMutate).toHaveBeenCalledWith({
+        id: "task-todo",
+        body: { fixed_deadline: true },
+      }),
+    );
+    // An officer moves the due themselves: no Ask for more time.
+    expect(
+      within(panel).queryByRole("button", { name: "Ask for more time" }),
+    ).toBeNull();
+  });
+
+  it("offers its assignee Ask for more time, and a fixed deadline in red in its place (#6096)", async () => {
+    const user = userEvent.setup();
+    permissionsRef.current = ["members:view"];
+    tasksRef.current = TASKS.map((row) =>
+      row.id === "task-in-progress" ? { ...row, fixed_deadline: true } : row,
+    );
+    render(<TasksBoard part="everyone" />);
+
+    await user.click(screen.getAllByText("Sweep the chapter room")[0]!);
+    let panel = await screen.findByRole("dialog", {
+      name: "Sweep the chapter room",
+    });
+    expect(
+      within(panel).getByRole("button", { name: "Ask for more time" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("switch", { name: "Fixed deadline" }),
+    ).toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getAllByText("Draft the rush calendar")[0]!);
+    panel = await screen.findByRole("dialog", {
+      name: "Draft the rush calendar",
+    });
+    expect(
+      within(panel).queryByRole("button", { name: "Ask for more time" }),
+    ).toBeNull();
+    expect(
+      within(panel).getByText("Fixed deadline · no extensions"),
+    ).toHaveClass("text-destructive-text");
+  });
+
   it("saves points on their own when the field loses focus", async () => {
     const user = userEvent.setup();
     render(<TasksBoard part="everyone" />);
@@ -1693,6 +1751,28 @@ describe("TasksBoard editing a task (#4296)", () => {
       await screen.findByRole("dialog", { name: "Sweep the chapter room" }),
     ).toBeInTheDocument();
     expect(row).toHaveAttribute("aria-current", "true");
+    // The open task is the address, pushed (#6044); its close goes Back.
+    expect(window.location.search).toBe("?task=task-todo");
+  });
+
+  it("closes the panel through the address when its task leaves the read (#6044)", async () => {
+    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
+    resetListLayoutForTests();
+    const user = userEvent.setup();
+    const { rerender } = render(<TasksBoard part="everyone" />);
+    const row = screen
+      .getAllByRole("listitem")
+      .find((item) => item.getAttribute("data-task-row") === "task-todo")!;
+    await user.click(
+      within(row).getByRole("button", { name: "Sweep the chapter room" }),
+    );
+    await screen.findByRole("dialog", { name: "Sweep the chapter room" });
+    // Deleted (here, or by someone else): the read no longer holds it.
+    tasksRef.current = tasksRef.current.filter(
+      (task) => (task as { id: string }).id !== "task-todo",
+    );
+    rerender(<TasksBoard part="everyone" />);
+    await waitFor(() => expect(window.location.search).not.toContain("task="));
   });
 
   it("offers no Edit without tasks:manage, or on a confirmed task", () => {
@@ -2278,7 +2358,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     }));
     // A member's read holds their own copy; its link (a notification's)
     // opens the group, whose Who row an officer adds people from.
-    searchRef.current = new URLSearchParams(`task=${GROUP[0]!.id}`);
+    setAddress(`/activity?task=${GROUP[0]!.id}`);
     render(<TasksBoard part="everyone" />);
     const panel = await screen.findByRole("dialog", {
       name: "Fill out the tabling form",
@@ -2331,9 +2411,9 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       return spy;
     };
 
-    it("opens the group in the task panel and drops the param", async () => {
+    it("opens the group in the task panel and keeps it in the address", async () => {
+      setAddress("/activity?group=group-1");
       const replaceState = dropsParam();
-      searchRef.current = new URLSearchParams("group=group-1");
       render(<TasksBoard part="everyone" />);
       const panel = await screen.findByRole("dialog", {
         name: "Fill out the tabling form",
@@ -2342,7 +2422,8 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       expect(
         within(panel).getByRole("region", { name: "Who's done" }),
       ).toBeInTheDocument();
-      expect(replaceState).toHaveBeenCalledTimes(1);
+      expect(replaceState).not.toHaveBeenCalled();
+      expect(window.location.search).toBe("?group=group-1");
       expect(tasksRefetch).not.toHaveBeenCalled();
       expect(toastSpy).not.toHaveBeenCalled();
     });
@@ -2353,13 +2434,8 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       expect(tasksEnabled.at(-1)).toBe(false);
       cleanup();
 
+      setAddress("/activity?view=everyone&group=group-1");
       const replaceState = dropsParam();
-      searchRef.current = new URLSearchParams("view=everyone&group=group-1");
-      window.history.pushState(
-        null,
-        "",
-        "/activity?view=everyone&group=group-1",
-      );
       render(<TasksBoard part="mine" />);
       expect(
         await screen.findByRole("dialog", {
@@ -2367,18 +2443,14 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
         }),
       ).toBeInTheDocument();
       expect(tasksEnabled.at(-1)).toBe(true);
-      // Only the link's own param leaves the address: Activity's `?view=`
-      // stays.
-      expect(replaceState).toHaveBeenCalledWith(
-        null,
-        "",
-        "/activity?view=everyone",
-      );
+      // The link stays in the address while its panel is open (#6044).
+      expect(replaceState).not.toHaveBeenCalled();
+      expect(window.location.search).toBe("?view=everyone&group=group-1");
       window.history.pushState(null, "", "/");
     });
 
     it("opens a copy's link as its group", async () => {
-      searchRef.current = new URLSearchParams("task=copy-other");
+      setAddress("/activity?task=copy-other");
       render(<TasksBoard part="everyone" />);
       const panel = await screen.findByRole("dialog", {
         name: "Fill out the tabling form",
@@ -2389,7 +2461,7 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     });
 
     it("reads again before calling a group missing: a cached read can predate it", async () => {
-      searchRef.current = new URLSearchParams("group=group-new");
+      setAddress("/activity?group=group-new");
       let land!: () => void;
       tasksRefetch.mockImplementation(
         () => new Promise<void>((resolve) => (land = resolve)),
@@ -2414,8 +2486,8 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     });
 
     it("says a group the re-read doesn't hold is gone, and leaves the board", async () => {
+      setAddress("/activity?group=gone");
       const replaceState = dropsParam();
-      searchRef.current = new URLSearchParams("group=gone");
       render(<TasksBoard part="everyone" />);
       await waitFor(() =>
         expect(toastSpy).toHaveBeenCalledWith(

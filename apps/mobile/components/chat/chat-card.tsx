@@ -228,7 +228,8 @@ export function CardEyebrow({
 }) {
   const styles = useCardStyles();
   const { tokens } = useFrappTheme();
-  const muted = tokens.color.text.mutedForeground;
+  // The section title's tone (#6115), glyph and label alike, as web's.
+  const muted = tokens.color.text.muted;
   return (
     <View style={styles.eyebrowRow}>
       <View style={styles.eyebrowLead}>
@@ -517,7 +518,7 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
     // The eyebrow recipe web's EYEBROW draws.
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     title: {
       ...typeRole({

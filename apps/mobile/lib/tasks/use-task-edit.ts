@@ -27,6 +27,7 @@ import {
   attachmentsSave,
   descriptionSave,
   dueSave,
+  fixedDeadlineSave,
   photosSave,
   pointsSave,
   followerSave,
@@ -64,7 +65,7 @@ type DraftKey = keyof TaskEditDrafts;
 
 /** Every field that saves: the typed ones, and those sent as they change. */
 type FieldKey =
-  DraftKey | "proof" | "photos" | "who" | "follower" | "attachments";
+  DraftKey | "proof" | "fixed" | "photos" | "who" | "follower" | "attachments";
 
 const NO_DRAFTS: TaskEditDrafts = {
   title: null,
@@ -86,6 +87,7 @@ const DRAFT_KEYS: readonly DraftKey[] = [
 const FIELD_ORDER: readonly FieldKey[] = [
   "title",
   "due",
+  "fixed",
   "repeat",
   "points",
   "description",
@@ -98,6 +100,7 @@ const FIELD_ORDER: readonly FieldKey[] = [
 
 const SENT_KEYS: readonly FieldKey[] = [
   "proof",
+  "fixed",
   "photos",
   "who",
   "follower",
@@ -191,6 +194,10 @@ export interface TaskEditing {
   /** Put away what the last saves said, for the screen's next action. */
   dismiss: () => void;
   setProof: (next: TaskProofKind) => void;
+  /** Fixed deadline (#6096), sent the moment it is switched. */
+  setFixedDeadline: (next: boolean) => void;
+  /** Fixed deadline as switched, drawn while its save is on its way. */
+  fixedDeadline: boolean;
   /** From (#5473): a tier, role or group entry, or `null` for none. */
   setFollower: (next: string | null) => void;
   /**
@@ -263,6 +270,8 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     null,
   );
   const attachmentTurn = useRef(0);
+  const [shownFixed, setShownFixed] = useState<boolean | null>(null);
+  const fixedTurn = useRef(0);
 
   // Read by the callbacks, which outlive a render: the task as last read,
   // the drafts as last typed, each field's save on its way, and what each
@@ -540,6 +549,20 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     [sendField, baseline],
   );
 
+  const setFixedDeadline = useCallback(
+    (next: boolean) => {
+      const turn = ++fixedTurn.current;
+      setShownFixed(next);
+      // Only the latest switch hands back to the task as read.
+      void sendField("fixed", fixedDeadlineSave(baseline(), next)).finally(
+        () => {
+          if (fixedTurn.current === turn) setShownFixed(null);
+        },
+      );
+    },
+    [sendField, baseline],
+  );
+
   const setFollower = useCallback(
     (next: string | null) =>
       void sendField("follower", followerSave(baseline(), next)),
@@ -672,6 +695,8 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     discard,
     dismiss,
     setProof,
+    setFixedDeadline,
+    fixedDeadline: shownFixed ?? row.fixedDeadline,
     setFollower,
     changeAttachments,
     attachments: shownAttachments ?? row.attachments,

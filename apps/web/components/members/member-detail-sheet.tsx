@@ -83,6 +83,7 @@ import {
   type MemberRecord,
 } from "@/components/members/member-detail-rows";
 import { MemberAssignments } from "@/components/members/member-assignments";
+import { MemberExtensionBlock } from "@/components/members/member-extension-block";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
 import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { MemberCorrectionDialog } from "@/components/members/member-correction-dialog";
@@ -136,6 +137,12 @@ function parseCustomFields(
 type MemberDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Message opened a DM and is leaving for chat: what to do with the sheet
+   * instead of closing it (`onOpenChange(false)`). A page whose sheet is an
+   * address passes a replace, so no Back races the move to chat.
+   */
+  onLeaveForMessage?: () => void;
   /**
    * Whose profile, by `users.id`, or `null` while nobody is selected; the
    * sheet stays mounted regardless. Read through
@@ -229,6 +236,7 @@ type MemberDetailSheetProps = {
 export function MemberDetailSheet({
   open,
   onOpenChange,
+  onLeaveForMessage,
   userId,
   initialMember,
   identity,
@@ -325,7 +333,9 @@ export function MemberDetailSheet({
     currentUserId,
     startMessage: handleMessage,
     isPending: dmPending,
-  } = useMessageMember(dmTargetUserId, () => onOpenChange(false));
+  } = useMessageMember(dmTargetUserId, () =>
+    onLeaveForMessage ? onLeaveForMessage() : onOpenChange(false),
+  );
 
   // The API's answer, read from the profile itself (never the directory row
   // that seeded the sheet, which carries none): it applies the rank rules the
@@ -353,6 +363,11 @@ export function MemberDetailSheet({
     dmTargetUserId !== currentUserId &&
     can("points:adjust", myPermissions);
   const canSeeLedger = pointsOn && can("points:view_all", myPermissions);
+  // Restore extension requests (#6096), for whoever manages tasks.
+  const canManageTasks =
+    moduleGate.status === "ready" &&
+    moduleGate.isModuleEnabled("tasks") &&
+    can("tasks:manage", myPermissions);
   // The API's answer (`viewer_can_timeout`: `members:timeout`, not your own
   // profile, not the President, and ranked below you), from the profile read
   // only, like Remove's. The running timeout comes with it, to the member
@@ -539,6 +554,10 @@ export function MemberDetailSheet({
             {timeoutLine ? (
               <p className="text-caption text-warning">{timeoutLine}</p>
             ) : null}
+            <MemberExtensionBlock
+              userId={dmTargetUserId}
+              canManageTasks={canManageTasks}
+            />
           </div>
 
           {!member && memberQuery.isPending ? (

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,9 +8,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * which layout they were handed.
  */
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 // The active tenant is a chapter here; councils have their own cases (#5933).
 vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
@@ -40,6 +40,23 @@ import { DirectoryPage } from "@/components/members/directory-page";
 
 afterEach(() => {
   window.localStorage.clear();
+  window.history.replaceState(null, "", "/members");
+});
+
+describe("DirectoryPage's tabs in the address (#6046)", () => {
+  it("pushes Alumni, and Back returns to Members", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/members");
+    render(<DirectoryPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    await user.click(screen.getByRole("tab", { name: /alumni/i }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?tab=alumni");
+    expect(await screen.findByTestId("alumni-layout")).toBeInTheDocument();
+    push.mockRestore();
+    act(() => window.history.back());
+    expect(await screen.findByTestId("actives-layout")).toBeInTheDocument();
+  });
 });
 
 describe("DirectoryPage's List/Grid toggle (#4175)", () => {

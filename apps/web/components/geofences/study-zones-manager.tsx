@@ -208,7 +208,7 @@ export function StudyZonesManager() {
       aria-labelledby={labelId}
       className="scroll-mt-16 space-y-4"
     >
-      <div className="flex min-h-[34px] items-center justify-between gap-3">
+      <div className="flex min-h-control-small items-center justify-between gap-3">
         <SectionLabel
           id={labelId}
           count={geofencesQuery.isSuccess ? zones.length : null}

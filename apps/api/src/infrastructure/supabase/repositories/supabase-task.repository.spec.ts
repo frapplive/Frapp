@@ -883,10 +883,13 @@ describe('SupabaseTaskRepository — task photos (#4635)', () => {
           first_due_at: null,
           latest_due_at: '2026-11-17T00:00:00.000Z',
           next_due_date: '2026-11-17',
+          fixed_deadline: true,
         }),
       );
       expect(harness.rpcCalls[0].args).toMatchObject({
         p_chapter_id: CHAPTER_B,
+        // The template's fixed deadline, which each copy takes (#6096).
+        p_fixed_deadline: true,
       });
     });
 

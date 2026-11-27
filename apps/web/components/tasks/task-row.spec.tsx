@@ -29,13 +29,13 @@ function task(overrides: Partial<BoardTask> = {}): BoardTask {
   };
 }
 
-function renderRow(value: BoardTask) {
+function renderRow(value: BoardTask, isMine = false) {
   return render(
     <ul>
       <TaskRow
         task={value}
         person={{ name: "Jane Doe", avatarUrl: null, tint: null }}
-        isMine={false}
+        isMine={isMine}
         showStatus
         canConfirm={false}
         gate={gate}
@@ -92,5 +92,17 @@ describe("TaskRow", () => {
   it("says nothing more for a task without them", () => {
     renderRow(task());
     expect(screen.queryByText(/of \d|photo|↻/)).not.toBeInTheDocument();
+  });
+  it("draws a fixed deadline's due in the red for its assignee only (#6096)", () => {
+    const due = task({ due_date: "2099-03-15", fixed_deadline: true });
+    const { unmount } = renderRow(due, true);
+    expect(screen.getByTitle(/Mar/).className).toContain(
+      "text-destructive-text",
+    );
+    unmount();
+    renderRow(due, false);
+    expect(screen.getByTitle(/Mar/).className).not.toContain(
+      "text-destructive-text",
+    );
   });
 });

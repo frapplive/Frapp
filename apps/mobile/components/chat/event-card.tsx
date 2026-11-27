@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { formatEventWhen } from "@repo/formatting";
+import type { SignetTokens } from "@repo/theme/signet";
 import type { EventPayload } from "@repo/chat-core/cards";
 import {
   countCheckedIn,
@@ -17,6 +20,8 @@ import {
 import {
   can,
   EVENT_PAGE_COPY,
+  EVENT_TENTATIVE_LABEL,
+  eventTakesAttendance,
   isModuleEnabled,
   statusLabel,
 } from "@repo/validation";
@@ -31,7 +36,7 @@ import {
   needsScannedCode,
   type CheckInOutcome,
 } from "@/lib/events/check-in-outcome";
-import { formatEventWindow, resolveCheckInWindow } from "@/lib/events/format";
+import { resolveCheckInWindow } from "@/lib/events/format";
 import { selectEventDetail, selectMyAttendance } from "@/lib/events/select";
 import { latLngOf, requireForegroundFix } from "@/lib/location";
 import { MODULE_REFUSAL_COPY } from "@/lib/module-refusal";
@@ -105,8 +110,13 @@ export function EventCard({
   onNavigate?: () => void;
 }) {
   const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
   const now = useNowDate();
+  // An event that takes no attendance (on the calendar only, or time TBD,
+  // #6098) never offers a check-in, whatever its stored times say.
+  const takesAttendance = eventTakesAttendance(payload);
   const open =
+    takesAttendance &&
     resolveCheckInWindow(
       payload.start_time,
       payload.end_time,
@@ -225,7 +235,8 @@ export function EventCard({
     });
   };
   const excuseButton =
-    excuse.kind === "offer" && !eventsOff ? (
+    // Nothing to be excused from at an event that takes no attendance.
+    excuse.kind === "offer" && !eventsOff && takesAttendance ? (
       <CardButton
         label="Can't make it?"
         variant="link"
@@ -245,17 +256,22 @@ export function EventCard({
             label="Event"
             glyph={EventsGlyph}
             trailing={
-              required ? (
-                <HairlineChip label={EVENT_PAGE_COPY.required} />
+              required || payload.is_tentative ? (
+                <View style={styles.chips}>
+                  {/* It might not happen (#6098): neutral, not an alarm. */}
+                  {payload.is_tentative ? (
+                    <HairlineChip label={EVENT_TENTATIVE_LABEL} />
+                  ) : null}
+                  {required ? (
+                    <HairlineChip label={EVENT_PAGE_COPY.required} />
+                  ) : null}
+                </View>
               ) : null
             }
           />
           <CardTitle>{payload.name}</CardTitle>
-          <CardMeta
-            items={[
-              formatEventWindow(payload.start_time, payload.end_time, now),
-            ]}
-          />
+          {/* By its days for an all-day or time-TBD event (#6098). */}
+          <CardMeta items={[formatEventWhen(payload, now)]} />
           <CardMeta
             items={[
               payload.location ? (
@@ -270,7 +286,7 @@ export function EventCard({
           />
           <CardMeta
             items={[
-              payload.point_value ? (
+              takesAttendance && payload.point_value ? (
                 <PointsChip points={payload.point_value} />
               ) : null,
               canViewAttendance && checkedIn !== null
@@ -354,4 +370,14 @@ export function EventCard({
       ) : null}
     </ChatCardShell>
   );
+}
+
+function createStyles(tokens: SignetTokens) {
+  return StyleSheet.create({
+    chips: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing.xs,
+    },
+  });
 }

@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import {
   selectDownloadUrl,
   selectForcedDownloadUrl,
   useDocument,
 } from "@repo/hooks";
-import { classifyFile } from "@repo/hooks/document-library";
+import {
+  classifyFile,
+  driveLink,
+  isDriveCopy,
+  uploadedLine,
+} from "@repo/hooks/document-library";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { isViewableImage } from "@repo/chat-core/attachments";
 import { formatDay } from "@repo/formatting";
@@ -18,9 +23,10 @@ import {
   VIEWER_CONTROL_SIZE,
 } from "@/components/shared/media-viewer";
 import { useDocumentDownload } from "@/components/documents/use-document-download";
+import { DriveGlyph } from "@/components/documents/resources-glyphs";
 import type { ChapterDocument } from "@/components/documents/document-types";
 import { destroyPdf, loadPdf, renderPagePreview } from "@/lib/backwork-bulk/pdf";
-import { cn, labelled } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /** The attribute each row's open control carries, for focus to find it on close. */
 export const OPEN_DOCUMENT_ATTRIBUTE = "data-document-open";
@@ -148,7 +154,10 @@ function OpenDocumentViewer({
   }
 
   const { label } = classifyFile(doc);
-  const meta = [label, labelled("Uploaded", formatDay(doc.created_at)), doc.folder]
+  const drive = driveLink(doc);
+  // A Drive copy says where it came from, as its row does (#6055).
+  const added = uploadedLine(formatDay(doc.created_at), null, isDriveCopy(doc));
+  const meta = [label, added, doc.folder]
     .filter(Boolean)
     .join(" · ");
 
@@ -186,21 +195,39 @@ function OpenDocumentViewer({
         opener.focus();
       }}
       actions={
-        <button
-          type="button"
-          aria-label="Download"
-          title="Download"
-          onClick={save}
-          disabled={fetching}
-          aria-busy={fetching}
-          className={cn(VIEWER_CONTROL, VIEWER_CONTROL_SIZE)}
-        >
-          {fetching ? (
-            <Loader2 aria-hidden="true" className="size-[18px] animate-spin" />
-          ) : (
-            <Download aria-hidden="true" className="size-[18px]" />
-          )}
-        </button>
+        <>
+          {/*
+            A Drive file's working copy is in Drive (#6055): open it there to
+            edit, and the sync brings the change back.
+          */}
+          {drive ? (
+            <a
+              href={drive}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open in Google Drive"
+              title="Open in Google Drive"
+              className={cn(VIEWER_CONTROL, VIEWER_CONTROL_SIZE)}
+            >
+              <DriveGlyph className="size-[18px]" />
+            </a>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Download"
+            title="Download"
+            onClick={save}
+            disabled={fetching}
+            aria-busy={fetching}
+            className={cn(VIEWER_CONTROL, VIEWER_CONTROL_SIZE)}
+          >
+            {fetching ? (
+              <Loader2 aria-hidden="true" className="size-[18px] animate-spin" />
+            ) : (
+              <Download aria-hidden="true" className="size-[18px]" />
+            )}
+          </button>
+        </>
       }
     >
       <DocumentPreview
@@ -245,15 +272,36 @@ function DocumentPreview({
   }
 
   if (kind === "none") {
+    const title =
+      label === "File"
+        ? "This file can't be previewed yet."
+        : `${label}s can't be previewed yet.`;
+    // A Drive file opens in Drive first (#6055): that is the copy to edit.
+    // The download stays beside it, second.
+    const drive = driveLink(doc);
+    if (drive) {
+      return (
+        <Notice
+          title={title}
+          action={{
+            label: "Open in Google Drive",
+            href: drive,
+            icon: <DriveGlyph className="size-4" />,
+          }}
+          secondary={{
+            label: "Download",
+            onClick: onSave,
+            busy: saving,
+            icon: DOWNLOAD_ICON,
+          }}
+        />
+      );
+    }
     return (
       <Notice
-        title={
-          label === "File"
-            ? "This file can't be previewed yet."
-            : `${label}s can't be previewed yet.`
-        }
+        title={title}
         detail="Download it to open it on your device."
-        action={{ label: "Download", onClick: onSave, busy: saving }}
+        action={{ label: "Download", onClick: onSave, busy: saving, icon: DOWNLOAD_ICON }}
       />
     );
   }
@@ -431,7 +479,7 @@ function PdfPages({
         <Notice
           title={`Showing the first ${state.pages.length} of ${state.total} pages.`}
           detail="Download the file to read the rest."
-          action={{ label: "Download", onClick: onDownload }}
+          action={{ label: "Download", onClick: onDownload, icon: DOWNLOAD_ICON }}
         />
       ) : null}
     </div>
@@ -449,33 +497,64 @@ function PageSkeleton() {
   );
 }
 
+/** A notice's button, or a link out; `icon` leads the label when given. */
+type NoticeAction = { label: string; icon?: ReactNode } & (
+  | { onClick: () => void; busy?: boolean; href?: never }
+  | { href: string; onClick?: never; busy?: never }
+);
+
+const DOWNLOAD_ICON = <Download aria-hidden="true" className="size-4" />;
+
 function Notice({
   title,
   detail,
   action,
+  secondary,
 }: {
   title: string;
-  detail: string;
-  action: { label: string; onClick: () => void; busy?: boolean };
+  detail?: string;
+  action: NoticeAction;
+  /** A quieter second choice beside the action. */
+  secondary?: NoticeAction;
 }) {
   return (
     <div className="flex max-w-sm flex-col items-center gap-1.5 self-center py-6 text-center text-white/85">
       <FileText aria-hidden="true" className="mb-2 size-14 text-white/50" strokeWidth={1.5} />
       <p className="text-sm font-semibold">{title}</p>
-      <p className="text-caption text-white/60">{detail}</p>
-      <button
-        type="button"
-        onClick={action.onClick}
-        disabled={action.busy}
-        aria-busy={action.busy}
-        className={cn(
-          VIEWER_CONTROL,
-          "mt-3 h-9 gap-2 border-white/25 px-3.5 text-sm font-semibold text-white pointer-coarse:h-11",
-        )}
-      >
-        {action.label === "Download" ? <Download aria-hidden="true" className="size-4" /> : null}
-        {action.label}
-      </button>
+      {detail ? <p className="text-caption text-white/60">{detail}</p> : null}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <NoticeButton action={action} primary />
+        {secondary ? <NoticeButton action={secondary} /> : null}
+      </div>
     </div>
+  );
+}
+
+/** The primary takes the outline; a secondary sits beside it, bare. */
+function NoticeButton({ action, primary = false }: { action: NoticeAction; primary?: boolean }) {
+  const className = cn(
+    VIEWER_CONTROL,
+    "h-control-small gap-2 px-3.5 text-sm font-semibold pointer-coarse:h-11",
+    primary ? "border-white/25 text-white" : "text-white/70",
+  );
+  if (action.href !== undefined) {
+    return (
+      <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
+        {action.icon}
+        {action.label}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={action.onClick}
+      disabled={action.busy}
+      aria-busy={action.busy}
+      className={className}
+    >
+      {action.icon}
+      {action.label}
+    </button>
   );
 }

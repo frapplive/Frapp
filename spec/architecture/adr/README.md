@@ -28,7 +28,7 @@ One file per ADR. [`spec/architecture/README.md`](../README.md) is the system ma
 | ADR-20: CI/CD pipeline redesign — production-shaped CI, one path to production, a six-stage program (2026-08-30) | Superseded by ADR-24 for decisions 4 and 8, and by ADR-21 for the Vercel half of decision 3 | [adr-20.md](adr-20.md) |
 | ADR-21: Retire the Vercel Git integration — deploys move into CI (landing 2026-09-01, web 2026-09-02) | Amended | [adr-21.md](adr-21.md) |
 | ADR-22: Sentry is the system of record for exceptions and traces; PostHog for product analytics | Amended | [adr-22.md](adr-22.md) |
-| ADR-23: Multi-agent budget — one big review, everything else small, explicit effort (2026-09-23) | Amended | [adr-23.md](adr-23.md) |
+| ADR-23: Multi-agent budget — one big review, everything else small, explicit effort (2026-09-23) | Amended: caps outside `/diff-review` became judgment (amendment 3) | [adr-23.md](adr-23.md) |
 | ADR-24: Delivery platform — outcome-verified delivery on the current hosts; Cloud Run only on triggers (2026-09-23) | Amended | [adr-24.md](adr-24.md) |
 | ADR-25: The product is named Frapp; "Signet" stays the design system's internal name until after the beta (2026-09-23) | Amended | [adr-25.md](adr-25.md) |
 | ADR-26: Discord bot imports copy attachments inside Supabase, through an Edge Function (2026-09-29) | Amended | [adr-26.md](adr-26.md) |

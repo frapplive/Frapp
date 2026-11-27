@@ -2,13 +2,14 @@
 
 import {
   Suspense,
+  useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   useDeleteDocument,
   useDocumentFolders,
@@ -25,9 +26,15 @@ import {
 } from "@repo/hooks";
 import {
   can,
-  DOCUMENTS_TYPE_PARAM,
+  DOCUMENTS_NO_FOLDER_PARAM_VALUE,
   MINUTES_TYPE_PARAM_VALUE,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { replaceAddress } from "@/lib/address/address";
 import { Can } from "@/components/shared/can";
 import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -53,7 +60,6 @@ import {
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { DocumentsPageSkeleton } from "@/components/documents/documents-skeleton";
 import { meetingHref } from "@/components/meetings/meeting-copy";
-import { DOCUMENT_LINK_PARAM } from "@/components/ask/ask-source-link";
 import {
   isFileDocument,
   type ChapterDocument,
@@ -101,11 +107,45 @@ export function DocumentsPage() {
 
 function DocumentsPageForLink() {
   const chapterId = useChapterStore((state) => state.activeChapterId);
-  const type = useSearchParams()?.get(DOCUMENTS_TYPE_PARAM) ?? null;
-  return <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />;
+  // The address outlives the remount, so a switch also clears what the
+  // address had open: those belong to the chapter they were opened in.
+  const shownChapter = useRef(chapterId);
+  useEffect(() => {
+    if (shownChapter.current === chapterId) return;
+    shownChapter.current = chapterId;
+    replaceAddress(
+      Object.fromEntries(DOCUMENT_ADDRESS.map((name) => [name, null])),
+    );
+  }, [chapterId]);
+  return <ChapterDocumentsPage key={chapterId ?? "none"} />;
 }
 
-function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
+/**
+ * What the address holds on `/documents` (spec § Addresses, #6042): the
+ * folder open (`folder=`, its name, or a space for No folder), the file in the
+ * viewer (`document=`), the file whose Who can see is open (`access=`) and
+ * the Minutes view (`type=minutes`). Back walks the folders and files the
+ * member opened, the way Finder and Google Drive do.
+ */
+const DOC = WEB_ADDRESS_PARAMS.documents;
+const DOCUMENT_ADDRESS = [
+  DOC.folder,
+  DOC.document,
+  DOC.access,
+  DOC.type,
+] as const;
+
+function folderFromParam(value: string | null): string | null {
+  if (value === null) return null;
+  return value === DOCUMENTS_NO_FOLDER_PARAM_VALUE ? "" : value;
+}
+
+function folderToParam(folder: string | null): string | null {
+  if (folder === null) return null;
+  return folder === "" ? DOCUMENTS_NO_FOLDER_PARAM_VALUE : folder;
+}
+
+function ChapterDocumentsPage() {
   const { toast } = useToast();
   const router = useRouter();
   // Every write route on `ChapterDocumentController` (upload URL, confirm,
@@ -124,13 +164,34 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     so a long library re-ranks behind the keystroke rather than ahead of it.
   */
   const deferredSearch = useDeferredValue(search.trim());
-  // `/documents?type=minutes` opens on the Minutes filter: where `/meetings`
-  // lands now that minutes are filed here (#5949), and what a meeting's
-  // minutes page goes back to. Read once; the filter is the member's after.
-  const [filters, setFilters] = useState<DocumentFilters>(() =>
-    initialType === MINUTES_TYPE_PARAM_VALUE
-      ? { ...NO_DOCUMENT_FILTERS, kind: "minutes" }
-      : NO_DOCUMENT_FILTERS,
+  const address = useAddressParams(DOCUMENT_ADDRESS);
+  const { open: openAddress, close: closeAddress } = address;
+  // `/documents?type=minutes` is the Minutes view: where `/meetings` lands
+  // now that minutes are filed here (#5949), and what a meeting's minutes
+  // page goes back to. It lives in the address, so picking Minutes pushes
+  // and Back leaves it; the other filters are the member's own.
+  const minutesView = address.values[DOC.type] === MINUTES_TYPE_PARAM_VALUE;
+  const [ownFilters, setOwnFilters] =
+    useState<DocumentFilters>(NO_DOCUMENT_FILTERS);
+  const filters = useMemo<DocumentFilters>(
+    () =>
+      // `ownFilters` never holds Minutes: `setFilters` moves it to the address.
+      minutesView ? { ...ownFilters, kind: "minutes" } : ownFilters,
+    [minutesView, ownFilters],
+  );
+  const setFilters = useCallback(
+    (next: DocumentFilters) => {
+      const wantsMinutes = next.kind === "minutes";
+      setOwnFilters(
+        wantsMinutes ? { ...next, kind: NO_DOCUMENT_FILTERS.kind } : next,
+      );
+      if (wantsMinutes && !minutesView) {
+        openAddress({ [DOC.type]: MINUTES_TYPE_PARAM_VALUE });
+      } else if (!wantsMinutes && minutesView) {
+        closeAddress([DOC.type]);
+      }
+    },
+    [minutesView, openAddress, closeAddress],
   );
   const [sort, setSort] = useState<DocumentSort>("name");
   const documentsQuery = useDocuments({ minutes: true });
@@ -204,11 +265,50 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     [railFolders],
   );
 
-  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const activeFolder = folderFromParam(address.values[DOC.folder]);
+  // Opening a folder pushes, so Back walks the folders opened; a folder
+  // renamed or deleted under the member moves the address in place.
+  /*
+    The folder this page last moved to itself (a pick, a rename it followed).
+    It isn't judged dead: a renamed folder's new name is missing from the list
+    until its re-read lands. Any other folder (from a link, Back or a reload)
+    is judged against the list.
+  */
+  const [chosenFolder, setChosenFolder] = useState<string | null>(null);
+  const noteChosen = useCallback((folder: string | null) => {
+    setChosenFolder(folder);
+  }, []);
+  const setActiveFolder = useCallback(
+    (folder: string | null) => {
+      noteChosen(folder);
+      openAddress({
+        [DOC.folder]: folderToParam(folder),
+        [DOC.document]: null,
+        [DOC.access]: null,
+      });
+    },
+    [openAddress, noteChosen],
+  );
+  const moveActiveFolder = useCallback(
+    (folder: string | null) => {
+      noteChosen(folder);
+      openAddress({ [DOC.folder]: folderToParam(folder) }, { replace: true });
+    },
+    [openAddress, noteChosen],
+  );
   // The document open in the viewer (#3849), by id: the viewer reads the row
-  // from `visible`, so it steps through the list as shown and closes when the
-  // row leaves it.
-  const [openId, setOpenId] = useState<string | null>(null);
+  // from `visible`, so it steps through the list as shown. Opening pushes;
+  // its X and Escape close by the address's rule; stepping to the previous
+  // or next file replaces, so Back closes the viewer rather than walking
+  // back through the files seen.
+  const openId = address.values[DOC.document];
+  const setOpenId = useCallback(
+    (id: string | null) => {
+      if (id === null) closeAddress([DOC.document]);
+      else openAddress({ [DOC.document]: id }, { replace: openId !== null });
+    },
+    [openAddress, closeAddress, openId],
+  );
   /*
     What opened the viewer, so closing goes back to it: a pinned or starred
     file is both a card and a row on All files (#3934), and the viewer's own
@@ -388,7 +488,72 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
       manages: canManageTypes,
       uploads: canUpload,
     });
-  const [accessDoc, setAccessDoc] = useState<ChapterDocument | null>(null);
+  // Who can see, for one file: `access=<id>`, pushed, closed by its rule.
+  const accessId = address.values[DOC.access];
+  // Only a file this member may set: the same check that draws the row's
+  // control, so an address can't open an editor the page wouldn't offer.
+  const accessTarget =
+    accessId === null
+      ? undefined
+      : documents.find((doc) => doc.id === accessId);
+  const permissionsKnown = permissionsPayload !== undefined;
+  const accessDoc =
+    accessTarget && permissionsKnown && canSetAccess(accessTarget)
+      ? accessTarget
+      : null;
+  const setAccessDoc = useCallback(
+    (doc: ChapterDocument | null) =>
+      doc === null
+        ? closeAddress([DOC.access])
+        : openAddress({ [DOC.access]: doc.id }),
+    [openAddress, closeAddress],
+  );
+  /*
+    A folder, file or Who can see the address names that this member can't
+    see, or that is gone: once the reads have settled, its parameter is
+    replaced away and a short note says so in its place.
+  */
+  // Read, not failed: a failed read says so itself, and names nothing dead.
+  const foldersKnown = foldersQuery.data !== undefined && !foldersQuery.isError;
+  const documentsKnown =
+    documentsQuery.data !== undefined &&
+    !documentsQuery.isPending &&
+    !documentsQuery.isError;
+  const deadFolder = useDeadAddressParam(
+    DOC.folder,
+    address.values[DOC.folder],
+    foldersKnown &&
+      activeFolder !== null &&
+      activeFolder !== "" &&
+      activeFolder !== chosenFolder &&
+      !folders.some((folder) => folder.name === activeFolder),
+  );
+  // A file's note lasts until the member moves on (another folder, a search,
+  // the Minutes view); the folder's own note goes with the next folder.
+  const unavailableContext = `${activeFolder ?? ""}\u0000${minutesView}\u0000${deferredSearch}`;
+  const deadDocument = useDeadAddressParam(
+    DOC.document,
+    openId,
+    documentsKnown &&
+      openId !== null &&
+      !documents.some((doc) => doc.id === openId),
+    unavailableContext,
+  );
+  const deadAccess = useDeadAddressParam(
+    DOC.access,
+    accessId,
+    documentsKnown &&
+      permissionsKnown &&
+      accessId !== null &&
+      accessDoc === null,
+    unavailableContext,
+  );
+  const unavailable =
+    deadFolder !== null
+      ? "That folder isn't available. It may have been renamed or removed, or you may not have access."
+      : deadDocument !== null || deadAccess !== null
+        ? "That file isn't available. It may have been removed, or you may not have access."
+        : null;
   const folderNames = useMemo(
     () => folders.map((folder) => folder.name),
     [folders],
@@ -429,7 +594,7 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     gate,
     folders,
     activeFolder,
-    setActiveFolder,
+    setActiveFolder: moveActiveFolder,
     confirm,
     refetchFolders: foldersQuery.refetch,
   });
@@ -621,6 +786,12 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
           still gets its card. Not over the loading, error or offline states,
           which have nothing to say about the cards.
         */}
+          {unavailable ? (
+            // A dead or forbidden folder or file from the address (§ Addresses).
+            <p role="status" className="text-sm text-muted-foreground">
+              {unavailable}
+            </p>
+          ) : null}
           {showStrip && (listState === "ready" || listState === "empty") ? (
             <MarkedStrip
               pinned={strip.pinned}
@@ -705,25 +876,28 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
         gate={gate}
         onClose={() => setAccessDoc(null)}
       />
-      <Suspense fallback={null}>
-        <OpenLinkedDocument
-          known={documents}
-          shown={visibleDocs}
-          onReveal={() => {
-            // The viewer reads the list as shown, so show all of it.
-            setActiveFolder(null);
-            setFilters(NO_DOCUMENT_FILTERS);
-            setSearch("");
-          }}
-          onOpen={(id) => {
-            viewerOpener.current = null;
-            setOpenId(id);
-          }}
-        />
-      </Suspense>
+      <OpenAddressedDocument
+        openId={openId}
+        known={documents}
+        shown={visibleDocs}
+        onReveal={() => {
+          // The viewer reads the list as shown, so show all of it.
+          if (activeFolder !== null) moveActiveFolder(null);
+          setOwnFilters(NO_DOCUMENT_FILTERS);
+          if (minutesView) openAddress({ [DOC.type]: null }, { replace: true });
+          setSearch("");
+        }}
+        onLost={() => setOpenId(null)}
+      />
       <DocumentViewer
         documents={visibleDocs}
-        openId={openId}
+        // Only once its row is shown: the list is still loading, or the
+        // reveal above is still clearing what hides it.
+        openId={
+          openId !== null && visibleDocs.some((doc) => doc.id === openId)
+            ? openId
+            : null
+        }
         onOpenChange={setOpenId}
         openerRef={viewerOpener}
       />
@@ -734,55 +908,57 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
 }
 
 /**
- * `/documents?document=<id>`: opens that file in the viewer, which is how a
- * source cited by Ask opens (`ask-source-link.ts`). It waits for the library
- * to hold the file, clears a folder, filter or search that hides it (the
- * viewer closes on a file the list does not show), opens it once the list
- * shows it, and takes the parameter back out of the
- * address so closing the viewer and following the same link again works. A
- * file the member cannot see, or one since deleted, opens nothing and leaves
- * them on the library. Its own component because `useSearchParams` needs a
- * Suspense boundary.
+ * `/documents?document=<id>`, from a link, Back or a reload: the viewer reads
+ * the list as shown, so a folder, filter or search that hides the file is
+ * cleared, and a link to a meeting's minutes row (#5949) opens the minutes,
+ * replacing the address, since that row is never in the viewer's list. Ask's
+ * cited sources open this way (`ask-source-link.ts`). Once the file has been
+ * shown, a search or filter the member changes behind the viewer that drops
+ * it closes the viewer instead (`onLost`), as before.
  */
-function OpenLinkedDocument({
+function OpenAddressedDocument({
+  openId,
   known,
   shown,
   onReveal,
-  onOpen,
+  onLost,
 }: {
+  openId: string | null;
   known: readonly ChapterDocument[];
   shown: readonly ChapterDocument[];
   onReveal: () => void;
-  onOpen: (id: string) => void;
+  onLost: () => void;
 }) {
-  const linked = useSearchParams()?.get(DOCUMENT_LINK_PARAM) ?? null;
   const linkedDoc =
-    linked === null ? undefined : known.find((doc) => doc.id === linked);
+    openId === null ? undefined : known.find((doc) => doc.id === openId);
   const found = linkedDoc !== undefined;
-  // A link to a meeting's minutes row (#5949) opens the minutes: the row is
-  // never in the viewer's list, so it must not wait to be shown there.
   const minutesId =
     linkedDoc && isMinutesDocument(linkedDoc) ? linkedDoc.meeting_id : null;
   const router = useRouter();
   useEffect(() => {
     if (minutesId) router.replace(meetingHref(minutesId));
   }, [minutesId, router]);
-  const visible = found && shown.some((doc) => doc.id === linked);
+  const visible = found && shown.some((doc) => doc.id === openId);
   // The latest callbacks without making the effect depend on their identity.
-  const callbacks = useRef({ onReveal, onOpen });
+  const callbacks = useRef({ onReveal, onLost });
   useEffect(() => {
-    callbacks.current = { onReveal, onOpen };
+    callbacks.current = { onReveal, onLost };
   });
+  // The file this address has shown, so a later hide is the member's own.
+  const shownId = useRef<string | null>(null);
   useEffect(() => {
-    if (!linked || !found || minutesId) return;
-    if (!visible) {
-      callbacks.current.onReveal();
+    if (openId === null) {
+      // Closed: the next time the address names a file, it is revealed.
+      shownId.current = null;
       return;
     }
-    callbacks.current.onOpen(linked);
-    // Next keeps `useSearchParams` in step with the History API, so this
-    // clears the parameter without a navigation.
-    window.history.replaceState(null, "", window.location.pathname);
-  }, [linked, found, visible, minutesId]);
+    if (visible) {
+      shownId.current = openId;
+      return;
+    }
+    if (!found || minutesId) return;
+    if (shownId.current === openId) callbacks.current.onLost();
+    else callbacks.current.onReveal();
+  }, [openId, found, visible, minutesId]);
   return null;
 }

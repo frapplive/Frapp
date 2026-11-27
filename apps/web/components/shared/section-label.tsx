@@ -27,7 +27,7 @@ export function SectionLabel({
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-      <h2 id={id} className={`${EYEBROW} truncate text-muted-foreground`}>
+      <h2 id={id} className={`${EYEBROW} truncate text-muted`}>
         {children}
       </h2>
       {count == null || count === false ? null : (

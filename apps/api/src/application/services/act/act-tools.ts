@@ -778,7 +778,10 @@ export class CreateEventActTool implements ActTool {
     if (invite) {
       attendance = invite.draft;
     } else if (copiesInvite && earlier && eventSetsRolesApart(earlier)) {
-      attendance = attendanceFromEvent(earlier);
+      // Who it invites, not whether it's on the calendar only: this card
+      // can't make a calendar-only event yet (#6099), so its line must not
+      // say one (#6098).
+      attendance = { ...attendanceFromEvent(earlier), calendarOnly: false };
       attendanceFrom = { kind: 'event', name: earlier.name };
     } else {
       // Attendance not said follows the type, as the event form does.

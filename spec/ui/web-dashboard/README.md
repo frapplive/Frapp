@@ -164,7 +164,8 @@ Five structural facts the table alone does not carry:
   `/`, `/dashboard` and the route-group index land on `/chat`, the open conversation ([§ Gating & routing semantics](#gating--routing-semantics)), and the chapter's channels are the sidebar's own list, always in view, so a pick opens one.
   Below `lg`, where the sidebar is a drawer, a Channels row links to `/chat` where the column holds the list.
 - **The channel list keeps room for eight rows at 1024×768, with every row showing.**
-  Each fixed row costs 36px (34px plus the 2px gap) taken from the list; a channel row is 32px and a category heading about 28px, so eight rows under one heading need 284px.
+  Each fixed row costs 30px (the 28px Row step plus the 2px gap) taken from the list; a channel row is 28px, a category heading about 28px at most and the list's top gutter 12px, so eight rows under one heading need 264px.
+  _(Changed 2026-11-26 by Paul, [#6115](https://github.com/pdcarlson/Frapp/issues/6115): rows were 34px and channel rows 32 until the control size scale moved one step denser; the room measured for the demo president on the local stack went from 348px to 396px, enough for about twelve one-line rows under one heading.)_
   [`apps/web/tests/visual/nav-fit.spec.ts`](../../../apps/web/tests/visual/nav-fit.spec.ts) fails the required `web-responsive-floor` job when the list is given less.
   The harness runs sessionless with an owner's `*` permissions stubbed and the chapter read held open, so every permission and module row shows, More included: more rows than any seeded role sees.
   It measures the room the list is given rather than drawn rows, because the list needs a signed-in chat; the room was about 348px when #5946 added the test.
@@ -328,7 +329,7 @@ It holds no account avatar: the member's row is the drawer's foot, and one menu 
   It replaced the ⌘K `cmdk` palette, which is deleted, and the chat channel list's own search field, which went with it.
   It carries **no navigation list**, so nav gating stays in one place (`nav-config.ts` and `isNavItemVisible`); a hand-maintained list of destinations here would be the defect the palette's derived list once fixed.
   Its Channels group lists channels only: a DM's stored `name` is not the participant's name, so typing a person finds the member, not the DM ([#2220](https://github.com/pdcarlson/Frapp/issues/2220); DMs left the group in #6053, where they had matched only on fragments of that stored name).
-  Member, event and backwork rows open their route, not the item, because none of those routes takes a deep link yet.
+  An event row opens the event (`/events?event=<id>`, #6043) and a member row opens the member (`/members?member=<user id>`, #6046), [§ Addresses](#addresses); backwork rows open their route, not the item, until that route takes one.
   `cmdk` stays a dependency, because the slash palette and the onboarding wizard still use `components/ui/command.tsx`.
   **It departs from the board on three points** (Paul, 2026-11-05).
   It shows no `⌘F` / `esc` keycap, because a visible way in is always on screen (the field, and since #5946 from `lg` up the Search row) and the shortcut is a convenience rather than the way in.
@@ -459,7 +460,7 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
 - **A page's views are plain words beside its title** (Paul, 2026-11-24, [#5947](https://github.com/frapplive/Frapp/issues/5947)). A page with two or three views renders them through `PageViews` in the same file into the header's view slot: after the title and a hairline, as [`components.md` § View labels](../design-system/components.md#view-labels-change-a-pages-or-a-lists-view) draws them, never as a boxed switch among the actions. Below `lg` they lead the header's pinned row. A member with one view sees none, and no hairline. A route with neither actions nor views draws no header row below `lg` and its body starts at the top of the pane.
   Every "New ..." button is one [`NewButton`](../../../apps/web/components/ui/new-button.tsx) ("+ New event", "+ New minutes"), and a main action with its own verb (Log hours, Upload, Adjust points) takes the same Button `action` variant ([`components.md`](../design-system/components.md) §3); on a narrow header it and Filter fold to their glyphs ([`components.md` § View labels](../design-system/components.md#view-labels-change-a-pages-or-a-lists-view) says when).
   Changed 2026-11-19 (Paul): it was one toolbar row at the top of the body carrying the route's filters, search and primary action, pushed to the trailing edge.
-  The controls sit at the toolbar height: 36 to a mouse, 44 to a finger (Button's `toolbar` size and the toolbar recipes in `table-controls.ts`, [`components.md`](../design-system/components.md) §3).
+  The controls sit at the toolbar height: the Small step, 28 to a mouse (36 until #6115), 44 to a finger (Button's `toolbar` size and the toolbar recipes in `table-controls.ts`, [`components.md`](../design-system/components.md) §3).
   A list row's secondary actions (Edit, Delete, an icon) take Button's neutral `ghost` variant.
 - **Lists are flush.**
   A list is a `<ul>` on `denseListClassName` ([`components/shared/table-controls.ts`](../../../apps/web/components/shared/table-controls.ts)): top-border dividers, no zebra, no per-row fill, no `<Table>`.
@@ -468,10 +469,10 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
   |                         | `/documents`, `/backwork`, `/billing` invoices, `/discord-import`, Chat Admin's categories and report queue                                                                                                                                   | `/members` (actives and alumni), Chat Admin's channels                     |
   | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
   | Row is itself a control | No: text plus trailing controls                                                                                                                                                                                                               | **Yes**: the row opens the member                                          |
-  | Height                  | `min-h-11` (44; on the Small step's 36 / 44 once [#3511](https://github.com/pdcarlson/Frapp/issues/3511) lands). `/backwork` is the exception: a seven-column grid at `@4xl:min-h-12` (48), stacking to two lines below a 896px page (`@4xl`) | `min-h-9`, and `pointer-coarse:min-h-11` (36, 44 on touch: the Small step) |
+  | Height                  | `min-h-11` (44; on the List row step's 32 / 44 once [#3511](https://github.com/pdcarlson/Frapp/issues/3511) lands). `/backwork` is the exception: a seven-column grid at `@4xl:min-h-12` (48), stacking to two lines below a 896px page (`@4xl`) | `min-h-control-list-row`, and `pointer-coarse:min-h-11` (32, 44 on touch: the List row step; 36 until #6115) |
 
-  `pointer-coarse` is [`components.md`](../design-system/components.md) §2's "compact 34px controls are web/pointer-only" carve-out in CSS: a mouse gets the board's density (`4a` draws a 34px member row), a finger the full 44.
-  Trailing 32px row controls take `compactControlClassName` on the same rule.
+  `pointer-coarse` is [`components.md`](../design-system/components.md) §2's pointer-only carve-out in CSS: a mouse gets the List row step (32 since #6115; `4a` drew a 34px member row), a finger the full 44.
+  Trailing row controls take `compactControlClassName` (the Row step, 28; 32 until #6115) on the same rule.
   Rows **stack** on a narrow page (`flex-col`, becoming a row at a breakpoint: `sm` or `md` on pages not yet converted, the page's or list's own `@xl` or `@md` on those that are, § Responsive contract) rather than hide fields, because `display:none` removes text from the accessibility tree too, and at the 375px floor a hidden meta line exists nowhere in the product.
 
 - **The checkbox column is gone; selection is not.**
@@ -495,7 +496,7 @@ A route that departs from it says why under [Surface decisions](#surface-decisio
   In a `·`-joined meta line an absent fact drops out of the line.
   In a label-over-value tile the value reads `Not set` or `Not recorded`, because a label over nothing names nothing.
   A lone `—` is a character a screen reader announces standing in for nothing.
-- **The upload sheet is `1j`** ([`components/shared/upload-sheet.tsx`](../../../apps/web/components/shared/upload-sheet.tsx)): fields and footer buttons at the Small step (36 to a mouse, 44 to a finger;
+- **The upload sheet is `1j`** ([`components/shared/upload-sheet.tsx`](../../../apps/web/components/shared/upload-sheet.tsx)): fields and footer buttons at the Small step (28 to a mouse since #6115, 44 to a finger;
   the board drew 44, [`../design-system/foundations.md`](../design-system/foundations.md) §9), inline errors on touched fields, and no instructional paragraph.
   Upload stays enabled and a missing file is an inline error; only a subscription refusal disables it, because that is a verdict about the chapter rather than the form.
   The well collapses to a file row.
@@ -604,7 +605,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   **A poll you posted, while open, and an event you made, once its check-in opens, say how far along they are** ([#4792](https://github.com/pdcarlson/Frapp/issues/4792)): a thin bar and "41 of 60" under the detail, as on the phone, the bar `aria-hidden` and the count read whole ("41 of 60 voted");
   the groove is `bg-card`, since the row sits on the page, where the meter's `bg-background` recess vanishes.
   The counts are [`activity.md` § Progress](../../behavior/activity.md#progress); with none, no bar.
-- **Archive** ([#5127](https://github.com/frapplive/Frapp/issues/5127), Shawn, 2026-11-15; what it holds is [`activity.md` § Archive](../../behavior/activity.md#archive)): an **Archive** text button at the foot of the page, under Snoozed, swaps the page for the Archive until **‹ Activity** takes it back (state for the visit, not a route).
+- **Archive** ([#5127](https://github.com/frapplive/Frapp/issues/5127), Shawn, 2026-11-15; what it holds is [`activity.md` § Archive](../../behavior/activity.md#archive)): an **Archive** text button at the foot of the page, under Snoozed, swaps the page for the Archive until **‹ Activity** takes it back. It is `?view=archive`, pushed, so Back leaves it too ([§ Addresses](#addresses), #6044; state for the visit until then).
   It is a heading, "Events, tasks and polls that are over.", then Events, Tasks and Polls as the page draws its groups, each row its page row with no ask (an event says Checked in when the member did, a task its state, a poll Closed) and opening the same panel.
   A section that failed says so; with nothing it says "Nothing finished in the last 30 days. Events, tasks and polls land here once they're over."
   It follows Google Classroom's To-do, whose Done tab holds finished work apart from what is assigned, and Gmail's Archive, which keeps mail out of the inbox one press away.
@@ -677,7 +678,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
 - **One sidebar, then the page and the open conversation** (#5946, Paul, 2026-11-24, epic [#5943](https://github.com/pdcarlson/Frapp/issues/5943); [`dashboard-shell.tsx`](../../../apps/web/components/layout/dashboard-shell.tsx), the state model in [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts)).
   The chapter's channel list is in the sidebar ([§ Navigation map](#navigation-map)).
   It is chat's own list, drawn there through a portal ([`channel-list-slot.tsx`](../../../apps/web/components/layout/channel-list-slot.tsx)), never a copy, so nothing is read or subscribed twice; its filters open from a control on its first category heading.
-  So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows:
+  So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows (the path is the page; what opens inside a page is in its query, [§ Addresses](#addresses)):
   - **`/chat`** is the open conversation alone, with the member column beside it from 1280px (below).
   - **`/messages`** is the Messages page, which the Messages row opens: the member's direct and group conversations in a 240px list pane titled "Messages", with the New message pencil and the people search, beside the open conversation.
   - **Beside a page** (any other route) the open conversation docks on the right at the member's width, with no list and no back-to-list arrow; the divider, the X and the 375px floors are as below.
@@ -719,7 +720,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   The members column and the side sheets (event, member, upload panels) already closed: the people button toggles the column, and every sheet has its close button and Escape.
   _(2026-11-12: those panels now open docked in place of their page, and close with a back arrow and Escape, [`components.md` § Surface size](../design-system/components.md#surface-size).)_
   Panels open with Signet's `context` duration and `entrance` ease and close with `standard` and `exit`, gliding 16px from the right edge, the side chat docks to (from the nav side until #5575); a page load or a link paints them in place, and reduced motion makes it instant.
-  State: the open tool is the URL, so links and Back work as before; `/chat` means "no tool", the conversation alone, and `/messages` the Messages page; chat open or closed beside a page is a cookie (`frapp_chat_open`).
+  State: the open tool is the path, and what opens inside it is the query ([§ Addresses](#addresses)), so links and Back work; `/chat` means "no tool", the conversation alone, and `/messages` the Messages page; chat open or closed beside a page is a cookie (`frapp_chat_open`).
   Any arrival at `/chat` or `/messages` (a link, a notification, a Find result, or the shell's own move there when a page closes) shows the conversation.
   Widths and the single-page fallback: [§ Responsive contract](#responsive-contract); the state model: [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts).
   Tool pages lay out by their own width beside chat, not the window's ([§ Responsive contract](#responsive-contract), #4022, #4033).
@@ -831,7 +832,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   - **Upload** is an outlined button with a menu beside it holding **Import a folder** and, for `chapter_docs:manage`, **Google Drive** (Connect Google Drive opens Google's picker first; once a folder is connected the item opens it in Documents, where its state line and ⋯ manage it: [`chapter-docs.md` § Google Drive folder](../../behavior/chapter-docs.md#google-drive-folder), 2026-11-25), as Drive's New and Dropbox's Upload menus hold folder uploads and connected sources (`upload-menu.tsx`). Its fill goes to the files, not to the button.
   - **The toolbar** is the search field and one **Filters** menu holding Uploaded by, Date added, File type, Pinned, Starred and the order (`DocumentFilterMenu`). The trigger is tinted and counts the filters that are on, so a narrowed list says so with the menu closed.
   - **Folders** stay a rail beside the list from a 672px page (`@2xl`), where they cost the list no height. Narrower, the tool panel beside chat included, the rail folds into a **Folder** control at the toolbar's start that opens the same rail, Edit and all, in a popover, and closes when a folder is picked. They are not a section of the Filters menu, because the rail also carries folder management.
-  - **A row is one line** at every width: a tile in its folder's hue, the title over its facts, and a star or pin mark when set. Star, Pin, Who can see, Download and Delete come up over the row's end on hover or when a control in the row takes focus, as Gmail's and Drive's row actions do. On a touch screen, with no hover, the same actions sit behind one More button at the row's end, as Drive's and Dropbox's touch layouts put them. A right-click on the row, or a long-press on touch, opens the same actions as the app's one action menu, as Gmail's and Drive's rows do. _(Added 2026-11-21.)_
+  - **A row is one line** at every width: a tile in its folder's hue, the title over its facts, and a star or pin mark when set, with Google Drive's mark on a file from Drive. Star, Pin, Who can see, Open in Google Drive (a file from Drive, #6055), Download and Delete come up over the row's end on hover or when a control in the row takes focus, as Gmail's and Drive's row actions do. On a touch screen, with no hover, the same actions sit behind one More button at the row's end, as Drive's and Dropbox's touch layouts put them. A right-click on the row, or a long-press on touch, opens the same actions as the app's one action menu, as Gmail's and Drive's rows do. _(Added 2026-11-21.)_
   - **The tile's hue is the folder's** (`documentFolderHues` in `@repo/hooks/document-library`): the top folders the member has take the role palette in the rail's order, a folder drawn under another wears its top folder's hue, and a file in no folder is Slate. So a folder hidden from a member, or one added ahead of the others, shifts the colours after it: distinct colours on one screen won over one colour per folder for everyone. The rail's folder glyph wears the same hue at rest, so the rail is the key. Folder rather than file type because a chapter library is nearly all PDFs. It follows [`foundations.md` § A place's hue](../design-system/foundations.md#a-places-hue-2026-11-12): a hue names a place, never a state.
   - **There is no List | Grid** (it was [#4175](https://github.com/pdcarlson/Frapp/issues/4175), Shawn's idea, 2026-11-12, with previews from [#4647](https://github.com/pdcarlson/Frapp/issues/4647)). Changed in [#5576](https://github.com/frapplive/Frapp/issues/5576) by pdcarlson, 2026-11-19: view switchers are out, and the grid's tiles showed a few files a screen. The Directory keeps its List | Grid until [#5577](https://github.com/frapplive/Frapp/issues/5577).
 
@@ -841,7 +842,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   Actives and alumni rows both open `MemberDetailSheet` (alumni since [#2484](https://github.com/pdcarlson/Frapp/issues/2484)).
   _Changed 2026-11-19 (Paul picked "a small card from the row", [#5684](https://github.com/frapplive/Frapp/issues/5684)): a row or tile opens the member's card beside it (chat's `MemberPopout`), and the card's View profile opens `MemberDetailSheet` as before._
   _Changed 2026-11-20 ([#5749](https://github.com/frapplive/Frapp/issues/5749), Shawn): a list row opens the card below the row, flipping above it near the window's bottom, since a row spans the Directory and beside it the card ran off the window's left edge; a grid tile still opens it beside the tile._
-  There is no trailing "View details" button: a 44px button inside a 36px row sets the row's height on its own.
+  There is no trailing "View details" button: a 44px button inside a 32px row sets the row's height on its own.
 - **One member profile, every door** ([#3726](https://github.com/pdcarlson/Frapp/issues/3726)).
   `MemberDetailSheet` (`components/members/member-detail-sheet.tsx`) reads a member by `users.id` (`GET /v1/members/by-user/{userId}`), so chat can open it with only a sender or mention id: since 2026-11-15 (#4593) a sender's name or photo, an `@` chip or a member-list row opens chat's profile popout first, and the sheet is its View profile ([`chat/README.md` § Mentions](../../behavior/chat/README.md#mentions), "The web profile popout").
   It follows mobile s13's order ([`../mobile/screens.md`](../mobile/screens.md)): photo, name and the class-year line, Message as a small Secondary button sized to its label and centered under the name, never a full-width bar (Paul, 2026-11-20; _changed from the sheet's one full-width accent button_), then the member's roles and groups (`MemberAssignments`, below), then a flat list of Phone (when set: the number is a `tel:` link and Text beside it an `sms:` link), Email (a `mailto:` link) and Member since, then the bio, with the custom fields the viewer's tier can see, those with a value (#1749), behind a More details toggle that starts closed on every opening (#3711, 2026-11-12: contact first, logistics a tap away).
@@ -1019,7 +1020,7 @@ Flushed together on 2026-11-05 (with `/polls`, since retired, #3871); the board 
 - **Study zones are a flush list** with quiet row actions, and New study zone (a `NewButton`) sits on the Zones section's label row, since Study zones is a Settings section rather than a page with a header of its own.
 - **Denied copy names the role, never the permission key**: "Your role can't see every poll." was the shape, not `polls:view_all`.
 - **Dates in the house shapes**: `@repo/formatting`'s display helpers ("Friday, November 6 · 5:00 – 7:00 PM", "Due tomorrow", "Overdue by 2 days"), written out as [`writing.md` § 5a](../design-system/writing.md#5a-dates-and-times) says, never a numeric date with seconds.
-  Both apps' task due lines read the same helpers through `@repo/hooks`' `taskDueLine`, and both chat event cards read `formatEventWindow` ("Tonight · 6:00 – 7:00 PM"), since #4135 (2026-11-12).
+  Both apps' task due lines read the same helpers through `@repo/hooks`' `taskDueLine`, and both chat event cards read `formatEventWhen` ("Tonight · 6:00 – 7:00 PM", or "Friday · All day" for a dated event; `formatEventWindow` until #6098), since #4135 (2026-11-12).
   Mobile's event rows still format their times with their own copy until they read these ([#3420](https://github.com/pdcarlson/Frapp/issues/3420)).
 
 ### Recruitment
@@ -1161,17 +1162,19 @@ What needs stating is where the board describes a product this codebase does not
 
 ### Settings
 
-- **One page, a left rail** (`4d`): 200px, 34px rows at radius 10, a filled accent chip for the active tab, grouped Chapter, People and Modules.
+- **One page, a left rail** (`4d`): 200px, rows at the sidebar's Row step (28 on a mouse since #6115; the board drew 34) at radius 10, a filled accent chip for the active tab, grouped Chapter, People and Modules.
   _Changed in #3827, 2026-11-11:_ Danger zone is no longer a row; its content is the last section of Plan and billing.
   The tabs are `SETTINGS_TABS` in `settings-rail.tsx`, and who sees which is owned by [`../../behavior/settings/README.md`](../../behavior/settings/README.md#who-sees-what); neither is restated here.
   The board's rail is a simplified chapter's, not an inventory: this product's live tabs it does not draw are kept.
   Two board tabs are **not built**: Join code (`apps/web` has no join-code surface; invites are single-use tokens), and Subscription as `4d` draws it.
   _Changed in #3827, 2026-11-11:_ the subscription is the Plan and billing row now, shown to `billing:view`; a member pays their own invoices from My invoices in personal Settings, so `4d`'s "Members never see this page" holds.
-- **Roles is the chapter's tiers, in order, each with its roles** (#3990, 2026-11-12; the `4e` matrix it replaced is deleted, which made #2173 and #2836 moot).
-  The tab is three pages addressed by the URL so Back and a shared link work: `?tab=roles` lists the tiers highest first with their roles and member counts, then the roles outside the tiers ([`roles-overview.tsx`](../../../apps/web/components/roles/roles-overview.tsx));
-  `&tier=<id>` is a tier's permissions, one switch per permission grouped by module, saved on click ([`tier-permissions-page.tsx`](../../../apps/web/components/roles/tier-permissions-page.tsx));
-  `&role=<id>` is one role's details, then its permissions ([`role-page.tsx`](../../../apps/web/components/roles/role-page.tsx)).
-  A role in a tier shows two columns (#4072): the tier's answer, read-only, and the role's own, picked from Off, Same as tier or On, each pick saved as one key of `permission_overrides` ([`role-override-list.tsx`](../../../apps/web/components/roles/role-override-list.tsx));
+- **Roles and groups is the chapter's tiers, in order, each with its roles** (#3990, 2026-11-12; the `4e` matrix it replaced is deleted, which made #2173 and #2836 moot; in the settings shape since #6029, 2026-11-25).
+  Every page is addressed by the URL so Back and a shared link work, and each page opened from a row draws `SettingsSubpage`'s back line to Roles and groups ([`settings-roles-tab.tsx`](../../../apps/web/components/settings/settings-roles-tab.tsx)):
+  `?tab=roles` is one `SettingsGroup` per tier, highest first (its Permissions row, its roles with member counts and a ⋯, Add role), Add tier, the roles outside the tiers, Non-chapter business, Groups and Invites and presidency ([`roles-overview.tsx`](../../../apps/web/components/roles/roles-overview.tsx), [`groups-section.tsx`](../../../apps/web/components/roles/groups-section.tsx));
+  `&tier=<id>` is a tier's name, ⋯ (Move up, Move down, Delete), @mention switch, roles, then one switch per permission grouped by module, saved on click ([`tier-permissions-page.tsx`](../../../apps/web/components/roles/tier-permissions-page.tsx));
+  `&role=<id>` is one role's name, its Role group and Save role, then its permissions ([`role-page.tsx`](../../../apps/web/components/roles/role-page.tsx));
+  `&group=<id>` is one group's page and `&groups=automatic` the groups kept from member details.
+  A role in a tier lists each permission once, with what the role ends up with as a value that opens Same as the tier, On and Off, each pick saved as one key of `permission_overrides` ([`role-override-list.tsx`](../../../apps/web/components/roles/role-override-list.tsx)); until #6029 it drew the tier's answer in a read-only column beside a three-way segmented switch on every row;
   a role outside the tiers keeps one column of live switches.
   Rows read in the registry's words ([`permission-registry.ts`](../../../packages/validation/src/permission-registry.ts)), never the raw string, and the wildcard is never a switch.
   The word "tier" is the chapter's own (`tier` vocabulary, set in Chapter settings → Vocabulary).
@@ -1187,7 +1190,7 @@ What needs stating is where the board describes a product this codebase does not
 ### Errors and tab titles
 
 - **404 and the root error page** are `1k`, through `CrestPage`.
-  Transcribed, not lifted: the crest renders at full opacity, the panel at radius 20 rather than 24, and the buttons at `size="sm"` (36 to a mouse, 44 to a finger since 2026-11-05) rather than 40.
+  Transcribed, not lifted: the crest renders at full opacity, the panel at radius 20 rather than 24, and the buttons at `size="sm"` (28 to a mouse since #6115, 36 from 2026-11-05, 44 to a finger) rather than 40.
 - **`app/error.tsx` reports to Sentry.**
   Before it existed every render error below the root layout reached `global-error`, which reports; catching them here without `captureException` would make the product look better and report less.
 - **The recovery prop is `retry`, not `reset`.**
@@ -1239,6 +1242,64 @@ These are the places it departs from the board, recorded here so they read as de
   It wears the shared New button's outlined accent ([`new-button.tsx`](../../../apps/web/components/ui/new-button.tsx)), so "New" looks the same in the sidebar as on every page; every other row is neutral until it is the open page's ([`components.md` § Sidebar item](../design-system/components.md#sidebar-item)).
   The More row is a grid glyph, not `⋯`, which is the app's action menu.
   Nothing sits over the channel list: no heading, switcher or button (Paul, 2026-11-24: no switcher over a list); its filters open from a control on its first category heading.
+
+## Addresses
+
+Every screen the shell opens on web has an address, so Back, Forward, a reload and a shared link each land on it, and the phone opens the same screen from the same link (epic [#6034](https://github.com/frapplive/Frapp/issues/6034); scheme approved by Paul, 2026-11-25, on [its decision comment](https://github.com/frapplive/Frapp/issues/6034#issuecomment-7149459567)).
+Comparables: Slack web and Discord web keep the open channel and thread in the address, and Linear and Notion give an opened record its own link.
+
+- **The path is the page whose sidebar row is lit** (`/events`, `/documents`, `/settings`, `/meetings/<id>`), unchanged.
+- **The query is anything that draws its own back arrow or X in place of the page**: a folder, a record, an editor, a Settings page, a named view.
+  Query parameters, not deeper paths. Back does exactly what that arrow does.
+- **The conversation** is in the address only where it is the page: `/chat?channel=<id>&thread=<id>` and `/messages?channel=<id>`.
+  Beside any other page it is remembered, not addressed, so Back keeps moving through that page (#5575).
+- **Never in the address:** typing, filter chips, menus, popovers, centred dialogs, Find, the bell, What's new, the image viewer.
+  The table's named exceptions stand: Documents' Minutes view (`type=minutes`, a filter value that is where `/meetings` lands) and its Who can see dialog (`access=`).
+
+### History rules
+
+- **Push:** a page; a named view; a folder, record or editor, or anything docked with a back arrow; a conversation or thread on `/chat` and `/messages`, and a search jump there.
+- **Replace:** moving through days and months, and changing the sort.
+- **Closing.** A back arrow, X or Escape on something opened in this tab goes Back, so Forward reopens it.
+  On something that arrived from a link, a notification or a reload, it replaces the address with its parent.
+- **One-shot marks erase themselves** with a replace once acted on: `?new=1`, `&message=` once the jump lands, `&excuse=1`, `?setting=`.
+- **A dead or forbidden id** opens the page with a short inline note in place of the record, and its parameter is replaced away.
+
+The web reads and moves these through one hook, [`use-address-params.ts`](../../../apps/web/lib/address/use-address-params.ts) over [`address.ts`](../../../apps/web/lib/address/address.ts): open pushes, close goes Back or replaces, replace mode is for days and sorts, `consumeAddressParam` takes a one-shot mark off, and `useDeadAddressParam` drops a dead id and keeps its note.
+The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts): the web's own names (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from it, and the phone reads it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands.
+
+### The table
+
+Rows marked "planned" are built by the sub-issue named; until it merges the page keeps the behaviour it has today.
+[`every-page-has-an-address.spec.ts`](../../../apps/web/components/layout/every-page-has-an-address.spec.ts) fails for a dashboard route missing from `web-addresses.ts`, and for a row of it, or a parameter in its Address cell, missing here.
+It can't see a parameter a page reads without listing it there, so each family's PR adds its own.
+
+| Address | History | Phone screen |
+|---|---|---|
+| `/chat?channel=&thread=&message=` | Conversation and thread push; a search or bookmark jump pushes `channel=` with `message=`, which is replaced away once the jump lands. Planned, #6041 | `/chat-thread` (`channelId`, `threadRootId`, `focusMessageId`); bare: Chat home |
+| `/messages?channel=&message=` | Push; a search jump as on `/chat`. Planned, #6041 | `/chat-thread` (`channelId`); bare: Messages |
+| `/documents?folder=&document=&access=&type=` | `folder=` is the folder's name (`+`, a space, for No folder: folder names are trimmed, so none is a space), and each one opened pushes, so Back walks them as Finder and Google Drive do. `document=` is the viewer: opening pushes, its previous and next replace, so Back closes it rather than stepping back through files. `access=` is Who can see, opened only for a file the member may set (the same check as the row's control); any other is unavailable. `type=minutes` is the Minutes view, pushed when Minutes is picked. A folder or file the member can't see shows a short note and is replaced away. Built in #6042; the docked upload and folder-import panels are not addressed yet (#6157) | Documents |
+| `/events?day=&event=&edit=&hours=&excuse=` | `day=YYYY-MM-DD` is the picked day, replaced as days are picked so Back doesn't walk them; today has none. A day from a link or a reload moves the month and the week strip to it; paging months is not in the address. `event=` is the open event, pushed; its back arrow and Escape close by the rule, and another meeting of its series replaces it. `edit=1` is its editor, pushed; leaving it goes back to the event. `hours=YYYY-MM-DD` is the hour grid, pushed; moving its day replaces, and its one-day view is not in the address. `edit=1` opens only for someone who may edit the event; anyone else's is taken out. `new=1` stays one-shot until #6157 decides create forms. `excuse=1` (a chat card's Can't make it) is one-shot. An event that is gone or not the member's to see is said and replaced away. Built in #6043 | `/event-details` (`id`, `excuse`), `/calendar-day` (`day`), Events |
+| `/activity?view=&task=&group=&posting=&item=&review=&extension=` | `view=everyone` (Everyone's tasks) and `view=archive` push; Mine is the bare address. `task=`, `group=` and `posting=` open the task panel with a push (a copy's task link is replaced with its group's), and `item=<row key>` is the open row, pushed; the next review in a review replaces it. A notification's `review=` or `extension=` becomes the row's `item=` in place once its row is found. A task or row that is gone or not the member's to see is said and replaced away. Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Built in #6044 | `/tasks` (`task`), `/activity` (`review`) |
+| `/members?tab=&member=&sort=` | `tab=alumni` pushes (was replace); Members is the bare address. `member=<user id>` is the member open in place of the list (and on Alumni), pushed by View profile; its back arrow closes by the rule. A row's card is a popout, not a place. `sort=` replaces. Invite's `new=1` stays one-shot until #6157. A `member=` the roster lacks is read again once, then an alumnus moves to `tab=alumni` in place, and anyone else (left, or hidden from the viewer) is said and replaced away; the same holds on Alumni. Message from the profile replaces `member=` before leaving for chat, so no Back races it. Chat's View profile joins with #6041. Built in #6046 | `/member` (`userId`), `/directory` (`sort`) |
+| `/rush?view=&prospect=` | `view=follow-up` or `view=all` is the view the member picked, pushed; with no `view=` the page opens as it always has (Follow up when it holds anything). `prospect=<id>` is the prospect open in place of the board, pushed; opening another while one is open replaces it, so Back closes the panel; its back arrow closes by the rule. Summary, the layout and search are not in the address. A linked prospect the read lacks is read again once, then one removed or not the role's to see is said and replaced away. Built in #6047 | `/rush-prospect` (`candidateId`), Recruitment |
+| `/profile?open=` | Opening a door (Points, Service, Study) pushes; closing follows the rule, so Back goes to the profile and Forward reopens the panel. Built in #6048 | You |
+| `/preferences?section=` | Each rail row is a link, so it pushes. `setting=` (settings search) is one-shot. Invoice pay and Meet Frapp AI are centred dialogs, not in the address. Built in #6048 | Preferences |
+| `/settings?tab=&page=&channel=&tool=&tier=&role=&class=&zone=&member=` | Rail rows push `tab=`; `channel=` adds Chat admin's picked channel; `member=` is the points ledger's member. Still full width, with chat hidden. Planned, #6049 | Web only |
+| `/ask` | No change until conversations get ids (#4704) | Frapp Intelligence |
+| `/whats-new` | Path only | What's new |
+| `/meetings/<id>`, `/meetings/<id>/notes`, `/meetings/<id>/transcript` | Paths | Web only |
+| `/backwork`, `/backwork/upload` | Paths | Web only |
+| `/affiliations`, `/chapters` | Path only | Web only |
+
+A route kept only to send old links on (`/tasks`, `/points`, `/billing`, `/chat-admin` and the rest) never draws, so it has no row; it keeps the parameters it forwards.
+
+### The phone
+
+`web-addresses.ts` maps each web address to its phone screen and the phone's parameter names.
+Three things read it once [#6050](https://github.com/frapplive/Frapp/issues/6050) lands: a `+native-intent` handler, the phone's notification targets (`apps/mobile/lib/notifications/targets.ts`) and Copy link.
+Its paths then join `APP_LINK_PATHS`; web-only pages are not claimed.
+iOS reads the claimed paths from the web; Android's intent filters need a new store build.
 
 ## Gating & routing semantics
 

@@ -24,6 +24,7 @@ import {
 } from "@/components/tasks/task-form-fields";
 import { WhoPickerSheet } from "@/components/tasks/who-picker-sheet";
 import { FollowerField } from "@/components/tasks/task-follower";
+import { FixedDeadlineRow } from "@/components/tasks/fixed-deadline-row";
 import type { TaskRowModel } from "@/lib/tasks/board";
 import {
   dueClearable,
@@ -168,6 +169,17 @@ export function TaskEditForm({
             onChange={(time) => edit.pickDue({ ...due, time })}
           />
         </View>
+      ) : null}
+
+      {/* Under the due it governs (#6096): only a dated task has one to fix.
+          Drawn as it will read once a save on its way lands. */}
+      {due ? (
+        <FixedDeadlineRow
+          value={edit.fixedDeadline}
+          onChange={edit.setFixedDeadline}
+          disabled={edit.saving}
+          style={styles.box}
+        />
       ) : null}
 
       {repeat ? (

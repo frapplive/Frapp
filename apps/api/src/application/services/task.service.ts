@@ -92,6 +92,15 @@ import {
 } from './push-copy';
 import { displayNameFor, notifyQuietly } from './task-push';
 import { instantOrThrow } from './instant-bound';
+import {
+  extensionStillFits,
+  extensionSummary,
+} from '#domain/utils/task-extension';
+import type { TaskExtensionRequest } from '#domain/entities/task-extension-request.entity';
+import {
+  TASK_EXTENSION_REQUEST_REPOSITORY,
+  type ITaskExtensionRequestRepository,
+} from '#domain/repositories/task-extension-request.repository.interface';
 import { planSeriesStart, readTaskRule } from './task-series-schedule';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
@@ -288,6 +297,8 @@ export interface CreateTaskInput {
   reference_photo_paths?: string[];
   /** What Mark done needs (#4635). Default `none`. */
   proof_kind?: TaskProofKind;
+  /** A fixed deadline: no extensions (#6096). Default false. */
+  fixed_deadline?: boolean;
   /**
    * The minutes the task was suggested from (#5562). Set only by accepting
    * a suggestion from minutes; never from the HTTP body.
@@ -322,6 +333,8 @@ export interface UpdateTaskInput {
    */
   reference_photo_paths?: string[];
   proof_kind?: TaskProofKind;
+  /** A fixed deadline: no extensions (#6096). */
+  fixed_deadline?: boolean;
   /**
    * The tier, role or group the task is from (#5473), or null for nobody.
    * A new one must name one the editor is in.
@@ -375,6 +388,8 @@ export class TaskService {
     @Inject(OPEN_TASK_REPOSITORY)
     private readonly openTaskRepo: IOpenTaskRepository,
     private readonly links: FrappLinkChecker,
+    @Inject(TASK_EXTENSION_REQUEST_REPOSITORY)
+    private readonly extensionRepo: ITaskExtensionRequestRepository,
   ) {}
 
   /**
@@ -661,15 +676,34 @@ export class TaskService {
   ): Promise<TaskView[]> {
     if (tasks.length === 0) return tasks;
     const ids = tasks.map((task) => task.id);
-    const [subtasks, withPhotos, series, groups, claimedFrom, followers] =
-      await Promise.all([
-        this.taskRepo.findSubtasks(chapterId, ids),
-        this.withPhotos(chapterId, tasks),
-        this.seriesSummaries(chapterId, tasks),
-        this.groupSummaries(chapterId, tasks),
-        this.openTaskRepo.findClaimedFrom(chapterId, ids),
-        this.followerNames(chapterId, tasks),
-      ]);
+    const [
+      subtasks,
+      withPhotos,
+      series,
+      groups,
+      claimedFrom,
+      followers,
+      extensions,
+    ] = await Promise.all([
+      this.taskRepo.findSubtasks(chapterId, ids),
+      this.withPhotos(chapterId, tasks),
+      this.seriesSummaries(chapterId, tasks),
+      this.groupSummaries(chapterId, tasks),
+      this.openTaskRepo.findClaimedFrom(chapterId, ids),
+      this.followerNames(chapterId, tasks),
+      // A failed read of the requests costs the line, never the task read.
+      this.extensionRepo
+        .latestForTasks(chapterId, ids)
+        .catch((error: unknown) => {
+          reportCaughtFailure(this.logger, {
+            level: 'warning',
+            site: 'task-read-extensions',
+            message: `could not read extension requests for ${ids.length} tasks`,
+            error,
+          });
+          return new Map<string, TaskExtensionRequest>();
+        }),
+    ]);
     const byTask = new Map<string, TaskSubtask[]>();
     for (const subtask of subtasks) {
       const list = byTask.get(subtask.task_id) ?? [];
@@ -685,7 +719,69 @@ export class TaskService {
       followed_by_name: task.followed_by
         ? (followers.get(task.followed_by) ?? null)
         : null,
+      // Only the current assignee's own request (#6096): after a hand-over
+      // the old assignee's reason and its answer aren't the new one's.
+      extension: extensionSummary(
+        extensions.get(task.id)?.requester_id === task.assignee_id
+          ? extensions.get(task.id)
+          : null,
+      ),
     }));
+  }
+
+  /**
+   * The chapter's requests for more time waiting on an officer (#6096), with
+   * each task as Activity's rows read it, for every `tasks:manage` holder but
+   * the member who asked, oldest first. A request its task has moved past
+   * (done, handed over, re-dated or fixed) is left out.
+   */
+  async waitingExtensions(
+    chapterId: string,
+    viewerId: string,
+    limit: number,
+  ): Promise<{ request: TaskExtensionRequest; task: TaskView }[]> {
+    // The viewer's own requests are left out by the read itself, so they
+    // never take one of the `limit` places.
+    const pending = await this.extensionRepo.listPending(
+      chapterId,
+      limit,
+      viewerId,
+    );
+    if (pending.length === 0) return [];
+    const tasks = await this.taskRepo.findByIds(
+      chapterId,
+      pending.map((row) => row.task_id),
+    );
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    return pending.flatMap((request) => {
+      const task = byId.get(request.task_id);
+      return task && extensionStillFits(task, request)
+        ? [{ request, task: toDisplayStatus(task) }]
+        : [];
+    });
+  }
+
+  /**
+   * Marks the tasks the reader is assigned with whether they can't ask for
+   * more time (#6096): one read of their membership, only when the list
+   * holds one of their own.
+   */
+  async withViewerStanding<T extends TaskView>(
+    chapterId: string,
+    userId: string,
+    views: T[],
+  ): Promise<T[]> {
+    if (!views.some((view) => view.assignee_id === userId)) return views;
+    // Unknown counts as able to ask: the API still refuses a blocked ask.
+    const standing = await this.extensionRepo
+      .standing(chapterId, userId)
+      .catch(() => null);
+    const blocked = !!standing?.blocked_at;
+    return views.map((view) =>
+      view.assignee_id === userId
+        ? { ...view, extension_requests_blocked: blocked }
+        : view,
+    );
   }
 
   /**
@@ -982,9 +1078,10 @@ export class TaskService {
             ...(follows.length > 0 ? { orFollowedBy: follows } : {}),
           }),
     });
-    const views = await this.withSubtasks(
+    const views = await this.withViewerStanding(
       chapterId,
-      toDisplayStatusList(tasks),
+      userId,
+      await this.withSubtasks(chapterId, toDisplayStatusList(tasks)),
     );
     return isAdmin
       ? views
@@ -1027,6 +1124,9 @@ export class TaskService {
       proof_link: null,
       completion_note: null,
       sent_back_reason: null,
+      // Why the assignee asked for more time is theirs and the officers'
+      // too (#6096).
+      extension: null,
       ...(view.photos
         ? { photos: view.photos.filter((photo) => photo.kind === 'reference') }
         : {}),
@@ -1308,6 +1408,7 @@ export class TaskService {
           latest_due_at: repeat.latest_due_at,
           next_due_date: repeat.next_due_date,
           attachments,
+          fixed_deadline: input.fixed_deadline ?? false,
         })
       : await this.taskRepo.create({
           chapter_id: input.chapter_id,
@@ -1323,6 +1424,7 @@ export class TaskService {
           completed_at: null,
           confirmed_at: null,
           proof_kind: input.proof_kind ?? 'none',
+          ...(input.fixed_deadline ? { fixed_deadline: true } : {}),
           ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
           ...(followedBy ? { followed_by: followedBy } : {}),
           ...(attachments.length > 0 ? { attachments } : {}),
@@ -1450,6 +1552,7 @@ export class TaskService {
       ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
       followed_by: followedBy,
       attachments,
+      fixed_deadline: input.fixed_deadline ?? false,
     });
 
     await this.notifyEachAssigned(copies, input.created_by);
@@ -1924,6 +2027,13 @@ export class TaskService {
       patch.proof_kind = input.proof_kind;
     }
 
+    if (
+      input.fixed_deadline !== undefined &&
+      input.fixed_deadline !== task.fixed_deadline
+    ) {
+      patch.fixed_deadline = input.fixed_deadline;
+    }
+
     if (input.attachments !== undefined) {
       const stored = task.attachments ?? [];
       const next =
@@ -2025,6 +2135,18 @@ export class TaskService {
       throw new BadRequestException(
         'This task was confirmed while you were editing it, so it can no longer change',
       );
+    }
+
+    // A request for more time waiting on the task no longer fits it once
+    // an officer moves its due, fixes it or hands it over (#6096). Approving
+    // one decides it before moving the due, so this never closes that one.
+    if (
+      reassigned ||
+      'due_date' in patch ||
+      'due_at' in patch ||
+      patch.fixed_deadline === true
+    ) {
+      await this.closeWaitingExtension(chapterId, id);
     }
 
     if (reassigned || 'due_date' in patch || 'due_at' in patch) {
@@ -2369,11 +2491,36 @@ export class TaskService {
       );
     }
 
+    // A request for more time waiting on it no longer fits a task marked
+    // done (#6096): it is closed, not left for an officer to find.
+    await this.closeWaitingExtension(chapterId, task.id);
     await this.notifyTaskCompleted(updated, userId, chapterId, {
       photoCount: photos.length,
       resubmitted: !!task.sent_back_at,
     });
     return this.viewWithPhotos(chapterId, updated);
+  }
+
+  /**
+   * Closes the task's waiting request for more time, as `withdrawn` (#6096,
+   * tasks.md § Asking for more time): the task was marked done, re-dated,
+   * given a fixed deadline or handed over first. The change stands if it
+   * fails; the request is then closed when an officer acts on it.
+   */
+  private async closeWaitingExtension(
+    chapterId: string,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      await this.extensionRepo.withdrawPending(chapterId, taskId);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'task-withdraw-extension',
+        message: `could not close the waiting extension on task ${taskId}`,
+        error,
+      });
+    }
   }
 
   /**

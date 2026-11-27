@@ -86,12 +86,18 @@ describe("settings search", () => {
     expect(ids("nudges", MEMBER)).not.toContain("nudges");
     expect(ids("nudges", { ...MEMBER, platform: "phone" })).toContain("nudges");
     // A setting only web changes is still listed on the phone, marked so.
-    const phone = searchSettings("points goal", {
+    const phone = searchSettings("discord import", {
       ...PRESIDENT,
       platform: "phone",
     });
-    const webOnly = phone.find((m) => m.entry.id === "points-goal");
+    const webOnly = phone.find((m) => m.entry.id === "discord-import");
     expect(webOnly?.opensHere).toBe(false);
+    // A module's goal opens its phone screen since #6030.
+    const goal = searchSettings("points goal", {
+      ...PRESIDENT,
+      platform: "phone",
+    }).find((m) => m.entry.id === "points-goal");
+    expect(goal?.opensHere).toBe(true);
     const quiet = searchSettings("quiet hours", {
       ...MEMBER,
       platform: "phone",

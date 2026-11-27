@@ -16,7 +16,7 @@ import { JumpToLatestGlyph, SendArrowGlyph } from "./chat-glyphs";
  * float over theirs. Pressing it scrolls to the nearest one; it doesn't open
  * it. The web face of mobile's `components/chat/unread-jump-pill.tsx`.
  *
- * Its height is the Chip step (24) to a mouse. The neutral recipe a floating
+ * Its height is the Chip step (20; 24 until #6115) to a mouse. The neutral recipe a floating
  * control takes (elevated `--popover` with the outlined edge, as Jump to
  * latest), and the mention red when anything out of view that way addresses
  * the member, the one thing that red means (foundations.md §5).
@@ -47,7 +47,7 @@ export function UnreadJumpPill({
         aria-label={unreadJumpLabel(direction)}
         onClick={onJump}
         className={cn(
-          "pointer-events-auto absolute inline-flex h-6 items-center gap-1 rounded-full border px-2.5 text-caption font-semibold transition-colors",
+          "pointer-events-auto absolute inline-flex h-control-chip items-center gap-1 rounded-full border px-2.5 text-caption font-semibold transition-colors",
           // Under a pinned heading at the top, over the list's end at the
           // bottom.
           direction === "above" ? "top-8" : "bottom-2",

@@ -262,6 +262,30 @@ describe("cn with the Signet type scale", () => {
   });
 });
 
+/**
+ * #6115: the control steps are names too, so `cn` registers them, or a
+ * caller's `h-control-row` would sit beside Button's `h-control-small`.
+ */
+describe("cn with the control size scale", () => {
+  const presetSteps = Object.keys(sharedConfig.theme?.extend?.height ?? {});
+
+  it("registers every control step the shared preset binds", () => {
+    expect(presetSteps.length).toBeGreaterThan(0);
+    for (const step of presetSteps) {
+      expect(cn("h-9", `h-${step}`)).toBe(`h-${step}`);
+      expect(cn("min-h-8", `min-h-${step}`)).toBe(`min-h-${step}`);
+      expect(cn("w-9", `w-${step}`)).toBe(`w-${step}`);
+      expect(cn("h-9 w-9", `size-${step}`)).toBe(`size-${step}`);
+    }
+  });
+
+  it("lets a caller's step replace a component's", () => {
+    expect(
+      cn("h-control-small px-3 pointer-coarse:h-11", "h-control-row"),
+    ).toBe("px-3 pointer-coarse:h-11 h-control-row");
+  });
+});
+
 describe("rowsToTsv", () => {
   it("separates cells with tabs and rows with newlines, with no BOM", () => {
     expect(

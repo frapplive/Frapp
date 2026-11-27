@@ -46,6 +46,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateTaskStatus: () => ({ mutateAsync: updateStatus, isPending: false }),
   useConfirmTask: () => ({ mutateAsync: confirmTask, isPending: false }),
   useRejectTask: () => ({ mutateAsync: rejectTask, isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCurrentChapter: () => ({
     data: { enabled_modules: state.enabledModules },
   }),

@@ -88,14 +88,14 @@ describe("SetupChecklistSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("draws lines on the Row step: 32 on a mouse, 44 on touch", () => {
+  it("draws lines on the Row step: 28 on a mouse, 44 on touch", () => {
     // foundations.md §9. The row is hand-rolled, so the primitives'
     // touch-floor spec does not cover it.
     state.checklist = TWO_OF_FIVE;
     render(<SetupChecklistSection />);
     const row = screen.getByRole("link", { name: "Add a study zone" });
     expect(row.className.split(" ")).toEqual(
-      expect.arrayContaining(["min-h-8", "pointer-coarse:min-h-11"]),
+      expect.arrayContaining(["min-h-control-row", "pointer-coarse:min-h-11"]),
     );
     const hide = screen.getByRole("button", {
       name: HIDE_SETUP_CHECKLIST_LABEL,

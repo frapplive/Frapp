@@ -35,6 +35,15 @@ officer queues need their own permission, as below.
 - **Task confirmations:** completed tasks waiting for a confirm, longest waiting first. Only for a
   `tasks:manage` holder, and never their own completion, which the confirm route refuses
   ([`tasks.md`](tasks.md)).
+- **Requests for more time** (`task_extensions`, #6096): a member asking for more time on a task,
+  oldest first, for every `tasks:manage` holder but the member who asked, as confirmations are (the
+  push goes only to the task's creator and the officers in the group it is from). A request its task
+  has moved past (done, handed over, re-dated, given a fixed deadline) is left out. Each row says who
+  asks, the task, the due asked for and why it waits on an officer, and opens to the reason with
+  Approve and Decline ([`tasks.md` § Asking for more time](tasks.md#asking-for-more-time)). Not
+  snoozable and never unread: a request waits until someone answers it. Counted in
+  `needs_you_count`. Served only to a client that asks with `extensions=true`, so a phone build from
+  before them gets none and its badge never counts rows it can't show.
 - **Hours approvals:** pending service entries, oldest first. Only for a `service:approve` holder,
   and never their own entry, which the approve route refuses
   ([`service-hours.md`](service-hours.md)). There is no assigned approver: every approver sees
@@ -287,9 +296,10 @@ board folds into its Activity tab in a later slice.
 - **Who sees the views.** They are plain words beside the title
   ([`components.md` § View labels](../ui/design-system/components.md)), offered to a `tasks:manage`
   holder and to a member who follows someone else's task (whose Everyone's is what their read
-  holds), while the chapter has Tasks on. Anyone else sees no labels. The page always opens on
-  Mine; `?view=everyone` opens Everyone's (a suggested-task notification with no minutes behind
-  it uses this), and the pick lasts the visit.
+  holds), while the chapter has Tasks on. Anyone else sees no labels. Mine is the bare address;
+  Everyone's is `?view=everyone`, pushed when picked, so Back returns to Mine and a reload or a
+  link lands on it (a suggested-task notification with no minutes behind it uses this; on web,
+  [`web-dashboard/README.md` § Addresses](../ui/web-dashboard/README.md#addresses), #6044).
 - **Task links.** `?task=<id>` and `?group=<id>` open that task or group in the task panel on
   whichever view is showing ([`tasks.md` § Tasks for everyone](tasks.md#tasks-for-everyone)).
   `/tasks` redirects here with either kept, so an old link, bookmark or notification still opens

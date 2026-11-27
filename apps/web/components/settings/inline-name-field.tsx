@@ -59,7 +59,7 @@ export function InlineNameField({
           onCancel?.();
         }
       }}
-      className="h-9 min-w-0 flex-1 border-transparent bg-transparent px-2 hover:border-control-edge focus-visible:border-control-edge"
+      className="h-control-small min-w-0 flex-1 border-transparent bg-transparent px-2 hover:border-control-edge focus-visible:border-control-edge"
     />
   );
 }

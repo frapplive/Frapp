@@ -5,7 +5,6 @@ import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineNote } from "@/components/shared/inline-note";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { modulePermissions } from "@/components/settings/settings-modules";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@repo/hooks/role-tiers";
 import { CANT_GIVE } from "@repo/hooks/use-roles-data";
 import {
+  modulePermissions,
   whoCanHolders,
   whoCanPageId,
   whoCanSummary,
@@ -262,7 +262,7 @@ export function WhoCanPermissionPage({
                 items={addable}
                 nameOf={(role) => role.name}
                 keyOf={(role) => role.id}
-                itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+                itemClassName="min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
                 renderItem={(role) => (
                   <>
                     <RoleDot color={role.color} />

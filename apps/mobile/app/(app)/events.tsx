@@ -99,7 +99,7 @@ export default function EventsScreen() {
   const nothingAhead = useMemo(
     () =>
       !allEvents.some((event) =>
-        isCurrentOrUpcoming(event.start_time, event.end_time, now),
+        isCurrentOrUpcoming(event.start_time, event.end_time, now, event),
       ),
     [allEvents, now],
   );

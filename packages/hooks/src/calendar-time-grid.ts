@@ -9,6 +9,12 @@
  */
 
 import { localIsoDate, parseInstant } from "@repo/formatting";
+import {
+  eventCoversDay,
+  eventIsDated,
+  eventTimingFieldsOf,
+  type EventTimingFields,
+} from "@repo/validation";
 
 /** One hour row, as Google Calendar's default density. */
 export const HOUR_HEIGHT = 48;
@@ -187,7 +193,13 @@ export type TimeGridColumn<E, Task> = {
   day: Date;
   /** `localIsoDate(day)`: the column's key, and `tasksByDay`'s. */
   key: string;
-  /** Events lasting a whole day or more that touch this day, for the strip. */
+  /**
+   * All-day and time-TBD events that cover this day by their own days
+   * (`eventCoversDay`), for the strip. Never placed by their stored
+   * instants, which are the saver's midnights (#6098, #6144).
+   */
+  dated: E[];
+  /** Timed events lasting a whole day or more that touch this day, for the strip. */
   allDay: E[];
   /** The day's tasks with no time of day (and birthdays), for the strip. */
   tasks: Task[];
@@ -223,6 +235,11 @@ export function taskSpan(minute: number): {
  * calendar apps draw a multi-day event, and a shorter one is a block clipped
  * to the day. An event whose start doesn't parse is left out.
  *
+ * An all-day or time-TBD event is read by its days, never its stored
+ * midnights (`spec/behavior/events.md` § Dates, tentative and on the calendar
+ * only): it goes in `dated` on each day it covers and is never a block at
+ * 12 AM, as Google Calendar keeps an all-day event above the hours.
+ *
  * A task `taskMinute` gives a minute is a marker at that time in the grid
  * (`calendarItemDueMinute` for the calendar's items); the rest sit in the
  * strip.
@@ -233,13 +250,23 @@ export function timeGridColumns<E extends GridEvent, Task>(
   tasksByDay: ReadonlyMap<string, Task[]>,
   taskMinute: (task: Task) => number | null = () => null,
 ): TimeGridColumn<E, Task>[] {
+  const shapes = new Map<E, EventTimingFields>();
+  for (const event of events) {
+    const shape = eventTimingFieldsOf(event as Record<string, unknown>);
+    if (eventIsDated(shape)) shapes.set(event, shape);
+  }
   const parsed = events.flatMap((event) => {
+    if (shapes.has(event)) return [];
     const start = parseInstant(event.start_time);
     if (!start) return [];
     return [{ event, start, end: parseInstant(event.end_time) }];
   });
   return days.map((day) => {
     const key = localIsoDate(day);
+    const dated: E[] = [];
+    for (const [event, shape] of shapes) {
+      if (eventCoversDay(shape, key)) dated.push(event);
+    }
     const allDay: E[] = [];
     const timed: TimedSpan<GridBlock<E, Task>>[] = [];
     for (const { event, start, end } of parsed) {
@@ -263,8 +290,21 @@ export function timeGridColumns<E extends GridEvent, Task>(
       if ("event" in item) placed.push({ item: item.event, ...geometry });
       else placedTasks.push({ item: item.task, ...geometry });
     }
-    return { day, key, allDay, tasks, placed, placedTasks };
+    return { day, key, dated, allDay, tasks, placed, placedTasks };
   });
+}
+
+/**
+ * Every event a column's all-day strip lists, one under another, as the
+ * phone's Day view draws it: the dated ones first (each on every day it
+ * covers, #6144), then timed events lasting a whole day or more. Web's week
+ * view draws the dated ones as bars across their columns instead.
+ */
+export function stripEvents<E>(column: {
+  dated: readonly E[];
+  allDay: readonly E[];
+}): E[] {
+  return [...column.dated, ...column.allDay];
 }
 
 /**

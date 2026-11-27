@@ -590,7 +590,7 @@ function ChannelsGroup() {
                             setEditingCategoryId(null);
                           }
                         }}
-                        className="h-8"
+                        className="h-control-row"
                         autoFocus
                       />
                       <Button
@@ -669,7 +669,7 @@ function ChannelsGroup() {
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setAddingCategory(false);
                   }}
-                  className="h-8"
+                  className="h-control-row"
                   autoFocus
                 />
                 <Button
@@ -802,7 +802,7 @@ function ChannelGroup({
             <Link
               href={channelSettingsPath(channel.id)}
               className={cn(
-                "flex min-h-10 items-center gap-4 py-2 pl-14 pr-4 text-sm transition hover:bg-card-hover",
+                "flex min-h-control-list-row items-center gap-4 py-2 pl-14 pointer-coarse:min-h-11 pr-4 text-sm transition hover:bg-card-hover",
                 FOCUS_RING,
               )}
             >

@@ -71,8 +71,6 @@ function createStyles(tokens: SignetTokens) {
     focused: field.fieldFocused,
     label: {
       ...typeRole(tokens.typography.role.label),
-      letterSpacing: 0.3,
-      textTransform: "uppercase",
       color: tokens.color.text.muted,
     },
   });

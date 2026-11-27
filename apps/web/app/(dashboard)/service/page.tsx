@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { NEW_INTENT_PARAM, newIntentHref } from "@/components/layout/new-intent";
+import {
+  NEW_INTENT_PARAM,
+  newIntentHref,
+} from "@/components/layout/new-intent-href";
 import { standingHref } from "@/components/standing/standing-doors";
 
 /**

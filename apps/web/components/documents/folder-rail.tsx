@@ -69,7 +69,7 @@ import { compactControlClassName } from "@/components/shared/table-controls";
  */
 function folderRowClassName(isActive: boolean): string {
   return [
-    "flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
+    "flex min-h-control-row w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors",
     "pointer-coarse:min-h-11",
     FOCUS_RING_OFFSET,
     isActive
@@ -84,7 +84,7 @@ function folderRowClassName(isActive: boolean): string {
  * disabled card fill, which drew a boxed arrow in the middle of the rail.
  */
 const MANAGE_CONTROL =
-  "h-9 w-9 pointer-coarse:h-11 pointer-coarse:w-11 disabled:border-transparent disabled:bg-transparent";
+  "h-control-small w-control-small pointer-coarse:h-11 pointer-coarse:w-11 disabled:border-transparent disabled:bg-transparent";
 
 /**
  * How far each level of the tree steps in (#5337), and the deepest level that
@@ -240,7 +240,7 @@ export function FolderRail({
     <FolderHueContext.Provider value={folderHue}>
       <nav ref={rootRef} aria-labelledby={labelId}>
         <div className="flex min-h-9 items-center justify-between gap-2">
-          <h2 id={labelId} className={`${EYEBROW} text-muted-foreground`}>
+          <h2 id={labelId} className={`${EYEBROW} text-muted`}>
             Folders
           </h2>
           <Can permission="chapter_docs:manage">
@@ -303,7 +303,7 @@ export function FolderRail({
               {group.label ? (
                 <p
                   aria-hidden
-                  className={`${EYEBROW} px-2 pb-0.5 pt-3 text-muted-foreground`}
+                  className={`${EYEBROW} px-2 pb-0.5 pt-3 text-muted`}
                 >
                   {group.label}
                 </p>
@@ -504,7 +504,7 @@ function FolderItem({
             onClick={onToggle}
             aria-expanded={open}
             aria-label={`${open ? "Close" : "Open"} ${folder.name}`}
-            className={`-mr-1 flex h-9 w-4 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-8 ${FOCUS_RING_OFFSET}`}
+            className={`-mr-1 flex h-control-small w-4 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-8 ${FOCUS_RING_OFFSET}`}
           >
             <ChevronRight
               aria-hidden

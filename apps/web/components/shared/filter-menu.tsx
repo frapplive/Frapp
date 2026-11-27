@@ -169,7 +169,7 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
             }}
             placeholder={`Search ${filter.label.toLowerCase()}`}
             aria-label={`Search ${filter.label.toLowerCase()}`}
-            className="mb-1 h-8"
+            className="mb-1 h-control-row"
           />
         ) : null}
         <DropdownMenuRadioGroup
@@ -240,7 +240,7 @@ export function ActiveFilterChips({
             }}
             aria-label={`Remove filter ${filter.label}: ${current?.label ?? ""}`}
             className={cn(
-              "inline-flex h-6 items-center gap-1 rounded-full border border-border bg-card px-2.5 text-caption text-foreground transition hover:bg-card-hover",
+              "inline-flex h-control-chip items-center gap-1 rounded-full border border-border bg-card px-2.5 text-caption text-foreground transition hover:bg-card-hover",
               FOCUS_RING,
             )}
           >
@@ -258,7 +258,7 @@ export function ActiveFilterChips({
             for (const filter of on) filter.onChange(filter.anyValue);
           }}
           className={cn(
-            "h-6 rounded-full px-2 text-caption text-muted-foreground hover:text-foreground",
+            "h-control-chip rounded-full px-2 text-caption text-muted-foreground hover:text-foreground",
             FOCUS_RING,
           )}
         >

@@ -4,6 +4,13 @@ import {
   type EventAttendanceFields,
   type EventAttendanceWire,
 } from "./event-attendance";
+import {
+  eventIsDated,
+  eventLastDay,
+  eventTiming,
+  type EventTiming,
+  type EventTimingFields,
+} from "./event-timing";
 import { isRepeatRule } from "./recurrence";
 import type { RepeatEditSeries } from "./repeat-draft";
 
@@ -227,6 +234,13 @@ export interface EventEditPatch {
   name?: string;
   start_time?: string;
   end_time?: string;
+  /** Sent with its days or times whenever the shape or a day changes (#6098). */
+  timing?: EventTiming;
+  start_date?: string;
+  /** `null` makes it one day. */
+  end_date?: string | null;
+  is_tentative?: boolean;
+  calendar_only?: boolean;
   location?: string;
   description?: string;
   notes?: string;
@@ -247,7 +261,7 @@ export interface EventEditPatch {
 }
 
 /** The event as stored, for {@link eventEditPatch} to compare against. */
-export interface EventEditStored {
+export interface EventEditStored extends EventTimingFields {
   name: string;
   start_time: string;
   end_time: string;
@@ -269,6 +283,16 @@ export interface EventEditStored {
  */
 export interface EventEditValues {
   name?: string;
+  /**
+   * The event's shape and, for a dated one, its days (`YYYY-MM-DD`;
+   * `end_date` the last day, or absent for one day). A dated event sends
+   * its days and never `start`/`end`: the API writes its bounds.
+   */
+  timing?: EventTiming;
+  start_date?: string;
+  end_date?: string | null;
+  is_tentative?: boolean;
+  calendar_only?: boolean;
   start?: Date;
   end?: Date;
   location?: string;
@@ -350,11 +374,51 @@ export function eventEditPatch(
   if (values.name !== undefined && values.name.trim() !== text(stored.name)) {
     patch.name = values.name.trim();
   }
-  if (values.start && !sameInstant(values.start, stored.start_time)) {
-    patch.start_time = values.start.toISOString();
+  const timing = values.timing ?? eventTiming(stored);
+  const wasTiming = eventTiming(stored);
+  if (timing === "timed") {
+    // Times sent without `timing` already make a dated event timed, but the
+    // shape is named so the request reads as what it does.
+    if (wasTiming !== "timed") patch.timing = "timed";
+    if (
+      values.start &&
+      (wasTiming !== "timed" || !sameInstant(values.start, stored.start_time))
+    ) {
+      patch.start_time = values.start.toISOString();
+    }
+    if (
+      values.end &&
+      (wasTiming !== "timed" || !sameInstant(values.end, stored.end_time))
+    ) {
+      patch.end_time = values.end.toISOString();
+    }
+  } else if (values.start_date !== undefined) {
+    // Dated: the shape and both days go together, so "a new first day keeps
+    // the length" on the server never stretches what the form shows.
+    const last =
+      timing === "all_day" ? (values.end_date ?? values.start_date) : null;
+    const storedLast = eventIsDated(stored) ? eventLastDay(stored) : null;
+    if (
+      wasTiming !== timing ||
+      values.start_date !== stored.start_date ||
+      (timing === "all_day" && last !== storedLast)
+    ) {
+      patch.timing = timing;
+      patch.start_date = values.start_date;
+      patch.end_date = last === values.start_date ? null : last;
+    }
   }
-  if (values.end && !sameInstant(values.end, stored.end_time)) {
-    patch.end_time = values.end.toISOString();
+  if (
+    values.is_tentative !== undefined &&
+    values.is_tentative !== (stored.is_tentative === true)
+  ) {
+    patch.is_tentative = values.is_tentative;
+  }
+  if (
+    values.calendar_only !== undefined &&
+    values.calendar_only !== (stored.calendar_only === true)
+  ) {
+    patch.calendar_only = values.calendar_only;
   }
   for (const key of ["location", "description", "notes"] as const) {
     const next = values[key];
@@ -421,7 +485,43 @@ export function saveScopeFor(
   now: Date,
 ): EventEditScope | "ask" {
   if (patch.recurrence_rule !== undefined) return "series";
+  // On the calendar only is the whole series' or nothing (#6098), and only
+  // upcoming meetings take a series edit, so the forms offer the change only
+  // where {@link calendarOnlyEditable} holds.
+  if (patch.calendar_only !== undefined && isInSeries(target.event)) {
+    return "series";
+  }
+  // A meeting made all-day or TBD is made so on its own: a series stays
+  // timed (`datedTimingEditable` keeps the head and a series-wide change
+  // out of it).
+  if (patch.timing !== undefined && patch.timing !== "timed") {
+    return "instance";
+  }
   return offersSeriesChoice(target, now) ? "ask" : "instance";
+}
+
+/**
+ * Whether the form may change On the calendar only on this event: always on
+ * a one-time event; on a series only while a series edit can reach it (it
+ * hasn't started and its parent is known), since the API takes the change
+ * only for every upcoming meeting (#6098).
+ */
+export function calendarOnlyEditable(
+  target: EventEditTarget,
+  now: Date,
+): boolean {
+  return !isInSeries(target.event) || offersSeriesChoice(target, now);
+}
+
+/**
+ * Whether the form may make this event all-day or TBD: not the head of a
+ * series, which holds the repeat rule (a repeating event stays timed), so
+ * only a one-time event or one generated meeting of a series (#6098).
+ */
+export function datedTimingEditable(
+  event: Pick<SeriesEventFields, "parent_event_id" | "recurrence_rule">,
+): boolean {
+  return !!event.parent_event_id || !isRepeatRule(event.recurrence_rule);
 }
 
 /** The request one save makes. */

@@ -341,7 +341,7 @@ export function InviteMemberDialog({ trigger }: InviteMemberDialogProps) {
           aria-label="Role they join as"
           // A quiet inline control, not a full-width field: the role is a
           // setting on the send, and most sends keep the default.
-          className="h-9 w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm hover:bg-card-hover pointer-coarse:h-11"
+          className="h-control-small w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm hover:bg-card-hover pointer-coarse:h-11"
         >
           <span className="text-muted-foreground">Joins as</span>
           <span className="font-semibold">

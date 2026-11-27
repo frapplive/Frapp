@@ -58,7 +58,7 @@ export function settingPhoneRoute(
 ): NotificationTarget | null {
   const phone = settingPhoneTarget(entry, options);
   if (!phone) return null;
-  const params: Record<string, string> = {};
+  const params: Record<string, string> = { ...phone.params };
   // A page pushed inside the screen (Settings' `?page=`, #6032) opens as its
   // own stack entry, so back returns to the screen's first page.
   if (phone.page) params.page = phone.page;

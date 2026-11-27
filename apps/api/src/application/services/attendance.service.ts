@@ -31,6 +31,8 @@ import {
   checkInWindowBounds,
   eventRequiresAnyone,
   eventSetsRolesApart,
+  EVENT_NO_ATTENDANCE_COPY,
+  eventNoAttendanceReason,
   eventTakesAttendance,
   type EventAttendanceFields,
   type EventTimingFields,
@@ -1000,15 +1002,18 @@ export class AttendanceService {
  * with a code, like the window's refusal, so the clients can say which.
  */
 export function assertTakesAttendance(event: EventTimingFields): void {
-  if (eventTakesAttendance(event)) return;
-  if (event.calendar_only) {
+  const reason = eventNoAttendanceReason(event);
+  if (!reason) return;
+  // Each code written out in its own exception, so the error-code scan
+  // (`api-error-codes.spec.ts`) finds it thrown.
+  if (reason === 'calendar_only') {
     throw new ConflictException({
       code: 'attendance.calendar_only',
-      message: 'This event is on the calendar only, so nobody checks in.',
+      message: EVENT_NO_ATTENDANCE_COPY.calendar_only,
     });
   }
   throw new ConflictException({
     code: 'attendance.time_tbd',
-    message: "This event's time isn't set yet, so check-in hasn't opened.",
+    message: EVENT_NO_ATTENDANCE_COPY.time_tbd,
   });
 }

@@ -79,6 +79,12 @@ function isBaseKey(filters: Filters) {
 /** The filters the component committed, newest last. */
 const committedFilters: Array<Filters> = [];
 
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
+}));
+beforeEach(() => window.history.replaceState(null, "", "/members?tab=alumni"));
+
 vi.mock("@repo/hooks", () => ({
   useMemberDisplayNames: () => ({ avatarTintFor: () => null }),
   // The List/Grid pick is kept per viewer (#4175).

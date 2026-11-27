@@ -4,9 +4,11 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { setAddress } from "@/tests/address-search-params";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityRow } from "@repo/hooks";
 
@@ -100,6 +102,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     activityRowAction: actual.activityRowAction,
     activityWeekSummary: actual.activityWeekSummary,
     findActivityTaskRow: actual.findActivityTaskRow,
+    findActivityExtensionRow: actual.findActivityExtensionRow,
     activityArchiveKeys: actual.activityArchiveKeys,
     activityKeys: actual.activityKeys,
     activityStandingKeys: actual.activityStandingKeys,
@@ -140,10 +143,11 @@ vi.mock("@repo/hooks", async (importOriginal) => {
 const mockSnooze = vi.fn(() => Promise.resolve());
 const mockUnsnooze = vi.fn(() => Promise.resolve());
 // `?review=<taskId>` from a "submitted a task" notification.
-let mockSearch = new URLSearchParams();
+
 const mockReplace = vi.fn();
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => mockSearch,
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
   usePathname: () => "/activity",
   useRouter: () => ({ replace: mockReplace }),
 }));
@@ -192,6 +196,11 @@ vi.mock("@/lib/providers/network-provider", () => ({
   callbacks. What the cards do inside it is chat's own tests' business; what
   this page owes is opening the right row and reacting to close and acted.
 */
+// The panel's `onClose` as each render handed it, so a spec can answer late
+// through an old render's close, as a real panel's pending action does.
+const panelCloses = vi.hoisted(
+  () => [] as { key: string; onClose: (key?: string) => void }[],
+);
 vi.mock("./activity-panel", () => ({
   ActivityPanel: ({
     row,
@@ -201,8 +210,10 @@ vi.mock("./activity-panel", () => ({
     row: ActivityRow | null;
     onClose: (key?: string) => void;
     onActed: () => void;
-  }) =>
-    row ? (
+  }) => {
+    if (!row) return null;
+    panelCloses.push({ key: row.key, onClose });
+    return (
       <div data-testid="panel">
         <span>{`panel:${row.title}`}</span>
         <button onClick={() => onClose()}>close</button>
@@ -210,7 +221,8 @@ vi.mock("./activity-panel", () => ({
         <button onClick={() => onClose(row.key)}>settled close</button>
         <button onClick={onActed}>acted</button>
       </div>
-    ) : null,
+    );
+  },
 }));
 
 /** The chapter's plan: `state.allowed` false refuses the row actions. */
@@ -340,7 +352,7 @@ beforeEach(() => {
   mockResetLayout.mockClear();
   vi.useRealTimers();
   vi.clearAllMocks();
-  mockSearch = new URLSearchParams();
+  setAddress("/activity");
   mockEveryoneOffered.mockReturnValue(false);
   mockModuleGate.mockReturnValue(undefined);
   mockUser.mockReturnValue({ userId: "me", isLoading: false });
@@ -1491,6 +1503,13 @@ describe("ActivityPage", () => {
       expect(screen.getByTestId("tasks-board-everyone")).toBeInTheDocument();
       expect(screen.queryByTestId("tasks-board-mine")).toBeNull();
       expect(screen.queryByRole("region", { name: /to do/i })).toBeNull();
+      // Everyone's is the address, pushed; Back returns to Mine (#6044).
+      expect(window.location.search).toBe("?view=everyone");
+      act(() => window.history.back());
+      await waitFor(() =>
+        expect(screen.getByTestId("tasks-board-mine")).toBeInTheDocument(),
+      );
+      expect(window.location.search).toBe("");
     });
 
     it("goes to Everyone's from a task made on Mine for someone else", async () => {
@@ -1505,14 +1524,14 @@ describe("ActivityPage", () => {
 
     it("opens on Everyone's from ?view=everyone, the Tasks page's old way in", () => {
       mockEveryoneOffered.mockReturnValue(true);
-      mockSearch = new URLSearchParams("view=everyone");
+      setAddress("/activity?view=everyone");
       mockActivity.mockReturnValue(loaded({}));
       render(<ActivityPage />);
       expect(screen.getByTestId("tasks-board-everyone")).toBeInTheDocument();
     });
 
     it("stays on Mine for ?view=everyone when Everyone's isn't offered", () => {
-      mockSearch = new URLSearchParams("view=everyone");
+      setAddress("/activity?view=everyone");
       mockActivity.mockReturnValue(loaded({}));
       render(<ActivityPage />);
       expect(screen.queryByTestId("tasks-board-everyone")).toBeNull();
@@ -1787,6 +1806,26 @@ describe("ActivityPage", () => {
     expect(screen.queryByRole("button", { name: /Archived polls/ })).toBeNull();
   });
 
+  it("puts the Archive in the address, so a reload or a link lands on it (#6044)", () => {
+    mockActivity.mockReturnValue(loaded({}));
+    mockArchive.mockReturnValue({ isPending: false, data: undefined });
+    setAddress("/activity?view=archive");
+    render(<ActivityPage />);
+    expect(
+      screen.getByRole("heading", { name: "Archive" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says a row the address names isn't here, and takes it out (#6044)", async () => {
+    mockActivity.mockReturnValue(loaded({}));
+    setAddress("/activity?item=task:gone");
+    render(<ActivityPage />);
+    expect(
+      await screen.findByText(/isn't on your Activity any more/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
   it("opens the Archive in place of the page, laid out by kind, and goes back (#5127)", () => {
     mockActivity.mockReturnValue(loaded({}));
     mockArchive.mockReturnValue({
@@ -1992,22 +2031,66 @@ describe("ActivityPage", () => {
       }),
     );
     mockActivity.mockReturnValue({ ...stale, refetch });
-    mockSearch = new URLSearchParams("review=t9");
+    setAddress("/activity?review=t9");
     const { rerender } = render(<ActivityPage />);
     await act(async () => {});
 
     expect(refetch).toHaveBeenCalledTimes(1);
     expect(screen.getByText("panel:Sweep the porch")).toBeInTheDocument();
-    // Dropped from the address, so a refresh doesn't open it again.
-    expect(mockReplace).toHaveBeenCalledWith("/activity", { scroll: false });
+    // The notification's mark becomes the row's address, in place (#6044).
+    expect(window.location.search).toMatch(/^\?item=/);
 
     // The address drops it, then the same notification is clicked again.
-    mockSearch = new URLSearchParams();
+    setAddress("/activity");
     rerender(<ActivityPage />);
-    mockSearch = new URLSearchParams("review=t9");
+    setAddress("/activity?review=t9");
     rerender(<ActivityPage />);
     await act(async () => {});
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens a request for more time from its push (#6096), or its task once answered", async () => {
+    const extension = {
+      id: "req-1",
+      task: { ...task, id: "t7", title: "Sweep the porch" },
+      requester_name: "Sam Lee",
+      reason: "Shift ran late",
+      from_due_date: "2026-11-14",
+      from_due_at: null,
+      to_due_date: "2026-11-16",
+      to_due_at: null,
+      needs_officer: "over_a_day",
+      ai_verdict: null,
+      ai_note: null,
+      created_at: "2026-11-13T01:00:00Z",
+    };
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() =>
+        Promise.resolve({
+          data: data({
+            needs_you: { ...nothingWaiting, task_extensions: [extension] },
+          }),
+        }),
+      ),
+    });
+    setAddress("/activity?extension=t7");
+    const { unmount } = render(<ActivityPage />);
+    await act(async () => {});
+    expect(
+      screen.getByText("panel:Sam Lee asks for more time"),
+    ).toBeInTheDocument();
+    expect(window.location.search).toMatch(/^\?item=/);
+    unmount();
+
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() => Promise.resolve({ data: data() })),
+    });
+    setAddress("/activity?extension=t7");
+    render(<ActivityPage />);
+    await act(async () => {});
+    expect(mockReplace).toHaveBeenCalledWith("/activity?task=t7");
   });
 
   it("sends a review the fresh read doesn't hold to that task on the board", async () => {
@@ -2015,7 +2098,7 @@ describe("ActivityPage", () => {
       ...loaded(),
       refetch: vi.fn(() => Promise.resolve({ data: data() })),
     });
-    mockSearch = new URLSearchParams("review=gone");
+    setAddress("/activity?review=gone");
     render(<ActivityPage />);
     await act(async () => {});
 
@@ -2114,7 +2197,7 @@ describe("ActivityPage", () => {
     expect(screen.getByText("Couldn't load your activity")).toBeInTheDocument();
   });
 
-  it("re-reads once when the panel is closed by hand, and once when an action settles", () => {
+  it("re-reads once when the panel is closed by hand, and once when an action settles", async () => {
     mockActivity.mockReturnValue(loaded());
     render(<ActivityPage />);
 
@@ -2123,8 +2206,10 @@ describe("ActivityPage", () => {
         name: /^(Unread:\s?)?(From .*\.\s?)?Formal venue\?/,
       }),
     );
+    expect(window.location.search).toMatch(/^\?item=/);
     fireEvent.click(screen.getByRole("button", { name: "close" }));
-    expect(screen.queryByTestId("panel")).toBeNull();
+    // Closing what this tab opened goes Back (§ Addresses).
+    await waitFor(() => expect(screen.queryByTestId("panel")).toBeNull());
     expect(listRereads()).toBe(1);
     expect(standingRereads()).toBe(1);
 
@@ -2135,7 +2220,7 @@ describe("ActivityPage", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "acted" }));
     fireEvent.click(screen.getByRole("button", { name: "settled close" }));
-    expect(screen.queryByTestId("panel")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("panel")).toBeNull());
     // `acted` re-read; the settled close did not read a second time.
     expect(listRereads()).toBe(2);
     expect(standingRereads()).toBe(2);
@@ -2153,6 +2238,47 @@ describe("ActivityPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "late close" }));
 
     expect(screen.getByText("panel:Formal venue?")).toBeInTheDocument();
+  });
+
+  it("does not close a row opened since when an earlier row's action answers late (#6044)", async () => {
+    mockActivity.mockReturnValue(loaded());
+    render(<ActivityPage />);
+    const rows = screen
+      .getAllByRole("button")
+      .filter((button) => button.closest("li"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^(Unread:\s?)?(From .*\.\s?)?Formal venue\?/,
+      }),
+    );
+    // The close an action started on this row will call when it answers.
+    const stale = panelCloses.at(-1)!;
+    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    await waitFor(() => expect(screen.queryByTestId("panel")).toBeNull());
+    const other = rows.find(
+      (button) =>
+        !/Formal venue/.test(button.textContent ?? "") &&
+        button.getAttribute("aria-haspopup") === null,
+    );
+    expect(other).toBeDefined();
+    if (!other) return;
+    fireEvent.click(other);
+    const opened = screen.queryByTestId("panel");
+    expect(opened).not.toBeNull();
+    if (!opened) return;
+    act(() => stale.onClose(stale.key));
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+  });
+
+  it("puts the Archive in the address with a push, and its back arrow goes Back (#6044)", async () => {
+    mockActivity.mockReturnValue(loaded({}));
+    mockArchive.mockReturnValue({ isPending: false, data: undefined });
+    render(<ActivityPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?view=archive");
+    push.mockRestore();
   });
 
   describe("asks on the row (#4402)", () => {
@@ -2656,7 +2782,7 @@ describe("Tasks you assigned: one row per task for everyone (#5538)", () => {
       ...read,
       refetch: vi.fn(() => Promise.resolve({ data: read.data })),
     });
-    mockSearch = new URLSearchParams("review=copy-7");
+    setAddress("/activity?review=copy-7");
     render(<ActivityPage />);
     await act(async () => {});
 

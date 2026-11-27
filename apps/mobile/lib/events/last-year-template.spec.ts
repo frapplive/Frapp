@@ -97,3 +97,42 @@ describe("lastYearTemplate", () => {
     expect(weekDraft.end!.getTime() - weekDraft.start!.getTime()).toBe(WEEK);
   });
 });
+
+describe("lastYearTemplate for a dated event (#6144)", () => {
+  // Stored as the saver's midnights; the form reads the days.
+  const RETREAT: EventDetail = {
+    ...FORMAL,
+    name: "Retreat 2025",
+    timing: "all_day",
+    start_date: "2025-11-22",
+    end_date: "2025-11-23",
+    start_time: "2025-11-22T05:00:00.000Z",
+    end_time: "2025-11-24T05:00:00.000Z",
+  };
+
+  it("keeps it all-day on the same weekdays this year, its span intact", () => {
+    const draft = lastYearTemplate(RETREAT, new Date(2026, 10, 12, 15));
+    expect(draft.timing).toBe("all_day");
+    expect(draft.name).toBe("Retreat 2026");
+    expect([
+      draft.start!.getFullYear(),
+      draft.start!.getMonth(),
+      draft.start!.getDate(),
+    ]).toEqual([2026, 10, 21]);
+    expect(draft.lastDay).toBe("2026-11-22");
+    expect(draft.repeat.preset).toBe("NONE");
+  });
+
+  it("keeps a time-TBD event today rather than a week on", () => {
+    const tbd: EventDetail = {
+      ...RETREAT,
+      timing: "time_tbd",
+      start_date: "2025-11-13",
+      end_date: "2025-11-13",
+    };
+    const draft = lastYearTemplate(tbd, new Date(2026, 10, 12, 21));
+    expect(draft.timing).toBe("time_tbd");
+    expect(draft.start!.getDate()).toBe(12);
+    expect(draft.lastDay).toBe(null);
+  });
+});

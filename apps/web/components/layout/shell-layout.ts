@@ -18,6 +18,8 @@ export { useMediaQueryState } from "@/lib/use-media-query";
  * - **The open page is the URL** (`/events`), so links and Back work as they
  *   always did. `/chat` is "no page": the conversation alone. `/messages` is
  *   the Messages page, the member's conversations listed beside the open one.
+ *   What opens inside a page (a folder, a record, a named view) is in its
+ *   query (`spec/ui/web-dashboard/README.md` § Addresses, `lib/address/`).
  * - **Chat open or closed beside a page is a cookie**, and so is the docked
  *   conversation's width, both read by the dashboard layout on the server so
  *   the first paint is right. They live in `shell-prefs.ts`, which the server

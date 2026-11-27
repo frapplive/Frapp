@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { selectCalendarBirthdays } from "@repo/hooks/calendar-birthdays";
 import { selectCalendarTasks } from "@repo/hooks/calendar-tasks";
 import { CALENDAR_KIND_HUE } from "@repo/hooks/activity-agenda";
@@ -158,7 +158,6 @@ vi.mock("@/lib/realtime/use-realtime-table", () => ({
 }));
 
 // The page's URL; no `?event=` unless a test sets one.
-const searchRef = vi.hoisted(() => ({ current: new URLSearchParams() }));
 // The agenda's birthday items (#4959), as `useCalendarBirthdays` serves them.
 const birthdaysRef = vi.hoisted(() => ({
   current: [] as import("@repo/hooks/calendar-birthdays").CalendarBirthday[],
@@ -175,11 +174,13 @@ const narrowRef = vi.hoisted(() => ({ current: null as boolean | null }));
 vi.mock("@/lib/use-is-narrow", () => ({
   useIsNarrow: () => [() => undefined, narrowRef.current],
 }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchRef.current,
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 import { EventsPage } from "./events-page";
+import { setAddress } from "@/tests/address-search-params";
 
 const row = (name: RegExp) => {
   const button = screen.getByRole("button", { name });
@@ -213,7 +214,7 @@ beforeEach(() => {
   eventsQuery.data = EVENTS;
   eventsQuery.isError = false;
   permissionsRef.current = ["events:create", "events:update", "members:view"];
-  searchRef.current = new URLSearchParams();
+  setAddress("/events");
   birthdaysRef.current = [];
   tasksRef.current = { items: [] };
   narrowRef.current = null;
@@ -221,7 +222,7 @@ beforeEach(() => {
 
 describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
   it("opens that event's detail sheet", () => {
-    searchRef.current = new URLSearchParams({ event: "evt-2" });
+    setAddress("/events?event=evt-2");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
@@ -232,12 +233,65 @@ describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
     );
   });
 
-  it("opens nothing for an id the list does not hold", () => {
-    searchRef.current = new URLSearchParams({ event: "gone" });
+  it("opens nothing for an id the list does not hold, says so, and drops it (#6043)", async () => {
+    setAddress("/events?event=gone");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ open: false }),
+    );
+    expect(
+      await screen.findByText(/That event isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("puts the event a row opens in the address, and its close goes Back (#6043)", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    const go = vi.spyOn(window.history, "go");
+    try {
+      await user.click(row(/study night/i).querySelector("button")!);
+      expect(window.location.search).toBe("?event=evt-2");
+      expect(push).toHaveBeenCalledTimes(1);
+      const props = detailSheetProps.mock.lastCall![0] as {
+        onOpenChange: (open: boolean) => void;
+      };
+      act(() => props.onOpenChange(false));
+      expect(go).toHaveBeenCalledWith(-1);
+    } finally {
+      push.mockRestore();
+      go.mockRestore();
+    }
+  });
+
+  it("closes the sheet when Back takes the event out of the address (#6043)", async () => {
+    setAddress("/events?event=evt-2");
+    render(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(detailSheetProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      ),
+    );
+  });
+});
+
+describe("EventsPage hour grid address (#6043)", () => {
+  it("pushes the hour grid, and Back closes it", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    await user.click(screen.getByRole("button", { name: "Hours for Today" }));
+    expect(window.location.search).toMatch(/^\?hours=\d{4}-\d{2}-\d{2}$/);
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole("button", { name: /^create event on/i }),
+      ).toHaveLength(0),
     );
   });
 });
@@ -1267,7 +1321,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getAllByRole("button", { name: /^create event on/i }).length,
     ).toBe(24 * 3);
     expect(
-      screen.getByRole("button", { name: /^view chapter meeting/i }),
+      screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Events" }));
@@ -1319,6 +1373,18 @@ describe("EventsPage keeps the editor's draft (#4593)", () => {
     expect(screen.getByLabelText("Event name")).toHaveValue("Formal");
   });
 
+  it("keeps the form it reopens with no edit= in the address (#6043)", async () => {
+    const user = userEvent.setup();
+    const first = render(tree());
+    await startDraft(user);
+    first.unmount();
+    setAddress("/events");
+
+    render(tree());
+    const editor = await screen.findByRole("region", { name: "New event" });
+    expect(within(editor).getByLabelText("Event name")).toHaveValue("Formal");
+  });
+
   it("doesn't reopen the editor for a viewer who can no longer create events", async () => {
     const user = userEvent.setup();
     const first = render(tree());
@@ -1328,5 +1394,74 @@ describe("EventsPage keeps the editor's draft (#4593)", () => {
     permissionsRef.current = ["members:view"];
     render(tree());
     expect(screen.queryByRole("region", { name: "New event" })).toBeNull();
+  });
+});
+
+describe("EventsPage dated, tentative and calendar-only events (#6098)", () => {
+  const dayKey = (days: number) => localIsoDate(new Date(daysOut(days)));
+  const DATED = [
+    {
+      id: "evt-drive",
+      name: "Service Drive",
+      timing: "all_day",
+      start_date: dayKey(2),
+      end_date: dayKey(3),
+      // Another zone's midnights: never what places or words it.
+      start_time: `${dayKey(2)}T08:00:00.000Z`,
+      end_time: `${dayKey(4)}T08:00:00.000Z`,
+      point_value: 5,
+      is_tentative: true,
+    },
+    {
+      id: "evt-council",
+      name: "Council Meeting",
+      timing: "time_tbd",
+      start_date: dayKey(4),
+      end_date: null,
+      start_time: `${dayKey(4)}T08:00:00.000Z`,
+      end_time: `${dayKey(5)}T08:00:00.000Z`,
+      point_value: 10,
+    },
+  ];
+
+  it("lists an all-day event on each of its days, by its days, with its Tentative chip", () => {
+    eventsQuery.data = DATED;
+    render(<EventsPage />);
+
+    const rows = screen.getAllByRole("button", { name: /service drive/i });
+    // Under both of its days' headings.
+    expect(rows).toHaveLength(2);
+    const text = rows[0]!.closest("li")!.textContent ?? "";
+    expect(text).toMatch(/All day · /);
+    expect(text).toContain("5 points");
+    expect(text).not.toMatch(/12:00 AM|\d:00 AM/);
+    expect(within(rows[0]!.closest("li")!).getByText("Tentative")).toBeTruthy();
+  });
+
+  it("says Time TBD on a row, with no points, check-in or Tentative chip", () => {
+    eventsQuery.data = DATED;
+    render(<EventsPage />);
+
+    const council = row(/council meeting/i);
+    expect(council.textContent).toContain("Time TBD");
+    expect(council.textContent).not.toContain("points");
+    expect(within(council).queryByText("Tentative")).toBeNull();
+  });
+
+  it("never says check-in is open on a calendar-only event", () => {
+    const now = Date.now();
+    eventsQuery.data = [
+      {
+        ...EVENTS[1],
+        id: "evt-info",
+        name: "Last Day of Classes",
+        calendar_only: true,
+        start_time: new Date(now - 5 * 60 * 1000).toISOString(),
+        end_time: new Date(now + 55 * 60 * 1000).toISOString(),
+      },
+    ];
+    render(<EventsPage />);
+
+    expect(row(/last day of classes/i).textContent).not.toContain("Check-in");
   });
 });

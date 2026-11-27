@@ -1035,7 +1035,7 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
   Category `events` or `tasks`, by the first thing in it.
 - **An event is added by the officer, in the ordinary form.**
   "Add to calendar" opens the event form filled in as a copy of last year's event, moved 52 weeks on (same weekday, same time of day;
-  a week further at a time if that day has already passed), never repeating, with the year in its name carried forward ("Winter Formal 2025" opens as "Winter Formal 2026").
+  a week further at a time if that day has already passed; an all-day or time-TBD event stays one, its days moved the same way and today counting as ahead, `datedDaysThisYear`, #6144), never repeating, with the year in its name carried forward ("Winter Formal 2025" opens as "Winter Formal 2026").
   Nothing is made until the officer saves it, by the ordinary route with its ordinary checks; the suggestion then records the event it became.
   Only the member who made the event can record it against the suggestion; anyone else's event answers as one that does not exist.
   Recording it is not counted as a change to the suggestion (`edited` stays false).
@@ -1069,6 +1069,12 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
 > Paul's ask set the tone and the limits in kind ("a few", "one per thing per year", "dismiss means gone", "already doing it is one tap").
 > The numbers are this session's: six weeks ahead, 52 weeks back, 60 days of slack, three new a week, five waiting, 150 days before a name is raised again, three months for a chore, Ask as the switch, the president as the member it acts for, and no model call.
 > The no-model choice leaves out what only a model could compare: the free-text action items and decisions of last year's minutes that never became tasks (#4416).
+
+## Asking for more time
+
+A member asking for more time on a task (#6096) has their reason judged by `tasks.extension-reason`: the task's title and the reason in, valid or invalid and a short note out, nothing else about the member.
+It is in the `nudges` family, so it stands behind the nudges switch (whose description in Settings says so) and the member's own yes, and the member's reason is one more thing that family sends besides their own tasks; with either off, or the call failing, the request goes to an officer, as it does when the reason is judged invalid.
+A valid verdict approves at most one extension of a day; the rules are [`tasks.md` § Asking for more time](tasks.md#asking-for-more-time).
 
 ## Nudges
 
@@ -1167,7 +1173,7 @@ Activity draws one card under Now (under the week card until #5779 replaced it w
 
 ## Stored AI text
 
-Frapp does not keep the text of prompts or answers, with four exceptions.
+Frapp does not keep the text of prompts or answers, with five exceptions.
 
 | Exception                                                          | What is kept                                                                            | Who reads it                                                                                                      | How long                                                      |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -1175,6 +1181,7 @@ Frapp does not keep the text of prompts or answers, with four exceptions.
 | Beta diagnostics                                                   | Questions and answers in Ask, for one chapter                                           | The Frapp team                                                                                                    | 14 days, encrypted, with a fixed end date                     |
 | Suggested agenda items                                             | Each item the model suggested (a few words, and why), whether it was added or dismissed | The event's editors while it waits; after that only the prompt, as an example for meetings with the same audience | Until the event, or the minutes it was drawn from, is deleted |
 | What people change in a suggestion                                 | The member's question, the text the suggestion proposed and the text they saved         | The Frapp team                                                                                                    | 90 days, encrypted                                            |
+| A member asks for more time on a task (#6096)                      | AI's valid-or-invalid and its note (up to 200 characters) on the request, beside the member's own reason | Officers who decide the request, in Activity                                                                       | With the request; deleted with the member's account |
 
 - A suggested task from minutes sent with **Add to next meeting's agenda** (#5790) is decided, so it keeps no text; the item it became keeps its words, which are the posted action item (no model wrote them; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)). A copy of the suggestion as it stood is kept for one day so Undo can put it back, then emptied by the hourly sweep.
 - **What people change in a suggestion is kept, so Frapp learns what it got wrong** (Paul, 2026-11-22: "we defo need to log what humans change when Frapp AI makes suggestions. that's how we learn what is good and not good").

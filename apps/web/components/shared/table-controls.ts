@@ -38,7 +38,7 @@ import { FOCUS_RING } from "@/components/ui/focus";
  * that, the later sibling swallows the earlier one's clicks — the defect the
  * chat slice found under its reaction chips. So the `<label>` *is* 44x44, and
  * only where 44 is the rule: `pointer-coarse` is §2's own carve-out that
- * "compact 34px controls (§7) are web/pointer-only", read in the other direction.
+ * that the mouse column of the size scale is web/pointer-only, read in the other direction.
  * A mouse keeps the small box (20px since 2026-11-05) and the 48px column; a finger gets a real 44px
  * target and the column is already wide enough to hold it.
  *
@@ -54,12 +54,14 @@ import { FOCUS_RING } from "@/components/ui/focus";
  * than the page and the 375px floor is unaffected.
  */
 /**
- * A toolbar row's height: 36 to a mouse, 44 to a finger. The same rule the
- * dense list rows below it take (`min-h-9 pointer-coarse:min-h-11`), and
+ * A toolbar row's height: the Small step, 28 to a mouse (36 until #6115) and
+ * 44 to a finger. The same rule the dense list rows below it take
+ * (`min-h-control-list-row pointer-coarse:min-h-11`), and
  * Button's `toolbar` size, so a filter, the search field and the route's
  * primary action line up in one row on either pointer (`components.md` §4).
  */
-export const dashboardToolbarHeightClassName = "h-9 pointer-coarse:h-11";
+export const dashboardToolbarHeightClassName =
+  "h-control-small pointer-coarse:h-11";
 const TOOLBAR_HEIGHT = dashboardToolbarHeightClassName;
 
 /** The search field in a toolbar row, leaving room for its glyph. */
@@ -101,8 +103,8 @@ export const dashboardCheckboxHitAreaClassName = [
  * - Chat's chrome buttons, which the board puts at 32px (`1b` pin 13).
  *
  * Both are true at once through `pointer-coarse`: §2's own carve-out that
- * "compact 34px controls (§7) are web/pointer-only", read in the other
- * direction, the same trade the checkbox hit area above makes. A pointer gets a 32px box, and
+ * that the mouse column of the size scale is web/pointer-only, read in the other
+ * direction, the same trade the checkbox hit area above makes. A pointer gets the Row step (28; 32 until #6115), and
  * on touch the real 44px target returns, with the row growing to hold it.
  *
  * One export rather than a string per call site, because the copies drift in
@@ -112,7 +114,7 @@ export const dashboardCheckboxHitAreaClassName = [
  * the touch floor.
  */
 export const compactControlClassName =
-  "h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11";
+  "h-control-row w-control-row pointer-coarse:h-11 pointer-coarse:w-11";
 
 /**
  * A list heading's small glyph control (20px, a 14px glyph): a channel
@@ -151,7 +153,7 @@ export const headingControlClassName =
  * `/backwork` draw a row that is not itself a control (`/documents` two lines
  * at `min-h-11`; `/backwork` a column grid at `md:min-h-12`, two stacked lines
  * below `md`);
- * `/members` draws a one-line `min-h-9 pointer-coarse:min-h-11` row that is the
+ * `/members` draws a one-line `min-h-control-list-row pointer-coarse:min-h-11` row that is the
  * member's whole hit target. They differ in line count, height and whether they
  * are interactive at all, so a shared parent would be a name over two things
  * that only look alike. Each row recipe is documented where it is written.

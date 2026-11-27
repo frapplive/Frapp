@@ -191,6 +191,7 @@ export * from "./minutes-request-copy";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
+export * from "./module-settings-copy";
 export * from "./name-lock";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen
@@ -224,6 +225,8 @@ export * from "./ops-nudges";
 export * from "./order-number";
 // s02's "Already in a chapter?" line, shared by web `/join` and the phone.
 export * from "./other-account";
+// The People settings pages' words, web and the phone (#6029).
+export * from "./people-settings-copy";
 // What each system permission is called and which module it belongs to. The
 // API serves it at `GET /v1/roles/permissions-catalog`; web and mobile read
 // the same list from here (#4069).
@@ -304,6 +307,8 @@ export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
 export * from "./task-due";
+// Asking for more time on a task (#6096).
+export * from "./task-extension";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";
@@ -340,6 +345,7 @@ export {
   normalizeExtension,
   type UploadKind,
 } from "./upload-allowlists";
+export * from "./web-addresses";
 export * from "./week-start";
 export * from "./welcome-card";
 // Point-in-polygon, shared by the API's geofence check and the phone's s10 screen.

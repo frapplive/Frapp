@@ -1,4 +1,11 @@
 import { POINTS_ADJUSTMENT_MAX } from "./field-limits";
+import {
+  EVENT_ALL_DAY_LABEL,
+  EVENT_TENTATIVE_LABEL,
+  EVENT_TIME_TBD_LABEL,
+  eventTakesAttendance,
+  type EventTiming,
+} from "./event-timing";
 
 /**
  * The words of the event form's rows (#5561), one copy for web's
@@ -144,4 +151,55 @@ export function eventLengthLabel(minutes: number): string {
     ? `${hours}`
     : hours.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
   return `${shown} ${hours === 1 ? "hr" : "hrs"}`;
+}
+
+/**
+ * The When row's three shapes (#6098), one short pick on both apps: a time,
+ * the whole day (or days), or a day whose time isn't set. Google Calendar and
+ * Apple Calendar put All day beside the times; a time TBD is Eventbrite's
+ * "time TBA". One three-way pick rather than a switch plus a second control,
+ * because the three are one exclusive choice (HIG: a segmented control for a
+ * few closely related choices).
+ */
+export const EVENT_TIMING_CHOICES = [
+  "timed",
+  "all_day",
+  "time_tbd",
+] as const satisfies readonly EventTiming[];
+
+export const EVENT_TIMING_CHOICE_LABELS: Record<EventTiming, string> = {
+  timed: "Set time",
+  all_day: EVENT_ALL_DAY_LABEL,
+  time_tbd: EVENT_TIME_TBD_LABEL,
+};
+
+/** The other words the When row says, the same on both apps. */
+export const EVENT_WHEN_COPY = {
+  /** Beside the switch under the When row. */
+  tentative: EVENT_TENTATIVE_LABEL,
+  /** The optional last day of an all-day event, while empty. */
+  lastDay: "Last day",
+  /** Opens the last day on an all-day event that is one day so far. */
+  endsAnotherDay: "Ends another day",
+  /** The tentative switch's accessible description. */
+  tentativeHint: "It might not happen",
+} as const;
+
+/**
+ * Which rows the form shows for the shape it holds (#6098), on both apps:
+ * Points and Check-in only where the event takes attendance
+ * (`eventTakesAttendance`), and Repeat only on a timed event, because a
+ * repeating event stays timed for now.
+ */
+export function eventFormShowsRow(
+  row: EventFormRow,
+  shape: { timing: EventTiming; calendarOnly: boolean },
+): boolean {
+  const takes = eventTakesAttendance({
+    timing: shape.timing,
+    calendar_only: shape.calendarOnly,
+  });
+  if (row === "points" || row === "checkIn") return takes;
+  if (row === "repeat") return shape.timing === "timed";
+  return true;
 }

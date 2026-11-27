@@ -3753,6 +3753,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tasks/extension-requests/blocked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Members who can't ask for more time (#6096)
+         * @description Each was granted 3 extensions in 30 days. An officer restores one with `POST /v1/tasks/extension-requests/restore`.
+         */
+        get: operations["TaskController_listBlockedFromExtensions_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/extension-requests/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Let a member ask for more time again (#6096)
+         * @description Clears the block 3 extensions in 30 days put on them; extensions granted before now stop counting. 404 when they could already ask.
+         */
+        post: operations["TaskController_restoreExtensions_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tasks/{id}": {
         parameters: {
             query?: never;
@@ -3874,6 +3914,66 @@ export interface paths {
         put?: never;
         /** Reject task completion (revert to IN_PROGRESS) */
         post: operations["TaskController_rejectCompletion_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/extension-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for more time on a task (#6096)
+         * @description The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 `task.extension_fixed_deadline`), while they may ask (403 `task.extension_blocked` after 3 extensions in 30 days). One waiting request per task (409 `task.extension_waiting`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.
+         */
+        post: operations["TaskController_requestExtension_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/extension-requests/{requestId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a request for more time (#6096)
+         * @description Moves the task's due through the officer's edit, so the reminders re-arm, and tells the member. Not your own request (403). 409 when someone answered first, or when the task changed since they asked (done, handed over, re-dated or fixed: `task.extension_stale`, and the request is closed).
+         */
+        post: operations["TaskController_approveExtension_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/extension-requests/{requestId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline a request for more time, with a reason (#6096)
+         * @description The due stays and the member is told why. The same refusals as approving.
+         */
+        post: operations["TaskController_declineExtension_v1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4051,6 +4151,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get what Meet Frapp Intelligence shows and the caller’s answer
+         * @description The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.
+         */
+        get: operations["AiConsentController_getConsent_v1"];
+        /**
+         * Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)
+         * @description Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.
+         */
+        put: operations["AiConsentController_answerConsent_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the chapter’s AI switches
+         * @description Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.
+         */
+        get: operations["AiChapterSettingsController_getSettings_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn the chapter’s AI features on or off
+         * @description President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.
+         */
+        patch: operations["AiChapterSettingsController_updateSettings_v1"];
+        trace?: never;
+    };
     "/v1/tenants/resolve": {
         parameters: {
             query?: never;
@@ -4205,54 +4353,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/v1/ai/consent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get what Meet Frapp Intelligence shows and the caller’s answer
-         * @description The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.
-         */
-        get: operations["AiConsentController_getConsent_v1"];
-        /**
-         * Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)
-         * @description Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.
-         */
-        put: operations["AiConsentController_answerConsent_v1"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/ai/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get the chapter’s AI switches
-         * @description Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.
-         */
-        get: operations["AiChapterSettingsController_getSettings_v1"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Turn the chapter’s AI features on or off
-         * @description President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.
-         */
-        patch: operations["AiChapterSettingsController_updateSettings_v1"];
         trace?: never;
     };
     "/v1/ai/runs": {
@@ -11455,6 +11555,19 @@ export interface components {
             /** @description How many copies are confirmed, or needed no sign-off when marked done. */
             confirmed: number;
         };
+        BlockedFromExtensionsDto: {
+            /** Format: uuid */
+            user_id: string;
+            /** Format: date-time */
+            blocked_at: string;
+        };
+        RestoreTaskExtensionsDto: {
+            /**
+             * Format: uuid
+             * @description The member to restore.
+             */
+            user_id: string;
+        };
         RequestTaskPhotoUploadUrlDto: {
             /** @description Original filename (a JPEG, PNG, GIF or WebP) */
             filename: string;
@@ -11557,6 +11670,8 @@ export interface components {
              * @enum {string}
              */
             proof_kind?: "none" | "photo" | "link";
+            /** @description A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group's copies and a series' copies all carry it. */
+            fixed_deadline?: boolean;
             /** @description Repeat on a schedule (#5119): the event rule format (`packages/validation/src/recurrence.ts`), `FREQ` DAILY, WEEKLY or MONTHLY, `INTERVAL` 1 to 30, `BYDAY` or `BYMONTHDAY`, a required `TZID` (the officer's zone), and `COUNT` (2 to 120), `UNTIL` (YYYYMMDD) or no end. Example: `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York`. The task is the first copy; the next is made once it is due, on the same time of day in that zone. */
             recurrence_rule?: string;
             /** @description When set with `client_message_id`, posts an interactive task card to this chat channel after the task is created (the `/task` slash command). Omit for dashboard creates. */
@@ -11653,6 +11768,8 @@ export interface components {
             followed_by: string | null;
             /** @description What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open. */
             attachments: components["schemas"]["FrappLinkDto"][];
+            /** @description A fixed deadline (#6096): never eligible for an extension, and shown more urgent to its assignee. */
+            fixed_deadline: boolean;
             /** Format: date-time */
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the task row committed and the card did not, so no Realtime echo will arrive to reconcile the caller’s optimistic placeholder — drop it and warn, without implying the create failed. Absent means the server reported no outcome (a dashboard create, or a request that did not attempt a card) — leave the placeholder for the echo. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
@@ -11698,6 +11815,8 @@ export interface components {
              * @enum {string}
              */
             proof_kind?: "none" | "photo" | "link";
+            /** @description A fixed deadline (#6096): no extensions. Turning it on closes a request for more time still waiting on the task. With `scope: group` every copy not yet confirmed; with `scope: series` the copies still to come too. */
+            fixed_deadline?: boolean;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. Null takes it off. A new one must name a tier, role or group the editor is in; the one the task has stays whoever edits. With `scope: group` it changes every copy, confirmed ones too. Not with `scope: series`. */
             followed_by?: string | null;
             /** @description What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. With `scope: group` every copy not yet confirmed takes it; with `scope: series` the next copies are made with it. */
@@ -11725,6 +11844,98 @@ export interface components {
             comment?: string;
             /** @description "Ask for a photo next time": raises the task's `proof_kind` to `photo`, so the next Mark done needs one. */
             require_photo?: boolean;
+        };
+        RequestTaskExtensionDto: {
+            /**
+             * Format: date
+             * @description The day asked for (`YYYY-MM-DD`), later than the task's. For a task due at a time, the day of `due_at` as the member sees it.
+             */
+            due_date: string;
+            /**
+             * Format: date-time
+             * @description The moment asked for: required on a task due at a time, refused on one due by a day.
+             */
+            due_at?: string | null;
+            /** @description Why the member needs more time, in one short line. */
+            reason: string;
+        };
+        TaskExtensionSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "declined" | "withdrawn";
+            reason: string;
+            /** Format: date */
+            from_due_date: string;
+            /** Format: date-time */
+            from_due_at: string | null;
+            /** Format: date */
+            to_due_date: string;
+            /** Format: date-time */
+            to_due_at: string | null;
+            /**
+             * @description Why it waits on an officer; null when it was approved automatically.
+             * @enum {string|null}
+             */
+            needs_officer: "over_a_day" | "second_request" | "back_to_back" | "reason_invalid" | "ai_unavailable" | null;
+            auto_approved: boolean;
+            decline_reason: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        RequestTaskExtensionResponseDto: {
+            extension: components["schemas"]["TaskExtensionSummaryDto"];
+            /** @description True when this extension made 3 in 30 days: the member can't ask again until an officer restores it. */
+            now_blocked: boolean;
+        };
+        TaskExtensionRequestDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "declined" | "withdrawn";
+            reason: string;
+            /** Format: date */
+            from_due_date: string;
+            /** Format: date-time */
+            from_due_at: string | null;
+            /** Format: date */
+            to_due_date: string;
+            /** Format: date-time */
+            to_due_at: string | null;
+            /**
+             * @description Why it waits on an officer; null when it was approved automatically.
+             * @enum {string|null}
+             */
+            needs_officer: "over_a_day" | "second_request" | "back_to_back" | "reason_invalid" | "ai_unavailable" | null;
+            auto_approved: boolean;
+            decline_reason: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            chapter_id: string;
+            /** Format: uuid */
+            task_id: string;
+            /** Format: uuid */
+            requester_id: string;
+            /**
+             * @description What AI made of the reason; null when it wasn't asked (over a day, a second request, back to back) or couldn't answer.
+             * @enum {string|null}
+             */
+            ai_verdict: "valid" | "invalid" | null;
+            ai_note: string | null;
+            /** Format: uuid */
+            decided_by: string | null;
+        };
+        DecideTaskExtensionResponseDto: {
+            extension: components["schemas"]["TaskExtensionRequestDto"];
+        };
+        DeclineTaskExtensionDto: {
+            /** @description Why not, shown to the member. */
+            reason: string;
         };
         OpenTaskDto: {
             /** Format: uuid */
@@ -11885,6 +12096,79 @@ export interface components {
              * @description Who gets it: any active member of the chapter, eligible to claim it or not.
              */
             assignee_id: string;
+        };
+        AiConsentSheetProviderDto: {
+            /** @enum {string} */
+            key: "anthropic" | "google" | "assemblyai";
+            /**
+             * @description The company's own name, shown as is.
+             * @example Anthropic
+             */
+            name: string;
+        };
+        AiConsentSheetDataKindDto: {
+            /** @enum {string} */
+            key: "questions" | "chapter_records" | "roster" | "channel_messages" | "meetings";
+            /**
+             * @description What is sent, in words a client shows as is.
+             * @example Questions you ask
+             */
+            label: string;
+        };
+        AiConsentSheetDto: {
+            /**
+             * @description The sheet version. Send it back with the answer; a new version asks everyone again.
+             * @example 1
+             */
+            version: number;
+            /** @description Every provider member data is sent to. */
+            providers: components["schemas"]["AiConsentSheetProviderDto"][];
+            /** @description Every kind of data that is sent. */
+            data: components["schemas"]["AiConsentSheetDataKindDto"][];
+        };
+        AiConsentStateDto: {
+            sheet: components["schemas"]["AiConsentSheetDto"];
+            /**
+             * @description The answer on the current version. Null when not answered, which counts as No.
+             * @enum {string|null}
+             */
+            answer: "yes" | "no" | null;
+            /** Format: date-time */
+            answered_at: string | null;
+            /** @description True when the caller answered an earlier version but not this one, so the sheet changed since. */
+            sheet_changed: boolean;
+        };
+        AnswerAiConsentDto: {
+            /**
+             * @description The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.
+             * @example 1
+             */
+            sheet_version: number;
+            /** @enum {string} */
+            answer: "yes" | "no";
+        };
+        AiChapterSettingsDto: {
+            /** @description The Questions and requests switch: members can ask Frapp Intelligence. */
+            ask: boolean;
+            /** @description Drafting minutes, and tasks suggested from them, is on. */
+            meeting_notes: boolean;
+            /** @description Messages in chapter channels, from members who said yes, are a source. */
+            chat_source: boolean;
+            /** @description Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes. */
+            nudges: boolean;
+            /**
+             * Format: date-time
+             * @description When a switch last changed. Null when none ever has.
+             */
+            updated_at: string | null;
+            /** @description Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again. */
+            can_change: boolean;
+        };
+        UpdateAiChapterSettingsDto: {
+            ask?: boolean;
+            meeting_notes?: boolean;
+            chat_source?: boolean;
+            nudges?: boolean;
         };
         ResolvedTenantDto: {
             /** Format: uuid */
@@ -12279,79 +12563,6 @@ export interface components {
             /** Format: date-time */
             event_start_time: string;
             items: components["schemas"]["OpenActionItemDto"][];
-        };
-        AiConsentSheetProviderDto: {
-            /** @enum {string} */
-            key: "anthropic" | "google" | "assemblyai";
-            /**
-             * @description The company's own name, shown as is.
-             * @example Anthropic
-             */
-            name: string;
-        };
-        AiConsentSheetDataKindDto: {
-            /** @enum {string} */
-            key: "questions" | "chapter_records" | "roster" | "channel_messages" | "meetings";
-            /**
-             * @description What is sent, in words a client shows as is.
-             * @example Questions you ask
-             */
-            label: string;
-        };
-        AiConsentSheetDto: {
-            /**
-             * @description The sheet version. Send it back with the answer; a new version asks everyone again.
-             * @example 1
-             */
-            version: number;
-            /** @description Every provider member data is sent to. */
-            providers: components["schemas"]["AiConsentSheetProviderDto"][];
-            /** @description Every kind of data that is sent. */
-            data: components["schemas"]["AiConsentSheetDataKindDto"][];
-        };
-        AiConsentStateDto: {
-            sheet: components["schemas"]["AiConsentSheetDto"];
-            /**
-             * @description The answer on the current version. Null when not answered, which counts as No.
-             * @enum {string|null}
-             */
-            answer: "yes" | "no" | null;
-            /** Format: date-time */
-            answered_at: string | null;
-            /** @description True when the caller answered an earlier version but not this one, so the sheet changed since. */
-            sheet_changed: boolean;
-        };
-        AnswerAiConsentDto: {
-            /**
-             * @description The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.
-             * @example 1
-             */
-            sheet_version: number;
-            /** @enum {string} */
-            answer: "yes" | "no";
-        };
-        AiChapterSettingsDto: {
-            /** @description The Questions and requests switch: members can ask Frapp Intelligence. */
-            ask: boolean;
-            /** @description Drafting minutes, and tasks suggested from them, is on. */
-            meeting_notes: boolean;
-            /** @description Messages in chapter channels, from members who said yes, are a source. */
-            chat_source: boolean;
-            /** @description Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes. */
-            nudges: boolean;
-            /**
-             * Format: date-time
-             * @description When a switch last changed. Null when none ever has.
-             */
-            updated_at: string | null;
-            /** @description Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again. */
-            can_change: boolean;
-        };
-        UpdateAiChapterSettingsDto: {
-            ask?: boolean;
-            meeting_notes?: boolean;
-            chat_source?: boolean;
-            nudges?: boolean;
         };
         AiRunDto: {
             /** Format: uuid */
@@ -13759,6 +13970,8 @@ export interface components {
             proof_kind: "none" | "photo" | "link";
             /** @description On a task for everyone, its group (#5492), as every task read carries it: each member’s copy has the same `id`, and the counts say how far the group is. Null for a one-person task. */
             group: components["schemas"]["TaskGroupSummaryDto"] | null;
+            /** @description A fixed deadline (#6096): no extensions, and its assignee’s row reads more urgent. */
+            fixed_deadline: boolean;
             /** Format: date-time */
             created_at: string;
             /** @description Whether the caller hasn’t opened it from Activity since it started waiting on them: since it was assigned or last sent back, or for a confirmation since it was completed (`POST /v1/activity/reads`). Always false while `unread_since` is null, in `made_by_you`, and for a task the caller assigned to themselves that was never sent back. */
@@ -13837,6 +14050,38 @@ export interface components {
              */
             kind: "group";
             group: components["schemas"]["ActivityTaskGroupDto"];
+        };
+        ActivityTaskExtensionDto: {
+            /**
+             * Format: uuid
+             * @description The request’s id.
+             */
+            id: string;
+            task: components["schemas"]["ActivityTaskDto"];
+            /** @description Empty when the member cannot be resolved (they have left). */
+            requester_name: string;
+            reason: string;
+            /** Format: date */
+            from_due_date: string;
+            /** Format: date-time */
+            from_due_at: string | null;
+            /** Format: date */
+            to_due_date: string;
+            /** Format: date-time */
+            to_due_at: string | null;
+            /**
+             * @description Why it waits on an officer: more than a day, a second request on the task, a repeating task extended on its previous copy too, a reason AI judged invalid, or AI off or failing.
+             * @enum {string|null}
+             */
+            needs_officer: "over_a_day" | "second_request" | "back_to_back" | "reason_invalid" | "ai_unavailable" | null;
+            /**
+             * @description What AI made of the reason, when it was asked.
+             * @enum {string|null}
+             */
+            ai_verdict: "valid" | "invalid" | null;
+            ai_note: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         ActivityHoursEntryDto: {
             /** Format: uuid */
@@ -13952,6 +14197,8 @@ export interface components {
             tasks: components["schemas"]["ActivityTaskDto"][];
             /** @description Finished tasks the caller can confirm (`tasks:manage`, never their own), longest waiting first. */
             task_confirmations: components["schemas"]["ActivityTaskDto"][];
+            /** @description Requests for more time the caller can decide (#6096: `tasks:manage`, never their own), oldest first. Counted in `needs_you_count`; not snoozable. */
+            task_extensions: components["schemas"]["ActivityTaskExtensionDto"][];
             /** @description Pending service entries the caller can approve (`service:approve`, never their own), oldest first. */
             hours_approvals: components["schemas"]["ActivityHoursEntryDto"][];
             /** @description Open polls from other members, in channels the caller can read, that the caller hasn’t voted on. Soonest closing first. */
@@ -13968,6 +14215,25 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+            /**
+             * @description The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`.
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event.
+             */
+            start_date: string | null;
+            /**
+             * Format: date
+             * @description A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event.
+             */
+            end_date: string | null;
+            /** @description Whether the event might not happen. */
+            is_tentative: boolean;
+            /** @description Whether the event is on the calendar only: nobody checks in, earns points or is marked absent. */
+            calendar_only: boolean;
             /**
              * @description What the event asks of the caller, not the event’s default: a role of theirs the event lists decides it, and an alumnus the default alone would require is optional.
              * @enum {string}
@@ -24468,6 +24734,64 @@ export interface operations {
             };
         };
     };
+    TaskController_listBlockedFromExtensions_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedFromExtensionsDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_restoreExtensions_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreTaskExtensionsDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     TaskController_getOne_v1: {
         parameters: {
             query?: never;
@@ -24736,6 +25060,106 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_requestExtension_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestTaskExtensionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestTaskExtensionResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_approveExtension_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecideTaskExtensionResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_declineExtension_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclineTaskExtensionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecideTaskExtensionResponseDto"];
+                };
             };
             /** @description Error */
             default: {
@@ -25126,6 +25550,168 @@ export interface operations {
             };
         };
     };
+    AiConsentController_getConsent_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConsentStateDto"];
+                };
+            };
+            /** @description AI is off on this server (`ai.not_available`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AiConsentController_answerConsent_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerAiConsentDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConsentStateDto"];
+                };
+            };
+            /** @description AI is off on this server (`ai.not_available`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AiChapterSettingsController_getSettings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiChapterSettingsDto"];
+                };
+            };
+            /** @description AI is off on this server (`ai.not_available`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AiChapterSettingsController_updateSettings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAiChapterSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiChapterSettingsDto"];
+                };
+            };
+            /** @description The caller is not the chapter’s president (`ai.settings.president_only`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI is off on this server (`ai.not_available`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     TenantController_resolve_v1: {
         parameters: {
             query: {
@@ -25395,168 +25981,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SeriesOpenActionItemsDto"][];
                 };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    AiConsentController_getConsent_v1: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiConsentStateDto"];
-                };
-            };
-            /** @description AI is off on this server (`ai.not_available`). */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    AiConsentController_answerConsent_v1: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnswerAiConsentDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiConsentStateDto"];
-                };
-            };
-            /** @description AI is off on this server (`ai.not_available`). */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    AiChapterSettingsController_getSettings_v1: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiChapterSettingsDto"];
-                };
-            };
-            /** @description AI is off on this server (`ai.not_available`). */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    AiChapterSettingsController_updateSettings_v1: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateAiChapterSettingsDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiChapterSettingsDto"];
-                };
-            };
-            /** @description The caller is not the chapter’s president (`ai.settings.president_only`). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description AI is off on this server (`ai.not_available`). */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error */
             default: {
@@ -29528,6 +29952,8 @@ export interface operations {
                 week_start?: string;
                 /** @description `true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949). */
                 minutes?: "true";
+                /** @description `true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096). */
+                extensions?: "true";
             };
             header?: never;
             path?: never;

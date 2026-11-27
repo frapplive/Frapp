@@ -50,24 +50,6 @@ describe("SegmentedChoice: neutral since 2026-11-24 (#5947)", () => {
     expect(held).not.toContain("bg-card ");
   });
 
-  it("holds a per-option quiet answer with the edge alone, and lights the others", () => {
-    render(
-      <SegmentedChoice
-        label="Manage roles for Secretary"
-        options={[
-          { value: "off", label: "Off" },
-          { value: "tier", label: "Same as tier", quiet: true },
-          { value: "on", label: "On" },
-        ]}
-        value="tier"
-        onChange={() => {}}
-      />,
-    );
-    expect(radio("Same as tier").className).toContain("border-border");
-    expect(radio("Same as tier").className).not.toContain("bg-card ");
-    expect(radio("Same as tier").className).not.toMatch(/\bbg-card$|\bbg-card\s/);
-  });
-
   it("keeps the control's edge, and stays a radio group", () => {
     render(
       <SegmentedChoice

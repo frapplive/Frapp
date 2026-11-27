@@ -1193,7 +1193,8 @@ A From, Date or Has filter searches with no text ("everything Ryan posted this w
 Each row shows the day and time, since hits span days.
 Mobile has no chat search yet; #341 builds it with these filters.
 Picking a hit selects its channel if it is not already open and then jumps, reusing the same in-shell pending-target machinery a `/chat?channel=&message=` deep link resolves through.
-**It does not change the URL** — a search jump is not shareable, back-button-recoverable, or reload-surviving; only a real deep link is.
+**It does not change the URL yet**: a search jump is not shareable, back-button-recoverable, or reload-surviving; only a real deep link is.
+That changes with [#6041](https://github.com/frapplive/Frapp/issues/6041): on `/chat` and `/messages` a search jump pushes `?channel=&message=`, and `message=` is replaced away once the jump lands ([`../../ui/web-dashboard/README.md` § Addresses](../../ui/web-dashboard/README.md#addresses)).
 
 **Three parts of the bullets above are aspirational, and the shipped surface says so rather than pretending otherwise:**
 

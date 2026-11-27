@@ -20,8 +20,8 @@ function ReportRows() {
           </div>
           <Skeleton className="h-[13px] w-[60%]" />
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-20 rounded-md" />
-            <Skeleton className="h-8 w-24 rounded-md" />
+            <Skeleton className="h-control-small w-20 rounded-md" />
+            <Skeleton className="h-control-small w-24 rounded-md" />
           </div>
         </li>
       ))}
@@ -58,7 +58,7 @@ function ChannelsBody() {
             lines={1}
             trailing={["w-14", "w-16", "w-8"]}
             trailingHeight="h-5"
-            rowClassName="min-h-9 pointer-coarse:min-h-11"
+            rowClassName="min-h-control-list-row pointer-coarse:min-h-11"
           />
           <div className="space-y-3 @3xl:border-l @3xl:border-border @3xl:pl-6">
             <Skeleton className="h-4 w-36" />

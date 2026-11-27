@@ -8,7 +8,13 @@ import {
   useRenameRushTag,
   type RushTag,
 } from "@repo/hooks";
-import { RUSH_TAGS_MAX, RUSH_TAG_LABEL_MAX } from "@repo/validation";
+import {
+  RUSH_SETTINGS_COPY,
+  RUSH_TAGS_MAX,
+  RUSH_TAG_LABEL_MAX,
+} from "@repo/validation";
+
+const COPY = RUSH_SETTINGS_COPY.tags;
 import { ProfileSection } from "@/components/profile/profile-section";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { InlineNote } from "@/components/shared/inline-note";
@@ -55,9 +61,9 @@ export function RushTagList({
 
   async function del(tag: RushTag) {
     const ok = await confirm({
-      title: `Delete ${tag.label}?`,
-      description: "It comes off every prospect tagged with it.",
-      confirmLabel: "Delete tag",
+      title: COPY.deleteTitle(tag.label),
+      description: COPY.deleteBody,
+      confirmLabel: COPY.deleteAction,
     });
     if (!ok) return;
     try {
@@ -74,13 +80,13 @@ export function RushTagList({
   return (
     <ProfileSection
       id="settings-module-rush-tags"
-      title="Tags"
-      hint="Labels members put on prospects."
+      title={COPY.title}
+      hint={COPY.hint}
     >
       {confirmDialog}
       {!canEdit ? (
         sorted.length === 0 ? (
-          <InlineNote>No tags yet.</InlineNote>
+          <InlineNote>{COPY.none}</InlineNote>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {sorted.map((tag) => (
@@ -132,7 +138,7 @@ export function RushTagList({
                     maxLength={RUSH_TAG_LABEL_MAX}
                     label=""
                     autoFocus
-                    placeholder="New tag"
+                    placeholder={COPY.newTag}
                     onCommit={(label) => void add(label)}
                     onCancel={() => setAdding(false)}
                   />
@@ -148,15 +154,11 @@ export function RushTagList({
                 size="sm"
                 className="gap-1.5"
                 disabled={full}
-                title={
-                  full
-                    ? `A chapter can have up to ${RUSH_TAGS_MAX} tags.`
-                    : undefined
-                }
+                title={full ? COPY.full(RUSH_TAGS_MAX) : undefined}
                 onClick={() => setAdding(true)}
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                Add a tag
+                {COPY.add}
               </Button>
             </div>
           )}

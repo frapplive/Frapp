@@ -36,13 +36,17 @@ export function SettingsBackLink({
 }
 
 /**
- * A page opened inside a module page: the back line, its heading under the
- * same rule a module page's header draws, and its body.
+ * A page opened from a settings row (a module page's channel, a Chapter tab
+ * page, a role, tier or group under Roles and groups): the back line naming
+ * the page it came from, its heading under the same rule a module page's
+ * header draws, and its body.
  */
 export function SettingsSubpage({
   backHref,
   backLabel,
   title,
+  titleLeading,
+  actions,
   description,
   children,
   shown = true,
@@ -50,6 +54,14 @@ export function SettingsSubpage({
   backHref: string;
   backLabel: string;
   title: string;
+  /** Drawn before the title: a role's or group's colour dot. */
+  titleLeading?: ReactNode;
+  /**
+   * The page's own actions, at the title's trailing edge: a "View as"
+   * button, the ⋯ (`ActionMenuButton`) with Move and Delete, never in the
+   * page's body (rulebook § 2).
+   */
+  actions?: ReactNode;
   /** One muted line under the title, when the title alone can't say it. */
   description?: ReactNode;
   children: ReactNode;
@@ -71,13 +83,21 @@ export function SettingsSubpage({
     <div className="space-y-8">
       <header className="space-y-1 border-b border-border pb-6">
         <SettingsBackLink href={backHref} label={backLabel} />
-        <h2
-          ref={headingRef}
-          tabIndex={-1}
-          className="text-title text-foreground outline-none"
-        >
-          {title}
-        </h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {titleLeading}
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="min-w-0 break-words text-title text-foreground outline-none"
+          >
+            {title}
+          </h2>
+          {actions ? (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {actions}
+            </div>
+          ) : null}
+        </div>
         {description ? (
           <p className="text-sm text-muted-foreground">{description}</p>
         ) : null}

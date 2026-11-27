@@ -96,8 +96,9 @@ which alerts those are).
    [`DOCUMENTATION_CONVENTIONS.md`](../../../docs/internal/DOCUMENTATION_CONVENTIONS.md)).
 2. **Do everything you can yourself first**, and say what you did. Only what needs his account, his
    card, his dashboard, or his judgment reaches him.
-3. **Hand him one step at a time** and wait for each outcome, per
-   [`AGENTS.md` § Operating mindset](../../../AGENTS.md#operating-mindset).
+3. **Hand him one step at a time** and wait for each outcome: these are owner-only actions in
+   provider dashboards, where a half-done sequence is costly
+   ([`AGENTS.md` § Operating mindset](../../../AGENTS.md#operating-mindset)).
 4. **Prove it.** Name what makes it verifiably finished (a green run, a config read-back, a commit)
    and check that rather than accepting "done".
 5. **Close the loop where the item lives.** An issue gets a comment with the proof and a close

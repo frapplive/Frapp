@@ -22,7 +22,11 @@ describe("useActivity", () => {
     expect(client.GET).toHaveBeenCalledWith("/v1/activity", {
       signal: expect.any(AbortSignal),
       params: {
-        query: { week_start: localWeekStart().toISOString(), minutes: "true" },
+        query: {
+          week_start: localWeekStart().toISOString(),
+          minutes: "true",
+          extensions: "true",
+        },
       },
     });
   });

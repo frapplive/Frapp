@@ -50,7 +50,7 @@ export function ImportantStrip({
       {show ? (
         <div
           data-slot="important-strip"
-          className="flex h-9 items-center border-b border-border bg-destructive-tint shadow-[inset_2px_0_0_var(--destructive)] pointer-coarse:h-11"
+          className="flex h-control-small items-center border-b border-border bg-destructive-tint shadow-[inset_2px_0_0_var(--destructive)] pointer-coarse:h-11"
         >
           <button
             type="button"

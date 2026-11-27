@@ -12,15 +12,24 @@ import {
   type AiSuggestion,
   type AiSuggestionDismissReason,
 } from "@repo/hooks";
-import { LAST_YEAR_COPY, lastYearEventLine } from "@repo/validation";
+import {
+  LAST_YEAR_COPY,
+  eventLastDay,
+  eventTiming,
+  eventTimingFieldsOf,
+  lastYearEventLine,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/shared/section-label";
 import { isoToLocalInput } from "@/components/events/local-input";
 import {
+  datedDaysThisYear,
   lastYearDay,
   nameForThisYear,
+  parseBareDateLocalNoon,
   sameWeekdayThisYear,
 } from "@repo/formatting";
+import type { DatedFill } from "@/components/events/event-editor-dialog";
 import { ReportAiButton } from "@/components/ai/report-ai";
 import { suggestionRefusalLine } from "@/components/ai/suggested-tasks";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -60,6 +69,62 @@ export interface EventPlan {
   /** `datetime-local` values: the same weekday and hour, this year. */
   startAt: string;
   endAt: string;
+  /**
+   * Last year's all-day or time-TBD event stays one, on the same weekdays
+   * this year (#6144); null for a timed one.
+   */
+  dated: DatedFill | null;
+}
+
+/**
+ * The form's opening for last year's event `template`, moved to this year:
+ * a timed one to the same weekday and hour, keeping its length; an all-day or
+ * time-TBD one by its own days (`datedDaysThisYear`), never its stored
+ * midnights, as the phone's `lastYearTemplate` moves it.
+ */
+export function planFromLastYear(
+  suggestionId: string,
+  template: Record<string, unknown>,
+  now: Date = new Date(),
+): EventPlan {
+  const shape = eventTimingFieldsOf(template);
+  const timing = eventTiming(shape);
+  const name = typeof template.name === "string" ? template.name : null;
+  if (timing !== "timed") {
+    const days = datedDaysThisYear(shape.start_date, eventLastDay(shape), now);
+    if (days) {
+      const held = parseBareDateLocalNoon(shape.start_date ?? "");
+      const first = parseBareDateLocalNoon(days.startDate);
+      return {
+        suggestionId,
+        template: {
+          ...template,
+          name: name ? nameForThisYear(name, held?.toISOString(), first) : name,
+        },
+        startAt: "",
+        endAt: "",
+        dated: {
+          timing,
+          startDate: days.startDate,
+          endDate: timing === "all_day" ? (days.lastDay ?? "") : "",
+          tentative: shape.is_tentative === true,
+        },
+      };
+    }
+  }
+  const start = sameWeekdayThisYear(template.start_time, now);
+  // The end keeps its distance from the start, not its own next week.
+  const end = sameWeekdayThisYear(template.end_time, start ?? undefined);
+  return {
+    suggestionId,
+    template: {
+      ...template,
+      name: name ? nameForThisYear(name, template.start_time, start) : name,
+    },
+    startAt: start ? isoToLocalInput(start.toISOString()) : "",
+    endAt: end ? isoToLocalInput(end.toISOString()) : "",
+    dated: null,
+  };
 }
 
 /**
@@ -138,22 +203,7 @@ export function SuggestedEvents({
         },
         staleTime: 30_000,
       });
-      const template = source;
-      const start = sameWeekdayThisYear(template.start_time);
-      // The end keeps its distance from the start, not its own next week.
-      const end = sameWeekdayThisYear(template.end_time, start ?? undefined);
-      onPlan({
-        suggestionId: item.id,
-        template: {
-          ...template,
-          name:
-            typeof template.name === "string"
-              ? nameForThisYear(template.name, template.start_time, start)
-              : template.name,
-        },
-        startAt: start ? isoToLocalInput(start.toISOString()) : "",
-        endAt: end ? isoToLocalInput(end.toISOString()) : "",
-      });
+      onPlan(planFromLastYear(item.id, source));
     } catch {
       toast({
         title: "Couldn't open last year's event",

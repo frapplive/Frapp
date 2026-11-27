@@ -11,8 +11,10 @@ import {
   CHECK_IN_NEEDS_CODE_COPY,
   checkInWindowBounds,
   isValidZoneOutline,
+  type EventTimingFields,
 } from "@repo/validation";
 import {
+  allDayCheckInWords,
   formatRelativeDayTime,
   formatTimeOfDay,
   localIsoDate,
@@ -177,10 +179,16 @@ export function MyCheckIn({
   zone,
   eventUnavailable = false,
   eventPending = false,
+  shape,
 }: {
   eventId: string;
   start: unknown;
   end: unknown;
+  /**
+   * The event's shape: an all-day event's window says its days, never the
+   * saver's midnights it is stored around (#6144).
+   */
+  shape?: EventTimingFields;
   opensMinutes: unknown;
   pointValue: unknown;
   zone: ZoneState;
@@ -214,6 +222,18 @@ export function MyCheckIn({
     now,
   });
   const points = pointsLabel(pointValue);
+  // An all-day event says its day where that is true for this viewer
+  // ("Opens tomorrow", "Open all day"); null for any other shape.
+  const allDay = shape
+    ? allDayCheckInWords(
+        shape,
+        {
+          opensAt: view.kind === "upcoming" ? view.opensAt : null,
+          closesAt: view.kind === "open" ? view.closesAt : null,
+        },
+        now,
+      )
+    : null;
 
   if (view.kind === "loading") {
     return (
@@ -234,14 +254,18 @@ export function MyCheckIn({
       title = view.label;
       break;
     case "open":
-      title = "Open now";
+      // The row is named Check-in, so web's form of the phone card's
+      // `ALL_DAY_CHECK_IN_OPEN`, as "Open now" is of its "Check-in is open".
+      title = allDay?.openAllDay ? "Open all day" : "Open now";
       detail =
-        view.zone === "none"
-          ? `Closes ${clockLabel(view.closesAt, now)}`
-          : ZONE_CHECK_IN_LINE[view.zone];
+        view.zone !== "none"
+          ? ZONE_CHECK_IN_LINE[view.zone]
+          : allDay?.openAllDay
+            ? null
+            : `Closes ${clockLabel(view.closesAt, now)}`;
       break;
     case "upcoming":
-      title = `Opens ${clockLabel(view.opensAt, now)}`;
+      title = `Opens ${allDay?.opens ?? clockLabel(view.opensAt, now)}`;
       break;
     case "closed":
       title = "Closed";

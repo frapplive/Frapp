@@ -333,7 +333,7 @@ export function StartCouncil() {
             <p
               id={fieldId("school")}
               tabIndex={-1}
-              className="flex h-10 items-center truncate rounded-md border border-border px-3 text-base text-foreground"
+              className="flex h-control-field items-center truncate rounded-md border border-border px-3 text-base text-foreground"
             >
               {school.name}
             </p>

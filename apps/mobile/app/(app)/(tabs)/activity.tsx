@@ -41,6 +41,7 @@ import {
   activityRunningCount,
   activityWeekSummary,
   activityRowTaskId,
+  findActivityExtensionRow,
   findActivityTaskRow,
   useActivity,
   useEventsOnNow,
@@ -441,6 +442,13 @@ function ActivityScreen() {
   const { markRead } = useActivityUnread(activity.data);
   const open = (row: ActivityRow) => {
     if (row.unread && row.readRef) markRead([row.readRef]);
+    // A request for more time (#6096) is decided in the sheet, as hours are,
+    // not on the task's screen: the reason and Approve and Decline are there.
+    if (row.kind === "extension") {
+      setOpened(row);
+      setOpenedKey(row.key);
+      return;
+    }
     // A task is its own screen (#5492; Paul, 2026-11-18: the sheet was
     // "lazy"), as on the board and the Calendar; a task for everyone opens
     // the copy that carries its group. A completion waiting on the viewer's
@@ -543,6 +551,42 @@ function ActivityScreen() {
     // Once per review linked; `open` is read when the read lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewTaskId, refetchActivity, router]);
+
+  // `/activity?extension=<taskId>`: an "asks for more time" push
+  // (targets.ts, #6096). Read again first, as for `?review=`, then the
+  // request opens as a press on its row opens it; one answered since (or
+  // past the read) opens the task's screen, which says where it stands.
+  const { extension: extensionParam } = useLocalSearchParams<{
+    extension?: string;
+  }>();
+  const extensionTaskId =
+    typeof extensionParam === "string" && extensionParam !== ""
+      ? extensionParam
+      : null;
+  useEffect(() => {
+    if (extensionTaskId === null) return;
+    let live = true;
+    void (async () => {
+      const result = await refetchActivity();
+      if (!live) return;
+      const row = result.data
+        ? findActivityExtensionRow(result.data, extensionTaskId, new Date())
+        : null;
+      router.setParams({ extension: undefined });
+      if (row) open(row);
+      else {
+        router.push({
+          pathname: "/task-details",
+          params: { id: extensionTaskId },
+        });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // Once per request linked; `open` is read when the read lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extensionTaskId, refetchActivity, router]);
 
   const ai = useAiSurfaces();
   const setNudgesEnabled = useSetActivityNudgesEnabled();

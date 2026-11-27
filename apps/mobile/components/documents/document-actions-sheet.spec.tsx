@@ -42,6 +42,7 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
   const onToggleStar = vi.fn();
   const onTogglePin = vi.fn();
   const onDelete = vi.fn();
+  const onOpenInDrive = vi.fn();
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
@@ -53,6 +54,7 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
           onToggleStar={onToggleStar}
           onTogglePin={onTogglePin}
           onDelete={onDelete}
+          onOpenInDrive={onOpenInDrive}
         />
       </FrappThemeProvider>,
       {
@@ -63,7 +65,7 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
       },
     );
   });
-  return { tree, onToggleStar, onTogglePin, onDelete };
+  return { tree, onToggleStar, onTogglePin, onDelete, onOpenInDrive };
 }
 
 const rowLabels = (tree: ReactTestRenderer) =>
@@ -146,5 +148,20 @@ describe("DocumentActionsSheet (#3934)", () => {
     act(() => row(tree, "Delete document").props.onPress());
     finishClosing(tree);
     expect(onDelete).toHaveBeenCalledWith(FILE);
+  });
+
+  it("offers a Drive file Open in Google Drive, and opens its page (#6055)", () => {
+    const drive = {
+      ...FILE,
+      fromDrive: true,
+      driveUrl: "https://drive.google.com/file/d/abc/view",
+    };
+    const { tree, onOpenInDrive } = render(drive, false);
+    expect(rowLabels(tree)).toEqual(["Star", "Open in Google Drive"]);
+    act(() => row(tree, "Open in Google Drive").props.onPress());
+    finishClosing(tree);
+    expect(onOpenInDrive).toHaveBeenCalledWith(drive.driveUrl);
+    // An upload has no Drive page.
+    expect(rowLabels(render(FILE, false).tree)).toEqual(["Star"]);
   });
 });

@@ -50,6 +50,7 @@ const task = (overrides: Partial<TaskView>): TaskView => ({
   meeting_id: null,
   followed_by: null,
   attachments: [],
+  fixed_deadline: false,
   created_at: iso(-48 * HOUR),
   ...overrides,
 });
@@ -105,6 +106,7 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
       ),
     ),
     listAssignedItems: jest.fn().mockResolvedValue([]),
+    waitingExtensions: jest.fn().mockResolvedValue([]),
   };
   const serviceEntryService = {
     findByChapterFiltered: jest.fn().mockResolvedValue([]),
@@ -1062,6 +1064,54 @@ describe('ActivityService', () => {
       // chapter-wide one, and the count holds both kinds.
       expect(view.needs_you.tasks.map((row) => row.id)).toEqual(['own-open']);
       expect(view.needs_you_count).toBe(2);
+    });
+
+    it('lists requests for more time for a client that asks, and counts them (#6096)', async () => {
+      const { service, taskService } = build([
+        SystemPermissions.MEMBERS_VIEW,
+        SystemPermissions.TASKS_MANAGE,
+      ]);
+      taskService.waitingExtensions.mockResolvedValue([
+        {
+          request: {
+            id: 'req-1',
+            requester_id: OTHER,
+            reason: 'Shift ran late',
+            from_due_date: '2026-11-26',
+            from_due_at: null,
+            to_due_date: '2026-11-28',
+            to_due_at: null,
+            needs_officer: 'over_a_day',
+            ai_verdict: null,
+            ai_note: null,
+            created_at: '2026-11-26T00:00:00.000Z',
+          },
+          task: { ...task({ id: 'asked-on', assignee_id: OTHER }) },
+        },
+      ]);
+
+      const old = await service.getActivity(CHAPTER, ME, null);
+      // A build from before them neither reads nor counts them.
+      expect(old.needs_you.task_extensions).toEqual([]);
+      expect(taskService.waitingExtensions).not.toHaveBeenCalled();
+
+      const view = await service.getActivity(CHAPTER, ME, null, {
+        extensions: true,
+      });
+      expect(taskService.waitingExtensions).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        25,
+      );
+      expect(view.needs_you.task_extensions).toEqual([
+        expect.objectContaining({
+          id: 'req-1',
+          reason: 'Shift ran late',
+          needs_officer: 'over_a_day',
+          task: expect.objectContaining({ id: 'asked-on' }),
+        }),
+      ]);
+      expect(view.needs_you_count).toBe(old.needs_you_count + 1);
     });
 
     it("carries a task for everyone's group on its rows (#5492)", async () => {

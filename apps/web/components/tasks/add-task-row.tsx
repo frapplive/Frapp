@@ -41,6 +41,7 @@ import {
 } from "@repo/validation";
 import { RepeatOptions } from "@/components/shared/repeat-options";
 import { WhoPicker } from "@/components/tasks/who-picker";
+import { FixedDeadlineSwitch } from "@/components/tasks/task-extension";
 
 /** What `POST /v1/tasks` takes from the page. */
 type NewTaskBody = {
@@ -61,6 +62,8 @@ type NewTaskBody = {
   recurrence_rule?: string;
   /** The tier, role or group it is from (#5473). */
   followed_by?: string;
+  /** No extensions, and urgent to whoever has it (#6096); sent only when on. */
+  fixed_deadline?: boolean;
 } & TaskWhoTaskFields;
 
 /**
@@ -81,6 +84,8 @@ const EMPTY = {
   repeat: noTaskRepeatDraft() as RepeatDraft,
   /** From (#5473): a tier, role or group the officer is in, or just them. */
   followedBy: null as string | null,
+  /** Fixed deadline (#6096). */
+  fixedDeadline: false,
   ...EMPTY_TASK_PHOTO_DRAFT,
 };
 
@@ -231,6 +236,7 @@ export function AddTaskRow({
             draft.followedBy && !(repeat?.ok && repeat.rule)
               ? draft.followedBy
               : undefined,
+          ...(draft.fixedDeadline && draft.due ? { fixed_deadline: true } : {}),
         },
       });
     }
@@ -316,7 +322,7 @@ export function AddTaskRow({
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, title: event.target.value }))
               }
-              className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+              className="h-control-small min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
             />
           </div>
           {hasTitle ? (
@@ -352,7 +358,7 @@ export function AddTaskRow({
             value={draft.due}
             aria-invalid={missing.due || missing.passed || undefined}
             disabled={controls.disabled}
-            className="h-9"
+            className="h-control-small"
             onChange={(due) => {
               // No due date can't repeat (#5761), so clearing it drops the
               // repeat; the Repeat control then says why it is off.
@@ -374,7 +380,7 @@ export function AddTaskRow({
           min={0}
           aria-label="Points (optional)"
           placeholder="Pts"
-          className="h-9 w-20 shrink-0"
+          className="h-control-small w-20 shrink-0"
           value={draft.points}
           disabled={controls.disabled}
           onChange={(event) => {
@@ -477,6 +483,16 @@ export function AddTaskRow({
               {missing.repeat}
             </p>
           ) : null}
+          {draft.due && !someone ? (
+            <FixedDeadlineSwitch
+              id={`${ids}-fixed`}
+              checked={draft.fixedDeadline}
+              disabled={busy}
+              onChange={(fixedDeadline) =>
+                setDraft((prev) => ({ ...prev, fixedDeadline }))
+              }
+            />
+          ) : null}
           {followerChoices.length > 0 && !someone ? (
             <div className="grid gap-1">
               <div className="flex items-center gap-2">
@@ -491,7 +507,7 @@ export function AddTaskRow({
                   onChange={(followedBy) =>
                     setDraft((prev) => ({ ...prev, followedBy }))
                   }
-                  className="h-8 w-fit min-w-[10rem]"
+                  className="h-control-row w-fit min-w-[10rem]"
                 />
               </div>
               <p className="text-caption text-muted-foreground">
