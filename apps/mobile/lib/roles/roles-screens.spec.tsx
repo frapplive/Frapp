@@ -227,6 +227,7 @@ vi.mock("@/lib/chapter-branding", () => ({
 }));
 
 import ChapterSettingsScreen from "@/app/(app)/chapter-settings";
+import ChapterAiScreen from "@/app/(app)/chapter-ai";
 import ChapterRolesScreen from "@/app/(app)/chapter-roles";
 import RoleTierScreen from "@/app/(app)/role-tier";
 import RoleScreen from "@/app/(app)/role";
@@ -542,7 +543,8 @@ describe("Chapter settings (#4074)", () => {
   });
 });
 
-describe("Chapter settings → AI (#4789)", () => {
+// The switches are their own screen since #6028; Chapter settings keeps a row.
+describe("Chapter settings → AI (#4789, #6028)", () => {
   const aiSwitch = (tree: ReturnType<typeof render>, label: string) =>
     tree.root.find(
       (node) =>
@@ -574,7 +576,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings();
     h.updateAi.mockClear();
-    const tree = render(<ChapterSettingsScreen />);
+    const tree = render(<ChapterAiScreen />);
     expect(aiSwitch(tree, "Questions and requests").props.value).toBe(true);
     act(() => aiSwitch(tree, "Minutes from notes").props.onValueChange(true));
     expect(h.updateAi).toHaveBeenCalledWith(
@@ -587,19 +589,19 @@ describe("Chapter settings → AI (#4789)", () => {
   it("holds Include channel messages off until Ask is on, but lets it go off", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings({ ask: false });
-    const off = render(<ChapterSettingsScreen />);
+    const off = render(<ChapterAiScreen />);
     expect(aiSwitch(off, "Include channel messages").props.disabled).toBe(true);
     expect(screenText(off)).toContain("Turn on Questions and requests first.");
 
     h.aiSettings = settings({ ask: false, chat_source: true });
-    const on = render(<ChapterSettingsScreen />);
+    const on = render(<ChapterAiScreen />);
     expect(aiSwitch(on, "Include channel messages").props.disabled).toBe(false);
   });
 
   it("draws Include channel messages nested under Ask, muted while Ask is off", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings({ ask: false });
-    const tree = render(<ChapterSettingsScreen />);
+    const tree = render(<ChapterAiScreen />);
     const row = tree.root.find(
       (node) =>
         node.props.label === "Include channel messages" &&
@@ -613,7 +615,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings();
     h.aiSaving = true;
-    const tree = render(<ChapterSettingsScreen />);
+    const tree = render(<ChapterAiScreen />);
     expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(aiSwitch(tree, "Minutes from notes").props.disabled).toBe(true);
   });
@@ -626,7 +628,7 @@ describe("Chapter settings → AI (#4789)", () => {
       (_body: unknown, options?: { onError?: () => void }) =>
         options?.onError?.(),
     );
-    const tree = render(<ChapterSettingsScreen />);
+    const tree = render(<ChapterAiScreen />);
     act(() => aiSwitch(tree, "Minutes from notes").props.onValueChange(true));
     const row = tree.root.find(
       (node) =>
@@ -652,7 +654,7 @@ describe("Chapter settings → AI (#4789)", () => {
   it("shows an officer the switches read-only, saying only the president changes them", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings({ can_change: false });
-    const tree = render(<ChapterSettingsScreen />);
+    const tree = render(<ChapterAiScreen />);
     expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(screenText(tree)).toContain(
       "Only the chapter president can turn these on or off.",
