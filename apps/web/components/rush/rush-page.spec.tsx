@@ -125,7 +125,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     data: pipeline.current,
     isPending: false,
     isError: false,
-    refetch: vi.fn(),
+    isFetching: false,
+    fetchStatus: "idle",
+    refetch: pipelineRefetch,
   }),
   useViewerUserId: () => "me",
   useMoveRushStage: () => ({ mutate: moveMutate, isPending: false }),
@@ -155,6 +157,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useSetRushFollowUp: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useClearRushFollowUp: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+
+// The pipeline's re-read, which a linked prospect it lacks asks for once.
+const pipelineRefetch = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
 vi.mock("next/navigation", async () => ({
   useSearchParams: (await import("@/tests/address-search-params"))
@@ -623,7 +628,19 @@ describe("follow-ups on the recruitment page (#5934)", () => {
     expect(
       await screen.findByText(/That prospect isn't available/),
     ).toBeInTheDocument();
+    // Read again once before they are called gone.
+    expect(pipelineRefetch).toHaveBeenCalled();
     expect(window.location.search).toBe("");
+  });
+
+  it("puts the prospect it opens in the address with a push (#6047)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const push = vi.spyOn(window.history, "pushState");
+    await user.click((await screen.findAllByText("Owen Park"))[0]!);
+    expect(window.location.search).toBe("?prospect=b");
+    expect(push).toHaveBeenCalledTimes(1);
+    push.mockRestore();
   });
 });
 

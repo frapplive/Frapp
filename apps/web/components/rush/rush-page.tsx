@@ -6,7 +6,7 @@ import {
 } from "@/lib/address/use-address-params";
 
 import { localIsoDate } from "@repo/formatting";
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   rushPipelineAccess,
   useMyPermissions,
@@ -176,11 +176,15 @@ function AddressedRushPage() {
       : viewParam === ALL_PARAM_VALUE
         ? "all"
         : firstPick;
-  const setViewPick = (next: RushView) =>
+  // A pick of the view already shown pushes nothing (the folded menu calls
+  // back for the checked item too).
+  const setViewPick = (next: RushView) => {
+    if (next === viewPick) return;
     address.open({
       [R.view]: next === "follow_up" ? FOLLOW_UP_PARAM_VALUE : ALL_PARAM_VALUE,
       [R.prospect]: null,
     });
+  };
   const [query, setQuery] = useState("");
   // Below the floor's few hundred pixels the header can't hold both sets of
   // views beside the title, so they fold into one View menu among the
@@ -210,13 +214,29 @@ function AddressedRushPage() {
 
   // A prospect the address names that the read doesn't hold (removed, or
   // not this role's to see, #4084): said, and taken out of the address.
+  /*
+    A prospect the read in hand doesn't hold is read again once (it can be
+    cached from before they were added); only a settled, successful read
+    without them calls them gone (removed, or not this role's, #4084).
+  */
+  const prospectMissing =
+    openId !== null &&
+    pipeline.data !== undefined &&
+    !pipeline.isFetching &&
+    !pipeline.isError &&
+    pipeline.fetchStatus !== "paused" &&
+    !pipeline.data.candidates.some((c) => c.id === openId);
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!prospectMissing || recheckedFor === openId) return;
+    void pipeline.refetch().finally(() => setRecheckedFor(openId));
+  }, [prospectMissing, recheckedFor, openId, pipeline]);
   const deadProspect = useDeadAddressParam(
     R.prospect,
     openId,
-    pipeline.data !== undefined &&
-      !pipeline.isFetching &&
-      openId !== null &&
-      !pipeline.data.candidates.some((c) => c.id === openId),
+    prospectMissing && recheckedFor === openId,
+    // The note goes once the member moves on to another view.
+    viewParam ?? "",
   );
 
   if (isOffline && anyReadUncached(permissionsQuery, pipeline)) {
@@ -425,7 +445,6 @@ function AddressedRushPage() {
         ) : null}
       </PageActions>
       <SubscriptionNotice gate={gate} feature="working prospects" />
-      {body}
       {deadProspect !== null ? (
         // A prospect from the address who isn't here (§ Addresses).
         <p role="status" className="text-sm text-muted-foreground">
@@ -433,6 +452,7 @@ function AddressedRushPage() {
           your role may not see them.
         </p>
       ) : null}
+      {body}
       {mover.dialog}
       {access.add ? (
         <AddProspectDialog open={adding} onOpenChange={setAdding} />
