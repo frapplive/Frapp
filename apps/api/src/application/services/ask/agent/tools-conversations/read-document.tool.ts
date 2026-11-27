@@ -96,6 +96,7 @@ export class ReadDocumentTool implements AgentReadTool<Args> {
           text: chunk.content,
           pageStart: chunk.page_start,
           sourceAt: read.source_at,
+          facts: read.facts,
         }),
       ),
     );

@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({ redirect }));
 const { default: ChatAdmin } = await import("./chat-admin/page");
 const { default: DiscordImport } = await import("./discord-import/page");
 const { default: Reports } = await import("./reports/page");
+const { default: Tasks } = await import("./tasks/page");
 
 type Route = (props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -21,12 +22,12 @@ const open = (route: Route, params: Record<string, string | string[]> = {}) =>
 // The officer tools open inside Chapter settings (#3837); their old routes
 // only redirect, carrying what the old link carried.
 describe("old officer tool routes", () => {
-  it("sends /chat-admin to the Chat page, keeping a channel", async () => {
+  it("sends /chat-admin to Chat admin, keeping a channel", async () => {
     await expect(open(ChatAdmin)).rejects.toThrow(
-      "redirect:/settings?tab=chat",
+      "redirect:/settings?tab=chat&page=chat-admin",
     );
     await expect(open(ChatAdmin, { channel: "c-1" })).rejects.toThrow(
-      "redirect:/settings?tab=chat&channel=c-1",
+      "redirect:/settings?tab=chat&page=chat-admin&channel=c-1",
     );
   });
 
@@ -41,6 +42,26 @@ describe("old officer tool routes", () => {
   it("sends /reports to the Reports page, and ignores an old tab", async () => {
     await expect(
       open(Reports, { tab: "roles", extra: ["a", "b"] }),
-    ).rejects.toThrow("redirect:/settings?tab=reports");
+    ).rejects.toThrow("redirect:/settings?tab=reports&page=reports");
+  });
+});
+
+// The Tasks page folded into Activity (#5948): Mine and Everyone's.
+describe("the old Tasks route", () => {
+  it("sends /tasks to Activity", async () => {
+    await expect(open(Tasks)).rejects.toThrow("redirect:/activity");
+  });
+
+  it("keeps a task or group link, so its panel still opens, and drops the rest", async () => {
+    await expect(open(Tasks, { task: "t-1", released: "1" })).rejects.toThrow(
+      "redirect:/activity?task=t-1",
+    );
+    await expect(open(Tasks, { group: ["g-1", "g-2"] })).rejects.toThrow(
+      "redirect:/activity?group=g-1",
+    );
+    // New's New task from a page loaded before the fold.
+    await expect(open(Tasks, { new: "1" })).rejects.toThrow(
+      "redirect:/activity?new=1",
+    );
   });
 });

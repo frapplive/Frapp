@@ -3,12 +3,13 @@
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { EYEBROW } from "@/components/ui/typography";
-import { MODULE_SETTINGS } from "@/components/settings/settings-modules";
+import { MODULE_SETTINGS } from "@repo/hooks/module-settings";
 import { InlineNote } from "@/components/shared/inline-note";
 import { CHAPTER_LOGS_TITLE } from "@repo/validation";
 import { SettingsSearch } from "@/components/settings/settings-search";
 
-// Board `4d`: rail rows are `height:34px;border-radius:10px;padding:0 10px`,
+// Board `4d`: rail rows are `border-radius:10px;padding:0 10px` at the
+// sidebar's Row step (the board drew 34px; 28 on a mouse since #6115),
 // inactive `#A9A399`, active a filled gold chip (`background:#2A2410;
 // color:#F0CD5E;font-weight:600`) rather than the §6 2px edge indicator this
 // rail used to run down its side.
@@ -30,14 +31,14 @@ import { SettingsSearch } from "@/components/settings/settings-search";
 /*
  * A rail row, not a tab: the shared `TabsTrigger` is the underlined tab, so
  * its 44px floor, its 2px underline and its `-mb-px` are taken back off
- * here. Without that the rows stood 44px apart under 34px tool links, and the
+ * here. Without that the rows stood 44px apart under the sidebar's rows, and the
  * active chip carried an accent underline (2026-11-05). `pointer-coarse`
  * keeps the 44px touch floor where the rail wraps into chips on a phone.
  */
 const RAIL_ROW_RESET =
   "mb-0 min-h-0 border-b-0 py-0 enabled:data-[state=active]:border-transparent pointer-coarse:min-h-11";
 
-const RAIL_TRIGGER_CLASS = `${RAIL_ROW_RESET} h-[34px] justify-start rounded-[10px] px-[10px] text-sm text-muted-foreground enabled:hover:bg-card data-[state=active]:bg-accent-subtle data-[state=active]:font-semibold data-[state=active]:text-accent-text data-[state=active]:shadow-none enabled:data-[state=active]:text-accent-text lg:w-full lg:flex-none`;
+const RAIL_TRIGGER_CLASS = `${RAIL_ROW_RESET} h-control-row justify-start rounded-[10px] px-[10px] text-sm text-muted-foreground enabled:hover:bg-card data-[state=active]:bg-accent-subtle data-[state=active]:font-semibold data-[state=active]:text-accent-text data-[state=active]:shadow-none enabled:data-[state=active]:text-accent-text lg:w-full lg:flex-none`;
 
 /** The rail's groups, in order. */
 export type SettingsTabGroup = "chapter" | "people" | "modules";

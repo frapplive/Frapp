@@ -15,7 +15,7 @@ import { JumpToLatestGlyph } from "./chat-glyphs";
  * Elevated `--popover` with the outlined button's edge, the neutral recipe a
  * floating control takes, and the chapter's solid accent only on the dot that
  * says a newer message landed out of sight. The secondary icon button's size,
- * 36 to a mouse and the 44 floor to a finger.
+ * 28 to a mouse (the Small step) and the 44 floor to a finger.
  *
  * The caller renders it only while `useJumpToLatest` says to (`showsJump`).
  */

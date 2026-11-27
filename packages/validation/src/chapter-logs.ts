@@ -52,6 +52,9 @@ const ACTION_PHRASES: Readonly<Record<string, string>> = {
   chapter_group_deleted: "removed a group",
   member_removed: "removed a member",
   member_profile_corrected: "edited a member's profile",
+  // Chat timeouts (#6006).
+  member_timed_out: "timed out a member",
+  member_timeout_lifted: "lifted a member's timeout",
   // A member renaming themselves (#5801).
   member_renamed: "changed their name",
   // A member setting their own More details (#581): which fields, never values.
@@ -111,6 +114,8 @@ export const CHAPTER_LOG_KINDS = [
     actions: [
       "member_removed",
       "member_profile_corrected",
+      "member_timed_out",
+      "member_timeout_lifted",
       "member_renamed",
       "member_custom_fields_updated",
       "presidency_transferred",

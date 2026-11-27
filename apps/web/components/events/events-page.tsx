@@ -13,10 +13,7 @@ import {
 import { OpenLinkedEvent } from "./open-linked-event";
 import { CalendarSubscribeMenu } from "./calendar-subscribe-menu";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  RolesGlyph,
-  SearchGlyph,
-} from "@/components/events/chapter-ops-glyphs";
+import { RolesGlyph } from "@/components/events/chapter-ops-glyphs";
 import {
   useAutoAbsent,
   useCalendarBirthdays,
@@ -73,15 +70,28 @@ import {
   canAll,
   CHECK_IN_OPEN_LABEL,
   EVENT_CREATE_PERMISSIONS,
+  EVENT_TENTATIVE_LABEL,
+  eventIsDated,
   eventSetsRolesApart,
+  eventTakesAttendance,
+  eventTimingFieldsOf,
   eventsCount,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
 import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
+import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
   ActiveFilterChips,
@@ -102,8 +112,6 @@ import {
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
-  dashboardToolbarSearchClassName,
-  dashboardToolbarSearchGlyphClassName,
   denseListClassName,
 } from "@/components/shared/table-controls";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -126,15 +134,18 @@ import { stateMicrocopy } from "@/lib/state-microcopy";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import {
+  allDayCheckInWords,
   formatDayHeading,
+  formatEventRowTime,
   formatRelativeDayTime,
-  formatTimeRange,
   localIsoDate,
+  parseBareDateLocalMidnight,
   parseInstant,
 } from "@repo/formatting";
 import {
   AGENDA_SPAN_DAYS,
   buildAgenda,
+  datedEventDays,
   dateOfKey,
   kindsByDay,
   type AgendaDay,
@@ -192,7 +203,18 @@ const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
   all: "All events",
 };
 
+/**
+ * When the event starts, for sorting and the time filter. An all-day or
+ * time-TBD event starts at the viewer's own midnight of its first day
+ * (#6098): its stored time is the saver's midnight, which can be another day
+ * in another zone.
+ */
 function startMsOf(event: EventRow): number | null {
+  if (eventIsDated(eventTimingFieldsOf(event))) {
+    return typeof event.start_date === "string"
+      ? (parseBareDateLocalMidnight(event.start_date)?.getTime() ?? null)
+      : null;
+  }
   return parseInstant(event.start_time)?.getTime() ?? null;
 }
 
@@ -229,6 +251,41 @@ function editorDraftNameOf(editor: KeptEditor): string {
 }
 
 export function EventsPage() {
+  // The open event, its editor, the picked day and the hour grid are read
+  // from the address, and `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedEventsPage />
+    </Suspense>
+  );
+}
+
+const E = WEB_ADDRESS_PARAMS.events;
+const EVENTS_ADDRESS = [E.day, E.event, E.edit, E.hours] as const;
+
+/** A `YYYY-MM-DD` from the address as a local day, or `null` for one that
+ * isn't a real day. */
+function dayFromParam(value: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const day = dateOfKey(value);
+  // `dateOfKey` rolls an out-of-range part over: 2026-02-31 is not a day.
+  return day && localIsoDate(day) === value ? day : null;
+}
+
+function AddressedEventsPage() {
+  /*
+    The address (#6043, spec § Addresses): `day=` is the picked day, replaced
+    as days are picked so Back doesn't walk every one; `event=` is the open
+    event and `edit=1` its editor, each pushed; `hours=` is the hour grid,
+    pushed. Each close follows the address's rule. The state below follows
+    the address: a write here moves both, and Back, Forward or a link moves
+    the address first and the state after it.
+  */
+  const address = useAddressParams(EVENTS_ADDRESS);
+  const dayParam = address.values[E.day];
+  const eventParam = address.values[E.event];
+  const editParam = address.values[E.edit] === "1";
+  const hoursParam = address.values[E.hours];
   const { isOffline } = useNetwork();
   const { toast } = useToast();
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
@@ -239,9 +296,6 @@ export function EventsPage() {
     useState<AttendanceFilter>("all");
   const [recurrenceFilter, setRecurrenceFilter] =
     useState<CadenceFilter>("all");
-  // Beside chat the search is a glyph until pressed (#5560); it stays a
-  // field while it holds text.
-  const [searchOpen, setSearchOpen] = useState(false);
   // Bulk actions live behind Select (#3822): the default list has no
   // checkboxes.
   const [selecting, setSelecting] = useState(false);
@@ -539,6 +593,19 @@ export function EventsPage() {
     const now = nowTick;
     const inWindow = calendarEvents.filter((event) => {
       if (timeFilter === "all") return true;
+      // A dated event by its days: Upcoming while its last day is at or
+      // after the anchor's, so a recruitment week under way still lists.
+      const days = datedEventDays(event);
+      if (days) {
+        if (timeFilter === "upcoming") {
+          return days.at(-1)! >= localIsoDate(new Date(anchorMs));
+        }
+        // Past: begun by now, or by the picked day.
+        return (
+          days[0]! <=
+          localIsoDate(new Date(Math.min(now, dayAfterAnchorMs - 1)))
+        );
+      }
       const start = startMsOf(event);
       // An event whose start cannot be read is shown under "upcoming" and
       // hidden under "past": it may still be ahead, and hiding it everywhere
@@ -570,6 +637,7 @@ export function EventsPage() {
         entries: agendaEntries,
         items: agendaItems,
         startOf: (event: EventRow) => event.start_time,
+        daysOf: datedEventDays,
         keyOf: eventIdOf,
         anchor,
         direction: timeFilter === "past" ? -1 : 1,
@@ -612,8 +680,106 @@ export function EventsPage() {
         (event: EventRow) => event.start_time,
         agendaItems,
         hiddenKinds,
+        datedEventDays,
       ),
     [calendarEvents, agendaItems, hiddenKinds],
+  );
+
+  /*
+    The state follows the address when Back, Forward or a link moves it
+    (the writes above move both, so these find nothing to do for them).
+    Effects, as the editor left open above is: what they follow is outside
+    React.
+  */
+  /* eslint-disable react-hooks/set-state-in-effect -- following the address */
+  // The event closed by Back: the sheet goes with it.
+  useEffect(() => {
+    if (eventParam === null && detailSheetOpen) setDetailSheetOpen(false);
+  }, [eventParam, detailSheetOpen]);
+  /*
+    The editor follows `edit=` only when the address moves it (Back closes
+    it, Forward or a reload opens it again), never on a render where the two
+    merely differ: the page's own close goes Back, which lands a moment
+    later, and the form the page was left with (#4593) reopens without it.
+  */
+  const [editWanted, setEditWanted] = useState(editParam);
+  const editSeen = useRef(editParam);
+  useEffect(() => {
+    if (editSeen.current === editParam) return;
+    editSeen.current = editParam;
+    setEditWanted(editParam);
+    if (!editParam && editorDialog.open && editorMode === "edit") {
+      editorDialog.setOpen(false);
+      keepEditorOpen(null);
+      if (eventParam !== null) setDetailSheetOpen(true);
+    }
+    // Only a move of the address acts here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam]);
+  // Waits for its event, then opens once, for someone who may edit it; an
+  // `edit=1` they may not use is taken out of the address.
+  useEffect(() => {
+    if (!editWanted || !activeEvent || eventIdOf(activeEvent) !== eventParam)
+      return;
+    setEditWanted(false);
+    if (!canMarkAttendance || !eventWriteGate.allowed) {
+      replaceAddress({ [E.edit]: null });
+      return;
+    }
+    if (editorDialog.open) return;
+    setDetailSheetOpen(false);
+    setEditorMode("edit");
+    keepEditorOpen({ mode: "edit", event: activeEvent, plan: null, day: null });
+    editorDialog.setOpen(true);
+    // `keepEditorOpen` and the dialog's setter are stable in what they do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editWanted, activeEvent, eventParam]);
+  // The picked day, from a link, a reload or Back to another page's entry.
+  useEffect(() => {
+    if (dayParam === null) {
+      if (pickedKey !== null && pickedKey !== todayKey) setPickedKey(null);
+      return;
+    }
+    if (dayParam === pickedKey) return;
+    const day = dayFromParam(dayParam);
+    if (!day) return;
+    setPickedKey(dayParam);
+    // The month and week strip follow the day the address names.
+    setNavMonth(day);
+    setStripStartKey(dayParam);
+    if (!hoursDay) showDayOnAgenda(day);
+    // Follows the address only; the page's own picks move both.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayParam]);
+  // The hour grid: opened by Forward or a link, closed by Back.
+  useEffect(() => {
+    if (hoursParam === null) {
+      if (hoursDay) {
+        // Back from the grid: the agenda comes back on its day, as its own
+        // back arrow does.
+        const day = hoursDay;
+        setHoursDay(null);
+        setHoursSingle(false);
+        showDayOnAgenda(day);
+      }
+      return;
+    }
+    const day = dayFromParam(hoursParam);
+    if (day && (!hoursDay || localIsoDate(hoursDay) !== hoursParam)) {
+      setHoursDay(day);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoursParam]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  // An event the address names that this member can't see, or that is
+  // gone: said in its place and taken out of the address.
+  const deadEvent = useDeadAddressParam(
+    E.event,
+    eventParam,
+    Array.isArray(eventsQuery.data) &&
+      !eventsQuery.isFetching &&
+      eventParam !== null &&
+      !events.some((event) => eventIdOf(event) === eventParam),
   );
 
   // Brings a picked day's heading into view once it has rendered.
@@ -646,18 +812,24 @@ export function EventsPage() {
     setNavMonth(null);
     setStripStartKey(null);
     setPickedKey(null);
+    replaceAddress({ [E.day]: null });
     if (hoursDay) {
       setHoursDay(todayStart);
+      replaceAddress({ [E.hours]: localIsoDate(todayStart) });
       return;
     }
     showDayOnAgenda(todayStart);
   }
 
   function pickDay(day: Date) {
-    setPickedKey(localIsoDate(day));
+    const key = localIsoDate(day);
+    setPickedKey(key);
+    // The day is replaced, not pushed: Back doesn't walk every day picked.
+    replaceAddress({ [E.day]: key === todayKey ? null : key });
     // On the hour grid, a picked day moves the grid there.
     if (hoursDay) {
       setHoursDay(startOfDay(day));
+      replaceAddress({ [E.hours]: key });
       return;
     }
     showDayOnAgenda(day);
@@ -667,7 +839,15 @@ export function EventsPage() {
     const day = hoursDay;
     setHoursDay(null);
     setHoursSingle(false);
+    closeAddress([E.hours]);
     if (day) showDayOnAgenda(day);
+  }
+
+  /** Opens the hour grid on `day`, a step Back returns from. */
+  function openHours(day: Date, single: boolean) {
+    setHoursDay(startOfDay(day));
+    setHoursSingle(single);
+    pushAddress({ [E.hours]: localIsoDate(day) });
   }
 
   const calendarCreateDefaults = useMemo(() => {
@@ -759,18 +939,26 @@ export function EventsPage() {
     // #3905).
     const now = new Date();
     const notClosed = ids.flatMap((eventId) => {
-      const closesAt = checkInClosesAt(
-        eventsById.get(eventId)?.end_time,
-        now.getTime(),
-      );
-      return closesAt
-        ? [
-            {
-              eventId,
-              message: `Check-in hasn't closed yet; it closes ${formatRelativeDayTime(closesAt, now)}.`,
-            },
-          ]
-        : [];
+      const event = eventsById.get(eventId);
+      const closesAt = checkInClosesAt(event?.end_time, now.getTime());
+      if (!closesAt) return [];
+      // An all-day event closes around the saver's midnight: said by its
+      // days where that is true for this officer, never "12:15 AM" (#6144).
+      const allDay = event
+        ? allDayCheckInWords(
+            eventTimingFieldsOf(event),
+            { opensAt: null, closesAt },
+            now,
+          )
+        : null;
+      return [
+        {
+          eventId,
+          message: allDay?.openAllDay
+            ? "Check-in hasn't closed yet; it stays open through the event's last day."
+            : `Check-in hasn't closed yet; it closes ${formatRelativeDayTime(closesAt, now)}.`,
+        },
+      ];
     });
     const toSend = ids.filter(
       (eventId) => !notClosed.some((pending) => pending.eventId === eventId),
@@ -949,7 +1137,11 @@ export function EventsPage() {
   // Any meeting of a series opens with its series, from an agenda row, a
   // past row or the hour grid: the sheet then has the head's rule (a
   // generated meeting carries none) and the series' upcoming meetings.
-  function openDetails(event: EventRow, linked = { excuse: false }) {
+  function openDetails(
+    event: EventRow,
+    linked: { excuse: boolean; fromAddress?: boolean } = { excuse: false },
+  ) {
+    if (!linked.fromAddress) pushAddress({ [E.event]: eventIdOf(event) });
     setExcuseAsk((ask) =>
       linked.excuse
         ? { eventId: eventIdOf(event), count: (ask?.count ?? 0) + 1 }
@@ -976,15 +1168,22 @@ export function EventsPage() {
     const cadence = series ? seriesCadenceOf(events, event) : null;
     // Start to end, "7:00 – 9:00 PM", as the phone's row says it: a member
     // deciding whether to go wants to know when it lets out (2026-11-19).
-    const time = formatTimeRange(event.start_time, event.end_time, nowDate);
+    // An all-day or time-TBD event says so in place of a time, and a span
+    // its days ("All day · Dec 1 – Dec 4"), never its midnights (#6098).
+    const shape = eventTimingFieldsOf(event);
+    const takesAttendance = eventTakesAttendance(shape);
+    const time = formatEventRowTime(event, nowDate);
     // Said on the row while it lasts, as the phone's row says it, so a member
-    // walking in sees where to check in without opening the event.
-    const checkInOpen = checkInOpenNow(
-      event.start_time,
-      event.end_time,
-      event.check_in_opens_minutes,
-      nowTick,
-    );
+    // walking in sees where to check in without opening the event. Never on
+    // an event that takes no attendance.
+    const checkInOpen =
+      takesAttendance &&
+      checkInOpenNow(
+        event.start_time,
+        event.end_time,
+        event.check_in_opens_minutes,
+        nowTick,
+      );
     // One derived value: the row fill and the checkbox must never disagree
     // about whether the row is selected.
     const isSelected = selecting && selectedIdSet.has(eventId);
@@ -993,7 +1192,11 @@ export function EventsPage() {
         ? event.location.trim()
         : null;
     // An absent fact drops out of the line rather than reading "TBD" or "0".
-    const meta = [time, location, pointsLabel(event.point_value)]
+    const meta = [
+      time,
+      location,
+      takesAttendance ? pointsLabel(event.point_value) : null,
+    ]
       .filter(Boolean)
       .join(" · ");
     const hue = EVENT_HUE;
@@ -1047,6 +1250,12 @@ export function EventsPage() {
                 >
                   Required
                 </span>
+              ) : null}
+              {shape.is_tentative ? (
+                // A status beside the name, not an alarm (#6098).
+                <Badge variant="outline" className="shrink-0">
+                  {EVENT_TENTATIVE_LABEL}
+                </Badge>
               ) : null}
             </span>
             {meta ? (
@@ -1143,8 +1352,7 @@ export function EventsPage() {
               aria-label={`Hours for ${heading}`}
               onClick={() => {
                 setPickedKey(day.key);
-                setHoursSingle(false);
-                setHoursDay(dayDate);
+                openHours(dayDate, false);
               }}
               className={cn(
                 "flex min-h-7 items-center gap-0.5 rounded-md px-1.5 text-caption font-semibold text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
@@ -1209,40 +1417,15 @@ export function EventsPage() {
         pressed and closes again on Escape or blur while empty.
       */}
       <PageActions className={cn("gap-x-2 gap-y-2", narrow && "flex-nowrap")}>
-        {narrow && !searchOpen && !query ? (
-          <IconButton
-            variant="secondary"
-            className="shrink-0"
-            label="Search events"
-            onClick={() => setSearchOpen(true)}
-          >
-            <SearchGlyph className="h-4 w-4" />
-          </IconButton>
-        ) : (
-          <div
-            className={cn(
-              "relative min-w-0 flex-1",
-              !narrow && "basis-full @xl:max-w-56 @xl:basis-auto",
-            )}
-          >
-            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-            <Input
-              type="search"
-              value={query}
-              autoFocus={narrow && searchOpen}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && !query) setSearchOpen(false);
-              }}
-              onBlur={() => {
-                if (!query) setSearchOpen(false);
-              }}
-              placeholder="Search events"
-              aria-label="Search events by name or location"
-              className={dashboardToolbarSearchClassName}
-            />
-          </div>
-        )}
+        <HeaderSearch
+          narrow={narrow}
+          value={query}
+          onChange={setQuery}
+          placeholder="Search events"
+          label="Search events by name or location"
+          glyphLabel="Search events"
+          className="flex-1 basis-full @xl:max-w-56 @xl:basis-auto"
+        />
         <FilterMenu filters={eventFilters} thing="events" narrow={narrow} />
         <CalendarSubscribeMenu iconOnly={narrow} />
         <Can allOf={EVENT_CREATE_PERMISSIONS}>
@@ -1276,6 +1459,14 @@ export function EventsPage() {
           onPlan={openPlan}
           disabled={eventWriteControls.disabled}
         />
+      ) : null}
+
+      {deadEvent !== null ? (
+        // An event from the address that isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That event isn&apos;t available. It may have been deleted, or you may
+          not have access.
+        </p>
       ) : null}
 
       <div
@@ -1361,6 +1552,7 @@ export function EventsPage() {
                 onOpenDay={(day) => {
                   setHoursDay(startOfDay(day));
                   setHoursSingle(true);
+                  replaceAddress({ [E.hours]: localIsoDate(day) });
                 }}
                 onCreateAt={(day, hour) => openCreate(day, hour)}
                 canCreate={canCreateEvents}
@@ -1385,7 +1577,7 @@ export function EventsPage() {
                 wired (#336): events have no assignee concept and no archive
                 state.
               */}
-              <div className="flex min-h-9 items-center gap-1 pointer-coarse:min-h-11">
+              <div className="flex min-h-control-list-row items-center gap-1 pointer-coarse:min-h-11">
                 <div className="min-w-0 flex-1 px-2">
                   <SectionLabel
                     id="events-list-label"
@@ -1533,29 +1725,38 @@ export function EventsPage() {
         </div>
       </div>
 
-      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`). In its
-          own boundary: it reads the URL, which must not hold back the page. */}
+      {/* `/events?event=<id>` opens that event's sheet (`eventDeepLink`), from
+          a link, Back, Forward or a reload. */}
       <Suspense fallback={null}>
         <OpenLinkedEvent
           events={events}
           idOf={eventIdOf}
-          onOpen={openDetails}
+          onOpen={(event, linked) =>
+            openDetails(event, { ...linked, fromAddress: true })
+          }
         />
       </Suspense>
 
       <EventDetailSheet
         open={detailSheetOpen}
-        onOpenChange={setDetailSheetOpen}
+        onOpenChange={(open) => {
+          setDetailSheetOpen(open);
+          // Its back arrow and Escape close by the address's rule.
+          if (!open) closeAddress([E.event, E.edit]);
+        }}
         event={activeEvent}
         series={activeSeries}
         seriesRule={activeSeriesHead?.recurrence_rule}
         onSelectOccurrence={(occurrence) => {
           setExcuseAsk(null);
           setActiveEvent(occurrence);
+          // Another meeting of the same series, in place.
+          replaceAddress({ [E.event]: eventIdOf(occurrence) });
         }}
         usingPreviewData={false}
         excuseAsk={excuseAsk}
         onRequestEdit={(event) => {
+          pushAddress({ [E.edit]: "1" });
           setActiveEvent(event);
           setDetailSheetOpen(false);
           setEditorMode("edit");
@@ -1587,6 +1788,13 @@ export function EventsPage() {
           ) {
             setDetailSheetOpen(true);
           }
+          // The editor's `edit=1` closes by the address's rule; a series
+          // save that left the event closes the event's too.
+          if (!open && editorMode === "edit") {
+            closeAddress(
+              leftEditedEvent.current ? [E.event, E.edit] : [E.edit],
+            );
+          }
           leftEditedEvent.current = false;
         }}
         onCloseAutoFocus={editorDialog.contentProps.onCloseAutoFocus}
@@ -1598,6 +1806,7 @@ export function EventsPage() {
         initialStartAt={eventPlan?.startAt ?? calendarCreateDefaults?.startAt}
         initialEndAt={eventPlan?.endAt ?? calendarCreateDefaults?.endAt}
         template={eventPlan?.template}
+        initialDated={eventPlan?.dated}
         keptDraft={editorDraftName}
         onCreated={async (eventId) => {
           if (eventPlan) {

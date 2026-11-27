@@ -70,7 +70,7 @@ export const BACKWORK_SEARCH_COLUMNS =
   'id, chapter_id, department_id, course_number, professor_id, uploader_id, title, year, semester, assignment_type, assignment_number, document_variant, storage_path, file_hash, is_redacted, tags, created_at, draft_fields, ai_fill_started_at';
 
 export const EVENT_SEARCH_COLUMNS =
-  'id, chapter_id, name, description, location, start_time, end_time, point_value, is_mandatory, recurrence_rule, parent_event_id, required_role_ids, optional_role_ids, excluded_role_ids, others_invited, attendance_picks, notes, created_at, check_in_zone, check_in_zone_name, check_in_opens_minutes, created_by, event_type_id, agenda, attachments';
+  'id, chapter_id, name, description, location, start_time, end_time, timing, start_date, end_date, is_tentative, calendar_only, point_value, is_mandatory, recurrence_rule, parent_event_id, required_role_ids, optional_role_ids, excluded_role_ids, others_invited, attendance_picks, notes, created_at, check_in_zone, check_in_zone_name, check_in_opens_minutes, created_by, event_type_id, agenda, attachments';
 
 /**
  * Not `*`: `content_search` is the STORED tsvector `searchMessages` matches on,
@@ -78,7 +78,7 @@ export const EVENT_SEARCH_COLUMNS =
  * on the one read whose result set the archive import grows most.
  */
 const MESSAGE_SEARCH_COLUMNS =
-  'id, channel_id, sender_id, author_name, author_avatar_path, author_external_id, content, type, kind, payload, client_message_id, reply_to_id, metadata, mentions, forwarded_from, is_pinned, pinned_at, flag, flagged_by, flagged_at, edited_at, is_deleted, created_at';
+  'id, channel_id, sender_id, author_name, author_avatar_path, author_external_id, content, type, kind, payload, client_message_id, reply_to_id, thread_root_id, metadata, mentions, forwarded_from, is_pinned, pinned_at, flag, flagged_by, flagged_at, edited_at, is_deleted, created_at';
 
 /**
  * The order `searchMessages` asks PostgREST for, `created_at desc, id desc`,
@@ -172,7 +172,9 @@ export class SupabaseSearchRepository implements ISearchRepository {
    * column to restrict the parent rows; `users.display_name_search` then matches
    * through `idx_users_display_name_search`. The roster is never fetched, the
    * match happens in SQL, and `limit` is applied by the database instead of by
-   * the length of whatever the previous query happened to return.
+   * the length of whatever the previous query happened to return. The embed
+   * names `members_user_id_fkey` because `members.chat_timeout_by` also
+   * reaches `users` (#6079); a bare one is refused as ambiguous (#6121).
    *
    * Chapter scoping is the outer `.eq('chapter_id', …)`: the join filters
    * WITHIN the chapter's members, so a name that matches in another chapter
@@ -192,7 +194,9 @@ export class SupabaseSearchRepository implements ISearchRepository {
   ): Promise<SearchMemberHit[]> {
     const { data, error } = (await this.supabase
       .from('members')
-      .select('id, user_id, chapter_id, users!inner(id, display_name, email)')
+      .select(
+        'id, user_id, chapter_id, users!members_user_id_fkey!inner(id, display_name, email)',
+      )
       .eq('chapter_id', chapterId)
       .textSearch('users.display_name_search', query, TEXT_SEARCH)
       .limit(limit)) as QueryResult<{

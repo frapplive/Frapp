@@ -76,18 +76,19 @@ describe("Study zones inside Chapter settings", () => {
       isPending: false,
       isError: false,
     });
-    searchParams = new URLSearchParams("tab=geofences");
+    searchParams = new URLSearchParams("tab=geofences&page=study-zones");
     activeChapterId = "chap-1";
   });
 
-  it("draws the zone list on the Study zones page, with no link out", () => {
+  it("draws the zone list on the page the Zones row opens, with a way back", () => {
     render(<SettingsPage />);
     expect(
       screen.getByRole("region", { name: "Zone list" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /study zones/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Study zones" })).toHaveAttribute(
+      "href",
+      "/settings?tab=geofences",
+    );
   });
 
   it("keeps the page, and a half-drawn zone, when a background refetch fails", () => {

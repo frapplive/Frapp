@@ -1,8 +1,12 @@
 "use client";
 
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+
 import { localIsoDate } from "@repo/formatting";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   rushPipelineAccess,
   useMyPermissions,
@@ -19,14 +23,21 @@ import { vocab } from "@repo/org-archetypes";
 import {
   isRushFollowUpForViewer,
   rushFollowUpsDueCount,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import { PageActions, PageViews } from "@/components/layout/page-actions";
-import { SearchGlyph } from "@/components/layout/nav-glyphs";
+import { HeaderSearch } from "@/components/shared/header-search";
+import { ChartNoAxesColumn, Columns3, List } from "lucide-react";
 import {
-  dashboardToolbarSearchClassName,
-  dashboardToolbarSearchGlyphClassName,
-} from "@/components/shared/table-controls";
-import { Input } from "@/components/ui/input";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { IconButton } from "@/components/ui/icon-button";
 import { InlineNote } from "@/components/shared/inline-note";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { anyReadUncached } from "@/components/shared/async-states";
@@ -39,6 +50,7 @@ import { ViewLabels } from "@/components/shared/view-labels";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
+import { useIsNarrow } from "@/lib/use-is-narrow";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { AddProspectDialog } from "./rush-add-prospect";
 import { RushBoard } from "./rush-board";
@@ -59,13 +71,33 @@ const LAYOUT_OPTIONS = [
 
 type RushView = "all" | "follow_up";
 
+/**
+ * The page width (the header's less its 48px of gutters) below which the
+ * views fold into the View menu: a 36rem header. Once they have, the header
+ * holds no views, so New is folded to its glyph here (`glyphOnly`) rather
+ * than by the header's views-present rule. Measured with `useIsNarrow`'s
+ * hysteresis, so they unfold again only from a page 40px wider.
+ */
+const VIEWS_FOLD_BELOW = 528;
+
+/** The page width (a 52rem header) below which search folds and the count goes. */
+const SEARCH_FOLD_BELOW = 784;
+
+const LAYOUT_GLYPHS = {
+  grid: Columns3,
+  list: List,
+  summary: ChartNoAxesColumn,
+} as const satisfies Record<RushLayout, unknown>;
+
 const VIEW_OPTIONS = [
   { value: "all", label: "All" },
   { value: "follow_up", label: "Follow up" },
 ] as const satisfies readonly { value: RushView; label: string }[];
 
-/** The notification's deep link: `/rush?prospect=<candidate id>`. */
-export const RUSH_PROSPECT_PARAM = "prospect";
+const R = WEB_ADDRESS_PARAMS.rush;
+/** `view=` values; no `view=` is the page's own first answer. */
+const FOLLOW_UP_PARAM_VALUE = "follow-up";
+const ALL_PARAM_VALUE = "all";
 
 /**
  * The recruitment page (#5924): every prospect the chapter is working, as a
@@ -91,6 +123,16 @@ export const RUSH_PROSPECT_PARAM = "prospect";
  * board and the list by name.
  */
 export function RushPage() {
+  // The open prospect and the view are read from the address, and
+  // `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedRushPage />
+    </Suspense>
+  );
+}
+
+function AddressedRushPage() {
   const { isOffline } = useNetwork();
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
@@ -112,12 +154,90 @@ export function RushPage() {
     setSummary(next === "summary");
     if (next !== "summary") setListLayout(next);
   };
-  const [openId, setOpenId] = useState<string | null>(null);
+  /*
+    The address (#6047, spec § Addresses): `prospect=<id>` is the prospect
+    open in place of the board, pushed, its back arrow closing by the
+    address's rule; `view=all|follow-up` is the view the member picked,
+    pushed. With no `view=` the page opens as it always has (Follow up when
+    it holds anything). Search, the layout and Summary are not in it.
+  */
+  const address = useAddressParams([R.prospect, R.view]);
+  const openId = address.values[R.prospect];
+  const setOpenId = (id: string | null) =>
+    id === null
+      ? address.close([R.prospect])
+      : address.open({ [R.prospect]: id }, { replace: openId !== null });
   const [adding, setAdding] = useState(false);
-  const [viewPick, setViewPick] = useState<RushView | null>(null);
+  const viewParam = address.values[R.view];
+  const [firstPick, setFirstPick] = useState<RushView | null>(null);
+  const viewPick: RushView | null =
+    viewParam === FOLLOW_UP_PARAM_VALUE
+      ? "follow_up"
+      : viewParam === ALL_PARAM_VALUE
+        ? "all"
+        : firstPick;
+  // A pick of the view already shown pushes nothing (the folded menu calls
+  // back for the checked item too).
+  const setViewPick = (next: RushView) => {
+    if (next === viewPick) return;
+    address.open({
+      [R.view]: next === "follow_up" ? FOLLOW_UP_PARAM_VALUE : ALL_PARAM_VALUE,
+      [R.prospect]: null,
+    });
+  };
   const [query, setQuery] = useState("");
+  // Below the floor's few hundred pixels the header can't hold both sets of
+  // views beside the title, so they fold into one View menu among the
+  // actions (`RushViewMenu`). Measured on the page, which is the header's
+  // width less its gutters.
+  const [pageRef, narrowMeasured] =
+    useIsNarrow<HTMLDivElement>(VIEWS_FOLD_BELOW);
+  const foldViews = narrowMeasured === true;
+  // Below a 52rem header the count goes and search folds to its glyph.
+  const [searchRef, narrowSearchMeasured] =
+    useIsNarrow<HTMLDivElement>(SEARCH_FOLD_BELOW);
+  const narrowSearch = narrowSearchMeasured === true;
+  // One box, measured against both widths.
+  const measureRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      const offViews = pageRef(node);
+      const offSearch = searchRef(node);
+      return () => {
+        offViews?.();
+        offSearch?.();
+      };
+    },
+    [pageRef, searchRef],
+  );
   const mover = useRushMove();
   const today = localIsoDate(new Date());
+
+  // A prospect the address names that the read doesn't hold (removed, or
+  // not this role's to see, #4084): said, and taken out of the address.
+  /*
+    A prospect the read in hand doesn't hold is read again once (it can be
+    cached from before they were added); only a settled, successful read
+    without them calls them gone (removed, or not this role's, #4084).
+  */
+  const prospectMissing =
+    openId !== null &&
+    pipeline.data !== undefined &&
+    !pipeline.isFetching &&
+    !pipeline.isError &&
+    pipeline.fetchStatus !== "paused" &&
+    !pipeline.data.candidates.some((c) => c.id === openId);
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!prospectMissing || recheckedFor === openId) return;
+    void pipeline.refetch().finally(() => setRecheckedFor(openId));
+  }, [prospectMissing, recheckedFor, openId, pipeline]);
+  const deadProspect = useDeadAddressParam(
+    R.prospect,
+    openId,
+    prospectMissing && recheckedFor === openId,
+    // The note goes once the member moves on to another view.
+    viewParam ?? "",
+  );
 
   if (isOffline && anyReadUncached(permissionsQuery, pipeline)) {
     return (
@@ -192,11 +312,13 @@ export function RushPage() {
   const firstView: RushView = candidates.some(mine) ? "follow_up" : "all";
   // The opening view is kept once answered, so logging the last due contact
   // doesn't move the page under the viewer (Tasks does the same).
-  if (canSwitchView && viewPick === null) setViewPick(firstView);
+  if (canSwitchView && viewPick === null) setFirstPick(firstView);
   const pageView: RushView = canSwitchView ? (viewPick ?? firstView) : "all";
   const inView =
     pageView === "follow_up" ? candidates.filter(mine) : candidates;
   const searching = query.trim().length > 0;
+  const showWhich = canSwitchView && !summary;
+  const showLayout = candidates.length > 0;
   const shown = searching
     ? inView.filter((c) => matchesWordStarts(c.display_name, query))
     : inView;
@@ -257,7 +379,7 @@ export function RushPage() {
   }
 
   return (
-    <div className="@container space-y-6">
+    <div ref={measureRef} className="@container space-y-6">
       {/* Board, List and Summary as plain words beside the title (#5947),
           none until there is a prospect to lay out. Summary counts the whole
           pipeline, so it hides the view and search that narrow the others. */}
@@ -266,58 +388,71 @@ export function RushPage() {
             like Tasks' My tasks / Everyone's, for roles that work them. */}
         <ViewLabels
           label="Which prospects"
-          options={canSwitchView && !summary ? VIEW_OPTIONS : []}
+          options={showWhich && !foldViews ? VIEW_OPTIONS : []}
           value={pageView}
           onChange={setViewPick}
         />
+        {/* A hairline between the two sets, as between the title and the
+            first, so five words don't read as one set of views. */}
+        {showWhich && showLayout && !foldViews ? (
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px bg-border" />
+        ) : null}
         <ViewLabels
           label="Layout"
-          options={candidates.length > 0 ? LAYOUT_OPTIONS : []}
+          options={showLayout && !foldViews ? LAYOUT_OPTIONS : []}
           value={layout}
           onChange={setLayout}
         />
       </PageViews>
+      {/* The header folds on the page's width, as Events' does beside chat
+          (#5560): below 52rem the count goes (the columns and Summary count
+          the same people) and search is a glyph that opens into its field,
+          so the title and both sets of views keep their room (Paul,
+          2026-11-24, on the header crammed and overlapping with chat open). */}
       <PageActions>
-        <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
-          {rushListSubtitle(open, due)}
-        </span>
+        {!narrowSearch ? (
+          <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
+            {rushListSubtitle(open, due)}
+          </span>
+        ) : null}
         {candidates.length > 0 && !summary ? (
-          <div className="relative w-44 min-w-0 shrink @max-[34rem]:w-28">
-            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && query) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setQuery("");
-                }
-              }}
-              placeholder="Search"
-              aria-label="Search prospects by name"
-              className={dashboardToolbarSearchClassName}
-            />
-          </div>
+          <HeaderSearch
+            narrow={narrowSearch}
+            value={query}
+            onChange={setQuery}
+            placeholder="Search"
+            label="Search prospects by name"
+            glyphLabel="Search prospects"
+            className="w-44 shrink"
+          />
+        ) : null}
+        {foldViews && showLayout ? (
+          <RushViewMenu
+            which={showWhich ? pageView : null}
+            onWhich={setViewPick}
+            layout={layout}
+            onLayout={setLayout}
+          />
         ) : null}
         {access.add ? (
           <NewButton
             type="button"
             thing="prospect"
+            glyphOnly={foldViews || narrowSearch}
             {...gate.controlProps()}
             onClick={() => setAdding(true)}
           />
         ) : null}
       </PageActions>
       <SubscriptionNotice gate={gate} feature="working prospects" />
+      {deadProspect !== null ? (
+        // A prospect from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That prospect isn&apos;t available. They may have been removed, or
+          your role may not see them.
+        </p>
+      ) : null}
       {body}
-      <Suspense fallback={null}>
-        <LinkedProspectParam
-          candidateIds={candidates.map((c) => c.id)}
-          onOpen={setOpenId}
-        />
-      </Suspense>
       {mover.dialog}
       {access.add ? (
         <AddProspectDialog open={adding} onOpenChange={setAdding} />
@@ -340,40 +475,66 @@ export function RushPage() {
 }
 
 /**
- * Opens the prospect `/rush?prospect=<id>` names (a follow-up or stale push,
- * `notifications-popover.tsx`) once the pipeline holds them, then drops the
- * parameter so a refresh doesn't reopen it, as Tasks' and Events' links do.
- * An id the pipeline doesn't hold (deleted) opens nothing. Its own component
- * because `useSearchParams` needs a Suspense boundary of its own.
+ * The page's views as one menu, for a header too narrow to hold All / Follow
+ * up and Board / List / Summary as words beside the title (beside chat at its
+ * widest, the 375px floor). The same picks as the words, in the same order,
+ * the way Linear folds a view's layout into its Display menu; the glyph is
+ * the current layout's, so the button says where you are.
  */
-function LinkedProspectParam({
-  candidateIds,
-  onOpen,
+function RushViewMenu({
+  which,
+  onWhich,
+  layout,
+  onLayout,
 }: {
-  candidateIds: readonly string[];
-  onOpen: (id: string) => void;
+  /** `null` for a role with one set of prospects (no All / Follow up). */
+  which: RushView | null;
+  onWhich: (next: RushView) => void;
+  layout: RushLayout;
+  onLayout: (next: RushLayout) => void;
 }) {
-  const searchParams = useSearchParams();
-  const linked = searchParams?.get(RUSH_PROSPECT_PARAM) ?? null;
-  const handled = useRef<string | null>(null);
-  const latest = useRef(onOpen);
-  useEffect(() => {
-    latest.current = onOpen;
-  });
-  const holds = linked !== null && candidateIds.includes(linked);
-  useEffect(() => {
-    if (!linked) {
-      handled.current = null;
-      return;
-    }
-    if (handled.current === linked) return;
-    handled.current = linked;
-    if (holds) latest.current(linked);
-    // Next keeps `useSearchParams` in step with the History API, so this
-    // clears the parameter without a navigation.
-    const url = new URL(window.location.href);
-    url.searchParams.delete(RUSH_PROSPECT_PARAM);
-    window.history.replaceState(window.history.state, "", url);
-  }, [linked, holds]);
-  return null;
+  const Glyph = LAYOUT_GLYPHS[layout];
+  const current = LAYOUT_OPTIONS.find((o) => o.value === layout)?.label;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          variant="secondary"
+          className="shrink-0"
+          label={`View: ${current}`}
+        >
+          <Glyph className="h-4 w-4" aria-hidden="true" />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {which !== null && layout !== "summary" ? (
+          <>
+            <DropdownMenuLabel>Which prospects</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={which}
+              onValueChange={(next) => onWhich(next as RushView)}
+            >
+              {VIEW_OPTIONS.map((option) => (
+                <DropdownMenuRadioItem key={option.value} value={option.value}>
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        <DropdownMenuLabel>Layout</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={layout}
+          onValueChange={(next) => onLayout(next as RushLayout)}
+        >
+          {LAYOUT_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }

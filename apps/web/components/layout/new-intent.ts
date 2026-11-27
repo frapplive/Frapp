@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { NEW_INTENT_PARAM, type NewIntent } from "./new-intent-href";
+import { consumeAddressParam } from "@/lib/address/address";
 
 /**
  * How New's actions open a page's own form (#5946).
@@ -22,38 +24,19 @@ import { useEffect, useRef } from "react";
  * panel is the exception, mounted on every route, so it passes what its own
  * search-params read says (`asked`).
  */
-export const NEW_INTENT_PARAM = "new";
-
-/**
- * Which form the mark asks for, where a page holds more than one: Documents
- * holds Upload (`"1"`, its own button's) and New minutes (`"minutes"`), since
- * minutes are filed there (#5949).
- */
-export type NewIntent = "1" | "minutes";
-
-/**
- * The address that opens `href`'s create form. `href` may carry a query of
- * its own (`/profile?open=service`, a panel that holds the form, #5950).
- */
-export function newIntentHref(href: string, intent: NewIntent = "1"): string {
-  return `${href}${href.includes("?") ? "&" : "?"}${NEW_INTENT_PARAM}=${intent}`;
-}
+// The mark's name and `newIntentHref` live in a module without "use client",
+// so the server redirect pages (`/service`, `/meetings`) read real values.
+export {
+  NEW_INTENT_PARAM,
+  newIntentHref,
+  type NewIntent,
+} from "./new-intent-href";
 
 function addressAsks(intent: NewIntent): boolean {
   if (typeof window === "undefined") return false;
   return (
     new URLSearchParams(window.location.search).get(NEW_INTENT_PARAM) === intent
   );
-}
-
-/**
- * Takes the mark off the address in place. Next keeps its search params in
- * step with the History API, so no navigation runs and nothing remounts.
- */
-function clearAddress(): void {
-  const url = new URL(window.location.href);
-  url.searchParams.delete(NEW_INTENT_PARAM);
-  window.history.replaceState(window.history.state, "", url);
 }
 
 export function useNewIntent(
@@ -81,7 +64,8 @@ export function useNewIntent(
     if (asked !== undefined && !asked) done.current = false;
     if (!wanted || !ready || done.current) return;
     done.current = true;
-    clearAddress();
+    // In place: Next keeps its search params in step, so nothing remounts.
+    consumeAddressParam(NEW_INTENT_PARAM);
     openRef.current();
   }, [ready, asked, intent]);
 }

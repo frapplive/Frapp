@@ -10,6 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
+  HEADER_BADGE_FOLD,
+  HEADER_BUTTON_FOLD,
+  HEADER_LABEL_FOLD,
+} from "@/components/ui/new-button";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -66,10 +71,12 @@ export function FilterMenu({
       <Badge
         variant="default"
         aria-hidden="true"
+        // On the glyph it rides the corner; on the worded button it does
+        // where the header folds that button to its glyph.
         className={
           narrow
             ? "absolute -right-1.5 -top-1.5 h-4 min-w-4 justify-center px-1"
-            : undefined
+            : HEADER_BADGE_FOLD
         }
       >
         {on.length}
@@ -90,15 +97,18 @@ export function FilterMenu({
             {count}
           </IconButton>
         ) : (
+          // Folds to its glyph where the header is narrow, at the same width
+          // as New beside it (`HEADER_BUTTON_FOLD`), the count riding its
+          // corner as the narrow glyph's does.
           <Button
             size="toolbar"
             variant="secondary"
-            className="shrink-0 gap-2"
+            className={cn("relative shrink-0 gap-2", HEADER_BUTTON_FOLD)}
             data-filter-menu-trigger=""
             aria-label={name}
           >
             <ListFilter className="h-4 w-4" aria-hidden="true" />
-            Filter
+            <span className={HEADER_LABEL_FOLD}>Filter</span>
             {count}
           </Button>
         )}
@@ -159,7 +169,7 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
             }}
             placeholder={`Search ${filter.label.toLowerCase()}`}
             aria-label={`Search ${filter.label.toLowerCase()}`}
-            className="mb-1 h-8"
+            className="mb-1 h-control-row"
           />
         ) : null}
         <DropdownMenuRadioGroup
@@ -230,7 +240,7 @@ export function ActiveFilterChips({
             }}
             aria-label={`Remove filter ${filter.label}: ${current?.label ?? ""}`}
             className={cn(
-              "inline-flex h-6 items-center gap-1 rounded-full border border-border bg-card px-2.5 text-caption text-foreground transition hover:bg-card-hover",
+              "inline-flex h-control-chip items-center gap-1 rounded-full border border-border bg-card px-2.5 text-caption text-foreground transition hover:bg-card-hover",
               FOCUS_RING,
             )}
           >
@@ -248,7 +258,7 @@ export function ActiveFilterChips({
             for (const filter of on) filter.onChange(filter.anyValue);
           }}
           className={cn(
-            "h-6 rounded-full px-2 text-caption text-muted-foreground hover:text-foreground",
+            "h-control-chip rounded-full px-2 text-caption text-muted-foreground hover:text-foreground",
             FOCUS_RING,
           )}
         >

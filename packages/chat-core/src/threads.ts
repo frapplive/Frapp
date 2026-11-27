@@ -17,7 +17,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomClientId, statusOf } from "@repo/api-sdk";
+import { codeOf, randomClientId, statusOf } from "@repo/api-sdk";
 import type { MentionPick } from "@repo/validation";
 import { firstName } from "./channel-preview";
 import { replyPreviewText } from "./reply-preview";
@@ -48,6 +48,7 @@ import {
 } from "./cache";
 import {
   classifyChatError,
+  refreshTimeoutIfRefused,
   RATE_LIMITED_COPY,
   type FrappApiClient,
 } from "./chat-client";
@@ -148,6 +149,8 @@ function apiError(error: unknown, fallback: string): Error {
   return Object.assign(new Error(message), {
     cause: error,
     statusCode: statusOf(error),
+    // The structured code, so a chat timeout's refusal (#6006) reads as one.
+    ...(codeOf(error) ? { code: codeOf(error) } : {}),
   });
 }
 
@@ -379,6 +382,7 @@ export async function sendThreadReply(
     );
     return { error: null };
   } catch (err) {
+    refreshTimeoutIfRefused(queryClient, err);
     const classified = classifyChatError(err);
     const reason =
       classified.status === 429 && !classified.busy

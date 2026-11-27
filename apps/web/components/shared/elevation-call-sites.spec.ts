@@ -405,24 +405,34 @@ describe("--muted is a text tone, never a fill under text (#3826)", () => {
 
 describe("a filled row hover stays inside its rounded list", () => {
   /*
-   * Settings' officer-tools list is a rounded card of link rows. Its row hover
-   * is a visible fill (`--card-hover`), so the end rows take the list's inner radius rather than
-   * painting square corners past the card's curve. The list doesn't clip with
-   * `overflow-hidden`, which would clip the rows' focus ring too.
+   * A settings group (`SettingsGroup`) is a rounded card of rows, and its
+   * officer-tool, goal and who-can rows are links (#6030). A row's hover is a
+   * visible fill (`--card-hover`), so the end rows take the list's inner
+   * radius rather than painting square corners past the card's curve. The list
+   * doesn't clip with `overflow-hidden`, which would clip the rows' focus ring
+   * too. The Who can page's Add a role row is drawn by hand inside the same
+   * list, so it is held to the same rule.
    */
-  const tools = codeWithoutComments(
-    join(WEB, "components", "settings", "settings-tool-list.tsx"),
+  const row = codeWithoutComments(
+    join(WEB, "components", "shared", "settings-row.tsx"),
+  );
+  const addRole = codeWithoutComments(
+    join(WEB, "components", "settings", "module-who-can.tsx"),
   );
 
-  it("finds the tools list", () => {
-    expect(tools).toMatch(/hover:bg-card-hover/);
+  it("finds the rows' hover fill", () => {
+    expect(row).toMatch(/hover:bg-card-hover/);
+    expect(addRole).toMatch(/hover:bg-card-hover/);
   });
 
   it("rounds the first and last rows to the list's inner radius", () => {
-    expect(tools).toMatch(/rounded-\[14px\] border border-border/);
-    expect(tools).toMatch(/<li key=\{tool\.id\} className="group">/);
-    expect(tools).toMatch(/group-first:rounded-t-\[13px\]/);
-    expect(tools).toMatch(/group-last:rounded-b-\[13px\]/);
+    expect(row).toMatch(/rounded-\[14px\] border border-border/);
+    expect(row).toMatch(/<li className="group">/);
+    for (const source of [row, addRole]) {
+      expect(source).toMatch(/group-first:rounded-t-\[13px\]/);
+      expect(source).toMatch(/group-last:rounded-b-\[13px\]/);
+    }
+    expect(row).not.toMatch(/overflow-hidden/);
   });
 });
 

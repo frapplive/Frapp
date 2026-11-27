@@ -84,21 +84,32 @@ export const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 export const EMAIL_CODE_LENGTH = 6;
 
 /**
- * Continue with email on the invite card, web and phone alike (#5625): the
- * address, then the code from the email typed in place. The same email also
- * carries a sign-in link, which works until the Auth templates print the code,
- * and on another device.
+ * The email code, web and phone alike: every Auth email carries a 6-digit
+ * code and no link (#6134, Paul 2026-11-26), typed where it was asked for.
+ * The invite card's Continue with email (#5625), sign-in's Email me a code,
+ * and sign-up's and an unconfirmed sign-in's Confirm your email all ask for
+ * it in the same words.
  */
 export const EMAIL_CODE_COPY = {
   sendLabel: "Send code",
   sentTitle: "Check your email",
+  confirmTitle: "Confirm your email",
   sent: (email: string) =>
-    `We sent a ${EMAIL_CODE_LENGTH}-digit code to ${email}. Enter it here, or tap the link in the email.`,
+    `Enter the ${EMAIL_CODE_LENGTH}-digit code we sent to ${email}.`,
+  /**
+   * An unconfirmed address on the sign-in form: no code went out just now,
+   * so it points at the sign-up email and offers a new one.
+   */
+  unconfirmed: (email: string) =>
+    `Confirm ${email} first. Enter the code from your sign-up email, or send a new one.`,
   wrongCode: "That code didn't work. Use the newest email, or send a new code.",
   invalidEmail: "Enter the email you use for school or your chapter.",
   differentEmail: "Use a different email",
   sendAgain: "Send a new code",
   sendAgainIn: (seconds: number) => `Send again in ${seconds}s`,
+  /** After Send a new code: what went out, never a toast. */
+  resent: (email: string) => `We sent a new code to ${email}.`,
+  codeLabel: `${EMAIL_CODE_LENGTH}-digit code`,
 } as const;
 
 /**
@@ -128,10 +139,10 @@ export const EMAIL_SEND_CAPPED_COPY =
   "We can't send email right now. Too many went out in the last hour. Try again in a few minutes.";
 
 export const UNCONFIRMED_EMAIL_COPY =
-  "Confirm your email first. Open the link we sent when you created your account.";
+  "Confirm your email first. Enter the code we sent when you created your account.";
 
 export const WRONG_CREDENTIALS_COPY =
-  "That email and password don't match. Check them and try again, or use a magic link instead.";
+  "That email and password don't match. Check them and try again, or email yourself a code instead.";
 
 /** The password form's refusal. */
 export function describePasswordSignInError(error: unknown): string {
@@ -141,9 +152,9 @@ export function describePasswordSignInError(error: unknown): string {
   return describeEmailSendError(error);
 }
 
-/** Email links are switched off for the project: retrying can't help. */
+/** Email codes are switched off for the project: retrying can't help. */
 export const EMAIL_LINKS_OFF_COPY =
-  "Email links are switched off right now. Sign in with your password.";
+  "Email codes are switched off right now. Sign in with your password.";
 
 export function cooldownCopy(seconds: number): string {
   const wait =
@@ -153,7 +164,7 @@ export function cooldownCopy(seconds: number): string {
   return `We just sent you an email. Check your inbox and spam folder. ${wait}`;
 }
 
-/** A refused email send: magic link, confirmation, or its resend. */
+/** A refused email send: a sign-in code, a confirmation code, or its resend. */
 export function describeEmailSendError(error: unknown): string {
   const cooldown = emailCooldownSeconds(error);
   if (cooldown !== undefined) return cooldownCopy(cooldown);

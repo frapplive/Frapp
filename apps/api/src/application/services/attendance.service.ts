@@ -31,7 +31,11 @@ import {
   checkInWindowBounds,
   eventRequiresAnyone,
   eventSetsRolesApart,
+  EVENT_NO_ATTENDANCE_COPY,
+  eventNoAttendanceReason,
+  eventTakesAttendance,
   type EventAttendanceFields,
+  type EventTimingFields,
   PRODUCTION_APP_ORIGIN,
 } from '@repo/validation';
 import { isValidZone, pointInPolygon } from '#domain/utils/geofence';
@@ -145,6 +149,7 @@ function checkInLinkOrigin(): string {
  */
 type CheckInRefusal =
   | 'no_event'
+  | 'no_attendance'
   | 'bad_times'
   | 'window'
   | 'not_member'
@@ -216,6 +221,7 @@ export class AttendanceService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    assertTakesAttendance(event);
 
     return mintCheckInToken(
       eventId,
@@ -264,6 +270,7 @@ export class AttendanceService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    assertTakesAttendance(event);
 
     const now = new Date();
     const { opensAt, closesAt } = checkInWindowBounds(
@@ -326,6 +333,10 @@ export class AttendanceService {
       // request carries the active chapter for.
       logCheckInRefusal('no_event', userId, options);
       throw new NotFoundException('Event not found');
+    }
+    if (!eventTakesAttendance(event)) {
+      logCheckInRefusal('no_attendance', userId, options);
+      assertTakesAttendance(event);
     }
 
     const now = new Date();
@@ -699,6 +710,7 @@ export class AttendanceService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    assertTakesAttendance(event);
     const wanted = [...new Set(userIds)];
     const [members, existing] = await Promise.all([
       this.memberRepo.findByChapter(chapterId),
@@ -803,6 +815,7 @@ export class AttendanceService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    assertTakesAttendance(event);
 
     const attendance = await this.attendanceRepo.findByEventAndUser(
       eventId,
@@ -908,6 +921,8 @@ export class AttendanceService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    // Nobody is held to an event that takes no attendance (#6098).
+    if (!eventTakesAttendance(event)) return { marked: 0 };
 
     // The close of the check-in window, from the same rule check-in uses.
     const { closesAt: graceEnd } = checkInWindowBounds(
@@ -978,4 +993,27 @@ export class AttendanceService {
 
     return { marked: created.length };
   }
+}
+
+/**
+ * Refuses attendance on an event that takes none (#6098,
+ * `eventTakesAttendance`): one on the calendar only, where nobody checks in,
+ * earns points or is marked absent, and one whose time isn't set yet. A 409
+ * with a code, like the window's refusal, so the clients can say which.
+ */
+export function assertTakesAttendance(event: EventTimingFields): void {
+  const reason = eventNoAttendanceReason(event);
+  if (!reason) return;
+  // Each code written out in its own exception, so the error-code scan
+  // (`api-error-codes.spec.ts`) finds it thrown.
+  if (reason === 'calendar_only') {
+    throw new ConflictException({
+      code: 'attendance.calendar_only',
+      message: EVENT_NO_ATTENDANCE_COPY.calendar_only,
+    });
+  }
+  throw new ConflictException({
+    code: 'attendance.time_tbd',
+    message: EVENT_NO_ATTENDANCE_COPY.time_tbd,
+  });
 }

@@ -87,7 +87,7 @@ Stage, fit rating and bid status are three separate things, because a chapter ac
 
 - **Reading notes needs `rush:read_notes`; writing them needs `rush:notes`.** #4070's backfill gave `rush:notes` to every role that held `members:view`, New Member and Alumni included, so reading needed a key of its own to keep notes to a committee (Paul, 2026-11-11).
   - **New chapters:** the top two starting tiers (Exec board, Officers and chairs) hold `rush:read_notes`, as officer defaults (#4068 decision 9).
-  - **Existing chapters:** nobody holds it until an officer turns it on. The Recruitment settings page says "Nobody can read recruitment notes yet" and offers to grant it to the chapter's top two tiers, which needs `roles:manage`; the page's Who can block grants it to anyone else.
+  - **Existing chapters:** nobody holds it until an officer turns it on. The Recruitment settings page's **Read recruitment notes** row says **Only the President**, and the page it opens says "Nobody can read recruitment notes yet" and offers to grant it to the chapter's top two tiers, which needs `roles:manage`; the same page's switches and Add a role grant it to anyone else (#6030).
   - A member who can write but not read sees the box to write a note and who can read it, and not the notes.
 - **Nobody reads notes about themselves.** On a prospect linked to the viewer's own account, the notes read is empty and writing, editing or deleting a note is refused, whatever keys they hold.
 - **The author edits or deletes their own note; `rush:manage` deletes any.**
@@ -146,6 +146,6 @@ The Recruitment module page in Chapter settings holds the stages and tags ([§ S
 - **The recruitment contacts Group:** told about each interest-form submission along with the holders of `rush:manage`. A Group holds no permissions, so the page names any member of it who lacks `rush:view`; they are skipped. None is picked until an officer picks one.
 - **The card channel:** where an interest-form submission's candidate card goes; none posts no card. A channel is taken only when everyone who can read it holds `rush:view`, because the card names the prospect to the whole channel; the save is refused otherwise, naming how many can't. A channel the person picking can't read answers as not found. The interest-form slice checks again at every post.
 
-The contacts Group and the card channel are read by the interest-form slice ([`ifc-recruitment.md` § What a submission does](ifc-recruitment.md#what-a-submission-does)); until it lands they are saved and shown, and nothing else reads them.
+The interest form (#5977) reads the contacts Group: its members who hold `rush:view` are told about each submission ([`ifc-recruitment.md` § What a submission does](ifc-recruitment.md#what-a-submission-does)). Nothing reads the card channel yet: the channel card waits on #5985.
 
 Reading these needs `rush:view` (`GET /v1/rush/settings`); changing them needs `rush:manage` (`PUT /v1/rush/settings`, which writes only the fields it is sent).

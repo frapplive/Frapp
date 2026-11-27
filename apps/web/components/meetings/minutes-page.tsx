@@ -126,6 +126,7 @@ import { LinkEventPanel } from "@/components/meetings/link-event";
 import { NotesDraftPanel } from "@/components/meetings/notes-draft-panel";
 import { AttendanceBackfill } from "@/components/meetings/attendance-backfill";
 import { SuggestedTasks } from "@/components/ai/suggested-tasks";
+import { useActionItemTaskRow } from "@/components/meetings/action-item-task";
 import { ComingUpDates } from "@/components/meetings/coming-up-dates";
 import { ComingUpPostReview } from "@/components/meetings/coming-up-post-review";
 import { MinutesPageSkeleton } from "@/components/meetings/meetings-skeleton";
@@ -615,6 +616,14 @@ function Minutes({
     view.content,
   );
   const jumps = editing ? [] : minutesJumps(readKeys, view.content);
+  // Each action item's own Create task, or Open task once it is one
+  // (#6051): on posted minutes being read, for whoever could create it.
+  const taskRow = useActionItemTaskRow({
+    meetingId: meeting.id,
+    items: view.content.action_items,
+    meetingStart: meeting.event_start_time,
+    enabled: !isDraft && !editing && !posting,
+  });
   const showsAttendance =
     !editing &&
     (hasAttendees(meeting) ||
@@ -1036,10 +1045,7 @@ function Minutes({
                   at > 0 && "border-t border-border pt-6",
                 )}
               >
-                <h3
-                  id={`${ids}-${key}`}
-                  className={`${EYEBROW} text-muted-foreground`}
-                >
+                <h3 id={`${ids}-${key}`} className={`${EYEBROW} text-muted`}>
                   {sectionLabel(key)}
                 </h3>
                 {key === "tldr" ? (
@@ -1065,6 +1071,7 @@ function Minutes({
                     nameFor={names.nameFor}
                     viewerId={viewer?.id ?? null}
                     tasks={actionItemTasks}
+                    taskRow={taskRow}
                   />
                 ) : key === "tabled" ? (
                   <TabledView items={view.content.tabled} />
@@ -1208,9 +1215,7 @@ function DraftingPlaceholders() {
     <div aria-hidden="true" className="space-y-8">
       {rows.map((row) => (
         <section key={row.key} className="space-y-3">
-          <h3 className={`${EYEBROW} text-muted-foreground`}>
-            {sectionLabel(row.key)}
-          </h3>
+          <h3 className={`${EYEBROW} text-muted`}>{sectionLabel(row.key)}</h3>
           {row.widths.map((width, at) => (
             <div
               key={at}
@@ -1496,7 +1501,7 @@ function TabledEditor({
               )}
               onClick={() => onChange([...items, tabledRowFromAgenda(item)])}
               className={cn(
-                "inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
+                "inline-flex min-h-control-row max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
                 FOCUS_RING_OFFSET,
               )}
             >

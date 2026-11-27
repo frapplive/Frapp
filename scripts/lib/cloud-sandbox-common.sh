@@ -13,6 +13,10 @@ cs_log() {
 . "$(dirname "${BASH_SOURCE[0]}")/supabase-cli.sh"
 FRAPP_SUPABASE_CLI_LOG_PREFIX='[cloud-sandbox]'
 
+# node_deps_turbo_runs, the turbo half of cs_node_deps_ok, shared with the session-start hook.
+# shellcheck source=scripts/lib/node-deps.sh
+. "$(dirname "${BASH_SOURCE[0]}")/node-deps.sh"
+
 # Silence the Supabase CLI's telemetry. Exported at source time so it covers both the CLI
 # invocation in cs_supabase and the `npm install` that fetches it.
 #
@@ -65,11 +69,9 @@ cs_supabase() {
 #                       fails latest and reads strangest; npm is the only thing here that
 #                       knows what was declared and can therefore see what is absent.
 #
-# Runs turbo rather than only stat-ing it. `-x` alone already covers the absent and dangling
-# cases (it follows the symlink), but not a target that exists and does not work — measured:
-# with `node_modules/turbo/bin/turbo` replaced by executable garbage, `-x` still reports the
-# bin PRESENT and only the `--version` run catches it. `npm ls` does not cover this either;
-# it reads the tree's metadata, not whether anything in it can execute.
+# The turbo signal is node_deps_turbo_runs (scripts/lib/node-deps.sh), which runs turbo rather
+# than only stat-ing it. `npm ls` does not cover that case; it reads the tree's metadata, not
+# whether anything in it can execute.
 #
 # `--depth=0` on the npm side is deliberate, and so is its narrowness. Measured on npm 10.9
 # against this repo, it catches LESS than "the tree is complete" — know the boundary before
@@ -88,9 +90,7 @@ cs_supabase() {
 # way `turbo: not found` is not — and that legibility is what this whole check is for.
 cs_node_deps_ok() {
   local root="${1:-$PWD}" why=""
-  [ -x "$root/node_modules/.bin/turbo" ] \
-    && "$root/node_modules/.bin/turbo" --version >/dev/null 2>&1 \
-    || why="turbo"
+  node_deps_turbo_runs "$root" || why="turbo"
   if [ -z "$why" ] && ! (cd "$root" && npm ls --depth=0 >/dev/null 2>&1); then
     why="incomplete"
   fi
@@ -121,9 +121,14 @@ cs_node_deps_ok() {
 #      checked-out branch. setup.sh gets away with the same pair only because it runs at
 #      environment-build time against a throwaway root filesystem.
 #
-# The session owns its node_modules; bringup only reports on it. #1631's acceptance criterion
-# is met either way — "either repairs the install or writes .cloud-sandbox-up.failed" — and
-# the sentinel names `npm ci`, so the agent runs it deliberately, in the foreground, once.
+# The session owns its node_modules; bringup only reports on it. The one repair that IS safe
+# runs before bringup and before the agent's first command, in .claude/hooks/session-start.sh:
+# only when turbo does not run (nothing left to destroy), only when that hook is about to launch
+# a bringup, `npm ci` alone (no `npm install` fallback), one install at a time. This check stays
+# as the backstop
+# for when that repair fails: #1631's acceptance criterion is met either way ("either repairs
+# the install or writes .cloud-sandbox-up.failed"), and the sentinel names `npm ci`, so the
+# agent runs it deliberately, in the foreground, once.
 cs_verify_node_deps() {
   local root="${1:-$PWD}"
 

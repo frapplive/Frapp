@@ -47,6 +47,8 @@ export * from "./beta-off-modules";
 // A member's birthday (#4959): its rules, its words, and where it falls.
 export * from "./birthday";
 export * from "./channel-access-lists";
+// A channel's settings on both apps (#6031).
+export * from "./channel-settings-copy";
 export * from "./chapter-branding";
 export * from "./chapter-config";
 export * from "./chapter-goals";
@@ -65,6 +67,7 @@ export * from "./chat-message";
 export * from "./chat-message-flags";
 export * from "./chat-notification-defaults";
 export * from "./chat-sidebar";
+export * from "./chat-timeout";
 // The check-in QR as a link the phone camera opens. See ./check-in-link.
 export * from "./check-in-link";
 export * from "./check-in-window";
@@ -111,6 +114,9 @@ export * from "./event-form-rows";
 // What is on right now, and the Now card's words (#5777).
 export * from "./event-now";
 export * from "./event-page";
+// All-day, multi-day and time-TBD events, tentative, and on the calendar only
+// (#6098): the shapes and the rules both apps and the API read.
+export * from "./event-timing";
 // The chapter's Everyone role, the floor every member holds, and the three
 // base roles an officer gives (Paul, 2026-11-21).
 export {
@@ -138,6 +144,9 @@ export {
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
 export * from "./frapp-link";
+// A chapter's public interest form (#5977): limits, the approved consent
+// text, refusal codes and the page's words.
+export * from "./interest-form";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -182,6 +191,7 @@ export * from "./minutes-request-copy";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
+export * from "./module-settings-copy";
 export * from "./name-lock";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen
@@ -215,6 +225,8 @@ export * from "./ops-nudges";
 export * from "./order-number";
 // s02's "Already in a chapter?" line, shared by web `/join` and the phone.
 export * from "./other-account";
+// The People settings pages' words, web and the phone (#6029).
+export * from "./people-settings-copy";
 // What each system permission is called and which module it belongs to. The
 // API serves it at `GET /v1/roles/permissions-catalog`; web and mobile read
 // the same list from here (#4069).
@@ -222,6 +234,7 @@ export * from "./permission-registry";
 // Client-side RBAC gates, shared by apps/web and apps/mobile. Moved out of
 // `apps/web/lib/auth/can.ts` with #994 so the wildcard rule has one definition.
 export * from "./permissions";
+export * from "./personal-settings";
 export * from "./phone";
 export * from "./phone-reach";
 // What each points category is called, and the officer action's one name,
@@ -247,9 +260,11 @@ export {
   nextReleaseNoteSnapshot,
   parseReleaseNoteSnapshot,
   parseReleaseNoteVersion,
+  RELEASE_NOTE_TIME_ZONE,
   RELEASE_NOTE_VERSION_PATTERN,
   RELEASE_NOTES,
   type ReleaseNote,
+  releaseNoteDay,
   releaseNoteGroups,
   type ReleaseNoteSnapshot,
   releaseNoteStoreText,
@@ -292,6 +307,8 @@ export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
 export * from "./task-due";
+// Asking for more time on a task (#6096).
+export * from "./task-extension";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";
@@ -328,6 +345,7 @@ export {
   normalizeExtension,
   type UploadKind,
 } from "./upload-allowlists";
+export * from "./web-addresses";
 export * from "./week-start";
 export * from "./welcome-card";
 // Point-in-polygon, shared by the API's geofence check and the phone's s10 screen.

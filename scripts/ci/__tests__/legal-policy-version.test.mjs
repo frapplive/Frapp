@@ -61,8 +61,8 @@
 //   member chooses whether to send it (same day, from the PR's review), was
 //   approved and ruled non-material by the owner too.
 //   The read-receipts sentence in section 1 (2026-11-18, #5519, in the
-//   wording Paul approved) moved only the Privacy pin on those precedents,
-//   pending the owner's material-or-not ruling in its PR.
+//   wording Paul approved) was ruled non-material by the owner the same day,
+//   so it moved only the Privacy pin.
 //   The Terms' Eligibility section moving the minimum age to 17, with Frapp
 //   AI for 18 and older (2026-11-19, #5627, Paul's pick of both ages) moved
 //   only the Terms pin: ruled non-material by the owner on his decision card

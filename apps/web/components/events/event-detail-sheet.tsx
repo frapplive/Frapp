@@ -8,7 +8,11 @@ import {
   describeAttendance,
   EVENT_FORM_ROW_LABELS,
   EVENT_PAGE_COPY,
+  EVENT_TENTATIVE_LABEL,
+  eventIsDated,
   eventPagePhase,
+  eventTakesAttendance,
+  eventTimingFieldsOf,
   deleteOffersSeriesChoice,
   readEventAgenda,
   readFrappLinks,
@@ -62,7 +66,11 @@ import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { Can } from "@/components/shared/can";
 import { PermissionsOfflineSurface } from "@/components/shared/async-states";
 import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
-import { formatDayTime, formatDayTimeRange } from "@repo/formatting";
+import {
+  formatDayTime,
+  formatEventDayTime,
+  formatEventWhen,
+} from "@repo/formatting";
 import { pointsLabel, recurrenceLabel } from "@/components/events/event-labels";
 import { EVENT_HUE } from "@/components/events/event-kind";
 import { cn } from "@/lib/utils";
@@ -233,6 +241,11 @@ export function EventDetailSheet({
     [resolvedEvent],
   );
   const attendance = attendanceFromEvent(audience);
+  // Its shape (#6098): an all-day or time-TBD event reads by its days, and
+  // a calendar-only or time-TBD one takes no attendance, so it shows no
+  // check-in, points, excuses or roster.
+  const shape = eventTimingFieldsOf(resolvedEvent ?? {});
+  const takesAttendance = eventTakesAttendance(shape);
   // The page follows the event's clock (Paul 2026-11-22): before check-in
   // opens it is who's coming, while it's open the roster fills, and after it
   // closes the record comes first (`eventPagePhase`).
@@ -241,6 +254,7 @@ export function EventDetailSheet({
     resolvedEvent?.end_time,
     resolvedEvent?.check_in_opens_minutes,
     now,
+    shape,
   );
   const invitees = useEventInvitees(audience);
   // Excuses (`spec/behavior/events.md` § Excuses): offered to a member the
@@ -271,15 +285,14 @@ export function EventDetailSheet({
       ) ?? null
     );
   }, [series, eventId, resolvedEvent?.start_time]);
-  const schedule = formatDayTimeRange(
-    resolvedEvent?.start_time,
-    resolvedEvent?.end_time,
-  );
+  const schedule = resolvedEvent ? formatEventDayTime(resolvedEvent) : null;
   const location =
     typeof resolvedEvent?.location === "string" && resolvedEvent.location.trim()
       ? resolvedEvent.location.trim()
       : null;
-  const points = pointsLabel(resolvedEvent?.point_value);
+  const points = takesAttendance
+    ? pointsLabel(resolvedEvent?.point_value)
+    : null;
   const description =
     typeof resolvedEvent?.description === "string"
       ? resolvedEvent.description
@@ -396,7 +409,11 @@ export function EventDetailSheet({
   const canTakeAttendance = can("events:update", permissions);
   // The roster is the side list once check-in opens, for whoever takes
   // attendance; before then, and for everyone else, it's who's coming.
-  const showRoster = phase !== "upcoming" && !!eventId && !usingPreviewData;
+  // The side list of people, except on a calendar-only event: nobody comes
+  // to it, so there is no one to list, excuse or check in.
+  const showPeople = !!eventId && !usingPreviewData && !shape.calendar_only;
+  const showRoster =
+    takesAttendance && phase !== "upcoming" && !!eventId && !usingPreviewData;
 
   // The check-in row, said once: first among the details while check-in is
   // open, since it's the one thing a member does then, and in its form order
@@ -417,6 +434,7 @@ export function EventDetailSheet({
           eventUnavailable={eventUnavailable}
           zone={zoneState}
           eventPending={checkInReadPending}
+          shape={shape}
         />
       ) : null}
       {checkInZoneIsMalformed && phase !== "past" ? (
@@ -534,6 +552,10 @@ export function EventDetailSheet({
               whether it requires the viewer. */}
           {resolvedEvent ? (
             <div className="mt-4 flex flex-wrap items-center gap-2 empty:hidden">
+              {shape.is_tentative ? (
+                // A status, not an alarm (#6098): it might not happen.
+                <Badge variant="outline">{EVENT_TENTATIVE_LABEL}</Badge>
+              ) : null}
               <EventNowPill event={resolvedEvent} now={now} />
               {requiredOfViewer ? (
                 <Badge variant="outline">{EVENT_PAGE_COPY.required}</Badge>
@@ -572,11 +594,17 @@ export function EventDetailSheet({
             is half as wide as with chat closed.
           */}
           <div className="@container mt-4">
-            <div className="grid gap-5 @[52rem]:grid-cols-[minmax(0,1fr)_18rem] @[52rem]:gap-8">
+            <div
+              className={cn(
+                "grid gap-5",
+                showPeople &&
+                  "@[52rem]:grid-cols-[minmax(0,1fr)_18rem] @[52rem]:gap-8",
+              )}
+            >
               <div className="flex min-w-0 flex-col [&>*+*]:mt-5 [&>*+*]:border-t [&>*+*]:border-border [&>*+*]:pt-5">
                 <section aria-label="Details" className="grid gap-2">
                   <dl className="grid gap-0.5">
-                    {phase === "live" ? checkInRow : null}
+                    {phase === "live" && takesAttendance ? checkInRow : null}
                     <DetailRow glyph="when" label={EVENT_FORM_ROW_LABELS.when}>
                       {schedule ?? "Not set"}
                     </DetailRow>
@@ -611,7 +639,12 @@ export function EventDetailSheet({
                               )}
                             >
                               Next{" "}
-                              {formatDayTime(nextOccurrence.start_time) ?? ""}
+                              {(eventIsDated(
+                                eventTimingFieldsOf(nextOccurrence),
+                              )
+                                ? formatEventWhen(nextOccurrence)
+                                : formatDayTime(nextOccurrence.start_time)) ??
+                                ""}
                             </button>
                           </>
                         ) : null}
@@ -640,10 +673,13 @@ export function EventDetailSheet({
                         centred under the rows before, attached to nothing).
                       */}
                       <div className="flex flex-wrap items-center gap-x-1.5 text-caption text-muted-foreground">
-                        {invitees !== null ? (
+                        {invitees !== null && !shape.calendar_only ? (
                           <span>{EVENT_PAGE_COPY.people(invitees.length)}</span>
                         ) : null}
-                        {eventId && !usingPreviewData && !eventUnavailable ? (
+                        {eventId &&
+                        !usingPreviewData &&
+                        !eventUnavailable &&
+                        takesAttendance ? (
                           // Keyed by event: the sheet switches series
                           // occurrences in place, and a half-typed reason must
                           // not carry over.
@@ -672,7 +708,7 @@ export function EventDetailSheet({
                         {points}
                       </DetailRow>
                     ) : null}
-                    {phase !== "live" ? checkInRow : null}
+                    {phase !== "live" && takesAttendance ? checkInRow : null}
                     {description ? (
                       <DetailRow
                         glyph="description"
@@ -744,12 +780,13 @@ export function EventDetailSheet({
                 sheet said "Your role can't do this" (#3855). `<Can>` holds it
                 back while permissions load, so it never fires that read first.
               */}
-              {eventId && !usingPreviewData ? (
+              {showPeople ? (
                 <aside
                   aria-label="People"
                   className="grid min-w-0 content-start gap-5 border-t border-border pt-5 @[52rem]:border-l @[52rem]:border-t-0 @[52rem]:pl-6 @[52rem]:pt-0"
                 >
                   {!eventUnavailable &&
+                  takesAttendance &&
                   (createdByViewer || canTakeAttendance) ? (
                     <ExcuseReview
                       key={`excuses-${eventId}`}

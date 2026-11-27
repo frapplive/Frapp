@@ -120,13 +120,69 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-27",
+    title: "New in this update",
+    changes: [
+      "A channel's settings now open as one page of rows, with its access, defaults, pinned messages and reports each a tap away, and each change saves as you make it.",
+    ],
+    web: [
+      "In Documents, Back now returns to the folder or file you had open, and a reload or a shared link lands on the same folder and file.",
+      "In Activity, Back now returns to Everyone's tasks, the Archive or the task or item you had open, and a reload or a shared link lands on the same place.",
+      "In Recruitment, Back now returns to the view or prospect you had open, and a shared link to a prospect opens them.",
+      "In the Directory, Back now returns to the tab or member profile you had open, and a shared link to a member's profile opens it.",
+      "On your profile, closing Points, Service hours or Study now goes Back, so Forward reopens it.",
+      "In the Calendar, Back now closes the event or the hour grid you opened, and a reload or a shared link lands on the same day and event.",
+    ],
+  },
+  {
+    date: "2026-11-26",
+    title: "New in this update",
+    changes: [
+      "Signing in or confirming a new account by email now gives you a 6-digit code to type right where you asked for it.",
+      "You can ask for more time on a task with a reason, and up to a day with a good reason is granted right away; officers can mark a task's deadline as fixed.",
+      "Section titles such as Pinned and Committees are smaller and quieter, in plain sentence case instead of capital letters.",
+      "Events can now be all day or span several days, have a time to be decided, be marked tentative, or sit on the calendar only for information, with no check-in or points.",
+      "Roles and groups settings read as simple lists now, the same in the app and on the web, and officers can add, rename, reorder and delete roles and tiers, and make, fill and delete groups, from either.",
+    ],
+    web: [
+      "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, and officers see the chapter's board under Everyone's.",
+      "Buttons, fields and rows are more compact, so the sidebar shows more of your channels and lists fit more on screen.",
+    ],
+    phone: [
+      "Officers can now turn each module on or off, set its rules and goals, change who can do what, and edit recruitment's stages, tags and interest form from Chapter settings, as on the web.",
+    ],
+  },
+  {
     date: "2026-11-25",
     title: "New in this update",
     changes: [
       "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+      "Recruitment has an interest form: open it from the Recruitment settings page, share its link or a QR code, and each person who fills it in lands in your pipeline's first stage.",
+      "When an unread channel is scrolled out of sight in your channel list, a New unreads pill at the top or bottom takes you to it, in red when someone mentioned you.",
+      "Frapp Intelligence gives shorter answers, says plainly when something isn't yours to see, and can tell whoever approves service hours which entries are waiting on them.",
+      "Folding a channel category no longer hides what's new: channels with unread messages stay in view under it until you read them, and a category's menu folds or unfolds them all at once.",
+      "A connected Google Drive folder now says how it's syncing right in Documents, with how many files and folders it left out and why, and officers can sync or disconnect it from there.",
+      "Officers can time out a member who's spamming, so they can't post or react in chapter channels for a few minutes up to a week, and they're told until when.",
+      "Officers can make a task straight from an action item in posted minutes and pick who it's for right there, without paging through the suggestions.",
+      "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
+      "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
+      "Frapp Intelligence now knows who uploaded a document and who posted minutes, finds replies in threads, and asks which event you mean when two different ones share a word.",
+      "Opening a channel or direct message with unread messages now takes you to the first one, under a \"New messages\" line, and a button at the top shows how many are new and takes you back to them, with Mark as read beside it.",
+      "Search opens on your unread channels and the ones you opened lately, and finds a channel from its first letter.",
+      "Settings is now a short list that opens a page for each part, with all your notification choices together on one page.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+      "Rush fits beside chat: stages with nobody in them fold to their names so the full ones keep their room, and the views, search and New fold into icons when the page is narrow.",
+      "School and council shows your school by its name, without the made-up initials badge beside it.",
+      "Each module's page in Chapter settings shows who can do what and its goals at a glance, and opens each one, like the ledger or a permission, on a page of its own.",
+      "Plan and billing now shows your plan as one row, with what it includes and your member invoices each on a page of their own.",
+      "Cmd+K, or Ctrl+K, opens Find from anywhere, even while you're typing a message.",
+      "The dashboard opens faster when you come back to it, and while the sidebar loads it shows placeholder shapes instead of empty gaps or a stand-in name.",
+    ],
+    phone: [
+      "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
+      "Officers can now change the chapter's name, logo, short name, identity, organization type, words and birthday posts from Chapter settings, as on the web.",
     ],
   },
   {
@@ -1107,6 +1163,29 @@ const MONTHS = [
   "November",
   "December",
 ] as const;
+
+/**
+ * The zone an update's `date` is a day in: the team's, where members are. The
+ * fold bot runs on CI's UTC clock, which dated a US evening's update tomorrow
+ * (#6054), so it reads the day here instead, as does anything comparing a
+ * moment with an entry's date.
+ */
+export const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `at`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteDay(at: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(at)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 /**
  * `"2026-11-07"` → `"November 7, 2026"`. Written out per the product's date

@@ -14,12 +14,14 @@ const open = (params: Record<string, string>) =>
 
 describe("/geofences", () => {
   it("sends old links to Study zones in Chapter settings", async () => {
-    await expect(open({})).rejects.toThrow("redirect:/settings?tab=geofences");
+    await expect(open({})).rejects.toThrow(
+      "redirect:/settings?tab=geofences&page=study-zones",
+    );
   });
 
   it("keeps `from`, which store builds send from the setup list", async () => {
     await expect(open({ from: "app" })).rejects.toThrow(
-      "redirect:/settings?tab=geofences&from=app",
+      "redirect:/settings?tab=geofences&page=study-zones&from=app",
     );
   });
 });

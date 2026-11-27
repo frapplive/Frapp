@@ -74,6 +74,8 @@ describe('MemberService', () => {
   beforeEach(async () => {
     mockRepo = {
       completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),
@@ -1764,6 +1766,102 @@ describe('MemberService', () => {
       await removeAs(TIERED_MEMBER.vicePresident, USER.president);
       expect(mockRepo.delete).toHaveBeenCalledWith(TIERED_MEMBER.vicePresident);
     });
+  });
+
+  // Chat timeouts (#6006).
+  describe('viewer_can_timeout and the timeout fields', () => {
+    const members = tieredChapterMembers();
+    const timedOutBrother = {
+      ...members.find((m) => m.id === TIERED_MEMBER.brother)!,
+      chat_timeout_until: '2999-01-01T00:00:00.000Z',
+      chat_timeout_reason: 'spamming',
+      chat_timeout_by: USER.vicePresident,
+    };
+    const profileAs = (
+      memberId: string,
+      viewerUserId: string,
+      viewerPermissions: string[],
+    ) => {
+      mockRepo.findById.mockResolvedValue(
+        memberId === TIERED_MEMBER.brother
+          ? timedOutBrother
+          : members.find((m) => m.id === memberId)!,
+      );
+      mockUserRepo.findById.mockResolvedValue(userFixture());
+      mockRbacService.getEffectivePermissions.mockImplementation(
+        async (_chapterId: string, userId: string) =>
+          userId === viewerUserId
+            ? viewerPermissions
+            : userId === USER.president
+              ? ['*']
+              : ['members:view'],
+      );
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(viewerUserId),
+      );
+      return service.findProfileById(memberId, CHAPTER_ID, viewerUserId);
+    };
+
+    it('is true, with the timeout, for an officer who can time out a brother', async () => {
+      const profile = await profileAs(
+        TIERED_MEMBER.brother,
+        USER.vicePresident,
+        ['members:view', 'members:timeout'],
+      );
+      expect(profile).toMatchObject({
+        viewer_can_timeout: true,
+        chat_timeout_until: '2999-01-01T00:00:00.000Z',
+        chat_timeout_reason: 'spamming',
+      });
+      expect(profile).not.toHaveProperty('chat_timeout_by');
+    });
+
+    it('hides the timeout from a member who can neither time out nor is them', async () => {
+      const profile = await profileAs(TIERED_MEMBER.brother, USER.riskChair, [
+        'members:view',
+      ]);
+      expect(profile).toMatchObject({
+        viewer_can_timeout: false,
+        chat_timeout_until: null,
+        chat_timeout_reason: null,
+      });
+    });
+
+    it('shows a member their own timeout, with no Time out', async () => {
+      const profile = await profileAs(TIERED_MEMBER.brother, USER.brother, [
+        'members:view',
+      ]);
+      expect(profile).toMatchObject({
+        viewer_can_timeout: false,
+        chat_timeout_reason: 'spamming',
+      });
+    });
+
+    it('is false on the President for another `*` holder', async () => {
+      const profile = await profileAs(
+        TIERED_MEMBER.president,
+        USER.vicePresident,
+        ['*'],
+      );
+      expect(profile.viewer_can_timeout).toBe(false);
+    });
+  });
+
+  it('leaves the timeout off Directory rows', async () => {
+    const [row] = tieredChapterMembers();
+    mockRepo.findByChapter.mockResolvedValue([
+      {
+        ...row,
+        chat_timeout_until: '2999-01-01T00:00:00.000Z',
+        chat_timeout_reason: 'x',
+      },
+    ]);
+    mockUserRepo.findByIds.mockResolvedValue([
+      { ...userFixture(), id: row.user_id },
+    ]);
+    const [listed] = await service.findByChapter(CHAPTER_ID);
+    expect(listed).not.toHaveProperty('chat_timeout_reason');
+    expect(listed).not.toHaveProperty('chat_timeout_until');
   });
 
   describe('viewer_can_remove', () => {

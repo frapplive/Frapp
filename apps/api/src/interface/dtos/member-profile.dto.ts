@@ -132,6 +132,34 @@ export class MemberProfileDto {
       'single-member reads.',
   })
   viewer_can_edit_profile?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the requesting viewer may time this member out of chat or ' +
+      'lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they ' +
+      'hold members:timeout, it is not their own profile, the member is not ' +
+      'the President, and the member ranks below them. Present only on ' +
+      'single-member reads.',
+  })
+  viewer_can_timeout?: boolean;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      "Until when the member can't post or react in the chapter's channels. " +
+      'Set only for the member themselves and for a viewer who can time ' +
+      'out; null otherwise and when there is no timeout.',
+  })
+  chat_timeout_until?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'The reason the officer gave, under the same rule.',
+  })
+  chat_timeout_reason?: string | null;
 }
 
 /**

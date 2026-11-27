@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  minutesActionItemMatchKey,
   readMeetingContent,
   taskTitleFrom,
   type MeetingActionItem,
@@ -39,15 +40,14 @@ export interface MinutesTaskProposal {
 /**
  * The same item after a fix to its capitals, spacing or punctuation is still
  * the same item, so an officer who tidies posted minutes is not asked about
- * a task twice.
+ * a task twice. The words are matched as both apps match an item to its
+ * suggestion (`minutesActionItemMatchKey`, #6051), so the two never drift.
  */
 export function actionItemKey(text: string): string {
-  const normalized = text
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-  return createHash('sha256').update(normalized).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update(minutesActionItemMatchKey(text))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 /**

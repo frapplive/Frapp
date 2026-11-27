@@ -186,7 +186,7 @@ export function TaskSubtaskList({
             add();
           }}
           {...gate.controlProps(addSubtask.isPending)}
-          className="mt-1 h-8 text-sm"
+          className="mt-1 h-control-row text-sm"
         />
       ) : null}
     </div>

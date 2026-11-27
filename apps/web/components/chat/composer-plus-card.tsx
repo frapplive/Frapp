@@ -50,7 +50,7 @@ import {
  * - Closing never loses a draft: the host keeps each form's draft per channel
  *   until it is posted or discarded, and the menu marks a row that has one.
  * - The card is 360px wide in both views, so turning into a form doesn't
- *   jump, and its controls are at the Small step (36 to a mouse).
+ *   jump, and its controls are at the Small step (28 to a mouse).
  *
  * What it offers, greys and explains is `plusMenuModel` in
  * `@repo/chat-core/plus-menu`, which the phone's + sheet shares.

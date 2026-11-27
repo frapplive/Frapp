@@ -6,8 +6,9 @@
  * Documents opened on the Minutes file type lists the chapter's posted
  * minutes, which are filed as documents (`spec/behavior/chapter-docs.md`
  * § Minutes). It is where the retired Meetings and Minutes lists land, and
- * what a meeting's minutes go back to. Each app reads the param once, into its
- * Type filter.
+ * what a meeting's minutes go back to. On the web it is a live view in the
+ * address (`web-addresses.ts`): picking Minutes pushes it and Back leaves it.
+ * The phone reads it once, into its Type filter.
  */
 export const DOCUMENTS_TYPE_PARAM = "type";
 export const MINUTES_TYPE_PARAM_VALUE = "minutes";

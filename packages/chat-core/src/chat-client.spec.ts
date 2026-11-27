@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CHAT_TIMED_OUT_REFUSAL } from "@repo/validation";
 import { QueryClient } from "@tanstack/react-query";
 import {
   actOnCard,
@@ -101,6 +102,37 @@ describe("react", () => {
 
     expect(toast).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  // A chat timeout (#6006): the wrapped error keeps the API's code, so the
+  // toast says why, and the member's own timeout is read again for the banner.
+  it("words a timeout's refusal as one, and re-reads the member's timeout", async () => {
+    const apiClient = {
+      POST: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          statusCode: 403,
+          code: "chat.timed_out",
+          message: "anything the server says",
+        },
+        response: { status: 403 },
+      }),
+    };
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const ctx = buildCtx({
+      apiClient: apiClient as unknown as ChatActionContext["apiClient"],
+      queryClient,
+      toast,
+      onError,
+    });
+
+    await react(ctx, { channelId: "chan-1", messageId: "msg-1", emoji: "👍" });
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ description: CHAT_TIMED_OUT_REFUSAL }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["chat-timeout"] });
   });
 
   it("fires both toast and onError, with the same message, on a rejected reaction", async () => {

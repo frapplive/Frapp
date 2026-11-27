@@ -25,7 +25,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { compactControlClassName } from "@/components/shared/table-controls";
+import {
+  compactControlClassName,
+  headingControlClassName,
+} from "@/components/shared/table-controls";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,17 +85,33 @@ export type RowMenuEntry =
   | { type: "separator"; key: string }
   | { type: "label"; key: string; label: string };
 
+/**
+ * Out of the way until the row is hovered or focused; never hidden from
+ * touch, where there is no hover. The row's ⋯ and any other control a row
+ * shows the same way (an action item's Create task, #6051) take it, so they
+ * appear together.
+ */
+export const ROW_REVEAL =
+  "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
+
 const DESTRUCTIVE_ITEM_CLASS =
   "text-destructive-text focus:bg-destructive-tint focus:text-destructive-text";
 
-/** Where a right-click should fall through to the browser's own menu. */
+/**
+ * Where a right-click should fall through to the browser's own menu. A link
+ * that is the row itself (`data-row-link`, a settings row that opens a page)
+ * opens the row's menu instead, as Discord's channel list does; any other
+ * link keeps "Open in new tab".
+ */
 export function keepsBrowserMenu(
   target: EventTarget | null,
   row: Element,
 ): boolean {
   if (
     target instanceof Element &&
-    target.closest("a[href], input, textarea, select, [contenteditable='true']")
+    target.closest(
+      "a[href]:not([data-row-link]), input, textarea, select, [contenteditable='true']",
+    )
   ) {
     return true;
   }
@@ -177,11 +196,17 @@ function Entries({
 export function RowMenu({
   entries,
   label,
+  size = "row",
   children,
 }: {
   entries: readonly RowMenuEntry[];
   /** Accessible name for the ⋯ button, e.g. "More for Cog Sci Homework 2". */
   label: string;
+  /**
+   * `heading` draws the ⋯ at a list heading's glyph size (20px), beside the
+   * heading's other controls, such as a channel category's + (#6053).
+   */
+  size?: "row" | "heading";
   children: (menuButton: ReactNode) => ReactElement;
 }) {
   // Decided on every pointerdown, which React flushes before the browser fires
@@ -190,7 +215,9 @@ export function RowMenu({
   // cleared as it passes: Radix skips its long-press timer while the trigger is
   // disabled, so a verdict left standing would swallow the next long-press.
   const [browserMenu, setBrowserMenu] = useState(false);
-  const button = <MoreButton entries={entries} label={label} onRow />;
+  const button = (
+    <MoreButton entries={entries} label={label} onRow size={size} />
+  );
 
   return (
     <ContextMenu>
@@ -240,6 +267,7 @@ function MoreButton({
   entries,
   label,
   onRow = false,
+  size = "row",
   disabled = false,
   busy = false,
   onOpenChange,
@@ -247,6 +275,7 @@ function MoreButton({
   entries: readonly RowMenuEntry[];
   label: string;
   onRow?: boolean;
+  size?: "row" | "heading";
   disabled?: boolean;
   busy?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -270,18 +299,20 @@ function MoreButton({
           aria-label={label}
           title="More"
           className={cn(
-            compactControlClassName,
+            size === "heading"
+              ? cn(headingControlClassName, "p-0")
+              : compactControlClassName,
             "shrink-0",
-            // Out of the way until the row is hovered or focused; never hidden
-            // from touch, where there is no hover.
-            onRow &&
-              "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100",
+            onRow && ROW_REVEAL,
           )}
         >
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            <MoreHorizontal
+              className={size === "heading" ? "h-3.5 w-3.5" : "h-4 w-4"}
+              aria-hidden="true"
+            />
           )}
         </Button>
       </DropdownMenuTrigger>

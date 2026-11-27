@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { localIsoDate, parseInstant } from "@repo/formatting";
+import { eventChipWords, localIsoDate, parseInstant } from "@repo/formatting";
 import { useRequiredOfViewer } from "@repo/hooks";
 import {
   calendarItemDueMinute,
@@ -21,10 +21,17 @@ import {
   hourLabel,
   minuteOfDay,
   OPEN_AT_HOUR,
+  stripEvents,
   timeGridColumns,
   TWO_LINE_MIN_HEIGHT,
 } from "@repo/hooks/calendar-time-grid";
 import { SignetTokens } from "@repo/theme/signet";
+import {
+  EVENT_ALL_DAY_LABEL,
+  EVENT_TENTATIVE_LABEL,
+  EVENT_TIME_TBD_LABEL,
+  eventTiming,
+} from "@repo/validation";
 import {
   CalendarTaskBlock,
   CalendarTaskChip,
@@ -35,12 +42,20 @@ import {
   longPressOf,
   type ItemMenuHandle,
 } from "@/components/item-actions-menu";
+import { HairlineChip } from "@/components/status-chip";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { formatEventClock } from "@/lib/events/format";
 import type { EventRow } from "@/lib/events/select";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const GUTTER = 44;
+
+/** What the strip says an event's when is: "All day" or "Time TBD". */
+function allDayWhen(event: EventRow): string {
+  return eventTiming(event) === "time_tbd"
+    ? EVENT_TIME_TBD_LABEL
+    : EVENT_ALL_DAY_LABEL;
+}
 
 function longDay(day: Date): string {
   return day.toLocaleDateString(undefined, {
@@ -59,7 +74,9 @@ function longDay(day: Date): string {
  * a block at its start and as tall as it lasts, events that overlap side by
  * side (`@repo/hooks/calendar-time-grid`, which web reads too), a task due at
  * a time as a slim marker at that time (#5116), and an All day strip for the
- * day's other tasks and any event of a whole day or more. A red
+ * day's other tasks, every all-day or time-TBD event that covers the day
+ * (#6098, Google Calendar's strip above the hours), and any timed event of a
+ * whole day or more. A red
  * line marks the time now when the day is today. A member who can create
  * events taps an hour that isn't over to open New event starting then
  * (`calendarHourStart`).
@@ -101,11 +118,18 @@ export function EventsTimeGrid({
   const todayKey = localIsoDate(now);
   const hourLabels = useMemo(() => HOURS.map(hourLabel), []);
 
-  // The shared layout lays out a range of days; this grid asks for one.
-  const { key, allDay, tasks, placed, placedTasks } = useMemo(
-    () => timeGridColumns([day], events, tasksByDay, calendarItemDueMinute)[0]!,
-    [day, events, tasksByDay],
-  );
+  // The shared layout lays out a range of days; this grid asks for one. An
+  // all-day or time-TBD event comes back in `dated` for each day it covers,
+  // never in the hours (#6144), and leads the All day strip.
+  const { key, allDay, tasks, placed, placedTasks } = useMemo(() => {
+    const column = timeGridColumns(
+      [day],
+      events,
+      tasksByDay,
+      calendarItemDueMinute,
+    )[0]!;
+    return { ...column, allDay: stripEvents(column) };
+  }, [day, events, tasksByDay]);
   const isToday = key === todayKey;
   const dayLabel = longDay(day);
   const hasStrip = allDay.length > 0 || tasks.length > 0;
@@ -127,9 +151,12 @@ export function EventsTimeGrid({
   const blockBorder = (event: EventRow) =>
     requiredOf(event.attendance) ? accent : tokens.color.border.control;
   // The accent edge is what marks a required event to the eye; a screen
-  // reader hears it, as web's grid says it.
-  const required = (event: EventRow) =>
-    requiredOf(event.attendance) ? ", required" : "";
+  // reader hears it, in the words web's grid says (`eventChipWords`).
+  const chipWords = (event: EventRow, when: string | null) =>
+    eventChipWords(event.name, when, {
+      required: requiredOf(event.attendance),
+      tentative: event.is_tentative === true,
+    });
 
   return (
     <View style={styles.root}>
@@ -171,7 +198,7 @@ export function EventsTimeGrid({
               <Pressable
                 key={event.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${event.name}, all day${required(event)}`}
+                accessibilityLabel={chipWords(event, allDayWhen(event)).label}
                 onPress={() => onOpen(event.id)}
                 {...eventLongPress(event)}
                 style={({ pressed }) => [
@@ -180,9 +207,20 @@ export function EventsTimeGrid({
                   pressed ? styles.pressed : null,
                 ]}
               >
-                <Text numberOfLines={1} style={styles.blockName}>
+                <Text numberOfLines={1} style={styles.allDayName}>
                   {event.name}
+                  {/* A time not set yet says so in the strip (#6098); the
+                      strip already says All day. */}
+                  {eventTiming(event) === "time_tbd" ? (
+                    <Text style={styles.blockTime}>
+                      {` · ${EVENT_TIME_TBD_LABEL}`}
+                    </Text>
+                  ) : null}
                 </Text>
+                {/* It might not happen: neutral, as web's strip. */}
+                {event.is_tentative ? (
+                  <HairlineChip label={EVENT_TENTATIVE_LABEL} />
+                ) : null}
               </Pressable>
             ))}
             {tasks.map((item) => (
@@ -281,7 +319,7 @@ export function EventsTimeGrid({
                   key={event.id}
                   testID={`time-grid-block-${event.id}-${key}`}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${event.name}, ${clock}${required(event)}`}
+                  accessibilityLabel={chipWords(event, clock || null).label}
                   onPress={() => onOpen(event.id)}
                   {...eventLongPress(event)}
                   style={({ pressed }) => [
@@ -425,6 +463,9 @@ function createStyles(tokens: SignetTokens) {
       paddingTop: 3,
     },
     allDayChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing.xs,
       paddingHorizontal: 4,
       paddingVertical: 3,
       borderRadius: 4,
@@ -464,6 +505,11 @@ function createStyles(tokens: SignetTokens) {
       borderColor: tokens.color.surface.background,
       backgroundColor: tokens.color.surface.surface1,
       overflow: "hidden",
+    },
+    allDayName: {
+      flex: 1,
+      ...typeRole({ ...caption, weight: tokens.typography.weight.semibold }),
+      color: tokens.color.text.foreground,
     },
     blockName: {
       ...typeRole({ ...caption, weight: tokens.typography.weight.semibold }),

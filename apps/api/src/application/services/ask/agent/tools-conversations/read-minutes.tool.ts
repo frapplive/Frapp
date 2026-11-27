@@ -6,9 +6,11 @@ import {
 } from '@repo/validation';
 import { z } from 'zod';
 import { SystemPermissions } from '#domain/constants/permissions';
+import { CorpusRetrievalService } from '../../../corpus/corpus-retrieval.service';
 import { minutesTitle } from '../../../corpus/meeting-minutes-corpus-source';
 import { MeetingService, type MeetingView } from '../../../meeting.service';
 import { MemberService } from '../../../member.service';
+import { recordFactsLine } from '../../ask-lines';
 import type {
   AgentEntity,
   AgentReadTool,
@@ -25,6 +27,7 @@ import {
   nothing,
   recordId,
 } from './conversation-lines';
+import { MINUTES_SOURCE_TYPE } from './search-records.tool';
 
 /** A decision or an action item is at most 1,000 characters as stored. */
 const ITEM_TEXT_MAX = 1000;
@@ -81,6 +84,7 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
   constructor(
     private readonly meetings: MeetingService,
     private readonly members: MemberService,
+    private readonly retrieval: CorpusRetrievalService,
   ) {}
 
   async run(args: Args, context: AgentToolContext): Promise<AgentToolResult> {
@@ -113,13 +117,19 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
       ),
     );
     const nameOf = new Map<string, string>();
-    if (owners.size > 0) {
-      for (const entry of await this.members.findRosterByChapter(chapterId)) {
-        if (owners.has(entry.user_id)) {
-          nameOf.set(entry.user_id, label(entry.display_name, 'A member'));
-        }
+    // Who posted them, by the rule a search's passages use
+    // (`MeetingMinutesCorpusSource.describe`, #5180): read beside the
+    // roster, and a failed read costs only those words.
+    const [roster, facts] = await Promise.all([
+      owners.size > 0 ? this.members.findRosterByChapter(chapterId) : [],
+      this.retrieval.describe(chapterId, MINUTES_SOURCE_TYPE, [meeting.id]),
+    ]);
+    for (const entry of roster) {
+      if (owners.has(entry.user_id)) {
+        nameOf.set(entry.user_id, label(entry.display_name, 'A member'));
       }
     }
+    const about = recordFactsLine(facts.get(meeting.id) ?? null);
 
     const title = minutesTitle(meeting);
     const entities: AgentEntity[] = [];
@@ -136,6 +146,7 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
         kind: 'minutes',
         title,
         detail: SECTION_LABEL.get(key) ?? key,
+        about,
         date: meeting.event_start_time,
         target: { type: 'meeting', meeting_id: meeting.id },
         text,
@@ -152,6 +163,7 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
         kind: 'minutes',
         title,
         detail: 'Transcript',
+        about,
         date: meeting.event_start_time,
         target: { type: 'meeting', meeting_id: meeting.id },
         text: meeting.transcript,

@@ -3,10 +3,14 @@ import React from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Alert } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
-import { SELF_ASSIGNABLE_SECTION_CAPTION } from "@repo/validation";
+import {
+  GROUPS_FOOTNOTE,
+  SELF_ASSIGNABLE_SECTION_CAPTION,
+} from "@repo/validation";
 
 /**
  * Chapter settings and its Roles screens on the phone (#4074), rendered. They
@@ -43,6 +47,17 @@ const h = vi.hoisted(() => ({
   updateRole: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   updateGroup: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   updateTier: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  // #6029: the structure the phone now changes, as web does.
+  createTier: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  reorderTiers: vi.fn<(ids: unknown) => Promise<object>>(async () => ({})),
+  deleteTier: vi.fn<(id: unknown) => Promise<object>>(async () => ({})),
+  deleteRole: vi.fn<(id: unknown) => Promise<object>>(async () => ({})),
+  createGroup: vi.fn<(input: unknown) => Promise<object>>(async () => ({
+    id: "g-new",
+  })),
+  deleteGroup: vi.fn<(id: unknown) => Promise<object>>(async () => ({})),
+  setGroupMembers: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  transfer: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   accentPresent: vi.fn(),
   backgroundPresent: vi.fn(),
   // `null` is a server without AI; an object is one that has it.
@@ -53,7 +68,8 @@ const h = vi.hoisted(() => ({
   aiSaving: false,
   // Chapter config (#5801): whether members may rename themselves.
   config: { members_can_change_name: false } as Record<string, unknown>,
-  patchConfig: vi.fn(),
+  // The config PATCH's `mutateAsync`, which Chapter settings awaits (#6027).
+  patchConfig: vi.fn<(diff: unknown) => Promise<object>>(async () => ({})),
 }));
 
 vi.mock("react-native", async () => {
@@ -97,12 +113,40 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useChapterRoleColors: () => [],
     useViewerDisplayName: () => "Marcus Ellison",
     useUpdateRoleTier: () => ({ mutateAsync: h.updateTier, isPending: false }),
+    useCreateRoleTier: () => ({ mutateAsync: h.createTier, isPending: false }),
+    useReorderRoleTiers: () => ({
+      mutateAsync: h.reorderTiers,
+      isPending: false,
+    }),
+    useDeleteRoleTier: () => ({ mutateAsync: h.deleteTier, isPending: false }),
+    useDeleteRole: () => ({ mutateAsync: h.deleteRole, isPending: false }),
+    useCreateGroup: () => ({ mutateAsync: h.createGroup, isPending: false }),
+    useDeleteGroup: () => ({ mutateAsync: h.deleteGroup, isPending: false }),
+    useSetGroupMembers: () => ({
+      mutateAsync: h.setGroupMembers,
+      isPending: false,
+    }),
+    useInvitableRoleIds: () => ok(undefined),
+    useTransferPresidency: () => ({
+      mutateAsync: h.transfer,
+      isPending: false,
+    }),
     useAiChapterSettings: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.aiSettings),
     useOrgConfig: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.config),
-    usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
+    usePatchOrgConfig: () => ({
+      mutate: vi.fn(),
+      mutateAsync: h.patchConfig,
+      isPending: false,
+    }),
+    // The Chapter tab's profile and birthday posts (#6027).
+    useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannels: () => ok([]),
     useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
       mutateAsync: h.createChannel,
@@ -184,6 +228,11 @@ import ChapterRolesScreen from "@/app/(app)/chapter-roles";
 import RoleTierScreen from "@/app/(app)/role-tier";
 import RoleScreen from "@/app/(app)/role";
 import { OverrideSheet } from "@/components/roles/override-sheet";
+import {
+  currentItemMenu,
+  dismissItemMenu,
+  pickItemMenuAction,
+} from "@/components/item-actions-menu";
 
 const role = (over: Record<string, unknown>) => ({
   color: null,
@@ -297,14 +346,16 @@ afterEach(() => {
 });
 
 describe("Chapter settings (#4074)", () => {
-  it("holds the accent, chat background, study zones and Roles for an officer", () => {
+  it("holds the accent, chat background, Roles and the modules for an officer", () => {
     const text = screenText(render(<ChapterSettingsScreen />));
     expect(text).toContain("Chapter accent");
     expect(text).toContain("Chat background");
     expect(text).toContain("Midnight");
-    expect(text).toContain(
-      "Study zones\nManaged on the web dashboard.\n2 zones",
-    );
+    // Study zones is a module row now (#6030); its zone count moved to its
+    // screen.
+    expect(text).toContain("Modules");
+    expect(text).toContain("Study zones");
+    expect(text).not.toContain("Managed on the web dashboard.");
     expect(text).toContain("Roles");
     expect(text).not.toContain("Set by an officer");
   });
@@ -323,10 +374,9 @@ describe("Chapter settings (#4074)", () => {
     );
     expect(toggle.props.value).toBe(false);
     act(() => toggle.props.onValueChange(true));
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      { members_can_change_name: true },
-      expect.anything(),
-    );
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      members_can_change_name: true,
+    });
   });
 
   it("shows the member-names switch read-only to a viewer without :manage (#5801)", () => {
@@ -626,15 +676,43 @@ describe("Chapter settings → AI (#4789)", () => {
 });
 
 describe("Roles (#4074)", () => {
-  it("lists the chapter's groups after the roles, own first, with counts", () => {
+  it("lists the chapter's own groups after the roles, the kept ones behind one row", () => {
     const tree = render(<ChapterRolesScreen />);
     const text = screenText(tree);
     expect(text).toContain("Groups");
+    expect(text).toContain(GROUPS_FOOTNOTE);
     expect(text.indexOf("In house")).toBeGreaterThan(
       text.indexOf("Rush Chair"),
     );
-    expect(text.indexOf("Fall 2025")).toBeGreaterThan(text.indexOf("In house"));
+    expect(text).toContain("2 members");
+    // Pledge classes, class years and majors are one row, as on web.
+    expect(
+      text.indexOf("Pledge classes, class years and majors"),
+    ).toBeGreaterThan(text.indexOf("In house"));
+    expect(text).not.toContain("Fall 2025");
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() =>
+      pressable(tree, "Pledge classes, class years and majors").props.onPress(),
+    );
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/chapter-roles",
+      params: { groups: "automatic" },
+    });
+    act(() => pressable(tree, "In house").props.onPress());
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/chapter-roles",
+      params: { group: "g-house" },
+    });
+  });
+
+  it("lists the kept groups on their own page, with what each follows", () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({ groups: "automatic" });
+    const text = screenText(render(<ChapterRolesScreen />));
+    expect(text).toContain("Fall 2025");
     expect(text).toContain("Follows pledge class");
+    expect(text).toContain("1 member");
+    expect(text).not.toContain("In house");
   });
 
   it("shows a groups manager without roles:manage only the groups", () => {
@@ -697,14 +775,21 @@ describe("Roles (#4074)", () => {
       (node) =>
         (node.type as unknown) === "Pressable" &&
         node.props.accessibilityHint ===
-          "Opens what every role in Brothers can do.",
+          "Opens Brothers: what every role in it can do.",
     );
     act(() => permissionsRow.props.onPress());
     expect(push).toHaveBeenCalledWith({
       pathname: "/role-tier",
       params: { tierId: "t-bro" },
     });
-    act(() => pressable(tree, "Rush Chair").props.onPress());
+    // The role's row; the Default invite role sheet lists it too.
+    const rushRow = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Rush Chair" &&
+        node.props.accessibilityHint === "Opens what this role can do.",
+    );
+    act(() => rushRow.props.onPress());
     expect(push).toHaveBeenCalledWith({
       pathname: "/role",
       params: { roleId: "r-rush" },
@@ -737,7 +822,6 @@ describe("Roles (#4074)", () => {
         ),
       ];
       const tree = render(<ChapterRolesScreen />);
-      expect(screenText(tree)).toContain("Sophomores · Class of 2029");
       const search = tree.root.find(
         (node) =>
           (node.type as unknown) === "TextInput" &&
@@ -891,28 +975,30 @@ describe("Non-chapter business on the phone (#4958)", () => {
         ),
     );
 
-  it("marks a safe role at once", async () => {
+  it("marks a safe role with Save role, as web's page does", async () => {
     h.roles = [...h.roles, role({ id: "r-ims", name: "Intramurals" })];
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const tree = render(<RoleScreen />);
     const [toggle] = pickSwitch(tree);
     expect(toggle!.props.disabled).toBe(false);
+    act(() => toggle!.props.onValueChange(true));
+    expect(h.updateRole).not.toHaveBeenCalled();
+    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
     await act(async () => {
-      toggle!.props.onValueChange(true);
+      pressable(tree, "Save role").props.onPress();
     });
     expect(h.updateRole).toHaveBeenCalledWith({
       id: "r-ims",
       body: { self_assignable: true },
     });
-    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
+    expect(screenText(tree)).toContain("Saved");
   });
 
   it("says why a role in a tier or with permissions can't be, and offers only off", () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-bro" });
     let tree = render(<RoleScreen />);
-    // The phone can't move a role between tiers, so it says where to.
     expect(screenText(tree)).toContain(
-      "Move it out of its tier on the web dashboard first.",
+      "Roles members pick themselves sit outside the tiers, since a tier carries rank. Move it out, or turn off Non-chapter business.",
     );
     expect(pickSwitch(tree)[0]!.props.disabled).toBe(true);
 
@@ -940,24 +1026,32 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(toggle!.props.disabled).toBe(false);
   });
 
-  it("shows what the roles read says once it lands after a save", async () => {
-    h.roles = [...h.roles, role({ id: "r-ims", name: "Intramurals" })];
+  it("judges it against the drafted tier, and moves the role with Save role", async () => {
+    h.roles = [
+      ...h.roles,
+      role({ id: "r-ims", name: "Intramurals", tier_id: "t-bro" }),
+    ];
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const tree = render(<RoleScreen />);
+    expect(pickSwitch(tree)[0]!.props.disabled).toBe(true);
+    // The Tier row's sheet: the tiers, then outside the tiers.
+    const tierSheet = tree.root.find(
+      (node) =>
+        node.props.title === "Tier" && Array.isArray(node.props.options),
+    );
+    expect(
+      tierSheet.props.options.map((option: { label: string }) => option.label),
+    ).toEqual(["Officers", "Brothers", "Outside the tiers"]);
+    act(() => tierSheet.props.onSelect("__outside__"));
+    expect(pickSwitch(tree)[0]!.props.disabled).toBe(false);
+    act(() => pickSwitch(tree)[0]!.props.onValueChange(true));
     await act(async () => {
-      pickSwitch(tree)[0]!.props.onValueChange(true);
+      pressable(tree, "Save role").props.onPress();
     });
-    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
-    // Another officer turned it back off before this read landed.
-    h.rolesUpdatedAt = Date.now() + 1000;
-    act(() => {
-      tree.update(
-        <FrappThemeProvider>
-          <RoleScreen />
-        </FrappThemeProvider>,
-      );
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-ims",
+      body: { tier_id: null, self_assignable: true },
     });
-    expect(pickSwitch(tree)[0]!.props.value).toBe(false);
   });
 
   it("has no switch on a built-in role", () => {
@@ -965,18 +1059,17 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(pickSwitch(render(<RoleScreen />))).toHaveLength(0);
   });
 
-  it("puts a failed save on its row and the switch back", async () => {
+  it("says a failed Save role beside the button, and keeps the draft", async () => {
     h.roles = [...h.roles, role({ id: "r-ims", name: "Intramurals" })];
     h.updateRole.mockRejectedValueOnce(new Error("boom"));
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const tree = render(<RoleScreen />);
+    act(() => pickSwitch(tree)[0]!.props.onValueChange(true));
     await act(async () => {
-      pickSwitch(tree)[0]!.props.onValueChange(true);
+      pressable(tree, "Save role").props.onPress();
     });
-    expect(screenText(tree)).toContain(
-      "Couldn't update Intramurals. Non-chapter business was not changed.",
-    );
-    expect(pickSwitch(tree)[0]!.props.value).toBe(false);
+    expect(screenText(tree)).toContain("Your change wasn't saved.");
+    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
   });
 
   it("lists marked roles apart on the Roles screen", () => {
@@ -1013,7 +1106,7 @@ describe("Non-chapter business on the phone (#4958)", () => {
       role({ id: "r-ims", name: "Intramurals", self_assignable: true }),
     ];
     const text = screenText(render(<ChapterRolesScreen />));
-    expect(text.indexOf("Add role")).toBeGreaterThan(
+    expect(text.lastIndexOf("Add role")).toBeGreaterThan(
       text.indexOf("Intramurals"),
     );
   });
@@ -1077,25 +1170,20 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
         typeof node.props.onChange === "function",
     );
 
-  it("saves a role's color from its page, and says so when it fails", async () => {
+  it("drafts a role's color on its page and saves it with Save role", async () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
     const tree = render(<RoleScreen />);
     expect(screenText(tree)).toContain("No color");
+    act(() => colorSheet(tree).props.onChange("#00B2E0"));
+    expect(screenText(tree)).toContain("Bright sky");
+    expect(h.updateRole).not.toHaveBeenCalled();
     await act(async () => {
-      colorSheet(tree).props.onChange("#00B2E0");
+      pressable(tree, "Save role").props.onPress();
     });
     expect(h.updateRole).toHaveBeenLastCalledWith({
       id: "r-tres",
       body: { color: "#00B2E0" },
     });
-    expect(screenText(tree)).toContain("Bright sky");
-    h.updateRole.mockRejectedValueOnce(new Error("boom"));
-    await act(async () => {
-      colorSheet(tree).props.onChange(null);
-    });
-    expect(screenText(tree)).toContain(
-      "Couldn't update Treasurer. The color was not changed.",
-    );
   });
 
   it("leaves a role's color read-only to someone who can't edit roles", () => {
@@ -1124,47 +1212,344 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
     expect(colorRow("r-bro").props.onPress).toBeTypeOf("function");
   });
 
-  it("puts a failed group color save on the group's row", async () => {
+  it("drafts a group's color, ping switch and members on its page, saved together", async () => {
     h.permissions = ["groups:manage", "members:view"];
-    h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    h.members = [
+      ...h.members,
+      { id: "m4", user_id: "u4", display_name: "Dana Ortiz", role_ids: [] },
+    ];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
     const tree = render(<ChapterRolesScreen />);
-    const row = tree.root.find(
-      (node) =>
-        node.props.label === "In house" &&
-        typeof node.props.onPress === "function",
-    );
-    act(() => row.props.onPress());
-    await act(async () => {
-      colorSheet(tree).props.onChange("#3DD6C4");
-    });
-    expect(screenText(tree)).toContain(
-      "Couldn't update In house. The color was not changed.",
-    );
-  });
-
-  it("lets a groups manager set a group's color from its row", async () => {
-    h.permissions = ["groups:manage", "members:view"];
-    const tree = render(<ChapterRolesScreen />);
-    const row = tree.root.find(
-      (node) =>
-        node.props.label === "In house" &&
-        typeof node.props.onPress === "function",
-    );
-    act(() => row.props.onPress());
+    expect(screenText(tree)).toContain("Anyone can @mention this group");
     expect(colorSheet(tree).props.previewName).toBe("In house");
+    act(() => colorSheet(tree).props.onChange("#3DD6C4"));
+    const addSheet = tree.root.find(
+      (node) =>
+        node.props.title === "Add a member" &&
+        Array.isArray(node.props.options),
+    );
+    act(() => addSheet.props.onSelect("u4"));
+    expect(h.updateGroup).not.toHaveBeenCalled();
     await act(async () => {
-      colorSheet(tree).props.onChange("#3DD6C4");
+      pressable(tree, "Save").props.onPress();
     });
     expect(h.updateGroup).toHaveBeenLastCalledWith({
       id: "g-house",
       body: { color: "#3DD6C4" },
     });
+    expect(h.setGroupMembers).toHaveBeenCalledWith({
+      id: "g-house",
+      memberIds: ["me", "u2", "u4"],
+    });
   });
 
-  it("gives no color control on a group to someone without groups:manage", () => {
-    h.permissions = ["members:view", "chapter-config:view"];
+  it("says a failed group save beside Save", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
     const tree = render(<ChapterRolesScreen />);
-    const row = tree.root.find((node) => node.props.label === "In house");
+    act(() => colorSheet(tree).props.onChange("#3DD6C4"));
+    await act(async () => {
+      pressable(tree, "Save").props.onPress();
+    });
+    expect(screenText(tree)).toContain("Nothing more was changed.");
+  });
+
+  it("gives no color control or Save on a group to someone without groups:manage", () => {
+    h.permissions = ["members:view", "chapter-config:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) => node.props.label === "Color" && node.props.value === "No color",
+    );
     expect(row.props.onPress).toBeUndefined();
+    expect(screenText(tree)).not.toContain("Save");
+  });
+});
+
+/** Answers the platform alert `confirmAlert` raised with its confirm button. */
+async function confirmLastAlert(title: string) {
+  const alert = vi.mocked(Alert.alert);
+  const [shown, , buttons] = alert.mock.calls.at(-1)!;
+  expect(shown).toBe(title);
+  const confirm = (buttons as { text: string; onPress?: () => void }[]).at(-1)!;
+  await act(async () => {
+    confirm.onPress?.();
+  });
+}
+
+describe("Roles and groups' structure on the phone (#6029)", () => {
+  afterEach(() => {
+    act(() => dismissItemMenu());
+  });
+
+  const longPress = (tree: ReactTestRenderer, name: string) => {
+    const row = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === name &&
+        node.props.accessibilityHint === "Opens what this role can do.",
+    );
+    act(() => row.props.onLongPress());
+  };
+
+  it("draws web's groups in web's order and words", () => {
+    const text = screenText(render(<ChapterRolesScreen />));
+    const order = [
+      "Officers",
+      "Permissions",
+      "Treasurer",
+      "Add role",
+      "Brothers",
+      "Add tier",
+      "Outside the tiers",
+      "Rank below every tier, like alumni or advisors.",
+      "Non-chapter business",
+      "None yet",
+      "Groups",
+      "New group",
+      "Invites and presidency",
+      "Default invite role",
+      "Transfer presidency",
+    ];
+    let last = -1;
+    for (const word of order) {
+      const at = text.indexOf(word, last + 1);
+      expect(at, word).toBeGreaterThan(last);
+      last = at;
+    }
+    expect(text).toContain("2 on");
+    expect(text).toContain("2 members");
+    expect(text).not.toContain("web dashboard");
+  });
+
+  it("moves a role down its tier from its long press", async () => {
+    h.roles = [
+      ...h.roles,
+      role({
+        id: "r-sec",
+        name: "Secretary",
+        tier_id: "t-off",
+        display_order: 1,
+      }),
+    ];
+    const tree = render(<ChapterRolesScreen />);
+    longPress(tree, "Treasurer");
+    const labels = currentItemMenu()!.actions.map((action) => action.label);
+    expect(labels).toEqual([
+      "Move down",
+      "Move to Brothers",
+      "Move to Outside the tiers",
+      "Delete role",
+    ]);
+    await act(async () => pickItemMenuAction("Move down"));
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-tres",
+      body: { display_order: 1 },
+    });
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-sec",
+      body: { display_order: 0 },
+    });
+  });
+
+  it("moves a role to another tier, and deletes one after asking", async () => {
+    const tree = render(<ChapterRolesScreen />);
+    longPress(tree, "Rush Chair");
+    await act(async () => pickItemMenuAction("Move to Brothers"));
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-rush",
+      body: { tier_id: "t-bro" },
+    });
+    longPress(tree, "Rush Chair");
+    act(() => pickItemMenuAction("Delete role"));
+    await confirmLastAlert("Delete Rush Chair?");
+    expect(h.deleteRole).toHaveBeenCalledWith("r-rush");
+  });
+
+  it("offers no menu on a role the officer can't change", () => {
+    h.permissions = ["chapter-config:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Rush Chair" &&
+        node.props.accessibilityHint === "Opens what this role can do.",
+    );
+    expect(row.props.onLongPress).toBeUndefined();
+    expect(screenText(tree)).not.toContain("Add role");
+  });
+
+  it("adds a tier from its name sheet", async () => {
+    const tree = render(<ChapterRolesScreen />);
+    const sheet = tree.root.find(
+      (node) =>
+        node.props.title === "Add tier" &&
+        typeof node.props.onSubmit === "function",
+    );
+    let result: unknown;
+    await act(async () => {
+      result = await sheet.props.onSubmit("Committee chairs");
+    });
+    expect(result).toBeNull();
+    expect(h.createTier).toHaveBeenCalledWith({
+      name: "Committee chairs",
+      permissions: [],
+    });
+  });
+
+  it("adds a group and opens its page", async () => {
+    const tree = render(<ChapterRolesScreen />);
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    const sheet = tree.root.find(
+      (node) =>
+        node.props.title === "New group" &&
+        typeof node.props.onSubmit === "function",
+    );
+    await act(async () => {
+      await sheet.props.onSubmit("Third floor");
+    });
+    expect(h.createGroup).toHaveBeenCalledWith({ name: "Third floor" });
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/chapter-roles",
+      params: { group: "g-new" },
+    });
+  });
+
+  it("saves the default invite role on the pick", async () => {
+    const tree = render(<ChapterRolesScreen />);
+    const sheet = tree.root.find(
+      (node) =>
+        node.props.title === "Default invite role" &&
+        Array.isArray(node.props.options),
+    );
+    expect(sheet.props.options[0].label).toBe("No role");
+    await act(async () => sheet.props.onSelect("r-bro"));
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      default_invite_role_id: "r-bro",
+    });
+  });
+
+  it("transfers presidency after a confirm that names who gets it", async () => {
+    h.members = [
+      ...h.members,
+      { id: "m9", user_id: "u9", display_name: "Jordan Reyes", role_ids: [] },
+    ];
+    const tree = render(<ChapterRolesScreen />);
+    const sheet = tree.root.find(
+      (node) =>
+        node.props.title === "Pick the new President" &&
+        Array.isArray(node.props.options),
+    );
+    act(() => sheet.props.onSelect("m9"));
+    await confirmLastAlert("Transfer presidency to Jordan Reyes?");
+    expect(h.transfer).toHaveBeenCalledWith({ target_member_id: "m9" });
+    expect(screenText(tree)).toContain("Jordan Reyes is now President.");
+  });
+
+  it("shows Transfer presidency only to the President", () => {
+    h.permissions = ["roles:manage", "chapter-config:view"];
+    expect(screenText(render(<ChapterRolesScreen />))).not.toContain(
+      "Transfer presidency",
+    );
+  });
+
+  it("renames, pings, reorders and deletes a tier from its page", async () => {
+    h.tiers = [
+      ...h.tiers,
+      { id: "t-new", name: "Pledges", position: 3, permissions: [] },
+    ];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ tierId: "t-new" });
+    const tree = render(<RoleTierScreen />);
+    const text = screenText(tree);
+    expect(text).toContain("Anyone can @mention this tier");
+    expect(text).toContain(
+      "What every role in Pledges can do. A role can be set apart on its own page.",
+    );
+    const name = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "TextInput" &&
+        node.props.value === "Pledges",
+    );
+    act(() => name.props.onChangeText("New members"));
+    await act(async () => {
+      name.props.onBlur();
+    });
+    expect(h.updateTier).toHaveBeenCalledWith({
+      id: "t-new",
+      body: { name: "New members" },
+    });
+    act(() => pressable(tree, "More for Pledges").props.onPress());
+    expect(currentItemMenu()!.actions.map((action) => action.label)).toEqual([
+      "Move up",
+      "Delete tier",
+    ]);
+    await act(async () => pickItemMenuAction("Move up"));
+    expect(h.reorderTiers).toHaveBeenCalledWith(["t-off", "t-new", "t-bro"]);
+    act(() => pressable(tree, "More for Pledges").props.onPress());
+    act(() => pickItemMenuAction("Delete tier"));
+    await confirmLastAlert("Delete Pledges?");
+    expect(h.deleteTier).toHaveBeenCalledWith("t-new");
+  });
+
+  it("offers a tier with roles no Delete, and says why", () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({ tierId: "t-bro" });
+    const tree = render(<RoleTierScreen />);
+    act(() => pressable(tree, "More for Brothers").props.onPress());
+    const menu = currentItemMenu()!;
+    expect(menu.actions.map((action) => action.label)).toEqual(["Move up"]);
+    expect(menu.message).toBe("Delete tier (move its roles out first)");
+    expect(screenText(tree)).toContain("Roles in it");
+  });
+
+  it("renames a role with Save role, and moves it from the page's ⋯", async () => {
+    h.roles = [
+      ...h.roles,
+      role({
+        id: "r-sec",
+        name: "Secretary",
+        tier_id: "t-off",
+        display_order: 1,
+      }),
+    ];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-sec" });
+    const tree = render(<RoleScreen />);
+    expect(screenText(tree)).toContain(
+      "Starts from Officers. Rows set apart from it say so.",
+    );
+    const name = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "TextInput" &&
+        node.props.value === "Secretary",
+    );
+    act(() => name.props.onChangeText("Scribe"));
+    await act(async () => {
+      pressable(tree, "Save role").props.onPress();
+    });
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-sec",
+      body: { name: "Scribe" },
+    });
+    act(() => pressable(tree, "More for Secretary").props.onPress());
+    expect(currentItemMenu()!.actions.map((action) => action.label)).toEqual([
+      "Move up",
+      "Delete role",
+    ]);
+    await act(async () => pickItemMenuAction("Move up"));
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "r-sec",
+      body: { display_order: 0 },
+    });
+  });
+
+  it("deletes a group from its page's ⋯ after asking", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
+    const tree = render(<ChapterRolesScreen />);
+    act(() => pressable(tree, "More for In house").props.onPress());
+    act(() => pickItemMenuAction("Delete group"));
+    await confirmLastAlert("Delete In house?");
+    expect(h.deleteGroup).toHaveBeenCalledWith("g-house");
   });
 });

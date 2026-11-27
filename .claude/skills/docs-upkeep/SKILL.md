@@ -68,8 +68,8 @@ One known imperfection is accepted: groups differ in reading weight by up to abo
 `.claude/skills/` file plus `AGENTS.md`). Budget for that, and say in the report where you stopped
 if you ran out of run, but don't re-scope the slice to balance it, because a judgement-based slice
 isn't reproducible. A heavy slice is worth splitting across a few subagents, each taking a group of
-files, since each file is independent, context-heavy reading; keep it within the
-[`multi-agent`](../multi-agent/SKILL.md) budget. Checking a single claim is not worth a subagent.
+files, since each file is independent, context-heavy reading; size it by
+[`multi-agent`](../multi-agent/SKILL.md)'s costs. Checking a single claim is not worth a subagent.
 
 ## What to check, in priority order
 

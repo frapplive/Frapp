@@ -4,6 +4,7 @@ import {
   NavigationRouteContext,
 } from "expo-router/react-navigation";
 import type { Href } from "expo-router";
+import { moduleScreenTitle } from "@repo/hooks/module-settings";
 import { SECTION_NAMES } from "@repo/validation";
 import { goBackTo } from "@/lib/href";
 
@@ -77,17 +78,29 @@ export const SCREEN_TITLES = {
   // Tasks and, since #3930, events: `AI_SUGGESTION_COPY.listHeading`.
   "suggested-tasks": "Suggested",
   "arrange-channels": "Arrange channels",
+  // One channel's settings (#6031), titled by the channel's name, which a
+  // capsule has no room for.
+  "channel-settings": "Channel settings",
   "chapter-settings": "Chapter settings",
   "chapter-roles": "Roles and groups",
   // Pushed from Chapter settings (Paul, 2026-11-21).
   "chapter-logs": "Logs",
+  // The Chapter rows' pages (#6027), titled as web's.
+  "chapter-mark": "Chapter mark",
+  "chapter-identity": "Identity & founding",
+  "chapter-type": "Organization type",
+  "chapter-vocabulary": "Vocabulary",
+  // A module's screen and its own screens (#6030) are titled by the module
+  // or the setting, which a back control over one reads from that screen's
+  // route (`moduleScreenTitle`). This is the stack's own title.
+  "module-settings": "Chapter settings",
   // A tier's and a role's pages are titled by their own name, which a
   // capsule has no room for, so both read as the list they belong to.
   "role-tier": "Roles",
   role: "Roles",
   // The recruitment list (#5924) is titled with the chapter's own word
   // ("Rush", "Intake"), which this map can't know: a back control over it
-  // shows the label its screen passes instead (`CHAPTER_WORD_TITLES`). This
+  // shows the label its screen passes instead (`NAMED_BY_SCREEN`). This
   // entry is the stack's own title, for the platform's back menu.
   rush: "Recruitment",
   // One prospect, pushed from the recruitment list (#5924).
@@ -95,10 +108,35 @@ export const SCREEN_TITLES = {
 } as const satisfies Record<string, string>;
 
 /**
- * Screens titled with the chapter's own word, which a back control over them
- * reads from the label its screen passes rather than from `SCREEN_TITLES`.
+ * Screens a back control over them names by the label its screen passes
+ * rather than by `SCREEN_TITLES`: the recruitment list, titled with the
+ * chapter's own word.
  */
-const CHAPTER_WORD_TITLES: ReadonlySet<string> = new Set(["rush"]);
+const NAMED_BY_SCREEN: ReadonlySet<string> = new Set(["rush"]);
+
+/**
+ * What a module's screen under this one is titled (#6030): the module
+ * ("Points") or the setting ("Points goal"), read from its route's params, so
+ * any screen pushed over it, not only the module's own, names it rightly.
+ */
+function moduleScreenBelowTitle(
+  routes: readonly StackRoute[],
+  key: string,
+): string | null {
+  const index = routes.findIndex((route) => route.key === key);
+  const params = (routes[index - 1]?.params ?? {}) as {
+    module?: unknown;
+    page?: unknown;
+  };
+  const first = (value: unknown) =>
+    typeof value === "string"
+      ? value
+      : Array.isArray(value) && typeof value[0] === "string"
+        ? value[0]
+        : null;
+  const module = first(params.module);
+  return module ? moduleScreenTitle(module, first(params.page)) : null;
+}
 
 /** The group in `app/(app)/` that holds the tab navigator. */
 const TABS_ROUTE = "(tabs)";
@@ -164,9 +202,13 @@ export function useScreenBelow(): ScreenBelow | null {
   if (!state || state.type !== "stack") return null;
   const name = screenBelowName(state.routes, route.key);
   if (!name) return null;
-  const title = CHAPTER_WORD_TITLES.has(name)
+  const title = NAMED_BY_SCREEN.has(name)
     ? null
-    : ((SCREEN_TITLES as Record<string, string | undefined>)[name] ?? "Back");
+    : ((name === "module-settings"
+        ? moduleScreenBelowTitle(state.routes, route.key)
+        : null) ??
+      (SCREEN_TITLES as Record<string, string | undefined>)[name] ??
+      "Back");
   return { name, title, goBack };
 }
 

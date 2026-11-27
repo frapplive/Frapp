@@ -31,7 +31,10 @@ import {
   useUpdateEvent,
 } from "@repo/hooks";
 import {
+  addEventDays,
+  calendarOnlyEditable,
   canAll,
+  datedTimingEditable,
   EVENT_CREATE_PERMISSIONS,
   deleteOffersSeriesChoice,
   describeAttendance,
@@ -44,6 +47,7 @@ import {
   EVENT_LOCATION_MAX_LENGTH,
   EVENT_NAME_MAX_LENGTH,
   EVENT_NOTES_MAX_LENGTH,
+  eventFormShowsRow,
   eventLimitsAudience,
   eventTypeFromForm,
   isEmptyEventPatch,
@@ -80,12 +84,14 @@ import {
   RowDivider,
 } from "@/components/events/event-form-rows";
 import { AttendanceSheet } from "@/components/events/attendance-sheet";
-import { WhenTimes } from "@/components/events/when-times";
+import { WhenFields } from "@/components/events/when-times";
 import { AgendaDraftList } from "@/components/events/event-agenda";
 import { RepeatOptions } from "@/components/repeat-options";
 import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
 import {
   applyEventType,
+  draftCalendarOnly,
+  draftTiming,
   emptyEventDraft,
   resolveEventTimes,
   shiftEnd,
@@ -173,6 +179,11 @@ export interface EventCreatedOutcome {
   name: string;
   /** From chat: the event keeps someone out, so no card was asked for. */
   cardKeptOut: boolean;
+  /**
+   * From chat: the event is all-day, time-TBD or on the calendar only, which
+   * a card can't post yet (#6098), so none was asked for.
+   */
+  cardNotPostable?: boolean;
   /** From chat: the event exists but its card didn't post (`card_posted: false`). */
   cardLost: boolean;
 }
@@ -245,6 +256,9 @@ const EVENT_EDIT_KEYS = [
   "name",
   "start",
   "end",
+  "timing",
+  "lastDay",
+  "tentative",
   "location",
   "pointsInput",
   "checkInOpensInput",
@@ -262,7 +276,7 @@ function keptEventEditOver(
   const { base, ...fields } = kept;
   return {
     ...keepEditsOver<NewEventDraft>(fields, base, now, EVENT_EDIT_KEYS, [
-      ["start", "end"],
+      ["start", "end", "lastDay"],
     ]),
     typeFilledName: fields.typeFilledName,
     openRow: fields.openRow,
@@ -485,7 +499,18 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
     function setStart(next: Date) {
       // A repeat refusal was about the old start (an end date before the
       // second meeting, say), and would hide the caption that now applies.
-      update({ start: next, end: shiftEnd({ start, end }, next) }, [
+      // An all-day event's last day moves with its first, so it keeps its
+      // days, as its end time would.
+      const days = Math.round(
+        (Date.UTC(next.getFullYear(), next.getMonth(), next.getDate()) -
+          Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) /
+          86_400_000,
+      );
+      const lastDay =
+        draft.lastDay && days !== 0
+          ? addEventDays(draft.lastDay, days)
+          : draft.lastDay;
+      update({ start: next, end: shiftEnd({ start, end }, next), lastDay }, [
         "start",
         "end",
         "repeat",
@@ -700,8 +725,18 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       // event that keeps anyone out can't be broadcast, so none is asked for
       // (the API refuses one, `EventService.create`), as on web.
       const cardKeptOut = !!chat && eventLimitsAudience(result.body);
+      // A card is a snapshot of start and end times, which an all-day,
+      // time-TBD or calendar-only event would misstate, so the API refuses
+      // one for them (#6098): the event is made without it.
+      const cardNotPostable =
+        !!chat &&
+        !cardKeptOut &&
+        (result.body.timing !== undefined ||
+          result.body.calendar_only === true);
       const card =
-        chat && !cardKeptOut ? chat.trackCard(result.body.name) : null;
+        chat && !cardKeptOut && !cardNotPostable
+          ? chat.trackCard(result.body.name)
+          : null;
       const handlers = {
         onSuccess: (created?: { id?: unknown; card_posted?: boolean }) => {
           sending.current = false;
@@ -715,6 +750,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
             id: typeof created?.id === "string" ? created.id : null,
             name: result.body.name,
             cardKeptOut,
+            cardNotPostable,
             cardLost,
           });
         },
@@ -734,8 +770,9 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
           } else setSubmitFailed(true);
         },
       };
+      const body = result.body;
       if (!chat) {
-        createEvent.mutate(result.body, handlers);
+        createEvent.mutate(body, handlers);
         return;
       }
       // From chat, the outcome has to land even if the member leaves the
@@ -746,11 +783,11 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
         .mutateAsync(
           card
             ? {
-                ...result.body,
+                ...body,
                 channel_id: chat.channelId,
                 client_message_id: card.clientMessageId,
               }
-            : result.body,
+            : body,
         )
         .then(handlers.onSuccess, handlers.onError);
     }
@@ -769,6 +806,12 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       : repeatSummary(draft.repeat, repeatStart, repeatSeries);
     const heldType =
       eventTypes.find((type) => type.id === draft.eventTypeId) ?? null;
+    // The rows the shape shows (#6098): Repeat only on a timed event, Points
+    // and Check-in only where the event takes attendance.
+    const timing = draftTiming(draft);
+    const shape = { timing, calendarOnly: draftCalendarOnly(draft) };
+    const shows = (row: Parameters<typeof eventFormShowsRow>[0]) =>
+      eventFormShowsRow(row, shape);
     // Whether anything differs from how the sheet opened: Cancel then reads
     // Discard, the word web's form uses for the same drop.
     const touched =
@@ -856,14 +899,31 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
             {null}
           </PropertyRow>
           <View style={styles.opened}>
-            <WhenTimes
+            <WhenFields
+              timing={timing}
               start={start}
               end={end}
+              lastDay={draft.lastDay ?? null}
+              tentative={draft.tentative === true}
               now={at}
               minimumDate={startFloor}
               disabled={pending}
+              // Switching keeps the day: it is the start's either way.
+              onTiming={(next) =>
+                update({ timing: next, start, end }, [
+                  "start",
+                  "end",
+                  "repeat",
+                  "points",
+                  "checkInOpens",
+                ])
+              }
               onStart={setStart}
               onEnd={setEnd}
+              onLastDay={(lastDay) => update({ lastDay }, ["end"])}
+              onTentative={(tentative) => update({ tentative }, [])}
+              // A series' head stays timed; a new event may be anything.
+              datedAllowed={editing ? datedTimingEditable(editing.event) : true}
             />
           </View>
           {errors.start ? (
@@ -872,37 +932,41 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
           {errors.end ? <Text style={styles.error}>{errors.end}</Text> : null}
           <RowDivider />
 
-          <PropertyRow
-            glyph="repeat"
-            label={EVENT_FORM_ROW_LABELS.repeat}
-            value={repeatValue}
-            empty={!repeatUnknown && draft.repeat.preset === "NONE"}
-            invalid={!!errors.repeat}
-            disabled={pending || repeatUnknown}
-            accessibilityHint="Shows how the event repeats."
-            onPress={() => toggleRow("repeat")}
-          />
-          {/* A generated occurrence whose series couldn't be read
-              doesn't know its rule, so it doesn't offer to change it. */}
-          {draft.openRow === "repeat" && !repeatUnknown ? (
-            <View style={styles.opened}>
-              <RepeatOptions
-                draft={
-                  repeatSeries
-                    ? repeatEditDraft(draft.repeat, repeatSeries)
-                    : draft.repeat
-                }
-                start={repeatStart}
-                onChange={(repeat) => update({ repeat }, ["repeat"])}
-                disabled={pending}
-                error={errors.repeat}
-                showCaption={showRepeatLength}
-                series={repeatSeries}
-                input={FormTextInput}
+          {shows("repeat") ? (
+            <>
+              <PropertyRow
+                glyph="repeat"
+                label={EVENT_FORM_ROW_LABELS.repeat}
+                value={repeatValue}
+                empty={!repeatUnknown && draft.repeat.preset === "NONE"}
+                invalid={!!errors.repeat}
+                disabled={pending || repeatUnknown}
+                accessibilityHint="Shows how the event repeats."
+                onPress={() => toggleRow("repeat")}
               />
-            </View>
+              {/* A generated occurrence whose series couldn't be read
+              doesn't know its rule, so it doesn't offer to change it. */}
+              {draft.openRow === "repeat" && !repeatUnknown ? (
+                <View style={styles.opened}>
+                  <RepeatOptions
+                    draft={
+                      repeatSeries
+                        ? repeatEditDraft(draft.repeat, repeatSeries)
+                        : draft.repeat
+                    }
+                    start={repeatStart}
+                    onChange={(repeat) => update({ repeat }, ["repeat"])}
+                    disabled={pending}
+                    error={errors.repeat}
+                    showCaption={showRepeatLength}
+                    series={repeatSeries}
+                    input={FormTextInput}
+                  />
+                </View>
+              ) : null}
+              <RowDivider />
+            </>
           ) : null}
-          <RowDivider />
 
           <PropertyRow glyph="location" label={EVENT_FORM_ROW_LABELS.location}>
             <FormTextInput
@@ -939,7 +1003,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
             <Text style={styles.error}>{errors.attendance}</Text>
           ) : null}
 
-          {setsRequirements ? (
+          {setsRequirements && shows("points") ? (
             <>
               <RowDivider />
               <PropertyRow glyph="points" label={EVENT_FORM_ROW_LABELS.points}>
@@ -1040,48 +1104,55 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
               style={[styles.rowInput, styles.rowInputMultiline]}
             />
           </PropertyRow>
-          <RowDivider />
 
-          {/* #3703: members arrive early, so check-in opens ahead of the
+          {shows("checkIn") ? (
+            <>
+              <RowDivider />
+
+              {/* #3703: members arrive early, so check-in opens ahead of the
               start; 10 minutes unless the officer says. The check-in zone
               is drawn on web, where a map belongs. */}
-          <PropertyRow
-            glyph="checkIn"
-            label={EVENT_FORM_ROW_LABELS.checkIn}
-            value={describeCheckIn(parseCheckInOpens(draft.checkInOpensInput))}
-            invalid={
-              !!errors.checkInOpens ||
-              parseCheckInOpens(draft.checkInOpensInput) === null
-            }
-            disabled={pending}
-            accessibilityHint="Shows how many minutes early check-in opens."
-            onPress={() => toggleRow("checkIn")}
-          />
-          {draft.openRow === "checkIn" ? (
-            <View style={[styles.opened, styles.checkInValue]}>
-              <FormTextInput
-                value={draft.checkInOpensInput}
-                onChangeText={(checkInOpensInput) =>
-                  update({ checkInOpensInput }, ["checkInOpens"])
+              <PropertyRow
+                glyph="checkIn"
+                label={EVENT_FORM_ROW_LABELS.checkIn}
+                value={describeCheckIn(
+                  parseCheckInOpens(draft.checkInOpensInput),
+                )}
+                invalid={
+                  !!errors.checkInOpens ||
+                  parseCheckInOpens(draft.checkInOpensInput) === null
                 }
-                onFocus={() => setFocused("checkInOpens")}
-                onBlur={() => setFocused(null)}
-                editable={!pending}
-                placeholder="10"
-                placeholderTextColor={tokens.color.text.muted}
-                accessibilityLabel="Minutes before the start that check-in opens"
-                keyboardType="number-pad"
-                selectTextOnFocus
-                style={[
-                  styles.minutesInput,
-                  errors.checkInOpens ? styles.rowInputError : null,
-                ]}
+                disabled={pending}
+                accessibilityHint="Shows how many minutes early check-in opens."
+                onPress={() => toggleRow("checkIn")}
               />
-              <Text style={styles.rowSuffix}>minutes early</Text>
-            </View>
-          ) : null}
-          {errors.checkInOpens ? (
-            <Text style={styles.error}>{errors.checkInOpens}</Text>
+              {draft.openRow === "checkIn" ? (
+                <View style={[styles.opened, styles.checkInValue]}>
+                  <FormTextInput
+                    value={draft.checkInOpensInput}
+                    onChangeText={(checkInOpensInput) =>
+                      update({ checkInOpensInput }, ["checkInOpens"])
+                    }
+                    onFocus={() => setFocused("checkInOpens")}
+                    onBlur={() => setFocused(null)}
+                    editable={!pending}
+                    placeholder="10"
+                    placeholderTextColor={tokens.color.text.muted}
+                    accessibilityLabel="Minutes before the start that check-in opens"
+                    keyboardType="number-pad"
+                    selectTextOnFocus
+                    style={[
+                      styles.minutesInput,
+                      errors.checkInOpens ? styles.rowInputError : null,
+                    ]}
+                  />
+                  <Text style={styles.rowSuffix}>minutes early</Text>
+                </View>
+              ) : null}
+              {errors.checkInOpens ? (
+                <Text style={styles.error}>{errors.checkInOpens}</Text>
+              ) : null}
+            </>
           ) : null}
         </View>
 
@@ -1207,6 +1278,10 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
           value={draft.attendance}
           onChange={(attendance) => update({ attendance }, ["attendance"])}
           allowRequired={setsRequirements}
+          // On the calendar only is the whole series' or nothing.
+          calendarOnlyAllowed={
+            editing ? calendarOnlyEditable(editing, at) : true
+          }
         />
       </>
     );

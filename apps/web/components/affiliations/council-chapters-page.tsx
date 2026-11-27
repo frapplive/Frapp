@@ -165,6 +165,7 @@ function CouncilChapters() {
                   <AffiliationRow
                     key={row.link.id}
                     name={row.chapter.name}
+                    crest
                     meta={chapterListingLine(row.chapter)}
                     busy={busyId === row.link.id}
                     trailing={
@@ -216,6 +217,7 @@ function CouncilChapters() {
                     <AffiliationRow
                       key={row.link.id}
                       name={row.chapter.name}
+                      crest
                       meta={chapterListingLine(row.chapter)}
                       busy={busyId === row.link.id}
                       trailing={
@@ -276,6 +278,7 @@ function CouncilChapters() {
                   <AffiliationRow
                     key={row.link.id}
                     name={row.chapter.name}
+                    crest
                     meta={chapterListingLine(row.chapter)}
                     busy={busyId === row.link.id}
                     trailing={

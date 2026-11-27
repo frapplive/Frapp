@@ -353,4 +353,60 @@ describe("<MyCheckIn />", () => {
     expect(screen.getByText(/^Opens 6:50\sPM$/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /check in/i })).toBeNull();
   });
+
+  describe("an all-day event (#6144)", () => {
+    // Stored around the saver's midnights; the row says its day instead.
+    const dayStart = new Date(2026, 10, 10);
+    const dayEnd = new Date(2026, 10, 11);
+    function renderAllDay() {
+      return render(
+        <MyCheckIn
+          eventId="e1"
+          start={dayStart.toISOString()}
+          end={dayEnd.toISOString()}
+          opensMinutes={undefined}
+          pointValue={5}
+          zone="none"
+          shape={{ timing: "all_day", start_date: "2026-11-10" }}
+        />,
+      );
+    }
+
+    it("says it is open all day, never a midnight clock", () => {
+      clock.now = new Date(2026, 10, 10, 15).getTime();
+      renderAllDay();
+
+      expect(screen.getByText("Open all day")).toBeInTheDocument();
+      expect(screen.queryByText(/Closes/)).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /check in/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the closing clock for a viewer whose day outlasts the window", () => {
+      // Saved six hours east: the window closes this evening here.
+      clock.now = new Date(2026, 10, 10, 15).getTime();
+      render(
+        <MyCheckIn
+          eventId="e1"
+          start={new Date(2026, 10, 9, 18).toISOString()}
+          end={new Date(2026, 10, 10, 18).toISOString()}
+          opensMinutes={undefined}
+          pointValue={5}
+          zone="none"
+          shape={{ timing: "all_day", start_date: "2026-11-10" }}
+        />,
+      );
+
+      expect(screen.getByText("Open now")).toBeInTheDocument();
+      expect(screen.getByText(/^Closes 6:15\sPM$/)).toBeInTheDocument();
+    });
+
+    it("says the day check-in opens, not 11:50 PM the night before", () => {
+      clock.now = new Date(2026, 10, 9, 12).getTime();
+      renderAllDay();
+
+      expect(screen.getByText("Opens tomorrow")).toBeInTheDocument();
+    });
+  });
 });

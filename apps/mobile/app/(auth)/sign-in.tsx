@@ -17,11 +17,11 @@ import {
   cooldownCopy,
   describeEmailSendError,
   describePasswordSignInError,
+  EMAIL_CODE_COPY,
   EMAIL_RESEND_COOLDOWN_SECONDS,
   emailCooldownSeconds,
   isEmailNotConfirmed,
   OAUTH_MEMBERSHIP_HINT,
-  UNCONFIRMED_EMAIL_COPY,
 } from "@repo/hooks/auth-error-copy";
 import { AuthMethod, useAuthSession } from "@/lib/auth-session";
 import {
@@ -32,6 +32,7 @@ import {
 import { AppleMark, GoogleMark } from "@/components/auth/oauth-brand-icons";
 import { SignInMoments } from "@/components/auth/sign-in-moments";
 import { BackRow } from "@/components/back-row";
+import { EmailCodeStep } from "@/components/onboarding/email-code-step";
 import {
   OnboardingFieldLabel,
   OnboardingTextInput,
@@ -59,7 +60,7 @@ export default function SignIn() {
     callbackError,
     isConfigured,
     resendConfirmation,
-    sendMagicLink,
+    sendEmailCode,
     signInWithOAuthProvider,
     signInWithPassword,
     status,
@@ -82,57 +83,43 @@ export default function SignIn() {
   const [submitting, setSubmitting] = useState(false);
   const [oauthPending, setOauthPending] = useState<OAuthProvider | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [magicLinkSentTo, setMagicLinkSentTo] = useState<string | null>(null);
   /**
    * Refusals are told in Frapp's words (`@repo/hooks/auth-error-copy`), never
-   * GoTrue's sentence (#3833). A refusal that isn't a failure, such as a
-   * magic link asked for inside the email minute, is a notice, not an error.
+   * GoTrue's sentence (#3833). A refusal that isn't a failure is a notice,
+   * not an error.
    */
   const [notice, setNotice] = useState<string | null>(null);
   /**
-   * The address whose password matched but was never confirmed: a member who
-   * made a password account on web and opened the app before the email. The
-   * app has no sign-up of its own, so it offers to send the email again.
+   * The code box (#6134), once an email went out: `sign-in` after Email me a
+   * code, `confirm` for an address whose password matched but was never
+   * confirmed (a member who made a password account on web and opened the
+   * app before typing the code; the app has no sign-up of its own).
    */
-  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(
-    null,
-  );
-  const [resending, setResending] = useState(false);
-  /**
-   * GoTrue's email minute is per address, so the count belongs to the
-   * address it was started for; another unconfirmed address can send now.
-   */
-  const [resendWait, setResendWait] = useState<{
+  const [codeStep, setCodeStep] = useState<{
+    kind: "sign-in" | "confirm";
     email: string;
-    seconds: number;
+    cooldown: number;
+    notice: string | null;
   } | null>(null);
   const passwordRef = useRef<TextInput>(null);
-  // A sign-in, a link or a resend in flight: nothing new starts, and the
+  // A sign-in or a code request in flight: nothing new starts, and the
   // form can't close under a late result.
-  const busy = submitting || resending;
+  const busy = submitting;
 
-  useEffect(() => {
-    if (!resendWait || resendWait.seconds <= 0) return undefined;
-    const timer = setTimeout(
-      () =>
-        setResendWait((wait) =>
-          wait ? { ...wait, seconds: wait.seconds - 1 } : wait,
-        ),
-      1000,
-    );
-    return () => clearTimeout(timer);
-  }, [resendWait]);
-
-  // Android's back button and back gesture close the email form, as its
-  // `‹ Back` row does, instead of leaving s01 (the `(auth)` anchor) and
-  // backgrounding the app. While a sign-in or a resend is in flight both are
-  // held, so a late result can't land on the provider view.
+  // Android's back button and back gesture step back as the screen's own
+  // controls do: from the code box to the email form, and from the form to
+  // the providers, instead of leaving s01 (the `(auth)` anchor) and
+  // backgrounding the app. While a sign-in is in flight both are held, so a
+  // late result can't land on the provider view.
   useEffect(() => {
     if (!emailOpen) return undefined;
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (!busy) {
+        if (busy) return true;
+        if (codeStep) {
+          setCodeStep(null);
+        } else {
           setEmailOpen(false);
           clearMessages();
         }
@@ -140,13 +127,12 @@ export default function SignIn() {
       },
     );
     return () => subscription.remove();
-  }, [emailOpen, busy]);
+  }, [emailOpen, busy, codeStep]);
 
   function clearMessages() {
     setAuthError(null);
     setNotice(null);
-    setMagicLinkSentTo(null);
-    setUnconfirmedEmail(null);
+    setCodeStep(null);
   }
 
   if (status === "authenticated") {
@@ -190,64 +176,50 @@ export default function SignIn() {
         return;
       }
 
-      await sendMagicLink({ email: normalizedEmail });
-      setMagicLinkSentTo(normalizedEmail);
+      await sendEmailCode({ email: normalizedEmail });
+      setCodeStep({
+        kind: "sign-in",
+        email: normalizedEmail,
+        cooldown: EMAIL_RESEND_COOLDOWN_SECONDS,
+        notice: null,
+      });
     } catch (error) {
       if (method === "password") {
         if (isEmailNotConfirmed(error)) {
-          setUnconfirmedEmail(normalizedEmail);
-          setAuthError(UNCONFIRMED_EMAIL_COPY);
+          // No password gets past this: the code from the sign-up email
+          // does, or a new one sent from the code box.
+          setPassword("");
+          setCodeStep({
+            kind: "confirm",
+            email: normalizedEmail,
+            cooldown: 0,
+            notice: null,
+          });
         } else {
           setAuthError(describePasswordSignInError(error));
         }
         return;
       }
-      // Inside GoTrue's one-email minute a link already went out.
+      // Inside GoTrue's one-email minute a code already went out, and it
+      // still works.
       const cooldown = emailCooldownSeconds(error);
-      if (cooldown !== undefined) setNotice(cooldownCopy(cooldown));
-      else setAuthError(describeEmailSendError(error));
+      if (cooldown !== undefined) {
+        setCodeStep({
+          kind: "sign-in",
+          email: normalizedEmail,
+          cooldown: Math.max(1, cooldown),
+          notice: cooldownCopy(cooldown),
+        });
+      } else setAuthError(describeEmailSendError(error));
     } finally {
       setSubmitting(false);
     }
   }
 
-  const resendSecondsLeft =
-    resendWait && resendWait.email === unconfirmedEmail ? resendWait.seconds : 0;
-
-  async function handleResend() {
-    if (!unconfirmedEmail || busy || resendSecondsLeft > 0) return;
-    setResending(true);
-    setAuthError(null);
-    setNotice(null);
-    try {
-      await resendConfirmation({ email: unconfirmedEmail });
-      setResendWait({
-        email: unconfirmedEmail,
-        seconds: EMAIL_RESEND_COOLDOWN_SECONDS,
-      });
-      setNotice(
-        `We sent a new link to ${unconfirmedEmail}. Open it on this phone to finish signing in.`,
-      );
-    } catch (error) {
-      const cooldown = emailCooldownSeconds(error);
-      if (cooldown !== undefined) {
-        setResendWait({
-          email: unconfirmedEmail,
-          seconds: Math.max(cooldown, 1),
-        });
-        setNotice(cooldownCopy(cooldown));
-      } else {
-        setAuthError(describeEmailSendError(error));
-      }
-    } finally {
-      setResending(false);
-    }
-  }
-
   /**
    * The Sign in button and the keyboard's return key both submit through here,
-   * so return is held to the button's guard: while a sign-in, a magic link or
-   * an OAuth kickoff is in flight the button is disabled, and return does
+   * so return is held to the button's guard: while a sign-in, a code request
+   * or an OAuth kickoff is in flight the button is disabled, and return does
    * nothing either.
    */
   function submit() {
@@ -330,8 +302,9 @@ export default function SignIn() {
     <>
       {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
       {notice ? <Text style={styles.successText}>{notice}</Text> : null}
-      {/* A dead magic link lands back here; without this the member cannot
-        tell a broken link from one they never tapped. */}
+      {/* A dead email link (one from before #6134, or production's
+        transition-era template) lands back here; without this the member
+        cannot tell a broken link from one they never tapped. */}
       {!authError && callbackError ? (
         <Text style={styles.errorText}>{callbackError}</Text>
       ) : null}
@@ -392,7 +365,39 @@ export default function SignIn() {
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
-          {emailOpen ? (
+          {emailOpen && codeStep ? (
+            <View style={styles.emailColumn}>
+              <EmailCodeStep
+                key={`${codeStep.kind}:${codeStep.email}`}
+                email={codeStep.email}
+                screen="/sign-in"
+                title={
+                  codeStep.kind === "confirm"
+                    ? EMAIL_CODE_COPY.confirmTitle
+                    : EMAIL_CODE_COPY.sentTitle
+                }
+                lead={
+                  codeStep.kind === "confirm"
+                    ? EMAIL_CODE_COPY.unconfirmed(codeStep.email)
+                    : undefined
+                }
+                initialCooldownSeconds={codeStep.cooldown}
+                initialNotice={codeStep.notice}
+                resend={() =>
+                  codeStep.kind === "confirm"
+                    ? resendConfirmation({ email: codeStep.email })
+                    : sendEmailCode({ email: codeStep.email })
+                }
+                // Signed in: the auth gate owns the next hop.
+                backLabel={
+                  codeStep.kind === "confirm"
+                    ? "Back to sign in"
+                    : EMAIL_CODE_COPY.differentEmail
+                }
+                onBack={() => setCodeStep(null)}
+              />
+            </View>
+          ) : emailOpen ? (
             <View style={styles.emailColumn}>
               {/* The board's s02 `‹ Back`, in house gold: sign-in has no
                 chapter accent to take. */}
@@ -418,8 +423,8 @@ export default function SignIn() {
                   keyboardType="email-address"
                   textContentType="username"
                   // Password mode: return moves to the password field, keeping
-                  // the keyboard up. Magic-link mode has no field after this
-                  // one, so return sends the link, as the button would.
+                  // the keyboard up. Email-code mode has no field after this
+                  // one, so return sends the code, as the button would.
                   returnKeyType={authMode === "password" ? "next" : "send"}
                   submitBehavior={
                     authMode === "password" ? "submit" : "blurAndSubmit"
@@ -454,22 +459,22 @@ export default function SignIn() {
                 </OnboardingPressable>
                 <OnboardingPressable
                   accessibilityRole="button"
-                  accessibilityState={{ selected: authMode === "magic_link" }}
-                  onPress={() => setAuthMode("magic_link")}
+                  accessibilityState={{ selected: authMode === "email_code" }}
+                  onPress={() => setAuthMode("email_code")}
                   style={[
                     styles.modeButton,
-                    authMode === "magic_link" ? styles.modeButtonActive : null,
+                    authMode === "email_code" ? styles.modeButtonActive : null,
                   ]}
                 >
                   <Text
                     style={[
                       styles.modeButtonText,
-                      authMode === "magic_link"
+                      authMode === "email_code"
                         ? styles.modeButtonTextActive
                         : null,
                     ]}
                   >
-                    Magic link
+                    Email code
                   </Text>
                 </OnboardingPressable>
               </View>
@@ -491,39 +496,14 @@ export default function SignIn() {
                 </View>
               ) : (
                 <Text style={styles.helperText}>
-                  We&apos;ll email you a link that signs you in on this device.
+                  We&apos;ll email you a 6-digit code to sign in.
                 </Text>
               )}
 
               {messages}
-              {/* Only for the address that was refused: an edited email is a
-                different account, and Sign in asks about it afresh. */}
-              {unconfirmedEmail &&
-              unconfirmedEmail === email.trim().toLowerCase() ? (
-                <OnboardingSecondaryButton
-                  label={
-                    resending
-                      ? "Sending…"
-                      : resendSecondsLeft > 0
-                        ? `Resend email in ${resendSecondsLeft}s`
-                        : "Resend email"
-                  }
-                  disabled={busy || resendSecondsLeft > 0}
-                  onPress={() => {
-                    void handleResend();
-                  }}
-                />
-              ) : null}
-              {magicLinkSentTo ? (
-                <Text style={styles.successText}>
-                  Link sent to {magicLinkSentTo}. Open it on this device to
-                  finish signing in.
-                </Text>
-              ) : null}
-
               {/* The onboarding primary, so a press shows and the wait is a
                 spinner. The busy label is what a screen reader hears over it,
-                and names what is running: a magic link isn't a sign-in yet. */}
+                and names what is running: a code request isn't a sign-in yet. */}
               <View style={styles.primaryWrap}>
                 <OnboardingPrimaryButton
                   label={
@@ -532,8 +512,8 @@ export default function SignIn() {
                         ? "Signing in…"
                         : "Sign in"
                       : submitting
-                        ? "Sending link…"
-                        : "Email me a link"
+                        ? "Sending code…"
+                        : "Email me a code"
                   }
                   disabled={busy}
                   busy={submitting}

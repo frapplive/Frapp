@@ -20,8 +20,8 @@ import { NEW_INTENT_PARAM } from "@/components/layout/new-intent";
  * `directory-page.tsx`'s `?tab=` pattern).
  *
  * Only a chat URL names chat's target (#3779). The panel stays mounted beside
- * every tool page, and a page's own `?channel=` (`/settings?tab=chat&channel=`
- * is the channel editor's) must not steer it. Off a chat URL the panel keeps the
+ * every tool page, and a page's own `?channel=`
+ * (`/settings?tab=chat&page=chat-admin&channel=` is the channel editor's) must not steer it. Off a chat URL the panel keeps the
  * target it last had, so going from a linked message to a tool page does not
  * read as the link being cleared.
  */

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEventWhenOr } from "@repo/formatting";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, X } from "lucide-react";
@@ -128,7 +129,7 @@ export function WelcomeCard({
           onClick={close}
           aria-label={WELCOME_CARD_COPY.close}
           className={cn(
-            "-mr-2 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11",
+            "-mr-2 -mt-1 inline-flex h-control-small w-control-small shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11",
             FOCUS_RING,
           )}
         >
@@ -149,7 +150,9 @@ export function WelcomeCard({
                 {event.name}
               </span>
               <span className="shrink-0 text-muted-foreground">
-                {welcomeCardEventWhen(event.start_time, new Date())}
+                {formatEventWhenOr(event, (start) =>
+                  welcomeCardEventWhen(start, new Date()),
+                )}
               </span>
             </Link>
           </li>

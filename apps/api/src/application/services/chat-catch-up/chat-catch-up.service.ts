@@ -481,7 +481,8 @@ export class ChatCatchUpService {
    * Step 4 for messages a caller already holds (#4900): a search's hits,
    * from channels the caller has checked this reader can open. Which of
    * them a model may be shown, by the same rule as a stretch, with the
-   * author's name.
+   * author's name. A reply under a recruitment candidate's card is dropped
+   * here, as a stretch's read drops it, and is not counted as left out.
    *
    * With the chapter's chat switch off nothing is read and nothing is
    * counted as left out, as in {@link readStretch}: `chatOff` says why, so
@@ -501,10 +502,22 @@ export class ChatCatchUpService {
     ) {
       return { messages: [], leftOut: 0, withheld: [], chatOff: true };
     }
-    if (rows.length === 0) {
+    // A reply under a recruitment candidate's card is talk about a
+    // prospect, which no model reads (`spec/behavior/ai.md`): the stretch
+    // reads leave it out in the repository, and this read of rows a caller
+    // found itself must too, so a search can return thread replies (#5180).
+    const rush = await this.stretches.findRushRootIds([
+      ...new Set(
+        rows.flatMap((row) => (row.thread_root_id ? [row.thread_root_id] : [])),
+      ),
+    ]);
+    const kept = rows.filter(
+      (row) => row.thread_root_id === null || !rush.has(row.thread_root_id),
+    );
+    if (kept.length === 0) {
       return { messages: [], leftOut: 0, withheld: [], chatOff: false };
     }
-    const { messages, leftOut, withheld } = await this.readable(reader, rows);
+    const { messages, leftOut, withheld } = await this.readable(reader, kept);
     return { messages, leftOut, withheld, chatOff: false };
   }
 

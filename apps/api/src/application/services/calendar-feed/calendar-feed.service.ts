@@ -8,7 +8,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isModuleEnabled } from '@repo/validation';
+import {
+  EVENT_TIME_TBD_LABEL,
+  eventDayNumber,
+  eventTiming,
+  isModuleEnabled,
+} from '@repo/validation';
 import { CALENDAR_FEED_REPOSITORY } from '#domain/repositories/calendar-feed.repository.interface';
 import type { ICalendarFeedRepository } from '#domain/repositories/calendar-feed.repository.interface';
 import { CHAPTER_REPOSITORY } from '#domain/repositories/chapter.repository.interface';
@@ -26,7 +31,7 @@ import { RbacService } from '../rbac.service';
 import { memberAttendance } from '../event-role-targeting';
 import { apiBaseUrl } from '../discord-oauth.service';
 import { resolveAppOrigin } from '../../../infrastructure/email/invite-link.util';
-import { buildIcsCalendar, type IcsItem } from './ics';
+import { buildIcsCalendar, type IcsItem, type IcsWhen } from './ics';
 import { calendarFeedTokenKeyRing } from '../../../config/calendar-feed-config';
 import {
   AiTextCipherError,
@@ -342,21 +347,30 @@ export class CalendarFeedService implements OnApplicationBootstrap {
     const url = `${this.appOrigin}/events?${new URLSearchParams({
       event: event.id,
     }).toString()}`;
+    const when = eventWhen(event);
+    const tbd = when.kind === 'day' && eventTiming(event) === 'time_tbd';
     return {
       uid: `event-${event.id}@frapp.live`,
-      when: { kind: 'instant', start: event.start_time, end: event.end_time },
+      when,
       summary: event.name,
       location: event.location,
-      description: describe(url, [
-        required ? 'Required' : null,
-        event.description,
-      ]),
+      description: describe(
+        url,
+        [
+          // Nobody is required at an event on the calendar only (#6098).
+          required && !event.calendar_only ? 'Required' : null,
+          event.description,
+        ],
+        tbd ? EVENT_TIME_TBD_LABEL : null,
+      ),
       url,
+      ...(event.is_tentative ? { tentative: true } : {}),
     };
   }
 
   private taskItem(task: TaskView & { due_date: string }): IcsItem {
-    const url = `${this.appOrigin}/tasks`;
+    // The task in its panel on the web app's Activity (#5948).
+    const url = `${this.appOrigin}/activity?task=${encodeURIComponent(task.id)}`;
     return {
       uid: `task-${task.id}@frapp.live`,
       // A task with a time sits at that moment, as a calendar shows a
@@ -486,13 +500,44 @@ function describeFailure(error: unknown): string {
 }
 
 /**
- * The description a calendar shows: the link back to Frapp first (Google
- * shows `URL` to the calendar's owner only, and not in every view), then the
- * rest, blank-line separated.
+ * When an event sits on a calendar (#6098). A dated one (all day, or time
+ * TBD) is whole days, `start_date` through `end_date`, never its stored
+ * instants, which are only the saving request's midnights; time TBD is its
+ * one day. A dated row whose days don't read falls back to its instants.
  */
-function describe(url: string, parts: (string | null)[]): string {
+function eventWhen(event: Event): IcsWhen {
+  const timing = eventTiming(event);
+  const start = event.start_date;
+  if (timing !== 'timed' && start && eventDayNumber(start) !== null) {
+    const end =
+      timing === 'all_day' &&
+      event.end_date &&
+      eventDayNumber(event.end_date) !== null &&
+      event.end_date > start
+        ? event.end_date
+        : undefined;
+    return end
+      ? { kind: 'day', date: start, endDate: end }
+      : { kind: 'day', date: start };
+  }
+  return { kind: 'instant', start: event.start_time, end: event.end_time };
+}
+
+/**
+ * The description a calendar shows: `lead` when there is one ("Time TBD",
+ * which a member must see before anything else), the link back to Frapp
+ * (Google shows `URL` to the calendar's owner only, and not in every view),
+ * then the rest, blank-line separated.
+ */
+function describe(
+  url: string,
+  parts: (string | null)[],
+  lead: string | null = null,
+): string {
   const rest = parts
     .map((part) => part?.trim())
     .filter((part): part is string => !!part);
-  return [`Open in Frapp: ${url}`, ...rest].join('\n\n');
+  return [...(lead ? [lead] : []), `Open in Frapp: ${url}`, ...rest].join(
+    '\n\n',
+  );
 }

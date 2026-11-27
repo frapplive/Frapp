@@ -1,7 +1,7 @@
 import { TaskStatus, type TaskView } from '#domain/entities/task.entity';
 import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import { localDateIn } from '#domain/utils/zoned-time';
-import { longDateTime, longDay } from './chapter-tool-kit';
+import { longDateTime, longDay, quoted, type People } from './chapter-tool-kit';
 
 /** How a task's due day and state are read, by both task tools (#4901). */
 
@@ -55,4 +55,22 @@ export function latestFinishFirst(
   b: Pick<TaskView, 'confirmed_at'>,
 ): number {
   return (b.confirmed_at ?? '').localeCompare(a.confirmed_at ?? '');
+}
+
+/**
+ * "Assigned by Avery Lin", or null for a task its owner gave themselves.
+ * The same words in `my_tasks` and `chapter_tasks` (#5180).
+ */
+export function assignedByPart(
+  task: Pick<TaskView, 'created_by' | 'assignee_id'>,
+  people: Pick<People, 'name'>,
+): string | null {
+  return task.created_by && task.created_by !== task.assignee_id
+    ? `Assigned by ${people.name(task.created_by)}`
+    : null;
+}
+
+/** `About: "…"`, the task's description, or null when it has none. */
+export function aboutPart(task: Pick<TaskView, 'description'>): string | null {
+  return task.description ? `About: ${quoted(task.description)}` : null;
 }

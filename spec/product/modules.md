@@ -2,7 +2,7 @@
 
 ## Identity & Access (IAM)
 
-**Auth provider:** Supabase Auth (email/password, magic link, Google, Apple).
+**Auth provider:** Supabase Auth (email/password, email code, Google, Apple).
 
 - **Multi-tenancy:** Every user belongs to one or more chapters (tenants). All data access is strictly scoped by `chapter_id`.
 - **RBAC:** Permissions are open-ended strings. Frapp publishes a system permissions catalog that the API enforces; chapters can define additional custom permission strings for channel gating and organizational use. **Custom permission strings are chapter-scoped — they cannot grant system-level or cross-chapter capabilities.** A chapter's custom `admin:all` (or any other string) applies only inside that chapter; the API never consults a chapter's custom permissions when authorizing platform or cross-chapter operations. Roles are chapter-scoped and fully customizable. System roles are seeded on chapter creation with sensible defaults; [`spec/behavior/rbac.md` § Role Lifecycle](../behavior/rbac.md#role-lifecycle) names them and their exact seeded permission sets. Full permission catalog and check algorithm: [`spec/behavior/rbac.md`](../behavior/rbac.md).
@@ -213,8 +213,8 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Chat | `chat` | Channels, DMs, reactions, pins, threads |
 | Members | `members` | Roster, profiles, custom fields, alumni status |
 | Announcements | `announcements` | Exec-write, member-read broadcast channel |
-| Audit Log | `audit-log` | Member-visible officer action history |
-| Chapter Settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
+| Logs | `audit-log` | Member-visible officer action history |
+| Chapter settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
 
 ## Paid integrations (gated by subscription)
 
@@ -231,7 +231,7 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
-| Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
+| Study zones | `geofences` | The places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
 | Meetings | `meetings` | Minutes written by hand, or drafted from notes or a recording, with suggested tasks and one template per chapter ([`spec/behavior/meetings.md`](../behavior/meetings.md)) |
 | AI Q&A | `ai` | Ask-anything over meeting minutes, documents, structured data, announcements, and channel messages from members who agreed ([`spec/behavior/ai.md`](../behavior/ai.md)) |
 
@@ -261,7 +261,7 @@ A line shows only to an officer who can do it, and only while the module the ser
 
 Nobody is sent to a feature that is on but that nobody has set up yet, when its screen could only say so. Two features qualify, and the web nav and the mobile You tab leave them out until the first item exists:
 
-- **Study hours** with no active study zone hides from everyone. _(Since #5950, 2026-11-24, neither list has a Study hours row to hide: web reads a member's sessions on their Profile, whose Study hours door is drawn only once they have a session, and the phone opens Study from the This semester gauge and New. The rule below stands for any entry point that comes back.)_ Zones are made on the web app's Chapter settings Study zones page (`/settings?tab=geofences`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
+- **Study hours** with no active study zone hides from everyone. _(Since #5950, 2026-11-24, neither list has a Study hours row to hide: web reads a member's sessions on their Profile, whose Study hours door is drawn only once they have a session, and the phone opens Study from the This semester gauge and New. The rule below stands for any entry point that comes back.)_ Zones are made on the web app's zone list, which the Chapter settings Study zones page's Zones row opens (`/settings?tab=geofences&page=study-zones`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
 - **Documents** with nothing in it hides from a viewer without `chapter_docs:upload`. Whoever can upload keeps it, because the upload is on that screen.
 
 The rule is shared by both clients (`useHiddenUnsetFeatures` in `@repo/hooks`), and it reads a feature's list only for a viewer it could hide the feature from, and only while the list's module is on. Nothing hides while the viewer's permissions, the chapter's modules or the list are still loading, or after the list's read fails: a row hides on a read that answers "none", or on its list's module being off. Only the entry points hide: the routes stay open, so a link into one still lands.

@@ -30,6 +30,7 @@ export { localClock, localIsoDate } from "./local-date";
 export {
   formatDay,
   formatDayHeading,
+  formatDayWords,
   formatDayRange,
   formatDayTime,
   formatDayTimeRange,
@@ -51,6 +52,18 @@ export {
   isDueOverdue,
 } from "./display";
 export {
+  ALL_DAY_CHECK_IN_OPEN,
+  allDayCheckInWords,
+  type EventWhenFields,
+  eventChipWords,
+  eventDatedWord,
+  formatEventDayTime,
+  formatEventRelativeWhen,
+  formatEventRowTime,
+  formatEventWhen,
+  formatEventWhenOr,
+} from "./event-when";
+export {
   type DateLean,
   dueEntryFields,
   dueEntryFromTask,
@@ -63,6 +76,7 @@ export {
 } from "./date-entry";
 export { nextUpLine } from "./next-up";
 export {
+  datedDaysThisYear,
   lastYearBareDay,
   lastYearDay,
   nameForThisYear,

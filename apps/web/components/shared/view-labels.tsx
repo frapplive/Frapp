@@ -143,7 +143,7 @@ export function ViewLabels<T extends string>({
             className={cn(
               // The Row step to a mouse, 44 on touch. The transparent border
               // is what `FOCUS_RING` turns solid.
-              "grid min-h-8 place-items-center whitespace-nowrap rounded-sm border border-transparent px-1.5 text-label transition-colors pointer-coarse:min-h-11",
+              "grid min-h-control-row place-items-center whitespace-nowrap rounded-sm border border-transparent px-1.5 text-label transition-colors pointer-coarse:min-h-11",
               held
                 ? "cursor-default font-semibold text-foreground"
                 : "font-normal text-muted hover:text-muted-foreground",

@@ -19,6 +19,11 @@ import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { STORAGE_PROVIDER } from '#domain/adapters/storage.interface';
 import { SupabaseStorageService } from '../../infrastructure/storage/supabase-storage.service';
+import { AiModule } from '../ai/ai.module';
+import { TaskExtensionService } from '../../application/services/task-extension/task-extension.service';
+import { TaskExtensionReasonService } from '../../application/services/task-extension/task-extension-reason.service';
+import { TASK_EXTENSION_REQUEST_REPOSITORY } from '#domain/repositories/task-extension-request.repository.interface';
+import { SupabaseTaskExtensionRequestRepository } from '../../infrastructure/supabase/repositories/supabase-task-extension-request.repository';
 
 @Module({
   // ChatModule → ChatService (posts the /task card); AuthModule → USER_REPOSITORY
@@ -33,6 +38,8 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
     ChapterModule,
     // A task's attachments must be the chapter's own records.
     FrappLinkCheckModule,
+    // Judging a reason for more time (#6096).
+    AiModule,
   ],
   controllers: [TaskController, OpenTaskController],
   providers: [
@@ -43,6 +50,13 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
     // for grabs (2026-11-18).
     TaskAudienceService,
     OpenTaskService,
+    // Asking for more time on a task (#6096).
+    TaskExtensionService,
+    TaskExtensionReasonService,
+    {
+      provide: TASK_EXTENSION_REQUEST_REPOSITORY,
+      useClass: SupabaseTaskExtensionRequestRepository,
+    },
     { provide: OPEN_TASK_REPOSITORY, useClass: SupabaseOpenTaskRepository },
     { provide: TASK_REPOSITORY, useClass: SupabaseTaskRepository },
     { provide: MEMBER_REPOSITORY, useClass: SupabaseMemberRepository },
@@ -54,6 +68,12 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
   // An accepted suggestion for "someone" posts a task up for grabs
   // (AiSuggestionModule). Ask's task card checks who a task may be from
   // (ActModule, 2026-11-22).
-  exports: [TaskService, OpenTaskService, TaskAudienceService],
+  // Activity's Needs you lists the waiting requests for more time (#6096).
+  exports: [
+    TaskService,
+    OpenTaskService,
+    TaskAudienceService,
+    TaskExtensionService,
+  ],
 })
 export class TaskModule {}

@@ -18,6 +18,8 @@ export { useMediaQueryState } from "@/lib/use-media-query";
  * - **The open page is the URL** (`/events`), so links and Back work as they
  *   always did. `/chat` is "no page": the conversation alone. `/messages` is
  *   the Messages page, the member's conversations listed beside the open one.
+ *   What opens inside a page (a folder, a record, a named view) is in its
+ *   query (`spec/ui/web-dashboard/README.md` § Addresses, `lib/address/`).
  * - **Chat open or closed beside a page is a cookie**, and so is the docked
  *   conversation's width, both read by the dashboard layout on the server so
  *   the first paint is right. They live in `shell-prefs.ts`, which the server
@@ -103,16 +105,21 @@ export function isAskRoute(pathname: string | null): boolean {
   );
 }
 
+/** The routes `isFullWidthToolRoute` gives the whole row, each with its subroutes. */
+const FULL_WIDTH_TOOL_ROUTES = ["/settings", "/preferences"] as const;
+
 /**
  * Tool routes that take the whole row: chat hides beside them and comes back
  * on leaving (decision 3 of #4068, Paul 2026-11-10). Chapter settings is a
  * grouped rail beside a form; beside chat at a 1280px window its Chapter form
- * was about 150px wide. Chat's open state is left alone, so the next tool
- * page finds it where the member left it.
+ * was about 150px wide. Personal Settings joined it on Paul's pick of
+ * 2026-11-25 (#6032): beside chat its rail wrapped into lines of words, and
+ * both Settings pages now share one frame. Chat's open state is left alone,
+ * so the next tool page finds it where the member left it.
  */
 export function isFullWidthToolRoute(pathname: string | null): boolean {
-  return (
-    pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"))
+  return FULL_WIDTH_TOOL_ROUTES.some(
+    (route) => pathname === route || Boolean(pathname?.startsWith(`${route}/`)),
   );
 }
 

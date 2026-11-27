@@ -92,7 +92,9 @@ async function lastKnownFix(): Promise<LocationFix | null> {
     });
     if (!position) return null;
     const accuracy = position.coords.accuracy;
-    return typeof accuracy === "number" && Number.isFinite(accuracy) && accuracy > 0
+    return typeof accuracy === "number" &&
+      Number.isFinite(accuracy) &&
+      accuracy > 0
       ? {
           lat: position.coords.latitude,
           lng: position.coords.longitude,

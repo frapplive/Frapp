@@ -69,12 +69,8 @@ export class SupabaseChatCatchUpRepository implements IChatCatchUpRepository {
       .neq('content', '');
   }
 
-  /**
-   * Which of these thread roots are a recruitment candidate's card. The
-   * replies under one are talk about a prospect, and no rush data reaches a
-   * model (`spec/behavior/ai.md`), so a stretch leaves them out.
-   */
-  private async rushRootIds(
+  /** {@link IChatCatchUpRepository.findRushRootIds}; a stretch here uses it too. */
+  async findRushRootIds(
     rootIds: readonly string[],
   ): Promise<ReadonlySet<string>> {
     if (rootIds.length === 0) return new Set();
@@ -149,7 +145,7 @@ export class SupabaseChatCatchUpRepository implements IChatCatchUpRepository {
       .limit(input.limit);
     if (error) throw new SupabaseQueryError(error);
     const fetched = (data ?? []) as Row[];
-    const rush = await this.rushRootIds([
+    const rush = await this.findRushRootIds([
       ...new Set(
         fetched
           .map((row) => row.thread_root_id)
@@ -188,7 +184,7 @@ export class SupabaseChatCatchUpRepository implements IChatCatchUpRepository {
     const row = data as unknown as CatchUpMessagePlace;
     if (
       row.thread_root_id !== null &&
-      (await this.rushRootIds([row.thread_root_id])).size > 0
+      (await this.findRushRootIds([row.thread_root_id])).size > 0
     ) {
       return null;
     }

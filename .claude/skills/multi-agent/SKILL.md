@@ -1,40 +1,28 @@
 ---
 name: multi-agent
 description: >
-  Size and shape multi-agent work in this repo: a Workflow script, a subagent fan-out, or an
-  ultracode run. Use before authoring or launching a Workflow, before fanning out more than two
-  subagents, and when deciding how many verifiers a claim needs or what effort an agent runs at.
-  Covers the agent budget, which review may be big, per-agent effort, worktrees, pinned SHAs, and
-  reading a workflow's results.
+  Facts and mechanics for multi-agent work in this repo: a Workflow script, a subagent fan-out, or
+  an ultracode run. Use before authoring or launching a Workflow or a sizeable fan-out, and when
+  choosing what effort an agent runs at. Covers what agents cost, what effort they really run at,
+  worktrees, pinned SHAs, and reading a workflow's results. Sizing is the session's judgment.
 ---
 
-# Multi-agent work: budget, effort, mechanics
+# Multi-agent work: cost, effort, mechanics
 
-Paul runs almost every session with ultracode. The harness then tells the model to use the
-Workflow tool on every substantive task and says "token cost is not a constraint". (It also pinned
-the session to `xhigh` effort until Claude Code 2.1.284; § Effort.) In this repo those defaults
-yield to the rules below. The loop stays:
-discover or code, then verify independently. What this skill limits is how many agents that takes
-and how hard each one thinks. Decision and evidence: [ADR-23](../../../spec/architecture/adr/adr-23.md).
+Since 2026-11-27 (Paul; [ADR-23](../../../spec/architecture/adr/adr-23.md) amendment 3) a session
+sizes its own fan-outs and sets its own subagent effort. There is no agent cap, and the repo sets no
+`workflowSizeGuideline`. This skill keeps what's worth knowing when you choose: what things cost,
+what effort an agent really runs at, and the mechanics that bite.
 
-## Budget
+## Cost
 
-- **`/diff-review` is the one review allowed to be big.** It gates every push. A branch's first
-  review runs through the saved workflow `frapp-review`, whose shape is fixed in code; later rounds
-  are inline unless they are large enough to count as new work. Don't hand-write a review workflow
-  for a diff, and don't layer another review on top of the gate (a lens pass, an "adversarial"
-  re-review of a fix).
-- **Everything else stays small.** `workflowSizeGuideline: "medium"` in `.claude/settings.json` has
-  the harness tell the model to keep a workflow under 10 agents; it is advisory, not a cap. On top
-  of it, use at most 5 agents in any one fan-out step; nothing enforces that but this rule.
-  Ultracode lifts neither, and most steps need 1 to 3.
-- **One agent covers several angles, files or claims.** Split only when each piece needs its own
-  heavy context.
-- **Verification outside the gate is one opinion.** Where a procedure calls for an independent
-  verdict, batch up to 5 claims into one `claim-verifier` and don't add a second verifier. Don't
-  spawn subagents to re-check your own work.
-- **A fix round is a fix plus the gate.** Fix inline, or with one agent, then run `/diff-review`,
-  which decides how much to review again (§1 of its skill). Don't add a review of your own.
+- **`/diff-review` is the review gate.** A branch's first review runs through the saved workflow
+  `frapp-review`, whose shape is fixed in code. Another review on top of it is your call; weigh it
+  against what the gate already covered.
+- **An agent pays for its own context.** One agent can cover several angles, files or claims, and
+  splitting pays when each piece needs its own heavy context or the pieces can run in parallel.
+- **Every launch re-reads.** A subagent starts cold, so a check you can do with a few tool calls is
+  usually cheaper done inline.
 
 ## Effort
 
@@ -52,13 +40,13 @@ from the `"effort"` field in subagent transcripts:
 | Workflow `agent()` with no `effort` | the session's (xhigh) |
 | Agent tool, any type, with no `effort` in its agent file (as loaded at session start) | the session's (xhigh) |
 
-- **In a workflow, pass `effort` on every `agent()` call.** Use `medium` by default and `high` for
-  finders and hard judgment calls. Never use `xhigh` or `max`.
+- **In a workflow, an `agent()` without `effort` runs at the session's level.** Pass one when the
+  task needs less (or more) thinking than the session runs at.
 - **The Agent tool has no effort parameter.** `diff-finder` and `claim-verifier` pin theirs in
   frontmatter (`high` and `medium`), and the frontmatter wins: in a session running at `xhigh`
   (2026-09-30), `diff-finder` ran at `high` and `claim-verifier` at `medium`. Built-in types
-  (`general-purpose`, `Explore`) always inherit, so in a session at `xhigh` run reading fan-outs as a
-  workflow with explicit `effort`.
+  (`general-purpose`, `Explore`) always inherit; a workflow with explicit `effort` is the way to run
+  them at another level.
 - **Choosing a session's level.** Anthropic's guidance for Opus 5.5 (the Claude API skill bundled
   with Claude Code 2.1.285, § Migrating to Claude Opus 5.5 → Choosing an effort level, read
   2026-09-30): the default `medium` matched or beat Opus 5 at `high` on agentic coding in

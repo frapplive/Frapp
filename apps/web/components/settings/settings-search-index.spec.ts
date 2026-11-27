@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SETTINGS_INDEX } from "@repo/hooks/settings-search";
-import { MODULE_SETTINGS } from "./settings-modules";
+import { MODULE_SETTINGS } from "@repo/hooks/module-settings";
 
 /**
  * The search index in `@repo/hooks` names each module page by hand, so this

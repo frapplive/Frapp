@@ -27,6 +27,7 @@ import {
 } from './chapter-tool-kit';
 import {
   ambiguityNote,
+  choiceNote,
   ATTENDANCE_WORDS,
   eventHeadline,
   findEvent,
@@ -84,7 +85,8 @@ export class EventAttendanceAgentTool implements AgentReadTool<Args> {
     if (!event) {
       return nothing(
         context,
-        'No event fits that. The events tool lists the calendar.',
+        choiceNote(foundEvent, context.timeZone) ??
+          'No event fits that. The events tool lists the calendar.',
       );
     }
     const [rows, roster] = await Promise.all([
@@ -96,7 +98,7 @@ export class EventAttendanceAgentTool implements AgentReadTool<Args> {
         context,
         [
           'Nobody has been marked for that event: nobody has checked in, and absences are marked after check-in closes.',
-          ambiguityNote(foundEvent),
+          ambiguityNote(foundEvent, context.timeZone),
         ]
           .filter(Boolean)
           .join(' '),
@@ -156,7 +158,7 @@ export class EventAttendanceAgentTool implements AgentReadTool<Args> {
         ? `${count(cut, 'more member')} not listed here. The counts above include them.`
         : null;
     const notes = [
-      ambiguityNote(foundEvent),
+      ambiguityNote(foundEvent, context.timeZone),
       cutLine ? `Showing ${shown.length} of ${lines.length} members.` : null,
     ].filter(Boolean);
     return found(

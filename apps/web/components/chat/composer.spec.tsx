@@ -1492,11 +1492,11 @@ describe("Composer help and controls (#2142)", () => {
     expect(help).toHaveTextContent("/ for commands. @ to mention.");
   });
 
-  it("sends from a round 32px arrow, mobile's send (principles.md P6.5)", () => {
+  it("sends from a round Row-step arrow, mobile's send (principles.md P6.5)", () => {
     render(<Composer {...baseProps()} />);
 
     const send = screen.getByRole("button", { name: "Send message" });
-    expect(send.className).toContain("h-8");
+    expect(send.className).toContain("h-control-row");
     expect(send.className).toContain("rounded-full");
     expect(send.querySelector("svg")).not.toBeNull();
     expect(send).not.toHaveTextContent("Send");
@@ -2694,6 +2694,29 @@ describe("Composer in the audit log", () => {
     expect(
       screen.queryByText("This channel is read-only for your role."),
     ).not.toBeInTheDocument();
+  });
+});
+
+// #6006: a timed-out member reads until when, and the reason, where the
+// editor would be; the server refuses their post either way.
+describe("Composer while timed out", () => {
+  it("shows the timeout in place of the editor", () => {
+    render(
+      <Composer
+        {...baseProps({
+          canPost: true,
+          timeoutNotice: {
+            title: "You're timed out until 3:40 PM",
+            detail: "Reason: spamming",
+          },
+        })}
+      />,
+    );
+    expect(
+      screen.getByText("You're timed out until 3:40 PM"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Reason: spamming")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 });
 

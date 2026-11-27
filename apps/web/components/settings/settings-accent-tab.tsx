@@ -263,14 +263,14 @@ export function SettingsAccentTab({
             onPick={draft.update}
             disabled={!canEditProfile}
           />
-          <p className={`${EYEBROW} text-muted-foreground`}>Custom color</p>
+          <p className={`${EYEBROW} text-muted`}>Custom color</p>
           <div className="flex flex-wrap items-center gap-4">
             <Input
               type="color"
               aria-label="Accent color picker"
               value={accentDraftHex || accent.resolvedAccent}
               onChange={(event) => draft.update(event.target.value)}
-              className="h-10 w-24 p-1 pointer-coarse:h-11"
+              className="h-control-field w-24 p-1 pointer-coarse:h-11"
             />
             <Input
               aria-label="Accent color hex value"
@@ -305,7 +305,7 @@ export function SettingsAccentTab({
               (#4388, `settings-contrast.spec.ts`).
             */}
             <div
-              className="flex h-10 w-36 items-center justify-center rounded-md text-sm font-semibold pointer-coarse:h-11"
+              className="flex h-control-field w-36 items-center justify-center rounded-md text-sm font-semibold pointer-coarse:h-11"
               style={{
                 backgroundColor: accent.resolvedAccent,
                 color: previewInk,

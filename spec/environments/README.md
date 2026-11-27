@@ -159,7 +159,7 @@ Three consequences worth holding together:
   Missing the file blocks every production migration and fails `migration-order` on every
   migration-bearing PR.
 - **Moving the API to another Google Cloud project, or recreating a Vercel project, means changing its id
-  in this file.** The deploy, `production-guardrails.yml` and `production-release-pin.yml` all read it from here, and the format
+  in this file.** The deploy, `production-guardrails.yml`, `production-release-pin.yml` and `desktop-release.yml` (which writes the desktop releases bucket in the production project) all read it from here, and the format
   check can't tell an old id from a new one, so a stale id deploys to, or asserts against, the object
   that was replaced.
 - **`check-migration-drift.yml` deliberately still reads its refs from Infisical.** Pointing it at the

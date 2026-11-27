@@ -92,6 +92,15 @@ import {
 } from './push-copy';
 import { displayNameFor, notifyQuietly } from './task-push';
 import { instantOrThrow } from './instant-bound';
+import {
+  extensionStillFits,
+  extensionSummary,
+} from '#domain/utils/task-extension';
+import type { TaskExtensionRequest } from '#domain/entities/task-extension-request.entity';
+import {
+  TASK_EXTENSION_REQUEST_REPOSITORY,
+  type ITaskExtensionRequestRepository,
+} from '#domain/repositories/task-extension-request.repository.interface';
 import { planSeriesStart, readTaskRule } from './task-series-schedule';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
@@ -106,17 +115,6 @@ const TASKS_BUCKET = 'tasks';
  */
 function taskPhotoPrefix(chapterId: string): string {
   return `chapters/${chapterId.toLowerCase()}/tasks/`;
-}
-
-/** Where a task stands for an action item of minutes (`doneMarks`). */
-export interface TaskDoneMark {
-  done: boolean;
-  /** A task for everyone: how many of its copies are done. */
-  group: { done: number; total: number } | null;
-  /** The display status, a group's read as one. */
-  status: TaskStatus;
-  /** Who has it: its member, or every copy's. */
-  assignee_ids: string[];
 }
 
 const VALID_ASSIGNEE_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
@@ -208,6 +206,24 @@ export type TaskRowListOptions = TaskListOptions &
     withTotal?: boolean;
   };
 
+/**
+ * Whether a task is done, for the minutes' checkbox (`doneMarks`), and who
+ * it went to, for an officer's row (#6051).
+ */
+export interface TaskDoneMark {
+  done: boolean;
+  /** A task for everyone: how many of its copies are done. */
+  group: { done: number; total: number } | null;
+  who: {
+    /** A task for everyone's audience; null for a task for one member. */
+    audience: TaskGroupSummary['audience'] | null;
+    /** The role's, group's or tier's name, when it went to one. */
+    audience_name: string | null;
+    /** The member, or the named people of a task for several. */
+    assignee_ids: string[];
+  };
+}
+
 /** A copy's state with its display status, as a group row reads it (#5492). */
 export type TaskGroupCopyView = TaskGroupCopyState & {
   stored_status: TaskStatus;
@@ -281,6 +297,8 @@ export interface CreateTaskInput {
   reference_photo_paths?: string[];
   /** What Mark done needs (#4635). Default `none`. */
   proof_kind?: TaskProofKind;
+  /** A fixed deadline: no extensions (#6096). Default false. */
+  fixed_deadline?: boolean;
   /**
    * The minutes the task was suggested from (#5562). Set only by accepting
    * a suggestion from minutes; never from the HTTP body.
@@ -315,6 +333,8 @@ export interface UpdateTaskInput {
    */
   reference_photo_paths?: string[];
   proof_kind?: TaskProofKind;
+  /** A fixed deadline: no extensions (#6096). */
+  fixed_deadline?: boolean;
   /**
    * The tier, role or group the task is from (#5473), or null for nobody.
    * A new one must name one the editor is in.
@@ -368,6 +388,8 @@ export class TaskService {
     @Inject(OPEN_TASK_REPOSITORY)
     private readonly openTaskRepo: IOpenTaskRepository,
     private readonly links: FrappLinkChecker,
+    @Inject(TASK_EXTENSION_REQUEST_REPOSITORY)
+    private readonly extensionRepo: ITaskExtensionRequestRepository,
   ) {}
 
   /**
@@ -602,52 +624,56 @@ export class TaskService {
   }
 
   /**
-   * Where each of these tasks stands, for an action item of minutes (#6062):
-   * done, its display status, and who has it. A group's copies are read as
-   * one: done when every copy is, overdue when an open copy is, started
-   * when any copy is done or under way, and its people are every copy's.
-   * Ids that are not this chapter's tasks are left out.
+   * Whether each of these tasks is done, by task id, in two reads whatever
+   * the count: a task for everyone is done once every copy is (#4295 step 3),
+   * and comes with its counts. Tasks that no longer exist are left out. For
+   * the checkboxes on posted minutes; `who` (who it went to) is for the
+   * callers that may show it, an officer who manages tasks (#6051).
    */
   async doneMarks(
     chapterId: string,
     ids: string[],
-    now: Date = new Date(),
   ): Promise<Map<string, TaskDoneMark>> {
     const tasks = await this.taskRepo.findByIds(chapterId, [...new Set(ids)]);
-    const groupIds = [
-      ...new Set(
-        tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
-      ),
-    ];
-    const copies =
-      groupIds.length > 0
-        ? await this.taskRepo.findGroupCopyStates(chapterId, groupIds)
-        : [];
+    const { summaries: groups, copies } = await this.readGroups(
+      chapterId,
+      tasks,
+    );
+    // Each group's people, read once however many of its copies are asked.
+    const assigneesOf = new Map<string, string[]>();
+    for (const copy of copies) {
+      if (!copy.group_id) continue;
+      const list = assigneesOf.get(copy.group_id) ?? [];
+      list.push(copy.assignee_id);
+      assigneesOf.set(copy.group_id, list);
+    }
     const marks = new Map<string, TaskDoneMark>();
     for (const task of tasks) {
-      const own = task.group_id
-        ? copies.filter((copy) => copy.group_id === task.group_id)
-        : [task];
-      const statuses = own.map((copy) => displayStatusOf(copy, now));
-      const doneCount = statuses.filter(
-        (status) => status === TaskStatus.COMPLETED,
-      ).length;
-      const done = own.length > 0 && doneCount === own.length;
+      const summary = task.group_id ? groups.get(task.group_id) : undefined;
+      const group = summary
+        ? { done: summary.done, total: summary.total }
+        : null;
       marks.set(task.id, {
-        done,
-        group: task.group_id ? { done: doneCount, total: own.length } : null,
-        status: done
-          ? TaskStatus.COMPLETED
-          : statuses.includes(TaskStatus.OVERDUE)
-            ? TaskStatus.OVERDUE
-            : doneCount > 0 || statuses.includes(TaskStatus.IN_PROGRESS)
-              ? TaskStatus.IN_PROGRESS
-              : TaskStatus.TODO,
-        assignee_ids: [
-          ...new Set(
-            own.flatMap((copy) => (copy.assignee_id ? [copy.assignee_id] : [])),
-          ),
-        ],
+        done: group
+          ? group.total > 0 && group.done >= group.total
+          : task.status === TaskStatus.COMPLETED,
+        group,
+        who: summary
+          ? {
+              audience: summary.audience,
+              audience_name: summary.target_name,
+              // Named people only: a role, a group or everyone is said by
+              // its name, however many copies it has.
+              assignee_ids:
+                summary.audience === 'people'
+                  ? (assigneesOf.get(summary.id) ?? [])
+                  : [],
+            }
+          : {
+              audience: null,
+              audience_name: null,
+              assignee_ids: [task.assignee_id],
+            },
       });
     }
     return marks;
@@ -673,15 +699,34 @@ export class TaskService {
   ): Promise<TaskView[]> {
     if (tasks.length === 0) return tasks;
     const ids = tasks.map((task) => task.id);
-    const [subtasks, withPhotos, series, groups, claimedFrom, followers] =
-      await Promise.all([
-        this.taskRepo.findSubtasks(chapterId, ids),
-        this.withPhotos(chapterId, tasks),
-        this.seriesSummaries(chapterId, tasks),
-        this.groupSummaries(chapterId, tasks),
-        this.openTaskRepo.findClaimedFrom(chapterId, ids),
-        this.followerNames(chapterId, tasks),
-      ]);
+    const [
+      subtasks,
+      withPhotos,
+      series,
+      groups,
+      claimedFrom,
+      followers,
+      extensions,
+    ] = await Promise.all([
+      this.taskRepo.findSubtasks(chapterId, ids),
+      this.withPhotos(chapterId, tasks),
+      this.seriesSummaries(chapterId, tasks),
+      this.groupSummaries(chapterId, tasks),
+      this.openTaskRepo.findClaimedFrom(chapterId, ids),
+      this.followerNames(chapterId, tasks),
+      // A failed read of the requests costs the line, never the task read.
+      this.extensionRepo
+        .latestForTasks(chapterId, ids)
+        .catch((error: unknown) => {
+          reportCaughtFailure(this.logger, {
+            level: 'warning',
+            site: 'task-read-extensions',
+            message: `could not read extension requests for ${ids.length} tasks`,
+            error,
+          });
+          return new Map<string, TaskExtensionRequest>();
+        }),
+    ]);
     const byTask = new Map<string, TaskSubtask[]>();
     for (const subtask of subtasks) {
       const list = byTask.get(subtask.task_id) ?? [];
@@ -697,7 +742,69 @@ export class TaskService {
       followed_by_name: task.followed_by
         ? (followers.get(task.followed_by) ?? null)
         : null,
+      // Only the current assignee's own request (#6096): after a hand-over
+      // the old assignee's reason and its answer aren't the new one's.
+      extension: extensionSummary(
+        extensions.get(task.id)?.requester_id === task.assignee_id
+          ? extensions.get(task.id)
+          : null,
+      ),
     }));
+  }
+
+  /**
+   * The chapter's requests for more time waiting on an officer (#6096), with
+   * each task as Activity's rows read it, for every `tasks:manage` holder but
+   * the member who asked, oldest first. A request its task has moved past
+   * (done, handed over, re-dated or fixed) is left out.
+   */
+  async waitingExtensions(
+    chapterId: string,
+    viewerId: string,
+    limit: number,
+  ): Promise<{ request: TaskExtensionRequest; task: TaskView }[]> {
+    // The viewer's own requests are left out by the read itself, so they
+    // never take one of the `limit` places.
+    const pending = await this.extensionRepo.listPending(
+      chapterId,
+      limit,
+      viewerId,
+    );
+    if (pending.length === 0) return [];
+    const tasks = await this.taskRepo.findByIds(
+      chapterId,
+      pending.map((row) => row.task_id),
+    );
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    return pending.flatMap((request) => {
+      const task = byId.get(request.task_id);
+      return task && extensionStillFits(task, request)
+        ? [{ request, task: toDisplayStatus(task) }]
+        : [];
+    });
+  }
+
+  /**
+   * Marks the tasks the reader is assigned with whether they can't ask for
+   * more time (#6096): one read of their membership, only when the list
+   * holds one of their own.
+   */
+  async withViewerStanding<T extends TaskView>(
+    chapterId: string,
+    userId: string,
+    views: T[],
+  ): Promise<T[]> {
+    if (!views.some((view) => view.assignee_id === userId)) return views;
+    // Unknown counts as able to ask: the API still refuses a blocked ask.
+    const standing = await this.extensionRepo
+      .standing(chapterId, userId)
+      .catch(() => null);
+    const blocked = !!standing?.blocked_at;
+    return views.map((view) =>
+      view.assignee_id === userId
+        ? { ...view, extension_requests_blocked: blocked }
+        : view,
+    );
   }
 
   /**
@@ -739,17 +846,34 @@ export class TaskService {
     chapterId: string,
     tasks: Task[],
   ): Promise<Map<string, TaskGroupSummary>> {
+    return (await this.readGroups(chapterId, tasks)).summaries;
+  }
+
+  /**
+   * {@link groupSummaries}, with the copies it counted, for a caller that
+   * also names a group's people (`doneMarks`, #6051).
+   */
+  private async readGroups(
+    chapterId: string,
+    tasks: Task[],
+  ): Promise<{
+    summaries: Map<string, TaskGroupSummary>;
+    copies: TaskGroupCopyState[];
+  }> {
     const ids = [
       ...new Set(
         tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
       ),
     ];
-    if (ids.length === 0) return new Map();
+    if (ids.length === 0) return { summaries: new Map(), copies: [] };
     const [groups, copies] = await Promise.all([
       this.taskRepo.findGroups(chapterId, ids),
       this.taskRepo.findGroupCopyStates(chapterId, ids),
     ]);
-    return this.summarize(chapterId, groups, copies);
+    return {
+      summaries: await this.summarize(chapterId, groups, copies),
+      copies,
+    };
   }
 
   /**
@@ -977,9 +1101,10 @@ export class TaskService {
             ...(follows.length > 0 ? { orFollowedBy: follows } : {}),
           }),
     });
-    const views = await this.withSubtasks(
+    const views = await this.withViewerStanding(
       chapterId,
-      toDisplayStatusList(tasks),
+      userId,
+      await this.withSubtasks(chapterId, toDisplayStatusList(tasks)),
     );
     return isAdmin
       ? views
@@ -1022,6 +1147,9 @@ export class TaskService {
       proof_link: null,
       completion_note: null,
       sent_back_reason: null,
+      // Why the assignee asked for more time is theirs and the officers'
+      // too (#6096).
+      extension: null,
       ...(view.photos
         ? { photos: view.photos.filter((photo) => photo.kind === 'reference') }
         : {}),
@@ -1303,6 +1431,7 @@ export class TaskService {
           latest_due_at: repeat.latest_due_at,
           next_due_date: repeat.next_due_date,
           attachments,
+          fixed_deadline: input.fixed_deadline ?? false,
         })
       : await this.taskRepo.create({
           chapter_id: input.chapter_id,
@@ -1318,6 +1447,7 @@ export class TaskService {
           completed_at: null,
           confirmed_at: null,
           proof_kind: input.proof_kind ?? 'none',
+          ...(input.fixed_deadline ? { fixed_deadline: true } : {}),
           ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
           ...(followedBy ? { followed_by: followedBy } : {}),
           ...(attachments.length > 0 ? { attachments } : {}),
@@ -1445,6 +1575,7 @@ export class TaskService {
       ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
       followed_by: followedBy,
       attachments,
+      fixed_deadline: input.fixed_deadline ?? false,
     });
 
     await this.notifyEachAssigned(copies, input.created_by);
@@ -1919,6 +2050,13 @@ export class TaskService {
       patch.proof_kind = input.proof_kind;
     }
 
+    if (
+      input.fixed_deadline !== undefined &&
+      input.fixed_deadline !== task.fixed_deadline
+    ) {
+      patch.fixed_deadline = input.fixed_deadline;
+    }
+
     if (input.attachments !== undefined) {
       const stored = task.attachments ?? [];
       const next =
@@ -2020,6 +2158,18 @@ export class TaskService {
       throw new BadRequestException(
         'This task was confirmed while you were editing it, so it can no longer change',
       );
+    }
+
+    // A request for more time waiting on the task no longer fits it once
+    // an officer moves its due, fixes it or hands it over (#6096). Approving
+    // one decides it before moving the due, so this never closes that one.
+    if (
+      reassigned ||
+      'due_date' in patch ||
+      'due_at' in patch ||
+      patch.fixed_deadline === true
+    ) {
+      await this.closeWaitingExtension(chapterId, id);
     }
 
     if (reassigned || 'due_date' in patch || 'due_at' in patch) {
@@ -2364,11 +2514,36 @@ export class TaskService {
       );
     }
 
+    // A request for more time waiting on it no longer fits a task marked
+    // done (#6096): it is closed, not left for an officer to find.
+    await this.closeWaitingExtension(chapterId, task.id);
     await this.notifyTaskCompleted(updated, userId, chapterId, {
       photoCount: photos.length,
       resubmitted: !!task.sent_back_at,
     });
     return this.viewWithPhotos(chapterId, updated);
+  }
+
+  /**
+   * Closes the task's waiting request for more time, as `withdrawn` (#6096,
+   * tasks.md § Asking for more time): the task was marked done, re-dated,
+   * given a fixed deadline or handed over first. The change stands if it
+   * fails; the request is then closed when an officer acts on it.
+   */
+  private async closeWaitingExtension(
+    chapterId: string,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      await this.extensionRepo.withdrawPending(chapterId, taskId);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'task-withdraw-extension',
+        message: `could not close the waiting extension on task ${taskId}`,
+        error,
+      });
+    }
   }
 
   /**

@@ -211,7 +211,7 @@ export function ArrivalCategories({
     >
       <h3
         id="discord-import-arrived-categories"
-        className={cn(EYEBROW, "text-muted-foreground")}
+        className={cn(EYEBROW, "text-muted")}
       >
         By Discord category
       </h3>

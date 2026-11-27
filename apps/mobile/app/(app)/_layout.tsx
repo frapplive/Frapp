@@ -178,15 +178,44 @@ export default function AppLayout() {
         name="arrange-channels"
         options={{ title: SCREEN_TITLES["arrange-channels"] }}
       />
+      {/* One channel's settings (#6031), from a channel row's Edit channel. */}
+      <Stack.Screen
+        name="channel-settings"
+        options={{ title: SCREEN_TITLES["channel-settings"] }}
+      />
       {/* Chapter settings and its Roles screens (#4074), from Chat home's chapter menu. */}
       <Stack.Screen
         name="chapter-settings"
         options={{ title: SCREEN_TITLES["chapter-settings"] }}
       />
+      {/* The pages Chapter settings' Chapter rows push (#6027), as web's
+          Chapter tab opens them behind `?page=`. */}
+      <Stack.Screen
+        name="chapter-mark"
+        options={{ title: SCREEN_TITLES["chapter-mark"] }}
+      />
+      <Stack.Screen
+        name="chapter-identity"
+        options={{ title: SCREEN_TITLES["chapter-identity"] }}
+      />
+      <Stack.Screen
+        name="chapter-type"
+        options={{ title: SCREEN_TITLES["chapter-type"] }}
+      />
+      <Stack.Screen
+        name="chapter-vocabulary"
+        options={{ title: SCREEN_TITLES["chapter-vocabulary"] }}
+      />
       {/* The record of officer changes (Paul, 2026-11-21), from Chapter settings. */}
       <Stack.Screen
         name="chapter-logs"
         options={{ title: SCREEN_TITLES["chapter-logs"] }}
+      />
+      {/* A module's screen and its own screens (#6030), from Chapter
+          settings' Modules group, as web's module pages open behind `?page=`. */}
+      <Stack.Screen
+        name="module-settings"
+        options={{ title: SCREEN_TITLES["module-settings"] }}
       />
       <Stack.Screen
         name="chapter-roles"

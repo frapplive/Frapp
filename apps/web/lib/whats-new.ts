@@ -24,6 +24,7 @@ import { useSyncExternalStore } from "react";
 import {
   RELEASE_NOTES,
   isLaterReleaseNoteVersion,
+  releaseNoteDay,
   releaseNoteVersion,
   type ReleaseNote,
 } from "@repo/validation";
@@ -66,9 +67,10 @@ function recordWhatsNewSeen(version: string): void {
  * Whether the account existed before `note` reached members: the web's
  * `existingInstall`. An account made on the entry's day or later never saw
  * the app without those changes, so they aren't news. `createdAt` is the
- * account's ISO timestamp; its UTC day is compared with the entry's date, and
- * an account whose age is unknown counts as new (missing one What's new is a
- * smaller failure than greeting a new member with a changelog).
+ * account's ISO timestamp; its day in the zone the fold dates an entry in
+ * (`releaseNoteDay`, #6054) is compared with the entry's date, and an account
+ * whose age is unknown counts as new (missing one What's new is a smaller
+ * failure than greeting a new member with a changelog).
  */
 export function accountPredatesNote(
   createdAt: string | null | undefined,
@@ -77,7 +79,7 @@ export function accountPredatesNote(
   if (!createdAt) return false;
   const time = Date.parse(createdAt);
   if (Number.isNaN(time)) return false;
-  return new Date(time).toISOString().slice(0, 10) < note.date;
+  return releaseNoteDay(new Date(time)) < note.date;
 }
 
 // ── Unread ──────────────────────────────────────────────────────────────────

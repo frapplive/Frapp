@@ -131,7 +131,7 @@ function createStyles(tokens: SignetTokens) {
     headText: { flex: 1, minWidth: 0, gap: 2 },
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     since: {
       ...typeRole(tokens.typography.role.caption),

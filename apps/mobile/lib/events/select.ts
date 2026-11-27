@@ -21,17 +21,27 @@ import {
 import {
   attendanceFieldsOf,
   checkInOpensMinutes,
+  eventTakesAttendance,
+  eventTimingFieldsOf,
   readEventAgenda,
   readFrappLinks,
   type EventAgendaItem,
   type EventAttachment,
   type EventAttendanceFields,
+  type EventTimingFields,
 } from "@repo/validation";
 import { parseInstant } from "@repo/formatting";
 import { isRecord, str } from "@/lib/more/narrow";
 import { isCurrentOrUpcoming, sortEventsByStart } from "./format";
 
-export interface EventRow {
+/**
+ * An event's shape rides on every row (#6098): `timing`, its zone-free days,
+ * `is_tentative` and `calendar_only` (`eventTimingFieldsOf`). A dated event's
+ * `start_time` and `end_time` are the saver's midnights, kept for sorting and
+ * range reads only: every screen shows its days (`@repo/formatting`'s
+ * `event-when.ts`), never those instants.
+ */
+export interface EventRow extends EventTimingFields {
   id: string;
   name: string;
   location: string | null;
@@ -119,6 +129,7 @@ function toRow(row: Record<string, unknown>): EventRow | null {
     attendance: attendanceFieldsOf(row),
     recurrence_rule: str(row, "recurrence_rule"),
     parent_event_id: str(row, "parent_event_id"),
+    ...eventTimingFieldsOf(row),
   };
 }
 
@@ -133,7 +144,19 @@ function toRow(row: Record<string, unknown>): EventRow | null {
  */
 export function selectEventRows(data: unknown, now: Date): EventRow[] {
   return selectAllEventRows(data).filter((row) =>
-    isCurrentOrUpcoming(row.start_time, row.end_time, now),
+    isCurrentOrUpcoming(row.start_time, row.end_time, now, row),
+  );
+}
+
+/**
+ * The event an officer would host check-in for, for You's Host check-in row
+ * and the quick-actions host: the soonest of {@link selectEventRows} that
+ * takes attendance. A time-TBD or calendar-only event takes none (#6144), so
+ * a TBD retreat tomorrow never stands in for tonight's meeting.
+ */
+export function selectHostableEvent(data: unknown, now: Date): EventRow | null {
+  return (
+    selectEventRows(data, now).find((row) => eventTakesAttendance(row)) ?? null
   );
 }
 

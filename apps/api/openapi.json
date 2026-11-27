@@ -12394,6 +12394,88 @@
         ]
       }
     },
+    "/v1/tasks/extension-requests/blocked": {
+      "get": {
+        "description": "Each was granted 3 extensions in 30 days. An officer restores one with `POST /v1/tasks/extension-requests/restore`.",
+        "operationId": "TaskController_listBlockedFromExtensions_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedFromExtensionsDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Members who can't ask for more time (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/extension-requests/restore": {
+      "post": {
+        "description": "Clears the block 3 extensions in 30 days put on them; extensions granted before now stop counting. 404 when they could already ask.",
+        "operationId": "TaskController_restoreExtensions_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreTaskExtensionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Let a member ask for more time again (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
     "/v1/tasks/{id}": {
       "get": {
         "operationId": "TaskController_getOne_v1",
@@ -12822,6 +12904,183 @@
           }
         ],
         "summary": "Reject task completion (revert to IN_PROGRESS)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests": {
+      "post": {
+        "description": "The task's assignee only (403 otherwise), on an open task with a due date and no fixed deadline (400 `task.extension_fixed_deadline`), while they may ask (403 `task.extension_blocked` after 3 extensions in 30 days). One waiting request per task (409 `task.extension_waiting`). A due later than the task's and still to come: a time on a task due at a time, a day on one due by a day. Up to a day with a reason AI judges valid is approved at once and moves the due; anything else waits on an officer, who is told.",
+        "operationId": "TaskController_requestExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestTaskExtensionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ask for more time on a task (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests/{requestId}/approve": {
+      "post": {
+        "description": "Moves the task's due through the officer's edit, so the reminders re-arm, and tells the member. Not your own request (403). 409 when someone answered first, or when the task changed since they asked (done, handed over, re-dated or fixed: `task.extension_stale`, and the request is closed).",
+        "operationId": "TaskController_approveExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a request for more time (#6096)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{id}/extension-requests/{requestId}/decline": {
+      "post": {
+        "description": "The due stays and the member is told why. The same refusals as approving.",
+        "operationId": "TaskController_declineExtension_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineTaskExtensionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideTaskExtensionResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Decline a request for more time, with a reason (#6096)",
         "tags": [
           "Tasks"
         ]
@@ -13421,6 +13680,192 @@
         ]
       }
     },
+    "/v1/ai/consent": {
+      "get": {
+        "description": "The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.",
+        "operationId": "AiConsentController_getConsent_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConsentStateDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get what Meet Frapp Intelligence shows and the caller’s answer",
+        "tags": [
+          "AI"
+        ]
+      },
+      "put": {
+        "description": "Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.",
+        "operationId": "AiConsentController_answerConsent_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerAiConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConsentStateDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "409": {
+            "description": "The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/v1/ai/settings": {
+      "get": {
+        "description": "Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.",
+        "operationId": "AiChapterSettingsController_getSettings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChapterSettingsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the chapter’s AI switches",
+        "tags": [
+          "AI"
+        ]
+      },
+      "patch": {
+        "description": "President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.",
+        "operationId": "AiChapterSettingsController_updateSettings_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiChapterSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChapterSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not the chapter’s president (`ai.settings.president_only`)."
+          },
+          "404": {
+            "description": "AI is off on this server (`ai.not_available`)."
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Turn the chapter’s AI features on or off",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
     "/v1/tenants/resolve": {
       "get": {
         "description": "Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.",
@@ -13821,7 +14266,7 @@
             "bearer": []
           }
         ],
-        "summary": "Which action items of posted minutes became tasks: whether each is done, its status, and who has it; the task id only for a viewer who can manage tasks. Empty for a draft",
+        "summary": "Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051)",
         "tags": [
           "Meetings"
         ]
@@ -13870,7 +14315,7 @@
             }
           },
           "409": {
-            "description": "The minutes changed since they were read, or another officer made the item a task at the same moment"
+            "description": "The minutes changed since they were read, or the item is a task already (another officer made it at the same moment, or it was accepted up for grabs)"
           },
           "default": {
             "description": "Error",
@@ -13888,7 +14333,7 @@
             "bearer": []
           }
         ],
-        "summary": "Make an action item of posted minutes a task, assigned to these members (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion",
+        "summary": "Make an action item of posted minutes a task for these members, when no suggestion is waiting for it (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion. The service also checks Meetings is on",
         "tags": [
           "Meetings"
         ]
@@ -13940,192 +14385,6 @@
         "summary": "The action items still open across one repeating meeting’s posted minutes, newest first: open until the task each became is done (#5482)",
         "tags": [
           "Meetings"
-        ]
-      }
-    },
-    "/v1/ai/consent": {
-      "get": {
-        "description": "The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.",
-        "operationId": "AiConsentController_getConsent_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiConsentStateDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get what Meet Frapp Intelligence shows and the caller’s answer",
-        "tags": [
-          "AI"
-        ]
-      },
-      "put": {
-        "description": "Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.",
-        "operationId": "AiConsentController_answerConsent_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AnswerAiConsentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiConsentStateDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "409": {
-            "description": "The sheet changed since it was shown (`ai.consent.stale_sheet`): read it again."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)",
-        "tags": [
-          "AI"
-        ]
-      }
-    },
-    "/v1/ai/settings": {
-      "get": {
-        "description": "Which AI features are on for the chapter: Ask, meeting notes, chat as a source, and nudges. All on until the president turns one off; `updated_at` is null until then. `can_change` says whether the caller is the president, who alone may change them.",
-        "operationId": "AiChapterSettingsController_getSettings_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiChapterSettingsDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get the chapter’s AI switches",
-        "tags": [
-          "AI"
-        ]
-      },
-      "patch": {
-        "description": "President only. Each change is recorded in the audit log and mirrored to #chapter-audit; a switch turned off stops that feature’s next call.",
-        "operationId": "AiChapterSettingsController_updateSettings_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAiChapterSettingsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiChapterSettingsDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller is not the chapter’s president (`ai.settings.president_only`)."
-          },
-          "404": {
-            "description": "AI is off on this server (`ai.not_available`)."
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Turn the chapter’s AI features on or off",
-        "tags": [
-          "AI"
         ]
       }
     },
@@ -14862,6 +15121,143 @@
         "summary": "Take one member out of a manual group",
         "tags": [
           "Groups"
+        ]
+      }
+    },
+    "/v1/chat/timeout": {
+      "get": {
+        "operationId": "ChatTimeoutController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTimeoutStateDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/v1/members/{id}/chat-timeout": {
+      "put": {
+        "operationId": "ChatTimeoutController_timeOut_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetChatTimeoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President.",
+        "tags": [
+          "Chat"
+        ]
+      },
+      "delete": {
+        "operationId": "ChatTimeoutController_lift_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lift a member's chat timeout early. Under the same rank rule as setting one.",
+        "tags": [
+          "Chat"
         ]
       }
     },
@@ -16430,6 +16826,550 @@
         "summary": "The PNM confirms the acceptance a member recorded, with one tap from the emailed link",
         "tags": [
           "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form": {
+      "get": {
+        "description": "Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.",
+        "operationId": "InterestFormController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's interest form, its QR codes and who it tells",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "patch": {
+        "operationId": "InterestFormController_update_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInterestFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open or close the form, or change its blurb, questions or contacts",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/labels": {
+      "post": {
+        "operationId": "InterestFormController_addLabel_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddInterestFormLabelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a QR source label",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/labels/{labelId}": {
+      "delete": {
+        "operationId": "InterestFormController_removeLabel_v1",
+        "parameters": [
+          {
+            "name": "labelId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a QR source label",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/replace": {
+      "post": {
+        "operationId": "InterestFormController_replace_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace the form: a new link, the old link and QR codes stop working",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/form": {
+      "get": {
+        "operationId": "InterestFormController_candidateForm_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateFormDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's newest interest-form submission: contact details and answers",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/interest-forms/withdrawal/preview": {
+      "post": {
+        "description": "The token rides the body, never a URL a log keeps. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.",
+        "operationId": "PublicInterestFormController_previewWithdrawal_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterestFormWithdrawTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormWithdrawalPreviewDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "What the \"Withdraw or delete my info\" link is for: the chapter, with no account needed",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/withdrawal": {
+      "post": {
+        "description": "Spends the token. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.",
+        "operationId": "PublicInterestFormController_withdraw_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterestFormWithdrawDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Withdraw from the chapter, or delete the recruitment information everywhere",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}": {
+      "get": {
+        "operationId": "PublicInterestFormController_get_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "src",
+            "required": false,
+            "in": "query",
+            "description": "The QR code's source label.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInterestFormDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "An interest form's public fields, with no account needed",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/code": {
+      "post": {
+        "description": "409 `interest_form.closed`; 400 `interest_form.email.invalid` or `interest_form.email.wrong_domain` (an address off the chapter's school domains); 409 `interest_form.verification_unavailable`; 429 `interest_form.code.cooldown` or `interest_form.code.rate_limited`; 503 `interest_form.code.send_failed`.",
+        "operationId": "PublicInterestFormController_startCode_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartInterestFormCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormCodeSentDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a one-time code to the address, before the form shows",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/verify": {
+      "post": {
+        "description": "400 `interest_form.code.missing`, `interest_form.code.expired` or `interest_form.code.wrong`; 429 `interest_form.code.too_many_attempts`.",
+        "operationId": "PublicInterestFormController_verify_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInterestFormCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormVerifiedDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check the code; answers the proof the submission spends",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/submissions": {
+      "post": {
+        "description": "400 `interest_form.proof.invalid` (expired or spent: verify again), `interest_form.consent.required` or `interest_form.answers.invalid`; 409 `interest_form.closed`.",
+        "operationId": "PublicInterestFormController_submit_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitInterestFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSubmittedDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Submit the form: the PNM joins the chapter's pipeline, and the council's master list once the link is accepted",
+        "tags": [
+          "Interest form"
         ]
       }
     },
@@ -18132,6 +19072,47 @@
         ]
       }
     },
+    "/v1/desktop/updates/{file}": {
+      "get": {
+        "operationId": "DesktopUpdateController_file_v1",
+        "parameters": [
+          {
+            "name": "file",
+            "required": true,
+            "in": "path",
+            "description": "A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "The download link, in `Location`"
+          },
+          "404": {
+            "description": "Not a file a release publishes"
+          },
+          "503": {
+            "description": "This API cannot reach the releases bucket"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A desktop release file or update feed: redirects to a time-limited download link",
+        "tags": [
+          "Desktop updates"
+        ]
+      }
+    },
     "/v1/channels/{channelId}/polls": {
       "post": {
         "operationId": "PollController_createPoll_v1",
@@ -19360,6 +20341,18 @@
             "required": false,
             "in": "query",
             "description": "`true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          },
+          {
+            "name": "extensions",
+            "required": false,
+            "in": "query",
+            "description": "`true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096).",
             "schema": {
               "type": "string",
               "enum": [
@@ -27872,6 +28865,21 @@
           "viewer_can_edit_profile": {
             "type": "boolean",
             "description": "Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads."
+          },
+          "viewer_can_timeout": {
+            "type": "boolean",
+            "description": "Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads."
+          },
+          "chat_timeout_until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout."
+          },
+          "chat_timeout_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reason the officer gave, under the same rule."
           }
         },
         "required": [
@@ -29111,6 +30119,35 @@
             "type": "string",
             "format": "date-time"
           },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
+          },
           "point_value": {
             "type": "number"
           },
@@ -29223,6 +30260,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -29272,6 +30314,35 @@
           "end_time": {
             "type": "string",
             "format": "date-time"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"
@@ -29389,6 +30460,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -29426,10 +30502,41 @@
             "maxLength": 500
           },
           "start_time": {
-            "type": "string"
+            "type": "string",
+            "description": "When a timed event starts. Required unless `timing` is `all_day` or `time_tbd`, whose bounds the server writes from `start_date`/`end_date`."
           },
           "end_time": {
-            "type": "string"
+            "type": "string",
+            "description": "When a timed event ends. Required unless `timing` is `all_day` or `time_tbd`."
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed. Omitted: timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative. Omitted: false."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. Omitted: false."
           },
           "point_value": {
             "type": "number",
@@ -29525,9 +30632,7 @@
           }
         },
         "required": [
-          "name",
-          "start_time",
-          "end_time"
+          "name"
         ]
       },
       "CreateEventResponseDto": {
@@ -29559,6 +30664,35 @@
           "end_time": {
             "type": "string",
             "format": "date-time"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"
@@ -29676,6 +30810,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -29716,6 +30855,33 @@
           },
           "end_time": {
             "type": "string"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed. Omitted leaves it, except that times sent without it make the event timed (a build from before all-day events only ever edits a time)."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"
@@ -29913,12 +31079,19 @@
           "mention_count": {
             "type": "number",
             "description": "Subset of unread_count that mentions the caller. Mentions are resolved server-side at send time."
+          },
+          "last_read_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The caller’s read cursor the counts were taken from; null for a channel they never opened. Places the thread’s “New messages” divider; never re-count from it."
           }
         },
         "required": [
           "channel_id",
           "unread_count",
-          "mention_count"
+          "mention_count",
+          "last_read_at"
         ]
       },
       "ForwardedGifDto": {
@@ -32786,7 +33959,7 @@
               "send_failed"
             ],
             "nullable": true,
-            "description": "Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message; `send_failed` it kept failing."
+            "description": "Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message, or the author was timed out when it came due; `send_failed` it kept failing."
           },
           "created_at": {
             "type": "string",
@@ -35090,6 +36263,36 @@
           "confirmed"
         ]
       },
+      "BlockedFromExtensionsDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blocked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "user_id",
+          "blocked_at"
+        ]
+      },
+      "RestoreTaskExtensionsDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The member to restore."
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
       "RequestTaskPhotoUploadUrlDto": {
         "type": "object",
         "properties": {
@@ -35295,6 +36498,10 @@
             ],
             "description": "What Mark done needs (#4635): `none` (default), `photo` (one or more proof photos) or `link`."
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): its assignee can never ask for more time, and the apps show it more urgent to them. Default false. A group's copies and a series' copies all carry it."
+          },
           "recurrence_rule": {
             "type": "string",
             "description": "Repeat on a schedule (#5119): the event rule format (`packages/validation/src/recurrence.ts`), `FREQ` DAILY, WEEKLY or MONTHLY, `INTERVAL` 1 to 30, `BYDAY` or `BYMONTHDAY`, a required `TZID` (the officer's zone), and `COUNT` (2 to 120), `UNTIL` (YYYYMMDD) or no end. Example: `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York`. The task is the first copy; the next is made once it is due, on the same time of day in that zone.",
@@ -35499,6 +36706,10 @@
               "$ref": "#/components/schemas/FrappLinkDto"
             }
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): never eligible for an extension, and shown more urgent to its assignee."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -35549,6 +36760,7 @@
           "meeting_id",
           "followed_by",
           "attachments",
+          "fixed_deadline",
           "created_at",
           "photos"
         ]
@@ -35631,6 +36843,10 @@
             ],
             "description": "What Mark done needs (#4635). Changing it doesn't touch a completion already waiting on an officer."
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): no extensions. Turning it on closes a request for more time still waiting on the task. With `scope: group` every copy not yet confirmed; with `scope: series` the copies still to come too."
+          },
           "followed_by": {
             "type": "string",
             "nullable": true,
@@ -35710,6 +36926,271 @@
             "description": "\"Ask for a photo next time\": raises the task's `proof_kind` to `photo`, so the next Mark done needs one."
           }
         }
+      },
+      "RequestTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "The day asked for (`YYYY-MM-DD`), later than the task's. For a task due at a time, the day of `due_at` as the member sees it."
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The moment asked for: required on a task due at a time, refused on one due by a day."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Why the member needs more time, in one short line."
+          }
+        },
+        "required": [
+          "due_date",
+          "reason"
+        ]
+      },
+      "TaskExtensionSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "declined",
+              "withdrawn"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer; null when it was approved automatically."
+          },
+          "auto_approved": {
+            "type": "boolean"
+          },
+          "decline_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "auto_approved",
+          "decline_reason",
+          "decided_at",
+          "created_at"
+        ]
+      },
+      "RequestTaskExtensionResponseDto": {
+        "type": "object",
+        "properties": {
+          "extension": {
+            "$ref": "#/components/schemas/TaskExtensionSummaryDto"
+          },
+          "now_blocked": {
+            "type": "boolean",
+            "description": "True when this extension made 3 in 30 days: the member can't ask again until an officer restores it."
+          }
+        },
+        "required": [
+          "extension",
+          "now_blocked"
+        ]
+      },
+      "TaskExtensionRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "declined",
+              "withdrawn"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer; null when it was approved automatically."
+          },
+          "auto_approved": {
+            "type": "boolean"
+          },
+          "decline_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requester_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ai_verdict": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "invalid"
+            ],
+            "nullable": true,
+            "description": "What AI made of the reason; null when it wasn't asked (over a day, a second request, back to back) or couldn't answer."
+          },
+          "ai_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "decided_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "auto_approved",
+          "decline_reason",
+          "decided_at",
+          "created_at",
+          "chapter_id",
+          "task_id",
+          "requester_id",
+          "ai_verdict",
+          "ai_note",
+          "decided_by"
+        ]
+      },
+      "DecideTaskExtensionResponseDto": {
+        "type": "object",
+        "properties": {
+          "extension": {
+            "$ref": "#/components/schemas/TaskExtensionRequestDto"
+          }
+        },
+        "required": [
+          "extension"
+        ]
+      },
+      "DeclineTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Why not, shown to the member."
+          }
+        },
+        "required": [
+          "reason"
+        ]
       },
       "OpenTaskDto": {
         "type": "object",
@@ -36135,6 +37616,190 @@
         "required": [
           "assignee_id"
         ]
+      },
+      "AiConsentSheetProviderDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "google",
+              "assemblyai"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "The company's own name, shown as is.",
+            "example": "Anthropic"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ]
+      },
+      "AiConsentSheetDataKindDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "questions",
+              "chapter_records",
+              "roster",
+              "channel_messages",
+              "meetings"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "What is sent, in words a client shows as is.",
+            "example": "Questions you ask"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ]
+      },
+      "AiConsentSheetDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "description": "The sheet version. Send it back with the answer; a new version asks everyone again.",
+            "example": 1
+          },
+          "providers": {
+            "description": "Every provider member data is sent to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConsentSheetProviderDto"
+            }
+          },
+          "data": {
+            "description": "Every kind of data that is sent.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConsentSheetDataKindDto"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "providers",
+          "data"
+        ]
+      },
+      "AiConsentStateDto": {
+        "type": "object",
+        "properties": {
+          "sheet": {
+            "$ref": "#/components/schemas/AiConsentSheetDto"
+          },
+          "answer": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "nullable": true,
+            "description": "The answer on the current version. Null when not answered, which counts as No."
+          },
+          "answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sheet_changed": {
+            "type": "boolean",
+            "description": "True when the caller answered an earlier version but not this one, so the sheet changed since."
+          }
+        },
+        "required": [
+          "sheet",
+          "answer",
+          "answered_at",
+          "sheet_changed"
+        ]
+      },
+      "AnswerAiConsentDto": {
+        "type": "object",
+        "properties": {
+          "sheet_version": {
+            "type": "number",
+            "description": "The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.",
+            "example": 1
+          },
+          "answer": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          }
+        },
+        "required": [
+          "sheet_version",
+          "answer"
+        ]
+      },
+      "AiChapterSettingsDto": {
+        "type": "object",
+        "properties": {
+          "ask": {
+            "type": "boolean",
+            "description": "The Questions and requests switch: members can ask Frapp Intelligence."
+          },
+          "meeting_notes": {
+            "type": "boolean",
+            "description": "Drafting minutes, and tasks suggested from them, is on."
+          },
+          "chat_source": {
+            "type": "boolean",
+            "description": "Messages in chapter channels, from members who said yes, are a source."
+          },
+          "nudges": {
+            "type": "boolean",
+            "description": "Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When a switch last changed. Null when none ever has."
+          },
+          "can_change": {
+            "type": "boolean",
+            "description": "Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again."
+          }
+        },
+        "required": [
+          "ask",
+          "meeting_notes",
+          "chat_source",
+          "nudges",
+          "updated_at",
+          "can_change"
+        ]
+      },
+      "UpdateAiChapterSettingsDto": {
+        "type": "object",
+        "properties": {
+          "ask": {
+            "type": "boolean"
+          },
+          "meeting_notes": {
+            "type": "boolean"
+          },
+          "chat_source": {
+            "type": "boolean"
+          },
+          "nudges": {
+            "type": "boolean"
+          }
+        }
       },
       "ResolvedTenantDto": {
         "type": "object",
@@ -37091,6 +38756,56 @@
           "total"
         ]
       },
+      "ActionItemTaskWhoDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "everyone",
+              "people",
+              "role",
+              "group",
+              "tier"
+            ],
+            "nullable": true,
+            "description": "A task for everyone’s audience; null for a task for one member."
+          },
+          "audience_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The role’s, group’s or tier’s name, when it went to one."
+          },
+          "assignee_ids": {
+            "description": "The member, or the named people of a task for several. Empty for a role, group, tier or everyone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "audience",
+          "audience_name",
+          "assignee_ids"
+        ]
+      },
+      "ActionItemTaskRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "who": {
+            "$ref": "#/components/schemas/ActionItemTaskWhoDto"
+          }
+        },
+        "required": [
+          "id",
+          "who"
+        ]
+      },
       "MeetingActionItemTaskDto": {
         "type": "object",
         "properties": {
@@ -37113,38 +38828,22 @@
               }
             ]
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "TODO",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "OVERDUE"
-            ],
-            "description": "The task’s status; a task for everyone’s copies read as one (done when all are, overdue when an open one is)."
-          },
-          "assignee_ids": {
-            "description": "Who has it: its member, or every copy’s.",
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "task_id": {
-            "type": "string",
-            "format": "uuid",
+          "task": {
             "nullable": true,
-            "description": "The task, for a viewer who can manage tasks; null for anyone else."
+            "description": "The task and who it went to, for a caller with `tasks:manage`; null for everyone else.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActionItemTaskRefDto"
+              }
+            ]
           }
         },
         "required": [
           "index",
           "done",
           "group",
-          "status",
-          "assignee_ids",
-          "task_id"
+          "task"
         ]
       },
       "MakeActionItemTaskDto": {
@@ -37244,190 +38943,6 @@
           "event_start_time",
           "items"
         ]
-      },
-      "AiConsentSheetProviderDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "enum": [
-              "anthropic",
-              "google",
-              "assemblyai"
-            ]
-          },
-          "name": {
-            "type": "string",
-            "description": "The company's own name, shown as is.",
-            "example": "Anthropic"
-          }
-        },
-        "required": [
-          "key",
-          "name"
-        ]
-      },
-      "AiConsentSheetDataKindDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "enum": [
-              "questions",
-              "chapter_records",
-              "roster",
-              "channel_messages",
-              "meetings"
-            ]
-          },
-          "label": {
-            "type": "string",
-            "description": "What is sent, in words a client shows as is.",
-            "example": "Questions you ask"
-          }
-        },
-        "required": [
-          "key",
-          "label"
-        ]
-      },
-      "AiConsentSheetDto": {
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "number",
-            "description": "The sheet version. Send it back with the answer; a new version asks everyone again.",
-            "example": 1
-          },
-          "providers": {
-            "description": "Every provider member data is sent to.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConsentSheetProviderDto"
-            }
-          },
-          "data": {
-            "description": "Every kind of data that is sent.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConsentSheetDataKindDto"
-            }
-          }
-        },
-        "required": [
-          "version",
-          "providers",
-          "data"
-        ]
-      },
-      "AiConsentStateDto": {
-        "type": "object",
-        "properties": {
-          "sheet": {
-            "$ref": "#/components/schemas/AiConsentSheetDto"
-          },
-          "answer": {
-            "type": "string",
-            "enum": [
-              "yes",
-              "no"
-            ],
-            "nullable": true,
-            "description": "The answer on the current version. Null when not answered, which counts as No."
-          },
-          "answered_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "sheet_changed": {
-            "type": "boolean",
-            "description": "True when the caller answered an earlier version but not this one, so the sheet changed since."
-          }
-        },
-        "required": [
-          "sheet",
-          "answer",
-          "answered_at",
-          "sheet_changed"
-        ]
-      },
-      "AnswerAiConsentDto": {
-        "type": "object",
-        "properties": {
-          "sheet_version": {
-            "type": "number",
-            "description": "The version of the sheet the member was shown. 409 `ai.consent.stale_sheet` when it is no longer current.",
-            "example": 1
-          },
-          "answer": {
-            "type": "string",
-            "enum": [
-              "yes",
-              "no"
-            ]
-          }
-        },
-        "required": [
-          "sheet_version",
-          "answer"
-        ]
-      },
-      "AiChapterSettingsDto": {
-        "type": "object",
-        "properties": {
-          "ask": {
-            "type": "boolean",
-            "description": "The Questions and requests switch: members can ask Frapp Intelligence."
-          },
-          "meeting_notes": {
-            "type": "boolean",
-            "description": "Drafting minutes, and tasks suggested from them, is on."
-          },
-          "chat_source": {
-            "type": "boolean",
-            "description": "Messages in chapter channels, from members who said yes, are a source."
-          },
-          "nudges": {
-            "type": "boolean",
-            "description": "Nudge cards on members' Activity. On unless the president turned them off; a member still gets one only after their own yes."
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true,
-            "description": "When a switch last changed. Null when none ever has."
-          },
-          "can_change": {
-            "type": "boolean",
-            "description": "Whether the caller may change the switches: they hold the chapter's President role. A hint for drawing the page; PATCH checks again."
-          }
-        },
-        "required": [
-          "ask",
-          "meeting_notes",
-          "chat_source",
-          "nudges",
-          "updated_at",
-          "can_change"
-        ]
-      },
-      "UpdateAiChapterSettingsDto": {
-        "type": "object",
-        "properties": {
-          "ask": {
-            "type": "boolean"
-          },
-          "meeting_notes": {
-            "type": "boolean"
-          },
-          "chat_source": {
-            "type": "boolean"
-          },
-          "nudges": {
-            "type": "boolean"
-          }
-        }
       },
       "AiRunDto": {
         "type": "object",
@@ -37804,6 +39319,73 @@
           "member_ids"
         ]
       },
+      "ChatTimeoutStateDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "until",
+          "reason"
+        ]
+      },
+      "SetChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5m",
+              "1h",
+              "1d",
+              "1w"
+            ],
+            "description": "5 minutes, 1 hour, 1 day or 1 week."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "Shown to the member and to officers who can time out. Optional."
+          }
+        },
+        "required": [
+          "duration"
+        ]
+      },
+      "MemberChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "member_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "until",
+          "reason",
+          "member_id"
+        ]
+      },
       "RushCandidateViewDto": {
         "type": "object",
         "properties": {
@@ -37865,7 +39447,9 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -38011,7 +39595,9 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -38160,11 +39746,22 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created."
           },
           "created_by_name": {
             "type": "string",
-            "description": "Who added the candidate, by current name."
+            "nullable": true,
+            "description": "Who added the candidate, by current name; null with `created_by`."
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "pnm"
+            ],
+            "description": "`manual` when a member added them, `pnm` when their interest form did (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -38320,6 +39917,7 @@
           "bid_status",
           "created_by",
           "created_by_name",
+          "origin",
           "created_at",
           "tag_ids",
           "viewer_rating",
@@ -39042,6 +40640,694 @@
           "recorded_by_name",
           "expires_at",
           "status"
+        ]
+      },
+      "InterestFormOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "InterestFormQuestionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "short_answer",
+              "paragraph",
+              "multiple_choice",
+              "checkboxes",
+              "dropdown",
+              "yes_no"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormOptionDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "required"
+        ]
+      },
+      "InterestFormDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "description": "The public page is `/f/<slug>`."
+          },
+          "path": {
+            "type": "string",
+            "example": "/f/k3mz8qpt2a"
+          },
+          "is_open": {
+            "type": "boolean"
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
+          },
+          "ask_referrer": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "path",
+          "is_open",
+          "blurb",
+          "questions",
+          "ask_referrer",
+          "updated_at"
+        ]
+      },
+      "InterestFormLabelDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "example": "tabling-quad"
+          },
+          "path": {
+            "type": "string",
+            "example": "/f/k3mz8qpt2a?src=tabling-quad",
+            "description": "The path the label's QR code opens."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "path"
+        ]
+      },
+      "InterestFormSettingsDto": {
+        "type": "object",
+        "properties": {
+          "offered": {
+            "type": "boolean",
+            "description": "False for an NPHC chapter, which never gets an interest form."
+          },
+          "form": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InterestFormDto"
+              }
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormLabelDto"
+            }
+          }
+        },
+        "required": [
+          "offered",
+          "form",
+          "labels"
+        ]
+      },
+      "UpdateInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "is_open": {
+            "type": "boolean",
+            "description": "Open or close the public page."
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "A few lines at the top of the form; empty or null clears it."
+          },
+          "questions": {
+            "maxItems": 10,
+            "description": "The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
+          },
+          "ask_referrer": {
+            "type": "boolean",
+            "description": "Ask \"Who referred you?\"."
+          }
+        }
+      },
+      "AddInterestFormLabelDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "A QR source label, such as `tabling-quad`. Spaces and capitals are folded to dashes and lowercase.",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "CandidateFormReferrerDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ]
+      },
+      "CandidateFormAnswerDto": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
+        ]
+      },
+      "CandidateFormSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true
+          },
+          "referrer_text": {
+            "type": "string",
+            "nullable": true
+          },
+          "referrer_suggestion": {
+            "nullable": true,
+            "description": "The member the referrer text names, when exactly one does.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CandidateFormReferrerDto"
+              }
+            ]
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CandidateFormAnswerDto"
+            }
+          }
+        },
+        "required": [
+          "submitted_at",
+          "email",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "class_year",
+          "phone",
+          "source_label",
+          "referrer_text",
+          "referrer_suggestion",
+          "answers"
+        ]
+      },
+      "CandidateFormDto": {
+        "type": "object",
+        "properties": {
+          "submission": {
+            "nullable": true,
+            "description": "The candidate's newest form submission; null for none.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CandidateFormSubmissionDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "submission"
+        ]
+      },
+      "InterestFormWithdrawTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the \"Withdraw or delete my info\" link in the confirmation email.",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "InterestFormWithdrawalPreviewDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          },
+          "at_school": {
+            "type": "boolean",
+            "description": "Whether the address has a school-wide recruitment record that `everywhere` deletes."
+          }
+        },
+        "required": [
+          "chapter_name",
+          "at_school"
+        ]
+      },
+      "InterestFormWithdrawDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the \"Withdraw or delete my info\" link in the confirmation email.",
+            "maxLength": 64
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "everywhere"
+            ],
+            "description": "`chapter` withdraws from the form's chapter; `everywhere` deletes the recruitment information."
+          }
+        },
+        "required": [
+          "token",
+          "scope"
+        ]
+      },
+      "PublicInterestFormChapterDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "university": {
+            "type": "string"
+          },
+          "mark_text": {
+            "type": "string",
+            "nullable": true
+          },
+          "accent_color": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "university",
+          "mark_text",
+          "accent_color"
+        ]
+      },
+      "PublicInterestFormVerifyDto": {
+        "type": "object",
+        "properties": {
+          "school_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school whose address gets the code; null takes any address."
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "school_name",
+          "domains"
+        ]
+      },
+      "ConsentRunDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "strong": {
+            "type": "boolean",
+            "description": "A name shown in bold."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "PublicInterestFormConsentDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Stored with each submission."
+          },
+          "runs": {
+            "description": "The approved consent text (`ifc-recruitment.md` § Consent and privacy text), shown above the submit button.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRunDto"
+            }
+          },
+          "agree_label": {
+            "type": "string",
+            "example": "I agree, and I'm 18 or older"
+          }
+        },
+        "required": [
+          "version",
+          "runs",
+          "agree_label"
+        ]
+      },
+      "PublicInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "is_open": {
+            "type": "boolean",
+            "description": "False shows \"Recruitment isn't open\"."
+          },
+          "chapter": {
+            "$ref": "#/components/schemas/PublicInterestFormChapterDto"
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "description": "Empty while the form is closed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
+          },
+          "ask_referrer": {
+            "type": "boolean"
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true,
+            "description": "The `src` label, when it's one of the form's QR codes."
+          },
+          "verify": {
+            "$ref": "#/components/schemas/PublicInterestFormVerifyDto"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/PublicInterestFormConsentDto"
+          }
+        },
+        "required": [
+          "slug",
+          "is_open",
+          "chapter",
+          "blurb",
+          "questions",
+          "ask_referrer",
+          "source_label",
+          "verify",
+          "consent"
+        ]
+      },
+      "StartInterestFormCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The PNM's address. At a chapter with a school, only an address on one of the school's verified domains is sent a code.",
+            "example": "student@rpi.edu",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "InterestFormCodeSentDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resend_after_seconds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "email",
+          "expires_at",
+          "resend_after_seconds"
+        ]
+      },
+      "ConfirmInterestFormCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "code": {
+            "type": "string",
+            "description": "The six-digit code from the email.",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ]
+      },
+      "InterestFormPrefillDto": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "class_year",
+          "phone"
+        ]
+      },
+      "InterestFormVerifiedDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "proof": {
+            "type": "string",
+            "description": "Send with the submission. Good for 30 minutes and spent once."
+          },
+          "prefill": {
+            "nullable": true,
+            "description": "The details this address last gave, filled in only after the code matched.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InterestFormPrefillDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "proof",
+          "prefill"
+        ]
+      },
+      "SubmitInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "proof": {
+            "type": "string",
+            "description": "The proof a matched code answered (`POST …/verify`). Spent by this submission.",
+            "maxLength": 100
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 7,
+            "maxLength": 32
+          },
+          "answers": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "description": "Answers to the chapter's questions keyed by question id, as a chat form card's answers are."
+          },
+          "referrer": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "\"Who referred you?\", free text."
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "The QR code's source label; one the form doesn't have is recorded as none."
+          },
+          "agree": {
+            "type": "boolean",
+            "description": "\"I agree, and I'm 18 or older\": must be true."
+          }
+        },
+        "required": [
+          "proof",
+          "first_name",
+          "last_name",
+          "agree"
+        ]
+      },
+      "InterestFormSubmittedDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter_name"
         ]
       },
       "GeofenceCircleDto": {
@@ -40669,6 +42955,10 @@
               }
             ]
           },
+          "fixed_deadline": {
+            "type": "boolean",
+            "description": "A fixed deadline (#6096): no extensions, and its assignee’s row reads more urgent."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -40701,6 +42991,7 @@
           "sent_back_at",
           "proof_kind",
           "group",
+          "fixed_deadline",
           "created_at",
           "unread",
           "snoozed_until"
@@ -40858,6 +43149,87 @@
         "required": [
           "kind",
           "group"
+        ]
+      },
+      "ActivityTaskExtensionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The request’s id."
+          },
+          "task": {
+            "$ref": "#/components/schemas/ActivityTaskDto"
+          },
+          "requester_name": {
+            "type": "string",
+            "description": "Empty when the member cannot be resolved (they have left)."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "from_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to_due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_due_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needs_officer": {
+            "type": "string",
+            "enum": [
+              "over_a_day",
+              "second_request",
+              "back_to_back",
+              "reason_invalid",
+              "ai_unavailable"
+            ],
+            "nullable": true,
+            "description": "Why it waits on an officer: more than a day, a second request on the task, a repeating task extended on its previous copy too, a reason AI judged invalid, or AI off or failing."
+          },
+          "ai_verdict": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "invalid"
+            ],
+            "nullable": true,
+            "description": "What AI made of the reason, when it was asked."
+          },
+          "ai_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "task",
+          "requester_name",
+          "reason",
+          "from_due_date",
+          "from_due_at",
+          "to_due_date",
+          "to_due_at",
+          "needs_officer",
+          "ai_verdict",
+          "ai_note",
+          "created_at"
         ]
       },
       "ActivityHoursEntryDto": {
@@ -41137,6 +43509,13 @@
               "$ref": "#/components/schemas/ActivityTaskDto"
             }
           },
+          "task_extensions": {
+            "description": "Requests for more time the caller can decide (#6096: `tasks:manage`, never their own), oldest first. Counted in `needs_you_count`; not snoozable.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityTaskExtensionDto"
+            }
+          },
           "hours_approvals": {
             "description": "Pending service entries the caller can approve (`service:approve`, never their own), oldest first.",
             "type": "array",
@@ -41162,6 +43541,7 @@
         "required": [
           "tasks",
           "task_confirmations",
+          "task_extensions",
           "hours_approvals",
           "polls",
           "cards"
@@ -41188,6 +43568,35 @@
           "end_time": {
             "type": "string",
             "format": "date-time"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "Whether the event might not happen."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "Whether the event is on the calendar only: nobody checks in, earns points or is marked absent."
           },
           "attendance": {
             "type": "string",
@@ -41263,6 +43672,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "attendance",
           "point_value",
           "check_in_opens_minutes",
@@ -45397,7 +47811,7 @@
               "linked_apps",
               "calendar"
             ],
-            "description": "For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps or Settings → Calendar."
+            "description": "For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps. `calendar` is the retired Settings → Calendar address, which now opens Linked apps."
           }
         },
         "required": [
@@ -45493,7 +47907,7 @@
           },
           "folders_left_out": {
             "type": "number",
-            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
+            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
           },
           "syncing": {
             "type": "boolean",
@@ -46795,6 +49209,7 @@
             "description": "True while the season isn't closed: interests are counts only."
           },
           "chapter_totals": {
+            "description": "Interest per accepted chapter. Empty until the season is closed: beside each PNM's count, totals could tell where a PNM signed up.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChapterTotalDto"

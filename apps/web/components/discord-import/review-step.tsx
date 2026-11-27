@@ -226,7 +226,7 @@ export function ReviewStep({
                   aria-checked={active}
                   onClick={() => onCutoffPresetChange(option.key)}
                   className={cn(
-                    "h-9 rounded-md border px-3 text-sm font-semibold transition pointer-coarse:h-11",
+                    "h-control-small rounded-md border px-3 text-sm font-semibold transition pointer-coarse:h-11",
                     FOCUS_RING,
                     active
                       ? "border-accent-border bg-accent-subtle-hover text-accent-text"

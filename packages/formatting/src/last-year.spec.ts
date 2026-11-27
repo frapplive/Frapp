@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { nameForThisYear, sameWeekdayThisYear } from "./last-year";
+import {
+  datedDaysThisYear,
+  nameForThisYear,
+  sameWeekdayThisYear,
+} from "./last-year";
 
 describe("last-year dates (#3930)", () => {
   it("moves an event 52 weeks on, so its weekday stays", () => {
@@ -42,5 +46,39 @@ describe("last-year dates (#3930)", () => {
     expect(nameForThisYear("Formal 2025", "not a date", start)).toBe(
       "Formal 2025",
     );
+  });
+});
+
+describe("datedDaysThisYear (#6144)", () => {
+  // Saturday, November 22, 2025 to Sunday the 23rd, an all-day retreat.
+  const now = new Date(2026, 10, 12, 15);
+
+  it("moves the days 52 weeks on, to the same weekdays, keeping the span", () => {
+    expect(datedDaysThisYear("2025-11-22", "2025-11-23", now)).toEqual({
+      startDate: "2026-11-21",
+      lastDay: "2026-11-22",
+    });
+  });
+
+  it("moves a week further while the first day is before today", () => {
+    expect(datedDaysThisYear("2025-11-08", null, now)).toEqual({
+      startDate: "2026-11-14",
+      lastDay: null,
+    });
+  });
+
+  it("keeps today, since an all-day event today hasn't passed", () => {
+    // November 13, 2025 is 52 weeks before November 12, 2026.
+    expect(datedDaysThisYear("2025-11-13", null, now)?.startDate).toBe(
+      "2026-11-12",
+    );
+  });
+
+  it("drops a last day that isn't after the first, and reads no bad day", () => {
+    expect(datedDaysThisYear("2025-11-22", "2025-11-22", now)?.lastDay).toBe(
+      null,
+    );
+    expect(datedDaysThisYear("2025-02-30", null, now)).toBe(null);
+    expect(datedDaysThisYear(null, null, now)).toBe(null);
   });
 });

@@ -13,6 +13,7 @@ import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { cn } from "@/lib/utils";
 import { useMyStudySessions } from "./my-study-panel";
 import { standingHref, type StandingDoor } from "./standing-doors";
+import { openStandingDoor } from "./open-standing-door";
 
 type Cell = {
   door: StandingDoor;
@@ -97,6 +98,7 @@ export function StandingStats() {
             <Link
               href={standingHref(cell.door)}
               scroll={false}
+              onClick={(event) => openStandingDoor(event, cell.door)}
               aria-label={`${cell.label}: ${cell.value ?? "couldn't load"}. Opens ${cell.opens}.`}
               data-testid={`profile-standing-${cell.door}`}
               className={cn(

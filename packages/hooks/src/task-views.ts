@@ -110,19 +110,6 @@ export const MY_TASKS_GROUP_LABELS: Record<MyTasksGroup, string> = {
 };
 
 /**
- * The quiet line under a My tasks group with nothing in it. Overdue and No
- * due date have none: each is drawn only when it holds a task, so a member
- * who is on top of everything never sees an empty Overdue.
- */
-export const MY_TASKS_GROUP_EMPTY: Record<MyTasksGroup, string | null> = {
-  overdue: null,
-  today: "Nothing due today",
-  week: "Nothing else this week",
-  later: "Nothing later",
-  none: null,
-};
-
-/**
  * The group a task sits in. Overdue is read on the member's own day
  * (`localTaskStatus`, #5774): the API calls a date-only task overdue once its
  * date ends in UTC, the evening in the Americas, and a task still "Due today"

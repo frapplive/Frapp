@@ -148,7 +148,7 @@ export function SignupCard({
 
   return (
     <Card className={MESSAGE_CARD}>
-      <p className={cn(EYEBROW, "text-muted-foreground")}>
+      <p className={cn(EYEBROW, "text-muted")}>
         {signupCardEyebrow(payload, tally, now)}
       </p>
       <div className="mt-2 text-base font-bold">{payload.title}</div>
@@ -175,7 +175,7 @@ export function SignupCard({
                 type="button"
                 size="sm"
                 variant={action.held ? "default" : "secondary"}
-                className="h-auto min-h-9 w-full justify-between gap-2 whitespace-normal py-1.5 text-left pointer-coarse:h-auto pointer-coarse:min-h-11"
+                className="h-auto min-h-control-list-row w-full justify-between gap-2 whitespace-normal py-1.5 text-left pointer-coarse:h-auto pointer-coarse:min-h-11"
                 disabled={!canClaim || action.full}
                 aria-pressed={action.held}
                 aria-label={`${action.label}: ${slot.label}`}
@@ -240,7 +240,7 @@ export function SignupCard({
               maxLength={SIGNUP_ANSWER_NOTE_MAX_LENGTH}
               placeholder="Running late, bringing a friend…"
               aria-label="Note on your answer"
-              className="h-8 min-w-0 flex-1"
+              className="h-control-row min-w-0 flex-1"
             />
             <Button type="submit" size="sm">
               Save

@@ -29,6 +29,7 @@ describe('a suggested task and the task form (#4313)', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     ).create(CHAPTER, OFFICER, fields);
 
     // The suggestion: accepted as proposed.

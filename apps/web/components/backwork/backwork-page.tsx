@@ -1,5 +1,6 @@
 "use client";
 
+import { EYEBROW } from "@/components/ui/typography";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import {
   useDeferredValue,
@@ -832,7 +833,7 @@ export function BackworkPage() {
             <div
               aria-hidden="true"
               className={cn(
-                "hidden gap-3 px-2 pb-1.5 text-caption font-semibold uppercase tracking-[0.06em] text-muted @4xl:grid",
+                `${EYEBROW} hidden gap-3 px-2 pb-1.5 text-muted @4xl:grid`,
                 ROW_GRID,
               )}
             >

@@ -6,7 +6,11 @@ import { Alert } from "react-native";
 import * as expoRouter from "expo-router";
 import { useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_SENDER_ID, type BlockListStatus } from "@repo/validation";
+import {
+  SYSTEM_SENDER_ID,
+  TASK_EXTENSION_COPY,
+  type BlockListStatus,
+} from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
 import {
   MESSAGE_CHECKING_BLOCK_LIST,
@@ -56,6 +60,10 @@ const state = vi.hoisted(() => ({
   correctMutate: vi.fn(),
   removeMutate: vi.fn(),
   block: vi.fn(),
+  // Members who can't ask for more time (#6096), and the restore's write.
+  extensionBlocked: [] as { user_id: string; blocked_at: string }[],
+  extensionReads: [] as ({ enabled?: boolean } | undefined)[],
+  restoreMutate: vi.fn(),
 }));
 
 function profile(userId: string, name: string) {
@@ -122,11 +130,22 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useMyPermissions: () => ({ data: { permissions: state.permissions } }),
   useAssignPledgeClasses: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveMember: () => ({ mutate: state.removeMutate, isPending: false }),
+  // Chat timeouts (#6006): the lift from the menu, and the sheet's writes.
+  useLiftChatTimeout: () => ({ mutate: vi.fn(), isPending: false }),
+  useTimeOutMember: () => ({ mutate: vi.fn(), isPending: false }),
   useCorrectMemberProfile: () => ({
     mutate: state.correctMutate,
     isPending: false,
   }),
   useViewerUserId: () => state.viewer,
+  useBlockedFromExtensions: (options?: { enabled?: boolean }) => {
+    state.extensionReads.push(options);
+    return { data: options?.enabled ? state.extensionBlocked : undefined };
+  },
+  useRestoreTaskExtensions: () => ({
+    mutate: state.restoreMutate,
+    isPending: false,
+  }),
   useBlockedUserIds: () => ({
     ids: state.blocked,
     unblocked: new Set<string>(),
@@ -1312,5 +1331,56 @@ describe("MemberProfile presence (#3917)", () => {
           node.props.children === "In lab until 6",
       ),
     ).toHaveLength(1);
+  });
+});
+
+// #6096: an officer sees that a member can't ask for more time, and restores it.
+describe("MemberProfile extension requests (#6096)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.viewer = VIEWER;
+    state.permissions = [];
+    state.extensionBlocked = [
+      { user_id: ADA, blocked_at: "2026-11-20T12:00:00.000Z" },
+    ];
+    state.extensionReads = [];
+  });
+
+  const texts = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAll((node) => typeof node.props.children === "string")
+      .map((node) => node.props.children as string);
+
+  it("says nothing to a viewer without tasks:manage, and doesn't ask", () => {
+    const tree = render(ADA);
+    expect(texts(tree)).not.toContain(TASK_EXTENSION_COPY.blockedBadge);
+    expect(state.extensionReads.every((read) => !read?.enabled)).toBe(true);
+    act(() => tree.unmount());
+  });
+
+  it("shows the badge and Restore to an officer, and says when it lands", () => {
+    state.permissions = ["tasks:manage"];
+    state.restoreMutate.mockImplementation(
+      (_id: string, handlers: { onSuccess: () => void }) =>
+        handlers.onSuccess(),
+    );
+    const tree = render(ADA);
+    expect(texts(tree)).toContain(TASK_EXTENSION_COPY.blockedBadge);
+    const restore = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === TASK_EXTENSION_COPY.restore &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => restore.props.onPress());
+    expect(state.restoreMutate).toHaveBeenCalledWith(ADA, expect.anything());
+    expect(texts(tree)).toContain(TASK_EXTENSION_COPY.restored);
+    act(() => tree.unmount());
+  });
+
+  it("draws nothing for a member who can still ask", () => {
+    state.permissions = ["tasks:manage"];
+    const tree = render(BOB);
+    expect(texts(tree)).not.toContain(TASK_EXTENSION_COPY.blockedBadge);
+    act(() => tree.unmount());
   });
 });

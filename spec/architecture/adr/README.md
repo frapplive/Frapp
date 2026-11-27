@@ -28,10 +28,10 @@ One file per ADR. [`spec/architecture/README.md`](../README.md) is the system ma
 | ADR-20: CI/CD pipeline redesign — production-shaped CI, one path to production, a six-stage program (2026-08-30) | Superseded by ADR-24 for decisions 4 and 8, and by ADR-21 for the Vercel half of decision 3 | [adr-20.md](adr-20.md) |
 | ADR-21: Retire the Vercel Git integration — deploys move into CI (landing 2026-09-01, web 2026-09-02) | Amended | [adr-21.md](adr-21.md) |
 | ADR-22: Sentry is the system of record for exceptions and traces; PostHog for product analytics | Amended | [adr-22.md](adr-22.md) |
-| ADR-23: Multi-agent budget — one big review, everything else small, explicit effort (2026-09-23) | Amended | [adr-23.md](adr-23.md) |
+| ADR-23: Multi-agent budget — one big review, everything else small, explicit effort (2026-09-23) | Amended: caps outside `/diff-review` became judgment (amendment 3) | [adr-23.md](adr-23.md) |
 | ADR-24: Delivery platform — outcome-verified delivery on the current hosts; Cloud Run only on triggers (2026-09-23) | Amended | [adr-24.md](adr-24.md) |
 | ADR-25: The product is named Frapp; "Signet" stays the design system's internal name until after the beta (2026-09-23) | Amended | [adr-25.md](adr-25.md) |
 | ADR-26: Discord bot imports copy attachments inside Supabase, through an Edge Function (2026-09-29) | Amended | [adr-26.md](adr-26.md) |
 | ADR-27: Tenant-scoped URLs; the page's URL, not the token, names the chapter a request acts in (proposed 2026-11-11) | Proposed, pending Paul | [adr-27.md](adr-27.md) |
 | ADR-28: AI platform — two providers behind a port Frapp owns, one model per feature, a bake-off decides (2026-11-11) | Current | [adr-28.md](adr-28.md) |
-| ADR-29: Desktop app — an Electron shell around the hosted web app, sign-in through the system browser, updates from GitHub Releases (2026-11-13) | Current | [adr-29.md](adr-29.md) |
+| ADR-29: Desktop app — an Electron shell around the hosted web app, sign-in through the system browser, updates from GitHub Releases (2026-11-13) | Amended | [adr-29.md](adr-29.md) |

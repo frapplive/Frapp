@@ -454,17 +454,32 @@ The categories themselves stay the chapter's (§ Channels).
   - When the filters leave no rows, the list says so and offers to turn both off, rather than drawing an empty sidebar.
   - There is no filter for read-only channels: `#announcements` is read-only, and a member folds an archive category instead.
 - **A muted channel stays quiet** (Shawn, 2026-11-13, [#3999](https://github.com/pdcarlson/Frapp/issues/3999), as Slack and Discord do).
-  Its plain unread draws its row as read, adds nothing to a folded header, and doesn't keep it under Unread only.
+  Its plain unread draws its row as read, doesn't keep it in view under a folded heading, and doesn't keep it under Unread only.
   An @-mention, or anything unread in a DM, gets past the mute, as it does for push.
   The messages are still there when the channel is opened.
   While the mute levels are unknown, nothing is quieted.
-  One rule for the row, the header and the filter: `countsLookUnread` in `@repo/hooks`.
+  One rule for the row, what a folded heading keeps in view, and the filter: `countsLookUnread` in `@repo/hooks`.
 - **Folds.**
   Any section header, Pinned included, folds its section, and the choice is remembered.
-  A folded header shows the unread total of the rows inside it that pass the filters, a muted channel's plain unread left out (above), in the mention red when any of them addresses the member, so folding never hides a mention.
-  A channel whose only news is a thread with new replies adds one to that total (`withUnreadThreadChannels` in `@repo/hooks`), so a folded section over it still reads unread.
-  The open channel stays visible under a folded header.
+  **Folding hides what the member has read, never what is new** (Paul's pick, 2026-11-25, [#6053](https://github.com/frapplive/Frapp/issues/6053), as Discord's collapsed categories keep their unread channels in view).
+  Under a folded heading stay the open channel and every row that passes the filters with something new for the member: an unread, an @-mention, an unread DM, or a thread with new replies (`withUnreadThreadChannels` in `@repo/hooks`); a muted channel's plain unread doesn't count (above).
+  Each leaves once it is read and no longer open.
+  So a folded heading carries no count of its own: what it holds that is new is drawn under it.
+  While the unread counts are unknown, nothing stays under a folded heading but the open channel, since unknown is not unread.
+  _(Until 2026-11-25 a folded heading drew only the open channel, and showed the unread total of the rows inside it, in the mention red when any of them addressed the member. Changed in #6053 by pdcarlson, 2026-11-25: members didn't fold, because folding hid which channels had news.)_
+  **Fold all and Unfold all** (#6053): a heading's menu folds or unfolds that heading, or every section of the channel list at once. Fold all folds the headings the member sees, never a section a pin or a filter hides, which would otherwise come back folded once unpinned or unfiltered; Unfold all unfolds every folded section, hidden ones included. Both leave Pinned as it is (it holds what the member chose to keep in view), and Direct messages, listed on its own page on web and on the Messages tab on the phone. One rule for both clients: `foldAllWrites` in `@repo/hooks`.
+  On web the menu is a heading's right-click and the `⋯` that shows while the heading is hovered or focused, and hides while a row or heading is held, as the + does, so the heading stays the whole drop target; on the phone it is a long press on the heading, which opens the glass menu, and Fold all and Unfold all are the heading's accessibility actions.
+  Fold all writes only the sections whose state it changes, one `PUT` or `DELETE` each, through the same per-section route, and a batch that fails tells the member once: the phone shows no second alert while one is up, and web's one toast replaces the last.
   While the list scrolls, the section in view keeps its header pinned at the top, so it can still be folded from there ([`../../ui/design-system/components.md`](../../ui/design-system/components.md#sidebar-item) § Sidebar item, "Pinned section headings").
+- **New unreads** (Winston, 2026-11-25, [#6045](https://github.com/frapplive/Frapp/issues/6045); Discord's "NEW UNREADS" bar and Slack's "Unread messages" pill are the comparables).
+  While something unread in the channel list is scrolled out of sight, a pill reading `New unreads` floats over that edge of the list, with an arrow up or down, and one at each edge when there is news both ways.
+  It counts what the list already draws as unread and nothing else: a row that reads unread (`countsLookUnread`, so a muted channel's plain unread doesn't count and its mention does), and a row whose listed thread has new replies, folded or not, since a folded section keeps those rows in view (§ Folds; until #6053 a folded heading with an unread total counted in their place); the open channel never counts, and a hidden conversation isn't in the list.
+  It is in the mention red when anything out of sight that way addresses the member (a mention, a reply to them, or a DM), and neutral otherwise.
+  Pressing it scrolls the nearest one into the middle of the list and lights it for a moment; it doesn't open it.
+  Pressing again goes on to the next, and the pill goes away once nothing unread is out of sight that way.
+  It follows the live counts, so it comes and goes as messages land and are read, and draws nothing while the counts are unknown or are only the ones the phone saved (§ Read Receipts).
+  It is a button named `Jump to unread channels above` or `below`, and under reduced motion the scroll is instant.
+  The rule is `unreadJumpTargets` in `@repo/hooks`, for both clients; the channel list only, since the Messages list runs newest first.
 - **Where it lives.**
   `chat_sidebar_preferences` holds one row per (member, chapter): the two filters, the sort (`chapter`, `recent` or `alpha`; `20261115001542`) and the folded section keys.
   `chat_sidebar_pins` holds one row per pinned (member, channel).
@@ -486,12 +501,12 @@ The categories themselves stay the chapter's (§ Channels).
   A failed write puts the list back on the server's state and tells the member, every time, not only for the latest write.
   A write still in flight when the member signs out, switches account or switches chapter never puts its own answer into the list read after that, so the next member of the chapter never sees the last one's arrangement; it only prompts a re-read, which goes out as whoever is signed in now.
   Its failure isn't reported either, since whoever is on screen then didn't make it.
-  While the unread counts are unknown, both clients draw no unread badges, on rows or folded headers alike; mobile also says the counts are unavailable once a read has failed.
+  While the unread counts are unknown, both clients draw no unread badges, and a folded heading keeps no row in view but the open channel; mobile also says the counts are unavailable once a read has failed.
 - **Row menu** (owner, 2026-11-06).
   Each channel row opens that channel's actions: on web a right-click on a rail row (or a long press, the menu key, or Shift+F10 with the row focused), and the row itself draws no hover controls; on mobile a long press on an s04 row, hidden conversations included, which taps and opens the app's own glass menu rather than a system alert.
   Which actions a row offers is `channelRowActions` in `@repo/hooks`, one rule for both clients, scoped to the member's permissions so nobody sees an action the server would refuse.
   Leaving Edit and Delete off DMs (below) matches the server, which enforces it: it refuses any edit or delete of a DM or group DM (§ [Direct Messages](#direct-messages)). Until 2026-11-21 the same held for `#chapter-audit` (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)).
-  In order: Mark as read (an unread row only), Pin to top or Unpin from top, Notifications (the three levels, the current one checked; locked while the level is unknown, and on mobile while offline), Display (mobile; this channel's display on this phone, § [Chat density](#chat-density), outside `channelRowActions` because it writes nothing to the server; web keeps it in the open channel's `⋯` menu), Copy link (web), and Hide conversation (a 1:1 DM); then, after a divider and only with `channels:manage`, Edit channel (on web it opens Chat settings on that channel; on mobile an Edit channel sheet with its name, description, category and who can see and post, #3838, #3702), Arrange channels (mobile; opens the Arrange channels screen above) and Delete channel (asks first, and Delete stays disabled until the channel's name is typed exactly, case and all: Paul, #3838, "deleting a channel should be harder"; Chat settings' Delete asks the same way).
+  In order: Mark as read (an unread row only), Pin to top or Unpin from top, Notifications (the three levels, the current one checked; locked while the level is unknown, and on mobile while offline), Display (mobile; this channel's display on this phone, § [Chat density](#chat-density), outside `channelRowActions` because it writes nothing to the server; web keeps it in the open channel's `⋯` menu), Copy link (web), and Hide conversation (a 1:1 DM); then, after a divider and only with `channels:manage`, Edit channel (it opens that channel's settings: on web Chat settings on that channel, on mobile its Channel settings screen, the same groups and words, #6031; a sheet with its name, description, category and who can see and post until then, #3838, #3702), Arrange channels (mobile; opens the Arrange channels screen above) and Delete channel (asks first, and Delete stays disabled until the channel's name is typed exactly, case and all: Paul, #3838, "deleting a channel should be harder"; Chat settings' Delete asks the same way).
   Mobile leaves out Copy link, since a phone has no address bar; it asks for the typed name in a sheet, since an Android alert can't hold a text field.
   Edit and Delete are never offered on a DM or a group DM.
   On web every action is also reachable without the menu: the open channel's `⋯` menu, opening the channel, the address bar, or Chat settings.
@@ -777,7 +792,7 @@ The #489 decision above, that a reply lands in the timeline, still holds for Rep
   The web rail draws them the same way under each channel, and under a conversation in its Direct messages view, never under a hidden one ([#5300](https://github.com/frapplive/Frapp/issues/5300), asked by Paul, after Discord's desktop sidebar), and keeps the header button (the ⋯ menu's Threads row in a narrow header) as the full list, which reaches threads past the quiet window; the open thread's row reads as the current row, and a click opens the thread in its channel's thread panel as an All threads row does.
   A thread row is one line, the parent's words as the All threads row's title reads them; it reads unread (bold, the leading pip, no number) while it has new replies and muted while muted, and a tap opens the thread with its channel under it, as a thread push's tap does, so back returns to the channel and its topic carries the live replies.
   Active is one rule in `sidebarThreadsByChannel` (`@repo/chat-core/threads`), over the newest 50 the list holds: every thread with new replies, uncapped, then read ones with activity in the last three days (Discord's default auto-archive; Frapp archives nothing), newest first, up to five per channel.
-  Because a thread reply never counts toward its channel, the channel list on both surfaces counts a channel with an unread thread as unread for arranging only (`withUnreadThreadChannels`, `@repo/hooks`): Unread only keeps it and a folded section reads unread over it, while the row's own badge stays the server's.
+  Because a thread reply never counts toward its channel, the channel list on both surfaces counts a channel with an unread thread as unread for arranging only (`withUnreadThreadChannels`, `@repo/hooks`): Unread only keeps it and a folded section keeps it in view, while the row's own badge stays the server's.
   The phone's Messages tab counts a group DM whose thread has new replies, and Messages draws no thread rows under search results.
   A failed read says so in one line on Chat home, and the pull re-reads it.
   A channel with none draws nothing under it, so there is no Threads entry, no empty state and no sheet; a thread that has dropped off is still on its parent's thread card.
@@ -1169,7 +1184,8 @@ A From, Date or Has filter searches with no text ("everything Ryan posted this w
 Each row shows the day and time, since hits span days.
 Mobile has no chat search yet; #341 builds it with these filters.
 Picking a hit selects its channel if it is not already open and then jumps, reusing the same in-shell pending-target machinery a `/chat?channel=&message=` deep link resolves through.
-**It does not change the URL** — a search jump is not shareable, back-button-recoverable, or reload-surviving; only a real deep link is.
+**It does not change the URL yet**: a search jump is not shareable, back-button-recoverable, or reload-surviving; only a real deep link is.
+That changes with [#6041](https://github.com/frapplive/Frapp/issues/6041): on `/chat` and `/messages` a search jump pushes `?channel=&message=`, and `message=` is replaced away once the jump lands ([`../../ui/web-dashboard/README.md` § Addresses](../../ui/web-dashboard/README.md#addresses)).
 
 **Three parts of the bullets above are aspirational, and the shipped surface says so rather than pretending otherwise:**
 
@@ -1681,6 +1697,20 @@ Three client rules complete the contract, each closing a way the rules above wou
   A sender this client unblocked still counts: a masked row that arrives after the unblock is what the same member blocked again elsewhere looks like.
   A tombstone keeps offering Unblock unless this client itself confirmed the unblock.
 
+### Timeouts
+
+**Decision (Paul's go, relayed by Shawn, 2026-11-25, #6006):** an officer can stop a member posting for a while, as Discord's Timeout does; Slack has none. Shawn asked for it against spamming ("Can we create a timeout feature for when people are spamming?"); the automatic spam detection that would suggest one stays [#3791](https://github.com/frapplive/Frapp/issues/3791).
+
+- **Who.** Holders of `members:timeout` (or `*`), a permission of its own switched on per tier or role in Roles and groups ([`rbac.md`](../rbac.md#permission-model)), in a chapter or a council (a council's catalog shares it). New chapters give it to the top two starting tiers, the officers who manage channels; migration `20261125014212_chat_timeouts.sql` gave it to every existing tier and role holding `channels:manage`. **Rank:** only on a member ranked below the caller, never yourself, and never a `*` holder (the President), whoever asks ([`rbac.md` § Rank](../rbac.md#rank)). Lifting one early is under the same rule.
+- **What it stops.** For 5 minutes, 1 hour, 1 day or 1 week, the member can't post or react in the chapter's channels, threads included: a message, an edit, a file, a card or poll posted into a channel, a forward into a channel, and a scheduled send (one due during the timeout fails and stays in the member's list, "didn't send", to edit or send again). Each refusal is a `403` with code `chat.timed_out`, which the clients word ("You're timed out, so you can't post or react in channels right now."); the clients hold the composer, and with it the `/` commands and the + menu, while it runs. A record a `/` command makes outside chat (`/points`, `/hours`, `/task`) is not a channel write: sent straight to the API it is still made, and only its card in the channel is refused, as when a card can't post for any other reason (`card_posted: false`).
+- **What it leaves alone.** DMs and group DMs, which a timeout doesn't reach. Reading everything. Voting in a poll, answering a form, claiming a sign-up and RSVPing: they add nothing anyone can be spammed with. Deleting their own messages, and closing their own poll.
+- **Where it's enforced.** `ChannelAccessService.assertChannelAccess`, the one channel check every write path calls, refuses a `post`, a `thread` reply and a `react` (an emoji reaction, a read to the channel predicate otherwise) in a channel while `members.chat_timeout_until` is still ahead. It reads the member row it already fetched, so the hot path pays no query. The time passing is the end: nothing has to run for the member to post again.
+- **Where an officer does it.** On web, a message's More menu (Time out, after Report message) and the profile's `⋯` (Time out, or Lift timeout while one runs); on the phone, a message's long-press sheet and the profile's `⋯`. Both open the same short form: how long (a pick of the four, 1 hour first), an optional reason up to 200 characters the member sees, and Time out; a member already timed out shows until when and offers Lift timeout. The form reads the member's profile first (`viewer_can_timeout`), so an officer who picks a member ranked too high is told "You can only time out members ranked below you." before anything is sent. Giving a new timeout replaces the running one.
+- **What the member sees.** In a channel, the composer's place says "You're timed out until 3:40 PM" ("tomorrow at …", the weekday within the week, else the date) with "Reason: …" under it; on web it stands where the editor would, as the read-only line does, and on the phone the composer is held with that line as its hint, as for any channel the member can't post in. Their own profile, and the profile to an officer who can time out, says "Timed out until …". `GET /v1/chat/timeout` is the member's own read: the apps re-read it the moment a write comes back `chat.timed_out`, every minute while one runs (so a lift reaches the composer within a minute), and otherwise on focus and every five minutes.
+- **Push.** The member is pushed when it starts ("Timed out for 1 hour" / "Paul Carlson timed you out of the chapter's channels. Reason: …"), when an officer lifts it ("Timeout lifted"), and when it runs out ("Timeout over", from a one-minute sweep, so up to a minute after it ends). They go out under `moderation`, which no notification switch silences, as a reminder's doesn't.
+- **Record.** Each timeout and each lift writes a chapter audit row (`member_timed_out`, with the length and the end; `member_timeout_lifted`), which Chapter settings → Logs lists under Members. The row carries no reason: Logs is read by `chapter-config:view` holders who may not be able to time out.
+- **Who sees the reason.** The member and anyone who can time out. The columns live on `members`, which no member's token reads; the API strips them from the Directory and from a role save, and serves them only on a profile read to those two.
+
 ### No pre-post content filter
 
 **Decision (owner, 2026-09-28): nothing screens a message before it posts.**
@@ -1826,7 +1856,7 @@ This follows WhatsApp's ticks; iMessage says the same in words under the bubble.
   iMessage and Slack draw nothing in groups, and Messenger draws each reader's face, which would expose who read what; neither was chosen (Paul, 2026-11-18).
 - **The Read receipts switch** (`user_settings.read_receipts`, on by default) is two-way, as Paul picked: off, a member's reads are never reported to anyone, and they are told about no one's, so their own messages say sent only.
   A member with it off never counts as having read a group's message, so that group stays at sent.
-  It lives in the phone's Settings › Chat and web's Settings › Appearance and chat, and follows the member across devices (`PATCH /v1/settings` `read_receipts`; `useReadReceiptsSetting` in `@repo/hooks`).
+  It lives in Settings › Chat on both apps (web's Appearance and chat until #6032), and follows the member across devices (`PATCH /v1/settings` `read_receipts`; `useReadReceiptsSetting` in `@repo/hooks`).
 - **A member who blocked the sender** never counts as having read it: a block withholds the sender's messages from them, so their cursor passing it says nothing.
 - **What leaves the server** is the one word, on the caller's own last message: `read_status` on `GET /v1/channels/latest`, decided in `get_channel_latest_messages` (`20261118173407`).
   No read time is ever served, and the read is filtered to channels the caller can read like every other preview, so nobody outside a conversation learns anything about it.
@@ -1835,6 +1865,37 @@ This follows WhatsApp's ticks; iMessage says the same in words under the bubble.
   The check refreshes with the previews (§ Channel list previews, "Freshness"), and once a switch change has saved.
   It does not flip the moment the other member reads, since nothing pings the sender then; that, and "Read" under the viewer's own message inside the open conversation, are [#5532](https://github.com/pdcarlson/Frapp/issues/5532).
   A message still queued in the outbox is not on the row at all yet (the row is the server's latest), so there is no "sending" mark ([#5533](https://github.com/pdcarlson/Frapp/issues/5533)).
+
+### Where the unread start
+
+_(Added in [#6052](https://github.com/pdcarlson/Frapp/issues/6052), asked by Paul (`pdcarlson`) on 2026-11-25 from Winston's feedback: "like discord a new messages and a direction to indicate where the new messages are".)_
+
+A channel or DM opened with unread messages shows where they start, as Discord and Slack do, on web and the phone alike.
+The look is [`components.md` § New messages divider](../../ui/design-system/components.md#11-signature-surfaces) and the words [`writing.md`](../../ui/design-system/writing.md); the rules are `new-messages.ts` and the per-visit state `useNewMessages`, both in `@repo/hooks`, which both threads use.
+
+- **Taken once a visit, as the channel opens.**
+  Opening stamps the cursor to `now()` (above), and so does every message that lands while the member looks, so the thread does not read the live cursor.
+  It takes the count and the cursor from what `GET /v1/channels/unread` said as the channel opened (`last_read_at` on each row since `20261126001026`, the cursor the count was taken from), the answer the app already holds for the channel list, and keeps both for the visit.
+  No stamp after that moves the divider or changes the pill's count while the member reads.
+  A visit is an open of the channel: switching to it, and on web also the thread coming back on screen (below `lg`, back from the channel list; the panel shown again), since leaving stamped it read.
+  The phone's thread coming back from a screen pushed over it is the same visit.
+  A channel opened before the counts first answer takes the first answer, which may already include the open's own stamp, and then shows nothing; so does a phone launched cold from a push, and one resumed from a push takes the counts it held before going to the background ([#6081](https://github.com/pdcarlson/Frapp/issues/6081) closes this).
+- **The divider** goes above the first message after that cursor that is someone else's and has something to read: the viewer's own messages, deleted messages and a blocked member's tombstones are skipped, as they never count.
+  It starts a run, as the day divider does, so the first unread message names its author ([`components.md`](../../ui/design-system/components.md) § Grouping).
+  Nothing is drawn when the count was zero, or for a channel the member never opened (no cursor): the server counts a never-opened channel's whole history, and a line above its first message would send a new member to the start of the channel, so it opens at its newest message as Slack does for a channel just joined.
+- **Opening** lands with the divider at the top of the screen, so a long stretch of unread starts where it starts, and a stretch shorter than a screen sits at the newest message as before (the list cannot scroll past its end).
+  When the unread start further back than the loaded history, the thread reads older pages for the first one (up to ten pages of 100) and lands there, as Discord and Slack open on the first unread however far back.
+  It lands as soon as the divider's row is loaded, also when the counts or the unread rows arrive after the first rows drew (a reconnect backfill under a cached page), as long as the member is still at the newest message where the thread opened them: once they have scrolled, nothing moves them, and a pill points the way instead.
+  A jump to one message (a search hit, a bookmark, a link, a push naming a message) owns where its open lands; the divider is still drawn.
+- **The pill** shows while the divider is off screen: `12 new messages` with an arrow toward it (up when it is above the screen or in history not loaded yet, down when the member scrolled back above it), and `Mark as read` beside it.
+  The count is the server's `unread_count` as the channel opened, never re-counted on the client, `99+` past 99.
+  Tapping it scrolls the divider to the top of the screen, reading older pages for it first when it is not loaded yet (up to ten pages of 100, then as far as it got).
+  It goes away for the rest of the visit once the member has seen the divider and then reached the newest message, since nothing new is left to point at.
+- **Mark as read** stamps the cursor again (opening already did) and takes the pill and the divider away for the visit, as Discord's does.
+- **With Jump to latest.**
+  Jump to latest keeps its corner and its job, the newest message and anything that lands below the reader ([`components.md`](../../ui/design-system/components.md) § New messages pill).
+  The pill sits at the top and goes to where the unread started.
+  Messages arriving while the member reads never move the divider or join the pill's count; they are Jump to latest's.
 
 ### Before the counts arrive (mobile)
 

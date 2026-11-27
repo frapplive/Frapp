@@ -29,6 +29,7 @@ export function PermissionToggleList({
   rowLockedReason,
   pendingPermission,
   failure = null,
+  footnote = null,
 }: {
   /** Names the holder in each switch's accessible name. */
   holderName: string;
@@ -44,6 +45,8 @@ export function PermissionToggleList({
   pendingPermission: string | null;
   /** The last save that failed, said on its own row (the phone has no toast). */
   failure?: { permission: string; message: string } | null;
+  /** The muted line under the first group: whose permissions these are. */
+  footnote?: string | null;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -56,8 +59,12 @@ export function PermissionToggleList({
   return (
     <>
       {lockedReason ? <Text style={styles.locked}>{lockedReason}</Text> : null}
-      {groups.map((group) => (
-        <PermissionGroup key={group.label} label={group.label}>
+      {groups.map((group, index) => (
+        <PermissionGroup
+          key={group.label}
+          label={group.label}
+          footnote={index === 0 ? footnote : null}
+        >
           {group.entries.map((row) => {
             const on = isOn(row.permission);
             const rowReason = lockedReason
@@ -93,18 +100,24 @@ export function PermissionToggleList({
   );
 }
 
-/** One module's heading and its rows, shared with the role's override list. */
+/**
+ * One module's heading and its rows, shared with the role's override list.
+ * The first group carries the page's footnote, as web's does
+ * (`tierPermissionsFootnote`, `rolePermissionsFootnote`).
+ */
 export function PermissionGroup({
   label,
+  footnote = null,
   children,
 }: {
   label: string;
+  footnote?: string | null;
   children: React.ReactNode;
 }) {
   return (
     <>
       <SectionHeader>{label}</SectionHeader>
-      <ListSection>{children}</ListSection>
+      <ListSection footnote={footnote}>{children}</ListSection>
     </>
   );
 }

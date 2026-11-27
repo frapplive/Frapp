@@ -65,6 +65,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeleteTask: () => ({ mutateAsync: deleteTask, isPending: false }),
   useConfirmTask: () => ({ mutateAsync: confirmTask, isPending: false }),
   useRejectTask: () => ({ mutateAsync: rejectTask, isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 /** `null` online; a reason while a write would be lost. */
 const connection = vi.hoisted(() => ({
@@ -210,9 +211,13 @@ afterEach(() => {
 });
 
 describe("a member on their own task", () => {
-  it("offers only Mark done and Start, and Mark done walks the checkbox's writes", async () => {
+  it("offers only Mark done, Start and Ask for more time, and Mark done walks the checkbox's writes", async () => {
     const tree = render();
-    expect(longPress(tree)).toEqual(["Mark done", "Start"]);
+    expect(longPress(tree)).toEqual([
+      "Mark done",
+      "Start",
+      "Ask for more time",
+    ]);
     await act(async () => {
       pick(tree, "Mark done");
     });
@@ -241,13 +246,17 @@ describe("a member on their own task", () => {
     });
     tasks = [{ ...BASE, status: "IN_PROGRESS", stored_status: "IN_PROGRESS" }];
     tree = render();
-    expect(longPress(tree)).toEqual(["Mark done"]);
+    expect(longPress(tree)).toEqual(["Mark done", "Ask for more time"]);
   });
 
   it("opens Mark done's proof sheet on a task that asks for a photo", async () => {
     tasks = [{ ...BASE, proof_kind: "photo" }];
     const tree = render();
-    expect(longPress(tree)).toEqual(["Mark done with a photo", "Start"]);
+    expect(longPress(tree)).toEqual([
+      "Mark done with a photo",
+      "Start",
+      "Ask for more time",
+    ]);
     await act(async () => {
       pick(tree, "Mark done with a photo");
     });

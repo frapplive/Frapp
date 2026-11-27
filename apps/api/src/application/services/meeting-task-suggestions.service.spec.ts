@@ -3,6 +3,11 @@ import { actionItemKey } from '#domain/utils/minutes-task-proposals';
 import { MeetingTaskSuggestionsService } from './meeting-task-suggestions.service';
 
 const CHAPTER = '11111111-1111-4111-8111-111111111111';
+const WHO_SOLO = {
+  audience: null,
+  audience_name: null,
+  assignee_ids: ['u-1'],
+};
 const OFFICER = '22222222-2222-4222-8222-222222222222';
 const JAKE = '33333333-3333-4333-8333-333333333333';
 const MEETING = '55555555-5555-4555-8555-555555555555';
@@ -227,14 +232,13 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
       },
     ]);
     tasks.doneMarks.mockResolvedValue(
-      new Map([['t-bus', { done: true, group: null }]]),
+      new Map([['t-bus', { done: true, group: null, who: WHO_SOLO }]]),
     );
 
+    // Only the done mark, unless the caller may read every task.
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([
-      { index: 0, done: true, group: null, task_id: 't-bus' },
-    ]);
+    ).resolves.toEqual([{ index: 0, done: true, group: null, task: null }]);
     expect(meetings.get).toHaveBeenCalledWith(CHAPTER, MEETING, OFFICER);
     expect(tasks.doneMarks).toHaveBeenCalledWith(CHAPTER, ['t-bus']);
   });
@@ -245,16 +249,41 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
       accepted('Order shirts', 't-shirts'),
     ]);
     tasks.doneMarks.mockResolvedValue(
-      new Map([['t-shirts', { done: false, group: { done: 14, total: 20 } }]]),
+      new Map([
+        [
+          't-shirts',
+          { done: false, group: { done: 14, total: 20 }, who: WHO_SOLO },
+        ],
+      ]),
     );
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
     ).resolves.toEqual([
+      { index: 1, done: false, group: { done: 14, total: 20 }, task: null },
+    ]);
+  });
+
+  it('tells an officer who manages tasks which task each item became, and whose (#6051)', async () => {
+    const { service, repo, tasks } = build();
+    repo.listKeyedForSource.mockResolvedValue([
+      accepted('Book the bus', 't-bus'),
+    ]);
+    const who = {
+      audience: 'role' as const,
+      audience_name: 'Cabinet',
+      assignee_ids: [],
+    };
+    tasks.doneMarks.mockResolvedValue(
+      new Map([['t-bus', { done: false, group: { done: 0, total: 6 }, who }]]),
+    );
+    await expect(
+      service.actionItemTasks(CHAPTER, MEETING, OFFICER, { withTask: true }),
+    ).resolves.toEqual([
       {
-        index: 1,
+        index: 0,
         done: false,
-        group: { done: 14, total: 20 },
-        task_id: 't-shirts',
+        group: { done: 0, total: 6 },
+        task: { id: 't-bus', who },
       },
     ]);
   });
@@ -276,13 +305,11 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
       accepted('Order shirts', 't-shirts'),
     ]);
     tasks.doneMarks.mockResolvedValue(
-      new Map([['t-shirts', { done: true, group: null }]]),
+      new Map([['t-shirts', { done: true, group: null, who: WHO_SOLO }]]),
     );
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([
-      { index: 0, done: true, group: null, task_id: 't-shirts' },
-    ]);
+    ).resolves.toEqual([{ index: 0, done: true, group: null, task: null }]);
   });
 
   it('leaves out an item whose task was deleted since', async () => {
@@ -310,9 +337,14 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
   const mark = {
     done: false,
     group: null,
-    status: 'TODO',
-    assignee_ids: [JAKE],
+    who: { audience: null, audience_name: null, assignee_ids: [JAKE] },
   };
+  const expected = (index: number, id: string) => ({
+    index,
+    done: mark.done,
+    group: mark.group,
+    task: { id, who: mark.who },
+  });
 
   it('claims the item, makes the task linked to the meeting, and fills the claim', async () => {
     const { service, tasks, itemTasks } = build();
@@ -332,7 +364,7 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
         { text: 'Book the bus', assignee_ids: [JAKE] },
         MODULES,
       ),
-    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-new' });
+    ).resolves.toEqual(expected(0, 't-new'));
 
     expect(itemTasks.claim).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -415,7 +447,7 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
         { text: 'Book the bus', assignee_ids: [JAKE] },
         MODULES,
       ),
-    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-bus' });
+    ).resolves.toEqual(expected(0, 't-bus'));
     expect(tasks.create).not.toHaveBeenCalled();
     expect(itemTasks.claim).not.toHaveBeenCalled();
   });
@@ -444,7 +476,7 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
         { text: 'Book the bus', assignee_ids: [JAKE] },
         MODULES,
       ),
-    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-bus' });
+    ).resolves.toEqual(expected(0, 't-bus'));
     expect(suggestions.accept).toHaveBeenCalledWith(
       CHAPTER,
       OFFICER,
@@ -645,8 +677,8 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
     tasks.copyOfGroups.mockResolvedValue(new Map([['group-1', 't-sam']]));
     tasks.doneMarks.mockResolvedValue(new Map([['t-sam', mark]]));
     await expect(
-      service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([{ index: 1, ...mark, task_id: 't-sam' }]);
+      service.actionItemTasks(CHAPTER, MEETING, OFFICER, { withTask: true }),
+    ).resolves.toEqual([expected(1, 't-sam')]);
     expect(tasks.copyOfGroups).toHaveBeenCalledWith(CHAPTER, ['group-1']);
   });
 
@@ -732,8 +764,8 @@ describe('makeTask: an action item made a task from the minutes (#6062)', () => 
     ]);
     tasks.doneMarks.mockResolvedValue(new Map([['t-made', mark]]));
     await expect(
-      service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([{ index: 1, ...mark, task_id: 't-made' }]);
+      service.actionItemTasks(CHAPTER, MEETING, OFFICER, { withTask: true }),
+    ).resolves.toEqual([expected(1, 't-made')]);
   });
 
   it('never suggests an item already made a task from the minutes', async () => {

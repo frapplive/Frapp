@@ -4,16 +4,17 @@ import React, { useMemo, useState } from "react";
 import {
   ALUMNI_FOLLOWING_NOTE,
   ATTENDANCE_SEARCH_FROM,
-  EVENT_ATTENDANCE_LABELS,
+  EVENT_ATTENDANCE_ANSWER_LABELS,
   alumniRoleIdOf,
-  attendanceChoices,
+  attendanceAnswerChoices,
   attendanceFloorOf,
-  attendanceOfRole,
   describeAttendance,
-  withEveryone,
-  withRole,
+  everyoneAnswer,
+  roleAnswer,
+  withEveryoneAnswer,
+  withRoleAnswer,
+  type EventAttendanceAnswer,
   type EventAttendanceDraft,
-  type EventAttendanceStatus,
 } from "@repo/validation";
 import { attendanceTargets } from "@repo/hooks/attendance-targets";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,9 @@ import { cn } from "@/lib/utils";
  *
  * One line says the whole rule; then "Everyone else", one row per tier (Paul,
  * 2026-11-22: a tier like Cabinet is picked whole, and stays current as roles
- * join it), then one row per role, each with the same three answers. A role
+ * join it), then one row per role, each with the same answers: Required,
+ * Optional, Not invited, and on Everyone else On the calendar only (#6098),
+ * the whole event's, after which a role row offers only it or Not invited. A role
  * in a tier that is set apart follows the tier's answer. A role that only follows Everyone else
  * holds its answer in neutral ink, a role set apart is lit in the accent.
  * Comparable: Discord's channel permission overrides, a row per role with the
@@ -51,6 +54,7 @@ export function AttendanceEditor({
   rolesState,
   disabled = false,
   allowRequired = true,
+  calendarOnlyAllowed = true,
 }: {
   value: EventAttendanceDraft;
   onChange: (next: EventAttendanceDraft) => void;
@@ -68,6 +72,11 @@ export function AttendanceEditor({
    * stays visible (`attendanceChoices`).
    */
   allowRequired?: boolean;
+  /**
+   * False keeps On the calendar only off Everyone else's answers (a form
+   * that can't send it); a draft already holding it keeps it.
+   */
+  calendarOnlyAllowed?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -99,12 +108,17 @@ export function AttendanceEditor({
   const collapsedCount = Math.max(ATTENDANCE_SEARCH_FROM, pinned.length);
   const shown = showAll || searching ? rows : rows.slice(0, collapsedCount);
   const options = (
-    current: EventAttendanceStatus,
-    floor?: EventAttendanceStatus,
+    row:
+      { kind: "everyone" } | { kind: "role"; current: EventAttendanceAnswer },
+    floor?: ReturnType<typeof attendanceFloorOf>,
   ) =>
-    attendanceChoices(current, allowRequired, floor).map((status) => ({
-      value: status,
-      label: EVENT_ATTENDANCE_LABELS[status],
+    attendanceAnswerChoices(value, row, {
+      allowRequired,
+      calendarOnlyAllowed,
+      floor,
+    }).map((answer) => ({
+      value: answer,
+      label: EVENT_ATTENDANCE_ANSWER_LABELS[answer],
     }));
 
   return (
@@ -128,9 +142,9 @@ export function AttendanceEditor({
           <SegmentedChoice
             dense
             label="Attendance for everyone else"
-            options={options(value.everyone)}
-            value={value.everyone}
-            onChange={(everyone) => emit(withEveryone(value, everyone))}
+            options={options({ kind: "everyone" })}
+            value={everyoneAnswer(value)}
+            onChange={(answer) => emit(withEveryoneAnswer(value, answer))}
             disabled={disabled}
           />
         </AttendanceRow>
@@ -151,7 +165,7 @@ export function AttendanceEditor({
             const setApart = role.id in value.roles;
             const followsTier =
               !setApart && !!role.tierEntry && role.tierEntry in value.roles;
-            const current = attendanceOfRole(value, role.id, role.tierEntry);
+            const current = roleAnswer(value, role.id, role.tierEntry);
             return (
               <li key={role.id} className="border-t border-border">
                 <AttendanceRow
@@ -163,6 +177,7 @@ export function AttendanceEditor({
                       ? `Follows ${nameOf(role.tierEntry)}`
                       : role.id === alumniId &&
                           !setApart &&
+                          !value.calendarOnly &&
                           value.everyone !== "not_invited"
                         ? ALUMNI_FOLLOWING_NOTE
                         : undefined)
@@ -172,12 +187,12 @@ export function AttendanceEditor({
                     dense
                     label={`Attendance for ${role.name}`}
                     options={options(
-                      current,
+                      { kind: "role", current },
                       attendanceFloorOf(value, role.tierEntry),
                     )}
                     value={current}
                     onChange={(next) =>
-                      emit(withRole(value, role.id, next, role.tierEntry))
+                      emit(withRoleAnswer(value, role.id, next, role.tierEntry))
                     }
                     disabled={disabled}
                     quiet={!setApart}

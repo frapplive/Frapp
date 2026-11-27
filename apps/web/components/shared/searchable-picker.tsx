@@ -163,7 +163,7 @@ export function SearchablePicker<T>({
             value={query}
             onValueChange={changeQuery}
             placeholder={placeholder}
-            className="h-9 py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base"
+            className="h-control-small py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base"
           />
           <CommandList className="max-h-72 p-1">
             {status !== undefined ? (
