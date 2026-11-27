@@ -113,12 +113,16 @@ Paste this block into a chain's brief, after its steps:
 >    step it blocks, with the options and your recommendation. Add `Blocked by #<that issue>` as the
 >    last line of the step's body, so `/next` leaves it alone. Mark it "waiting on Paul" in the
 >    ledger, and carry on with the next step that doesn't depend on it. Never AskUserQuestion.
-> 6. **Hand off after three merged PRs**, or sooner if the steps were large (a worker can't read its
->    own context use). Bring the ledger up to date, push everything, call `unsubscribe_pr_activity`
->    on every PR you're subscribed to, and end with "handoff: ledger on #<epic>".
+> 6. **Hand off at 50% context** (`get_session` with no id reads it; if you can't, after three
+>    merged PRs). Bring the ledger up to date, push everything, and call `unsubscribe_pr_activity` on
+>    every PR you're subscribed to. If you have `create_session`, start your successor yourself, as
+>    the coordinator does its own: the same brief plus "Continue from the Chain status comment on
+>    #<epic>. First subscribe to every open PR it lists." Name it in the ledger and end with "handed
+>    off to <session>". Otherwise end with "handoff: ledger on #<epic>".
 
 On every wake, read each chain's ledger and session:
 
+- **"handed off to <session>":** archive the worker; its successor is running.
 - **"handoff":** archive the worker, and start its successor with the same brief plus "Continue from
   the Chain status comment on #<epic>. First subscribe to every open PR it lists."
 - **"blocked: waiting for #N to merge", and #N has merged:** message the worker to continue.
@@ -177,6 +181,6 @@ The session can't run `/compact` on itself, so it hands off instead. After each 
 - **Identity.** Workers run on the coordinator owner's account, GitHub and environment, so anything
   Shawn sends runs as Paul. That is why Shawn's ideas stop at research and design until Paul approves.
 - **Hands off.** Never merge or turn on auto-merge, and never change production without Paul.
-- **Waking.** Workers have no `create_session` or `get_session` (their tool list, read
-  2026-11-27), and nothing wakes the coordinator on its own, so a chain that hands off or blocks
-  waits until Paul next writes here or on the board. Read the chains' ledgers then.
+- **Waking.** Nothing wakes the coordinator on its own, so a chain that blocks, or hands off
+  without starting its successor, waits until Paul next writes here or on the board. Read the
+  chains' ledgers then.
