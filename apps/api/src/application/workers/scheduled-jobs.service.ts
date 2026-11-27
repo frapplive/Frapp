@@ -102,6 +102,11 @@ const POLL_EXPIRY_LOOKBACK_HOURS = 24;
  * `fetchAllPages` and reports it to Sentry — that is the alertable signal. A
  * worker that never ran logs nothing, and neither does a healthy tick with no
  * upcoming events, so `{sent: 0}` on its own distinguishes nothing.
+ *
+ * The database's wake check (`api_work_due`,
+ * `20261127210946_wake_api_when_reminders_due.sql`) copies this window plus
+ * 5 minutes, so a sleeping staging API is up when the window opens. Change
+ * both together.
  */
 const EVENT_REMINDER_LEAD_MINUTES = 30;
 
@@ -122,6 +127,9 @@ const DUE_SOON_LEAD_DAYS = 1;
  * It is the window's width, not the delivery offset: a five-minute tick
  * first sees a task 55 to 60 minutes out, and one made inside its own window
  * is closer still, so the body says the time actually left (`dueInPhrase`).
+ *
+ * `api_work_due` (`20261127210946_wake_api_when_reminders_due.sql`) copies it
+ * plus 5 minutes to wake a sleeping staging API; change both together.
  */
 const TIMED_TASK_DUE_SOON_LEAD_MINUTES = 60;
 
