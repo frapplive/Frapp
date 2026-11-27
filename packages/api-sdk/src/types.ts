@@ -5601,6 +5601,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/documents/{id}/version-upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes) */
+        post: operations["ChapterDocumentController_requestVersionUploadUrl_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a document’s file with a new version, keeping its id, folder, who can see it, pin and stars (the earlier file is deleted) */
+        put: operations["ChapterDocumentController_replaceFile_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/documents/{id}/pin": {
         parameters: {
             query?: never;
@@ -13605,6 +13639,14 @@ export interface components {
         SetDocumentAccessDto: {
             /** @description Who can see the file (#3642): null or left out for the same as its folder, or the tiers, roles and groups named, which narrow the folder's (a member passes both). Not empty. The caller's own tier and every tier above it are always kept. */
             who_can_see?: string[] | null;
+        };
+        ReplaceDocumentFileDto: {
+            /** @description Storage path returned from version-upload-url, after the bytes were PUT to its upload_url */
+            storage_path: string;
+            /** @description MIME content type of the new version, as declared for its upload; it may differ from the earlier file’s */
+            content_type: string;
+            /** @description Size of the new version in bytes */
+            byte_size?: number;
         };
         FrappLinkTargetDto: {
             /** @enum {string} */
@@ -28964,6 +29006,74 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetDocumentAccessDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterDocumentDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterDocumentController_requestVersionUploadUrl_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDocumentUploadUrlDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentUploadUrlResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterDocumentController_replaceFile_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceDocumentFileDto"];
             };
         };
         responses: {

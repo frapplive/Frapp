@@ -207,6 +207,8 @@ export const FEATURE_EVENTS = {
     properties: ['has_document_type', 'has_folder'],
   },
   'document-viewed': { feature: 'documents', properties: [] },
+  // A new version of an uploaded file (#6055): the same row, a new file.
+  'document-version-uploaded': { feature: 'documents', properties: [] },
   // One per batch a folder import files (#2242): counts only, since types
   // and folders are chapter-chosen names.
   'documents-imported': {

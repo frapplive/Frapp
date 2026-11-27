@@ -518,4 +518,44 @@ describe('SupabaseChapterDocumentRepository — paging and refiling', () => {
     expect(row(id('a', 2))?.folder).toBe('Rush');
     expect(row(id('b', 1))?.folder).toBeNull();
   });
+
+  // #6055: a new version replaces an upload's file in place, never a Drive
+  // file's, and only while the row still files the path the caller read.
+  it('replaces an upload’s file in place, never a Drive file’s, another chapter’s, or a stale read’s', async () => {
+    const harness = harnessWith(
+      twins([
+        [1],
+        [2, { drive_file_id: 'copy-2' }],
+        [3, { drive_file_id: 'linked-3', drive_link_status: 'active' }],
+      ]),
+    );
+    const repo = new SupabaseChapterDocumentRepository(harness.client);
+    const row = (rowId: string) =>
+      harness.rows('chapter_documents').find((r) => r.id === rowId);
+    const file = {
+      storage_path: 'a/file-1-v2.docx',
+      content_type: 'application/msword',
+      byte_size: 10,
+    };
+
+    const replaced = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.replaceFile(id('a', 1), CHAPTER_A, 'a/file-1.pdf', file),
+    );
+    expect(replaced).toMatchObject({ id: id('a', 1), ...file });
+    expect(row(id('b', 1))?.storage_path).toBe('b/file-1.pdf');
+
+    // The path it was read with is gone: another version landed first.
+    await expect(
+      repo.replaceFile(id('a', 1), CHAPTER_A, 'a/file-1.pdf', file),
+    ).resolves.toBeNull();
+    for (const n of [2, 3]) {
+      await expect(
+        repo.replaceFile(id('a', n), CHAPTER_A, `a/file-${n}.pdf`, file),
+      ).resolves.toBeNull();
+      expect(row(id('a', n))?.storage_path).toBe(`a/file-${n}.pdf`);
+    }
+    await expect(
+      repo.replaceFile(id('b', 1), CHAPTER_A, 'b/file-1.pdf', file),
+    ).resolves.toBeNull();
+  });
 });

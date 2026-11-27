@@ -18792,6 +18792,118 @@
         ]
       }
     },
+    "/v1/documents/{id}/version-upload-url": {
+      "post": {
+        "operationId": "ChapterDocumentController_requestVersionUploadUrl_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestDocumentUploadUrlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentUploadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes)",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/v1/documents/{id}/file": {
+      "put": {
+        "operationId": "ChapterDocumentController_replaceFile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceDocumentFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterDocumentDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a document’s file with a new version, keeping its id, folder, who can see it, pin and stars (the earlier file is deleted)",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
     "/v1/documents/{id}/pin": {
       "put": {
         "operationId": "ChapterDocumentController_pinDocument_v1",
@@ -42048,6 +42160,27 @@
             }
           }
         }
+      },
+      "ReplaceDocumentFileDto": {
+        "type": "object",
+        "properties": {
+          "storage_path": {
+            "type": "string",
+            "description": "Storage path returned from version-upload-url, after the bytes were PUT to its upload_url"
+          },
+          "content_type": {
+            "type": "string",
+            "description": "MIME content type of the new version, as declared for its upload; it may differ from the earlier file’s"
+          },
+          "byte_size": {
+            "type": "number",
+            "description": "Size of the new version in bytes"
+          }
+        },
+        "required": [
+          "storage_path",
+          "content_type"
+        ]
       },
       "FrappLinkTargetDto": {
         "type": "object",

@@ -111,6 +111,7 @@ describe('ChapterDocumentService', () => {
       setPinnedAt: jest.fn(),
       setWhoCanSee: jest.fn(),
       updateFiling: jest.fn(),
+      replaceFile: jest.fn(),
       moveMany: jest.fn(),
       findInFolders: jest.fn().mockResolvedValue([]),
       fileMinutes: jest.fn(),
@@ -2617,6 +2618,199 @@ describe('ChapterDocumentService', () => {
           null,
         );
       });
+    });
+  });
+
+  describe('a new version (#6055)', () => {
+    const NEW_PATH =
+      'chapters/ch-1/documents/0b6f6a52-6d0a-4b8e-9d55-4c1c5a1f2e33/bylaws-v2.docx';
+    const DOCX =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const version = {
+      storage_path: NEW_PATH,
+      content_type: DOCX,
+      byte_size: 2048,
+    };
+    const ticket = { filename: 'bylaws-v2.docx', contentType: DOCX };
+
+    beforeEach(() => {
+      mockDocumentRepo.findById.mockResolvedValue(baseDocument);
+      mockDocumentRepo.replaceFile.mockImplementation(
+        async (_id, _chapter, _current, file) => ({ ...baseDocument, ...file }),
+      );
+      mockStorageProvider.deleteFile.mockResolvedValue(undefined);
+    });
+
+    it('puts the new file in place on the same row and deletes the old one', async () => {
+      const result = await service.replaceFile(
+        'doc-1',
+        'ch-1',
+        'user-1',
+        version,
+      );
+      expect(mockDocumentRepo.replaceFile).toHaveBeenCalledWith(
+        'doc-1',
+        'ch-1',
+        baseDocument.storage_path,
+        { storage_path: NEW_PATH, content_type: DOCX, byte_size: 2048 },
+      );
+      // Same id, title, folder and list: only the file changed.
+      expect(result).toMatchObject({
+        id: 'doc-1',
+        title: baseDocument.title,
+        folder: baseDocument.folder,
+        who_can_see: baseDocument.who_can_see,
+        storage_path: NEW_PATH,
+        content_type: DOCX,
+      });
+      expect(mockDocumentRepo.create).not.toHaveBeenCalled();
+      expect(mockStorageProvider.deleteFile).toHaveBeenCalledWith(
+        'documents',
+        baseDocument.storage_path,
+      );
+      // The uploader needs no permission beyond seeing their own file.
+      expect(mockRbac.memberHasAnyPermission).not.toHaveBeenCalled();
+    });
+
+    it("lets someone who manages documents replace another member's upload", async () => {
+      mockRbac.memberHasAnyPermission.mockResolvedValue(true);
+      await service.replaceFile('doc-1', 'ch-1', 'user-officer', version);
+      expect(mockRbac.memberHasAnyPermission).toHaveBeenCalledWith(
+        'ch-1',
+        'user-officer',
+        ['chapter_docs:manage'],
+      );
+      expect(mockDocumentRepo.replaceFile).toHaveBeenCalled();
+    });
+
+    it('refuses anyone else, before a link is minted or a file is touched', async () => {
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-2', version),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.requestVersionUploadUrl('doc-1', 'ch-1', 'user-2', ticket),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockStorageProvider.getSignedUploadUrl).not.toHaveBeenCalled();
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a copy from the Drive folder', { drive_file_id: 'drive-1' }],
+      [
+        'a file added by its Drive link',
+        { drive_file_id: 'drive-2', drive_link_status: 'active' as const },
+      ],
+    ])('refuses %s, even to whoever manages documents', async (_name, over) => {
+      mockRbac.memberHasAnyPermission.mockResolvedValue(true);
+      mockDocumentRepo.findById.mockResolvedValue({ ...baseDocument, ...over });
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow('Change it in Google Drive');
+      await expect(
+        service.requestVersionUploadUrl('doc-1', 'ch-1', 'user-1', ticket),
+      ).rejects.toThrow(ConflictException);
+      expect(mockStorageProvider.getSignedUploadUrl).not.toHaveBeenCalled();
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+    });
+
+    it("refuses a meeting's minutes", async () => {
+      mockRbac.memberHasAnyPermission.mockResolvedValue(true);
+      mockMeetings.readablePosted.mockResolvedValue(
+        new Map([['mtg-1', { event_name: 'Chapter' }]]),
+      );
+      mockDocumentRepo.findById.mockResolvedValue({
+        ...baseDocument,
+        storage_path: null,
+        uploaded_by: null,
+        meeting_id: 'mtg-1',
+      });
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow(ConflictException);
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+    });
+
+    it('checks the new file as an upload is checked', async () => {
+      await expect(
+        service.requestVersionUploadUrl('doc-1', 'ch-1', 'user-1', {
+          filename: 'logo.svg',
+          contentType: 'image/svg+xml',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', {
+          ...version,
+          content_type: 'text/html',
+        }),
+      ).rejects.toThrow('is not allowed');
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', {
+          ...version,
+          storage_path: 'chapters/ch-2/documents/x/bylaws.pdf',
+        }),
+      ).rejects.toThrow('within the chapter documents folder');
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+    });
+
+    it('mints a link in the chapter for a file the caller may replace', async () => {
+      mockStorageProvider.getSignedUploadUrl.mockResolvedValue(
+        'https://storage.supabase.co/upload/signed',
+      );
+      const minted = await service.requestVersionUploadUrl(
+        'doc-1',
+        'ch-1',
+        'user-1',
+        { ...ticket, sizeBytes: 2048 },
+      );
+      expect(minted.storagePath).toMatch(
+        /^chapters\/ch-1\/documents\/[0-9a-f-]{36}\/bylaws-v2\.docx$/,
+      );
+    });
+
+    it('answers a retry of the version already in place with the row, unchanged', async () => {
+      mockDocumentRepo.findById.mockResolvedValue({
+        ...baseDocument,
+        storage_path: NEW_PATH,
+      });
+      const result = await service.replaceFile(
+        'doc-1',
+        'ch-1',
+        'user-1',
+        version,
+      );
+      expect(result.storage_path).toBe(NEW_PATH);
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('refuses a path another row files, which would put two rows on one object', async () => {
+      mockDocumentRepo.findByStoragePath.mockResolvedValue({
+        ...baseDocument,
+        id: 'doc-2',
+        storage_path: NEW_PATH,
+      });
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow(ConflictException);
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old file when another version landed first', async () => {
+      mockDocumentRepo.replaceFile.mockResolvedValue(null);
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow('uploaded a new version first');
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('still answers with the new version when the old file will not delete', async () => {
+      mockStorageProvider.deleteFile.mockRejectedValue(
+        new Error('storage down'),
+      );
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).resolves.toMatchObject({ id: 'doc-1', storage_path: NEW_PATH });
     });
   });
 });

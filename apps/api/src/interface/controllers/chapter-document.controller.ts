@@ -67,6 +67,7 @@ import {
   SetDocumentAccessDto,
   UpdateDocumentDto,
   MoveDocumentsDto,
+  ReplaceDocumentFileDto,
 } from '../dtos/chapter-document.dto';
 
 @ApiTags('Documents')
@@ -608,6 +609,64 @@ export class ChapterDocumentController {
       userId,
       dto.who_can_see ?? null,
     );
+  }
+
+  // A new version (#6055): like who sees it, for the file's uploader or
+  // whoever manages documents; the service checks which. Never a file from
+  // Google Drive or a meeting's minutes.
+  @Post(':id/version-upload-url')
+  @ThrottleFanOutWrite()
+  @ApiOperation({
+    summary:
+      'Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes)',
+  })
+  @ApiCreatedResponse({ type: DocumentUploadUrlResponseDto })
+  async requestVersionUploadUrl(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestDocumentUploadUrlDto,
+  ): Promise<DocumentUploadUrlResponseDto> {
+    const ticket = await this.chapterDocumentService.requestVersionUploadUrl(
+      id,
+      chapterId,
+      userId,
+      {
+        filename: dto.filename,
+        contentType: dto.content_type,
+        sizeBytes: dto.size_bytes,
+      },
+    );
+    if (!ticket.signedUrl || !ticket.storagePath) {
+      throw new InternalServerErrorException(
+        'Storage did not return a signed upload URL or storage path.',
+      );
+    }
+    return {
+      upload_url: ticket.signedUrl,
+      storage_path: ticket.storagePath,
+      document_id: ticket.documentId,
+    };
+  }
+
+  @Put(':id/file')
+  @ApiOperation({
+    summary:
+      'Replace a document’s file with a new version, keeping its id, folder, who can see it, pin and stars (the earlier file is deleted)',
+  })
+  @ApiOkResponse({ type: ChapterDocumentDto })
+  @FeatureEvent('document-version-uploaded')
+  async replaceFile(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReplaceDocumentFileDto,
+  ): Promise<ChapterDocumentDto> {
+    return this.chapterDocumentService.replaceFile(id, chapterId, userId, {
+      storage_path: dto.storage_path,
+      content_type: dto.content_type,
+      byte_size: dto.byte_size,
+    });
   }
 
   @Put(':id/pin')

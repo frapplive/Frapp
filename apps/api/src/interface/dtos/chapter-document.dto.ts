@@ -22,6 +22,7 @@ import {
   CHANNEL_ACCESS_LIST_MAX,
   DOCUMENT_TITLE_MAX_LENGTH,
   DOCUMENT_TYPE_NAME_MAX_LENGTH,
+  MAX_UPLOAD_BYTES,
   MEETING_TYPES,
   type MeetingType,
 } from '@repo/validation';
@@ -152,6 +153,38 @@ export class ConfirmDocumentUploadDto {
 
   @WhoCanSee(FILE_WHO_CAN_SEE)
   who_can_see?: string[] | null;
+}
+
+/**
+ * A new version of an uploaded file (`PUT /v1/documents/:id/file`, #6055):
+ * the storage path `POST /v1/documents/:id/version-upload-url` minted, once
+ * the bytes are there. The document keeps its id, title, folder, who can
+ * see it, pin and stars; the earlier file is deleted.
+ */
+export class ReplaceDocumentFileDto {
+  @ApiProperty({
+    description:
+      'Storage path returned from version-upload-url, after the bytes were PUT to its upload_url',
+  })
+  @IsString()
+  @MaxLength(1024)
+  storage_path: string;
+
+  @ApiProperty({
+    description:
+      'MIME content type of the new version, as declared for its upload; it may differ from the earlier file’s',
+  })
+  @IsString()
+  @MaxLength(255)
+  content_type: string;
+
+  @ApiPropertyOptional({ description: 'Size of the new version in bytes' })
+  // Omitted is "size unknown"; `null` is not a size.
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(MAX_UPLOAD_BYTES)
+  byte_size?: number;
 }
 
 /**
