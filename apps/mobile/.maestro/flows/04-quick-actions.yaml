@@ -9,9 +9,9 @@ tags:
 - runFlow: ../subflows/sign-in.yaml
 - tapOn:
     id: "tab-plus"
-- assertVisible: "Close quick actions"
+- assertVisible: "Close New"
 - takeScreenshot: quick-actions
 - tapOn:
     id: "tab-plus"
-- assertVisible: "Quick actions"
-- assertNotVisible: "Close quick actions"
+- assertVisible: "New"
+- assertNotVisible: "Close New"

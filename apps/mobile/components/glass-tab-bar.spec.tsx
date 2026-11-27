@@ -1,9 +1,8 @@
 /** @vitest-environment jsdom */
 import React from "react";
 import { act } from "react";
-import { withTiming } from "react-native-reanimated";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FrappThemeProvider } from "@/lib/theme";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { drawnText } from "@/test/screen-text";
@@ -102,15 +101,8 @@ vi.mock("@/lib/ai/availability", () => ({
 vi.mock("@/components/quick-actions/quick-actions-panel", () => ({
   QuickActionsPanel: "QuickActionsPanel",
 }));
-// So has the Frapp Intelligence bar (`ask/ask-bar.spec.tsx`).
-vi.mock("@/components/ask/ask-bar", () => ({ AskBar: "AskBar" }));
 
-import { AccessibilityInfo, BackHandler } from "react-native";
-import {
-  floatingScreenLayout,
-  setBarFolded,
-  useAskBarLift,
-} from "@/lib/floating-chrome";
+import { BackHandler } from "react-native";
 import { GlassTabBar } from "./glass-tab-bar";
 
 type Node = ReactTestRenderer["root"];
@@ -393,9 +385,7 @@ describe("the +", () => {
 
     act(() => plus(tree.root)!.props.onPress());
     expect(panel(tree.root).props.editing).toBe(false);
-    expect(plus(tree.root)!.props.accessibilityLabel).toBe(
-      "Close quick actions",
-    );
+    expect(plus(tree.root)!.props.accessibilityLabel).toBe("Close New");
 
     act(() => plus(tree.root)!.props.onPress());
     expect(panel(tree.root)).toBeUndefined();
@@ -453,7 +443,7 @@ describe("the +", () => {
     act(() => plus(tree.root)!.props.onPress());
     const scrim = pressables(tree.root).find(
       (node) =>
-        node.props.accessibilityLabel === "Close quick actions" &&
+        node.props.accessibilityLabel === "Close New" &&
         node.props.accessibilityState === undefined,
     );
     act(() => scrim!.props.onPress());
@@ -480,94 +470,38 @@ describe("the +", () => {
 });
 
 /**
- * Frapp Intelligence's front door (#4702, Paul 2026-11-13): "in a bar above the normal
- * liquid glass bottom, not only when you open the plus menu".
+ * The + is New (#5983; Paul, 2026-11-24, decision 2 on #5943): its panel
+ * leads with Frapp Intelligence for a member who has Ask, and no bar sits
+ * above the tabs.
  */
-describe("the Frapp Intelligence bar", () => {
-  const askBar = (root: Node) =>
-    root.findAll((node) => (node.type as unknown) === "AskBar")[0];
-  /** The wrapper the tab bar places it with. */
-  const placed = (root: Node) => flat(askBar(root).parent!.props.style);
-  /** What a tab screen is told to lift its floating things by. */
-  function liftOnATab(): number {
-    let seen = -1;
-    function Probe() {
-      seen = useAskBarLift();
-      return null;
-    }
-    act(() => {
-      create(
-        floatingScreenLayout({
-          route: { name: "index" },
-          navigation: { addListener: () => () => {} },
-          children: <Probe />,
-        } as unknown as Parameters<typeof floatingScreenLayout>[0]),
-      );
-    });
-    return seen;
-  }
-
-  it("is not there for a member without Ask, and the screens are not told to make room", () => {
+describe("Frapp Intelligence", () => {
+  it("leads the + panel for a member who has Ask, and closes it as it opens the conversation", () => {
+    quick.hasAsk = true;
     const tree = render();
-    expect(askBar(tree.root)).toBeUndefined();
-    expect(liftOnATab()).toBe(0);
+    act(() => plus(tree.root)!.props.onPress());
+    const onAsk = panel(tree.root).props.onAsk as () => void;
+    expect(onAsk).toBeInstanceOf(Function);
+    act(() => onAsk());
+    expect(quick.ask).toHaveBeenCalledTimes(1);
+    expect(panel(tree.root)).toBeUndefined();
   });
 
-  it("sits 8pt above the tab bar, as wide as the bar and its + together, on every tab", () => {
+  it("is not in the panel for a member without Ask", () => {
+    const tree = render();
+    act(() => plus(tree.root)!.props.onPress());
+    expect(panel(tree.root).props.onAsk).toBeUndefined();
+  });
+
+  it("draws no bar above the tabs, on any tab", () => {
     quick.hasAsk = true;
     for (const tab of ["index", "activity", "messages", "you"]) {
       const tree = render(tab);
-      // No inset: the tab bar's top is 12 + 62 off the edge.
-      expect(placed(tree.root)).toMatchObject({
-        position: "absolute",
-        left: 14,
-        width: 402 - 14 * 2,
-        height: 48,
-        bottom: 12 + 62 + 8,
-      });
+      expect(
+        tree.root.findAll((node) => node.props.testID === "ask-bar"),
+      ).toHaveLength(0);
+      expect(drawnText(tree.root)).not.toContain("What do you need?");
       act(() => tree.unmount());
     }
-  });
-
-  it("rides up with the tab bar over a home indicator", () => {
-    quick.hasAsk = true;
-    device.bottomInset = 34;
-    expect(placed(render().root).bottom).toBe(26 + 62 + 8);
-  });
-
-  it("opens the conversation", () => {
-    quick.hasAsk = true;
-    const tree = render();
-    act(() => askBar(tree.root).props.onPress());
-    expect(quick.ask).toHaveBeenCalledTimes(1);
-  });
-
-  it("tells the tab screens to make room while it is there, and stops when it goes", () => {
-    quick.hasAsk = true;
-    const tree = render();
-    expect(liftOnATab()).toBe(48 + 8);
-    // The president turns Ask off: the bar goes and the room is given back.
-    quick.hasAsk = false;
-    act(() => tree.update(element("index")));
-    expect(askBar(tree.root)).toBeUndefined();
-    expect(liftOnATab()).toBe(0);
-  });
-
-  it("gives the room back when the tab bar itself goes", () => {
-    quick.hasAsk = true;
-    const tree = render();
-    act(() => tree.unmount());
-    expect(liftOnATab()).toBe(0);
-  });
-
-  it("is covered by the open + panel, which no longer holds an Ask row of its own", () => {
-    quick.hasAsk = true;
-    const tree = render();
-    act(() => plus(tree.root)!.props.onPress());
-    expect(askBar(tree.root)).toBeUndefined();
-    expect(panel(tree.root).props.onAsk).toBeUndefined();
-    act(() => plus(tree.root)!.props.onPress());
-    expect(askBar(tree.root)).toBeDefined();
   });
 });
 
@@ -583,14 +517,13 @@ describe("a confirmation", () => {
     return flat(node!.props.style).bottom as number;
   };
 
-  it("sits above the Frapp Intelligence bar for a member who has one, never over it", () => {
+  it("sits just above the tab bar, whether or not the member has Ask", () => {
     quick.notice = "Assigned to Sam Rivera.";
     const without = noticeBottom(render().root);
     quick.hasAsk = true;
-    const withBar = noticeBottom(render().root);
-    // The Ask bar's own top edge, plus the gap a notice keeps.
-    expect(withBar).toBe(12 + 62 + 8 + 48 + 10);
-    expect(withBar).toBeGreaterThan(without);
+    // The tab bar's top edge, plus the gap a notice keeps.
+    expect(noticeBottom(render().root)).toBe(12 + 62 + 10);
+    expect(without).toBe(12 + 62 + 10);
   });
 
   it("shows above the bar, and not over an open panel", () => {
@@ -603,225 +536,5 @@ describe("a confirmation", () => {
     expect(texts()).toContain("Assigned to Sam Rivera.");
     act(() => plus(tree.root)!.props.onPress());
     expect(texts()).not.toContain("Assigned to Sam Rivera.");
-  });
-});
-
-/**
- * The fold (#4904, Paul's direction A, 2026-11-17): reading down a tab
- * screen folds the tabs to the current one and brings the Frapp Intelligence bar down
- * into the row between it and the +, which never moves.
- */
-describe("the fold", () => {
-  afterEach(() => act(() => setBarFolded(false)));
-
-  /** Rendered, once the screen reader's setting has been read (off). */
-  async function renderSettled(focused = "index") {
-    const tree = render(focused);
-    await act(async () => {});
-    return tree;
-  }
-  const askPlaced = (root: Node) =>
-    flat(
-      root.findAll((node) => (node.type as unknown) === "AskBar")[0].parent!
-        .props.style,
-    );
-  const tabs = (root: Node) =>
-    root.findAll(
-      (node) =>
-        (node.type as unknown) === "Animated.View" &&
-        node.props.pointerEvents !== undefined &&
-        node.props.importantForAccessibility !== undefined,
-    )[0];
-
-  it("folds the tabs to the current one and brings Ask into the row, leaving the + where it was", async () => {
-    quick.hasAsk = true;
-    const tree = await renderSettled("messages");
-    const plusBefore = flat(plus(tree.root)!.parent!.props.style);
-    act(() => setBarFolded(true));
-
-    expect(flat(pill(tree.root).props.style).width).toBe(62);
-    expect(askPlaced(tree.root)).toMatchObject({
-      left: 14 + 62 + 10,
-      width: 402 - (14 + 62 + 10) * 2,
-      bottom: 12,
-      height: 62,
-    });
-    // The four tabs are out of reach and out of a screen reader's way.
-    expect(tabs(tree.root).props.pointerEvents).toBe("none");
-    expect(tabs(tree.root).props.accessibilityElementsHidden).toBe(true);
-    expect(flat(plus(tree.root)!.parent!.props.style)).toEqual(plusBefore);
-
-    // The folded round names the tab it stands for, and opens the tabs.
-    const round = tree.root.findByProps({ testID: "tab-folded" });
-    expect(round.props.accessibilityLabel).toBe("Messages, show all tabs");
-    act(() => round.props.onPress());
-    expect(flat(pill(tree.root).props.style).width).toBe(
-      402 - 14 - (14 + 62 + 10),
-    );
-    expect(askPlaced(tree.root)).toMatchObject({ left: 14, height: 48 });
-  });
-
-  it("keeps Activity's count in sight while folded: the number on its own round, a dot on another", async () => {
-    quick.hasAsk = true;
-    activity.data = { needs_you_count: 3, unavailable: [] };
-    const onActivity = await renderSettled("activity");
-    act(() => setBarFolded(true));
-    expect(
-      onActivity.root.findAllByProps({ testID: "tab-folded-badge" }),
-    ).toHaveLength(1);
-    act(() => onActivity.unmount());
-
-    const onMessages = await renderSettled("messages");
-    act(() => setBarFolded(true));
-    expect(
-      onMessages.root.findAllByProps({ testID: "tab-folded-dot" }),
-    ).toHaveLength(1);
-    expect(
-      onMessages.root.findByProps({ testID: "tab-folded" }).props
-        .accessibilityLabel,
-    ).toMatch(/^Messages, show all tabs, Activity: /);
-  });
-
-  it("keeps Messages' count in sight while folded, in mention red, and says it", async () => {
-    quick.hasAsk = true;
-    unreadConversations.count = 2;
-    try {
-      const onMessages = await renderSettled("messages");
-      act(() => setBarFolded(true));
-      const [badge] = onMessages.root.findAll(
-        (node) =>
-          typeof node.type === "string" &&
-          node.props.testID === "tab-folded-messages-badge",
-      );
-      expect(drawnText(badge!)).toBe("2");
-      expect(flat(badge!.props.style).backgroundColor).toBe(
-        signetDarkTokens.color.semantic.mention,
-      );
-      expect(
-        onMessages.root.findByProps({ testID: "tab-folded" }).props
-          .accessibilityLabel,
-      ).toBe("Messages, 2 unread conversations, show all tabs");
-      act(() => onMessages.unmount());
-
-      const onChat = await renderSettled("index");
-      act(() => setBarFolded(true));
-      const dots = onChat.root.findAll(
-        (node) =>
-          typeof node.type === "string" &&
-          node.props.testID === "tab-folded-messages-dot",
-      );
-      expect(dots).toHaveLength(1);
-      expect(flat(dots[0]!.props.style).backgroundColor).toBe(
-        signetDarkTokens.color.semantic.mention,
-      );
-      act(() => onChat.unmount());
-    } finally {
-      unreadConversations.count = 0;
-    }
-  });
-
-  it("names both counts on the folded round, the dots stacked rather than on top of each other", async () => {
-    quick.hasAsk = true;
-    activity.data = { needs_you_count: 3, unavailable: [] };
-    unreadConversations.count = 2;
-    try {
-      const onChat = await renderSettled("index");
-      act(() => setBarFolded(true));
-      const round = onChat.root.findByProps({ testID: "tab-folded" });
-      expect(round.props.accessibilityLabel).toMatch(
-        /^Chat, show all tabs, Activity: .+, Messages: 2 unread conversations$/,
-      );
-      const top = (testID: string) =>
-        flat(
-          onChat.root.find(
-            (node) =>
-              typeof node.type === "string" && node.props.testID === testID,
-          ).props.style,
-        ).top;
-      expect(top("tab-folded-dot")).not.toBe(top("tab-folded-messages-dot"));
-      act(() => onChat.unmount());
-
-      // On Messages, its own count leads and Activity's follows.
-      const onMessages = await renderSettled("messages");
-      act(() => setBarFolded(true));
-      expect(
-        onMessages.root.findByProps({ testID: "tab-folded" }).props
-          .accessibilityLabel,
-      ).toMatch(/^Messages, 2 unread conversations, show all tabs, Activity: /);
-      act(() => onMessages.unmount());
-    } finally {
-      unreadConversations.count = 0;
-    }
-  });
-
-  it("gives the tabs back their touches only once they are back in place", async () => {
-    quick.hasAsk = true;
-    const tree = await renderSettled();
-    act(() => setBarFolded(true));
-    vi.useFakeTimers();
-    try {
-      act(() =>
-        tree.root.findByProps({ testID: "tab-folded" }).props.onPress(),
-      );
-      // Opening: a second quick tap lands on nothing.
-      expect(tabs(tree.root).props.pointerEvents).toBe("none");
-      act(() => vi.advanceTimersByTime(320));
-      expect(tabs(tree.root).props.pointerEvents).toBe("auto");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("moves in 320ms, and at once with Reduce Motion on, read live", async () => {
-    quick.hasAsk = true;
-    const timing = vi.mocked(withTiming);
-    timing.mockClear();
-    await renderSettled();
-    act(() => setBarFolded(true));
-    expect(timing.mock.calls.at(-1)?.[1]).toMatchObject({ duration: 320 });
-
-    vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValueOnce(
-      true,
-    );
-    act(() => setBarFolded(false));
-    const reduced = await renderSettled();
-    timing.mockClear();
-    act(() => setBarFolded(true));
-    expect(timing.mock.calls.at(-1)?.[1]).toMatchObject({ duration: 0 });
-    act(() => reduced.unmount());
-  });
-
-  it("doesn't fold for a member without Ask: there is nothing to bring down", async () => {
-    const tree = await renderSettled();
-    act(() => setBarFolded(true));
-    expect(flat(pill(tree.root).props.style).width).toBe(
-      402 - 14 - (14 + 62 + 10),
-    );
-  });
-
-  it("doesn't fold while the + panel is open", async () => {
-    quick.hasAsk = true;
-    const tree = await renderSettled();
-    act(() => plus(tree.root)!.props.onPress());
-    act(() => setBarFolded(true));
-    expect(flat(pill(tree.root).props.style).width).toBe(
-      402 - 14 - (14 + 62 + 10),
-    );
-  });
-
-  it("never folds under a screen reader, so every tab stays a labelled control", async () => {
-    quick.hasAsk = true;
-    vi.mocked(AccessibilityInfo.isScreenReaderEnabled).mockResolvedValueOnce(
-      true,
-    );
-    const tree = await renderSettled();
-    act(() => setBarFolded(true));
-    expect(flat(pill(tree.root).props.style).width).toBe(
-      402 - 14 - (14 + 62 + 10),
-    );
-    expect(
-      tree.root.findByProps({ testID: "tab-folded" }).props
-        .accessibilityElementsHidden,
-    ).toBe(true);
   });
 });

@@ -10,7 +10,10 @@ import { FrappThemeProvider, typeRole } from "@/lib/theme";
 import { screenText, textHeadings } from "@/test/screen-text";
 import { expectBackRow } from "@/test/back-row";
 import { BACK_TO_YOU } from "./back-row";
-import { floatingScreenLayout } from "@/lib/floating-chrome";
+import {
+  floatingScreenLayout,
+  ScreenScrollWatchProvider,
+} from "@/lib/floating-chrome";
 
 // The back row paints the chapter accent; its value is back-row.spec.tsx's.
 vi.mock("@/lib/chapter-branding", () => ({
@@ -387,7 +390,7 @@ describe("ScreenShell over the floating tab bar", () => {
   };
   const lg = getSignetTokens("dark").spacing.lg;
 
-  it("reports its scroll for the bar's fold on a tab, and not on a pushed screen (#4904)", () => {
+  it("reports its scroll only to a screen that watches it, on a tab or not (#5983: the fold that also read it is gone)", () => {
     const scrollProps = (tree: ReactTestRenderer) =>
       tree.root.find((node) => (node.type as unknown) === "ScrollView").props;
     const onTab = scrollProps(
@@ -397,20 +400,22 @@ describe("ScreenShell over the floating tab bar", () => {
         </ScreenShell>,
       ),
     );
-    expect(typeof onTab.onScroll).toBe("function");
-    expect(onTab.scrollEventThrottle).toBe(16);
-    expect(typeof onTab.onContentSizeChange).toBe("function");
-    expect(typeof onTab.onLayout).toBe("function");
+    expect(onTab.onScroll).toBeUndefined();
+    expect(onTab.scrollEventThrottle).toBeUndefined();
 
-    const pushed = scrollProps(
+    const watched = scrollProps(
       render(
-        <ScreenShell title="Dues">
-          <Text>Body</Text>
-        </ScreenShell>,
+        <ScreenScrollWatchProvider value={() => undefined}>
+          <ScreenShell title="Documents">
+            <Text>Body</Text>
+          </ScreenShell>
+        </ScreenScrollWatchProvider>,
       ),
     );
-    expect(pushed.onScroll).toBeUndefined();
-    expect(pushed.scrollEventThrottle).toBeUndefined();
+    expect(typeof watched.onScroll).toBe("function");
+    expect(watched.scrollEventThrottle).toBe(16);
+    expect(typeof watched.onContentSizeChange).toBe("function");
+    expect(typeof watched.onLayout).toBe("function");
   });
 
   it("ends its scroll clear of the bar", () => {

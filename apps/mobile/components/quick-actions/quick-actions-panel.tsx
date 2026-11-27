@@ -12,6 +12,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
 import { NAV_GLYPHS, type DuotoneGlyphPaths } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
+import { AskEntry } from "@/components/ask/ask-entry";
 import { GLASS_EDGE, GlassSurface } from "@/components/glass-surface";
 import { NavGlyph } from "@/components/nav-glyph";
 import { selectionHaptic } from "@/lib/haptics";
@@ -80,6 +81,11 @@ export type QuickActionsPanelProps = {
   onEditingChange: (editing: boolean) => void;
   onRun: (key: QuickActionKey) => void;
   onSave: (keys: readonly QuickActionKey[]) => void;
+  /**
+   * Opens Frapp Intelligence from the field at the panel's top. Left out for
+   * a member without Ask, who gets the actions alone.
+   */
+  onAsk?: () => void;
 };
 
 /**
@@ -93,9 +99,13 @@ export type QuickActionsPanelProps = {
  * can use but hasn't placed. Every change is kept as it is made, so Done and
  * closing the panel both leave it as the member left it.
  *
- * Frapp Intelligence is not in here. It was a bar across the top of this panel until
- * 2026-11-13, when it moved above the tab bar itself (`ask/ask-bar.tsx`,
- * #4702), where a member sees it without opening anything.
+ * The + is New (#5983; Paul, 2026-11-24, decision 2 on #5943: "New opens
+ * Frapp Intelligence … The phone's + becomes the same thing"), so for a member
+ * who has Ask the panel leads with Frapp Intelligence's field
+ * (`ask/ask-entry.tsx`), then the actions, as web's New page does (#5946).
+ * The field steps aside while the member edits the actions. It was a bar
+ * across this panel's top until 2026-11-13 and a bar above the tab bar
+ * (#4702) until #5983.
  */
 export function QuickActionsPanel({
   shown,
@@ -106,6 +116,7 @@ export function QuickActionsPanel({
   onEditingChange,
   onRun,
   onSave,
+  onAsk,
 }: QuickActionsPanelProps) {
   const { tokens } = useFrappTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
@@ -119,6 +130,11 @@ export function QuickActionsPanel({
 
   return (
     <GlassSurface style={[styles.panel, { width }]}>
+      {onAsk && !editing ? (
+        <View style={styles.ask}>
+          <AskEntry onPress={onAsk} />
+        </View>
+      ) : null}
       <Pressable
         // Holding the panel's own surface, between the actions, edits too.
         onLongPress={enterEditing}
@@ -568,6 +584,8 @@ function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     panel: { borderRadius: 30 },
     body: { paddingHorizontal: PAD_X, paddingVertical: PAD_Y },
+    // The field's sides line up with the action discs' outer cells.
+    ask: { paddingHorizontal: PAD_X + LABEL_INSET, paddingTop: PAD_Y },
     rows: {
       flexDirection: "row",
       flexWrap: "wrap",

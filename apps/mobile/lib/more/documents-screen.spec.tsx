@@ -2071,7 +2071,7 @@ describe("a long library (#6088)", () => {
       created_at: new Date(Date.UTC(2026, 9, 1) - i * 60_000).toISOString(),
     }));
 
-  // The shell's scroll view: the one carrying the handler `useBarScroll`
+  // The shell's scroll view: the one carrying the handler `useScreenScroll`
   // spreads, which reports to the screen's scroll watch.
   const scrollTo = (tree: ReactTestRenderer, y: number, content: number) => {
     const [view] = tree.root.findAll(

@@ -8,6 +8,10 @@ import { QUICK_ACTION_LABELS, type QuickActionKey } from "@/lib/quick-actions";
 
 const haptic = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/haptics", () => ({ selectionHaptic: haptic }));
+// The Frapp Intelligence field's crest takes the chapter's colour.
+vi.mock("@/lib/chapter-branding", () => ({
+  useChapterBranding: () => ({ accent: "#8B5CF6" }),
+}));
 
 import { QuickActionsPanel } from "./quick-actions-panel";
 
@@ -406,5 +410,65 @@ describe("the edit badges' glyphs (#4393)", () => {
     for (const { ink, fill } of glyphsOn(tree.root, "M2 5h6")) {
       expect(contrast(ink, fill)).toBeGreaterThanOrEqual(NON_TEXT);
     }
+  });
+});
+
+/**
+ * The + is New (#5983): Frapp Intelligence leads the panel for a member who
+ * has Ask, then the actions; without Ask, the actions alone.
+ */
+describe("Frapp Intelligence at the panel's top", () => {
+  const ask = vi.fn();
+  function renderWithAsk(editing = false, withAsk = true) {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <QuickActionsPanel
+            shown={["newTask", "message"]}
+            available={OFFICER}
+            width={374}
+            editing={editing}
+            {...props}
+            onAsk={withAsk ? ask : undefined}
+          />
+        </FrappThemeProvider>,
+      );
+    });
+    return tree;
+  }
+
+  it("comes first, before the actions, and opens the conversation", () => {
+    ask.mockReset();
+    const tree = renderWithAsk();
+    const labels = pressables(tree.root)
+      .map((node) => node.props.accessibilityLabel)
+      .filter(Boolean);
+    expect(labels).toEqual([
+      "Frapp Intelligence, What do you need?",
+      "New task",
+      "New message",
+    ]);
+    act(() =>
+      byLabel(
+        tree.root,
+        "Frapp Intelligence, What do you need?",
+      )!.props.onPress(),
+    );
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not there for a member without Ask", () => {
+    const tree = renderWithAsk(false, false);
+    expect(
+      tree.root.findAll((node) => node.props.testID === "ask-entry"),
+    ).toHaveLength(0);
+  });
+
+  it("steps aside while the member edits the actions", () => {
+    const tree = renderWithAsk(true);
+    expect(
+      tree.root.findAll((node) => node.props.testID === "ask-entry"),
+    ).toHaveLength(0);
   });
 });

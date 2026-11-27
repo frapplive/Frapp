@@ -31,7 +31,7 @@ import {
 } from "@/components/floating-create-button";
 import {
   FLOATING_TAB_BAR,
-  useBarScroll,
+  useScreenScroll,
   useTabBarClearance,
 } from "@/lib/floating-chrome";
 import {
@@ -227,7 +227,7 @@ export function ScreenShell<V extends string = string>({
   // top level (fragments and arrays included) can be pinned. Index 0 is the
   // title block, which scrolls away.
   const body = flattenChildren(children);
-  const barScroll = useBarScroll();
+  const screenScroll = useScreenScroll();
   const hasViews = views !== undefined && views.options.length > 1;
   const stickyHeaderIndices = body.flatMap((child, index) =>
     child.type === StickyHeader ? [index + 1] : [],
@@ -250,7 +250,7 @@ export function ScreenShell<V extends string = string>({
               ref={scrollRef}
               // Folds the floating bar while the member reads down a tab
               // screen (#4904); nothing off the tab bar.
-              {...barScroll}
+              {...screenScroll}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps={keyboardShouldPersistTaps}
               stickyHeaderIndices={
