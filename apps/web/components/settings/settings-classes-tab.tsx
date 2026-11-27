@@ -229,7 +229,7 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
   } else if (classesQuery.isError && classesQuery.data === undefined) {
     body = (
       <ErrorState
-        title="Couldn't load the list"
+        title={PLEDGE_CLASS_SETTINGS_COPY.loadFailed}
         description="Retry to fetch it again."
         onRetry={() => void classesQuery.refetch()}
       />
@@ -256,7 +256,8 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
     ) : (
       <SettingsSubpage backHref={BASE} backLabel={classTerm} title={classTerm}>
         <InlineNote>
-          It isn&apos;t in the list any more. Someone may have deleted it.
+          {PLEDGE_CLASS_SETTINGS_COPY.gone}{" "}
+          {PLEDGE_CLASS_SETTINGS_COPY.goneDetail}
         </InlineNote>
       </SettingsSubpage>
     );
@@ -493,7 +494,7 @@ function ClassPage({
         />
       ) : membersFailed ? (
         <InlineNote>
-          Couldn&apos;t load the chapter&apos;s members.{" "}
+          {PLEDGE_CLASS_SETTINGS_COPY.membersLoadFailed}{" "}
           <InlineNoteAction onClick={onRetryMembers}>Retry</InlineNoteAction>
         </InlineNote>
       ) : (

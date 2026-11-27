@@ -254,7 +254,7 @@ export function SettingsFieldsTab({ canManage }: Props) {
   } else if (fieldsQuery.isError && fieldsQuery.data === undefined) {
     body = (
       <ErrorState
-        title="Couldn't load member fields"
+        title={MEMBER_FIELDS_COPY.loadFailed}
         description="Retry to fetch them again."
         onRetry={() => void fieldsQuery.refetch()}
       />
@@ -290,7 +290,7 @@ export function SettingsFieldsTab({ canManage }: Props) {
         title={MEMBER_FIELDS_COPY.pageTitle}
       >
         <InlineNote>
-          This field is gone. Someone may have deleted it.
+          {MEMBER_FIELDS_COPY.gone} {MEMBER_FIELDS_COPY.goneDetail}
         </InlineNote>
       </SettingsSubpage>
     );
