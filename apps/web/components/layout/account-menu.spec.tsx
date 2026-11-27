@@ -66,6 +66,15 @@ vi.mock("@/lib/auth/use-frapp-user", () => ({
   useFrappUser: () => ({ userId: "me" }),
 }));
 const network = vi.hoisted(() => ({ isOffline: false }));
+const shellIdentity = vi.hoisted(() => ({
+  value: null as {
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null,
+}));
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellIdentity: () => shellIdentity.value,
+}));
 vi.mock("@/lib/providers/network-provider", () => ({
   useNetwork: () => ({ isOffline: network.isOffline }),
 }));
@@ -122,6 +131,7 @@ describe("AccountMenu", () => {
     };
     presenceStatus.value = "online";
     network.isOffline = false;
+    shellIdentity.value = null;
     save.mockClear();
     bulkDropNotice.mockReturnValue(null);
     signOutCurrentSession.mockClear();
@@ -203,6 +213,28 @@ describe("AccountMenu", () => {
     expect(
       screen.getByRole("menu").querySelector(".skeleton-shimmer"),
     ).not.toBeNull();
+  });
+
+  it("paints the name this browser last saw while the user is read (#5049)", () => {
+    useCurrentUser.mockReturnValue(READING);
+    shellIdentity.value = { display_name: "Paul Carlson", avatar_url: null };
+    const { container } = render(
+      <AccountMenu variant="foot" switcher={ONE_CHAPTER} />,
+    );
+    expect(
+      screen.getByRole("button", { name: /account menu for Paul Carlson/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("PC")).toBeInTheDocument();
+    expect(container.querySelector(".skeleton-shimmer")).toBeNull();
+  });
+
+  it("lets the live answer win over the cached name", () => {
+    shellIdentity.value = { display_name: "Old Name", avatar_url: null };
+    render(<AccountMenu variant="foot" switcher={ONE_CHAPTER} />);
+    expect(
+      screen.getByRole("button", { name: /account menu for Paul Carlson/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Old Name")).toBeNull();
   });
 
   it("keeps the shape through a retry paused in a hidden tab", () => {

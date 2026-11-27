@@ -6,6 +6,7 @@ import { throwUnlessOk, type components } from "@repo/api-sdk";
 import { can, isModuleEnabled, minutesDraftElapsed } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { aiSuggestionKeys } from "./use-ai-suggestions";
+import { eventsQueryKey } from "./use-events";
 import { useCurrentChapter } from "./use-chapters";
 import { taskKeys } from "./use-tasks";
 import { usePermissionList } from "./use-user";
@@ -372,7 +373,7 @@ export function useStartMeeting() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: meetingsKey(chapterId) }),
         // A meeting with no event got one.
-        queryClient.invalidateQueries({ queryKey: ["events", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) }),
       ]);
     },
   });
@@ -848,7 +849,7 @@ export function useLinkMeetingEvent() {
       queryClient.setQueryData(meetingKey(chapterId, data.id), data);
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: meetingsKey(chapterId) }),
-        queryClient.invalidateQueries({ queryKey: ["events", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) }),
       ]);
     },
   });

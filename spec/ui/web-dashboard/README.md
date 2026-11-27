@@ -261,7 +261,8 @@ The control is gone; the orphaned API field is tracked separately.
 - **Your own dot sits on the avatar** that opens the menu, in both variants, and the trigger's accessible name ends with the status ("Account menu for Paul Carlson, Do Not Disturb").
 - **While the member's own record is still being read** the row draws an avatar disc and a name bar, and the menu's head a name bar, never a stand-in name or initials (#6121, 2026-11-26: "Your account" with "YA" read as an account nobody had linked).
   The trigger is then named "Account menu", with the status when the dot shows one.
-  Only a read that failed, can't run, or waits for a connection names the row "Your account", with a person glyph in the avatar.
+  On a revisit the row shows the name and photo this browser last saw for the member instead, offline included, until the live answer replaces them ([`caching.md` § Shell cache](../resilience/caching.md#shell-cache), #5049).
+  Only a read that failed, can't run, or waits for a connection with nothing kept names the row "Your account", with a person glyph in the avatar.
 
 ## What's new
 

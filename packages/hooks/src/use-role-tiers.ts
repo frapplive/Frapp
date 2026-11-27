@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { rosterQueryKey } from "./use-members";
+import { myPermissionsQueryKey } from "./use-user";
 
 export type CreateRoleTierBody = components["schemas"]["CreateRoleTierDto"];
 export type UpdateRoleTierBody = components["schemas"]["UpdateRoleTierDto"];
@@ -44,14 +46,14 @@ function useInvalidateAfterTierWrite() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["roles", chapterId] });
     void queryClient.invalidateQueries({
-      queryKey: ["user", "me", "permissions", chapterId],
+      queryKey: myPermissionsQueryKey(chapterId),
     });
     void queryClient.invalidateQueries({
       queryKey: ["members", chapterId, "channel"],
     });
     // The roster's name colors rank by tier too.
     void queryClient.invalidateQueries({
-      queryKey: ["members", chapterId, "roster"],
+      queryKey: rosterQueryKey(chapterId),
     });
   };
 }

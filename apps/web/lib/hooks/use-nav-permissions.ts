@@ -1,6 +1,11 @@
 "use client";
 
 import { useMyPermissions } from "@repo/hooks";
+import {
+  activePreview,
+  useRolePreviewStore,
+} from "@/lib/stores/role-preview-store";
+import { useShellCached } from "@/lib/shell-cache/shell-cache-sync";
 import { readIsOffline } from "@/components/shared/async-states";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useChapterStore } from "@/lib/stores/chapter-store";
@@ -21,13 +26,34 @@ import { useChapterStore } from "@/lib/stores/chapter-store";
  *
  * Once the shell has an answer the query stays mounted for the session, so
  * going offline later keeps the answer and changes nothing here.
+ *
+ * `fromShellCache` (the shell's nav and page title only, #5049): while the
+ * read is still out, the permissions this browser last saw for this member
+ * and chapter stand in, so a revisit draws its rows at once. Only for
+ * drawing: anything that decides (a redirect, `<Can>`, a page's own gate)
+ * calls this without it and waits for the answer. Never during a role
+ * preview, whose permissions aren't the ones kept.
  */
-export function useNavPermissions(): readonly string[] | null | undefined {
+export function useNavPermissions(
+  options: { fromShellCache?: boolean } = {},
+): readonly string[] | null | undefined {
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
   const read = useMyPermissions({ enabled: Boolean(activeChapterId) });
   const { isOffline } = useNetwork();
+  const preview = useRolePreviewStore((s) =>
+    activePreview(s.preview, activeChapterId),
+  );
+  const kept = useShellCached<{ permissions?: unknown }>("permissions");
   const permissions = read.data?.permissions;
   if (permissions) return permissions;
+  if (
+    options.fromShellCache &&
+    read.isLoading &&
+    !preview &&
+    Array.isArray(kept?.permissions)
+  ) {
+    return kept.permissions as readonly string[];
+  }
   if (activeChapterId && readIsOffline(isOffline, read)) return null;
   return undefined;
 }

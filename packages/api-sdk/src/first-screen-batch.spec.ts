@@ -100,7 +100,7 @@ describe("bootstrapSectionFor", () => {
 });
 
 describe("first-screen batching", () => {
-  it("answers reads fired together from one bootstrap call", async () => {
+  it("answers reads fired together from one bootstrap call per layer", async () => {
     const fetchMock = stubFetch((include) =>
       json(
         Object.fromEntries(include.map((section) => [section, { section }])),
@@ -108,18 +108,129 @@ describe("first-screen batching", () => {
     );
     const api = client();
 
-    const [unread, me, roster] = await Promise.all([
+    const [unread, me, roster, channels] = await Promise.all([
       api.GET("/v1/channels/unread"),
       api.GET("/v1/users/me"),
       api.GET("/v1/members/roster"),
+      api.GET("/v1/channels"),
     ]);
 
+    // The shell's sections go out apart from the page's (#5049).
     expect(urlsOf(fetchMock)).toEqual([
-      "/v1/bootstrap?include=channel_unread,user,member_roster,whats_new",
+      "/v1/bootstrap?include=user,member_roster,whats_new",
+      "/v1/bootstrap?include=channel_unread,channels",
     ]);
     expect(unread.data).toEqual({ section: "channel_unread" });
     expect(me.data).toEqual({ section: "user" });
     expect(roster.data).toEqual({ section: "member_roster" });
+    expect(channels.data).toEqual({ section: "channels" });
+  });
+
+  it("answers the shell's layer without waiting on a slow page layer (#5049)", async () => {
+    let releasePage: () => void = () => {};
+    const pageHeld = new Promise<void>((resolve) => {
+      releasePage = resolve;
+    });
+    stubFetch(async (include) => {
+      if (include.includes("channels")) await pageHeld;
+      return json(
+        Object.fromEntries(include.map((section) => [section, { section }])),
+      );
+    });
+    const api = client({ token: "token-layers" });
+
+    const me = api.GET("/v1/users/me");
+    const permissions = api.GET("/v1/users/me/permissions");
+    const channels = api.GET("/v1/channels");
+    const unread = api.GET("/v1/channels/unread");
+
+    expect((await me).data).toEqual({ section: "user" });
+    expect((await permissions).data).toEqual({ section: "permissions" });
+    releasePage();
+    expect((await channels).data).toEqual({ section: "channels" });
+    expect((await unread).data).toEqual({ section: "channel_unread" });
+  });
+
+  it("keeps a batch whole when one layer would be a single section", async () => {
+    const fetchMock = stubFetch((include) =>
+      json(Object.fromEntries(include.map((section) => [section, {}]))),
+    );
+    const api = client({ token: "token-one" });
+
+    await Promise.all([
+      api.GET("/v1/users/me/permissions"),
+      api.GET("/v1/channels"),
+      api.GET("/v1/channels/unread"),
+    ]);
+
+    // Split, permissions would go to its own route and lose its companions.
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,channels,channel_unread,geofences,documents",
+    ]);
+  });
+
+  it("fetches each companion once, with the layer of its kind", async () => {
+    const fetchMock = stubFetch((include) =>
+      json(Object.fromEntries(include.map((section) => [section, {}]))),
+    );
+    const api = client({ token: "token-split-companions" });
+
+    await Promise.all([
+      api.GET("/v1/users/me/permissions"),
+      api.GET("/v1/users/me"),
+      api.GET("/v1/channels"),
+      api.GET("/v1/channels/unread"),
+    ]);
+
+    // What's new rides with the shell; the nav's "not set up yet" reads ride
+    // with the page, so the shell's answer never waits on them.
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,user,whats_new",
+      "/v1/bootstrap?include=channels,channel_unread,geofences,documents",
+    ]);
+  });
+
+  it("lets a companion read wait for the slower page layer instead of sending its own", async () => {
+    let releasePage: () => void = () => undefined;
+    const pageHeld = new Promise<void>((resolve) => {
+      releasePage = resolve;
+    });
+    const fetchMock = stubFetch(async (include) => {
+      if (include.includes("channels")) await pageHeld;
+      return json(
+        Object.fromEntries(
+          include.map((section) => [section, { section }]),
+        ),
+      );
+    });
+    const api = client({ token: "token-companion-waits" });
+
+    const shell = Promise.all([
+      api.GET("/v1/users/me/permissions"),
+      api.GET("/v1/users/me"),
+    ]);
+    const page = Promise.all([
+      api.GET("/v1/channels"),
+      api.GET("/v1/channels/unread"),
+    ]);
+    await shell;
+    // What the setup checklist fires once permissions answer, while the page
+    // layer, which carries its companions, is still out.
+    const followers = Promise.all([
+      api.GET("/v1/geofences"),
+      api.GET("/v1/documents"),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releasePage();
+    const [geofences, documents] = await followers;
+    await page;
+
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,user,whats_new",
+      "/v1/bootstrap?include=channels,channel_unread,geofences,documents",
+    ]);
+    expect(geofences.data).toEqual({ section: "geofences" });
+    expect(documents.data).toEqual({ section: "documents" });
   });
 
   it("sends the bootstrap with the reads' own credentials and a fresh request id", async () => {
@@ -243,10 +354,12 @@ describe("first-screen batching", () => {
     ]);
 
     expect(urlsOf(fetchMock)).toEqual([
-      "/v1/bootstrap?include=user,chapters,channels,channel_unread,whats_new",
+      "/v1/bootstrap?include=user,chapters,whats_new",
+      "/v1/bootstrap?include=channels,channel_unread",
     ]);
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(new Headers(init.headers).get("x-chapter-id")).toBe("chapter-1");
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(new Headers(init.headers).get("x-chapter-id")).toBe("chapter-1");
+    }
   });
 
   it("keeps a chapter read that names no chapter out of another chapter's batch", async () => {
@@ -379,10 +492,13 @@ describe("first-screen batching", () => {
       early.GET("/v1/users/me"),
       api.GET("/v1/channels/unread"),
       api.GET("/v1/settings"),
+      api.GET("/v1/chapters/current"),
+      api.GET("/v1/channels/categories/list"),
     ]);
 
     expect(urlsOf(fetchMock).sort()).toEqual([
-      "/v1/bootstrap?include=channel_unread,settings",
+      "/v1/bootstrap?include=channel_unread,channel_categories",
+      "/v1/bootstrap?include=settings,current_chapter",
       "/v1/channels",
       "/v1/users/me",
     ]);
