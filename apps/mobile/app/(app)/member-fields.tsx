@@ -141,7 +141,7 @@ export default function MemberFieldsScreen() {
   if (fieldsQuery.isError && fieldsQuery.data === undefined) {
     body = (
       <ErrorState
-        title="Couldn't load the fields"
+        title={MEMBER_FIELDS_COPY.loadFailed}
         body={describeLoadFailure(fieldsQuery.error)}
         onRetry={() => void fieldsQuery.refetch()}
         isRetrying={fieldsQuery.isFetching}

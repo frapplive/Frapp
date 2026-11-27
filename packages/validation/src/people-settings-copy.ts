@@ -201,6 +201,13 @@ export const PLEDGE_CLASS_SETTINGS_COPY = {
   everyoneIn: "Everyone is already in it.",
   empty: "Nothing here yet. Add the oldest one first.",
   readOnly: "Only officers who manage roles can change this list.",
+  /** The list's read failed (both apps' error state title). */
+  loadFailed: "Couldn't load the list",
+  /** The roster read failed, so counts and the member editor are unavailable. */
+  membersLoadFailed: "Couldn't load the chapter's members.",
+  /** A class's page whose class is no longer in the list. */
+  gone: "It isn't in the list any more.",
+  goneDetail: "Someone may have deleted it.",
 } as const;
 
 /** The last row of the pledge class list, in the chapter's own word as typed. */
@@ -273,6 +280,11 @@ export const MEMBER_FIELDS_COPY = {
   noLimit: "No limit",
   maxLengthFloor: "Longest answer starts at 1",
   deleteField: "Delete field",
+  /** The fields' read failed (both apps' error state title). */
+  loadFailed: "Couldn't load member fields",
+  /** A field's page whose field is no longer in the list. */
+  gone: "This field is gone.",
+  goneDetail: "Someone may have deleted it.",
 } as const;
 
 /**

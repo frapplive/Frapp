@@ -105,14 +105,20 @@ export default function PledgeClassScreen() {
   const classes = classesQuery.data;
   const entry = classes?.find((item) => item.id === classId) ?? null;
 
+  const classesFailed = classesQuery.isError && classes === undefined;
   if (
-    (classesQuery.isError && classes === undefined) ||
+    classesFailed ||
     (membersQuery.isError && membersQuery.data === undefined)
   ) {
     return (
       <ScreenShell back={back} title={classTerm}>
         <ErrorState
-          title="Couldn't load this page"
+          // Web's words for whichever read failed.
+          title={
+            classesFailed
+              ? PLEDGE_CLASS_SETTINGS_COPY.loadFailed
+              : PLEDGE_CLASS_SETTINGS_COPY.membersLoadFailed
+          }
           body={describeLoadFailure(classesQuery.error ?? membersQuery.error)}
           onRetry={() => {
             void classesQuery.refetch();
@@ -134,8 +140,8 @@ export default function PledgeClassScreen() {
     return (
       <ScreenShell back={back} title={classTerm}>
         <ErrorState
-          title="This one is gone"
-          body={`Someone may have deleted it. Go back to ${classTerm} to see the list as it is now.`}
+          title={PLEDGE_CLASS_SETTINGS_COPY.gone}
+          body={PLEDGE_CLASS_SETTINGS_COPY.goneDetail}
         />
       </ScreenShell>
     );
@@ -213,8 +219,10 @@ function ClassPage({
     JSON.stringify(rows),
     opening,
   );
-  const [pageFailure, setPageFailure] = useState<string | null>(null);
-  const [saveFailure, setSaveFailure] = useState<string | null>(null);
+  // A failed rename is the name field's own line; a failed Move, Delete or
+  // Save is the page's one line, under the members, said once.
+  const [renameFailure, setRenameFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const index = classes.findIndex((item) => item.id === entry.id);
   const classNames = useMemo(
@@ -236,13 +244,17 @@ function ClassPage({
   const dirty = assignments === null || assignments.length > 0;
   const busy = assign.isPending;
 
-  async function run(action: () => Promise<unknown>, fallback: string) {
-    setPageFailure(null);
+  async function run(
+    action: () => Promise<unknown>,
+    fallback: string,
+    onFail: (message: string | null) => void = setFailure,
+  ) {
+    onFail(null);
     try {
       await action();
       return true;
     } catch (error) {
-      setPageFailure(
+      onFail(
         `Couldn't change ${entry.name}. ${errorCopy(error, fallback, { serverWritesForMembers: true })}`,
       );
       return false;
@@ -286,14 +298,14 @@ function ClassPage({
   /** The bar's X: start over from the roster as it is now. */
   function discard() {
     kept.clear();
-    setSaveFailure(null);
+    setFailure(null);
     setMembers(liveMembers);
     setRows(classRowsOf(liveMembers, entry.id, classes));
   }
 
   async function save() {
     if (!assignments || assignments.length === 0 || tooMany) return;
-    setSaveFailure(null);
+    setFailure(null);
     kept.hold();
     try {
       await assign.mutateAsync(assignments);
@@ -305,14 +317,14 @@ function ClassPage({
       setRows(classRowsOf(fresh, entry.id, classes));
     } catch (error) {
       kept.release();
-      setSaveFailure(
+      setFailure(
         `Couldn't save ${entry.name}. ${errorCopy(error, "Nothing was changed. Try again in a moment.", { serverWritesForMembers: true })}`,
       );
     }
   }
 
   function takeOut(row: ClassEditorRow) {
-    setSaveFailure(null);
+    setFailure(null);
     setRows((previous) =>
       previous.filter((item) => item.memberId !== row.memberId),
     );
@@ -392,12 +404,13 @@ function ClassPage({
           label={PEOPLE_SETTINGS_COPY.name}
           value={entry.name}
           editable={canManage}
-          failure={pageFailure}
+          failure={renameFailure}
           maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
           onSave={(name) =>
             run(
               () => rename.mutateAsync({ id: entry.id, name }),
               "Check that no other one has this name, then try again.",
+              setRenameFailure,
             )
           }
         />
@@ -463,9 +476,9 @@ function ClassPage({
             })
           )}
         </ListSection>
-        {saveFailure ? (
+        {failure ? (
           <Text accessibilityLiveRegion="polite" style={styles.failure}>
-            {saveFailure}
+            {failure}
           </Text>
         ) : null}
         {barShown ? <TaskActionBarSpacer /> : null}
@@ -486,7 +499,7 @@ function ClassPage({
             onSelect={(memberId) => {
               const picked = members.find((member) => member.id === memberId);
               if (!picked) return;
-              setSaveFailure(null);
+              setFailure(null);
               setRows((previous) =>
                 addRow(previous, {
                   memberId: picked.id,

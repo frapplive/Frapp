@@ -23,14 +23,14 @@ import { canCreateChannel } from "@/lib/chat/create-channel";
  *
  * - `newChannel`: New channel (#5296), for whoever can make one
  *   (`canCreateChannel`, which Chat home's "+" asks too).
- * - `newRole`: New role (#5296), behind `POST /v1/roles`' `roles:manage`;
- *   the row also waits for a tier the officer ranks above (`newRolePlacements`).
  *
  * - `pledgeClasses`: Pledge class (#6029), web's tab gate `roles:manage`
  *   (`settings-access.ts`), with the `members:view` its list and roster
  *   reads take.
  * - `memberFields`: Member fields (#6029), `chapter-config:view`, what
  *   `GET /v1/custom-fields` takes, as web's tab.
+ *   Both routes refuse a council (ChapterGuard), so the screen also asks
+ *   `useServesChapterFeatures` before drawing either row.
  *
  * - `logs`: the Logs screen (Paul, 2026-11-21), behind what
  *   `GET /v1/audit-log` takes: `chapter-config:view` and `members:view`, as
@@ -47,13 +47,11 @@ export function chapterSettingsAccess(permissions: readonly string[]) {
   );
   const logs = canAll(CHAPTER_LOGS_PERMISSIONS, permissions);
   const newChannel = canCreateChannel(permissions);
-  const newRole = can("roles:manage", permissions);
   return {
     chapter,
     roles,
     logs,
     newChannel,
-    newRole,
     pledgeClasses: canAll(["roles:manage", "members:view"], permissions),
     memberFields: chapter,
     any: chapter || roles || newChannel,

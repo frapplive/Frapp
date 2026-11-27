@@ -22,7 +22,6 @@ describe("chapterSettingsAccess", () => {
       roles: true,
       logs: false,
       newChannel: false,
-      newRole: true,
       pledgeClasses: false,
       memberFields: false,
       any: true,
@@ -32,7 +31,6 @@ describe("chapterSettingsAccess", () => {
       roles: true,
       logs: false,
       newChannel: false,
-      newRole: false,
       pledgeClasses: false,
       memberFields: true,
       any: true,
@@ -64,7 +62,6 @@ describe("chapterSettingsAccess", () => {
       roles: true,
       logs: false,
       newChannel: false,
-      newRole: false,
       pledgeClasses: false,
       memberFields: false,
       any: true,
@@ -81,6 +78,5 @@ describe("chapterSettingsAccess", () => {
     // Enough to open Chapter settings on its own.
     expect(both.any).toBe(true);
     expect(chapterSettingsAccess(["*"]).newChannel).toBe(true);
-    expect(chapterSettingsAccess(["*"]).newRole).toBe(true);
   });
 });
