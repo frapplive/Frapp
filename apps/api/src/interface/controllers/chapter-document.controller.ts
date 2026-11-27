@@ -49,6 +49,7 @@ import { SystemPermissions } from '#domain/constants/permissions';
 import {
   RequestDocumentUploadUrlDto,
   DocumentUploadUrlResponseDto,
+  DocumentVersionUploadUrlResponseDto,
   ConfirmDocumentUploadDto,
   CreateDocumentFolderDto,
   UpdateDocumentFolderDto,
@@ -91,25 +92,14 @@ export class ChapterDocumentController {
     @CurrentChapterId() chapterId: string,
     @Body() dto: RequestDocumentUploadUrlDto,
   ): Promise<DocumentUploadUrlResponseDto> {
-    // Same mapping as BackworkController.requestUploadUrl — the service
-    // returns camelCase; the dashboard reads snake_case. Passthrough made a
-    // successful mint look like a missing ticket.
-    const ticket = await this.chapterDocumentService.requestUploadUrl({
-      chapterId,
-      filename: dto.filename,
-      contentType: dto.content_type,
-      sizeBytes: dto.size_bytes,
-    });
-    if (!ticket.signedUrl || !ticket.storagePath) {
-      throw new InternalServerErrorException(
-        'Storage did not return a signed upload URL or storage path.',
-      );
-    }
-    return {
-      upload_url: ticket.signedUrl,
-      storage_path: ticket.storagePath,
-      document_id: ticket.documentId,
-    };
+    return toUploadUrlResponse(
+      await this.chapterDocumentService.requestUploadUrl({
+        chapterId,
+        filename: dto.filename,
+        contentType: dto.content_type,
+        sizeBytes: dto.size_bytes,
+      }),
+    );
   }
 
   @Post('upload-urls')
@@ -613,43 +603,46 @@ export class ChapterDocumentController {
 
   // A new version (#6055): like who sees it, for the file's uploader or
   // whoever manages documents; the service checks which. Never a file from
-  // Google Drive or a meeting's minutes.
+  // Google Drive or a meeting's minutes. Storing a new file is an upload, so
+  // the member must still hold upload or manage, as making a new folder
+  // does (`checkedMove`): an uploader who lost upload keeps their file but
+  // stores no new one.
   @Post(':id/version-upload-url')
   @ThrottleFanOutWrite()
+  @RequireAnyOfPermissions(
+    SystemPermissions.CHAPTER_DOCS_UPLOAD,
+    SystemPermissions.CHAPTER_DOCS_MANAGE,
+  )
   @ApiOperation({
     summary:
-      'Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes)',
+      'Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes); confirm it with PUT /v1/documents/{id}/file',
   })
-  @ApiCreatedResponse({ type: DocumentUploadUrlResponseDto })
+  @ApiCreatedResponse({ type: DocumentVersionUploadUrlResponseDto })
   async requestVersionUploadUrl(
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RequestDocumentUploadUrlDto,
-  ): Promise<DocumentUploadUrlResponseDto> {
-    const ticket = await this.chapterDocumentService.requestVersionUploadUrl(
-      id,
-      chapterId,
-      userId,
-      {
-        filename: dto.filename,
-        contentType: dto.content_type,
-        sizeBytes: dto.size_bytes,
-      },
+  ): Promise<DocumentVersionUploadUrlResponseDto> {
+    return toUploadUrlResponse(
+      await this.chapterDocumentService.requestVersionUploadUrl(
+        id,
+        chapterId,
+        userId,
+        {
+          filename: dto.filename,
+          contentType: dto.content_type,
+          sizeBytes: dto.size_bytes,
+        },
+      ),
     );
-    if (!ticket.signedUrl || !ticket.storagePath) {
-      throw new InternalServerErrorException(
-        'Storage did not return a signed upload URL or storage path.',
-      );
-    }
-    return {
-      upload_url: ticket.signedUrl,
-      storage_path: ticket.storagePath,
-      document_id: ticket.documentId,
-    };
   }
 
   @Put(':id/file')
+  @RequireAnyOfPermissions(
+    SystemPermissions.CHAPTER_DOCS_UPLOAD,
+    SystemPermissions.CHAPTER_DOCS_MANAGE,
+  )
   @ApiOperation({
     summary:
       'Replace a document’s file with a new version, keeping its id, folder, who can see it, pin and stars (the earlier file is deleted)',
@@ -738,4 +731,28 @@ export class ChapterDocumentController {
       false,
     );
   }
+}
+
+/**
+ * A minted upload ticket on the wire, for an upload and a new version alike.
+ * The service returns camelCase and the clients read snake_case (as
+ * `BackworkController.requestUploadUrl` maps it); passthrough once made a
+ * successful mint look like a missing ticket. A ticket without its URL or
+ * path fails closed.
+ */
+function toUploadUrlResponse(ticket: {
+  signedUrl: string;
+  storagePath: string;
+  documentId: string;
+}): DocumentUploadUrlResponseDto {
+  if (!ticket.signedUrl || !ticket.storagePath) {
+    throw new InternalServerErrorException(
+      'Storage did not return a signed upload URL or storage path.',
+    );
+  }
+  return {
+    upload_url: ticket.signedUrl,
+    storage_path: ticket.storagePath,
+    document_id: ticket.documentId,
+  };
 }

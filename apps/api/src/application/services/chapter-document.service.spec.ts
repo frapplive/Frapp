@@ -2639,6 +2639,7 @@ describe('ChapterDocumentService', () => {
         async (_id, _chapter, _current, file) => ({ ...baseDocument, ...file }),
       );
       mockStorageProvider.deleteFile.mockResolvedValue(undefined);
+      mockStorageProvider.listFiles.mockResolvedValue([NEW_PATH]);
     });
 
     it('puts the new file in place on the same row and deletes the old one', async () => {
@@ -2801,6 +2802,30 @@ describe('ChapterDocumentService', () => {
       await expect(
         service.replaceFile('doc-1', 'ch-1', 'user-1', version),
       ).rejects.toThrow('uploaded a new version first');
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('refuses a minted path nothing was uploaded to, and keeps the old file', async () => {
+      mockStorageProvider.listFiles.mockResolvedValue([]);
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockStorageProvider.listFiles).toHaveBeenCalledWith(
+        'documents',
+        NEW_PATH.slice(0, NEW_PATH.lastIndexOf('/')),
+      );
+      expect(mockDocumentRepo.replaceFile).not.toHaveBeenCalled();
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 when the document was deleted while the version uploaded', async () => {
+      mockDocumentRepo.replaceFile.mockResolvedValue(null);
+      mockDocumentRepo.findById
+        .mockResolvedValueOnce(baseDocument)
+        .mockResolvedValueOnce(null);
+      await expect(
+        service.replaceFile('doc-1', 'ch-1', 'user-1', version),
+      ).rejects.toThrow(NotFoundException);
       expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
     });
 

@@ -18821,7 +18821,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocumentUploadUrlResponseDto"
+                  "$ref": "#/components/schemas/DocumentVersionUploadUrlResponseDto"
                 }
               }
             }
@@ -18842,7 +18842,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes)",
+        "summary": "Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes); confirm it with PUT /v1/documents/{id}/file",
         "tags": [
           "Documents"
         ]
@@ -42160,6 +42160,28 @@
             }
           }
         }
+      },
+      "DocumentVersionUploadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "description": "Short-lived signed URL; PUT the new version’s bytes to it."
+          },
+          "storage_path": {
+            "type": "string",
+            "description": "Storage path to send as storage_path on PUT /v1/documents/{id}/file, once the bytes are uploaded."
+          },
+          "document_id": {
+            "type": "string",
+            "description": "The upload id embedded in storage_path. Not the versioned document’s id: the document keeps its own id, and no new document is made."
+          }
+        },
+        "required": [
+          "upload_url",
+          "storage_path",
+          "document_id"
+        ]
       },
       "ReplaceDocumentFileDto": {
         "type": "object",

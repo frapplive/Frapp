@@ -96,6 +96,31 @@ export class DocumentUploadUrlResponseDto {
   document_id: string;
 }
 
+/**
+ * The ticket for a new version (`POST /v1/documents/:id/version-upload-url`,
+ * #6055). Same shape as an upload's, but it is confirmed differently: with
+ * `PUT /v1/documents/{id}/file`, and the id in its path is not a new
+ * document's.
+ */
+export class DocumentVersionUploadUrlResponseDto {
+  @ApiProperty({
+    description: 'Short-lived signed URL; PUT the new version’s bytes to it.',
+  })
+  upload_url: string;
+
+  @ApiProperty({
+    description:
+      'Storage path to send as storage_path on PUT /v1/documents/{id}/file, once the bytes are uploaded.',
+  })
+  storage_path: string;
+
+  @ApiProperty({
+    description:
+      'The upload id embedded in storage_path. Not the versioned document’s id: the document keeps its own id, and no new document is made.',
+  })
+  document_id: string;
+}
+
 export class ConfirmDocumentUploadDto {
   @ApiProperty({ description: 'Storage path returned from upload-url' })
   @IsString()

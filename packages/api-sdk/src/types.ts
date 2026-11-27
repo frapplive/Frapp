@@ -5610,7 +5610,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes) */
+        /** Get a signed upload URL for a new version of an uploaded document (not a Google Drive file or minutes); confirm it with PUT /v1/documents/{id}/file */
         post: operations["ChapterDocumentController_requestVersionUploadUrl_v1"];
         delete?: never;
         options?: never;
@@ -13639,6 +13639,14 @@ export interface components {
         SetDocumentAccessDto: {
             /** @description Who can see the file (#3642): null or left out for the same as its folder, or the tiers, roles and groups named, which narrow the folder's (a member passes both). Not empty. The caller's own tier and every tier above it are always kept. */
             who_can_see?: string[] | null;
+        };
+        DocumentVersionUploadUrlResponseDto: {
+            /** @description Short-lived signed URL; PUT the new version’s bytes to it. */
+            upload_url: string;
+            /** @description Storage path to send as storage_path on PUT /v1/documents/{id}/file, once the bytes are uploaded. */
+            storage_path: string;
+            /** @description The upload id embedded in storage_path. Not the versioned document’s id: the document keeps its own id, and no new document is made. */
+            document_id: string;
         };
         ReplaceDocumentFileDto: {
             /** @description Storage path returned from version-upload-url, after the bytes were PUT to its upload_url */
@@ -29048,7 +29056,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentUploadUrlResponseDto"];
+                    "application/json": components["schemas"]["DocumentVersionUploadUrlResponseDto"];
                 };
             };
             /** @description Error */

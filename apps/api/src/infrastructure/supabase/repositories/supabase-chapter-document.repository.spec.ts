@@ -420,7 +420,7 @@ describe('SupabaseChapterDocumentRepository — paging and refiling', () => {
   const harnessWith = (rows: ReturnType<typeof twins>) =>
     createTenantHarness({
       tables: { chapter_documents: rows },
-      collisionExempt: { chapter_documents: ['storage_path'] },
+      collisionExempt: { chapter_documents: ['storage_path', 'meeting_id'] },
       maxRows: 2,
     });
 
@@ -488,6 +488,9 @@ describe('SupabaseChapterDocumentRepository — paging and refiling', () => {
         [1],
         [2, { drive_file_id: 'copy-2' }],
         [3, { drive_file_id: 'linked-3', drive_link_status: 'active' }],
+        // A meeting's minutes, given a path so only the minutes filter
+        // stands between it and the update.
+        [4, { meeting_id: '0c000000-0000-4000-8000-0000000000b4' }],
       ]),
     );
     const repo = new SupabaseChapterDocumentRepository(harness.client);
@@ -521,12 +524,15 @@ describe('SupabaseChapterDocumentRepository — paging and refiling', () => {
 
   // #6055: a new version replaces an upload's file in place, never a Drive
   // file's, and only while the row still files the path the caller read.
-  it('replaces an upload’s file in place, never a Drive file’s, another chapter’s, or a stale read’s', async () => {
+  it('replaces an upload’s file in place, never a Drive file’s, minutes, another chapter’s, or a stale read’s', async () => {
     const harness = harnessWith(
       twins([
         [1],
         [2, { drive_file_id: 'copy-2' }],
         [3, { drive_file_id: 'linked-3', drive_link_status: 'active' }],
+        // A meeting's minutes, given a path so only the minutes filter
+        // stands between it and the update.
+        [4, { meeting_id: '0c000000-0000-4000-8000-0000000000b4' }],
       ]),
     );
     const repo = new SupabaseChapterDocumentRepository(harness.client);
@@ -548,7 +554,7 @@ describe('SupabaseChapterDocumentRepository — paging and refiling', () => {
     await expect(
       repo.replaceFile(id('a', 1), CHAPTER_A, 'a/file-1.pdf', file),
     ).resolves.toBeNull();
-    for (const n of [2, 3]) {
+    for (const n of [2, 3, 4]) {
       await expect(
         repo.replaceFile(id('a', n), CHAPTER_A, `a/file-${n}.pdf`, file),
       ).resolves.toBeNull();

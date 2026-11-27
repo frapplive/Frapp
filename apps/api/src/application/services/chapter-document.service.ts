@@ -71,6 +71,7 @@ import { RbacService } from './rbac.service';
 import { MeetingService, type PostedMinutesFacts } from './meeting.service';
 import {
   assertUploadRequestAllowed,
+  assertUploadedPathUnder,
   mintChapterUpload,
 } from './chapter-upload';
 
@@ -841,6 +842,22 @@ export class ChapterDocumentService {
     if (input.storage_path === document.storage_path) return document;
     assertMintedDocumentPath(chapterId, input.storage_path);
     assertDocumentContentType(input.content_type);
+    // The bytes must be there before the row moves onto them and the old
+    // file goes: a path that was minted but never uploaded to would leave
+    // the document pointing at nothing, with its earlier file deleted.
+    await assertUploadedPathUnder(
+      this.storageProvider,
+      DOCUMENTS_BUCKET,
+      `chapters/${chapterId}/documents/`,
+      input.storage_path,
+      {
+        field: 'storage_path',
+        outsidePrefix:
+          'storage_path must be within the chapter documents folder',
+        missing:
+          "We couldn't find the new version's file. Upload it again, then save it.",
+      },
+    );
     // A path another row files is that row's object: taking it here would
     // leave two rows on one object, and deleting either would empty both.
     if (
@@ -884,7 +901,9 @@ export class ChapterDocumentService {
    * upload (not a meeting's minutes, and not a file from Google Drive, which
    * is changed in Drive and comes back with the next sync), and that they
    * uploaded or manage documents for, the rule every change to one file's
-   * own settings follows ({@link assertUploaderOrManager}).
+   * own settings follows ({@link assertUploaderOrManager}). Holding upload or
+   * manage at all is the routes' check (`@RequireAnyOfPermissions`), as
+   * storing a new file is an upload.
    */
   private async replaceableDocument(
     id: string,
