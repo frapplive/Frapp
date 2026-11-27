@@ -397,7 +397,11 @@ describe("a module's screen (#6030)", () => {
         is_read_only: true,
       },
     ];
+    h.permissions = ["chapter-config:view", "channels:manage"];
     const tree = screen("announcements");
+    expect(
+      pressable(tree, ANNOUNCEMENTS_CHANNEL_COPY.label).props.accessibilityHint,
+    ).toBe("Opens the channel's settings.");
     act(() =>
       pressable(tree, ANNOUNCEMENTS_CHANNEL_COPY.label).props.onPress(),
     );
@@ -405,6 +409,21 @@ describe("a module's screen (#6030)", () => {
       pathname: "/channel-settings",
       params: { channelId: "c-ann" },
     });
+  });
+
+  it("draws no channel row for a viewer without channels:manage (#6151)", () => {
+    h.channels = [
+      {
+        id: "c-ann",
+        name: "announcements",
+        type: "PUBLIC",
+        is_read_only: true,
+      },
+    ];
+    h.permissions = READER;
+    expect(screenText(screen("announcements"))).not.toContain(
+      ANNOUNCEMENTS_CHANNEL_COPY.label,
+    );
   });
 
   it("says Always on for Chat and Announcements, with no switch", () => {
