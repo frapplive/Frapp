@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeAddress } from "@/lib/address/address";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
@@ -102,7 +103,6 @@ export function ProfilePanel() {
   const isCouncil = useIsCouncil();
   // `/profile?open=points` (or `service`, `study`) opens that number's panel
   // in place of the page; the figures and gauges below link to it.
-  const router = useRouter();
   const openDoor = standingDoorFrom(useSearchParams().get(STANDING_PARAM));
   // Your pledge class and order number live on your membership, not on
   // `/v1/users/me`, behind the Directory's gate (`members:view`); a viewer
@@ -511,7 +511,9 @@ export function ProfilePanel() {
       </div>
       <StandingPanels
         open={isCouncil ? null : openDoor}
-        onClose={() => router.replace("/profile", { scroll: false })}
+        // Closes by the address's rule (#6048, spec § Addresses): Back when
+        // this tab opened it, so Forward reopens it; else replaced away.
+        onClose={() => closeAddress([STANDING_PARAM])}
       />
     </div>
   );

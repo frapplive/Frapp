@@ -676,11 +676,28 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
 
   it("draws your numbers as doors, and opens the one the address names (#5950)", async () => {
     mocks.open = "service";
+    window.history.replaceState(null, "", "/profile?open=service");
     render(<ProfilePanel />);
     expect(screen.getByTestId("standing-stats")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("panel-service"));
-    // Closing returns to the profile under it.
-    expect(mocks.replace).toHaveBeenCalledWith("/profile", { scroll: false });
+    // Closing a panel that arrived from a link replaces the address with the
+    // profile under it (#6048, § Addresses).
+    expect(window.location.search).toBe("");
+  });
+
+  it("closes a panel this tab opened by going Back, so Forward reopens it (#6048)", async () => {
+    mocks.open = "service";
+    window.history.replaceState(null, "", "/profile");
+    window.history.pushState(
+      { frappAddressFrom: ["/profile"] },
+      "",
+      "/profile?open=service",
+    );
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    render(<ProfilePanel />);
+    await userEvent.click(screen.getByTestId("panel-service"));
+    expect(go).toHaveBeenCalledWith(-1);
+    go.mockRestore();
   });
 
   it("opens no panel for an address that names none, or one that isn't a door", () => {

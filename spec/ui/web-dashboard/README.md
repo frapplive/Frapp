@@ -1281,8 +1281,8 @@ It can't see a parameter a page reads without listing it there, so each family's
 | `/activity?view=&task=&group=&posting=&item=&review=&extension=` | Push; `view=archive`; `extension=` is a notification's request for more time (#6096). Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Planned, #6044 | `/tasks` (`task`), `/activity` (`review`) |
 | `/members?tab=&member=&sort=` | `tab=` pushes (was replace), `member=` pushes, `sort=` replaces, `new=1`. Planned, #6046 | `/member` (`userId`), `/directory` (`sort`) |
 | `/rush?view=&prospect=` | Push. Planned, #6047 | `/rush-prospect` (`candidateId`), Recruitment |
-| `/profile?open=` | Closing goes Back instead of replacing. Planned, #6048 | You |
-| `/preferences?section=` | Push. Planned, #6048 | Preferences |
+| `/profile?open=` | Opening a door (Points, Service, Study) pushes; closing follows the rule, so Back goes to the profile and Forward reopens the panel. Built in #6048 | You |
+| `/preferences?section=` | Each rail row is a link, so it pushes. `setting=` (settings search) is one-shot. Invoice pay and Meet Frapp AI are centred dialogs, not in the address. Built in #6048 | Preferences |
 | `/settings?tab=&page=&channel=&tool=&tier=&role=&class=&zone=&member=` | Rail rows push `tab=`; `channel=` adds Chat admin's picked channel; `member=` is the points ledger's member. Still full width, with chat hidden. Planned, #6049 | Web only |
 | `/ask` | No change until conversations get ids (#4704) | Frapp Intelligence |
 | `/whats-new` | Path only | What's new |
