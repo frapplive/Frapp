@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { closeAddress } from "@/lib/address/address";
+import { NEW_INTENT_PARAM } from "@/components/layout/new-intent-href";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
@@ -513,7 +514,8 @@ export function ProfilePanel() {
         open={isCouncil ? null : openDoor}
         // Closes by the address's rule (#6048, spec § Addresses): Back when
         // this tab opened it, so Forward reopens it; else replaced away.
-        onClose={() => closeAddress([STANDING_PARAM])}
+        // A New link's unconsumed `new=1` goes with the panel it asked for.
+        onClose={() => closeAddress([STANDING_PARAM, NEW_INTENT_PARAM])}
       />
     </div>
   );

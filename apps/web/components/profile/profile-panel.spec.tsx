@@ -110,7 +110,8 @@ vi.mock("@/components/standing/standing-panels", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
-  useSearchParams: () => new URLSearchParams(mocks.open ? `open=${mocks.open}` : ""),
+  useSearchParams: () =>
+    new URLSearchParams(mocks.open ? `open=${mocks.open}` : ""),
 }));
 
 // More details is its own spec's business (#581); the panel's job is the gate.
@@ -683,6 +684,7 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     // Closing a panel that arrived from a link replaces the address with the
     // profile under it (#6048, § Addresses).
     expect(window.location.search).toBe("");
+    window.history.replaceState(null, "", "/");
   });
 
   it("closes a panel this tab opened by going Back, so Forward reopens it (#6048)", async () => {
@@ -694,10 +696,14 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
       "/profile?open=service",
     );
     const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
-    render(<ProfilePanel />);
-    await userEvent.click(screen.getByTestId("panel-service"));
-    expect(go).toHaveBeenCalledWith(-1);
-    go.mockRestore();
+    try {
+      render(<ProfilePanel />);
+      await userEvent.click(screen.getByTestId("panel-service"));
+      expect(go).toHaveBeenCalledWith(-1);
+    } finally {
+      go.mockRestore();
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("opens no panel for an address that names none, or one that isn't a door", () => {

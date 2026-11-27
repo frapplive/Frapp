@@ -12,12 +12,8 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { cn } from "@/lib/utils";
 import { useMyStudySessions } from "./my-study-panel";
-import {
-  STANDING_PARAM,
-  standingHref,
-  type StandingDoor,
-} from "./standing-doors";
-import { pushAddress } from "@/lib/address/address";
+import { standingHref, type StandingDoor } from "./standing-doors";
+import { openStandingDoor } from "./open-standing-door";
 
 type Cell = {
   door: StandingDoor;
@@ -102,21 +98,7 @@ export function StandingStats() {
             <Link
               href={standingHref(cell.door)}
               scroll={false}
-              // On the profile, opening a door is a step this tab pushes, so
-              // the panel's close goes Back and Forward reopens it (#6048).
-              // A modified click still opens a new tab through the link.
-              onClick={(event) => {
-                if (
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey ||
-                  event.button !== 0
-                )
-                  return;
-                event.preventDefault();
-                pushAddress({ [STANDING_PARAM]: cell.door });
-              }}
+              onClick={(event) => openStandingDoor(event, cell.door)}
               aria-label={`${cell.label}: ${cell.value ?? "couldn't load"}. Opens ${cell.opens}.`}
               data-testid={`profile-standing-${cell.door}`}
               className={cn(
