@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  SHELL_CACHE_ROOT,
   closeShellCache,
   pruneOtherMembers,
   reopenShellCache,
@@ -73,6 +74,25 @@ describe("shell cache rows", () => {
     expect(ownKeys()).toEqual([]);
   });
 
+  it("drops a row another build wrote, unread", () => {
+    localStorage.setItem(
+      `${SHELL_CACHE_PREFIX}auth-a|chapter-1|events`,
+      JSON.stringify({ at: Date.now(), build: "an-older-deploy", data: [] }),
+    );
+    expect(readShellRows(A).size).toBe(0);
+    expect(ownKeys()).toEqual([]);
+  });
+
+  it("clears and prunes another version's rows too", () => {
+    const older = `${SHELL_CACHE_ROOT}v0|auth-a|chapter-1|roster`;
+    localStorage.setItem(older, "{}");
+    pruneOtherMembers("auth-a");
+    expect(localStorage.getItem(older)).toBe(null);
+    localStorage.setItem(older, "{}");
+    clearShellCache();
+    expect(localStorage.getItem(older)).toBe(null);
+  });
+
   it("clears every row and leaves other storage alone", () => {
     writeShellRow(A, "roster", ROSTER);
     writeShellRow({ ...A, authUserId: "auth-b" }, "roster", ROSTER);
@@ -140,7 +160,57 @@ describe("keeping and offering (#5049)", () => {
       name: "Beta Theta Omega",
       logo_url: null,
       branding: null,
+      enabled_modules: null,
     });
+  });
+
+  it("keeps an event only as the list draws it: no notes, agenda or check-in zone", async () => {
+    const client = new QueryClient();
+    const stop = keepShellAnswers(client, A);
+    await client.fetchQuery({
+      queryKey: ["events", "chapter-1"],
+      queryFn: () => [
+        {
+          id: "e-1",
+          name: "Chapter",
+          start_time: "2026-12-01T00:00:00Z",
+          end_time: "2026-12-01T01:00:00Z",
+          required_role_ids: ["r-1"],
+          notes: "Tabled: a motion about a brother",
+          agenda: [{ title: "Discipline" }],
+          description: "Private",
+          attachments: [{ url: "https://x/doc" }],
+          check_in_zone: { lat: 1, lng: 2 },
+        },
+      ],
+    });
+    stop();
+    expect(readShellRows(A).get("events")?.data).toEqual([
+      {
+        id: "e-1",
+        name: "Chapter",
+        start_time: "2026-12-01T00:00:00Z",
+        end_time: "2026-12-01T01:00:00Z",
+        required_role_ids: ["r-1"],
+      },
+    ]);
+  });
+
+  it("doesn't write an unchanged answer again on a refetch", async () => {
+    const client = new QueryClient();
+    const stop = keepShellAnswers(client, A);
+    const fetchRoster = () =>
+      client.fetchQuery({
+        queryKey: ["members", "chapter-1", "roster"],
+        queryFn: () => ROSTER.map((row) => ({ ...row })),
+        staleTime: 0,
+      });
+    await fetchRoster();
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    await fetchRoster();
+    stop();
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 
   it("drops an answer from a query no longer in the cache", async () => {

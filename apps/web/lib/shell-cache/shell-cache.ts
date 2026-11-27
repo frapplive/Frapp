@@ -35,7 +35,13 @@ import {
   myPermissionsQueryKey,
   rosterQueryKey,
 } from "@repo/hooks";
-import { SHELL_CACHE_PREFIX, shellCacheClosed } from "./shell-cache-clear";
+import {
+  removeShellKey,
+  SHELL_CACHE_PREFIX,
+  shellCacheClosed,
+  shellKeys,
+  shellStorage,
+} from "./shell-cache-clear";
 
 export { SHELL_CACHE_PREFIX, clearShellCache } from "./shell-cache-clear";
 
@@ -48,46 +54,102 @@ export const SHELL_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const SHELL_CACHE_MAX_ROW_CHARS = 500_000;
 
-/** The layer a row paints in: 1 identity and shell, 2 the open page. */
-export type ShellLayer = 1 | 2;
+/**
+ * The build that wrote a row. A row from another build is dropped unread, so
+ * a deploy that changes an answer's shape never draws an old one (#6061 step
+ * 4): the first visit after a deploy loads live, the next one paints. The
+ * release is Vercel's commit SHA (`next.config` derives it); a local build
+ * has none and keeps its own rows.
+ */
+export const SHELL_CACHE_BUILD =
+  process.env.NEXT_PUBLIC_SENTRY_RELEASE || "local";
 
 /** A query whose last answer this cache keeps. */
 export interface ShellQueryPart {
   name: string;
-  layer: ShellLayer;
   /** The key the reading hook uses, for this chapter. */
   key: (chapterId: string) => QueryKey;
   /** The part of the answer worth keeping; the whole answer when omitted. */
   keep?: (data: unknown) => unknown;
 }
 
-/** The chapter row: what the chapter head draws, and nothing else. */
+/**
+ * The chapter row: what the chapter head draws, and which modules are on, so
+ * the nav doesn't draw a row a switched-off module then takes back. Nothing
+ * about billing.
+ */
 function chapterHead(data: unknown): unknown {
   if (!data || typeof data !== "object") return undefined;
   const row = data as {
     name?: unknown;
     logo_url?: unknown;
     branding?: unknown;
+    enabled_modules?: unknown;
   };
   if (typeof row.name !== "string") return undefined;
+  const modules = row.enabled_modules;
   return {
     name: row.name,
     logo_url: typeof row.logo_url === "string" ? row.logo_url : null,
     branding: row.branding ?? null,
+    enabled_modules:
+      modules && typeof modules === "object" && !Array.isArray(modules)
+        ? modules
+        : null,
   };
 }
 
-/** The queries kept, by layer. */
+/**
+ * The fields the Calendar's list draws and files a row by (its line, its
+ * timing, its series, who it's for). An event's notes, agenda, description,
+ * attachments and check-in zone are left out: the list never reads them, and
+ * the detail sheet loads its own copy (Paul, 2026-11-26: "leave out anything
+ * sensitive").
+ */
+const EVENT_LIST_FIELDS = [
+  "id",
+  "name",
+  "location",
+  "start_time",
+  "end_time",
+  "timing",
+  "start_date",
+  "end_date",
+  "is_tentative",
+  "calendar_only",
+  "recurrence_rule",
+  "parent_event_id",
+  "event_type_id",
+  "point_value",
+  "check_in_opens_minutes",
+  "is_mandatory",
+  "required_role_ids",
+  "optional_role_ids",
+  "excluded_role_ids",
+  "others_invited",
+  "attendance_picks",
+] as const;
+
+/** The events list, each row cut to {@link EVENT_LIST_FIELDS}. */
+function eventList(data: unknown): unknown {
+  if (!Array.isArray(data)) return undefined;
+  return data.map((event: unknown) => {
+    if (!event || typeof event !== "object") return event;
+    const row = event as Record<string, unknown>;
+    const kept: Record<string, unknown> = {};
+    for (const field of EVENT_LIST_FIELDS) {
+      if (field in row) kept[field] = row[field];
+    }
+    return kept;
+  });
+}
+
+/** The queries kept. */
 export const SHELL_QUERY_PARTS: readonly ShellQueryPart[] = [
-  { name: "roster", layer: 1, key: (c) => rosterQueryKey(c) },
-  { name: "permissions", layer: 1, key: (c) => myPermissionsQueryKey(c) },
-  {
-    name: "chapter",
-    layer: 1,
-    key: (c) => currentChapterQueryKey(c),
-    keep: chapterHead,
-  },
-  { name: "events", layer: 2, key: (c) => eventsQueryKey(c) },
+  { name: "roster", key: (c) => rosterQueryKey(c) },
+  { name: "permissions", key: (c) => myPermissionsQueryKey(c) },
+  { name: "chapter", key: (c) => currentChapterQueryKey(c), keep: chapterHead },
+  { name: "events", key: (c) => eventsQueryKey(c), keep: eventList },
 ];
 
 /** The member's own name and photo, the one identity row (never `["user","me"]`). */
@@ -108,16 +170,9 @@ export interface ShellScope {
 interface StoredRow {
   /** When the answer was fetched, ms since the epoch. */
   at: number;
+  /** The {@link SHELL_CACHE_BUILD} that wrote it. */
+  build: string;
   data: unknown;
-}
-
-/** Storage that may be missing or refuse (a private window, blocked site data). */
-function storage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
 }
 
 function scopePrefix(scope: ShellScope): string {
@@ -126,16 +181,6 @@ function scopePrefix(scope: ShellScope): string {
 
 function rowKey(scope: ShellScope, part: string): string {
   return `${scopePrefix(scope)}${part}`;
-}
-
-/** Every key this cache owns, read up front so removing one doesn't skip the next. */
-function ownKeys(store: Storage): string[] {
-  const keys: string[] = [];
-  for (let i = 0; i < store.length; i++) {
-    const key = store.key(i);
-    if (key?.startsWith(SHELL_CACHE_PREFIX)) keys.push(key);
-  }
-  return keys;
 }
 
 /**
@@ -148,10 +193,14 @@ export function writeShellRow(
   data: unknown,
   at: number = Date.now(),
 ): void {
-  const store = storage();
+  const store = shellStorage();
   if (!store || data === undefined || shellCacheClosed()) return;
   try {
-    const value = JSON.stringify({ at, data } satisfies StoredRow);
+    const value = JSON.stringify({
+      at,
+      build: SHELL_CACHE_BUILD,
+      data,
+    } satisfies StoredRow);
     if (value.length > SHELL_CACHE_MAX_ROW_CHARS) {
       store.removeItem(rowKey(scope, part));
       return;
@@ -173,16 +222,13 @@ export function readShellRows(
   now: number = Date.now(),
 ): Map<string, StoredRow> {
   const rows = new Map<string, StoredRow>();
-  const store = storage();
+  const store = shellStorage();
   if (!store) return rows;
   const mine = scopePrefix(scope);
-  for (const key of ownKeys(store)) {
+  for (const key of shellKeys(store)) {
+    // Another scope's, or another version's: the read can't reach it.
     if (!key.startsWith(mine)) {
-      try {
-        store.removeItem(key);
-      } catch {
-        // Ignore: the key still can't be read under this scope.
-      }
+      removeShellKey(store, key);
       continue;
     }
     const part = key.slice(mine.length);
@@ -191,19 +237,16 @@ export function readShellRows(
       if (
         !row ||
         typeof row.at !== "number" ||
+        row.build !== SHELL_CACHE_BUILD ||
         now - row.at > SHELL_CACHE_MAX_AGE_MS ||
         row.at > now + 60_000
       ) {
-        store.removeItem(key);
+        removeShellKey(store, key);
         continue;
       }
       rows.set(part, row);
     } catch {
-      try {
-        store.removeItem(key);
-      } catch {
-        // Ignore.
-      }
+      removeShellKey(store, key);
     }
   }
   return rows;

@@ -67,19 +67,20 @@ The web dashboard's shell cache ([`apps/web/lib/shell-cache/`](../../../apps/web
 
 - **Read, never seeded.** `ShellCacheSync` reads one scope's rows once and offers them (`useShellCached`) to the surfaces that draw from them, each only while its own live read is in flight:
   - the account row: the member's name and photo (`useShellIdentity`), offline included, never over a failed read;
-  - the nav and the page title: the permissions (`useNavPermissions({ fromShellCache: true })`), never during a role preview;
+  - the nav and the page title: the permissions (`useNavPermissions({ fromShellCache: true })`), never during a role preview, and the chapter's module switches, so a row a switched-off module hides is never drawn and taken back;
   - the chapter head: the chapter's name and mark;
   - members' names everywhere `useMemberDisplayNames` reads them, chat included: the roster (`CachedRosterProvider` in `@repo/hooks`);
-  - the Calendar's list: the events (the page's reopen and New intent wait on the live answer).
+  - the Calendar's list: the events. The address's event and its `edit=1` and `excuse=1`, the page's reopen and its New intent all wait on the live answer.
 
   Nothing goes into the query cache. A seeded answer reads as a live one to everything else, and #5049's review found three readers that would have acted on a week-old answer: the no-access redirect, the billing redirect and `/join`'s "already in" check. A module gate or a one-time reopen is the same hazard, so a surface opts in only where it draws.
 
-- **What it keeps.** The roster (names, photos, role colours), the member's permissions in this chapter, the chapter's name, logo and branding (not its billing state), the events list, and the member's own name and photo.
+- **What it keeps.** The roster (names, photos, role colours), the member's permissions in this chapter, the chapter's name, logo, branding and module switches (not its billing state), the events list cut to what the list draws (name, place, times, series and who it's for), and the member's own name and photo.
 - **What it leaves out.**
   - `["user","me"]` (its readers take a whole profile, and Profile's form starts from it).
   - Activity: its answer carries chat text (poll messages, reminder previews), and its page is held by another open PR; it follows in [#6131](https://github.com/pdcarlson/Frapp/issues/6131).
+  - An event's notes, agenda, description, attachments and check-in zone: the list never draws them, and the detail sheet loads its own copy.
   - Anything about money, anybody else's contact details, and messages (chat has its first-chunk cache).
-  - The logo and photo URLs are short-lived signed URLs to the member's own chapter's logo and their own photo. One that has expired fails to load and the mark or initials show until the live answer replaces it.
+  - The logo and photo URLs are short-lived signed URLs (an hour): the chapter's logo, the member's own photo, and every roster member's photo. One that has expired fails to load and the mark or initials show until the live answer replaces it.
 - **Keying is the boundary.** Every row's key carries the auth uid and chapter id it was fetched under, and a read looks up only the current pair, so there is no key under which another member's or another chapter's answer comes back.
 - **Writes come only from a fetch.** A query's own answer is kept; a manual write (an optimistic update) is not. Only a key built for the current chapter is kept, and only while its query is still in the cache, since an identity change clears the cache before a late answer could land.
 - **Clearing is hygiene on top.** Rows are deleted:
@@ -88,7 +89,9 @@ The web dashboard's shell cache ([`apps/web/lib/shell-cache/`](../../../apps/web
   - when the sign-in page opens, for a session that ended with no tab open;
   - for every other member, once the signed-in member is known, even before a chapter is.
 
-  A read also deletes the rows of every other chapter. It is `localStorage`, so the clear is synchronous and a second tab can't block it, and the shell path imports no Dexie for it. Rows older than seven days are dropped unread, and a row over 500,000 characters isn't kept.
+  A read also deletes the rows of every other chapter, and the clears match every version of the key, so a later version never strands an older one's rows. A row written by another build (Vercel's commit SHA) is dropped unread, so a deploy that changes an answer's shape never draws the old one: the first visit after a deploy loads live. It is `localStorage`, so the clear is synchronous and a second tab can't block it, and the shell path imports no Dexie for it. Rows older than seven days are dropped unread, and a row over 500,000 characters isn't kept.
+
+  One limit, accepted: the rows paint on the session the browser holds, before any server check, so a session revoked elsewhere ("sign out everywhere", a password change) still paints its member's rows on that browser until the access token expires or a live read is refused, about a round trip in practice. The rows were already on that disk.
 
 The network side is layered too, on web and on the phone, in the first-screen batch both share ([`spec/architecture/README.md`](../../architecture/README.md) owns how the batch works).
 

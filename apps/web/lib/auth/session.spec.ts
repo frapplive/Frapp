@@ -54,4 +54,14 @@ describe("sign-out and the shell cache (#5049)", () => {
       Object.keys(localStorage).filter((k) => k.startsWith("frapp.shell.v1|")),
     ).toEqual([]);
   });
+
+  it("reopens the store when the sign-out throws and the member stays", async () => {
+    const { signOutCurrentSession } = await import("./session");
+    const { shellCacheClosed } = await import(
+      "@/lib/shell-cache/shell-cache-clear"
+    );
+    signOut.mockRejectedValue(new Error("lock not acquired"));
+    await expect(signOutCurrentSession()).rejects.toThrow("lock not acquired");
+    expect(shellCacheClosed()).toBe(false);
+  });
 });

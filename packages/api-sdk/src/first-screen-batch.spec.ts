@@ -190,6 +190,49 @@ describe("first-screen batching", () => {
     ]);
   });
 
+  it("lets a companion read wait for the slower page layer instead of sending its own", async () => {
+    let releasePage: () => void = () => undefined;
+    const pageHeld = new Promise<void>((resolve) => {
+      releasePage = resolve;
+    });
+    const fetchMock = stubFetch(async (include) => {
+      if (include.includes("channels")) await pageHeld;
+      return json(
+        Object.fromEntries(
+          include.map((section) => [section, { section }]),
+        ),
+      );
+    });
+    const api = client({ token: "token-companion-waits" });
+
+    const shell = Promise.all([
+      api.GET("/v1/users/me/permissions"),
+      api.GET("/v1/users/me"),
+    ]);
+    const page = Promise.all([
+      api.GET("/v1/channels"),
+      api.GET("/v1/channels/unread"),
+    ]);
+    await shell;
+    // What the setup checklist fires once permissions answer, while the page
+    // layer, which carries its companions, is still out.
+    const followers = Promise.all([
+      api.GET("/v1/geofences"),
+      api.GET("/v1/documents"),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releasePage();
+    const [geofences, documents] = await followers;
+    await page;
+
+    expect(urlsOf(fetchMock)).toEqual([
+      "/v1/bootstrap?include=permissions,user,whats_new",
+      "/v1/bootstrap?include=channels,channel_unread,geofences,documents",
+    ]);
+    expect(geofences.data).toEqual({ section: "geofences" });
+    expect(documents.data).toEqual({ section: "documents" });
+  });
+
   it("sends the bootstrap with the reads' own credentials and a fresh request id", async () => {
     const fetchMock = stubFetch(() => json({ user: {}, settings: {} }));
     const api = client({ token: "token-9", chapter: "chapter-9" });

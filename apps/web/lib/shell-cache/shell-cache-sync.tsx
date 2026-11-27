@@ -51,6 +51,9 @@ export function useShellIdentity(): ShellIdentity | null {
   return shellIdentityFrom(useShellCached(IDENTITY_PART));
 }
 
+/** How long an unchanged answer goes before its row is written again. */
+const REWRITE_AFTER_MS = 60 * 60 * 1000;
+
 /** Same key, element by element (query keys here are flat strings and nulls). */
 function sameKey(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((part, i) => part === b[i]);
@@ -70,6 +73,19 @@ export function keepShellAnswers(
   scope: ShellScope,
 ): () => void {
   const cache = queryClient.getQueryCache();
+  // A refetch whose answer didn't change keeps the same object (structural
+  // sharing), so it isn't serialised and written again, except to move the
+  // row's age on once in a while.
+  const written = new Map<string, { data: unknown; at: number }>();
+  const keep = (part: string, answer: unknown, data: unknown) => {
+    const now = Date.now();
+    const last = written.get(part);
+    if (last && last.data === answer && now - last.at < REWRITE_AFTER_MS) {
+      return;
+    }
+    written.set(part, { data: answer, at: now });
+    writeShellRow(scope, part, data, now);
+  };
   return cache.subscribe((event) => {
     if (event.type !== "updated") return;
     const action = event.action;
@@ -79,7 +95,7 @@ export function keepShellAnswers(
     const key = query.queryKey;
     if (sameKey(key, ["user", "me"])) {
       const identity = shellIdentityFrom(query.state.data);
-      if (identity) writeShellRow(scope, IDENTITY_PART, identity);
+      if (identity) keep(IDENTITY_PART, query.state.data, identity);
       return;
     }
     const part = SHELL_QUERY_PARTS.find((p) =>
@@ -87,7 +103,7 @@ export function keepShellAnswers(
     );
     if (!part) return;
     const kept = part.keep ? part.keep(query.state.data) : query.state.data;
-    if (kept !== undefined) writeShellRow(scope, part.name, kept);
+    if (kept !== undefined) keep(part.name, query.state.data, kept);
   });
 }
 

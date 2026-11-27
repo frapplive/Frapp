@@ -192,6 +192,15 @@ function stashKey(
   return `${session}|${scope}|${section}`;
 }
 
+/**
+ * Companion answers on their way, by stash key, settled once their layer has
+ * answered and stashed them. A split open sends companions with the page
+ * layer, while the reads that want them fire once the shell layer answers
+ * (the setup checklist's geofences and documents wait on permissions): such a
+ * read waits for its companion instead of sending a batch of its own (#5049).
+ */
+const inFlight = new Map<string, Promise<void>>();
+
 /** Takes a fresh companion answer for this read, once. */
 function takeStashed(key: string, now: number): unknown {
   const entry = stash.get(key);
@@ -214,6 +223,9 @@ function sweepStash(now: number): void {
 function forgetSession(session: string): void {
   for (const key of stash.keys()) {
     if (key.startsWith(`${session}|`)) stash.delete(key);
+  }
+  for (const key of inFlight.keys()) {
+    if (key.startsWith(`${session}|`)) inFlight.delete(key);
   }
 }
 
@@ -265,7 +277,9 @@ function batchFor(
  * GoTrue calls and stalled Supabase for seconds. This middleware holds a read
  * the bootstrap covers for {@link FIRST_SCREEN_BATCH_WINDOW_MS}; every covered
  * read that arrives in that window joins it, and the batch goes out as one
- * bootstrap call that `include`s exactly the sections asked for. Each read
+ * bootstrap call that `include`s the sections asked for (plus companions), or
+ * as two at once, the shell's sections and the page's, when each side has two
+ * or more ({@link SHELL_SECTIONS}, #5049). Each read
  * then gets its own section as an ordinary 200, so the hooks above see the
  * same body their own route would have answered and need no change.
  *
@@ -341,6 +355,14 @@ export function createFirstScreenBatchMiddleware(options?: {
     companions: BootstrapSection[],
   ) => {
     const asked = [...new Set(waiters.map((w) => w.section))];
+    const companionKeys = companions.map((section) =>
+      stashKey(batch.session, batch.chapter, section),
+    );
+    let landed: () => void = () => undefined;
+    const arrived = new Promise<void>((resolve) => {
+      landed = resolve;
+    });
+    for (const key of companionKeys) inFlight.set(key, arrived);
     let body: Record<string, unknown> | null = null;
     try {
       const url = new URL(batch.request.url);
@@ -385,6 +407,10 @@ export function createFirstScreenBatchMiddleware(options?: {
         });
       }
     }
+    for (const key of companionKeys) {
+      if (inFlight.get(key) === arrived) inFlight.delete(key);
+    }
+    landed();
     for (const waiter of waiters) {
       const value = body?.[waiter.section];
       waiter.resolve(
@@ -409,8 +435,23 @@ export function createFirstScreenBatchMiddleware(options?: {
       );
       if (!section) return undefined;
       const chapter = request.headers.get("x-chapter-id");
-      const stashed = takeStashed(stashKey(session, chapter, section), now);
+      const key = stashKey(session, chapter, section);
+      const stashed = takeStashed(key, now);
       if (stashed !== undefined) return jsonResponse(stashed);
+      const coming = inFlight.get(key);
+      if (coming) {
+        // Its companion is on its way with another layer: take that answer,
+        // or go to the route if it didn't come (or the read is cancelled).
+        return new Promise<Response | undefined>((resolve) => {
+          request.signal?.addEventListener("abort", () => resolve(undefined), {
+            once: true,
+          });
+          void coming.then(() => {
+            const value = takeStashed(key, Date.now());
+            resolve(value === undefined ? undefined : jsonResponse(value));
+          });
+        });
+      }
       return new Promise<Response | undefined>((resolve) => {
         // A read its caller cancels leaves the batch at once: it goes on to
         // its own route, which sees the aborted signal and fails there,

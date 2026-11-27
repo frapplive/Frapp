@@ -63,8 +63,9 @@ import {
  * Kept form drafts (`@repo/hooks/kept-drafts`) are dropped here too.
  *
  * So is the shell cache (`lib/shell-cache/`, #5049): the last roster,
- * permissions, chapter, Activity and events, kept per auth uid and chapter so
- * a revisit paints them first. Like the first chunk, keying is the boundary
+ * permissions, chapter head, events list and the member's own name and photo,
+ * kept per auth uid and chapter so a revisit paints them first (Activity is
+ * not kept: #6131). Like the first chunk, keying is the boundary
  * and this clear is hygiene; unlike it, the clear is synchronous.
  *
  * Bulk backwork upload batches (`lib/backwork-bulk/session.ts`) live outside
