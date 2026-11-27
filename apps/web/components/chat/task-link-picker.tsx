@@ -154,7 +154,7 @@ export function TaskLinkPicker({
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search tasks"
           aria-label="Search tasks"
-          className="h-9 min-w-0 flex-1"
+          className="h-control-small min-w-0 flex-1"
         />
         {canCreate ? (
           <NewButton thing="task" size="sm" type="button" onClick={onNew} />

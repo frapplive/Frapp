@@ -1,10 +1,10 @@
-import { MODULE_CATALOG } from "@repo/org-archetypes";
 import {
   CHAPTER_LOGS_PERMISSIONS,
   canAll,
   isBetaOffModule,
   type PhoneSettingsPage,
 } from "@repo/validation";
+import { MODULE_SETTINGS } from "./module-settings";
 
 /**
  * Settings search: one list of every setting a member can change, with the
@@ -48,6 +48,7 @@ export type SettingPhoneScreen =
   | "/chapter-vocabulary"
   | "/chapter-roles"
   | "/chapter-logs"
+  | "/module-settings"
   | "/preferences";
 
 export type SettingEntry = {
@@ -84,6 +85,8 @@ export type SettingEntry = {
     screen: SettingPhoneScreen;
     page?: PhoneSettingsPage;
     anchor?: string;
+    /** More params the screen needs, such as a module's `module=points`. */
+    params?: Readonly<Record<string, string>>;
     /**
      * Drawn only for a chapter: the phone's Chapter tab parts that read the
      * chapter's config, which a council's routes refuse (#5933). A council
@@ -110,73 +113,35 @@ export const SETTINGS_AREA_LABELS: Readonly<Record<SettingsArea, string>> = {
   personal: "Settings",
 };
 
-type ModuleWords = {
-  key: string;
-  label: string;
-  keywords: readonly string[];
+/**
+ * Other words for each module page. Its key, name and rail order are
+ * `MODULE_SETTINGS`'s (`module-settings.ts`), so search can't drift from the
+ * page.
+ */
+const MODULE_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
+  chat: ["messages", "messaging"],
+  announcements: ["announce", "broadcast", "news", "officer posts"],
+  events: ["calendar", "rsvp", "attendance", "check in", "check-in"],
+  points: ["leaderboard", "ledger"],
+  hours: ["service", "study hours", "volunteer", "community service"],
+  geofences: ["geofence", "study", "library", "map"],
+  tasks: ["todo", "to do", "assignments", "chores"],
+  polls: ["vote", "voting", "survey"],
+  meetings: ["minutes", "agenda", "notes", "chapter meeting"],
+  documents: ["files", "bylaws", "drive", "docs", "forms"],
+  backwork: ["coursework", "tests", "exams", "old tests", "test bank"],
+  reports: ["export", "csv", "spreadsheet"],
+  rush: ["rush", "prospects", "pnm", "bids", "intake"],
+  dues: ["payments", "fees", "money", "late fee", "payment plan"],
 };
 
-/** The module pages of Chapter settings, in rail order (`settings-modules.ts`). */
-const MODULE_WORDS: readonly ModuleWords[] = [
-  { key: "chat", label: "Chat", keywords: ["messages", "messaging"] },
-  {
-    key: "announcements",
-    label: "Announcements",
-    keywords: ["announce", "broadcast", "news", "officer posts"],
-  },
-  {
-    key: "events",
-    label: "Events",
-    keywords: ["calendar", "rsvp", "attendance", "check in", "check-in"],
-  },
-  { key: "points", label: "Points", keywords: ["leaderboard", "ledger"] },
-  {
-    key: "hours",
-    label: "Service hours",
-    keywords: ["service", "study hours", "volunteer", "community service"],
-  },
-  {
-    key: "geofences",
-    label: "Study zones",
-    keywords: ["geofence", "study", "library", "map"],
-  },
-  {
-    key: "tasks",
-    label: "Tasks",
-    keywords: ["todo", "to do", "assignments", "chores"],
-  },
-  { key: "polls", label: "Polls", keywords: ["vote", "voting", "survey"] },
-  {
-    key: "meetings",
-    label: "Meetings",
-    keywords: ["minutes", "agenda", "notes", "chapter meeting"],
-  },
-  {
-    key: "documents",
-    label: "Documents",
-    keywords: ["files", "bylaws", "drive", "docs", "forms"],
-  },
-  {
-    key: "backwork",
-    label: "Backwork",
-    keywords: ["coursework", "tests", "exams", "old tests", "test bank"],
-  },
-  {
-    key: "reports",
-    label: "Reports",
-    keywords: ["export", "csv", "spreadsheet"],
-  },
-  {
-    key: "rush",
-    label: "Recruitment",
-    keywords: ["rush", "prospects", "pnm", "bids", "intake"],
-  },
-  {
-    key: "dues",
-    label: "Dues",
-    keywords: ["payments", "fees", "money", "late fee", "payment plan"],
-  },
-];
+/** The module pages of Chapter settings, in rail order. */
+const MODULE_WORDS = MODULE_SETTINGS.map((module) => ({
+  key: module.key,
+  label: module.label,
+  alwaysOn: module.alwaysOn,
+  keywords: MODULE_KEYWORDS[module.key] ?? [],
+}));
 
 const MODULE_SWITCH_WORDS = [
   "module",
@@ -739,9 +704,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
   ...MODULE_WORDS.map((module): SettingEntry => {
     // An always-on module (Chat, Announcements) has no switch to light or
     // turn off, so its page opens at the top and offers no switch words.
-    const alwaysOn =
-      MODULE_CATALOG.find((entry) => entry.key === module.key)?.alwaysOn ??
-      false;
+    const alwaysOn = module.alwaysOn;
     return {
       id: `module-${module.key}`,
       label: module.label,
@@ -755,6 +718,13 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       web: alwaysOn
         ? { page: module.key }
         : { page: module.key, anchor: `settings-module-${module.key}-switch` },
+      // The module's screen on the phone (#6030), which reads the chapter's
+      // config, so a council is sent to the web dashboard.
+      phone: {
+        screen: "/module-settings",
+        params: { module: module.key },
+        chapterOnly: true,
+      },
     };
   }),
   {
@@ -812,6 +782,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "hours",
     web: { page: "hours", anchor: "settings-module-hours-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours" },
+      chapterOnly: true,
+    },
   },
   {
     id: "service-goals",
@@ -826,6 +801,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-module-service-goals",
       params: { page: "goal-service" },
     },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-service" },
+      chapterOnly: true,
+    },
   },
   {
     id: "study-goals",
@@ -839,6 +819,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "hours",
       anchor: "settings-module-study-goals",
       params: { page: "goal-study" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "hours", page: "goal-study" },
+      chapterOnly: true,
     },
   },
   {
@@ -864,6 +849,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     betaModule: "points",
     web: { page: "points", anchor: "settings-module-points-rules" },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points" },
+      chapterOnly: true,
+    },
   },
   {
     id: "points-goal",
@@ -877,6 +867,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "points",
       anchor: "settings-module-points-goals",
       params: { page: "goal-points" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "points", page: "goal-points" },
+      chapterOnly: true,
     },
   },
   {
@@ -892,6 +887,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "meetings",
       anchor: "settings-module-meetings-rules",
       params: { page: "sections" },
+    },
+    phone: {
+      screen: "/module-settings",
+      params: { module: "meetings", page: "sections" },
+      chapterOnly: true,
     },
   },
   {

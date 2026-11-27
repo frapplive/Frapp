@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CHECK_IN_GRACE_MINUTES } from "@repo/validation";
 import {
+  checkInOpenFor,
   formatCheckInOpens,
   formatCountdown,
   formatEventClock,
@@ -242,5 +243,45 @@ describe("formatCountdown", () => {
   it("clamps at zero rather than rendering a negative countdown", () => {
     // A late refetch must read as "rotating now", not "-0:03".
     expect(formatCountdown(-3_000)).toBe("0:00");
+  });
+});
+
+describe("event shapes on the list (#6098)", () => {
+  const DAY = {
+    start_time: "2026-11-09T05:00:00.000Z",
+    end_time: "2026-11-10T05:00:00.000Z",
+    check_in_opens_minutes: 10,
+  };
+
+  it("keeps an all-day event current through its last day, by the viewer's days", () => {
+    const shape = {
+      timing: "all_day",
+      start_date: "2026-11-09",
+      end_date: "2026-11-11",
+    };
+    const late = new Date(2026, 10, 11, 23, 30);
+    expect(isCurrentOrUpcoming(DAY.start_time, DAY.end_time, late, shape)).toBe(
+      true,
+    );
+    expect(
+      isCurrentOrUpcoming(
+        DAY.start_time,
+        DAY.end_time,
+        new Date(2026, 10, 12, 0, 30),
+        shape,
+      ),
+    ).toBe(false);
+  });
+
+  it("never opens check-in for an event that takes no attendance", () => {
+    const during = new Date("2026-11-09T12:00:00.000Z");
+    expect(checkInOpenFor({ ...DAY, timing: "all_day" }, during)).toBe(true);
+    expect(checkInOpenFor({ ...DAY, timing: "time_tbd" }, during)).toBe(false);
+    expect(
+      checkInOpenFor(
+        { ...DAY, timing: "all_day", calendar_only: true },
+        during,
+      ),
+    ).toBe(false);
   });
 });

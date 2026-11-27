@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import type { Override } from "@repo/hooks/permission-overlay";
 import { SignetTokens } from "@repo/theme/signet";
+import { overrideChoiceLabels } from "@repo/validation";
 import {
   SheetBackToClose,
   SheetGrabber,
@@ -25,8 +26,6 @@ export type OverrideTarget = {
   label: string;
   roleName: string;
   tierName: string;
-  /** The chapter's word for a tier, in running text. */
-  tierWord: string;
   tierHas: boolean;
   current: Override;
   /** On is refused: the caller doesn't hold this permission. */
@@ -68,28 +67,32 @@ export const OverrideSheet = forwardRef<
   const brand = useChapterBranding();
   const styles = createStyles(tokens, brand);
 
-  const options: Option[] = target
-    ? [
-        {
-          value: null,
-          label: `Same as ${target.tierWord}`,
-          description: `${target.tierName} has it ${target.tierHas ? "on" : "off"}. Follows ${target.tierName} if that changes.`,
-          refused: target.tierRefused,
-        },
-        {
-          value: true,
-          label: "On",
-          description: `On for ${target.roleName}, whatever ${target.tierName} does.`,
-          refused: target.onRefused,
-        },
-        {
-          value: false,
-          label: "Off",
-          description: `Off for ${target.roleName}, whatever ${target.tierName} does.`,
-          refused: false,
-        },
-      ]
-    : [];
+  const choices = target
+    ? overrideChoiceLabels(target.tierName, target.tierHas)
+    : null;
+  const options: Option[] =
+    target && choices
+      ? [
+          {
+            value: null,
+            label: choices.inherit,
+            description: `${target.tierName} has it ${target.tierHas ? "on" : "off"}. Follows ${target.tierName} if that changes.`,
+            refused: target.tierRefused,
+          },
+          {
+            value: true,
+            label: choices.on,
+            description: `On for ${target.roleName}, whatever ${target.tierName} does.`,
+            refused: target.onRefused,
+          },
+          {
+            value: false,
+            label: choices.off,
+            description: `Off for ${target.roleName}, whatever ${target.tierName} does.`,
+            refused: false,
+          },
+        ]
+      : [];
 
   return (
     <BottomSheetModal

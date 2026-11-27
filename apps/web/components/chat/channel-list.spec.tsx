@@ -62,7 +62,7 @@ function renderList(
  * per header would pass on a rail that rendered them backwards.
  */
 function sectionLabels(container: HTMLElement): string[] {
-  return Array.from(container.querySelectorAll("p.uppercase")).map(
+  return Array.from(container.querySelectorAll('p[data-flip^="head:"]')).map(
     (node) => node.textContent ?? "",
   );
 }
@@ -93,9 +93,9 @@ async function menuFor(title: string): Promise<string[]> {
 
 /** Row titles under one section header, in DOM order. */
 function channelsUnder(container: HTMLElement, label: string): string[] {
-  const header = Array.from(container.querySelectorAll("p.uppercase")).find(
-    (node) => node.textContent === label,
-  );
+  const header = Array.from(
+    container.querySelectorAll('p[data-flip^="head:"]'),
+  ).find((node) => node.textContent === label);
   if (!header) return [];
   const list = header.parentElement?.querySelector("ul");
   return Array.from(list?.querySelectorAll("li") ?? []).map(
@@ -562,6 +562,8 @@ describe("ChannelList hide and reopen (#2303)", () => {
       name: "Hidden conversations (1)",
     });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // A fold heading like the categories: the name, then its chevron.
+    expect(toggle.lastElementChild?.tagName.toLowerCase()).toBe("svg");
     expect(screen.queryByText("Alice Chen")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
@@ -1497,7 +1499,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
     );
     const hidden = screen.getByRole("list", { name: "Hidden conversations" });
     const hiddenButton = hidden.querySelector("button")!;
-    expect(hiddenButton).toHaveClass("h-8");
+    expect(hiddenButton).toHaveClass("h-control-row");
     expect(hiddenButton.querySelector("[data-preview]")).toBeNull();
   });
 });
@@ -1789,5 +1791,33 @@ describe("ChannelList in the sidebar: the list's own control on its first headin
     const heading = controls[0]!.closest(".group\\/head");
     expect(heading).not.toBeNull();
     expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
+  });
+
+  it("draws each fold heading as its name, then its chevron (#6115)", () => {
+    // Claude's "Pinned ⌄" and Discord's "Events ⌄": the name leads, the fold
+    // chevron follows it, and the name is in sentence case, not capitals.
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+      />,
+    );
+    const folds = document.querySelectorAll(
+      'button[aria-expanded][data-flip^="head:"]',
+    );
+    expect(folds.length).toBeGreaterThan(0);
+    for (const fold of folds) {
+      const children = Array.from(fold.children);
+      expect(children[0]?.tagName).toBe("SPAN");
+      expect(children.at(-1)?.tagName.toLowerCase()).toBe("svg");
+      expect(fold.className).not.toMatch(/(^| )uppercase( |$)/);
+      expect(fold.className).not.toMatch(/tracking-/);
+    }
   });
 });

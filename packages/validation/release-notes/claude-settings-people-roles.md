@@ -1,0 +1,1 @@
+Roles and groups settings read as simple lists now, the same in the app and on the web, and officers can add, rename, reorder and delete roles and tiers, and make, fill and delete groups, from either.

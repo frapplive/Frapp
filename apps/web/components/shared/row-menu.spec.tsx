@@ -32,6 +32,19 @@ describe("keepsBrowserMenu", () => {
     expect(keepsBrowserMenu(screen.getByTestId("title"), row)).toBe(false);
   });
 
+  it("opens the row's menu on a link that is the row itself", () => {
+    render(
+      <div data-testid="row">
+        <a href="/settings?tab=roles&role=r1" data-row-link="">
+          Secretary
+        </a>
+      </div>,
+    );
+    expect(
+      keepsBrowserMenu(screen.getByRole("link"), screen.getByTestId("row")),
+    ).toBe(false);
+  });
+
   it("leaves a text selection inside the row to the browser", () => {
     render(<Row entries={[]} />);
     const row = screen.getByTestId("row");

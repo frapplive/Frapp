@@ -11,7 +11,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useChannels } from "@repo/hooks";
-import { isAnnouncementChannel } from "@repo/validation";
+import {
+  ANNOUNCEMENTS_CHANNEL_COPY,
+  isAnnouncementChannel,
+} from "@repo/validation";
 import { type SettingsTool } from "@/components/settings/settings-access";
 import { channelSettingsPath } from "@/components/settings/settings-paths";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
@@ -87,12 +90,12 @@ export function AnnouncementsChannelGroup({
   if (!channel) return null;
   return (
     <SettingsGroup
-      heading="Where they post"
-      footnote="Who can post is set on the channel."
+      heading={ANNOUNCEMENTS_CHANNEL_COPY.heading}
+      footnote={ANNOUNCEMENTS_CHANNEL_COPY.footnote}
     >
       <SettingsRow
         icon={Hash}
-        label="Announcements channel"
+        label={ANNOUNCEMENTS_CHANNEL_COPY.label}
         value={`#${channel.name}`}
         href={channelSettingsPath(channel.id)}
       />

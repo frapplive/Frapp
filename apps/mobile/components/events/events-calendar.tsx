@@ -5,7 +5,6 @@ import {
   formatDayHeading,
   localIsoDate,
   monthGrid,
-  parseInstant,
   startOfMonth,
 } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
@@ -25,6 +24,7 @@ import { seriesCadenceOf, useRequiredOfViewer } from "@repo/hooks";
 import type { CalendarItem } from "@repo/hooks/calendar-tasks";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { WEEKDAY_INITIALS } from "@/lib/calendar-weekdays";
+import { eventsByDay } from "@/lib/events/event-days";
 import { monthCellSummary } from "@/lib/events/month-cell";
 import type { EventRow } from "@/lib/events/select";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
@@ -35,7 +35,8 @@ import { tint, typeRole, useFrappTheme } from "@/lib/theme";
  * the selected day's events listed under it, and the month moved with the
  * chevrons or a sideways swipe.
  *
- * Every occurrence of a series is marked on its own day. The grid is
+ * Every occurrence of a series is marked on its own day, and an all-day or
+ * time-TBD event on each day it covers (`eventsByDay`, #6098). The grid is
  * `@repo/formatting`'s `monthGrid`, the weeks from the Sunday on or before
  * the 1st that web's calendar draws, less any week at the end with no day of
  * the month, so the phone's month is four to six weeks tall; a day is the
@@ -110,18 +111,9 @@ export function EventsCalendar({
   const requiredOf = useRequiredOfViewer();
   const styles = createStyles(tokens);
 
-  const byDay = useMemo(() => {
-    const map = new Map<string, EventRow[]>();
-    for (const event of events) {
-      const start = parseInstant(event.start_time);
-      if (!start) continue;
-      const key = localIsoDate(start);
-      const list = map.get(key);
-      if (list) list.push(event);
-      else map.set(key, [event]);
-    }
-    return map;
-  }, [events]);
+  // A timed event on its start's day; an all-day or time-TBD event on each
+  // of its own days (#6098), ahead of the day's timed ones.
+  const byDay = useMemo(() => eventsByDay(events), [events]);
 
   const month = startOfMonth(monthAnchor);
   const days = monthGrid(month);

@@ -116,7 +116,7 @@ function SettingsBody() {
             <Skeleton className="mx-[10px] mb-1 h-[11px] w-14" />
             <div className="flex flex-row flex-wrap gap-0.5 lg:flex-col">
               {group.map((width, row) => (
-                <div key={row} className="flex h-9 items-center px-[10px]">
+                <div key={row} className="flex h-control-row items-center px-[10px] pointer-coarse:h-11">
                   <Skeleton className={`h-[13px] ${width}`} />
                 </div>
               ))}

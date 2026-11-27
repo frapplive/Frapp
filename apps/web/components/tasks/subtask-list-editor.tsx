@@ -51,7 +51,7 @@ export function SubtaskListEditor({
           setOpen(true);
           requestAnimationFrame(() => inputRef.current?.focus());
         }}
-        className="flex min-h-9 items-center gap-2 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        className="flex min-h-control-small items-center gap-2 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
       >
         <ListChecks className="size-4" aria-hidden="true" />
         Add subtasks
@@ -108,7 +108,7 @@ export function SubtaskListEditor({
             commit();
             if (items.length === 0 && !text.trim()) setOpen(false);
           }}
-          className={cn("h-9")}
+          className={cn("h-control-small")}
         />
       )}
     </div>

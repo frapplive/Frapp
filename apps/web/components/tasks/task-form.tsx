@@ -394,8 +394,8 @@ export function TaskForm({
           data-plus-autofocus
           rows={1}
           className={cn(
-            "min-h-10 resize-none py-2 [field-sizing:content] pointer-coarse:min-h-11",
-            layout === "card" ? "min-h-9 py-1.5" : null,
+            "min-h-control-field resize-none py-2 [field-sizing:content] pointer-coarse:min-h-11",
+            layout === "card" ? "min-h-control-list-row py-1.5" : null,
           )}
           value={draft.title}
           placeholder="Sweep the porch"

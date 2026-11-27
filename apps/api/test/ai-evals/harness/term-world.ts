@@ -444,6 +444,7 @@ export function createTermWorld(
       due_date: task.due,
       due_at: null,
       attachments: [],
+      fixed_deadline: false,
       status: pastDue ? TaskStatus.OVERDUE : stored,
       stored_status: stored,
       point_reward: task.points > 0 ? task.points : null,

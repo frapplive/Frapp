@@ -94,9 +94,9 @@ const rowOf = (container: HTMLElement, id: string) =>
 
 /** Row titles under a section header, in DOM order. */
 function titlesUnder(container: HTMLElement, label: string): string[] {
-  const header = Array.from(container.querySelectorAll("p.uppercase")).find(
-    (node) => node.textContent === label,
-  );
+  const header = Array.from(
+    container.querySelectorAll('p[data-flip^="head:"]'),
+  ).find((node) => node.textContent === label);
   const list = header?.parentElement?.querySelector("ul");
   return Array.from(list?.querySelectorAll("li") ?? []).map(
     (li) => li.querySelector("span.truncate")?.textContent ?? "",

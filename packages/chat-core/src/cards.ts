@@ -11,6 +11,8 @@ import {
   attendanceFieldsOf,
   chapterLogPhrase,
   checkInOpensMinutes,
+  eventTiming,
+  eventTimingFieldsOf,
   keyAsWords,
 } from "@repo/validation";
 
@@ -51,6 +53,31 @@ function finiteNumber(value: unknown): number | null {
 }
 
 /**
+ * The event's shape off a payload (#6098), only where it differs from a plain
+ * timed event, so a card posted before the fields reads as it always has.
+ */
+function eventShapeOf(
+  r: Record<string, unknown>,
+): Pick<
+  EventPayload,
+  "timing" | "start_date" | "end_date" | "is_tentative" | "calendar_only"
+> {
+  const fields = eventTimingFieldsOf(r);
+  const timing = eventTiming(fields);
+  return {
+    ...(timing !== "timed"
+      ? {
+          timing,
+          start_date: fields.start_date ?? null,
+          end_date: fields.end_date ?? null,
+        }
+      : {}),
+    ...(fields.is_tentative ? { is_tentative: true } : {}),
+    ...(fields.calendar_only ? { calendar_only: true } : {}),
+  };
+}
+
+/**
  * A `kind:"event"` payload, or `null` without the id, name and both times.
  * `point_value` defaults to 0 (the card draws no points chip) and `location` to
  * `null`.
@@ -81,6 +108,7 @@ export function readEventPayload(message: ChatMessage): EventPayload | null {
       ? { viewer_required: r.viewer_required }
       : {}),
     check_in_opens_minutes: checkInOpensMinutes(r.check_in_opens_minutes),
+    ...eventShapeOf(r),
     created_at: typeof r.created_at === "string" ? r.created_at : "",
   };
 }

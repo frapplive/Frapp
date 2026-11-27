@@ -1,3 +1,4 @@
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * The three numbers a member can open from their own Profile (#5950): each is
  * a panel docked in place of the page, never a page of its own. Points,
@@ -9,7 +10,7 @@ export const STANDING_DOORS = ["points", "service", "study"] as const;
 export type StandingDoor = (typeof STANDING_DOORS)[number];
 
 /** The search param that names the open panel: `/profile?open=points`. */
-export const STANDING_PARAM = "open";
+export const STANDING_PARAM = WEB_ADDRESS_PARAMS.profile.open;
 
 /**
  * Where a door opens. Anything that used to link to `/points`, `/service` or

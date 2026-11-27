@@ -6,6 +6,8 @@ type ToggleProps = {
   value: boolean;
   onValueChange: (value: boolean) => void;
   accessibilityLabel: string;
+  /** What turning it on does, for a screen reader, when the label alone doesn't say. */
+  accessibilityHint?: string;
   /**
    * Paint in house gold rather than the chapter accent, for a toggle drawn
    * where there is no chapter yet (the `(auth)` group, `spec/behavior/branding.md`).
@@ -38,6 +40,7 @@ export function Toggle({
   value,
   onValueChange,
   accessibilityLabel,
+  accessibilityHint,
   house = false,
   disabled = false,
 }: ToggleProps) {
@@ -56,6 +59,7 @@ export function Toggle({
       disabled={disabled}
       onValueChange={onValueChange}
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       trackColor={{ false: offTrack, true: onTrack }}
       thumbColor={value ? onThumb : offThumb}
       ios_backgroundColor={offFill}

@@ -117,7 +117,12 @@ export function SectionSkeleton({
  */
 export function SkeletonControl({ className }: { className?: string }) {
   return (
-    <Skeleton className={cn("h-9 rounded-md pointer-coarse:h-11", className)} />
+    <Skeleton
+      className={cn(
+        "h-control-small rounded-md pointer-coarse:h-11",
+        className,
+      )}
+    />
   );
 }
 

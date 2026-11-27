@@ -207,11 +207,11 @@ export const QUIET_FIELD =
   "border border-control-edge bg-card hover:bg-card-hover disabled:border-border";
 
 /**
- * The Small step (foundations.md §9): 36 to a mouse, 44 to a finger, the
+ * The List row step (foundations.md §9): 32 to a mouse, 44 to a finger, the
  * label size, and the row's own hover lift.
  */
 const ROW_VALUE = cn(
-  "flex min-h-9 w-full min-w-0 items-center rounded-md bg-transparent px-2 text-sm pointer-coarse:min-h-11",
+  "flex min-h-control-list-row w-full min-w-0 items-center rounded-md bg-transparent px-2 text-sm pointer-coarse:min-h-11",
   "transition-colors hover:bg-card-hover disabled:pointer-events-none disabled:text-disabled",
   FOCUS_RING,
 );

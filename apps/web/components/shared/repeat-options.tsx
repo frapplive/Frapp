@@ -115,7 +115,7 @@ export function RepeatOptions({
                       if (start) onChange(toggleRepeatDay(draft, code, start));
                     }}
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors pointer-coarse:h-11 pointer-coarse:w-11",
+                      "flex h-control-row w-control-row items-center justify-center rounded-full text-sm font-semibold transition-colors pointer-coarse:h-11 pointer-coarse:w-11",
                       on
                         ? "bg-accent-subtle text-accent-text"
                         : "border border-input text-muted-foreground hover:bg-card-hover hover:text-foreground",

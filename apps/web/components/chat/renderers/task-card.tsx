@@ -255,12 +255,7 @@ export function TaskCard({ message, viewerId, isConfirmed }: TaskCardProps) {
   return (
     <Card className={cn(MESSAGE_CARD)}>
       <div className="flex items-center justify-between gap-2">
-        <div
-          className={cn(
-            EYEBROW,
-            "flex items-center gap-1.5 text-muted-foreground",
-          )}
-        >
+        <div className={cn(EYEBROW, "flex items-center gap-1.5 text-muted")}>
           <TasksGlyph className="h-4 w-4" /> Task
         </div>
         <div className="flex items-center gap-1">

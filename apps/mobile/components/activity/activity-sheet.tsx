@@ -30,6 +30,7 @@ import {
   type ChatCardFrameProps,
 } from "@/components/chat/chat-card";
 import { EventCard } from "@/components/chat/event-card";
+import { ExtensionDecision } from "@/components/activity/extension-decision";
 import { ListRow, ListSection } from "@/components/list-section";
 import { HoursCard } from "@/components/chat/hours-card";
 import { PollCard } from "@/components/chat/poll-card";
@@ -271,6 +272,14 @@ function SheetCard({
       ) : null;
     case "card":
       // A sign-up or form row opens its message in chat, never this sheet.
+      return null;
+    case "extension":
+      // A request for more time (#6096): decided here, as hours are.
+      return <ExtensionDecision row={row} onActed={onActed} />;
+    case "minutes-to-write":
+    case "minutes-draft":
+    case "minutes-notes":
+      // Minutes open where the Minutes list opened them (#5949).
       return null;
   }
 }

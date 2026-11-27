@@ -16,11 +16,12 @@ import {
   useViewerUserId,
 } from "@repo/hooks";
 import type { CalendarTask } from "@repo/hooks/calendar-tasks";
-import { can } from "@repo/validation";
+import { can, TASK_EXTENSION_COPY } from "@repo/validation";
 import {
   CheckGlyph,
   CopyGlyph,
   MinusGlyph,
+  MoreTimeGlyph,
   PencilGlyph,
   PersonGlyph,
   PlayGlyph,
@@ -38,6 +39,7 @@ import { alertFailure } from "@/lib/failure-alert";
 import type { TaskRowModel } from "@/lib/tasks/board";
 import { useStartTask } from "@/lib/tasks/use-start-task";
 import { useTaskReview } from "@/lib/tasks/use-task-review";
+import { useAskForMoreTime } from "@/lib/tasks/use-ask-for-more-time";
 import { useTaskRowById } from "@/lib/tasks/use-task-row-by-id";
 import {
   taskCreatedLine,
@@ -78,6 +80,9 @@ import {
  *   (`confirmInMenu`); a refusal is the platform's alert.
  * - Start is the assignee's To do → In progress (`useStartTask`), as chat's
  *   task card and the task screen's More offer it.
+ * - Ask for more time (#6096) opens the task screen's sheet
+ *   (`useAskForMoreTime`); what it says once it lands goes where a create's
+ *   line goes, or the platform's alert on a screen with no line.
  * - Edit and Reassign push the task's screen in its edit mode (`edit=1`,
  *   #5514), Reassign with Assign to's picker open over it (`who=1`).
  * - Remove people opens the task's screen in its select mode (`select=1`).
@@ -94,7 +99,10 @@ export function useTaskMenu({
 }: {
   /** The screen's Mark done (`useTaskToggle`), whose sheet it hosts. */
   toggles: TaskToggle;
-  /** Said where the screen says a create landed (the board's line). */
+  /**
+   * Said where the screen says a create landed (the board's line): a
+   * Duplicate's, and an Ask for more time's answer (#6096).
+   */
   onCreated?: (line: string) => void;
 }): {
   menuFor: (row: TaskRowModel) => ItemMenuHandle | null;
@@ -156,6 +164,11 @@ export function useTaskMenu({
     if (confirmRefusal) Alert.alert(confirmRefusal.text);
   }, [confirmRefusal]);
   const { confirm: confirmTask, sendBack } = review;
+  const askMore = useAskForMoreTime((line) => {
+    if (onCreated) onCreated(line);
+    else Alert.alert(line);
+  });
+  const askForMoreTime = askMore.ask;
 
   const actionFor = useCallback(
     (key: TaskMenuKey, row: TaskRowModel): ItemMenuAction => {
@@ -187,6 +200,13 @@ export function useTaskMenu({
             label: TASK_ACTION_LABELS.start,
             glyph: (color) => <PlayGlyph color={color} />,
             run: () => startTask(row.id),
+          };
+        case "askForMoreTime":
+          return {
+            key,
+            label: TASK_EXTENSION_COPY.ask,
+            glyph: (color) => <MoreTimeGlyph color={color} />,
+            run: () => askForMoreTime(row),
           };
         case "reopen":
           return {
@@ -261,7 +281,16 @@ export function useTaskMenu({
         }
       }
     },
-    [toggle, router, tasksData, runDelete, startTask, confirmTask, sendBack],
+    [
+      toggle,
+      router,
+      tasksData,
+      runDelete,
+      startTask,
+      confirmTask,
+      sendBack,
+      askForMoreTime,
+    ],
   );
 
   const reviewRefused = reviewRefusal?.gate === true;
@@ -337,6 +366,7 @@ export function useTaskMenu({
     <>
       {menu.element}
       {review.host}
+      {askMore.host}
       {duplicating ? (
         <NewTaskSheet
           key={`duplicate-${duplicating.key}`}

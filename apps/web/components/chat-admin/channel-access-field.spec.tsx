@@ -123,31 +123,31 @@ describe("ChannelAccessField's Add menu", () => {
         "    <label cmdk-label="" style="position: absolute; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); white-space: nowrap; border-width: 0px;">Add to who can see",
         "    <div class="flex items-center border-b border-border px-3" cmdk-input-wrapper="">",
         "      <svg aria-hidden="true" class="lucide lucide-search mr-2 h-4 w-4 shrink-0 text-muted">",
-        "      <input aria-autocomplete="list" aria-expanded="true" autocomplete="off" autocorrect="off" class="flex w-full rounded-md bg-transparent text-foreground caret-primary outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:text-disabled h-9 py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base" cmdk-input="" placeholder="Find a tier, role or group" role="combobox" spellcheck="false" type="text" value="">",
+        "      <input aria-autocomplete="list" aria-expanded="true" autocomplete="off" autocorrect="off" class="flex w-full rounded-md bg-transparent text-foreground caret-primary outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:text-disabled h-control-small py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base" cmdk-input="" placeholder="Find a tier, role or group" role="combobox" spellcheck="false" type="text" value="">",
         "    <div aria-label="Suggestions" class="overflow-y-auto overflow-x-hidden max-h-72 p-1" cmdk-list="" role="listbox" tabindex="-1">",
         "      <div cmdk-list-sizer="">",
         "        <div class="overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground" cmdk-group="" data-value="Tiers" role="presentation">",
         "          <div aria-hidden="true" cmdk-group-heading="">Tiers",
         "          <div cmdk-group-items="" role="group">",
-        "            <div aria-disabled="false" aria-selected="true" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="true" data-value="tier-t-exec" role="option">",
+        "            <div aria-disabled="false" aria-selected="true" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="true" data-value="tier-t-exec" role="option">",
         "              <svg aria-hidden="true" class="lucide lucide-layers lucide-layers-3 h-3 w-3 shrink-0 text-muted-foreground">",
         "              <span class="min-w-0 flex-1 break-words">Exec board",
         "              <span class="shrink-0 text-caption text-muted-foreground">1 person",
         "        <div class="overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground" cmdk-group="" data-value="Roles" role="presentation">",
         "          <div aria-hidden="true" cmdk-group-heading="">Roles",
         "          <div cmdk-group-items="" role="group">",
-        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="role-r-social" role="option">",
+        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="role-r-social" role="option">",
         "              <span aria-hidden="true" class="h-2 w-2 shrink-0 rounded-full bg-muted-foreground" style="background-color: rgb(255, 0, 0);">",
         "              <span class="min-w-0 flex-1 break-words">Social Chair",
         "              <span class="shrink-0 text-caption text-muted-foreground">3 people",
-        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="role-r-new" role="option">",
+        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="role-r-new" role="option">",
         "              <span aria-hidden="true" class="h-2 w-2 shrink-0 rounded-full bg-muted-foreground">",
         "              <span class="min-w-0 flex-1 break-words">New Member",
         "              <span class="shrink-0 text-caption text-muted-foreground">0 people",
         "        <div class="overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground" cmdk-group="" data-value="Groups" role="presentation">",
         "          <div aria-hidden="true" cmdk-group-heading="">Groups",
         "          <div cmdk-group-items="" role="group">",
-        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="group-g-2027" role="option">",
+        "            <div aria-disabled="false" aria-selected="false" class="relative flex cursor-default select-none items-center rounded-xs px-2 py-1 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-card-hover data-[selected=true]:text-foreground data-[disabled=true]:text-disabled [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base" cmdk-item="" data-disabled="false" data-selected="false" data-value="group-g-2027" role="option">",
         "              <span aria-hidden="true" class="h-2 w-2 shrink-0 rounded-full bg-muted-foreground">",
         "              <span class="min-w-0 flex-1 break-words">Class of 2027",
         "              <span class="shrink-0 text-caption text-muted-foreground">12 people",
@@ -159,17 +159,17 @@ describe("ChannelAccessField's Add menu", () => {
     await openAdd({ optionsState: "loading" });
     expect(markupLines(screen.getByRole("dialog")).slice(1))
       .toMatchInlineSnapshot(`
-      [
-        "  <div class="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground outline-none" cmdk-root="" tabindex="-1">",
-        "    <label cmdk-label="" style="position: absolute; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); white-space: nowrap; border-width: 0px;">Add to who can see",
-        "    <div class="flex items-center border-b border-border px-3" cmdk-input-wrapper="">",
-        "      <svg aria-hidden="true" class="lucide lucide-search mr-2 h-4 w-4 shrink-0 text-muted">",
-        "      <input aria-autocomplete="list" aria-expanded="true" autocomplete="off" autocorrect="off" class="flex w-full rounded-md bg-transparent text-foreground caret-primary outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:text-disabled h-9 py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base" cmdk-input="" placeholder="Find a tier, role or group" role="combobox" spellcheck="false" type="text" value="">",
-        "    <div aria-label="Suggestions" class="overflow-y-auto overflow-x-hidden max-h-72 p-1" cmdk-list="" role="listbox" tabindex="-1">",
-        "      <div cmdk-list-sizer="">",
-        "        <p class="px-2 py-3 text-sm text-muted" role="status">Loading who you can add",
-      ]
-    `);
+        [
+          "  <div class="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground outline-none" cmdk-root="" tabindex="-1">",
+          "    <label cmdk-label="" style="position: absolute; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); white-space: nowrap; border-width: 0px;">Add to who can see",
+          "    <div class="flex items-center border-b border-border px-3" cmdk-input-wrapper="">",
+          "      <svg aria-hidden="true" class="lucide lucide-search mr-2 h-4 w-4 shrink-0 text-muted">",
+          "      <input aria-autocomplete="list" aria-expanded="true" autocomplete="off" autocorrect="off" class="flex w-full rounded-md bg-transparent text-foreground caret-primary outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:text-disabled h-control-small py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base" cmdk-input="" placeholder="Find a tier, role or group" role="combobox" spellcheck="false" type="text" value="">",
+          "    <div aria-label="Suggestions" class="overflow-y-auto overflow-x-hidden max-h-72 p-1" cmdk-list="" role="listbox" tabindex="-1">",
+          "      <div cmdk-list-sizer="">",
+          "        <p class="px-2 py-3 text-sm text-muted" role="status">Loading who you can add",
+        ]
+      `);
   });
 
   it("says the options couldn't load, as before", async () => {

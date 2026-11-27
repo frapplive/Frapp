@@ -1,9 +1,8 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DASHBOARD_NAV_ITEMS } from "@/components/layout/nav-config";
 import { currentFor } from "@/components/layout/sidebar";
 import { resolvePageTitle } from "@/components/layout/page-title";
+import { dashboardRoutes } from "@/components/layout/dashboard-routes";
 
 /**
  * Every page has a way back and the sidebar says where you are (rulebook § 8,
@@ -17,34 +16,6 @@ import { resolvePageTitle } from "@/components/layout/page-title";
  *   still under More lights More, `sidebar.tsx`), or the route is one of the
  *   doors outside the nav listed below.
  */
-
-const DASHBOARD = path.resolve(__dirname, "../../app/(dashboard)");
-
-function routes(dir: string, prefix = ""): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(dir)) {
-    const full = path.join(dir, name);
-    if (statSync(full).isDirectory()) {
-      // A dynamic segment gets a sample value.
-      const segment = name.startsWith("[") ? "sample-id" : name;
-      out.push(...routes(full, `${prefix}/${segment}`));
-    } else if (name === "page.tsx" && !onlyRedirects(full)) {
-      out.push(prefix || "/");
-    }
-  }
-  return out;
-}
-
-/**
- * A page kept only to send old links on (`/roles` to Settings) never draws,
- * so it needs neither. It imports Next's `redirect` or a `…Redirect` component.
- */
-function onlyRedirects(file: string): boolean {
-  const source = readFileSync(file, "utf8");
-  return /import \{[^}]*\bredirect\b[^}]*\} from "next\/navigation"|import \{ \w+Redirect \}/.test(
-    source,
-  );
-}
 
 /**
  * The conversation is the shell's own page, with no tool page to close:
@@ -66,7 +37,10 @@ const OFF_NAV_DOORS: Readonly<Record<string, string>> = {
   "/ask": "the New row",
 };
 
-const ALL = routes(DASHBOARD).filter((r) => !NOT_A_TOOL_PAGE.has(r));
+// A dynamic segment gets a sample value.
+const ALL = dashboardRoutes()
+  .map((r) => r.replace(/\[[^\]]+\]/g, "sample-id"))
+  .filter((r) => !NOT_A_TOOL_PAGE.has(r));
 
 describe("every dashboard page has a way back and a place in the sidebar", () => {
   it("finds the routes", () => {

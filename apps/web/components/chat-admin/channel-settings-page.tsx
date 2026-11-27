@@ -111,7 +111,7 @@ import { asArray, cn, getErrorMessage } from "@/lib/utils";
  * the rows that open a page show theirs, rather than a field box in a row.
  */
 const ROW_PICKER =
-  "h-8 w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground shadow-none hover:text-foreground";
+  "h-control-row w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground shadow-none hover:text-foreground";
 
 /** Sentinel for "no category": Radix `Select` rejects an empty-string value. */
 const NO_CATEGORY = "__none__";

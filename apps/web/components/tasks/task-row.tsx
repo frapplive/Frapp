@@ -203,7 +203,12 @@ export function TaskRow({
       ) : (
         <PersonChip person={person} />
       )}
-      <DueText task={task} due={due} />
+      <DueText
+        task={task}
+        due={due}
+        // A fixed deadline reads urgent to whoever has it (#6096).
+        urgent={isMine && !!task.fixed_deadline && status !== "COMPLETED"}
+      />
       <TaskFacts task={task} done={status === "COMPLETED"} part="shown" />
       <PointsTag points={task.point_reward} />
       {waiting && canConfirm ? (
@@ -211,7 +216,7 @@ export function TaskRow({
           type="button"
           size="toolbar"
           variant="secondary"
-          className="h-8 shrink-0"
+          className="h-control-row shrink-0"
           {...controls}
           onClick={onConfirm}
         >
@@ -422,16 +427,20 @@ function PersonChip({ person }: { person: RowPerson }) {
 function DueText({
   task,
   due,
+  urgent = false,
 }: {
   task: BoardTask;
   due: { text: string; overdue: boolean } | null;
+  urgent?: boolean;
 }) {
   if (!due) return null;
   return (
     <span
       className={cn(
         "min-w-0 truncate text-caption",
-        due.overdue ? "text-destructive-text" : "text-muted-foreground",
+        due.overdue || urgent
+          ? "text-destructive-text"
+          : "text-muted-foreground",
       )}
       title={
         (task.due_at ? formatDayTime(task.due_at) : formatWeekdayDay(task.due_date)) ??
@@ -467,7 +476,10 @@ function circleClass(state: CircleState) {
 
 function CircleMark({ state }: { state: CircleState }) {
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center" aria-hidden="true">
+    <span
+      className="flex h-control-row w-control-row shrink-0 items-center justify-center"
+      aria-hidden="true"
+    >
       <span className={circleClass(state)}>
         {state === "done" ? <Check className="h-3 w-3" /> : null}
         {state === "started" ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
@@ -495,7 +507,7 @@ function CircleButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
+        "flex h-control-row w-control-row shrink-0 items-center justify-center rounded-full hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
         FOCUS_RING,
       )}
     >

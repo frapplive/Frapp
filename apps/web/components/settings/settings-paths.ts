@@ -1,3 +1,4 @@
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * Where the officer tools live on web: inside Chapter settings, on the page
  * of the module each belongs to (#3837).
@@ -116,7 +117,7 @@ export const POINTS_SETTINGS_PATH = moduleSettingsHref(
 );
 
 /** `?member=` narrows the ledger to one member's transactions. */
-export const LEDGER_MEMBER_PARAM = "member";
+export const LEDGER_MEMBER_PARAM = WEB_ADDRESS_PARAMS.settings.member;
 
 /** The ledger on one member, from the Points row on their card. */
 export function pointsLedgerPath(userId: string): string {
@@ -151,6 +152,13 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "module",
   // A page opened from one of the Chapter tab's or a module page's rows.
   "page",
+  // Roles and groups' pages: a tier, a role, a group, the automatic groups,
+  // and where a group's page was opened from (#6029).
+  "tier",
+  "role",
+  "group",
+  "groups",
+  "from",
   // A channel's Description focused, from "Add a description" (#6031).
   FOCUS_DESCRIPTION_PARAM,
   // The points ledger's member, from a member's card.

@@ -161,7 +161,7 @@ export function ScheduleSendButton({
             type="button"
             size="icon"
             variant="ghost"
-            className="h-8 w-6 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-8"
+            className="h-control-row w-6 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-8"
             aria-label="Schedule message"
             title="Schedule for later"
             disabled={disabled}

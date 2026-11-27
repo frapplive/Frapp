@@ -3,13 +3,17 @@
 import { useState } from "react";
 import { Columns3, Tag } from "lucide-react";
 import { countSummary } from "@repo/hooks/module-settings";
+import { RUSH_SETTINGS_COPY } from "@repo/validation";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   rushPipelineAccess,
   useMyPermissions,
   useRushPipeline,
 } from "@repo/hooks";
-import { isWildcardRole, mayGrant, reachesTier } from "@repo/hooks/role-tiers";
+import {
+  RUSH_READ_NOTES,
+  rushNotesAccess,
+} from "@repo/hooks/rush-notes-access";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { InlineNote } from "@/components/shared/inline-note";
 import { Button } from "@/components/ui/button";
@@ -28,7 +32,7 @@ import {
 } from "./interest-form-settings";
 
 /** The key that lets a role read recruitment notes. */
-export const RUSH_READ_NOTES = "rush:read_notes";
+export { RUSH_READ_NOTES };
 
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
@@ -75,7 +79,7 @@ export function RushModuleSettings({
             <SettingsRow
               id="module-row-stages"
               icon={Columns3}
-              label="Stages"
+              label={RUSH_SETTINGS_COPY.stages.title}
               value={countSummary(
                 pipeline.data.stages.filter((stage) => !stage.hidden).length,
                 "stage",
@@ -86,13 +90,13 @@ export function RushModuleSettings({
             <SettingsRow
               id="module-row-tags"
               icon={Tag}
-              label="Tags"
+              label={RUSH_SETTINGS_COPY.tags.title}
               value={countSummary(pipeline.data.tags.length, "tag", "tags")}
               href={pageHref("tags")}
             />
           </SettingsGroup>
         ) : pipeline.isError ? (
-          <InlineNote>Couldn&apos;t load the stages and tags.</InlineNote>
+          <InlineNote>{RUSH_SETTINGS_COPY.stagesAndTagsFailed}</InlineNote>
         ) : null
       ) : null}
       {/*
@@ -121,7 +125,7 @@ export function RushStagesPage() {
   const access = rushPipelineAccess(useMyPermissions().data?.permissions);
   const pipeline = useRushPipeline({ enabled: access.view });
   if (pipeline.isError) {
-    return <InlineNote>Couldn&apos;t load the stages.</InlineNote>;
+    return <InlineNote>{RUSH_SETTINGS_COPY.stages.loadFailed}</InlineNote>;
   }
   if (!pipeline.data) return null;
   return (
@@ -134,7 +138,7 @@ export function RushTagsPage() {
   const access = rushPipelineAccess(useMyPermissions().data?.permissions);
   const pipeline = useRushPipeline({ enabled: access.view });
   if (pipeline.isError) {
-    return <InlineNote>Couldn&apos;t load the tags.</InlineNote>;
+    return <InlineNote>{RUSH_SETTINGS_COPY.tags.loadFailed}</InlineNote>;
   }
   if (!pipeline.data) return null;
   return <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />;
@@ -160,31 +164,16 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   if (rolesQuery.isPending || tiersQuery.isPending) return null;
   if (rolesQuery.isError || tiersQuery.isError) return null;
 
-  const top = [...tiers].sort((a, b) => a.position - b.position).slice(0, 2);
-  const holds = (tier: (typeof tiers)[number]) =>
-    toggle.permissionsOf(tier).includes(RUSH_READ_NOTES);
-  // Anyone holding it beyond the top two means the chapter chose who reads
-  // notes: the line goes. Only part of the top two holding it (a grant that
-  // half failed) keeps the line, so the press can finish the job.
-  const heldElsewhere =
-    tiers.some((tier) => !top.includes(tier) && holds(tier)) ||
-    roles.some(
-      (role) =>
-        !isWildcardRole(role) && role.permissions.includes(RUSH_READ_NOTES),
-    );
-  const missing = top.filter((tier) => !holds(tier));
-  if (heldElsewhere || (top.length > 0 && missing.length === 0)) return null;
-  const partly = missing.length < top.length;
-
-  const why =
-    top.length === 0
-      ? `Your chapter has no ${words.plural} yet.`
-      : !canEditRoles
-        ? "Your role can't change roles."
-        : !mayGrant(reach, RUSH_READ_NOTES) ||
-            !top.every((tier) => reachesTier(reach, tier))
-          ? "Only the President can turn this on."
-          : null;
+  const access = rushNotesAccess({
+    tiers,
+    roles,
+    tierHolds: (tier) => toggle.permissionsOf(tier).includes(RUSH_READ_NOTES),
+    reach,
+    canEditRoles,
+    tierPlural: words.plural,
+  });
+  if (!access) return null;
+  const { why, missing } = access;
 
   async function grant() {
     setGranting(true);
@@ -202,14 +191,7 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   return (
     <ProfileSection id="settings-module-rush-notes" title="Notes">
       <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-foreground">
-          {partly
-            ? `Only ${top
-                .filter(holds)
-                .map((tier) => tier.name)
-                .join(" and ")} can read recruitment notes so far.`
-            : "Nobody can read recruitment notes yet."}
-        </p>
+        <p className="text-sm text-foreground">{access.line}</p>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <Button
             type="button"
@@ -219,9 +201,7 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
             title={why ?? undefined}
             onClick={() => void grant()}
           >
-            {partly
-              ? `Let ${missing.map((tier) => tier.name).join(" and ")} read them too`
-              : `Let the top two ${words.plural} read them`}
+            {access.action}
           </Button>
           {why ? (
             <span className="text-caption text-muted-foreground">{why}</span>

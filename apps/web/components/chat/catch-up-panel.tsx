@@ -444,7 +444,7 @@ function Summary({
         if (points.length === 0) return null;
         return (
           <section key={kind} className="space-y-1.5">
-            <h3 className={cn(EYEBROW, "text-muted-foreground")}>
+            <h3 className={cn(EYEBROW, "text-muted")}>
               {CHAT_CATCH_UP_COPY.groups[kind]}
             </h3>
             <ul className="space-y-1">
@@ -557,7 +557,7 @@ function CatchUpStrip({
   return (
     <div
       data-slot={slot}
-      className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-surface-1 pl-4 pr-1 pointer-coarse:h-11"
+      className="flex h-control-small shrink-0 items-center gap-2 border-b border-border bg-surface-1 pl-4 pr-1 pointer-coarse:h-11"
     >
       <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
         {line}

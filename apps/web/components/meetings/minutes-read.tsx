@@ -106,7 +106,7 @@ export function MinutesJumpBar({
           type="button"
           onClick={() => onJump(jump)}
           className={cn(
-            "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
+            "inline-flex min-h-control-row shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
             FOCUS_RING_OFFSET,
           )}
         >

@@ -1267,7 +1267,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getAllByRole("button", { name: /^create event on/i }).length,
     ).toBe(24 * 3);
     expect(
-      screen.getByRole("button", { name: /^view chapter meeting/i }),
+      screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Events" }));
@@ -1328,5 +1328,74 @@ describe("EventsPage keeps the editor's draft (#4593)", () => {
     permissionsRef.current = ["members:view"];
     render(tree());
     expect(screen.queryByRole("region", { name: "New event" })).toBeNull();
+  });
+});
+
+describe("EventsPage dated, tentative and calendar-only events (#6098)", () => {
+  const dayKey = (days: number) => localIsoDate(new Date(daysOut(days)));
+  const DATED = [
+    {
+      id: "evt-drive",
+      name: "Service Drive",
+      timing: "all_day",
+      start_date: dayKey(2),
+      end_date: dayKey(3),
+      // Another zone's midnights: never what places or words it.
+      start_time: `${dayKey(2)}T08:00:00.000Z`,
+      end_time: `${dayKey(4)}T08:00:00.000Z`,
+      point_value: 5,
+      is_tentative: true,
+    },
+    {
+      id: "evt-council",
+      name: "Council Meeting",
+      timing: "time_tbd",
+      start_date: dayKey(4),
+      end_date: null,
+      start_time: `${dayKey(4)}T08:00:00.000Z`,
+      end_time: `${dayKey(5)}T08:00:00.000Z`,
+      point_value: 10,
+    },
+  ];
+
+  it("lists an all-day event on each of its days, by its days, with its Tentative chip", () => {
+    eventsQuery.data = DATED;
+    render(<EventsPage />);
+
+    const rows = screen.getAllByRole("button", { name: /service drive/i });
+    // Under both of its days' headings.
+    expect(rows).toHaveLength(2);
+    const text = rows[0]!.closest("li")!.textContent ?? "";
+    expect(text).toMatch(/All day · /);
+    expect(text).toContain("5 points");
+    expect(text).not.toMatch(/12:00 AM|\d:00 AM/);
+    expect(within(rows[0]!.closest("li")!).getByText("Tentative")).toBeTruthy();
+  });
+
+  it("says Time TBD on a row, with no points, check-in or Tentative chip", () => {
+    eventsQuery.data = DATED;
+    render(<EventsPage />);
+
+    const council = row(/council meeting/i);
+    expect(council.textContent).toContain("Time TBD");
+    expect(council.textContent).not.toContain("points");
+    expect(within(council).queryByText("Tentative")).toBeNull();
+  });
+
+  it("never says check-in is open on a calendar-only event", () => {
+    const now = Date.now();
+    eventsQuery.data = [
+      {
+        ...EVENTS[1],
+        id: "evt-info",
+        name: "Last Day of Classes",
+        calendar_only: true,
+        start_time: new Date(now - 5 * 60 * 1000).toISOString(),
+        end_time: new Date(now + 55 * 60 * 1000).toISOString(),
+      },
+    ];
+    render(<EventsPage />);
+
+    expect(row(/last day of classes/i).textContent).not.toContain("Check-in");
   });
 });

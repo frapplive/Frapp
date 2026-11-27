@@ -199,7 +199,7 @@ export function AlumniDirectory() {
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
             <Label
               htmlFor="alumni-grad-year"
-              className={`${EYEBROW} text-muted-foreground`}
+              className={`${EYEBROW} text-muted`}
             >
               Graduation year
             </Label>
@@ -213,10 +213,7 @@ export function AlumniDirectory() {
             />
           </div>
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
-            <Label
-              htmlFor="alumni-city"
-              className={`${EYEBROW} text-muted-foreground`}
-            >
+            <Label htmlFor="alumni-city" className={`${EYEBROW} text-muted`}>
               City
             </Label>
             <Input
@@ -228,10 +225,7 @@ export function AlumniDirectory() {
             />
           </div>
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
-            <Label
-              htmlFor="alumni-company"
-              className={`${EYEBROW} text-muted-foreground`}
-            >
+            <Label htmlFor="alumni-company" className={`${EYEBROW} text-muted`}>
               Company
             </Label>
             <Input
@@ -383,7 +377,7 @@ export function AlumniDirectory() {
                   onClick={open}
                   aria-label={label}
                   className={cn(
-                    "flex min-h-9 min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
+                    "flex min-h-control-list-row min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
                     "pointer-coarse:min-h-11 hover:bg-card-hover hover:text-foreground",
                     FOCUS_RING_OFFSET,
                   )}

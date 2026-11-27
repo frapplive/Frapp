@@ -64,6 +64,7 @@ vi.mock("@repo/hooks", async () => {
     useUpdateTaskStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useConfirmTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRejectTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
     // The hours card's live read (#3383); its own spec covers the badge.
     useServiceEntry: () => ({ data: undefined }),
     // The rush card's live read and writes (#3383); its own spec covers them.

@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "./tabs";
  * `foundations.md` §9's control size scale: every primitive is dense to a
  * mouse and returns to the 44px touch floor (`components.md` §2) under
  * `pointer-coarse`. Dropping the coarse class leaves every phone-browser
- * control at 32-40px, and nothing a type checks would notice, so this pins
+ * control at 28-32px, and nothing a type checks would notice, so this pins
  * both halves. It also pins the rule that padding does not split by pointer: a
  * `pointer-coarse:px-*` class survives a caller's plain `pl-9` through `cn()`
  * and puts the toolbar search glyph on top of the typed text.
@@ -20,10 +20,10 @@ const classes = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
 describe("control size scale", () => {
   it.each([
-    ["default", "h-10", "pointer-coarse:h-11"],
-    ["sm", "h-9", "pointer-coarse:h-11"],
-    ["toolbar", "h-9", "pointer-coarse:h-11"],
-    ["icon", "h-9", "pointer-coarse:h-11"],
+    ["default", "h-control-field", "pointer-coarse:h-11"],
+    ["sm", "h-control-small", "pointer-coarse:h-11"],
+    ["toolbar", "h-control-small", "pointer-coarse:h-11"],
+    ["icon", "h-control-small", "pointer-coarse:h-11"],
   ] as const)(
     "Button %s is %s to a mouse and 44 to a finger",
     (size, fine, coarse) => {
@@ -37,7 +37,11 @@ describe("control size scale", () => {
     render(<Input aria-label="Name" />);
     const tokens = classes(screen.getByLabelText("Name"));
     expect(tokens).toEqual(
-      expect.arrayContaining(["h-10", "pointer-coarse:h-11", "px-3"]),
+      expect.arrayContaining([
+        "h-control-field",
+        "pointer-coarse:h-11",
+        "px-3",
+      ]),
     );
     expect(tokens.some((t) => t.startsWith("pointer-coarse:p"))).toBe(false);
   });
@@ -58,11 +62,11 @@ describe("control size scale", () => {
       </Select>,
     );
     expect(classes(screen.getByLabelText("Role"))).toEqual(
-      expect.arrayContaining(["h-10", "pointer-coarse:h-11"]),
+      expect.arrayContaining(["h-control-field", "pointer-coarse:h-11"]),
     );
   });
 
-  it("a tab is 36 to a mouse and 44 to a finger, by min-height", () => {
+  it("a tab is the Small step to a mouse and 44 to a finger, by min-height", () => {
     render(
       <Tabs defaultValue="a">
         <TabsList>
@@ -72,12 +76,15 @@ describe("control size scale", () => {
     );
     const tokens = classes(screen.getByRole("tab"));
     expect(tokens).toEqual(
-      expect.arrayContaining(["min-h-9", "pointer-coarse:min-h-11"]),
+      expect.arrayContaining([
+        "min-h-control-small",
+        "pointer-coarse:min-h-11",
+      ]),
     );
     expect(tokens.some((t) => t.startsWith("pointer-coarse:py-"))).toBe(false);
   });
 
-  it("a table header is 36 to a mouse and 44 to a finger", () => {
+  it("a table header is the Small step to a mouse and 44 to a finger", () => {
     render(
       <Table>
         <TableHeader>
@@ -88,7 +95,7 @@ describe("control size scale", () => {
       </Table>,
     );
     expect(classes(screen.getByRole("columnheader"))).toEqual(
-      expect.arrayContaining(["h-9", "pointer-coarse:h-11"]),
+      expect.arrayContaining(["h-control-small", "pointer-coarse:h-11"]),
     );
   });
 

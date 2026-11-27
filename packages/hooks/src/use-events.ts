@@ -61,9 +61,19 @@ export function useCreateEvent() {
       name: string;
       description?: string;
       location?: string;
-      start_time: string;
-      end_time: string;
-      point_value: number;
+      // A timed event sends its times; an all-day or time-TBD one sends
+      // `timing` and its days instead, and the API writes the bounds (#6098).
+      start_time?: string;
+      end_time?: string;
+      timing?: "timed" | "all_day" | "time_tbd";
+      start_date?: string;
+      end_date?: string;
+      // Sent only when true, so a create still works against an API from
+      // before the fields.
+      is_tentative?: boolean;
+      calendar_only?: boolean;
+      // Omitted on a calendar-only event, which the API stores with 0.
+      point_value?: number;
       is_mandatory: boolean;
       recurrence_rule?: string;
       // Attendance by role (`@repo/validation` § event-attendance). Send
@@ -95,7 +105,11 @@ export function useCreateEvent() {
       // carries no message of the API's (an empty body, or an edge's page:
       // the client hands both back as a bare `{ statusCode }`, #3394).
       const result = await client
-        .POST("/v1/events", { body })
+        // The contract marks `point_value` required for its default; a
+        // calendar-only event leaves it out and the API stores 0 (#6098).
+        .POST("/v1/events", {
+          body: { ...body, point_value: body.point_value ?? 0 },
+        })
         .catch((thrown: unknown) => {
           if (isRequestTimeout(thrown)) {
             throw new Error(EVENT_CREATE_UNCONFIRMED);

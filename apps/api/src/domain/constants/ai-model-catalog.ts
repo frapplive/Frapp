@@ -257,6 +257,21 @@ export const AI_MODEL_CATALOG = {
     effort: 'low',
   },
   /**
+   * Asking for more time on a task (#6096): the task's title and the
+   * member's reason in, whether the reason is a valid one for a day's
+   * extension and a short note out. Nothing else about the member is sent.
+   * In the `nudges` family, whose switch covers AI over a member's own
+   * tasks and starts on; a chapter with it off, or a member who said No,
+   * has every request go to an officer.
+   */
+  'tasks.extension-reason': {
+    ...CLAUDE_HAIKU,
+    family: 'nudges',
+    kind: 'structured',
+    maxOutputTokens: 200,
+    effort: 'low',
+  },
+  /**
    * Backwork draft fill (#5233): one bulk-uploaded file's redacted text in,
    * its course, professor, term, type and tags out, matched to the chapter's
    * own names where it can. Only the stored, flattened file's text is read,

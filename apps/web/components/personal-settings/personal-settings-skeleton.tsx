@@ -63,7 +63,7 @@ function PersonalSettingsBody() {
                 {group.map((width, row) => (
                   <div
                     key={row}
-                    className="flex h-[34px] items-center px-[10px]"
+                    className="flex h-control-row items-center px-[10px]"
                   >
                     <Skeleton className={`h-[13px] ${width}`} />
                   </div>

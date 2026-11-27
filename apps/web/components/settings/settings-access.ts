@@ -5,7 +5,7 @@ import {
   canAny,
   isBetaOffModule,
 } from "@repo/validation";
-import { isModuleSettingsTab } from "@/components/settings/settings-modules";
+import { isModuleSettingsTab } from "@repo/hooks/module-settings";
 import {
   CHAT_SETTINGS_PATH,
   DISCORD_IMPORT_SETTINGS_PATH,

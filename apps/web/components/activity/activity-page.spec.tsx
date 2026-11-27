@@ -100,6 +100,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     activityRowAction: actual.activityRowAction,
     activityWeekSummary: actual.activityWeekSummary,
     findActivityTaskRow: actual.findActivityTaskRow,
+    findActivityExtensionRow: actual.findActivityExtensionRow,
     activityArchiveKeys: actual.activityArchiveKeys,
     activityKeys: actual.activityKeys,
     activityStandingKeys: actual.activityStandingKeys,
@@ -2008,6 +2009,50 @@ describe("ActivityPage", () => {
     rerender(<ActivityPage />);
     await act(async () => {});
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens a request for more time from its push (#6096), or its task once answered", async () => {
+    const extension = {
+      id: "req-1",
+      task: { ...task, id: "t7", title: "Sweep the porch" },
+      requester_name: "Sam Lee",
+      reason: "Shift ran late",
+      from_due_date: "2026-11-14",
+      from_due_at: null,
+      to_due_date: "2026-11-16",
+      to_due_at: null,
+      needs_officer: "over_a_day",
+      ai_verdict: null,
+      ai_note: null,
+      created_at: "2026-11-13T01:00:00Z",
+    };
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() =>
+        Promise.resolve({
+          data: data({
+            needs_you: { ...nothingWaiting, task_extensions: [extension] },
+          }),
+        }),
+      ),
+    });
+    mockSearch = new URLSearchParams("extension=t7");
+    const { unmount } = render(<ActivityPage />);
+    await act(async () => {});
+    expect(
+      screen.getByText("panel:Sam Lee asks for more time"),
+    ).toBeInTheDocument();
+    expect(mockReplace).toHaveBeenCalledWith("/activity", { scroll: false });
+    unmount();
+
+    mockActivity.mockReturnValue({
+      ...loaded(),
+      refetch: vi.fn(() => Promise.resolve({ data: data() })),
+    });
+    mockSearch = new URLSearchParams("extension=t7");
+    render(<ActivityPage />);
+    await act(async () => {});
+    expect(mockReplace).toHaveBeenCalledWith("/activity?task=t7");
   });
 
   it("sends a review the fresh read doesn't hold to that task on the board", async () => {

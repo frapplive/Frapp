@@ -47,7 +47,7 @@ function PreviewGroup({ section }: { section: PreviewSection }) {
   const more = section.channels.length - shown.length;
   return (
     <div className="min-w-0">
-      <p className={cn(EYEBROW, "truncate text-muted-foreground")}>{name}</p>
+      <p className={cn(EYEBROW, "truncate text-muted")}>{name}</p>
       <ul aria-label={name} className="mt-1 space-y-0.5">
         {shown.map((channel) => (
           <li

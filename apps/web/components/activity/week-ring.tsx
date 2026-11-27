@@ -62,7 +62,7 @@ export function WeekRing({
           id="activity-week-ring"
           data-testid="activity-week-ring"
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-2.5 text-caption font-semibold tabular-nums transition-colors hover:bg-card-hover pointer-coarse:h-11",
+            "inline-flex h-control-small items-center gap-1.5 rounded-full border border-border px-2.5 text-caption font-semibold tabular-nums transition-colors hover:bg-card-hover pointer-coarse:h-11",
             filter !== "all" ? "text-accent-text" : "text-foreground",
             FOCUS_RING,
           )}
@@ -149,7 +149,7 @@ function WeekLine({
       className={cn(
         // One column each, so every line's bar starts and ends on the same
         // edges whatever its label and count say.
-        "-mx-2 grid min-h-8 w-[calc(100%+1rem)] grid-cols-[minmax(0,5fr)_minmax(0,3fr)_4.5rem] items-center gap-2 rounded-sm px-2 text-left",
+        "-mx-2 grid min-h-control-row w-[calc(100%+1rem)] grid-cols-[minmax(0,5fr)_minmax(0,3fr)_4.5rem] items-center gap-2 rounded-sm px-2 text-left",
         "transition-colors hover:bg-card-hover pointer-coarse:min-h-11",
         FOCUS_RING,
       )}

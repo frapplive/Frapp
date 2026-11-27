@@ -1,8 +1,22 @@
 import type { Config } from "tailwindcss";
 import { motionTokens } from "./motion";
+import { signetDarkTokens } from "./signet";
 
 const motionDuration = motionTokens.duration;
 const motionEasing = motionTokens.easing;
+
+/**
+ * foundations.md §9's control steps by name (`control-row`, `control-list-row`,
+ * ...), each reading its `--control-*` property. Built from `signet.ts`'s
+ * `control` map, the one list `cn()`'s tailwind-merge registration also reads,
+ * so a step added there is a utility here with nothing to keep in step.
+ */
+const CONTROL_STEPS: Record<string, string> = Object.fromEntries(
+  Object.keys(signetDarkTokens.control).map((step) => {
+    const name = `control-${step.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+    return [name, `var(--${name})`];
+  }),
+);
 
 /**
  * Reads a color token straight out of its custom property, whatever format the
@@ -328,10 +342,22 @@ const config: Partial<Config> = {
       minHeight: {
         touch: "var(--touch-min)",
         button: "var(--touch-button)",
+        ...CONTROL_STEPS,
       },
       minWidth: {
         touch: "var(--touch-min)",
+        ...CONTROL_STEPS,
       },
+      /*
+       * The control size scale's pointer column (foundations.md §9) by step
+       * name: `h-control-row` is a sidebar or menu row on a mouse, and the
+       * same element takes `pointer-coarse:h-11` for the touch floor. Named
+       * so a size change is one number in `signet.ts`, not a sweep of `h-9`
+       * and `h-[34px]` literals (#6115).
+       */
+      height: CONTROL_STEPS,
+      width: CONTROL_STEPS,
+      size: CONTROL_STEPS,
       /*
        * Figtree since #2366 took the last surface off Geist. Both consuming
        * apps used to re-declare `sans` in their own config; #2371 deleted those

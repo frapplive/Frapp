@@ -11,7 +11,12 @@ import {
   ADJUSTMENT_RATE_LIMIT_MAX,
   CHAPTER_POINTS_CONFIG_DEFAULTS,
   POINTS_ADJUSTMENT_MAX,
+  POINTS_RULES_COPY,
   SERVICE_MINUTES_PER_POINT_DEFAULT,
+  SERVICE_RULES_COPY,
+  moduleRulesFootnote,
+  readBoundedNumber,
+  serviceRateHint,
   servicePointsForDuration,
   type PatchChapterConfig,
 } from "@repo/validation";
@@ -20,7 +25,7 @@ import { SettingsGroup } from "@/components/shared/settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { cn, guardIntDraft, parseGuardedInt } from "@/lib/utils";
+import { cn, guardIntDraft } from "@/lib/utils";
 
 /**
  * The Rules block of a module page (#4073): only settings that are stored and
@@ -37,20 +42,8 @@ import { cn, guardIntDraft, parseGuardedInt } from "@/lib/utils";
 
 type Patch = (diff: PatchChapterConfig, successTitle: string) => Promise<void>;
 
-/** A bounded whole number as typed, or the sentence saying why it isn't one. */
-export function readBounded(
-  draft: string,
-  min: number,
-  max: number,
-): { value: number } | { error: string } {
-  const value = parseGuardedInt(draft, min);
-  if (draft.trim() === "") return { error: "Enter a number." };
-  if (value === undefined) return { error: `Use a whole number from ${min}.` };
-  if (value > max) {
-    return { error: `Use ${max.toLocaleString("en-US")} or less.` };
-  }
-  return { value };
-}
+/** A bounded whole number as typed, shared with the phone (#6030). */
+export const readBounded = readBoundedNumber;
 
 export function NumberRule({
   label,
@@ -241,12 +234,6 @@ function workflowEnabled(
   return workflows.find((wf) => wf.key === key)?.enabled === true;
 }
 
-function hoursForPoints(points: number, minutesPerPoint: number): string {
-  const hours = (points * minutesPerPoint) / 60;
-  const shown = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
-  return `${shown} ${hours === 1 ? "hour" : "hours"}`;
-}
-
 /** Service hours → Rules: the point rate and the proof switch. */
 export function ServiceHoursRules({
   minutesPerPoint,
@@ -306,18 +293,12 @@ export function ServiceHoursRules({
       className="scroll-mt-16 space-y-3"
       noValidate
     >
-      <RuleGroup footnote={rulesFootnote(canManage)}>
+      <RuleGroup footnote={moduleRulesFootnote(canManage)}>
         <NumberRule
           asItem
-          label="Minutes of service per point"
-          hint={
-            <>
-              A 3-hour shift earns {shiftPoints.toLocaleString("en-US")}{" "}
-              {shiftPoints === 1 ? "point" : "points"}, and 10 points take{" "}
-              {hoursForPoints(10, rate)}. Entries already approved keep theirs.
-            </>
-          }
-          suffix="minutes"
+          label={SERVICE_RULES_COPY.rate.label}
+          hint={serviceRateHint(shiftPoints, rate)}
+          suffix={SERVICE_RULES_COPY.rate.suffix}
           draft={draft}
           onDraft={setDraft}
           onBlur={() => void check()}
@@ -327,8 +308,8 @@ export function ServiceHoursRules({
         {hasProofWorkflow ? (
           <SwitchRule
             asItem
-            label="Ask for proof"
-            hint="A photo or a signed slip, which the approving officer sees."
+            label={SERVICE_RULES_COPY.proof.label}
+            hint={SERVICE_RULES_COPY.proof.hint}
             checked={proof}
             disabled={!canManage || savingWorkflows}
             onChange={(enabled) =>
@@ -348,13 +329,6 @@ export function ServiceHoursRules({
       />
     </form>
   );
-}
-
-/** A module's Rules footnote: they're logged, and whether you can change them. */
-function rulesFootnote(canManage: boolean, lead?: string): string {
-  const logged = "Changes are recorded in Logs.";
-  const said = lead ? `${lead} ${logged}` : logged;
-  return canManage ? said : `${said} Your role can't change these.`;
 }
 
 /** Points → Rules: the two anti-fraud limits on manual adjustments. */
@@ -425,16 +399,13 @@ export function PointsRules({
       noValidate
     >
       <RuleGroup
-        footnote={rulesFootnote(
-          canManage,
-          "Limits on points added or taken by hand; points from events, tasks and service aren't limited.",
-        )}
+        footnote={moduleRulesFootnote(canManage, POINTS_RULES_COPY.lead)}
       >
         <NumberRule
           asItem
-          label="Adjustments per officer each hour"
-          hint="Past this, an officer's next one waits for the hour."
-          suffix="an hour"
+          label={POINTS_RULES_COPY.rate.label}
+          hint={POINTS_RULES_COPY.rate.hint}
+          suffix={POINTS_RULES_COPY.rate.suffix}
           draft={rateDraft}
           onDraft={setRateDraft}
           onBlur={() => void checkRate()}
@@ -443,9 +414,9 @@ export function PointsRules({
         />
         <NumberRule
           asItem
-          label="Flag adjustments of"
-          hint="Up or down, flagged in the ledger for another officer to check."
-          suffix="points"
+          label={POINTS_RULES_COPY.flag.label}
+          hint={POINTS_RULES_COPY.flag.hint}
+          suffix={POINTS_RULES_COPY.flag.suffix}
           draft={flagDraft}
           onDraft={setFlagDraft}
           onBlur={() => void checkFlag()}

@@ -7,12 +7,13 @@ import { SettingsSearch } from "@/components/settings/settings-search";
 /**
  * A settings rail row that is a link, in a container-sized rail
  * (`SettingsNavRail`). Board `4d`'s row geometry
- * (`height:34px;border-radius:10px;padding:0 10px`), with the nav's hover
+ * (`border-radius:10px;padding:0 10px`) at the sidebar's Row step (the board
+ * drew 34px; 28 on a mouse since #6115), with the nav's hover
  * step. `pointer-coarse` keeps the 44px touch floor where the rail wraps into
  * chips on a phone.
  */
 const RAIL_NAV_LINK_CLASS = cn(
-  "flex h-[34px] items-center rounded-[10px] px-[10px] text-sm text-muted-foreground transition hover:bg-card hover:text-foreground pointer-coarse:h-11 @3xl:w-full",
+  "flex h-control-row items-center rounded-[10px] px-[10px] text-sm text-muted-foreground transition hover:bg-card hover:text-foreground pointer-coarse:h-11 @3xl:w-full",
   FOCUS_RING,
 );
 

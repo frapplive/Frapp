@@ -58,6 +58,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { UnreadDot } from "@/components/shared/unread-dot";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { EYEBROW } from "@/components/ui/typography";
 import {
   ROLE_NAME_CLASS,
   roleNameStyle,
@@ -111,7 +112,10 @@ type Notification = {
       /** "Minutes posted" (`meeting.service.ts`) names the minutes too. */
       meetingId?: string;
       taskId?: string;
-      /** "review": a task submitted to the reader for sign-off. */
+      /**
+       * "review": a task submitted to the reader for sign-off; "extension":
+       * a request for more time on it, for the reader to decide (#6096).
+       */
       view?: string;
       invoiceId?: string;
       /** "Suggested tasks to review" names what they were drawn from. */
@@ -191,7 +195,10 @@ export function deepLinkFor(notification: Notification): string {
     case "tasks":
       return target.view === "review" && target.taskId
         ? `/activity?review=${encodeURIComponent(target.taskId)}`
-        : target.taskId
+        : // "Sam asks for more time" opens that request's panel (#6096).
+          target.view === "extension" && target.taskId
+          ? `/activity?extension=${encodeURIComponent(target.taskId)}`
+          : target.taskId
           ? tasksTaskLink(target.taskId)
           : "/activity";
     // Suggested tasks to review (#4313): on the minutes they came from, where
@@ -490,7 +497,7 @@ export function NotificationsPopover({
             <div className="-mx-3 grid gap-2">
               {groups.map((group) => (
                 <section key={group.heading} aria-label={group.heading}>
-                  <h3 className="px-3 pb-1 text-caption font-semibold uppercase tracking-[0.08em] text-muted">
+                  <h3 className={`${EYEBROW} px-3 pb-1 text-muted`}>
                     {group.heading}
                   </h3>
                   <ul className="divide-y divide-border">

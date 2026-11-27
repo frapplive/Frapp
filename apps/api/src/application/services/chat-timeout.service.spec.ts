@@ -319,6 +319,9 @@ describe('ChatTimeoutService', () => {
         chat_timeout_until: 'x',
         chat_timeout_reason: 'y',
         chat_timeout_by: 'z',
+        // Nor whether they may ask for more time (#6096).
+        extension_requests_blocked_at: 'b',
+        extension_requests_restored_at: 'r',
       }),
     ).toEqual({ id: 'm' });
   });

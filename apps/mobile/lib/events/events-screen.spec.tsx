@@ -147,6 +147,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeleteTask: () => ({ mutateAsync: deleteTask, isPending: false }),
   useConfirmTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRejectTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateTaskStatus: () => ({ mutateAsync: updateStatus }),
 }));
 
@@ -582,8 +583,7 @@ describe("Calendar day rows", () => {
     expect(resting.borderRadius).toBeUndefined();
     const chip = row.find(
       (node) =>
-        (node.type as unknown) === "Text" &&
-        node.props.children === "Required",
+        (node.type as unknown) === "Text" && node.props.children === "Required",
     );
     expect(StyleSheet.flatten(chip.props.style).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
@@ -1646,7 +1646,7 @@ describe("Calendar day screen", () => {
     expect(
       tree.root.findAll(
         (node) =>
-          node.props.accessibilityLabel === "Open Retreat, all day" &&
+          node.props.accessibilityLabel === "Open Retreat, All day" &&
           typeof node.props.onPress === "function",
       ),
     ).toHaveLength(1);
