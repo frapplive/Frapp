@@ -794,7 +794,7 @@ describe("AskProposal", () => {
       screen
         .getByRole("link", { name: ACT_COPY.open_tasks })
         .getAttribute("href"),
-    ).toBe("/tasks");
+    ).toBe("/activity");
   });
 });
 

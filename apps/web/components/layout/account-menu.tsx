@@ -17,6 +17,7 @@ import {
 import { useCurrentUser, useMemberDisplayNames } from "@repo/hooks";
 import { CHAPTER_AFFILIATIONS_COPY, can } from "@repo/validation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/shared/async-states";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,10 +130,22 @@ export function AccountMenu({
   // showed them first (#4043; both in `lib/whats-new.ts`). The dot is
   // neutral, as every unread mark is (components.md § Chrome weight).
   const whatsNewUnread = useWhatsNewUnread();
-  const { data } = useCurrentUser();
+  const { data, isError, fetchStatus } = useCurrentUser();
+  const { isOffline } = useNetwork();
 
   const user = (data ?? {}) as CurrentUser;
-  const name = user.display_name?.trim() || "Your account";
+  // While `/v1/users/me` is out the row draws its own shape (an avatar disc
+  // and a name bar) rather than a stand-in identity: "Your account" with "YA"
+  // read as an account nobody had linked (#6121; rulebook § States, "no fake
+  // or placeholder identity"). Out includes a retry paused in a hidden tab
+  // (`fetchStatus` "paused" while online), which `isLoading` would call done.
+  // A read that failed, can't run, or waits on a connection the browser
+  // doesn't have shows the plain-words label instead, with a person glyph,
+  // never initials made from it: offline is the connection pill's to say.
+  const identityLoading =
+    !data && !isError && fetchStatus !== "idle" && !isOffline;
+  const ownName = user.display_name?.trim() || null;
+  const name = ownName ?? "Your account";
   const email = user.email ?? null;
 
   const { confirmDrop, confirmDropDialog } = useConfirmDropBulkUploads();
@@ -164,6 +177,10 @@ export function AccountMenu({
   const accountLabel = ownDot
     ? `Account menu for ${name}, ${presenceLabel(ownDot)}`
     : `Account menu for ${name}`;
+  // Loading keeps the status the dot already shows; only the name waits.
+  const loadingLabel = ownDot
+    ? `Account menu, ${presenceLabel(ownDot)}`
+    : "Account menu";
   // Under the name: what the member wrote, else their presence in words.
   const statusLine = own?.line ?? (ownDot ? presenceLabel(ownDot) : null);
 
@@ -188,32 +205,40 @@ export function AccountMenu({
            */
           <button
             type="button"
-            aria-label={accountLabel}
-            title={name}
+            aria-label={identityLoading ? loadingLabel : accountLabel}
+            title={identityLoading ? undefined : name}
             className={cn(
-              "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
+              "grid size-control-small pointer-coarse:size-11 shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
               FOCUS_RING_SHELL,
             )}
           >
             <span className="relative block">
-              <Avatar className="h-[26px] w-[26px] border border-border bg-popover">
-                {user.avatar_url ? (
-                  <AvatarImage src={user.avatar_url} alt="" />
-                ) : null}
-                <AvatarFallback
-                  className="text-[10px] font-semibold"
-                  tint={ownTint}
-                >
-                  {initials(name)}
-                </AvatarFallback>
-              </Avatar>
+              {identityLoading ? (
+                <Skeleton className="h-[26px] w-[26px] rounded-full" />
+              ) : (
+                <Avatar className="h-[26px] w-[26px] border border-border bg-popover">
+                  {user.avatar_url ? (
+                    <AvatarImage src={user.avatar_url} alt="" />
+                  ) : null}
+                  <AvatarFallback
+                    className="text-[10px] font-semibold"
+                    tint={ownTint}
+                  >
+                    {ownName ? (
+                      initials(ownName)
+                    ) : (
+                      <User className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <AvatarPresenceDot status={ownDot} />
             </span>
           </button>
         ) : (
           <button
             type="button"
-            aria-label={accountLabel}
+            aria-label={identityLoading ? loadingLabel : accountLabel}
             data-member-row=""
             className={cn(
               // 44px: two lines beside a 32px avatar, and the touch floor in
@@ -224,23 +249,38 @@ export function AccountMenu({
             )}
           >
             <span className="relative shrink-0">
-              <Avatar className="h-8 w-8 border border-border bg-popover">
-                {user.avatar_url ? (
-                  <AvatarImage src={user.avatar_url} alt="" />
-                ) : null}
-                <AvatarFallback
-                  className="text-xs font-semibold"
-                  tint={ownTint}
-                >
-                  {initials(name)}
-                </AvatarFallback>
-              </Avatar>
+              {identityLoading ? (
+                <Skeleton className="h-8 w-8 rounded-full" />
+              ) : (
+                <Avatar className="h-8 w-8 border border-border bg-popover">
+                  {user.avatar_url ? (
+                    <AvatarImage src={user.avatar_url} alt="" />
+                  ) : null}
+                  <AvatarFallback
+                    className="text-xs font-semibold"
+                    tint={ownTint}
+                  >
+                    {ownName ? (
+                      initials(ownName)
+                    ) : (
+                      <User className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <AvatarPresenceDot status={ownDot} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium leading-5 text-foreground">
-                {name}
-              </span>
+              {identityLoading ? (
+                // The name line's own height, so nothing moves when it lands.
+                <span className="flex h-5 items-center">
+                  <Skeleton className="h-[13px] w-24" />
+                </span>
+              ) : (
+                <span className="block truncate text-sm font-medium leading-5 text-foreground">
+                  {name}
+                </span>
+              )}
               {statusLine ? (
                 <span className="block truncate text-caption leading-4 text-muted-foreground">
                   {statusLine}
@@ -262,7 +302,11 @@ export function AccountMenu({
         className="w-[248px]"
       >
         <DropdownMenuLabel className="font-normal">
-          <span className="block truncate text-sm font-medium">{name}</span>
+          {identityLoading ? (
+            <Skeleton className="my-1 h-[13px] w-28" />
+          ) : (
+            <span className="block truncate text-sm font-medium">{name}</span>
+          )}
           {email ? (
             <span className="block truncate text-xs text-muted-foreground">
               {email}

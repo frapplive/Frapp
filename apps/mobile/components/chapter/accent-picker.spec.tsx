@@ -93,7 +93,7 @@ describe("AccentPicker", () => {
     );
     expect(flatStyle(label.props.style)).toMatchObject({
       ...eyebrowStyle(signetDarkTokens),
-      color: signetDarkTokens.color.text.mutedForeground,
+      color: signetDarkTokens.color.text.muted,
     });
   });
 

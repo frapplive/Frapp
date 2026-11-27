@@ -8,7 +8,8 @@ import { MemberService } from '../member.service';
 import { PointsService } from '../points.service';
 import { RbacService } from '../rbac.service';
 import { TaskService } from '../task.service';
-import { longDay, longRange } from './agent/tools-chapter/chapter-tool-kit';
+import { longDay } from './agent/tools-chapter/chapter-tool-kit';
+import { eventWhenWords } from './agent/tools-chapter/event-lines';
 import { dueFirst, dueWords } from './agent/tools-chapter/task-lines';
 import { nameInLine, oneLine } from './ask-lines';
 import type { AskTool, AskToolContext, AskToolResult } from './ask-tool';
@@ -174,7 +175,7 @@ export class EventsAskTool implements AskTool {
       // an officer typed it. The check-in zone's coordinates are never
       // read: no location reaches a model.
       const parts = [
-        `${oneLine(event.name)}${over ? ' (already happened)' : ''}: ${longRange(event.start_time, event.end_time, timeZone)}${event.location ? `, at ${oneLine(event.location)}` : ''}`,
+        `${oneLine(event.name)}${over ? ' (already happened)' : ''}: ${eventWhenWords(event, timeZone)}${event.is_tentative ? ' (tentative)' : ''}${event.calendar_only ? ' (on the calendar only)' : ''}${event.location ? `, at ${oneLine(event.location)}` : ''}`,
         attendance.status === 'required'
           ? over
             ? 'You were required to attend'

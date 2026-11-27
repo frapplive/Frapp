@@ -123,6 +123,23 @@ describe("selectDocuments", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps the Drive folder a synced folder came from", () => {
+    expect(
+      selectDocumentFolders([
+        { id: "f-1", name: "Chapter files", drive_folder_id: "drive-1" },
+        { id: "f-2", name: "Bylaws", drive_folder_id: null },
+      ]),
+    ).toEqual([
+      { id: "f-2", name: "Bylaws", pinned_at: null },
+      {
+        id: "f-1",
+        name: "Chapter files",
+        pinned_at: null,
+        drive_folder_id: "drive-1",
+      },
+    ]);
+  });
+
   it("returns an empty list for an absent payload", () => {
     expect(selectDocuments(undefined)).toEqual([]);
   });

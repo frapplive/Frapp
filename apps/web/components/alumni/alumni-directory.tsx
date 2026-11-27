@@ -1,6 +1,16 @@
 "use client";
 
-import { DIRECTORY_COPY } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
+
+import { DIRECTORY_COPY, WEB_ADDRESS_PARAMS } from "@repo/validation";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { useMemo, useState } from "react";
 import { SearchGlyph } from "@/components/members/directory-glyphs";
@@ -47,6 +57,8 @@ type AlumniRow = {
   email: string | null;
 };
 
+const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
+
 /**
  * The alumni half of the Directory.
  *
@@ -66,6 +78,7 @@ type AlumniRow = {
  * way on web to correct a mistaken Alumni role or remove an alumnus. Mobile's
  * s13 already opens its sheet from both tabs.
  */
+
 export function AlumniDirectory() {
   const { isOffline } = useNetwork();
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
@@ -82,7 +95,13 @@ export function AlumniDirectory() {
   // list without the member in it — a lookup would empty the sheet mid-edit.
   // The sheet re-reads the member by id itself, so the snapshot only seeds it.
   const [openAlumnus, setOpenAlumnus] = useState<AlumniRow | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // Open is the address's `member=` (#6046, spec § Addresses), pushed, so
+  // Back returns to the list; the snapshot above only seeds the sheet.
+  const memberParam = useAddressParams([MEMBER_PARAM]).values[MEMBER_PARAM];
+  const sheetOpen = memberParam !== null;
+  const setSheetOpen = (open: boolean) => {
+    if (!open) closeAddress([MEMBER_PARAM]);
+  };
   const [committed, setCommitted] = useState<{
     graduation_year?: string;
     city?: string;
@@ -96,6 +115,20 @@ export function AlumniDirectory() {
   });
 
   const alumni = useMemo(() => asArray<AlumniRow>(query.data), [query.data]);
+  // An alumnus the address names who isn't on the unfiltered list (left, or
+  // hidden from this viewer): said, and taken out of the address.
+  const deadAlumnus = useDeadAddressParam(
+    MEMBER_PARAM,
+    memberParam,
+    query.data !== undefined &&
+      !query.isFetching &&
+      !committed.graduation_year &&
+      !committed.city &&
+      !committed.company &&
+      memberParam !== null &&
+      openAlumnus?.user_id !== memberParam &&
+      !alumni.some((alum) => alum.user_id === memberParam),
+  );
   // A committed filter is the difference between "this chapter has no alumni"
   // and "nothing matched what you asked for" — the two states the board draws
   // separately (`3b`), which this screen used to answer with one string.
@@ -167,6 +200,13 @@ export function AlumniDirectory() {
 
   return (
     <section aria-labelledby="alumni-list-label" className="space-y-3">
+      {deadAlumnus !== null ? (
+        // An alumnus from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That member isn&apos;t in the directory. They may have left the
+          chapter, or you may not have access.
+        </p>
+      ) : null}
       {/*
         One toolbar row: the list's name and count on the left, its filter form
         on the right, on the page surface. `1f` pin 2.
@@ -199,7 +239,7 @@ export function AlumniDirectory() {
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
             <Label
               htmlFor="alumni-grad-year"
-              className={`${EYEBROW} text-muted-foreground`}
+              className={`${EYEBROW} text-muted`}
             >
               Graduation year
             </Label>
@@ -213,10 +253,7 @@ export function AlumniDirectory() {
             />
           </div>
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
-            <Label
-              htmlFor="alumni-city"
-              className={`${EYEBROW} text-muted-foreground`}
-            >
+            <Label htmlFor="alumni-city" className={`${EYEBROW} text-muted`}>
               City
             </Label>
             <Input
@@ -228,10 +265,7 @@ export function AlumniDirectory() {
             />
           </div>
           <div className="flex w-full min-w-0 flex-col gap-1 @md:w-auto">
-            <Label
-              htmlFor="alumni-company"
-              className={`${EYEBROW} text-muted-foreground`}
-            >
+            <Label htmlFor="alumni-company" className={`${EYEBROW} text-muted`}>
               Company
             </Label>
             <Input
@@ -317,7 +351,7 @@ export function AlumniDirectory() {
               .join(" · ");
             const open = () => {
               setOpenAlumnus(alum);
-              setSheetOpen(true);
+              pushAddress({ [MEMBER_PARAM]: alum.user_id });
             };
             const label = [name, meta || null, alum.bio || null]
               .filter(Boolean)
@@ -383,7 +417,7 @@ export function AlumniDirectory() {
                   onClick={open}
                   aria-label={label}
                   className={cn(
-                    "flex min-h-9 min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
+                    "flex min-h-control-list-row min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
                     "pointer-coarse:min-h-11 hover:bg-card-hover hover:text-foreground",
                     FOCUS_RING_OFFSET,
                   )}
@@ -434,8 +468,13 @@ export function AlumniDirectory() {
       <MemberDetailSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        userId={openAlumnus?.user_id ?? null}
-        initialMember={openAlumnus}
+        userId={memberParam}
+        onLeaveForMessage={() => replaceAddress({ [MEMBER_PARAM]: null })}
+        initialMember={
+          openAlumnus?.user_id === memberParam
+            ? openAlumnus
+            : (alumni.find((alum) => alum.user_id === memberParam) ?? null)
+        }
         // Alumni accrue no points (`spec/behavior/alumni.md`), and the
         // leaderboard this would come from ranks actives, so the sheet draws
         // no Points row.

@@ -28,10 +28,15 @@ export function useActivity(options: { enabled?: boolean } = {}) {
       // Sunday the standing read counts study from.
       const { data, error } = await client.GET("/v1/activity", {
         signal,
-        // `minutes`: this build draws the Minutes run (#5949), so its rows
-        // come back and count toward the badge.
+        // `minutes`: this build draws the Minutes run (#5949), and
+        // `extensions` the requests for more time (#6096), so their rows come
+        // back and count toward the badge.
         params: {
-          query: { week_start: localWeekStart().toISOString(), minutes: "true" },
+          query: {
+            week_start: localWeekStart().toISOString(),
+            minutes: "true",
+            extensions: "true",
+          },
         },
       });
       if (error) throw error;

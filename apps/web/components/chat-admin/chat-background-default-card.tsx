@@ -7,7 +7,6 @@ import {
 } from "@repo/hooks";
 import { CHAPTER_PROFILE_PERMISSIONS } from "@repo/validation";
 import { Can } from "@/components/shared/can";
-import { SectionLabel } from "@/components/shared/section-label";
 import { useChapterLetters } from "@/components/chat/chat-background";
 import { ChatBackgroundPicker } from "@/components/chat/chat-background-picker";
 
@@ -30,10 +29,8 @@ function DefaultBackgroundSection() {
   const setDefault = useSetChapterChatBackground();
   const letters = useChapterLetters();
   return (
-    <section aria-labelledby="ca-background-label" className="space-y-2">
-      <SectionLabel id="ca-background-label">
-        Default chat background
-      </SectionLabel>
+    <section aria-label="Chat background" className="space-y-2">
+      {/* Its page's title names it (#6031); the line says what it reaches. */}
       <p className="text-sm text-muted-foreground">
         Every channel shows this unless it has its own, set from that
         channel&apos;s menu. DMs stay plain.

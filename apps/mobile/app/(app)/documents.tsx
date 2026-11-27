@@ -1,4 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   Alert,
@@ -19,6 +26,7 @@ import {
   useMarkFilterHold,
   useDocuments,
   useDocumentStars,
+  useGoogleDriveStatus,
   useMemberDisplayNames,
   useSetDocumentPin,
   useSetDocumentStar,
@@ -43,6 +51,11 @@ import {
   type DocumentSort,
   type FileKind,
 } from "@repo/hooks/document-library";
+import { nearScrollEnd, useRenderWindow } from "@repo/hooks/use-render-window";
+import {
+  ScreenScrollWatchProvider,
+  type ScreenScroll,
+} from "@/lib/floating-chrome";
 import {
   buildFolderTree,
   folderLevel,
@@ -83,6 +96,7 @@ import {
 } from "@/components/documents/limited-mark";
 import { MarkedCards } from "@/components/documents/marked-cards";
 import { DocumentTiles } from "@/components/documents/document-tiles";
+import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
 import {
   BackGlyph,
@@ -355,6 +369,12 @@ export default function DocumentsScreen() {
     () => selectDocumentFolders(foldersQuery.data),
     [foldersQuery.data],
   );
+  // The Google Drive folder's row (officers), as on web: over a folder sync
+  // made, or at the top of Documents for the connected folder itself when
+  // its list leaves this officer out or the first pass hasn't made it yet,
+  // so Disconnect never depends on seeing the folder.
+  const driveConnection = useGoogleDriveStatus({ enabled: canManage }).data
+    ?.connection;
   // Each row's tile wears its folder's hue, as web's rows do (#5576,
   // `documentFolderHues`): a hue names a folder, never a state.
   const folderHue = useMemo(
@@ -412,6 +432,35 @@ export default function DocumentsScreen() {
   const rows = useMemo(
     () => (showCards ? visible : tierRows(visible, starredDocuments)),
     [visible, showCards, starredDocuments],
+  );
+  // A page of rows at a time (#6088): mounting one per file before the
+  // screen painted is what kept a chapter with a few hundred on a blank
+  // list. The next page is drawn as the reader nears the end of the shell's
+  // scroll, and a new folder, search, filter, order or layout starts over.
+  const listKey = JSON.stringify([
+    folder,
+    deferredSearch,
+    sort,
+    filters,
+    layout,
+  ]);
+  const rowWindow = useRenderWindow(rows, listKey);
+  const { showMore } = rowWindow;
+  // One page per growth of the content: the scroll reports every 16 ms, and
+  // several reports before the new rows lay out would add several pages.
+  // Forgotten with each new list, whose first page may lay out at the very
+  // height the last growth was asked at, and would then never grow.
+  const grownAt = useRef(-1);
+  useEffect(() => {
+    grownAt.current = -1;
+  }, [listKey]);
+  const watchScroll = useCallback(
+    (scroll: ScreenScroll) => {
+      if (scroll.content === grownAt.current || !nearScrollEnd(scroll)) return;
+      grownAt.current = scroll.content;
+      showMore();
+    },
+    [showMore],
   );
   const cards = useMemo(
     () =>
@@ -903,7 +952,7 @@ export default function DocumentsScreen() {
           {/* The upload in flight stays a row, heading the tiles. */}
           {pendingRow ? <ListSection>{pendingRow}</ListSection> : null}
           <DocumentTiles
-            rows={rows}
+            rows={rowWindow.shown}
             isStarred={(id) => starredDocuments.has(id)}
             isLimited={isLimited}
             busyIds={
@@ -924,7 +973,7 @@ export default function DocumentsScreen() {
     return (
       <ListSection>
         {pendingRow}
-        {rows.map((row) => (
+        {rowWindow.shown.map((row) => (
           <ListRow
             key={row.doc.id}
             leading={
@@ -1069,187 +1118,211 @@ export default function DocumentsScreen() {
   );
 
   return (
-    <ScreenShell
-      back={BACK_TO_YOU}
-      refresh={refresh}
-      createAction={
-        canUpload
-          ? {
-              label: "Upload document",
-              hint: "Opens a sheet to upload a file or a photo to the library.",
-              onPress: () => uploadSheetRef.current?.present(),
-            }
-          : undefined
-      }
-      title={SECTION_NAMES.resources}
-      headerAction={<ListLayoutToggle screen="documents" />}
-    >
-      <SearchField
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search documents"
-        accessibilityLabel="Search documents"
-        searchGlyph
-      />
-
-      {folders.length > 0 ? (
-        <FilterChips
-          // A new row for each level, so it starts at its back chip rather
-          // than keeping the scroll the last level was at (#5337).
-          key={chipLevel.level?.folder.name ?? "top"}
-          accessibilityLabel="Filter by folder"
-          scroll
-          selected={folder}
-          onSelect={setFolder}
-          chips={folderChips}
+    <ScreenScrollWatchProvider value={watchScroll}>
+      <ScreenShell
+        back={BACK_TO_YOU}
+        refresh={refresh}
+        createAction={
+          canUpload
+            ? {
+                label: "Upload document",
+                hint: "Opens a sheet to upload a file or a photo to the library.",
+                onPress: () => uploadSheetRef.current?.present(),
+              }
+            : undefined
+        }
+        title={SECTION_NAMES.resources}
+        headerAction={<ListLayoutToggle screen="documents" />}
+      >
+        <SearchField
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search documents"
+          accessibilityLabel="Search documents"
+          searchGlyph
         />
-      ) : null}
-      {filterRow}
 
-      {openFailed ? (
-        <Text style={styles.errorNote}>
-          That document couldn&apos;t be opened. Try again in a moment.
-        </Text>
-      ) : null}
-      {starsQuery.isError ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          Couldn&apos;t load your stars. Pull down to try again.
-        </Text>
-      ) : null}
-      {markFailed ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          {markFailed}
-        </Text>
-      ) : null}
-      {deleteFailed ? (
-        <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
-          {deleteFailed}
-        </Text>
-      ) : null}
+        {folders.length > 0 ? (
+          <FilterChips
+            // A new row for each level, so it starts at its back chip rather
+            // than keeping the scroll the last level was at (#5337).
+            key={chipLevel.level?.folder.name ?? "top"}
+            accessibilityLabel="Filter by folder"
+            scroll
+            selected={folder}
+            onSelect={setFolder}
+            chips={folderChips}
+          />
+        ) : null}
+        {filterRow}
 
-      {showCards &&
-      !documentsQuery.isPending &&
-      !(documentsQuery.isError && documentsQuery.data === undefined) ? (
-        <MarkedCards
-          pinned={cards.pinned}
-          starred={cards.starred}
-          folderNames={folderNames}
-          isStarred={(item) =>
-            item.kind === "folder"
-              ? starredFolders.has(item.folder.id)
-              : starredDocuments.has(item.doc.id)
-          }
-          isLimited={(item) =>
-            item.kind === "folder"
-              ? !!item.folder.who_can_see
-              : isLimited(item.doc)
-          }
-          openingId={openingId}
-          deletingIds={deletingIds}
-          actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
-          onOpenFolder={setFolder}
-          onOpenDocument={(doc) => void open(doc)}
-          onActions={(item) =>
-            openActions(
+        {openFailed ? (
+          <Text style={styles.errorNote}>
+            That document couldn&apos;t be opened. Try again in a moment.
+          </Text>
+        ) : null}
+        {starsQuery.isError ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            Couldn&apos;t load your stars. Pull down to try again.
+          </Text>
+        ) : null}
+        {markFailed ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            {markFailed}
+          </Text>
+        ) : null}
+        {deleteFailed ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorNote}>
+            {deleteFailed}
+          </Text>
+        ) : null}
+
+        {showCards &&
+        !documentsQuery.isPending &&
+        !(documentsQuery.isError && documentsQuery.data === undefined) ? (
+          <MarkedCards
+            pinned={cards.pinned}
+            starred={cards.starred}
+            folderNames={folderNames}
+            isStarred={(item) =>
               item.kind === "folder"
-                ? folderTarget(item.folder)
-                : documentTarget(item.doc),
+                ? starredFolders.has(item.folder.id)
+                : starredDocuments.has(item.doc.id)
+            }
+            isLimited={(item) =>
+              item.kind === "folder"
+                ? !!item.folder.who_can_see
+                : isLimited(item.doc)
+            }
+            openingId={openingId}
+            deletingIds={deletingIds}
+            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            onOpenFolder={setFolder}
+            onOpenDocument={(doc) => void open(doc)}
+            onActions={(item) =>
+              openActions(
+                item.kind === "folder"
+                  ? folderTarget(item.folder)
+                  : documentTarget(item.doc),
+              )
+            }
+          />
+        ) : null}
+
+        {canManage ? (
+          <DriveFolderRow
+            folder={
+              folder
+                ? folders.find((entry) => entry.name === folder)
+                : driveConnection &&
+                    !folders.some(
+                      (entry) =>
+                        entry.drive_folder_id === driveConnection.folder_id,
+                    )
+                  ? {
+                      name: driveConnection.folder_name,
+                      drive_folder_id: driveConnection.folder_id,
+                    }
+                  : undefined
+            }
+          />
+        ) : null}
+        {/* The count and, across from it, the order (#5278), as Files, Drive
+          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
+        <View style={styles.listHeader}>
+          <SectionHeader>
+            {documentsQuery.isSuccess
+              ? `${visible.length} ${visible.length === 1 ? "document" : "documents"}`
+              : "Documents"}
+          </SectionHeader>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sortLabel}`}
+            accessibilityHint="Opens the sort orders."
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            onPress={() => sortSheetRef.current?.present()}
+            style={({ pressed }) => [
+              styles.sortControl,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={styles.sortLabel}>{sortLabel}</Text>
+            <DisclosureGlyph
+              color={tokens.color.text.mutedForeground}
+              size={14}
+              direction="down"
+            />
+          </Pressable>
+        </View>
+        {renderList()}
+
+        <OptionSheet
+          ref={sortSheetRef}
+          title="Sort by"
+          options={SORT_OPTIONS}
+          selected={sort}
+          onSelect={(value) =>
+            setSort((value as DocumentSort | null) ?? "name")
+          }
+        />
+        <OptionSheet
+          ref={typeSheetRef}
+          title="File type"
+          options={[{ value: null, label: "Any type" }, ...kinds]}
+          selected={kind}
+          onSelect={(value) => setKind(value as FileKind | null)}
+        />
+        <OptionSheet
+          ref={uploaderSheetRef}
+          title="Uploaded by"
+          options={[{ value: null, label: "Anyone" }, ...uploaders]}
+          selected={uploader}
+          onSelect={setPickedUploader}
+        />
+        <OptionSheet
+          ref={dateSheetRef}
+          title="Date added"
+          options={dateOptions}
+          selected={dateActive ? datePreset : null}
+          onSelect={(value) =>
+            setDatePreset(value as "semester" | "30d" | null)
+          }
+        />
+
+        <DocumentActionsSheet
+          ref={actionsSheetRef}
+          target={actionsTarget}
+          canManage={canManage}
+          onToggleStar={(target) => void toggleStar(target)}
+          onTogglePin={(target) => void togglePin(target)}
+          onDelete={(target) => confirmDelete(target.id, target.name)}
+          // The Drive app when it's installed (its links are universal
+          // links), the browser otherwise.
+          onOpenInDrive={(url) =>
+            void Linking.openURL(url).catch(() =>
+              Alert.alert("Couldn't open Google Drive."),
             )
           }
         />
-      ) : null}
 
-      {/* The count and, across from it, the order (#5278), as Files, Drive
-          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
-      <View style={styles.listHeader}>
-        <SectionHeader>
-          {documentsQuery.isSuccess
-            ? `${visible.length} ${visible.length === 1 ? "document" : "documents"}`
-            : "Documents"}
-        </SectionHeader>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sort: ${sortLabel}`}
-          accessibilityHint="Opens the sort orders."
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-          onPress={() => sortSheetRef.current?.present()}
-          style={({ pressed }) => [
-            styles.sortControl,
-            pressed ? styles.pressed : null,
-          ]}
-        >
-          <Text style={styles.sortLabel}>{sortLabel}</Text>
-          <DisclosureGlyph
-            color={tokens.color.text.mutedForeground}
-            size={14}
-            direction="down"
+        {canUpload ? (
+          <UploadDocumentSheet
+            // A new sheet per chapter: a kept draft belongs to the chapter it
+            // was started in, and a retry the sheet holds after a failed
+            // confirm names a path minted under the chapter it was sent from.
+            key={chapterId ?? "no-chapter"}
+            ref={uploadSheetRef}
+            folders={folders}
+            initialFolder={folder}
+            onUploaded={uploaded}
+            onPending={setPendingUpload}
+            // Kept past this screen (#4593): going back and coming here again
+            // opens Upload on the draft left in it.
+            keptDraft="documents-upload"
           />
-        </Pressable>
-      </View>
-      {renderList()}
-
-      <OptionSheet
-        ref={sortSheetRef}
-        title="Sort by"
-        options={SORT_OPTIONS}
-        selected={sort}
-        onSelect={(value) => setSort((value as DocumentSort | null) ?? "name")}
-      />
-      <OptionSheet
-        ref={typeSheetRef}
-        title="File type"
-        options={[{ value: null, label: "Any type" }, ...kinds]}
-        selected={kind}
-        onSelect={(value) => setKind(value as FileKind | null)}
-      />
-      <OptionSheet
-        ref={uploaderSheetRef}
-        title="Uploaded by"
-        options={[{ value: null, label: "Anyone" }, ...uploaders]}
-        selected={uploader}
-        onSelect={setPickedUploader}
-      />
-      <OptionSheet
-        ref={dateSheetRef}
-        title="Date added"
-        options={dateOptions}
-        selected={dateActive ? datePreset : null}
-        onSelect={(value) => setDatePreset(value as "semester" | "30d" | null)}
-      />
-
-      <DocumentActionsSheet
-        ref={actionsSheetRef}
-        target={actionsTarget}
-        canManage={canManage}
-        onToggleStar={(target) => void toggleStar(target)}
-        onTogglePin={(target) => void togglePin(target)}
-        onDelete={(target) => confirmDelete(target.id, target.name)}
-        // The Drive app when it's installed (its links are universal
-        // links), the browser otherwise.
-        onOpenInDrive={(url) =>
-          void Linking.openURL(url).catch(() =>
-            Alert.alert("Couldn't open Google Drive."),
-          )
-        }
-      />
-
-      {canUpload ? (
-        <UploadDocumentSheet
-          // A new sheet per chapter: a kept draft belongs to the chapter it
-          // was started in, and a retry the sheet holds after a failed
-          // confirm names a path minted under the chapter it was sent from.
-          key={chapterId ?? "no-chapter"}
-          ref={uploadSheetRef}
-          folders={folders}
-          initialFolder={folder}
-          onUploaded={uploaded}
-          onPending={setPendingUpload}
-          // Kept past this screen (#4593): going back and coming here again
-          // opens Upload on the draft left in it.
-          keptDraft="documents-upload"
-        />
-      ) : null}
-    </ScreenShell>
+        ) : null}
+      </ScreenShell>
+    </ScreenScrollWatchProvider>
   );
 }
 

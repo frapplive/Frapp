@@ -349,6 +349,28 @@ describe("Host check-in while the room fills", () => {
     act(() => tree.unmount());
   });
 
+  it("refuses a time-TBD or calendar-only event in the API's words, with no code (#6144)", () => {
+    for (const [shape, words] of [
+      [
+        { timing: "time_tbd", start_date: "2026-11-05" },
+        "This event's time isn't set yet, so check-in hasn't opened.",
+      ],
+      [
+        { calendar_only: true },
+        "This event is on the calendar only, so nobody checks in.",
+      ],
+    ] as const) {
+      hooks.event = { ...EVENT, ...shape };
+      hooks.mintCalls = [];
+      const tree = render();
+      const text = screenText(tree);
+      expect(text).toContain(words);
+      expect(text).not.toContain("4KQ-88");
+      expect(lastCall(hooks.mintCalls)).toEqual(["evt-1", false]);
+      act(() => tree.unmount());
+    }
+  });
+
   it("draws the count of members who are there, and the code members type", () => {
     const tree = render();
     const text = screenText(tree);

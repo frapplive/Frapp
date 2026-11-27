@@ -32,6 +32,7 @@ export function DueTimeField({
   suggested,
   disabled,
   onChange,
+  clearable = true,
   platform = Platform.OS,
 }: {
   value: string | null;
@@ -39,6 +40,11 @@ export function DueTimeField({
   suggested: string;
   disabled: boolean;
   onChange: (next: string | null) => void;
+  /**
+   * Whether the time can be taken off. A new due asked for on a task due at
+   * a time keeps one (#6096), so that field draws no ×.
+   */
+  clearable?: boolean;
   platform?: string;
 }) {
   const { tokens } = useFrappTheme();
@@ -81,7 +87,7 @@ export function DueTimeField({
   }
 
   const label = formatDueTimeLabel(value);
-  const clear = (
+  const clear = !clearable ? null : (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Remove the time"

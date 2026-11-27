@@ -9,7 +9,7 @@ import { FrappThemeProvider } from "@/lib/theme";
  * The keyboard's return key on sign-in (s01).
  *
  * In password mode return on the email field moves to the password field, and
- * return on the password field signs in. In magic-link mode return on the
+ * return on the password field signs in. In email-code mode return on the
  * email field sends the link. Either way return goes through the same submit
  * as the button, so it gets the button's guard: nothing new starts while a
  * sign-in is in flight.
@@ -20,7 +20,7 @@ import { FrappThemeProvider } from "@/lib/theme";
 
 const auth = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
-  sendMagicLink: vi.fn(),
+  sendEmailCode: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-session", () => ({
@@ -28,7 +28,7 @@ vi.mock("@/lib/auth-session", () => ({
     status: "unauthenticated",
     isConfigured: true,
     callbackError: null,
-    sendMagicLink: auth.sendMagicLink,
+    sendEmailCode: auth.sendEmailCode,
     signInWithOAuthProvider: vi.fn(),
     signInWithPassword: auth.signInWithPassword,
     signOut: vi.fn(),
@@ -124,7 +124,7 @@ function pressReturn(input: Node) {
 
 beforeEach(() => {
   auth.signInWithPassword.mockReset();
-  auth.sendMagicLink.mockReset();
+  auth.sendEmailCode.mockReset();
   focusPassword.mockReset();
 });
 
@@ -200,13 +200,13 @@ describe("sign-in return key, password mode", () => {
   });
 });
 
-describe("sign-in return key, magic-link mode", () => {
-  it("sends the link from the email field, which is the last field", async () => {
-    auth.sendMagicLink.mockResolvedValue(undefined);
+describe("sign-in return key, email-code mode", () => {
+  it("sends the code from the email field, which is the last field", async () => {
+    auth.sendEmailCode.mockResolvedValue(undefined);
     const tree = render();
 
     act(() => {
-      pressableLabelled(tree.root, "Magic link").props.onPress();
+      pressableLabelled(tree.root, "Email code").props.onPress();
     });
     expect(hasField(tree.root, "password")).toBe(false);
 
@@ -219,19 +219,19 @@ describe("sign-in return key, magic-link mode", () => {
     });
 
     expect(focusPassword).not.toHaveBeenCalled();
-    expect(auth.sendMagicLink).toHaveBeenCalledTimes(1);
-    expect(auth.sendMagicLink).toHaveBeenCalledWith({
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(1);
+    expect(auth.sendEmailCode).toHaveBeenCalledWith({
       email: "brother@westfield.edu",
     });
     expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("names the wait as a link being sent, not a sign-in", async () => {
+  it("names the wait as a code being sent, not a sign-in", async () => {
     // Never settles, so the screen stays submitting.
-    auth.sendMagicLink.mockReturnValue(new Promise(() => {}));
+    auth.sendEmailCode.mockReturnValue(new Promise(() => {}));
     const tree = render();
     act(() => {
-      pressableLabelled(tree.root, "Magic link").props.onPress();
+      pressableLabelled(tree.root, "Email code").props.onPress();
     });
     type(field(tree.root, "username"), "brother@westfield.edu");
 
@@ -239,7 +239,7 @@ describe("sign-in return key, magic-link mode", () => {
       field(tree.root, "username").props.onSubmitEditing();
     });
 
-    const busy = pressableLabelled(tree.root, "Sending link…");
+    const busy = pressableLabelled(tree.root, "Sending code…");
     expect(busy.props.disabled).toBe(true);
     expect(busy.props.accessibilityState).toEqual({
       disabled: true,

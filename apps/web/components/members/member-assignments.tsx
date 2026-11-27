@@ -1,5 +1,6 @@
 "use client";
 
+import { EYEBROW } from "@/components/ui/typography";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Plus, X } from "lucide-react";
 import {
@@ -308,10 +309,7 @@ function ChipRow({
   const cut = cutChips(chips, expanded);
   return (
     <section className="space-y-2" aria-labelledby={headingId}>
-      <h3
-        id={headingId}
-        className="text-label font-semibold uppercase tracking-wide text-muted-foreground"
-      >
+      <h3 id={headingId} className={`${EYEBROW} text-muted`}>
         {title}
       </h3>
       <ul id={listId} className="flex flex-wrap items-center gap-1.5">
@@ -462,7 +460,7 @@ function AddPicker({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search roles and groups"
-            className="h-8"
+            className="h-control-row"
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -473,7 +471,7 @@ function AddPicker({
           ) : (
             ordered.map((section) => (
               <div key={section.key} role="group" aria-label={section.title}>
-                <p className="px-3 pb-1 pt-2 text-label font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className={`${EYEBROW} px-3 pb-1 pt-2 text-muted`}>
                   {section.title}
                 </p>
                 {section.rows.map((row) => {

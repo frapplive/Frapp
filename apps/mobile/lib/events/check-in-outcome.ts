@@ -79,7 +79,6 @@ export { CHECK_IN_CODE_REFUSED_MESSAGE, CHECK_IN_NEEDS_LOCATION_MESSAGES };
 export const CHECK_IN_NEEDS_CODE_MESSAGE =
   "Scan the code on the check-in screen with the Frapp app to check in";
 
-
 /** Whether a failed check-in was refused for carrying no location. */
 export function needsLocationRefusal(error: unknown): boolean {
   const message = serverMessageOf(error);

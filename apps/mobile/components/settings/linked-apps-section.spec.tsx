@@ -26,6 +26,7 @@ vi.mock("expo-web-browser", () => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCurrentChapter: () => ({ data: { name: "Beta Theta Omega" } }),
   useGoogleCalendarStatus: () => ({
     data: state.google,
     isError: state.googleError,
@@ -87,7 +88,8 @@ import {
   pickItemMenuAction,
 } from "@/components/item-actions-menu";
 import { FrappThemeProvider } from "@/lib/theme";
-import { LinkedAppsSection } from "./linked-apps-section";
+import { screenText as screenTextOf } from "@/test/screen-text";
+import { LinkedAppsSection, SignInSection } from "./linked-apps-section";
 
 const OFF = {
   available: true,
@@ -97,14 +99,14 @@ const OFF = {
   last_synced_at: null,
 };
 
-async function render(): Promise<ReactTestRenderer> {
+async function render(
+  section: React.ReactElement = <LinkedAppsSection />,
+): Promise<ReactTestRenderer> {
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = create(
       <QueryClientProvider client={new QueryClient()}>
-        <FrappThemeProvider>
-          <LinkedAppsSection />
-        </FrappThemeProvider>
+        <FrappThemeProvider>{section}</FrappThemeProvider>
       </QueryClientProvider>,
     );
   });
@@ -145,17 +147,17 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     vi.mocked(Alert.alert).mockClear();
   });
 
-  it("connects Google from Settings and has the sign-in come back to Settings", async () => {
+  it("connects Google from Settings and has the sign-in come back to Linked apps (#6032)", async () => {
     const tree = await render();
     await act(async () => {
       row(tree, "Google Calendar").props.onPress();
     });
     expect(state.start).toHaveBeenCalledWith({
       client: "mobile",
-      returnUrl: expect.stringContaining("preferences"),
+      returnUrl: expect.stringContaining("preferences?page=apps"),
     });
     // The Calendar apps sheet opened from here comes back here too.
-    expect(state.sheetReturnPaths.at(-1)).toBe("preferences");
+    expect(state.sheetReturnPaths.at(-1)).toBe("preferences?page=apps");
   });
 
   it("offers Reconnect and Disconnect on an expired connection", async () => {
@@ -190,8 +192,15 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     expect(state.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("marks each sign-in method by whether the account has it", async () => {
+  it("heads its rows with the chapter they belong to (#6032)", async () => {
     const tree = await render();
+    expect(screenTextOf(tree)).toContain("In Beta Theta Omega");
+    // The ways the account signs in are on Account now (`SignInSection`).
+    expect(screenTextOf(tree)).not.toContain("Sign in");
+  });
+
+  it("marks each sign-in method by whether the account has it, on Account", async () => {
+    const tree = await render(<SignInSection />);
     // The sign-in methods load through a query that settles a few ticks later.
     for (let i = 0; i < 5; i++) {
       await act(async () => {
@@ -224,11 +233,11 @@ describe("Phone Settings → Linked apps (#5407)", () => {
 
     expect(state.discordBegin).toHaveBeenCalledWith({
       client: "mobile",
-      returnUrl: "frapp://preferences",
+      returnUrl: "frapp://preferences?page=apps",
     });
     expect(state.authSession).toHaveBeenCalledWith(
       "https://discord.com/oauth2/authorize?x",
-      "frapp://preferences",
+      "frapp://preferences?page=apps",
     );
     expect(state.discordConfirm).toHaveBeenCalledWith({
       handshake: "11111111-1111-4111-8111-111111111111",

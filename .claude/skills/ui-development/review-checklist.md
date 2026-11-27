@@ -17,7 +17,7 @@ role and a committee chair's role; the empty capture is a fresh chapter from the
 the phone, where View as doesn't exist yet, read the member and chair layout from the screen's code and
 the role gates it uses, and say so in the PR (seeded per-role logins are #5687):
 
-| | Web (1440 wide, and beside chat from 1024) | Phone (iPhone size) |
+| | Web (1440 wide, and beside chat at 576 and at the 375 floor) | Phone (iPhone size) |
 | --- | --- | --- |
 | Average member | required | required |
 | Committee chair | required | required |
@@ -42,8 +42,7 @@ The rule Paul wrote this for: never fix only the screen he named.
 2. Find every instance on both apps. Grep for the component or class that draws it, list the routes in
    `apps/web/app/` and `apps/mobile/app/`, and look at the screens that do the same job (every list
    page, every create form, every record page).
-3. Fix every instance this PR's screens own. For one held by another open PR (one open PR per screen,
-   `AGENTS.md`), message that thread or note it on its PR. For the rest, file one issue per pattern
+3. Fix every instance this PR's screens own. For one another open PR is changing, message that thread or note it on its PR. For the rest, file one issue per pattern
    ([`file-follow-up`](../file-follow-up/SKILL.md)) listing every file.
 4. Put the table in the PR body: pattern, every place found, and fixed here / held by #N / filed as #N.
 

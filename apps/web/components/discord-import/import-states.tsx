@@ -167,7 +167,7 @@ export function ImportLanding({
 
       <div className="grid gap-4 @xl:grid-cols-2">
         <div className="space-y-1.5">
-          <p className={cn(EYEBROW, "text-muted-foreground")}>Comes over</p>
+          <p className={cn(EYEBROW, "text-muted")}>Comes over</p>
           <ul className="space-y-1 text-sm">
             {COMES_OVER.map((item) => (
               <li key={item}>{item}</li>
@@ -175,7 +175,7 @@ export function ImportLanding({
           </ul>
         </div>
         <div className="space-y-1.5">
-          <p className={cn(EYEBROW, "text-muted-foreground")}>Stays behind</p>
+          <p className={cn(EYEBROW, "text-muted")}>Stays behind</p>
           <p className="text-sm">DMs, voice, and who holds which role</p>
         </div>
       </div>
@@ -258,7 +258,7 @@ export function ImportRunning({
       className="mx-auto max-w-2xl space-y-4"
     >
       <div className="space-y-1">
-        <p className={cn(EYEBROW, "text-muted-foreground")}>
+        <p className={cn(EYEBROW, "text-muted")}>
           {row.status === "ready" ? "Waiting to start" : "Importing"}
           {row.guild_name ? ` · ${row.guild_name}` : ""}
         </p>

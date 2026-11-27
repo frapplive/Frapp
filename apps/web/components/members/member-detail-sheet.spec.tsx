@@ -58,6 +58,12 @@ const {
 // The sheet's council check (#5933): these members are a chapter's.
 vi.mock("@/lib/hooks/use-tenant-kind", () => ({ useIsCouncil: () => false }));
 
+const liftMutateAsync = vi.fn();
+const restoreMutate = vi.fn();
+const mockBlocked = vi.hoisted(() => ({
+  current: [] as { user_id: string; blocked_at: string }[],
+}));
+
 vi.mock("@repo/hooks", async () => ({
   // The pure reader of the DM response runs for real.
   dmChannelIdOf: (
@@ -81,6 +87,18 @@ vi.mock("@repo/hooks", async () => ({
     refetch: rolesState.refetch,
   }),
   useRemoveMember: () => ({ mutateAsync: removeMutateAsync, isPending: false }),
+  // Chat timeouts (#6006).
+  useLiftChatTimeout: () => ({
+    mutateAsync: liftMutateAsync,
+    isPending: false,
+  }),
+  useTimeOutMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // Restore extension requests (#6096).
+  useBlockedFromExtensions: ({ enabled }: { enabled?: boolean } = {}) => ({
+    data: enabled ? mockBlocked.current : undefined,
+  }),
+  useRestoreTaskExtensions: () => ({ mutate: restoreMutate, isPending: false }),
+  useNowDate: () => new Date(),
   useUpdateMemberRoles: () => ({
     mutateAsync: updateRolesMutateAsync,
     isPending: false,
@@ -170,6 +188,7 @@ vi.mock("@/components/members/member-assignments", () => ({
   ),
 }));
 
+import { TASK_EXTENSION_COPY } from "@repo/validation";
 import { MemberDetailSheet } from "./member-detail-sheet";
 
 const baseMember = {
@@ -643,6 +662,54 @@ describe("MemberDetailSheet Message action", () => {
   });
 });
 
+// Chat timeouts (#6006): Time out and Lift timeout behind the ⋯, where the
+// API says `viewer_can_timeout`, and the running timeout on the profile.
+describe("MemberDetailSheet chat timeout", () => {
+  const moreButton = () =>
+    screen.queryByRole("button", { name: "More for Jane Smith" });
+  const running = {
+    chat_timeout_until: new Date(Date.now() + 60 * 60_000).toISOString(),
+    chat_timeout_reason: "spamming",
+  };
+
+  it("offers Time out where the API allows it", async () => {
+    const user = userEvent.setup();
+    renderProfile({ ...baseMember, viewer_can_timeout: true });
+    await user.click(moreButton()!);
+    expect(
+      await screen.findByRole("menuitem", { name: "Time out" }),
+    ).toBeInTheDocument();
+  });
+
+  it("draws no ⋯ when the API says this viewer may not", () => {
+    renderProfile({ ...baseMember, viewer_can_timeout: false });
+    expect(moreButton()).not.toBeInTheDocument();
+  });
+
+  it("says until when, and lifts it after confirming", async () => {
+    const user = userEvent.setup();
+    liftMutateAsync.mockResolvedValue({});
+    renderProfile({ ...baseMember, viewer_can_timeout: true, ...running });
+
+    expect(
+      screen.getByText(/^Timed out until .+ · spamming$/),
+    ).toBeInTheDocument();
+    await user.click(moreButton()!);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Lift timeout" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Lift Jane Smith's timeout?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Lift timeout" }),
+    );
+    await waitFor(() =>
+      expect(liftMutateAsync).toHaveBeenCalledWith({ memberId: "m1" }),
+    );
+  });
+});
+
 // Removing a member sits behind the profile's ⋯, never on its face (Paul,
 // 2026-11-11), and only where the API says this viewer may remove this member
 // (`viewer_can_remove`: `members:remove`, not their own profile, and the
@@ -776,7 +843,7 @@ describe("MemberDetailSheet Adjust points (#5950)", () => {
     renderProfile(baseMember, { points: 142 });
     expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute(
       "href",
-      "/settings?tab=points&member=u1",
+      "/settings?tab=points&page=points-ledger&member=u1",
     );
   });
 
@@ -959,5 +1026,46 @@ describe("MemberDetailSheet roles and groups", () => {
     const section = screen.getByRole("region", { name: "Roles and groups" });
     expect(section).toHaveTextContent("Roles r-pres");
     expect(section).toHaveAttribute("data-editable", "true");
+  });
+});
+
+describe("MemberDetailSheet extension requests (#6096)", () => {
+  beforeEach(() => {
+    mockBlocked.current = [];
+    restoreMutate.mockReset();
+  });
+
+  it("offers Restore for a blocked member to a tasks:manage holder", () => {
+    mockBlocked.current = [
+      {
+        user_id: String(baseMember.user_id),
+        blocked_at: "2026-11-20T00:00:00Z",
+      },
+    ];
+    renderProfile();
+    expect(
+      screen.getByText(TASK_EXTENSION_COPY.blockedBadge),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: TASK_EXTENSION_COPY.restore }),
+    );
+    expect(restoreMutate.mock.calls[0]?.[0]).toBe(baseMember.user_id);
+  });
+
+  it("says nothing for a member who can still ask, or to a member", () => {
+    const { unmount } = renderProfile();
+    expect(screen.queryByText(TASK_EXTENSION_COPY.blockedBadge)).toBeNull();
+    unmount();
+    mockBlocked.current = [
+      {
+        user_id: String(baseMember.user_id),
+        blocked_at: "2026-11-20T00:00:00Z",
+      },
+    ];
+    mockPermissions.current = ["members:view"];
+    renderProfile();
+    expect(
+      screen.queryByRole("button", { name: TASK_EXTENSION_COPY.restore }),
+    ).toBeNull();
   });
 });

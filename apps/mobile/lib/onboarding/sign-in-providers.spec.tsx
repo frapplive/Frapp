@@ -33,7 +33,7 @@ vi.mock("@/lib/auth-session", () => ({
     status: "unauthenticated",
     isConfigured: true,
     callbackError: null,
-    sendMagicLink: vi.fn(),
+    sendEmailCode: vi.fn(),
     signInWithOAuthProvider: auth.signInWithOAuthProvider,
     signInWithPassword: auth.signInWithPassword,
     signOut: vi.fn(),
@@ -309,15 +309,15 @@ describe("the email form", () => {
     };
 
     expect(look("Password")).toEqual(chosen);
-    expect(look("Magic link")).toEqual(
+    expect(look("Email code")).toEqual(
       expect.objectContaining({ selected: false }),
     );
-    expect(look("Magic link").ink).not.toBe(gold.askText);
+    expect(look("Email code").ink).not.toBe(gold.askText);
 
     act(() => {
-      pressableLabelled(tree.root, "Magic link").props.onPress();
+      pressableLabelled(tree.root, "Email code").props.onPress();
     });
-    expect(look("Magic link")).toEqual(chosen);
+    expect(look("Email code")).toEqual(chosen);
     expect(look("Password").fill).not.toBe(tint(gold.house));
   });
 });

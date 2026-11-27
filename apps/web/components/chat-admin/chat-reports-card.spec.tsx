@@ -374,9 +374,6 @@ describe("ChatReportsCard — reported attachments", () => {
       ]),
     };
     render(<ChatReportsCard />);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Report history" }),
-    );
     await userEvent.click(screen.getByRole("tab", { name: "Dismissed" }));
 
     expect(await screen.findByText("photo.png")).toBeInTheDocument();
@@ -450,7 +447,6 @@ describe("ChatReportsCard — status tabs", () => {
       const user = userEvent.setup();
       reportsByStatus.value = { [status]: settled([]), open: settled([]) };
       const { container } = render(<ChatReportsCard />);
-      await user.click(screen.getByRole("button", { name: "Report history" }));
       await user.click(screen.getByRole("tab", { name: label }));
       expect(screen.getByText(title)).toBeInTheDocument();
       expect(cardFilledContainers(container)).toEqual([]);
@@ -459,29 +455,29 @@ describe("ChatReportsCard — status tabs", () => {
 });
 
 describe("ChatReportsCard — async states", () => {
-  // Paul, 2026-11-11: reports stay "on the DL". Most chapters have none
-  // open, so the queue draws nothing until the open read answers rather than
-  // flashing a skeleton that then folds to one link.
-  it("draws nothing while the open read loads", () => {
+  // The queue is its own page since #6031, behind a Reports row that says
+  // how many are open, so it shows whole: its rows' skeleton while the open
+  // read loads, and its tabs with nothing open.
+  it("draws the rows' skeleton while the open read loads", () => {
     reportsByStatus.value = {
       open: { isPending: true, isLoading: true, fetchStatus: "fetching" },
     };
-    const { container } = render(<ChatReportsCard />);
-    expect(screen.queryByText("Loading reports")).toBeNull();
-    expect(screen.queryByText("Reported messages")).toBeNull();
-    expect(container).toBeEmptyDOMElement();
+    render(<ChatReportsCard />);
+    expect(
+      screen.getByRole("region", { name: "Reported messages" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Loading reports")).toBeInTheDocument();
   });
 
-  it("folds to one Report history link when nothing is open, and opens the queue from it", async () => {
+  it("shows the queue whole when nothing is open, on the Open tab", () => {
     reportsByStatus.value = { open: settled([]) };
     render(<ChatReportsCard />);
-
-    expect(screen.queryByText("Reported messages")).toBeNull();
-    expect(screen.queryByRole("tab")).toBeNull();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Report history" }),
+    expect(screen.getByRole("tab", { name: "Open" })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
     expect(screen.getByRole("tab", { name: "Reviewed" })).toBeInTheDocument();
+    expect(screen.getByText("No open reports.")).toBeInTheDocument();
   });
 
   it("shows an error with a retry that refetches the slice", async () => {
@@ -525,9 +521,6 @@ describe("ChatReportsCard — async states", () => {
       open: { ...settled([]), isError: true, error: { statusCode: 500 } },
     };
     render(<ChatReportsCard />);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Report history" }),
-    );
     expect(screen.getByText("No open reports.")).toBeInTheDocument();
     expect(screen.getByText(STALE)).toBeInTheDocument();
   });
@@ -551,21 +544,24 @@ describe("ChatReportsCard — async states", () => {
     );
   });
 
-  it("draws nothing, rather than an empty queue, with no chapter or offline with nothing cached", () => {
+  it("says why there is no queue, rather than an empty one, with no chapter or offline with nothing cached", () => {
     reportsByStatus.value = {
       open: { data: undefined, isPending: true, fetchStatus: "idle" },
     };
-    const { container, unmount } = render(<ChatReportsCard />);
-    expect(container).toBeEmptyDOMElement();
+    const { unmount } = render(<ChatReportsCard />);
+    expect(
+      screen.getByText("Pick an active chapter to review its reports."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No open reports.")).not.toBeInTheDocument();
     unmount();
 
     mockOffline.value = true;
     reportsByStatus.value = {
       open: { data: undefined, isPending: true, fetchStatus: "paused" },
     };
-    const offline = render(<ChatReportsCard />);
-    expect(offline.container).toBeEmptyDOMElement();
-    expect(screen.queryByText("No open reports")).not.toBeInTheDocument();
+    render(<ChatReportsCard />);
+    expect(screen.getByText("Reports unavailable offline")).toBeInTheDocument();
+    expect(screen.queryByText("No open reports.")).not.toBeInTheDocument();
   });
 });
 

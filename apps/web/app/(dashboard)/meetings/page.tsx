@@ -3,7 +3,7 @@ import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import {
   NEW_INTENT_PARAM,
   newIntentHref,
-} from "@/components/layout/new-intent";
+} from "@/components/layout/new-intent-href";
 
 // The Meetings list folded into Documents (#5949, Paul 2026-11-24: "File
 // minutes as documents"): posted minutes are filed there, under the Minutes

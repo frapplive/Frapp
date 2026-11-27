@@ -597,7 +597,7 @@ describe("ThreadPanel (#3785)", () => {
     const { onClose } = renderPanel({ onClosePanel });
     const close = screen.getByRole("button", { name: "Close chat" });
     // 16px from the panel's edge against the thread header's 8px gutter.
-    expect(close).toHaveClass("h-9", "w-9", "mr-2");
+    expect(close).toHaveClass("h-control-small", "w-control-small", "mr-2");
     await userEvent.setup().click(close);
     expect(onClosePanel).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();

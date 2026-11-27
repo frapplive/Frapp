@@ -3,6 +3,7 @@
 import { NowCard } from "@/components/events/now-card";
 import {
   Fragment,
+  useCallback,
   Suspense,
   useEffect,
   useMemo,
@@ -11,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,7 +32,10 @@ import {
   useSubscriptionGate,
   type SubscriptionGate,
 } from "@/components/shared/subscription-gate";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { ViewLabels } from "@/components/shared/view-labels";
+import { TasksBoard } from "@/components/tasks/tasks-board";
+import { useEveryoneOffered } from "@/components/tasks/everyones-tasks";
 import { SectionLabel } from "@/components/shared/section-label";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { Badge } from "@/components/ui/badge";
@@ -40,9 +44,25 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { chatDeepLink } from "@/lib/chat/chat-links";
-import { tasksGroupLink, tasksTaskLink } from "@/lib/tasks/task-links";
+import {
+  ACTIVITY_VIEW_PARAM,
+  EVERYONES_VIEW,
+  TASKS_GROUP_PARAM,
+  TASKS_TASK_PARAM,
+  tasksGroupLink,
+  tasksTaskLink,
+} from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
-import { can, type ActivityCardKey } from "@repo/validation";
+import {
+  can,
+  type ActivityCardKey,
+  WEB_ADDRESS_PARAMS,
+} from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { replaceAddress } from "@/lib/address/address";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { ActivityPanel } from "./activity-panel";
 import {
@@ -90,6 +110,7 @@ import {
   activityReviewQueue,
   activitySnoozedRows,
   activityWeekSummary,
+  findActivityExtensionRow,
   findActivityTaskRow,
   activityRowAction,
   activityArchiveKeys,
@@ -381,11 +402,12 @@ function CardRow({
 type RowMenuEntries = Parameters<typeof RowMenu>[0]["entries"];
 
 /**
- * A task for everyone the member assigned, as one row (#5538): it goes to the
- * Tasks board with the group open in its task panel (`tasksGroupLink`), the
- * one place on web that shows a group, rather than to Activity's panel,
- * which draws one task as chat's card and would show one member's copy as
- * if it were the group. What the member made has no dot and no menu.
+ * A task for everyone the member assigned, as one row (#5538): it opens the
+ * group in the task panel (`tasksGroupLink`, `?group=`, which the board's
+ * Mine part reads), the one panel on web that shows a group, rather than
+ * Activity's panel, which draws one task as chat's card and would show one
+ * member's copy as if it were the group. What the member made has no dot and
+ * no menu.
  */
 function TaskGroupRow({
   row,
@@ -936,21 +958,22 @@ function SnoozedSection({ rows, kit }: { rows: ActivityRow[]; kit: RowKit }) {
 }
 
 /**
- * Tasks you assigned as one row per task for everyone (#5538), as on the
- * phone: the row opens the group on the Tasks board (`TaskGroupRow`).
- */
-
-/**
  * Reads `?review=<taskId>` (a "submitted a task" notification, `deepLinkFor`
- * in the bell) and hands it to the page once per link, then drops it from the
- * address so a refresh doesn't reopen the panel. Clicking the same link again
- * later opens it again. Its own component because `useSearchParams` needs a
- * Suspense boundary of its own (as in `chat-page.tsx`), and the page around
- * it must not wait on one.
+ * in the bell) and hands it to the page once per link; the page then puts
+ * the row's `item=` in its place (§ Addresses, #6044), so a refresh reopens
+ * the row, not the review link. Clicking the same link again later opens it
+ * again.
  */
-function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
+function ReviewParam({
+  open,
+}: {
+  open: (taskId: string, view: "review" | "extension") => Promise<void>;
+}) {
   const searchParams = useSearchParams();
-  const taskId = searchParams.get("review");
+  // `?extension=<taskId>`: "asks for more time" (#6096), read the same way.
+  const extensionId = searchParams.get("extension");
+  const view = extensionId ? "extension" : "review";
+  const taskId = extensionId ?? searchParams.get("review");
   const handled = useRef<string | null>(null);
   // The page hands a new `open` each render; the link is acted on once.
   const latestOpen = useRef(open);
@@ -962,12 +985,51 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
       handled.current = null;
       return;
     }
-    if (handled.current === taskId) return;
-    handled.current = taskId;
-    void latestOpen.current(taskId);
-  }, [taskId]);
+    if (handled.current === `${view}:${taskId}`) return;
+    handled.current = `${view}:${taskId}`;
+    void latestOpen.current(taskId, view);
+  }, [taskId, view]);
   return null;
 }
+
+/**
+ * Hears `?view=everyone` (`everyonesTasksLink`: the Tasks page's old links
+ * and its redirect, #5948) and a task link arriving, so the page can leave
+ * the editor or the Archive for them. The view itself is the address
+ * (`ActivityPage`, #6044).
+ */
+function ViewParam({
+  onEveryone,
+  onTaskLink,
+}: {
+  onEveryone: () => void;
+  /** A `?task=` or `?group=` link arrived: its panel is opened on the page. */
+  onTaskLink: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const asked = searchParams.get(ACTIVITY_VIEW_PARAM) === EVERYONES_VIEW;
+  const taskLink =
+    searchParams.get(TASKS_TASK_PARAM) ?? searchParams.get(TASKS_GROUP_PARAM);
+  const latest = useRef({ onEveryone, onTaskLink });
+  useEffect(() => {
+    latest.current = { onEveryone, onTaskLink };
+  });
+  useEffect(() => {
+    if (taskLink) latest.current.onTaskLink();
+  }, [taskLink]);
+  useEffect(() => {
+    if (asked) latest.current.onEveryone();
+  }, [asked]);
+  return null;
+}
+
+/** Activity's two views (#5948): the member's own, and the chapter's tasks. */
+type ActivityView = "mine" | "everyone";
+
+const ACTIVITY_VIEWS = [
+  { value: "mine", label: "Mine" },
+  { value: "everyone", label: "Everyone's" },
+] as const satisfies readonly { value: ActivityView; label: string }[];
 
 /**
  * `/activity`: the member's week, what they still have to do, and what waits
@@ -999,6 +1061,17 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  * tiles, the filter chips (and the chip remembered per browser) and the Now
  * and Later split are gone.
  *
+ * Mine and Everyone's (#5948, step 4 of #5943; Paul's pick of 2026-11-24,
+ * "two homes": Activity is yours, the Calendar is the chapter's). The Tasks
+ * page folded in here: `/tasks` redirects to this page. Mine is the page
+ * above, plus New task, its add line and Up for grabs (`TasksBoard`'s `mine`
+ * part, which also opens the task panel for `?task=` and `?group=` links).
+ * Everyone's is the chapter's task board (`TasksBoard`'s `everyone` part):
+ * by status or by person, a list or a grid, its filters in the one Filter
+ * button, and the suggestions from minutes. It is offered beside the title as
+ * plain words (`ViewLabels`, #5947) to a `tasks:manage` holder and to a
+ * member who follows tasks (`everyoneOffered`); anyone else sees no labels.
+ *
  * A row opens the record in a panel drawn with chat's own card, where the
  * member acts on it; a sign-up or form opens its message in chat. When the read refreshes after
  * an action, the panel shows the fresh row; a row that has left the list (a
@@ -1007,7 +1080,32 @@ function ReviewParam({ open }: { open: (taskId: string) => Promise<void> }) {
  * under them.
  */
 export function ActivityPage() {
+  // The view and the open row are read from the address, and
+  // `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedActivityPage />
+    </Suspense>
+  );
+}
+
+const A = WEB_ADDRESS_PARAMS.activity;
+// The task panel's own parameters are listed so a view switch can close it.
+const ACTIVITY_ADDRESS = [A.view, A.item, A.task, A.group, A.posting] as const;
+/** `view=archive`: the Archive in place of the page (#5127). */
+const ARCHIVE_VIEW = "archive";
+
+function AddressedActivityPage() {
   const activity = useActivity();
+  /*
+    The view (Mine, `view=everyone`, `view=archive`) and the open row
+    (`item=<row key>`) are the address (#6044, spec § Addresses): each pushes,
+    so Back returns to the view and the row before, and the panel's close and
+    the Archive's back arrow close by the address's rule. Mine is the bare
+    address.
+  */
+  const address = useAddressParams(ACTIVITY_ADDRESS);
+  const { open: openActivityAddress, close: closeActivityAddress } = address;
   // The shared 30s clock the poll cards read: a poll whose time runs out
   // leaves the list within a tick, without a re-read (#4258), and the days
   // and Next stay current while the page is open.
@@ -1017,6 +1115,25 @@ export function ActivityPage() {
   const chapterId = useActiveChapterId();
   const queryClient = useQueryClient();
   const isModuleEnabled = useChapterModuleGate();
+  const tasksOn = isModuleEnabled?.("tasks") ?? true;
+  // Mine or Everyone's, from the address; the bare address is the member's
+  // own (#5578, as the Tasks page did).
+  const viewPick: ActivityView =
+    address.values[A.view] === EVERYONES_VIEW ? "everyone" : "mine";
+  const setViewPick = useCallback(
+    (next: ActivityView) =>
+      openActivityAddress({
+        [A.view]: next === "everyone" ? EVERYONES_VIEW : null,
+        [A.item]: null,
+        // The task panel belongs to the view it was opened in.
+        [A.task]: null,
+        [A.group]: null,
+        [A.posting]: null,
+      }),
+    [openActivityAddress],
+  );
+  const everyoneOffered = useEveryoneOffered(tasksOn);
+  const view: ActivityView = everyoneOffered ? viewPick : "mine";
   const summary = useMemo(
     () => (activity.data ? activityWeekSummary(activity.data, now) : null),
     [activity.data, now],
@@ -1064,16 +1181,43 @@ export function ActivityPage() {
   const snoozeActions = useActivitySnoozeActions();
   // A read when the soonest snooze ends, for its dot and the badge.
   useActivitySnoozeWake(activity.data);
+  // The row last opened here, kept so a row that has left the lists (a vote
+  // cast, an archived item) stays open as it was. What is open is the
+  // address's `item=`.
   const [opened, setOpened] = useState<ActivityRow | null>(null);
-  // The Archive (#5127) in place of the page, for this visit; never stored.
-  const [showArchive, setShowArchive] = useState(false);
+  const itemParam = address.values[A.item];
+  // The Archive (#5127) in place of the page.
+  const showArchive = address.values[A.view] === ARCHIVE_VIEW;
+  const setShowArchive = useCallback(
+    (show: boolean) =>
+      show
+        ? openActivityAddress({
+            [A.view]: ARCHIVE_VIEW,
+            [A.item]: null,
+            [A.task]: null,
+            [A.group]: null,
+            [A.posting]: null,
+          })
+        : closeActivityAddress([A.view]),
+    [openActivityAddress, closeActivityAddress],
+  );
+  const showRow = (row: ActivityRow, options?: { replace?: boolean }) => {
+    // Opening a row from here is what reads it (#4405). A reminder row has no
+    // read to record (`readRef` is null) and is never unread.
+    if (row.unread && row.readRef) markRead([row.readRef]);
+    setOpened(row);
+    openActivityAddress({ [A.item]: row.key }, options);
+  };
+  // The address's `item=` now, for a late answer from an action started on
+  // another row: its close must not close the row open since.
+  const itemNow = useRef(itemParam);
+  useEffect(() => {
+    itemNow.current = itemParam;
+  });
   // Dots (#4405): opening a row from here is what reads it; scrolling past
   // doesn't, and neither does acting on the item elsewhere in Frapp.
   const { markRead } = useActivityUnread(activity.data);
   const openFromList = (row: ActivityRow) => {
-    // A reminder row has no read to record (`readRef` is null) and is never
-    // unread.
-    if (row.unread && row.readRef) markRead([row.readRef]);
     // A link opens in a new tab, a sign-up, form or reminder in chat, a
     // task for everyone on the Tasks board, and minutes on their own page
     // (#5949): no panel.
@@ -1086,7 +1230,8 @@ export function ActivityPage() {
       row.kind !== "minutes-draft" &&
       row.kind !== "minutes-notes"
     )
-      setOpened(row);
+      showRow(row);
+    else if (row.unread && row.readRef) markRead([row.readRef]);
   };
   // `/activity?review=<taskId>`: a "submitted a task" notification
   // (`deepLinkFor` in the bell). Opens that task's panel once the read has
@@ -1098,17 +1243,26 @@ export function ActivityPage() {
   // on the board, which opens it, or its group, in the task panel (#5538).
   // The copy a task for everyone's row names opens the group, as the row does.
   const router = useRouter();
-  const pathname = usePathname();
-  const openReview = async (taskId: string) => {
+  const openReview = async (
+    taskId: string,
+    view: "review" | "extension" = "review",
+  ) => {
     const result = await activity.refetch();
-    const row = result.data
-      ? findActivityTaskRow(result.data, taskId, new Date())
-      : null;
+    // A request for more time opens its decision; one already answered opens
+    // the task, which says how it was answered (#6096).
+    const find =
+      view === "extension" ? findActivityExtensionRow : findActivityTaskRow;
+    const row = result.data ? find(result.data, taskId, new Date()) : null;
     if (row?.kind === "task-group") {
       router.replace(tasksGroupLink(row.group.id));
     } else if (row) {
-      openFromList(row);
-      router.replace(pathname, { scroll: false });
+      // The notification's mark becomes the row's address, in place, so the
+      // panel closes like any row a link opened (§ Addresses).
+      showRow(row, { replace: true });
+      replaceAddress({
+        [A.review]: null,
+        [A.extension]: null,
+      });
     } else {
       router.replace(tasksTaskLink(taskId));
     }
@@ -1194,26 +1348,133 @@ export function ActivityPage() {
     () => (visible ? activityReviewQueue(visible, now) : []),
     [visible, now],
   );
-  const openRow = useMemo(
-    () =>
-      opened === null
-        ? null
-        : ([
-            ...(agenda?.rows ?? []),
-            ...(review?.rows ?? []),
-            ...groups.flatMap((group) => group.rows),
-            ...snoozedRows,
-          ].find((row) => row.key === opened.key) ?? opened),
-    [agenda, review, groups, snoozedRows, opened],
+  /*
+    The row `item=` names, wherever it is: the lists as shown first (a fresh
+    row after a re-read), then the whole read unnarrowed (a row the week
+    line filters out, the event on the Now card), then the Archive's rows
+    while the Archive is open. A row the page opened itself and that has
+    since left them all stays open as it was (`opened`).
+  */
+  const archiveRead = useActivityArchive({
+    enabled: showArchive && itemParam !== null,
+  });
+  const listedRow = useMemo(() => {
+    if (itemParam === null) return undefined;
+    const match = (row: ActivityRow) => row.key === itemParam;
+    const shown = [
+      ...(agenda?.rows ?? []),
+      ...(review?.rows ?? []),
+      ...groups.flatMap((group) => group.rows),
+      ...snoozedRows,
+    ].find(match);
+    if (shown || !activity.data) return shown;
+    const whole = activityAwake(activity.data, now);
+    return (
+      activityAgenda(whole, "all", now).rows.find(match) ??
+      activityGroups(whole, now)
+        .flatMap((group) => group.rows)
+        .find(match) ??
+      (showArchive && archiveRead.data
+        ? activityArchiveGroups(archiveRead.data, userId, now)
+            .flatMap((group) => group.rows)
+            .find(match)
+        : undefined)
+    );
+  }, [
+    agenda,
+    review,
+    groups,
+    snoozedRows,
+    itemParam,
+    activity.data,
+    now,
+    showArchive,
+    archiveRead.data,
+    userId,
+  ]);
+  const openRow =
+    itemParam === null
+      ? null
+      : (listedRow ?? (opened?.key === itemParam ? opened : null));
+  // A row the address names that the read doesn't hold, and this page didn't
+  // open (a link, Back or a reload to something finished or gone): said in
+  // its place, and taken out of the address. Under the Archive it waits for
+  // the Archive's read.
+  const deadItem = useDeadAddressParam(
+    A.item,
+    itemParam,
+    activity.data !== undefined &&
+      (!showArchive || archiveRead.data !== undefined) &&
+      itemParam !== null &&
+      openRow === null,
   );
+
+  // The views beside the title, on the page itself (not over the editor or
+  // the Archive, which are Mine's).
+  const views =
+    everyoneOffered && !editing && !showArchive ? (
+      <PageViews>
+        <ViewLabels
+          label="Whose tasks"
+          options={ACTIVITY_VIEWS}
+          value={view}
+          onChange={setViewPick}
+        />
+      </PageViews>
+    ) : null;
+  // The links' readers. First in every branch below, so switching views or
+  // a read settling never remounts them and handles a link twice.
+  const params = (
+    <Suspense fallback={null}>
+      <ViewParam
+        onEveryone={() => {
+          // A link is a deliberate move: it leaves the editor.
+          setEditing(false);
+        }}
+        onTaskLink={() => {
+          if (showArchive) replaceAddress({ [A.view]: null });
+        }}
+      />
+      <ReviewParam
+        open={async (taskId, kind) => {
+          // A review opens on Mine, where its panel is.
+          if (viewPick !== "mine") replaceAddress({ [A.view]: null });
+          await openReview(taskId, kind);
+        }}
+      />
+    </Suspense>
+  );
+  // Mine's task parts (#5948), drawn while the page's own read loads or
+  // fails too, so a `?task=` link still opens its panel.
+  const mineTasks = tasksOn ? (
+    <TasksBoard
+      part="mine"
+      onShowEveryone={
+        everyoneOffered ? () => setViewPick("everyone") : undefined
+      }
+    />
+  ) : null;
+  if (view === "everyone") {
+    return (
+      <>
+        {params}
+        {views}
+        <TasksBoard part="everyone" />
+      </>
+    );
+  }
 
   if (isOffline && anyReadUncached(activity)) {
     return (
-      <OfflineState
-        title="Activity unavailable offline"
-        description="Reconnect to see your week and what's left to do."
-        onRetry={() => void activity.refetch()}
-      />
+      <>
+        {params}
+        {views}
+        <OfflineState
+          title="Activity unavailable offline"
+          description="Reconnect to see your week and what's left to do."
+          onRetry={() => void activity.refetch()}
+        />
+      </>
     );
   }
   // Held until the viewer is known (as the Events page holds its view): the
@@ -1222,10 +1483,15 @@ export function ActivityPage() {
   // page's read loads or fails.
   if (activity.isPending || (userLoading && !isOffline)) {
     return (
-      <div className="space-y-8">
-        <NowCard />
-        <ActivityPageSkeleton />
-      </div>
+      <>
+        {params}
+        <div className="space-y-8">
+          {views}
+          <NowCard />
+          {mineTasks}
+          <ActivityPageSkeleton />
+        </div>
+      </>
     );
   }
   // Only with nothing to show: a refetch that fails (this page refetches after
@@ -1233,14 +1499,19 @@ export function ActivityPage() {
   // the open panel with it, by an error page. The same guard as the task board.
   if (activity.isError && !activity.data) {
     return (
-      <div className="space-y-8">
-        <NowCard />
-        <ErrorState
-          title="Couldn't load your activity"
-          description={describeLoadFailure(activity.error)}
-          onRetry={() => void activity.refetch()}
-        />
-      </div>
+      <>
+        {params}
+        <div className="space-y-8">
+          {views}
+          <NowCard />
+          {mineTasks}
+          <ErrorState
+            title="Couldn't load your activity"
+            description={describeLoadFailure(activity.error)}
+            onRetry={() => void activity.refetch()}
+          />
+        </div>
+      </>
     );
   }
 
@@ -1315,108 +1586,119 @@ export function ActivityPage() {
   };
 
   return (
-    <ActivityFaces.Provider value={faceFor}>
-      <div className="@container">
-        {editing ? (
-          <ActivityEditor
-            initial={arrangement}
-            role={cardRole}
-            saved={layout.data?.saved ?? false}
-            onDone={finishEditing}
-            onReset={() => {
-              setEditing(false);
-              resetLayout.mutate(undefined, {
-                onError: () =>
-                  toast({
-                    variant: "destructive",
-                    title: "Couldn't reset your cards",
-                  }),
-              });
-            }}
-          />
-        ) : showArchive ? (
-          <ArchiveView
-            viewerId={userId}
-            now={now}
-            onBack={() => setShowArchive(false)}
-            onOpen={openFromList}
-          />
-        ) : (
-          <div className="space-y-8">
-            {/* The week and the page's one action, in the header beside the
+    <>
+      {params}
+      <ActivityFaces.Provider value={faceFor}>
+        <div className="@container">
+          {editing ? (
+            <ActivityEditor
+              initial={arrangement}
+              role={cardRole}
+              saved={layout.data?.saved ?? false}
+              onDone={finishEditing}
+              onReset={() => {
+                setEditing(false);
+                resetLayout.mutate(undefined, {
+                  onError: () =>
+                    toast({
+                      variant: "destructive",
+                      title: "Couldn't reset your cards",
+                    }),
+                });
+              }}
+            />
+          ) : showArchive ? (
+            <ArchiveView
+              viewerId={userId}
+              now={now}
+              onBack={() => setShowArchive(false)}
+              onOpen={openFromList}
+            />
+          ) : (
+            <div className="space-y-8">
+              {/* The week and the page's one action, in the header beside the
                 title (#5779), where a full-width Edit Activity button and the
                 week card were. */}
-            <PageActions>
-              {summary ? (
-                <WeekRing
-                  summary={summary}
-                  filter={filter}
-                  onFilter={setPicked}
-                />
+              <PageActions>
+                {summary ? (
+                  <WeekRing
+                    summary={summary}
+                    filter={filter}
+                    onFilter={setPicked}
+                  />
+                ) : null}
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setEditing(true)}
+                  >
+                    Edit Activity
+                  </Button>
+                ) : null}
+              </PageActions>
+              {views}
+              {deadItem !== null ? (
+                // A row from the address that isn't here (§ Addresses).
+                <p role="status" className="text-sm text-muted-foreground">
+                  That item isn&apos;t on your Activity any more. It may be
+                  finished or removed.
+                </p>
               ) : null}
-              {canEdit ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setEditing(true)}
-                >
-                  Edit Activity
-                </Button>
+              <NowCard />
+              {mineTasks}
+              {arrangement.shown.map((key) => (
+                <Fragment key={key}>{cards[key]}</Fragment>
+              ))}
+              {snoozedRows.length > 0 ? (
+                <SnoozedSection rows={snoozedRows} kit={kit} />
               ) : null}
-            </PageActions>
-            <NowCard />
-            {arrangement.shown.map((key) => (
-              <Fragment key={key}>{cards[key]}</Fragment>
-            ))}
-            {snoozedRows.length > 0 ? (
-              <SnoozedSection rows={snoozedRows} kit={kit} />
-            ) : null}
-            {/* What is finished left the page; it is one press away (#5127). */}
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="px-2"
-              onClick={() => setShowArchive(true)}
-            >
-              Archive
-            </Button>
-          </div>
-        )}
+              {/* What is finished left the page; it is one press away (#5127). */}
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="px-2"
+                onClick={() => setShowArchive(true)}
+              >
+                Archive
+              </Button>
+            </div>
+          )}
 
-        <Suspense fallback={null}>
-          <ReviewParam open={openReview} />
-        </Suspense>
-        <ActivityPanel
-          row={openRow}
-          viewerId={userId}
-          onClose={(key) => {
-            // A late answer from one row's action must not close another row
-            // the member has since opened.
-            setOpened((current) =>
-              key === undefined || current?.key === key ? null : current,
-            );
-            // The cards write through their own hooks (a task's status, a
-            // check-in), which this page's read does not hear about, so it is
-            // re-read when the panel closes by hand. An action's own close
-            // (`key` given) has already re-read through `onActed`.
-            if (key === undefined) refresh();
-          }}
-          onActed={refresh}
-          reviewQueue={{
-            after: (key) => {
-              const at = reviewQueue.findIndex((item) => item.key === key);
-              return at === -1
-                ? reviewQueue.filter((item) => item.key !== key)
-                : // Only those after it: one before it was confirmed or
-                  // skipped already, and the list still holds the skipped.
-                  reviewQueue.slice(at + 1);
-            },
-            open: openFromList,
-          }}
-        />
-      </div>
-    </ActivityFaces.Provider>
+          <ActivityPanel
+            row={openRow}
+            viewerId={userId}
+            onClose={(key) => {
+              // A late answer from one row's action must not close another row
+              // the member has since opened.
+              if (key === undefined || itemNow.current === key) {
+                closeActivityAddress([A.item]);
+              }
+              // The cards write through their own hooks (a task's status, a
+              // check-in), which this page's read does not hear about, so it is
+              // re-read when the panel closes by hand. An action's own close
+              // (`key` given) has already re-read through `onActed`.
+              if (key === undefined) refresh();
+            }}
+            onActed={refresh}
+            reviewQueue={{
+              after: (key) => {
+                const at = reviewQueue.findIndex((item) => item.key === key);
+                return at === -1
+                  ? reviewQueue.filter((item) => item.key !== key)
+                  : // Only those after it: one before it was confirmed or
+                    // skipped already, and the list still holds the skipped.
+                    reviewQueue.slice(at + 1);
+              },
+              // The next review replaces the one done, so Back closes the
+              // panel rather than stepping back through the queue.
+              open: (row: ActivityRow) => showRow(row, { replace: true }),
+            }}
+          />
+        </div>
+      </ActivityFaces.Provider>
+    </>
   );
 }

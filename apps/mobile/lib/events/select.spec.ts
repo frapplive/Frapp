@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   selectAllEventRows,
   selectEventDetail,
+  selectHostableEvent,
   withoutMeetingLists,
   selectMyAttendance,
   selectSeriesOccurrences,
@@ -183,5 +184,32 @@ describe("withoutMeetingLists (#4934)", () => {
     );
     expect(withoutMeetingLists(checkedOff)).toEqual(read);
     expect(withoutMeetingLists(undefined)).toBeUndefined();
+  });
+});
+
+describe("selectHostableEvent (#6144)", () => {
+  it("skips a sooner event that takes no check-in for tonight's meeting", () => {
+    const now = new Date("2026-09-01T12:00:00.000Z");
+    const rows = [
+      event({
+        id: "retreat",
+        name: "Retreat",
+        timing: "time_tbd",
+        start_date: "2026-09-01",
+        end_date: "2026-09-01",
+        start_time: "2026-09-01T04:00:00.000Z",
+        end_time: "2026-09-02T04:00:00.000Z",
+      }),
+      event({
+        id: "classes",
+        name: "First day of classes",
+        calendar_only: true,
+        start_time: "2026-09-01T13:00:00.000Z",
+        end_time: "2026-09-01T14:00:00.000Z",
+      }),
+      event({ id: "meeting" }),
+    ];
+    expect(selectHostableEvent(rows, now)?.id).toBe("meeting");
+    expect(selectHostableEvent(rows.slice(0, 2), now)).toBe(null);
   });
 });

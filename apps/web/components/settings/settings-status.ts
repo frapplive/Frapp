@@ -53,20 +53,8 @@ export function moduleTierKind(tier: ModuleTier | string): BadgeKind {
   return "outline";
 }
 
-/**
- * The tier as a person should read it.
- *
- * `writing.md` §5 fixes the vocabulary for the six states it names and none of
- * these is among them, so `invoice-status.ts`'s disposition for Stripe's
- * tokens applies: a vocabulary with no §5 row maps to plain language **once**,
- * here, rather than being re-cased at each call site. These are the two strings
- * the modules tab already shipped from its ternary; a repaint must not quietly
- * change user-visible copy.
- *
- * `paid` reads as "Chapter Pro" rather than "Paid" deliberately — `PAID` is one
- * of the six tokens §5 *does* fix, and it means a settled invoice. The same
- * word on a module would state the opposite of what it states on `/billing`.
+/*
+ * The tier as a person reads it ("Free", "Chapter Pro", never "Paid") is
+ * `moduleTierLabel` in `@repo/validation` (`module-settings-copy.ts`), shared
+ * with the phone's module screens (#6030).
  */
-export function moduleTierLabel(tier: ModuleTier | string): string {
-  return tier === "paid" ? "Chapter Pro" : "Free";
-}

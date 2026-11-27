@@ -252,7 +252,7 @@ export function ReportAiDialog({
                 <label
                   key={option}
                   className={cn(
-                    "flex min-h-9 cursor-pointer items-center gap-3 rounded-md px-2 text-sm",
+                    "flex min-h-control-list-row cursor-pointer items-center gap-3 rounded-md px-2 text-sm",
                     "hover:bg-card-hover pointer-coarse:min-h-11",
                   )}
                 >

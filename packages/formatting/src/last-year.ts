@@ -1,4 +1,6 @@
+import { addEventDays, eventDayNumber } from "@repo/validation";
 import { parseBareDateLocalNoon } from "./bare-date";
+import { localIsoDate } from "./local-date";
 import { parseInstant } from "./instant";
 
 /** 52 weeks: last year's Saturday lands on a Saturday (#3930). */
@@ -47,6 +49,36 @@ export function sameWeekdayThisYear(
     moved.setDate(moved.getDate() + 7);
   }
   return moved;
+}
+
+/**
+ * An all-day or time-TBD event's days this year (#6144), the dated twin of
+ * {@link sameWeekdayThisYear}: its first day 52 weeks on, then a week at a
+ * time until it isn't before the reader's today, and its last day moved with
+ * it. Read from the event's zone-free days, never its stored midnights
+ * (`spec/behavior/events.md` § Dates, tentative and on the calendar only),
+ * and today counts as ahead, since an all-day event today hasn't passed.
+ * Null when the first day doesn't read.
+ */
+export function datedDaysThisYear(
+  startDate: string | null | undefined,
+  lastDay: string | null | undefined,
+  now: Date = new Date(),
+): { startDate: string; lastDay: string | null } | null {
+  const first = eventDayNumber(startDate);
+  if (first === null || !startDate) return null;
+  const today = eventDayNumber(localIsoDate(now))!;
+  let moved = first + SHIFT_DAYS;
+  while (moved < today) moved += 7;
+  const offset = moved - first;
+  const last = eventDayNumber(lastDay);
+  return {
+    startDate: addEventDays(startDate, offset)!,
+    lastDay:
+      lastDay && last !== null && last > first
+        ? addEventDays(lastDay, offset)
+        : null,
+  };
 }
 
 /**

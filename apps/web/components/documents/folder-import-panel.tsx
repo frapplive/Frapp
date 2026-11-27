@@ -463,7 +463,7 @@ function ImportReview({
                 }
               >
                 <SelectTrigger
-                  className="h-8 w-auto min-w-36 text-sm"
+                  className="h-control-row w-auto min-w-36 text-sm"
                   aria-label={`Move ${folder || "unfiled files"} to`}
                 >
                   <SelectValue />
@@ -557,7 +557,7 @@ const FileRow = React.memo(function FileRow({
         <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
           <Input
             aria-label={`Title for ${row.path}`}
-            className="h-8 text-sm"
+            className="h-control-row text-sm"
             value={row.title}
             maxLength={255}
             onChange={(event) =>
@@ -571,7 +571,7 @@ const FileRow = React.memo(function FileRow({
             }
           >
             <SelectTrigger
-              className="h-8 text-sm"
+              className="h-control-row text-sm"
               aria-label={`Type for ${row.path}`}
             >
               <SelectValue />

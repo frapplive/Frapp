@@ -171,14 +171,18 @@ vi.mock("@/components/events/my-check-in", async (importOriginal) => ({
     zone,
     eventUnavailable,
     eventPending,
+    shape,
   }: {
     zone: string;
     eventUnavailable?: boolean;
     eventPending?: boolean;
+    shape?: { timing?: string | null; start_date?: string | null };
   }) => (
     <div
       data-testid="my-check-in"
       data-zone={zone}
+      data-timing={shape?.timing ?? ""}
+      data-start-date={shape?.start_date ?? ""}
       data-unavailable={String(Boolean(eventUnavailable))}
       data-pending={String(Boolean(eventPending))}
     />
@@ -992,7 +996,7 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     expect(
       Boolean(
         checkIn.compareDocumentPosition(when) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
   });
@@ -1012,7 +1016,7 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     expect(
       Boolean(
         when.compareDocumentPosition(checkIn) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
   });
@@ -1273,6 +1277,84 @@ describe("EventDetailSheet Now pill (#5777)", () => {
         onEventDeleted={() => {}}
       />,
     );
+    expect(screen.queryByTestId("event-now-pill")).toBeNull();
+  });
+});
+
+describe("EventDetailSheet event shapes (#6098)", () => {
+  function renderShaped(event: Record<string, unknown>) {
+    return render(
+      <EventDetailSheet
+        open
+        onOpenChange={() => {}}
+        usingPreviewData={false}
+        event={event}
+        onRequestEdit={() => {}}
+        onEventDeleted={() => {}}
+      />,
+    );
+  }
+
+  // Today, as the viewer's own day, so the event is on "now".
+  const today = (() => {
+    const at = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  })();
+  const midnight = new Date(`${today}T00:00`);
+  const allDayToday = {
+    id: "d1",
+    name: "Service drive",
+    timing: "all_day",
+    start_date: today,
+    end_date: null,
+    start_time: midnight.toISOString(),
+    end_time: new Date(midnight.getTime() + 86_400_000).toISOString(),
+    point_value: 5,
+  };
+
+  it("reads an all-day event by its day, never its midnights, and is never on now", () => {
+    renderShaped(allDayToday);
+    expect(screen.getByText(/· All day$/)).toBeInTheDocument();
+    expect(screen.queryByText(/12:00/)).toBeNull();
+    expect(screen.queryByTestId("event-now-pill")).toBeNull();
+    // It still takes attendance: check-in and points stay, and the check-in
+    // row is handed the event's shape so it says its day (#6144).
+    expect(screen.getByTestId("my-check-in")).toHaveAttribute(
+      "data-timing",
+      "all_day",
+    );
+    expect(screen.getByTestId("my-check-in")).toHaveAttribute(
+      "data-start-date",
+      today,
+    );
+    expect(screen.getByText("Points")).toBeInTheDocument();
+  });
+
+  it("badges a tentative event beside its name", () => {
+    renderShaped({ ...baseEvent, is_tentative: true });
+    expect(screen.getByText("Tentative")).toBeInTheDocument();
+  });
+
+  it("offers no check-in, points or excuses on a time-TBD event", () => {
+    excuseState.required = true;
+    renderShaped({ ...allDayToday, timing: "time_tbd" });
+    expect(screen.getByText(/· Time TBD$/)).toBeInTheDocument();
+    expect(screen.queryByTestId("my-check-in")).toBeNull();
+    expect(screen.queryByText("Points")).toBeNull();
+    expect(screen.queryByTestId("my-excuse")).toBeNull();
+  });
+
+  it("says a calendar-only event is on the calendar only, with no people or check-in", () => {
+    permissionsState.value = ["events:update"];
+    renderShaped({ ...liveEvent, calendar_only: true, point_value: 0 });
+    expect(
+      screen.getByText("On the calendar only for everyone"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("my-check-in")).toBeNull();
+    expect(screen.queryByTestId("attendance-roster")).toBeNull();
+    expect(screen.queryByTestId("excuse-review")).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "People" })).toBeNull();
     expect(screen.queryByTestId("event-now-pill")).toBeNull();
   });
 });

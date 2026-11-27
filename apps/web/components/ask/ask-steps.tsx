@@ -198,7 +198,7 @@ export function AskSteps({
         aria-label={`${askStepsSummary(steps)}. ${open ? ASK_COPY.steps_hide : ASK_COPY.steps_show}`}
         onClick={() => setOpen((was) => !was)}
         className={cn(
-          "inline-flex h-9 max-w-full items-center gap-2.5 self-start rounded-[12px] border border-border pl-1.5 pr-3 text-caption font-semibold text-muted-foreground hover:bg-surface-1 pointer-coarse:h-11",
+          "inline-flex h-control-small max-w-full items-center gap-2.5 self-start rounded-[12px] border border-border pl-1.5 pr-3 text-caption font-semibold text-muted-foreground hover:bg-surface-1 pointer-coarse:h-11",
           FOCUS_RING,
         )}
       >

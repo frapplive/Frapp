@@ -3,26 +3,40 @@ import type { NavGlyphName } from "@repo/theme/nav-glyphs";
 import {
   MEETING_LIST_COPY,
   MEETING_NOTE_TAKERS_COPY,
+  EVENT_TENTATIVE_LABEL,
+  eventDatedPhase,
+  eventIsDated,
   eventOnAt,
+  eventTimingFieldsOf,
   minutesDraftState,
   minutesDraftStateLabel,
   signUpLinkKind,
+  TASK_EXTENSION_COPY,
+  TASK_EXTENSION_NEEDS_OFFICER_LABELS,
   taskGroupLabel,
 } from "@repo/validation";
 import { isSentBack, localTaskStatus, taskStatusLabel } from "./task-card";
 import {
   closesAtHasPassed,
+  formatClockShort,
   formatDayHeading,
+  formatDayWords,
   formatDueLabel,
+  formatEventRelativeWhen,
+  formatEventRowTime,
   formatMinutesRounded,
   formatRelativeDayTime,
   formatTimeOfDay,
+  parseBareDateLocalMidnight,
   parseInstant,
   parseInstantOrBareLocalNoon,
 } from "@repo/formatting";
 
 export type Activity = components["schemas"]["ActivityDto"];
 export type ActivityTask = components["schemas"]["ActivityTaskDto"];
+/** A request for more time the member can decide (#6096). */
+export type ActivityTaskExtension =
+  components["schemas"]["ActivityTaskExtensionDto"];
 /**
  * A task for everyone the member assigned, as one row of `task_items`
  * (#5492): the group's progress and what its copies share.
@@ -269,6 +283,11 @@ export type ActivityRow = RowBase &
     | { kind: "poll"; poll: ActivityPoll }
     | { kind: "event"; event: ActivityEvent }
     | { kind: "hours"; entry: ActivityHours }
+    /**
+     * A member's request for more time an officer decides (#6096): opens to
+     * the reason, the due asked for, and Approve and Decline.
+     */
+    | { kind: "extension"; extension: ActivityTaskExtension }
     | { kind: "link"; link: ActivityLink }
     | { kind: "card"; card: ActivityCard }
     | { kind: "reminder"; reminder: ActivityReminder }
@@ -643,8 +662,76 @@ function hoursRow(entry: ActivityHours): ActivityRow {
   };
 }
 
-function dateBlock(event: ActivityEvent): ActivityDateBlock | null {
-  const at = parseInstant(event.start_time);
+/**
+ * When an Activity event row sits in time (#6098): a timed event at its
+ * start; a dated one at the viewer's own midnight of its first day, or of
+ * today while a span is under way, so it leads its day as an all-day event
+ * leads Google Calendar's. Its stored start is the saver's midnight, never
+ * read here.
+ */
+function eventAt(event: ActivityEvent, now: Date): Date | null {
+  const shape = eventTimingFieldsOf(event as unknown as Record<string, unknown>);
+  if (!eventIsDated(shape)) return parseInstant(event.start_time);
+  const first = shape.start_date
+    ? parseBareDateLocalMidnight(shape.start_date)
+    : null;
+  if (!first) return null;
+  if (eventDatedPhase(shape, now) !== "during") return first;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+/**
+ * The due a request asks for, in a row's words: "Saturday", "tomorrow at
+ * 5 PM" (#6096).
+ */
+export function extensionDueWords(
+  extension: Pick<ActivityTaskExtension, "to_due_date" | "to_due_at">,
+  now: Date = new Date(),
+): string {
+  if (extension.to_due_at) {
+    const at = parseInstant(extension.to_due_at);
+    if (at) return `${formatDayWords(at, now)} at ${formatClockShort(at)}`;
+  }
+  return formatDayWords(
+    parseInstantOrBareLocalNoon(extension.to_due_date) ?? extension.to_due_date,
+    now,
+  );
+}
+
+function extensionRow(
+  extension: ActivityTaskExtension,
+  now: Date,
+): ActivityRow {
+  const why = extension.needs_officer
+    ? TASK_EXTENSION_NEEDS_OFFICER_LABELS[extension.needs_officer]
+    : null;
+  return {
+    kind: "extension",
+    key: `needs:extension:${extension.id}`,
+    extension,
+    title: TASK_EXTENSION_COPY.asks(extension.requester_name || "A member"),
+    detail: [
+      extension.task.title,
+      `to ${extensionDueWords(extension, now)}`,
+      why,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: extension.task.assignee_id,
+    // An ask that opens: the officer reads the reason before deciding.
+    badge: { label: "Decide", variant: "warning" },
+    glyph: "task",
+    dateBlock: null,
+    // New until someone answers it; there is no dot to clear.
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+function dateBlock(event: ActivityEvent, now: Date): ActivityDateBlock | null {
+  const at = eventAt(event, now);
   if (!at) return null;
   return {
     month: at.toLocaleDateString(undefined, { month: "short" }).toUpperCase(),
@@ -659,16 +746,32 @@ function eventRow(
   when: RowWhen = "dated",
 ): ActivityRow {
   const needsCheckIn = activityEventNeedsCheckIn(event);
+  const shape = eventTimingFieldsOf(event as unknown as Record<string, unknown>);
+  const dated = eventIsDated(shape);
   return {
     kind: "event",
     key: `${group}:event:${event.id}`,
     event,
     title: event.name,
     detail: [
+      // A dated event says "All day" or "Time TBD" where a time would go,
+      // never its stored midnight (#6098).
       when === "timed"
-        ? formatTimeOfDay(event.start_time)
-        : formatRelativeDayTime(event.start_time, now),
+        ? dated
+          ? formatEventRowTime(shape, now)
+          : formatTimeOfDay(event.start_time)
+        : dated
+          ? formatEventRelativeWhen(shape, now)
+          : formatRelativeDayTime(event.start_time, now),
       event.location,
+      // Said in the line when the one badge is taken by something else, so
+      // a required meeting that might not happen still says so (#6098).
+      shape.is_tentative &&
+      (needsCheckIn ||
+        event.checked_in ||
+        (event.attendance === "required" && !shape.calendar_only))
+        ? EVENT_TENTATIVE_LABEL
+        : null,
     ]
       .filter(Boolean)
       .join(" · "),
@@ -678,13 +781,15 @@ function eventRow(
       ? { label: "Check in", variant: "warning" }
       : event.checked_in
         ? { label: "Checked in", variant: "success" }
-        : event.attendance === "required"
+        : event.attendance === "required" && !shape.calendar_only
           ? { label: "Required", variant: "outline" }
-          : null,
+          : shape.is_tentative
+            ? { label: EVENT_TENTATIVE_LABEL, variant: "outline" }
+            : null,
     glyph: "event",
     // Under a day's heading the date is already said: the row leads with
     // the events glyph instead.
-    dateBlock: when === "timed" ? null : dateBlock(event),
+    dateBlock: when === "timed" ? null : dateBlock(event, now),
     unread: group !== "made" && event.unread,
     readRef: { kind: "event", item_id: event.id },
     progress:
@@ -1094,7 +1199,7 @@ export function activityToDos(
         return both(
           (when) =>
             eventRow(event, needsCheckIn ? "needs" : "coming", now, when),
-          parseInstant(event.start_time),
+          eventAt(event, now),
           // Happening now only until its end, as the Now card and the
           // event's pill say (#5777); check-in's grace after it still
           // offers Check in under its day.
@@ -1106,6 +1211,7 @@ export function activityToDos(
                 event.end_time,
                 event.check_in_opens_minutes,
                 now.getTime(),
+                eventTimingFieldsOf(event as Record<string, unknown>),
               ),
           },
         );
@@ -1210,6 +1316,10 @@ export function activityReviewRows(
     ...activity.needs_you.task_confirmations.map((task) =>
       taskRow(task, "needs-confirm", "confirm", now),
     ),
+    // An API read from before #6096 has none.
+    ...(activity.needs_you.task_extensions ?? []).map((extension) =>
+      extensionRow(extension, now),
+    ),
     ...activity.needs_you.hours_approvals.map(hoursRow),
   ];
 }
@@ -1245,7 +1355,41 @@ export function findActivityTaskRow(
 export function activityRowTaskId(row: ActivityRow): string | null {
   if (row.kind === "task") return row.task.id;
   if (row.kind === "task-group") return row.group.task_id;
+  if (row.kind === "extension") return row.extension.task.id;
   return null;
+}
+
+/**
+ * Whether an Activity row is the member's own open To do task with a fixed
+ * deadline (#6096), whose second line both apps draw in the danger red. The
+ * To do list's rows are the member's own (`needs:`); a task they assigned,
+ * or one waiting on their sign-off, isn't theirs to finish by it.
+ */
+export function activityRowFixedDeadline(row: ActivityRow): boolean {
+  return (
+    row.kind === "task" &&
+    row.glyph === "task" &&
+    row.key.startsWith("needs:") &&
+    row.task.fixed_deadline === true &&
+    row.task.stored_status !== "COMPLETED"
+  );
+}
+
+/**
+ * The row an "asks for more time" push opens (`target.view ===
+ * "extension"`, #6096): the waiting request on that task, or null once
+ * someone answered it.
+ */
+export function findActivityExtensionRow(
+  activity: Activity,
+  taskId: string,
+  now: Date = new Date(),
+): ActivityRow | null {
+  return (
+    activityReviewRows(activity, now).find(
+      (row) => row.kind === "extension" && row.extension.task.id === taskId,
+    ) ?? null
+  );
 }
 
 /**

@@ -335,7 +335,7 @@ describe('SupabaseSearchRepository — query shape', () => {
 
     // one query, with the join and the match both pushed into SQL
     expect(chains.members.select).toHaveBeenCalledWith(
-      'id, user_id, chapter_id, users!inner(id, display_name, email)',
+      'id, user_id, chapter_id, users!members_user_id_fkey!inner(id, display_name, email)',
     );
     expect(chains.members.eq).toHaveBeenCalledWith('chapter_id', 'ch-1');
     expect(chains.members.limit).toHaveBeenCalledWith(10);

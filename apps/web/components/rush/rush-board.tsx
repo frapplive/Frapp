@@ -1,6 +1,13 @@
 "use client";
 
-import { useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import {
   rushBoardColumns,
   rushCandidatesByColumn,
@@ -19,7 +26,11 @@ import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { SectionLabel } from "@/components/shared/section-label";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
-import { RUSH_BOARD_CLASS, RUSH_COLUMN_CLASS } from "./rush-board-layout";
+import {
+  RUSH_BOARD_CLASS,
+  RUSH_COLUMN_CLASS,
+  RUSH_EMPTY_COLUMN_CLASS,
+} from "./rush-board-layout";
 import { RushBidBadge, RushFollowUpFact, RushTagChips } from "./rush-facts";
 
 export interface RushBoardProps {
@@ -88,6 +99,8 @@ export function RushBoard({
       (stage) => !stage.hidden,
     );
 
+  const [edges, boardRef] = useScrollEdges();
+
   function endDrag() {
     held.current = null;
     setHeldId(null);
@@ -95,7 +108,17 @@ export function RushBoard({
   }
 
   return (
-    <div className={RUSH_BOARD_CLASS}>
+    <div
+      ref={boardRef}
+      className={cn(
+        RUSH_BOARD_CLASS,
+        // A column cut by the pane's edge fades out rather than stops dead,
+        // so it reads as more board to scroll to, not a broken card.
+        edges.start && edges.end && RUSH_FADE_BOTH,
+        edges.start && !edges.end && RUSH_FADE_START,
+        !edges.start && edges.end && RUSH_FADE_END,
+      )}
+    >
       {columns.map((column) => {
         const inColumn = byColumn.get(column.id) ?? [];
         // Closed folds in the accepted prospects (#5973), listed first under
@@ -130,7 +153,9 @@ export function RushBoard({
             aria-labelledby={labelId}
             data-rush-column={column.id}
             className={cn(
-              RUSH_COLUMN_CLASS,
+              // An empty stage folds to its label, so the stages holding
+              // prospects get the width (`rush-board-layout.ts`).
+              cards.length > 0 ? RUSH_COLUMN_CLASS : RUSH_EMPTY_COLUMN_CLASS,
               "transition-colors",
               // Where the held card would land.
               overColumn === column.id && "border-input bg-card",
@@ -200,6 +225,54 @@ export function RushBoard({
       })}
     </div>
   );
+}
+
+const RUSH_FADE_END =
+  "[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]";
+const RUSH_FADE_START =
+  "[mask-image:linear-gradient(to_right,transparent,black_2rem)]";
+const RUSH_FADE_BOTH =
+  "[mask-image:linear-gradient(to_right,transparent,black_2rem,black_calc(100%-2rem),transparent)]";
+
+/**
+ * Whether a sideways scroller has more to show before its start and past its
+ * end, kept live on scroll and resize. Both false until measured, and in
+ * jsdom, whose boxes measure 0.
+ */
+function useScrollEdges(): [
+  { start: boolean; end: boolean },
+  (node: HTMLDivElement | null) => (() => void) | undefined,
+] {
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const measure = useRef<() => void>(() => {});
+  // Cards moving between columns change the row's width without resizing
+  // the scroller, so every render measures again too.
+  useEffect(() => measure.current());
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return undefined;
+    const update = () => {
+      const max = node.scrollWidth - node.clientWidth;
+      const start = node.scrollLeft > 1;
+      const end = max - node.scrollLeft > 1;
+      setEdges((current) =>
+        current.start === start && current.end === end
+          ? current
+          : { start, end },
+      );
+    };
+    measure.current = update;
+    update();
+    node.addEventListener("scroll", update, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(node);
+    return () => {
+      measure.current = () => {};
+      node.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, []);
+  return [edges, ref];
 }
 
 /** A card, after its group's label when it starts one (Accepted, Closed). */

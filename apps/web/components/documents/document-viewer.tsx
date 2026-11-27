@@ -521,7 +521,7 @@ function Notice({
 function NoticeButton({ action, primary = false }: { action: NoticeAction; primary?: boolean }) {
   const className = cn(
     VIEWER_CONTROL,
-    "h-9 gap-2 px-3.5 text-sm font-semibold pointer-coarse:h-11",
+    "h-control-small gap-2 px-3.5 text-sm font-semibold pointer-coarse:h-11",
     primary ? "border-white/25 text-white" : "text-white/70",
   );
   if (action.href !== undefined) {

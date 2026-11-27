@@ -1,4 +1,9 @@
-import type { LiveTaskPhoto, TaskStatus, TaskSubtask } from "@repo/hooks";
+import type {
+  LiveTaskPhoto,
+  TaskExtensionSummary,
+  TaskStatus,
+  TaskSubtask,
+} from "@repo/hooks";
 import type { TaskProofKind, TaskSeriesLine } from "@repo/validation";
 
 /** A task as the Tasks page reads it from `GET /v1/tasks`. */
@@ -66,6 +71,15 @@ export type BoardTask = {
   followed_by_name?: string | null;
   /** Its Frapp links (`spec/behavior/frapp-links.md`); read with `readFrappLinks`. */
   attachments?: unknown;
+  /** No extensions, and urgent to its assignee (#6096). */
+  fixed_deadline?: boolean;
+  /**
+   * Its latest request for more time (#6096), for its assignee and officers;
+   * null otherwise, and on a task never asked about.
+   */
+  extension?: TaskExtensionSummary | null;
+  /** On the assignee's own tasks: they can't ask until an officer restores it. */
+  extension_requests_blocked?: boolean;
 };
 
 /**

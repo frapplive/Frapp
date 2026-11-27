@@ -75,8 +75,8 @@ export interface ChannelSummary {
   /**
    * Who can see and who can post (#3722): `null` is everyone (who can post:
    * everyone who can see it), a list names `tier:` and `role:` entries.
-   * Absent when the row doesn't say, so the Edit channel sheet (#3702) never
-   * mistakes an older API's row for "everyone".
+   * Absent when the row doesn't say, so Channel settings (#3702, #6031)
+   * never mistakes an older API's row for "everyone".
    */
   who_can_see?: string[] | null;
   who_can_post?: string[] | null;
@@ -87,6 +87,14 @@ export interface ChannelSummary {
    * (#4864) offers a row unless this is `false`.
    */
   can_post?: boolean;
+  /** The chapter's default channel, where Chat opens with no last channel. */
+  is_default?: boolean;
+  /** Leave out of Activity (#3897): its sign-up links reach no one's Activity. */
+  activity_excluded?: boolean;
+  /** Officer-set default push level (#2771); absent is the built-in one. */
+  default_notification_level?: "all" | "mentions" | "off";
+  /** Mirrors `who_can_post !== null`; what the built-in push default reads. */
+  is_read_only?: boolean;
 }
 
 /**
@@ -161,6 +169,18 @@ export function selectChannels(data: unknown): ChannelSummary[] {
         ...(row.is_audit_log === true ? { is_audit_log: true } : {}),
         ...(typeof row.can_post === "boolean"
           ? { can_post: row.can_post }
+          : {}),
+        // A channel's own settings screen reads these (#6031); each present
+        // only when the API sent it.
+        ...(row.is_default === true ? { is_default: true } : {}),
+        ...(row.activity_excluded === true ? { activity_excluded: true } : {}),
+        ...(row.default_notification_level === "all" ||
+        row.default_notification_level === "mentions" ||
+        row.default_notification_level === "off"
+          ? { default_notification_level: row.default_notification_level }
+          : {}),
+        ...(typeof row.is_read_only === "boolean"
+          ? { is_read_only: row.is_read_only }
           : {}),
         ...accessLists(row),
       },

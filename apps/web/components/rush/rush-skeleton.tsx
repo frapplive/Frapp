@@ -4,10 +4,18 @@ import {
   SkeletonFrame,
   SkeletonSectionLabel,
 } from "@/components/shared/page-skeletons";
-import { RUSH_BOARD_CLASS, RUSH_COLUMN_CLASS } from "./rush-board-layout";
+import {
+  RUSH_BOARD_CLASS,
+  RUSH_COLUMN_CLASS,
+  RUSH_EMPTY_COLUMN_CLASS,
+} from "./rush-board-layout";
 
-/** Cards per stage column, tapering the way a real pipeline does. */
-const COLUMN_CARDS = [4, 3, 2, 2, 1, 1] as const;
+/**
+ * Cards per stage column, tapering the way a real pipeline does, with the
+ * later stages empty and folded as early in rush they are
+ * (`RUSH_EMPTY_COLUMN_CLASS`), so the board doesn't jump on load.
+ */
+const COLUMN_CARDS = [3, 2, 1, 0, 0, 0] as const;
 
 /**
  * `/rush` while it loads: the board it opens on (`useListLayout("rush")`
@@ -19,7 +27,10 @@ export function RushPageSkeleton() {
     <PageSkeleton label="Loading prospects">
       <div aria-hidden="true" className={RUSH_BOARD_CLASS}>
         {COLUMN_CARDS.map((cards, column) => (
-          <section key={column} className={RUSH_COLUMN_CLASS}>
+          <section
+            key={column}
+            className={cards > 0 ? RUSH_COLUMN_CLASS : RUSH_EMPTY_COLUMN_CLASS}
+          >
             <SkeletonSectionLabel width="w-20" count />
             <div className="space-y-2">
               {Array.from({ length: cards }, (_, card) => (

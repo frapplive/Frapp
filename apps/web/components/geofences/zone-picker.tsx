@@ -337,7 +337,7 @@ export function ZonePicker({
             <Input
               id={radiusId}
               inputMode="numeric"
-              className="h-9 w-24 pointer-coarse:h-11"
+              className="h-control-small w-24 pointer-coarse:h-11"
               value={radiusDraft}
               disabled={disabled}
               aria-describedby={`${radiusId}-unit`}

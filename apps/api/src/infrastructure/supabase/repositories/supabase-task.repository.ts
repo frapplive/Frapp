@@ -405,6 +405,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
       p_latest_due_at: input.latest_due_at,
       p_next_due_date: input.next_due_date,
       p_attachments: input.attachments,
+      p_fixed_deadline: input.fixed_deadline ?? false,
     });
     if (error) throw new SupabaseQueryError(error);
     const [task] = data ?? [];
@@ -431,6 +432,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
       p_subtask_titles: input.subtask_titles,
       p_followed_by: input.followed_by ?? null,
       p_attachments: input.attachments,
+      p_fixed_deadline: input.fixed_deadline ?? false,
     });
     if (error) throw new SupabaseQueryError(error);
     const copies = data ?? [];

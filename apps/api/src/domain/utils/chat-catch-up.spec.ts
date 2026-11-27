@@ -100,6 +100,18 @@ describe('the prompt', () => {
     );
   });
 
+  it('names an announcement and imported history, in the words Ask uses (#5180)', () => {
+    const { lines: kinds } = buildCatchUpLines([
+      message('msg-a', 'Dues are due November 20.', { kind: 'announcement' }),
+      message('msg-b', 'old server days', { kind: 'imported' }),
+    ]);
+    const [turn] = catchUpMessages(kinds, 'Lee Park');
+    expect(linesInCatchUpPrompt(turn.content).map((line) => line.who)).toEqual([
+      'Sam Ortiz (posting an announcement)',
+      'Sam Ortiz (in history imported from Discord)',
+    ]);
+  });
+
   it('can be read back line by line by the scripted model', () => {
     const [turn] = catchUpMessages(lines, 'Lee Park');
     expect(linesInCatchUpPrompt(turn.content)).toEqual([

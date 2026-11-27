@@ -72,6 +72,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "Discord's OAuth redirect; the signed state parameter binds it to the officer who started it.",
   'CalendarFeedFetchController.fetch':
     "A calendar app fetches a member's .ics feed; the 256-bit token in the query is the credential, checked in the service.",
+  'DesktopUpdateController.file':
+    "The desktop app's updater asks before anyone signs in (#4843); it redirects to a time-limited link for a release file, the installer anyone may download, and only for the file names a release publishes.",
   'GoogleCalendarCallbackController.callback':
     "Google's OAuth redirect; connects nothing, only sends the browser back to where the sign-in started, whose signed-in member finishes it.",
   'InviteDetailsController.details':

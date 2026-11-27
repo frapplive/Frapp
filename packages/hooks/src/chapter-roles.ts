@@ -131,3 +131,47 @@ export function toRoleOptions(
     return [{ id: role.id, name: role.name }];
   });
 }
+
+/**
+ * The Default invite role picker's reading, on web and the phone (#422;
+ * moved here with #6029 so both apps draw the same choices).
+ *
+ * - `options`: roles an invite may grant, A to Z. Not the Everyone role
+ *   (what an invite with no default grants anyway), not a locked role (the
+ *   API answers 400), and not one `invitableIds` leaves out (ranked at or
+ *   above the officer, #1830; the API answers 403). The configured role stays
+ *   listed whatever it is, so the picker names it rather than calling it gone.
+ * - `selectedId`: the configured default, or `null` for none. A default that
+ *   names the Everyone role reads as none.
+ * - `dangling`: a default is configured but no longer among the roles (the
+ *   API's `on delete set null` makes it rare; a rename between two reads is
+ *   enough). The picker says so rather than silently showing "No role".
+ */
+export function defaultInviteRoleChoices(
+  roles: readonly ChapterRole[],
+  configuredId: string | null,
+  invitableIds?: readonly string[],
+): {
+  options: { id: string; name: string }[];
+  selectedId: string | null;
+  dangling: boolean;
+} {
+  const invitable = invitableIds ? new Set(invitableIds) : undefined;
+  const options = roles
+    .filter(
+      (role) =>
+        !role.everyone &&
+        (role.id === configuredId ||
+          (!role.locked && (invitable?.has(role.id) ?? true))),
+    )
+    .map(({ id, name }) => ({ id, name }))
+    .sort((first, second) => first.name.localeCompare(second.name));
+  const everyoneId = roles.find((role) => role.everyone)?.id;
+  const selectedId =
+    configuredId !== null && configuredId === everyoneId ? null : configuredId;
+  const dangling =
+    selectedId !== null &&
+    options.length > 0 &&
+    !options.some((role) => role.id === selectedId);
+  return { options, selectedId, dangling };
+}

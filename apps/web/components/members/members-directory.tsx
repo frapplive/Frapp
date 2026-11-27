@@ -28,6 +28,7 @@ import {
   DEFAULT_STANDINGS_WINDOW,
   useStandings,
   type StandingsMetric,
+  useAlumni,
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -107,7 +108,19 @@ import {
   phoneReachStateLabel,
   type PhoneReach,
   type PhoneReachFilter,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import {
+  closeAddress,
+  pushAddress,
+  replaceAddress,
+} from "@/lib/address/address";
+
+const MEMBER_PARAM = WEB_ADDRESS_PARAMS.members.member;
 import { asArray, cn, initials } from "@/lib/utils";
 import { stateMicrocopy } from "@/lib/state-microcopy";
 import {
@@ -235,11 +248,12 @@ function formatJoined(value: string): string | null {
  *
  * **The rows are the board's member row, not its table row.** `4a` draws the
  * only member row in the file at 34px with a 24px avatar, a 10px gap and the
- * name on one truncating line; `4d`'s 40px data row is a plan matrix. 34 is not
- * a Tailwind step and `min-h-9` (36) is the adjacent one, so the row is
- * `min-h-9` with `pointer-coarse:min-h-11` restoring §2's 44px floor on touch —
+ * name on one truncating line; `4d`'s 40px data row is a plan matrix. Since
+ * #6115 the row is foundations §9's List row step (32 on a mouse; 36 until
+ * then), `min-h-control-list-row` with `pointer-coarse:min-h-11` restoring
+ * §2's 44px floor on touch —
  * the same carve-out `compactControlClassName` and lane 4's folder rail take,
- * and the reading §2 spells out ("compact 34px controls are web/pointer-only").
+ * and the reading §2 spells out (the mouse column is web/pointer-only).
  * It is deliberately *not* lane 4's flat `min-h-11` document row: that row is
  * not itself a control, where this one is the member's whole hit target, and
  * the lane's own density target is 32–36 on a pointer.
@@ -314,8 +328,21 @@ export function MembersDirectory() {
   const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
   // The sheet reads the profile by `users.id` itself (#3726), so it keeps its
   // member even once a role save moves them off this tab's list.
-  const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [popoutUserId, setPopoutUserId] = useState<string | null>(null);
+  /*
+    The member open in place of the list is the address's `member=` (#6046,
+    spec § Addresses): View profile pushes it, so Back returns to the list,
+    and its back arrow closes by the address's rule. The card from a row is
+    a popout, not a place, so it has no address.
+  */
+  const memberParam = useAddressParams([MEMBER_PARAM]).values[MEMBER_PARAM];
+  const detailSheetOpen = memberParam !== null;
+  const activeUserId = memberParam ?? popoutUserId;
+  const setDetailSheetOpen = (open: boolean) => {
+    if (open) {
+      if (popoutUserId) pushAddress({ [MEMBER_PARAM]: popoutUserId });
+    } else closeAddress([MEMBER_PARAM]);
+  };
   const [popoutOpen, setPopoutOpen] = useState(false);
   const [popoutAnchor, setPopoutAnchor] = useState<MemberPopoutAnchor | null>(
     null,
@@ -348,6 +375,49 @@ export function MembersDirectory() {
   const presence = useChapterPresenceContext();
   const usingSearch = deferredQuery.length > 0;
   const activeQuery = usingSearch ? searchQuery : membersQuery;
+  /*
+    A member the address names who isn't on the chapter's list: the list is
+    read again once (the one in hand can be cached from before they joined),
+    then an alumnus moves to the Alumni tab, and anyone else (left, or hidden
+    from this viewer) is said and taken out of the address.
+  */
+  const memberListed =
+    memberParam !== null &&
+    (membersQuery.data ?? []).some((member) => member.user_id === memberParam);
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  const memberMissing =
+    memberParam !== null &&
+    membersQuery.data !== undefined &&
+    !membersQuery.isFetching &&
+    !memberListed;
+  useEffect(() => {
+    if (!memberMissing || recheckedFor === memberParam) return;
+    void membersQuery.refetch().finally(() => setRecheckedFor(memberParam));
+  }, [memberMissing, recheckedFor, memberParam, membersQuery]);
+  const alumniRead = useAlumni(undefined, {
+    enabled:
+      tenantKind === "chapter" && memberMissing && recheckedFor === memberParam,
+  });
+  const isAlumnus =
+    memberParam !== null &&
+    asArray<{ user_id?: unknown }>(alumniRead.data).some(
+      (alum) => alum.user_id === memberParam,
+    );
+  useEffect(() => {
+    if (isAlumnus) {
+      replaceAddress({ [WEB_ADDRESS_PARAMS.members.tab]: "alumni" });
+    }
+  }, [isAlumnus]);
+  const deadMember = useDeadAddressParam(
+    MEMBER_PARAM,
+    memberParam,
+    memberMissing &&
+      recheckedFor === memberParam &&
+      (tenantKind !== "chapter" ||
+        (alumniRead.data !== undefined &&
+          !alumniRead.isFetching &&
+          !isAlumnus)),
+  );
 
   // The Actives tab is the chapter minus its alumni (#2484), who are listed on
   // the Alumni tab beside it. `GET /v1/members` returns the whole chapter, so
@@ -790,10 +860,12 @@ export function MembersDirectory() {
   // unknown one with its roles cleared.
   const activeMember = useMemo(
     () =>
-      (activeQuery.data ?? []).find(
-        (member) => memberId(member) === activeMemberId,
+      (activeQuery.data ?? []).find((member) =>
+        memberParam !== null
+          ? member.user_id === memberParam
+          : memberId(member) === activeMemberId,
       ) ?? null,
-    [activeMemberId, activeQuery.data],
+    [activeMemberId, activeQuery.data, memberParam],
   );
   // A filter or a search term is the difference between "this chapter has no
   // members" and "nothing matched what you asked for" — two different states on
@@ -898,7 +970,7 @@ export function MembersDirectory() {
     side: "right" | "bottom" = "bottom",
   ) {
     setActiveMemberId(memberId(member));
-    setActiveUserId(typeof member.user_id === "string" ? member.user_id : null);
+    setPopoutUserId(typeof member.user_id === "string" ? member.user_id : null);
     setPopoutAnchor(anchorFor(opener));
     setPopoutSide(side);
     setPopoutOpen(true);
@@ -1046,6 +1118,13 @@ export function MembersDirectory() {
 
   return (
     <section aria-labelledby="members-list-label" className="space-y-3">
+      {deadMember !== null ? (
+        // A member from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That member isn&apos;t in the directory. They may have left the
+          chapter, or you may not have access.
+        </p>
+      ) : null}
       {/*
       One toolbar row, not a card header: the list's own name and count on the
       left, its search, filters and sort on the right, sitting directly on the
@@ -1343,7 +1422,7 @@ export function MembersDirectory() {
             emptied the selection, which unmounted the bar around the checkbox
             that had focus. Here it behaves exactly as the `<th>` checkbox did.
           */}
-          <label className="flex w-fit min-h-9 cursor-pointer items-center gap-2 text-caption text-muted pointer-coarse:min-h-11">
+          <label className="flex w-fit min-h-control-list-row cursor-pointer items-center gap-2 text-caption text-muted pointer-coarse:min-h-11">
             <span className={dashboardCheckboxHitAreaClassName}>
               <input
                 type="checkbox"
@@ -1400,7 +1479,7 @@ export function MembersDirectory() {
                   <li
                     key={id}
                     className={cn(
-                      "flex min-h-9 items-center gap-1 pointer-coarse:min-h-11",
+                      "flex min-h-control-list-row items-center gap-1 pointer-coarse:min-h-11",
                       // Fill means state, never striping. `--popover` is what
                       // `TableRow` paints for `data-state="selected"`: neutral
                       // since 2026-11-05 (`foundations.md` §6), a step under the
@@ -1452,7 +1531,7 @@ export function MembersDirectory() {
                       }
                       aria-label={label}
                       className={cn(
-                        "flex min-h-9 min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
+                        "flex min-h-control-list-row min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors",
                         "pointer-coarse:min-h-11",
                         /*
                         Hover only while NOT selected. The selected fill lives
@@ -1644,6 +1723,7 @@ export function MembersDirectory() {
         onOpenChange={setDetailSheetOpen}
         userId={activeUserId}
         initialMember={activeMember}
+        onLeaveForMessage={() => replaceAddress({ [MEMBER_PARAM]: null })}
         points={activeMember && pointsOn ? pointsOf(activeMember) : null}
         docked
         backLabel="Back to directory"

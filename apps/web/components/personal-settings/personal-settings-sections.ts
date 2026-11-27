@@ -1,20 +1,14 @@
-import { isBetaOffModule } from "@repo/validation";
+import {
+  PERSONAL_SETTINGS_PAGES,
+  isBetaOffModule,
+  type PersonalSettingsPage,
+} from "@repo/validation";
 
 /**
- * The personal Settings page's sections (`/preferences`, #3856).
- *
- * Two groups, by what a setting belongs to (epic #4068's scopes). "My account"
- * is stored on the person and follows them into every chapter. "In <chapter>"
- * is stored per chapter, so it changes with the chapter switcher: alerts
- * (`notification_preferences` is keyed by chapter), the block list
- * (`GET /v1/chat/blocks` is the active chapter's), and My invoices (a
- * member's dues are the chapter's invoices; #3827 moved them here from
- * `/billing`).
- *
- * Linked apps and Calendar (#5407) sit under "My account" though Google
- * Calendar and the Discord link are kept per chapter: a member looks for
- * their connected apps in one place, as in every other app, and the rows say
- * which chapter they belong to.
+ * The personal Settings page's sections (`/preferences`, #3856): the shared
+ * pages in `@repo/validation` (`PERSONAL_SETTINGS_PAGES`), which the phone's
+ * Settings screen lists too, so both apps carry the same pages in the same
+ * order under the same words (#6032).
  *
  * A section's `value` is its `?section=` address. Other screens link to these,
  * and the API's Discord link and Google Calendar sign-in return to `apps` and
@@ -23,22 +17,9 @@ import { isBetaOffModule } from "@repo/validation";
  */
 export const PERSONAL_SETTINGS_PATH = "/preferences";
 
-export const PERSONAL_SETTINGS_SECTIONS = [
-  { value: "notifications", label: "Notifications", group: "account" },
-  { value: "appearance", label: "Appearance and chat", group: "account" },
-  { value: "apps", label: "Linked apps", group: "account" },
-  { value: "calendar", label: "Calendar", group: "account" },
-  { value: "account", label: "Account", group: "account" },
-  // The member's answer on the AI sheet (#4308). Shown only while the server
-  // has AI: the page passes `aiAvailable`.
-  { value: "ai", label: "AI", group: "account" },
-  { value: "alerts", label: "Chapter alerts", group: "chapter" },
-  { value: "blocked", label: "Blocked members", group: "chapter" },
-  { value: "invoices", label: "My invoices", group: "chapter" },
-] as const;
+export const PERSONAL_SETTINGS_SECTIONS = PERSONAL_SETTINGS_PAGES;
 
-export type PersonalSettingsSection =
-  (typeof PERSONAL_SETTINGS_SECTIONS)[number]["value"];
+export type PersonalSettingsSection = PersonalSettingsPage;
 
 /**
  * Sections that belong to one module, and leave while it is off for every
@@ -77,10 +58,15 @@ export function personalSettingsHref(section: PersonalSettingsSection): string {
 /**
  * Retired `?section=` addresses and where they open now. `discord` was the
  * Discord history section until Linked apps took its row (#5407); a Discord
- * sign-in started before that change still comes back to it.
+ * sign-in started before that change still comes back to it. `alerts`,
+ * `appearance` and `calendar` folded into Notifications, Chat and Linked apps
+ * (#6032); Google Calendar's web sign-in still returns to `calendar`.
  */
 const SECTION_ALIASES: Record<string, PersonalSettingsSection> = {
   discord: "apps",
+  alerts: "notifications",
+  appearance: "chat",
+  calendar: "apps",
 };
 
 export function resolvePersonalSettingsSection(

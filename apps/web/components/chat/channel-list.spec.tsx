@@ -3,14 +3,12 @@ import { describe, it, expect, vi } from "vitest";
 import {
   ChannelFilters,
   ChannelList,
-  badgeLabel,
   type ChannelSidebarControls,
-  unreadAnnouncement,
   type ChannelCategory,
   type ChatChannel,
   type ChannelUnread,
 } from "./channel-list";
-import type { MemberThread } from "@repo/hooks";
+import { unreadAnnouncement, type MemberThread } from "@repo/hooks";
 
 /**
  * Before display-name resolution landed, this sidebar rendered a DM channel's
@@ -64,7 +62,7 @@ function renderList(
  * per header would pass on a rail that rendered them backwards.
  */
 function sectionLabels(container: HTMLElement): string[] {
-  return Array.from(container.querySelectorAll("p.uppercase")).map(
+  return Array.from(container.querySelectorAll('p[data-flip^="head:"]')).map(
     (node) => node.textContent ?? "",
   );
 }
@@ -95,9 +93,9 @@ async function menuFor(title: string): Promise<string[]> {
 
 /** Row titles under one section header, in DOM order. */
 function channelsUnder(container: HTMLElement, label: string): string[] {
-  const header = Array.from(container.querySelectorAll("p.uppercase")).find(
-    (node) => node.textContent === label,
-  );
+  const header = Array.from(
+    container.querySelectorAll('p[data-flip^="head:"]'),
+  ).find((node) => node.textContent === label);
   if (!header) return [];
   const list = header.parentElement?.querySelector("ul");
   return Array.from(list?.querySelectorAll("li") ?? []).map(
@@ -345,44 +343,6 @@ describe("ChannelList category grouping", () => {
   });
 });
 
-describe("badgeLabel", () => {
-  it("shows the plain unread count with no @ when there is no mention", () => {
-    expect(badgeLabel(3, 0)).toBe("3");
-  });
-
-  it("leads with @ and shows the mention count, not the total, when both are present", () => {
-    expect(badgeLabel(12, 2)).toBe("@ 2");
-  });
-
-  it("caps at 99+", () => {
-    expect(badgeLabel(140, 0)).toBe("99+");
-    expect(badgeLabel(1, 100)).toBe("@ 99+");
-  });
-});
-
-describe("unreadAnnouncement", () => {
-  it("names both the mention count and the unread total when there is a mention", () => {
-    expect(unreadAnnouncement({ unreadCount: 5, mentionCount: 2 })).toBe(
-      "2 mentions, 5 unread",
-    );
-  });
-
-  it("pluralizes a single mention correctly", () => {
-    expect(unreadAnnouncement({ unreadCount: 1, mentionCount: 1 })).toBe(
-      "1 mention, 1 unread",
-    );
-  });
-
-  it("announces a direct message distinctly from a channel", () => {
-    expect(unreadAnnouncement({ unreadCount: 3, mentionCount: 0 }, true)).toBe(
-      "3 unread direct messages",
-    );
-    expect(unreadAnnouncement({ unreadCount: 3, mentionCount: 0 }, false)).toBe(
-      "3 unread messages",
-    );
-  });
-});
-
 describe("ChannelList unread badges", () => {
   it("shows no number on a channel that is merely unread", () => {
     // 2026-11-07: only a mention or a DM carries a count, as on Discord; the
@@ -602,6 +562,8 @@ describe("ChannelList hide and reopen (#2303)", () => {
       name: "Hidden conversations (1)",
     });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // A fold heading like the categories: the name, then its chevron.
+    expect(toggle.lastElementChild?.tagName.toLowerCase()).toBe("svg");
     expect(screen.queryByText("Alice Chen")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
@@ -623,7 +585,7 @@ describe("ChannelList hide and reopen (#2303)", () => {
 //
 // The arrangement itself (pins, sort, filters, folds) is pinned in
 // `@repo/hooks`' `channel-sidebar.spec.ts`. These cases pin what the rail adds:
-// that it renders that output, draws the fold control and the folded badge,
+// that it renders that output, draws the fold control and the heading's menu,
 // offers pin, and shows the filtered-out empty state.
 
 const announcements: ChatChannel = {
@@ -731,7 +693,9 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     }
   });
 
-  it("shows a folded section's total on its header, red when it holds a mention", () => {
+  // #6053, Discord's collapsed categories: folding hides what the member has
+  // read, never what is new, so the heading needs no count of its own.
+  it("keeps the channels with something new under a folded heading, which stays quiet", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -746,15 +710,18 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
       ]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
+    const header = screen.getByRole("button", { name: "Channels" });
     expect(header).toHaveAttribute("aria-expanded", "false");
-    expect(header).toHaveTextContent("@ 1");
-    expect(screen.getByLabelText("1 mention, 5 unread")).toBeInTheDocument();
-    // Folded: no rows drawn under it.
-    expect(screen.queryByRole("list", { name: /Channels/ })).toBeNull();
+    expect(header).toHaveTextContent(/^Channels$/);
+    expect(header.className).not.toMatch(/\bfont-bold\b/);
+    const rows = screen.getByRole("list", { name: "Channels" });
+    expect(rows).toHaveTextContent("general");
+    expect(rows).toHaveTextContent("announcements");
+    // exec has nothing new, so it folds away.
+    expect(rows).not.toHaveTextContent("exec");
   });
 
-  it("draws a folded section over plain unread bold, as an unread row reads", () => {
+  it("folds a section with nothing new to its heading alone", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -763,11 +730,133 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           filters: { unreadOnly: false, hideMuted: false },
         },
       }),
-      new Map([["c-gen", { unreadCount: 3, mentionCount: 0 }]]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
-    expect(header).toHaveClass("font-bold", "text-foreground");
+    expect(screen.queryByRole("list", { name: "Channels" })).toBeNull();
+  });
+
+  describe("a heading's menu (#6053)", () => {
+    const execRow: ChatChannel = {
+      id: "c-exec",
+      name: "exec-board",
+      type: "PUBLIC",
+      category_id: "cat-exec",
+    };
+    function renderWithCategory(onSetCollapsed = vi.fn()) {
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(),
+              collapsed: new Set(["category:cat-exec"]),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      return onSetCollapsed;
+    }
+    async function openMenu(heading: string): Promise<string[]> {
+      fireEvent.contextMenu(screen.getByRole("button", { name: heading }));
+      const items = await screen.findAllByRole("menuitem");
+      return items.map((item) => item.textContent ?? "");
+    }
+
+    it("folds this heading, or every section at once", async () => {
+      renderWithCategory();
+      expect(await openMenu("Channels")).toEqual([
+        "Fold Channels",
+        "Fold all categories",
+        "Unfold all categories",
+      ]);
+    });
+
+    it("names a folded heading's own entry Unfold", async () => {
+      renderWithCategory();
+      expect((await openMenu("Executive"))[0]).toBe("Unfold Executive");
+    });
+
+    it("writes only the sections Fold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("writes only the sections Unfold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("runs the heading's own entry: Fold, or Unfold once folded", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Fold Channels" }));
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("unfolds a folded heading from its own entry", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Executive");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold Executive" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("has a visible ⋯ too, shown while the heading is hovered", () => {
+      renderWithCategory();
+      const more = screen.getByRole("button", { name: "More for Channels" });
+      // RowMenu's ⋯ appears on `group-hover`: the heading's row is that group.
+      expect(more).toHaveClass("group-hover:opacity-100");
+      expect(more.closest(".group")).toBe(
+        screen.getByRole("button", { name: "Channels" }).parentElement,
+      );
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", async () => {
+      // Every channel of Executive is pinned, so Executive draws no heading:
+      // folding it would hide what comes back once the member unpins.
+      const onSetCollapsed = vi.fn();
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(["c-exec"]),
+              collapsed: new Set(),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
   });
 
   it("keeps the open channel under its folded header", () => {
@@ -956,7 +1045,7 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     );
   });
 
-  it("announces a folded Direct messages header as direct messages", () => {
+  it("keeps an unread DM under a folded Direct messages heading", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -969,8 +1058,8 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     );
 
     expect(
-      screen.getByLabelText("3 unread messages, including direct messages"),
-    ).toBeInTheDocument();
+      screen.getByRole("list", { name: "Direct messages" }),
+    ).toHaveTextContent("Alice Chen");
   });
 
   it("offers no fold or pin control without `sidebar`", () => {
@@ -1327,10 +1416,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
                 readStatus: "read" as const,
               },
             ],
-            [
-              "c-group",
-              { time: "4:46 PM", timeLabel: null, readStatus: null },
-            ],
+            ["c-group", { time: "4:46 PM", timeLabel: null, readStatus: null }],
           ])
         }
         sidebar={sidebarControls()}
@@ -1413,7 +1499,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
     );
     const hidden = screen.getByRole("list", { name: "Hidden conversations" });
     const hiddenButton = hidden.querySelector("button")!;
-    expect(hiddenButton).toHaveClass("h-8");
+    expect(hiddenButton).toHaveClass("h-control-row");
     expect(hiddenButton.querySelector("[data-preview]")).toBeNull();
   });
 });
@@ -1660,7 +1746,7 @@ describe("ChannelList threads under their channel (#5300)", () => {
     expect(generalRow).not.toHaveClass("font-bold");
   });
 
-  it("reads a folded section as unread over a thread with new replies", () => {
+  it("keeps a channel whose thread has new replies under a folded heading", () => {
     renderThreads(new Map([["c-gen", [thread({ unread_count: 1 })]]]), {
       sidebar: sidebarControls({
         preferences: {
@@ -1671,10 +1757,9 @@ describe("ChannelList threads under their channel (#5300)", () => {
       }),
     });
 
-    expect(screen.getByRole("button", { name: /Channels/ })).toHaveClass(
-      "font-bold",
-      "text-foreground",
-    );
+    const channels = screen.getByRole("list", { name: "Channels" });
+    expect(channels).toHaveTextContent("general");
+    expect(channels).not.toHaveTextContent("exec");
   });
 });
 
@@ -1706,5 +1791,33 @@ describe("ChannelList in the sidebar: the list's own control on its first headin
     const heading = controls[0]!.closest(".group\\/head");
     expect(heading).not.toBeNull();
     expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
+  });
+
+  it("draws each fold heading as its name, then its chevron (#6115)", () => {
+    // Claude's "Pinned ⌄" and Discord's "Events ⌄": the name leads, the fold
+    // chevron follows it, and the name is in sentence case, not capitals.
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+      />,
+    );
+    const folds = document.querySelectorAll(
+      'button[aria-expanded][data-flip^="head:"]',
+    );
+    expect(folds.length).toBeGreaterThan(0);
+    for (const fold of folds) {
+      const children = Array.from(fold.children);
+      expect(children[0]?.tagName).toBe("SPAN");
+      expect(children.at(-1)?.tagName.toLowerCase()).toBe("svg");
+      expect(fold.className).not.toMatch(/(^| )uppercase( |$)/);
+      expect(fold.className).not.toMatch(/tracking-/);
+    }
   });
 });

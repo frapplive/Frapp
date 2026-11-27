@@ -58,10 +58,10 @@ describe("eventInvitees", () => {
     ).toHaveLength(4);
     // A role of theirs set apart does.
     expect(
-      eventInvitees(
-        { is_mandatory: true, optional_role_ids: ["alumni"] },
-        [...members, alumnus],
-      ).map((m) => m.user_id),
+      eventInvitees({ is_mandatory: true, optional_role_ids: ["alumni"] }, [
+        ...members,
+        alumnus,
+      ]).map((m) => m.user_id),
     ).toContain("e");
   });
 
@@ -91,5 +91,44 @@ describe("EVENT_PAGE_COPY", () => {
   it("counts people in words", () => {
     expect(EVENT_PAGE_COPY.people(1)).toBe("1 person");
     expect(EVENT_PAGE_COPY.people(15)).toBe("15 people");
+  });
+});
+
+describe("eventPagePhase, events that take no attendance (#6098)", () => {
+  const start = "2026-11-25T18:00:00.000Z";
+  const end = "2026-11-25T19:00:00.000Z";
+  it("is never live for a calendar-only event", () => {
+    const during = Date.parse("2026-11-25T18:30:00.000Z");
+    expect(eventPagePhase(start, end, 10, during)).toBe("live");
+    expect(
+      eventPagePhase(start, end, 10, during, { calendar_only: true }),
+    ).toBe("upcoming");
+    expect(
+      eventPagePhase(start, end, 10, Date.parse("2026-11-25T20:00:00.000Z"), {
+        calendar_only: true,
+      }),
+    ).toBe("past");
+  });
+
+  it("follows a TBD event's day", () => {
+    const shape = { timing: "time_tbd", start_date: "2026-11-25" };
+    expect(
+      eventPagePhase(
+        null,
+        null,
+        10,
+        new Date(2026, 10, 25, 12).getTime(),
+        shape,
+      ),
+    ).toBe("upcoming");
+    expect(
+      eventPagePhase(
+        null,
+        null,
+        10,
+        new Date(2026, 10, 26, 12).getTime(),
+        shape,
+      ),
+    ).toBe("past");
   });
 });

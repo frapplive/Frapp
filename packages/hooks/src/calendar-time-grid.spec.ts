@@ -8,6 +8,7 @@ import {
   layoutDay,
   MIN_BLOCK_MINUTES,
   spanWithinDay,
+  stripEvents,
   taskSpan,
   timeGridColumns,
   type TimedSpan,
@@ -173,6 +174,46 @@ describe("timeGridColumns (#4825)", () => {
     expect(sat!.allDay).toEqual([retreat]);
     expect(sun!.allDay).toEqual([]);
     for (const column of [fri!, sat!, sun!]) expect(column.placed).toEqual([]);
+  });
+
+  it("files an all-day or TBD event by its days, never at its stored midnight (#6144)", () => {
+    // Stored as the saver's midnights, which the clock would place at 12 AM
+    // and, for the two-day formal, hand a third column.
+    const formal = {
+      id: "f",
+      timing: "all_day",
+      start_date: "2026-11-13",
+      end_date: "2026-11-14",
+      start_time: at(13, 0),
+      end_time: at(15, 0),
+    };
+    const tbd = {
+      id: "t",
+      timing: "time_tbd",
+      start_date: "2026-11-14",
+      end_date: "2026-11-14",
+      start_time: at(14, 0),
+      end_time: at(15, 0),
+    };
+    const meeting = { id: "m", start_time: at(14, 18), end_time: at(14, 19) };
+    const [fri, sat, sun] = timeGridColumns(
+      consecutiveDays(new Date(2026, 10, 13), 3),
+      [formal, tbd, meeting],
+      new Map(),
+    );
+    expect(fri!.dated).toEqual([formal]);
+    expect(sat!.dated).toEqual([formal, tbd]);
+    expect(sun!.dated).toEqual([]);
+    for (const column of [fri!, sat!, sun!]) expect(column.allDay).toEqual([]);
+    // The phone's strip lists them, ahead of any day-long timed event.
+    expect(stripEvents(sat!)).toEqual([formal, tbd]);
+    expect(stripEvents({ dated: [formal], allDay: [meeting] })).toEqual([
+      formal,
+      meeting,
+    ]);
+    expect(fri!.placed).toEqual([]);
+    expect(sat!.placed.map((p) => p.item.id)).toEqual(["m"]);
+    expect(sun!.placed).toEqual([]);
   });
 
   it("lays overlapping events side by side", () => {

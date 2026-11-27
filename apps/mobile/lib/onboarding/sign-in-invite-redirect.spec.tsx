@@ -30,7 +30,7 @@ vi.mock("@/lib/auth-session", () => ({
     status: session.status,
     isConfigured: true,
     callbackError: null,
-    sendMagicLink: vi.fn(),
+    sendEmailCode: vi.fn(),
     signInWithOAuthProvider: vi.fn(),
     signInWithPassword: vi.fn(),
     signOut: vi.fn(),

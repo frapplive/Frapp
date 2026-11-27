@@ -145,6 +145,7 @@ import type {
   StudyGeofence,
   StudySession,
   Task,
+  TaskExtensionRequest,
   TaskGroup,
   TaskPhoto,
   TaskSeries,
@@ -354,6 +355,7 @@ export interface Database {
       stripe_webhook_events: TableDefinition<StripeWebhookEvent>;
       study_geofences: TableDefinition<StudyGeofence>;
       study_sessions: TableDefinition<StudySession>;
+      task_extension_requests: TableDefinition<TaskExtensionRequest>;
       task_groups: TableDefinition<TaskGroup>;
       task_photos: TableDefinition<TaskPhoto>;
       task_series: TableDefinition<TaskSeries>;
@@ -683,6 +685,8 @@ export interface Database {
           p_subtask_titles: string[];
           p_followed_by: string | null;
           p_attachments?: FrappLink[];
+          /** Since `20261126033214` (#6096). */
+          p_fixed_deadline?: boolean;
         };
         Returns: Task[];
       };
@@ -708,6 +712,8 @@ export interface Database {
           p_latest_due_at: string;
           p_next_due_date: string;
           p_attachments?: FrappLink[];
+          /** Since `20261126033214` (#6096). */
+          p_fixed_deadline?: boolean;
         };
         Returns: Task[];
       };
@@ -971,6 +977,8 @@ export interface Database {
           channel_id: string;
           unread_count: number;
           mention_count: number;
+          /** `20261126001026` (#6052): the cursor counted from; null if never opened. */
+          last_read_at: string | null;
         }[];
       };
       /**

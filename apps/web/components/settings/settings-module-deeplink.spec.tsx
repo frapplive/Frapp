@@ -79,7 +79,7 @@ vi.mock("@/lib/hooks/use-toast", async () =>
 
 const { SettingsPage } = await import("./settings-page");
 
-const eventsSwitch = () => screen.getByRole("switch", { name: /^events on$/i });
+const eventsSwitch = () => screen.getByRole("switch", { name: /^events$/i });
 
 /**
  * The receiving half of chat's ops-setup nudge deep link (#492). The nudge
@@ -184,7 +184,7 @@ describe("settings ?module= on a cold load", () => {
     activeChapterId = null;
     const { rerender } = render(<SettingsPage />);
     expect(
-      screen.queryByRole("switch", { name: /^events on$/i }),
+      screen.queryByRole("switch", { name: /^events$/i }),
     ).not.toBeInTheDocument();
 
     activeChapterId = "chap-1";
@@ -222,7 +222,7 @@ describe("settings while the AI read is out", () => {
     render(<SettingsPage />);
     expect(screen.getByText("Loading chapter settings")).toBeInTheDocument();
     expect(
-      screen.queryByRole("switch", { name: /^events on$/i }),
+      screen.queryByRole("switch", { name: /^events$/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -235,5 +235,57 @@ describe("settings while the AI read is out", () => {
     };
     render(<SettingsPage />);
     expect(eventsSwitch()).toBeInTheDocument();
+  });
+});
+
+/**
+ * A new-report link from before the queue had a page of its own (#6031)
+ * carried `?tab=chat#reported-messages`; it now opens the queue's page.
+ */
+describe("the old report-queue anchor", () => {
+  beforeEach(() => {
+    mockCurrentChapter.mockReturnValue({
+      data: { id: "chap-1", name: "Test", subscription_status: "active" },
+      isPending: false,
+      isError: false,
+    });
+    searchParams = new URLSearchParams();
+    activeChapterId = "chap-1";
+  });
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("turns #reported-messages on the Chat page into its page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(window.location.hash).toBe("");
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("turns #reported-messages on Chat admin into the queue's page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&page=chat-admin#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("leaves a channel's address alone", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&channel=c1#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).has("page")).toBe(false);
   });
 });

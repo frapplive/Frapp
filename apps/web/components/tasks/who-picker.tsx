@@ -763,7 +763,7 @@ function PickRow({
         disabled={disabled}
         onClick={onClick}
         className={cn(
-          "flex min-h-9 min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-1 text-left text-sm text-foreground hover:bg-card-hover pointer-coarse:min-h-11",
+          "flex min-h-control-list-row min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-1 text-left text-sm text-foreground hover:bg-card-hover pointer-coarse:min-h-11",
           "disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-transparent",
           FOCUS_RING,
         )}

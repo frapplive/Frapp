@@ -1,3 +1,4 @@
+import { validTimeZone } from '#domain/utils/zoned-time';
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AGENDA_SUGGESTIONS_TABLED_MAX,
@@ -727,17 +728,6 @@ function toView(
     source_meeting_id: row.source_meeting_id,
     reason: row.reason,
   };
-}
-
-/** The member's zone when the device sent a real one; UTC otherwise. */
-function validTimeZone(zone: string | undefined): string {
-  if (!zone) return 'UTC';
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: zone });
-    return zone;
-  } catch {
-    return 'UTC';
-  }
 }
 
 /**

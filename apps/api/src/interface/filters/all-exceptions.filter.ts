@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { errorCodeOf } from '#domain/utils/error-code';
 import * as Sentry from '@sentry/nestjs';
 import { httpStatusClass, isPseudonymHex } from '@repo/observability';
 import type { ApiErrorResponseDto } from '../dtos/api-error.dto';
@@ -95,10 +96,7 @@ function extractMessage(exception: HttpException): string | string[] {
  * refusal, so it stays in the server log.
  */
 function extractCode(exception: HttpException): string | undefined {
-  const response = exception.getResponse();
-  if (!response || typeof response !== 'object') return undefined;
-  const { code } = response as { code?: unknown };
-  return typeof code === 'string' && code.length > 0 ? code : undefined;
+  return errorCodeOf(exception.getResponse());
 }
 
 /**

@@ -170,7 +170,7 @@ and 5, but open no second PR; findings go to the ledger and, up to the cap, the 
 ## Phase 1 — Scan
 
 Slice lenses are independent reads: on a large slice, split the lenses or directories across a few
-subagents (within the [`multi-agent`](../multi-agent/SKILL.md) budget, so several lenses share
+subagents (sized by [`multi-agent`](../multi-agent/SKILL.md)'s costs; several lenses can share
 one) that return candidates in the finding format below, and keep gate output and quick greps
 yourself.
 A delegated candidate is a lead until you have opened the file, checked consumers, and named the
@@ -259,8 +259,8 @@ Prefer a consolidation theme first: one subsystem's open duplicated-rule issues 
 `same rule`), so the weekly run pays down that backlog (Paul, 2026-11-16). Issues that restore
 one rule are one theme; several different rules are the batch shape, at most ~6 issues, each still
 whole-pattern. Before choosing, list the open PRs and their files (`list_pull_requests`, then
-`pull_request_read` `get_files`) and skip a batch on a screen one of them holds (one PR per screen,
-[`AGENTS.md` § Autonomous PR lifecycle](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)). Then prefer a fix that closes a
+`pull_request_read` `get_files`) and skip a batch on any screen one of them is changing: this routine doesn't subscribe to its PR,
+so a conflict would sit until someone noticed ([`AGENTS.md` § Autonomous PR lifecycle](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)). Then prefer a fix that closes a
 `suggestion` issue, then one that shrinks a gate baseline, then one that deletes more than it adds. Decline to the ledger, with the reason, anything that is taste,
 off-limits, adds copies, or needs a product or design decision. Zero fixes with written reasons is a
 pass; manufacturing a change to show work is a failure.
@@ -290,9 +290,8 @@ pass; manufacturing a change to show work is a failure.
 4. When a fix moves or renames a file a doc cites, fix the doc in the same PR. `check:links` catches
    only markdown links, not backticked paths, so grep the old name before moving it. Otherwise a
    mechanical PR changes no doc.
-5. End with the "debt spotted" note
-   ([`AGENTS.md` § Tech debt protocol](../../../AGENTS.md#tech-debt-protocol)), citing each item's
-   issue or ledger reference.
+5. Name any debt the run turned up, citing each item's issue or ledger reference
+   ([`AGENTS.md` § Tech debt protocol](../../../AGENTS.md#tech-debt-protocol)).
 
 ## Phase 4 — Review, push, open the PR
 
@@ -365,7 +364,7 @@ In this order:
 6. **Needs you:** design questions, off-limits findings, spec-vs-code contradictions, the PR waiting
    on review, each specific enough to decide from.
 7. **Not run:** anything you couldn't verify, and why.
-8. **Debt spotted:** even when "none".
+8. **Debt spotted:** each item with its issue or ledger reference; leave it out when there is none.
 
 ## Self-maintenance
 

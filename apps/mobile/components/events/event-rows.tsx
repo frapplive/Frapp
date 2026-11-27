@@ -1,7 +1,12 @@
 import { StyleSheet, Text, View } from "react-native";
-import { formatPoints, formatTimeRange } from "@repo/formatting";
+import { formatEventRowTime, formatPoints } from "@repo/formatting";
 import { useRequiredOfViewer } from "@repo/hooks";
-import { CHECK_IN_OPEN_LABEL, EVENT_PAGE_COPY } from "@repo/validation";
+import {
+  CHECK_IN_OPEN_LABEL,
+  EVENT_PAGE_COPY,
+  EVENT_TENTATIVE_LABEL,
+  eventTakesAttendance,
+} from "@repo/validation";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import { ForwardGlyph } from "@/components/control-glyphs";
@@ -18,7 +23,7 @@ import {
 } from "@/components/item-actions-menu";
 import { NavGlyph } from "@/components/nav-glyph";
 import { HairlineChip } from "@/components/status-chip";
-import { resolveCheckInWindow } from "@/lib/events/format";
+import { checkInOpenFor } from "@/lib/events/format";
 import type { EventRow } from "@/lib/events/select";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -36,25 +41,26 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
  * Start to end, "7:00 – 9:00 PM", as web's agenda row says it: a member
- * deciding whether to go wants to know when it lets out (2026-11-19).
+ * deciding whether to go wants to know when it lets out (2026-11-19). An
+ * all-day or time-TBD event says so instead ("All day", "Time TBD", or a
+ * span's days, #6098), never its stored midnights.
  */
 function clockOf(event: EventRow, now: Date): string | null {
-  return formatTimeRange(event.start_time, event.end_time, now);
+  return formatEventRowTime(event, now);
 }
 
 function accessibilityLabelOf(event: EventRow, cadence: string | null) {
-  return cadence ? `Open ${event.name}, ${cadence}` : `Open ${event.name}`;
+  return [
+    `Open ${event.name}`,
+    cadence,
+    event.is_tentative ? EVENT_TENTATIVE_LABEL.toLowerCase() : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function useCheckInOpen(event: EventRow, now: Date): boolean {
-  return (
-    resolveCheckInWindow(
-      event.start_time,
-      event.end_time,
-      now,
-      event.check_in_opens_minutes,
-    ).state === "open"
-  );
+  return checkInOpenFor(event, now);
 }
 
 /** The name, with a series' cadence after it in the muted caption colour. */
@@ -120,7 +126,10 @@ export function EventRowFlat({
   const meta = [
     clockOf(event, now),
     event.location,
-    event.point_value ? formatPoints(event.point_value) : null,
+    // Points only where there is something to attend (#6098), as web's row.
+    eventTakesAttendance(event) && event.point_value
+      ? formatPoints(event.point_value)
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -153,6 +162,11 @@ export function EventRowFlat({
           <Text style={styles.openNow}>{CHECK_IN_OPEN_LABEL}</Text>
         ) : null}
       </View>
+      {/* Tentative is a status, not an alarm (#6098): the same neutral
+          hairline chip, before Required. */}
+      {event.is_tentative ? (
+        <HairlineChip label={EVENT_TENTATIVE_LABEL} />
+      ) : null}
       {/* Hairline, as web's row draws it (#3822, #4132): required of this
           viewer, by default or by a role of theirs (`useRequiredOfViewer`). */}
       {required ? <HairlineChip label={EVENT_PAGE_COPY.required} /> : null}

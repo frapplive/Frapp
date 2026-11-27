@@ -21,10 +21,25 @@ import { extendTailwindMerge } from "tailwind-merge";
  * 16px (#2842). The keys are the §7 roles, which the shared preset binds one to
  * one; `utils.spec.ts` holds the two lists together.
  */
+/**
+ * The same trap for foundations §9's control steps (`h-control-row`,
+ * `min-h-control-list-row`, `size-control-small`, #6115): a name rather than a
+ * length, so unregistered, `cn("h-control-small", "h-control-row")` kept both
+ * and a caller's height lost to the component's by stylesheet order.
+ */
+const CONTROL_STEPS = Object.keys(signetDarkTokens.control).map(
+  (step) => `control-${step.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`,
+);
+
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
       "font-size": [{ text: Object.keys(signetDarkTokens.typography.role) }],
+      h: [{ h: CONTROL_STEPS }],
+      "min-h": [{ "min-h": CONTROL_STEPS }],
+      w: [{ w: CONTROL_STEPS }],
+      "min-w": [{ "min-w": CONTROL_STEPS }],
+      size: [{ size: CONTROL_STEPS }],
     },
   },
 });

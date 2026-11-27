@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
+import { setAddress } from "@/tests/address-search-params";
 import { networkMock } from "@/tests/network";
 
 /**
@@ -139,6 +140,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     // The List/Grid pick is kept per viewer (#4175).
     useViewerUserId: () => "viewer-1",
     useMembers: () => membersRead,
+    // A member= the roster lacks is looked for among the alumni (#6046).
+    useAlumni: () => ({ data: [], isFetching: false }),
     useMemberSearch: (q: string) => (q ? searchRead : membersRead),
     useRoles: () => rolesRead,
     useRoleTiers: () => tiersRead,
@@ -205,15 +208,15 @@ const standings = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 const modules = vi.hoisted(() => ({ off: new Set<string>() }));
-const search = vi.hoisted(() => ({ value: "" }));
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   useChapterModuleGateState: () => ({
     status: "ready",
     isModuleEnabled: (key: string) => !modules.off.has(key),
   }),
 }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(search.value),
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 const customLines = vi.hoisted(() => ({ value: {} as Record<string, string> }));
@@ -311,7 +314,7 @@ beforeEach(() => {
   standings.isError = false;
   standings.refetch.mockClear();
   modules.off = new Set();
-  search.value = "";
+  setAddress("/members");
   phoneReachRead.value = null;
   tenant.council = false;
   permissionsRead.data = { permissions: [] };
@@ -344,10 +347,10 @@ describe("Directory on the greenfield shell", () => {
     ).toBeNull();
   });
 
-  it("keeps the row at 36px on a pointer and 44px on touch", () => {
+  it("keeps the row at the List row step on a pointer and 44px on touch", () => {
     const { container } = render(<MembersDirectory />);
     const row = container.querySelector("li");
-    expect(row?.className).toContain("min-h-9");
+    expect(row?.className).toContain("min-h-control-list-row");
     // §2's touch floor, via the carve-out `compactControlClassName` uses.
     expect(row?.className).toContain("pointer-coarse:min-h-11");
   });
@@ -410,6 +413,37 @@ describe("Directory on the greenfield shell", () => {
       "data-user-id",
       "u-1",
     );
+  });
+
+  it("puts the open member in the address with View profile's push (#6046)", async () => {
+    const user = userEvent.setup();
+    render(<MembersDirectory />);
+    await user.click(screen.getByRole("button", { name: /^Ada Lovelace,/ }));
+    const push = vi.spyOn(window.history, "pushState");
+    await user.click(screen.getByRole("button", { name: "View profile" }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?member=u-1");
+    push.mockRestore();
+  });
+
+  it("opens the member a link names, and says one who isn't here is gone (#6046)", async () => {
+    setAddress("/members?member=u-1");
+    const { unmount } = render(<MembersDirectory />);
+    expect(screen.getByTestId("detail-sheet")).toHaveAttribute(
+      "data-user-id",
+      "u-1",
+    );
+    unmount();
+
+    membersRead.refetch = vi.fn(() => Promise.resolve());
+    setAddress("/members?member=nobody");
+    render(<MembersDirectory />);
+    expect(
+      await screen.findByText(/That member isn't in the directory/),
+    ).toBeInTheDocument();
+    // Read again once before it is called gone.
+    expect(membersRead.refetch).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("");
   });
 
   it("drops an absent field from the meta line instead of rendering an em dash", () => {
@@ -1458,7 +1492,7 @@ describe("MembersDirectory standings (#5950)", () => {
   });
 
   it("opens on the standing a link names", () => {
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     render(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Most points · This semester" }),
@@ -1468,7 +1502,7 @@ describe("MembersDirectory standings (#5950)", () => {
   it("offers no standing, and no points on rows, while its module is off", async () => {
     const user = userEvent.setup();
     modules.off = new Set(["points", "hours"]);
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     render(<MembersDirectory />);
     // A link to a standing whose module is off opens on the name instead.
     await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
@@ -1509,13 +1543,13 @@ describe("MembersDirectory standings (#5950)", () => {
     expect(
       screen.getByRole("button", { name: "Sort: Name A to Z" }),
     ).toBeInTheDocument();
-    search.value = "sort=points";
+    setAddress("/members?sort=points");
     rerender(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Most points · This semester" }),
     ).toBeInTheDocument();
     // The sidebar's plain Directory link drops the param, and the sort with it.
-    search.value = "";
+    setAddress("/members");
     rerender(<MembersDirectory />);
     expect(
       screen.getByRole("button", { name: "Sort: Name A to Z" }),
@@ -1527,9 +1561,9 @@ describe("MembersDirectory standings (#5950)", () => {
     standings.isError = true;
     render(<MembersDirectory />);
     await pick(user, /^Sort:/, "Most points");
-    expect(
-      screen.getByText("Couldn't load the standings"),
-    ).toBeInTheDocument();
-    expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(0);
+    expect(screen.getByText("Couldn't load the standings")).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(
+      0,
+    );
   });
 });

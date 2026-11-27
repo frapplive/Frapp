@@ -177,6 +177,8 @@ function load(permissions: string[]) {
     ]),
   };
   const audiences = { liveNames: stub(new Map()) };
+  // An officer's waiting requests for more time (#6096): none here.
+  const extensionRepo = { listPending: stub([]) };
   const taskService = new TaskService(
     taskRepo,
     {} as never,
@@ -187,6 +189,7 @@ function load(permissions: string[]) {
     audiences as never,
     openTaskRepo,
     {} as never,
+    extensionRepo as never,
   );
   // Every other read the page makes, one PostgREST request each, except a
   // read by ids given none, which the repositories answer without a request.

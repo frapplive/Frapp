@@ -168,7 +168,7 @@ export function RolePickerCard({ message, isConfirmed }: RolePickerCardProps) {
 
   return (
     <Card className={MESSAGE_CARD}>
-      <p className={cn(EYEBROW, "text-muted-foreground")}>Role picker</p>
+      <p className={cn(EYEBROW, "text-muted")}>Role picker</p>
       <div className="mt-2 break-words text-base font-bold">
         {payload.title}
       </div>

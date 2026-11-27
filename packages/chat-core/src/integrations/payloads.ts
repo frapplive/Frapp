@@ -166,6 +166,16 @@ export interface EventPayload {
    * (`checkInOpensMinutes` in `@repo/validation`).
    */
   check_in_opens_minutes: number;
+  /**
+   * The event's shape (#6098), on the Activity page's built message only: a
+   * posted card is always of a timed event, because the API won't post one
+   * for an all-day, time-TBD or calendar-only event. Absent reads as timed.
+   */
+  timing?: "timed" | "all_day" | "time_tbd";
+  start_date?: string | null;
+  end_date?: string | null;
+  is_tentative?: boolean;
+  calendar_only?: boolean;
   /** `events.created_at`. */
   created_at: string;
 }

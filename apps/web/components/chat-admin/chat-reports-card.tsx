@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import {
   memberFallbackLabel,
@@ -26,7 +26,6 @@ import {
 import { Can } from "@/components/shared/can";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EYEBROW } from "@/components/ui/typography";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { StaleReadNotice } from "@/components/shared/stale-read-notice";
 import { ViewLabels } from "@/components/shared/view-labels";
@@ -55,7 +54,6 @@ import {
 import type { ChatReportTab } from "./chat-report-copy";
 import { ReportRowsSkeleton } from "@/components/chat-admin/chat-admin-skeleton";
 import { InlineNote } from "@/components/shared/inline-note";
-import { CHAT_REPORTS_ANCHOR } from "@/components/settings/settings-paths";
 
 /**
  * The officer report queue (#2257) and its one destructive action (#2311).
@@ -98,8 +96,8 @@ import { CHAT_REPORTS_ANCHOR } from "@/components/settings/settings-paths";
 export function ChatReportsCard({
   channelId,
 }: {
-  // One channel's reports, beside that channel's settings. Omitted, the whole
-  // chapter's queue: the only place a report about a DM appears.
+  // One channel's reports, on that channel's Reports page. Omitted, the
+  // whole chapter's queue: the only place a report about a DM appears.
   channelId?: string;
 } = {}) {
   return (
@@ -203,33 +201,14 @@ function namesAuditLogEntry(
   );
 }
 
+/**
+ * The queue, on its own page (`?page=reports`, #6031): kept out of the way
+ * (Paul, 2026-11-11: "it doesn't need to be staring you right in the face")
+ * by living behind a Reports row that says how many are open, so the page
+ * shows it whole, under the page's title.
+ */
 function ChatReportsQueue({ channelId }: { channelId?: string }) {
-  // Kept out of the way (Paul, 2026-11-11: "just not showing reports if
-  // there's no reported messages ... it doesn't need to be staring you right
-  // in the face"). With no open report the queue folds to one quiet link to
-  // its history; an open report, a failed read or a notification's
-  // `#reported-messages` link shows it in full. The read is the Open tab's own
-  // query, so it costs nothing extra.
-  const openQuery = useChatReports("open", channelId);
-  const [historyShown, setHistoryShown] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.location.hash === `#${CHAT_REPORTS_ANCHOR}`,
-  );
-  const nothingOpen =
-    Array.isArray(openQuery.data) && openQuery.data.length === 0;
   const [status, setStatus] = useState<ChatReportStatus>("open");
-  // The queue sits last on the page, under the channel settings, so a
-  // new-report notification (`CHAT_REPORTS_SETTINGS_PATH`) scrolls to it
-  // once it mounts: the browser's own jump ran before the permission gate let
-  // the section render.
-  const sectionRef = useRef<HTMLElement>(null);
-  const loaded = openQuery.data !== undefined || openQuery.isError;
-  useEffect(() => {
-    if (loaded && window.location.hash === `#${CHAT_REPORTS_ANCHOR}`) {
-      sectionRef.current?.scrollIntoView({ block: "start" });
-    }
-  }, [loaded]);
   const { confirm, confirmDialog } = useConfirmDialog();
   const { toast } = useToast();
   const resolve = useResolveChatReport();
@@ -301,44 +280,17 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
     }
   }
 
-  // Nothing to show until the open read answers, so the page doesn't flash
-  // a queue that then folds away.
-  if (!loaded) return null;
-  if (nothingOpen && !historyShown) {
-    return (
-      <div id={CHAT_REPORTS_ANCHOR} className="scroll-mt-4">
-        <button
-          type="button"
-          className={cn(
-            "rounded-sm text-caption text-muted transition-colors hover:text-foreground",
-            FOCUS_RING,
-          )}
-          onClick={() => setHistoryShown(true)}
-        >
-          {copy.historyLink}
-        </button>
-      </div>
-    );
-  }
-
   return (
     // Flush, not carded: the route's other sections sit on the page surface,
     // and this one is labelled the same way. The heading survives as the
     // section label; the line under it is kept, because it is not the queue
     // describing itself but the two facts a row cannot show — that its text is
     // the snapshot taken at report time, and that the reporter is never named.
-    <section
-      ref={sectionRef}
-      id={CHAT_REPORTS_ANCHOR}
-      aria-labelledby="chat-reports-label"
-      className="scroll-mt-4 space-y-3"
-    >
+    <section aria-labelledby="chat-reports-label" className="space-y-3">
       {confirmDialog}
       <div className="space-y-1">
-        <h2
-          id="chat-reports-label"
-          className={`${EYEBROW} text-muted-foreground`}
-        >
+        {/* Its page's title names it; a screen reader still hears this. */}
+        <h2 id="chat-reports-label" className="sr-only">
           {copy.title}
         </h2>
         <p className="text-caption text-muted">{copy.description}</p>

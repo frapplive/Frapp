@@ -53,6 +53,9 @@ import {
   useSetChannelBackground,
   chatBackgroundErrorCopy,
   useMarkChannelRead,
+  newMessagesMark,
+  readArrival,
+  type UnreadArrival,
   useCategories,
   useChapterRoster,
   useMemberDisplayNames,
@@ -60,6 +63,7 @@ import {
   useRosterCatchUp,
   useMentionRoles,
   useMyPermissions,
+  useMyChatTimeout,
   useBookmarks,
   useBookmarkedMessageIds,
   useScheduleMessage,
@@ -92,6 +96,7 @@ import {
 import { sidebarThreadsByChannel } from "@repo/chat-core/threads";
 import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
 import { typingLabel } from "@repo/chat-core/typing-label";
+
 import { attachmentRequestBody } from "@repo/chat-core/adapters";
 import {
   channelPreviewLine,
@@ -259,6 +264,14 @@ import {
   type ReportTarget,
 } from "./report-message-dialog";
 import { ForwardMessageDialog } from "./forward-message-dialog";
+import {
+  TimeoutMemberDialog,
+  type TimeoutTarget,
+} from "@/components/members/timeout-member-dialog";
+import {
+  chatTimeoutNotice,
+  timeOutOfferedIn,
+} from "@repo/chat-core/chat-timeout";
 import { forwardTargetOf, type ForwardTarget } from "@repo/chat-core/forward";
 import { compactControlClassName } from "@/components/shared/table-controls";
 import { useIsDesktopShell } from "@/components/layout/shell-layout";
@@ -1686,6 +1699,34 @@ export function ChatShell({
     permissionsPayload?.permissions,
   );
 
+  // Chat timeouts (#6006): Time out on a message's sender, in a channel, for
+  // a viewer holding `members:timeout`; and the viewer's own timeout, which
+  // takes the composer's place in a channel.
+  const timeOutHere = timeOutOfferedIn(
+    can("members:timeout", permissionsPayload?.permissions),
+    activeChannel,
+  );
+  const [timeoutTarget, setTimeoutTarget] = useState<TimeoutTarget | null>(
+    null,
+  );
+  const handleTimeOut = useCallback(
+    (message: ChatMessage) => {
+      if (!message.sender_id) return;
+      setTimeoutTarget({
+        userId: message.sender_id,
+        name: resolveAuthorName(message, nameFor) ?? "this member",
+      });
+    },
+    [nameFor],
+  );
+  const myTimeout = useMyChatTimeout();
+  const timeoutNow = useNowDate();
+  const timeoutNotice = chatTimeoutNotice(
+    myTimeout.data,
+    activeChannel,
+    timeoutNow,
+  );
+
   // Chat backgrounds (#3973): the open channel's, for the menu's picker.
   const channelBackground = useChatBackground(activeChannel?.id ?? null);
   const setChannelBackground = useSetChannelBackground();
@@ -2271,6 +2312,12 @@ export function ChatShell({
   // `now()`; there is no mark-read-to-a-message.
   const markRead = useMarkChannelRead();
   const markReadMutate = markRead.mutate;
+  // The timeline's "New messages" pill's Mark as read (#6052). Opening already
+  // stamped the cursor; this stamps it again for anything since, and the pill
+  // takes its divider away.
+  const markActiveChannelRead = useCallback(() => {
+    if (activeChannelId) markReadMutate(activeChannelId);
+  }, [activeChannelId, markReadMutate]);
   /*
     Only while the thread is on screen. Below `lg` the list and the thread are
     one screen each, and a member back on the list (the arrow, `Esc`, the
@@ -2938,6 +2985,54 @@ export function ChatShell({
     // The counts landed after the channel did (a first load).
     setArrival({ ...arrival, unread: liveUnread });
   }
+  /*
+    The "New messages" divider and pill (#6052) take the count and the
+    cursor the same way, once per visit: when the channel changes, and each
+    time the thread comes back on screen (below `lg`, back from the channel
+    list; the panel shown again), since leaving stamped it read. The stamps
+    while it is on screen move neither. A visit that opens before the counts
+    first answer takes the first answer.
+  */
+  const [threadVisit, setThreadVisit] = useState({
+    onScreen: threadOnScreen,
+    count: 0,
+  });
+  if (threadVisit.onScreen !== threadOnScreen) {
+    setThreadVisit({
+      onScreen: threadOnScreen,
+      count: threadVisit.count + (threadOnScreen ? 1 : 0),
+    });
+  }
+  const liveCounted: UnreadArrival | null =
+    liveUnread === null
+      ? null
+      : (readArrival(unreadQuery.data, activeChannelId) ?? {
+          unread: 0,
+          lastReadAt: null,
+        });
+  const [unreadAtOpen, setUnreadAtOpen] = useState<{
+    channelId: string | null;
+    visit: number;
+    counted: UnreadArrival | null;
+  }>({ channelId: null, visit: -1, counted: null });
+  if (
+    unreadAtOpen.channelId !== activeChannelId ||
+    unreadAtOpen.visit !== threadVisit.count
+  ) {
+    setUnreadAtOpen({
+      channelId: activeChannelId,
+      visit: threadVisit.count,
+      counted: liveCounted,
+    });
+  } else if (unreadAtOpen.counted === null && liveCounted !== null) {
+    setUnreadAtOpen({ ...unreadAtOpen, counted: liveCounted });
+  }
+  const countedAtOpen =
+    unreadAtOpen.channelId === activeChannelId ? unreadAtOpen.counted : null;
+  const newMessages = useMemo(
+    () => newMessagesMark(countedAtOpen),
+    [countedAtOpen],
+  );
   const arrivedAt = useRef<{ channelId: string; at: string } | null>(null);
   useEffect(() => {
     arrivedAt.current = activeChannelId
@@ -3634,6 +3729,8 @@ export function ChatShell({
           canManageChannel={canManageChannel}
           onReport={handleReport}
           onBlock={handleBlock}
+          onTimeOut={timeOutHere ? handleTimeOut : undefined}
+          timeoutNotice={timeoutNotice}
           onForward={handleForward}
           onOpenProfile={openProfile}
           isMember={isMember}
@@ -4356,6 +4453,8 @@ export function ChatShell({
                   avatarFor={avatarFor}
                   messages={channel.messages}
                   askTurns={askTurns}
+                  newMessages={newMessages}
+                  onMarkRead={markActiveChannelRead}
                   threadUnread={threadUnread}
                   blockList={{ blockState, thread }}
                   onUnblock={handleUnblock}
@@ -4449,6 +4548,7 @@ export function ChatShell({
                   inAuditLog={activeChannel?.is_audit_log === true}
                   onReport={handleReport}
                   onBlock={handleBlock}
+                  onTimeOut={timeOutHere ? handleTimeOut : undefined}
                   onForward={handleForward}
                   onOpenProfile={openProfile}
                   isMember={isMember}
@@ -4505,6 +4605,7 @@ export function ChatShell({
             // `true` — the safe fallback for a read-only channel whose
             // `can_post` hasn't arrived yet.
             canPost={activeChannel.can_post}
+            timeoutNotice={timeoutNotice}
             draft={channel.draft}
             onChangeDraft={channel.setDraft}
             // `replyTo?.id`, not `replyToId`: the derived target is the one the
@@ -4746,6 +4847,10 @@ export function ChatShell({
         key={reportTarget?.messageId ?? "closed"}
         target={reportTarget}
         onClose={() => setReportTarget(null)}
+      />
+      <TimeoutMemberDialog
+        target={timeoutTarget}
+        onClose={() => setTimeoutTarget(null)}
       />
       {/* Mounted only while open: its channel and roster reads have no
           work to do for a closed dialog. */}

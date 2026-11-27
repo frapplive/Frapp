@@ -346,6 +346,8 @@ export function createEvalCorpus(
       repository as ICorpusRepository,
       adapters,
       gateway,
+      // The eval adapters describe nothing, so no one is named.
+      { findChapterMemberIdentities: async () => [] } as never,
     ),
     consent,
     documentFor(passageId, quote) {

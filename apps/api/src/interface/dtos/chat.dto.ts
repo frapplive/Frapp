@@ -1048,6 +1048,15 @@ export class ChannelUnreadCountDto {
       'Subset of unread_count that mentions the caller. Mentions are resolved server-side at send time.',
   })
   mention_count: number;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'The caller’s read cursor the counts were taken from; null for a channel they never opened. Places the thread’s “New messages” divider; never re-count from it.',
+  })
+  last_read_at: string | null;
 }
 
 /**

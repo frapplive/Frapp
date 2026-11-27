@@ -101,6 +101,7 @@ export function ChannelAccessField({
   locked = [],
   alwaysLine,
   canChoose = true,
+  labelHidden = false,
 }: {
   id: string;
   question: ChannelAccessQuestion;
@@ -132,6 +133,11 @@ export function ChannelAccessField({
    * still lift a list, but Chosen roles and its chips are read-only.
    */
   canChoose?: boolean;
+  /**
+   * The question is the page's own title (a channel's Who can see page,
+   * #6031), so the field doesn't say it again; a screen reader still does.
+   */
+  labelHidden?: boolean;
 }) {
   const mode = value === null ? EVERYONE : CHOSEN;
   const lockedSet = new Set(locked);
@@ -170,8 +176,16 @@ export function ChannelAccessField({
 
   return (
     <div className="grid gap-2" role="group" aria-labelledby={`${id}-label`}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <span id={`${id}-label`} className="text-sm font-medium">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-4 gap-y-2",
+          labelHidden ? "justify-start" : "justify-between",
+        )}
+      >
+        <span
+          id={`${id}-label`}
+          className={cn("text-sm font-medium", labelHidden && "sr-only")}
+        >
           {label}
         </span>
         <SegmentedChoice
@@ -349,7 +363,7 @@ function AddEntry({
             : undefined
       }
       emptyText="Everything is already on the list."
-      itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+      itemClassName="min-h-control-row gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
       renderItem={(option) => (
         <>
           <EntryMark option={option} />

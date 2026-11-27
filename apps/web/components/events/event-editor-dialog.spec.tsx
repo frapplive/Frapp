@@ -904,6 +904,45 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("evt-new"));
   });
 
+  it("opens last year's all-day event as one, on this year's days (#6144)", async () => {
+    createMutate.mockResolvedValue({ id: "evt-new" });
+    render(
+      <EventEditorDialog
+        open
+        mode="create"
+        event={null}
+        template={{
+          id: "evt-old",
+          name: "Retreat 2026",
+          timing: "all_day",
+          start_date: "2025-12-05",
+          end_date: "2025-12-06",
+        }}
+        initialDated={{
+          timing: "all_day",
+          startDate: "2026-12-04",
+          endDate: "2026-12-05",
+          tentative: true,
+        }}
+        usingPreviewData={false}
+        onOpenChange={() => {}}
+        onSaved={async () => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    const body = createMutate.mock.calls[0]![0];
+    expect(body).toMatchObject({
+      name: "Retreat 2026",
+      timing: "all_day",
+      start_date: "2026-12-04",
+      end_date: "2026-12-05",
+      is_tentative: true,
+    });
+    expect(body).not.toHaveProperty("start_time");
+  });
+
   it("sends no role list on create when nothing differs", async () => {
     renderCreate();
     fillRequiredFields();
@@ -2061,5 +2100,346 @@ describe("EventEditorDialog kept edits over a changed record (#4593)", () => {
     expect(screen.getByLabelText("Event name")).toHaveValue("Chapter meeting");
     expect(screen.getByLabelText("Location")).toHaveValue("Hall B");
     expect(screen.getByText("Draft restored")).toBeInTheDocument();
+  });
+});
+
+describe("EventEditorDialog event shapes (#6098)", () => {
+  beforeEach(() => {
+    createMutate.mockReset();
+    updateMutate.mockReset();
+    mockToast.mockReset();
+    createMutate.mockResolvedValue(undefined);
+    updateMutate.mockResolvedValue(undefined);
+    mockPermissions.list = ["events:update"];
+    chapter.active();
+  });
+
+  function renderCreate(
+    props: Partial<React.ComponentProps<typeof EventEditorDialog>> = {},
+  ) {
+    render(
+      <EventEditorDialog
+        open
+        mode="create"
+        event={null}
+        usingPreviewData={false}
+        onOpenChange={() => {}}
+        onSaved={async () => {}}
+        {...props}
+      />,
+    );
+  }
+
+  function pickTiming(label: "Set time" | "All day" | "Time TBD") {
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: "Timing" })).getByRole(
+        "radio",
+        { name: label },
+      ),
+    );
+  }
+
+  function typeDay(field: "First day" | "Last day" | "Day", day: string) {
+    fireEvent.change(screen.getByLabelText(field), { target: { value: day } });
+  }
+
+  async function create(name = "Formal recruitment") {
+    fireEvent.change(screen.getByLabelText("Event name"), {
+      target: { value: name },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    await waitFor(() => expect(createMutate).toHaveBeenCalledTimes(1));
+    return createMutate.mock.calls[0]![0] as Record<string, unknown>;
+  }
+
+  const row = (name: RegExp) => screen.queryByRole("button", { name });
+
+  it("creates an all-day event over several days with its days and no times", async () => {
+    renderCreate();
+    pickTiming("All day");
+    expect(screen.queryByLabelText("Starts, time")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "How long" })).toBeNull();
+    // A dated event doesn't repeat; it still takes attendance.
+    expect(row(/^Repeat: /)).toBeNull();
+    expect(screen.getByLabelText("Points for attending")).toBeTruthy();
+    expect(row(/^Check-in: /)).toBeTruthy();
+    typeDay("First day", "2026-12-01");
+    typeDay("Last day", "2026-12-04");
+    const body = await create();
+    expect(body).toMatchObject({
+      timing: "all_day",
+      start_date: "2026-12-01",
+      end_date: "2026-12-04",
+      point_value: 10,
+    });
+    expect(body).not.toHaveProperty("start_time");
+    expect(body).not.toHaveProperty("end_time");
+    expect(body).not.toHaveProperty("recurrence_rule");
+    expect(body).not.toHaveProperty("is_tentative");
+    expect(body).not.toHaveProperty("calendar_only");
+  });
+
+  it("sends a one-day all-day event with no last day", async () => {
+    renderCreate();
+    pickTiming("All day");
+    typeDay("First day", "2026-12-01");
+    const body = await create();
+    expect(body).toMatchObject({ timing: "all_day", start_date: "2026-12-01" });
+    expect(body).not.toHaveProperty("end_date");
+  });
+
+  it("refuses a last day before the first, in the rule's own words", async () => {
+    renderCreate();
+    pickTiming("All day");
+    typeDay("First day", "2026-12-04");
+    typeDay("Last day", "2026-12-01");
+    expect(
+      screen.getByText("The last day can't be before the first."),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Event name"), {
+      target: { value: "Retreat" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: "The last day can't be before the first.",
+        }),
+      ),
+    );
+    expect(createMutate).not.toHaveBeenCalled();
+  });
+
+  it("creates a time-TBD event on its day, with no points or check-in", async () => {
+    renderCreate();
+    pickTiming("Time TBD");
+    expect(screen.queryByLabelText("Last day")).toBeNull();
+    expect(screen.queryByLabelText("Points for attending")).toBeNull();
+    expect(row(/^Check-in: /)).toBeNull();
+    typeDay("Day", "2026-12-05");
+    const body = await create("Council meeting");
+    expect(body).toMatchObject({
+      timing: "time_tbd",
+      start_date: "2026-12-05",
+      // The hidden Points row's default is never sent.
+      point_value: 0,
+    });
+    expect(body).not.toHaveProperty("end_date");
+    expect(body).not.toHaveProperty("start_time");
+    expect(body).not.toHaveProperty("check_in_opens_minutes");
+  });
+
+  it("keeps the start's day going all-day, and its time coming back", () => {
+    renderCreate({
+      initialStartAt: "2026-07-01T18:00",
+      initialEndAt: "2026-07-01T19:00",
+    });
+    pickTiming("All day");
+    expect(screen.getByLabelText("First day")).toHaveValue(
+      formatDateEntry("2026-07-01", new Date()),
+    );
+    typeDay("First day", "2026-07-03");
+    pickTiming("Set time");
+    expect(screen.getByLabelText("Starts, day")).toHaveValue(
+      formatDateEntry("2026-07-03", new Date()),
+    );
+    expect(screen.getByLabelText("Starts, time")).toHaveValue("6 PM");
+    expect(screen.getByLabelText("Ends, time")).toHaveValue("7 PM");
+  });
+
+  it("sends Tentative only when it is on", async () => {
+    renderCreate({
+      initialStartAt: "2026-07-01T18:00",
+      initialEndAt: "2026-07-01T19:00",
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "Tentative" }));
+    const body = await create("Formal");
+    expect(body).toMatchObject({
+      is_tentative: true,
+      start_time: expect.any(String),
+    });
+    expect(body).not.toHaveProperty("timing");
+  });
+
+  it("creates a calendar-only event: no points or check-in, nobody required", async () => {
+    renderCreate({
+      initialStartAt: "2026-07-01T18:00",
+      initialEndAt: "2026-07-01T19:00",
+    });
+    openRow("Who's coming");
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "Attendance for Exec" }),
+      ).getByRole("radio", { name: "Required" }),
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", {
+          name: "Attendance for everyone else",
+        }),
+      ).getByRole("radio", { name: "On the calendar only" }),
+    );
+    expect(screen.queryByLabelText("Points for attending")).toBeNull();
+    expect(row(/^Check-in: /)).toBeNull();
+    expect(row(/^Who's coming: /)).toHaveTextContent(
+      "On the calendar only for everyone",
+    );
+    const body = await create("First day of classes");
+    expect(body).toMatchObject({ calendar_only: true, is_mandatory: false });
+    expect(body).not.toHaveProperty("required_role_ids");
+    expect(body).not.toHaveProperty("optional_role_ids");
+    expect(body).not.toHaveProperty("point_value");
+    expect(body).not.toHaveProperty("check_in_opens_minutes");
+  });
+
+  it("posts no chat card for a dated event, and says so", async () => {
+    createMutate.mockResolvedValue({ id: "e9" });
+    renderCreate({ postToChannelId: "11111111-1111-4111-8111-111111111111" });
+    pickTiming("All day");
+    typeDay("First day", "2026-12-01");
+    const body = await create("Retreat");
+    expect(body).not.toHaveProperty("channel_id");
+    expect(body).not.toHaveProperty("client_message_id");
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description:
+          "Retreat is on the calendar. Its card isn't posted in chat yet.",
+      }),
+    );
+  });
+
+  const DATED = {
+    id: "d1",
+    name: "Formal recruitment",
+    timing: "all_day",
+    start_date: "2026-12-01",
+    end_date: "2026-12-03",
+    // The saver's midnights: never shown, never sent back.
+    start_time: "2026-12-01T05:00:00.000Z",
+    end_time: "2026-12-04T05:00:00.000Z",
+    point_value: 10,
+    check_in_opens_minutes: 10,
+  };
+
+  function renderEdit(event: Record<string, unknown>) {
+    render(
+      <EventEditorDialog
+        open
+        mode="edit"
+        event={event}
+        usingPreviewData={false}
+        onOpenChange={() => {}}
+        onSaved={async () => {}}
+      />,
+    );
+  }
+
+  async function save() {
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    return (updateMutate.mock.calls[0]![0] as { body: Record<string, unknown> })
+      .body;
+  }
+
+  it("reads a dated event back by its days and sends only a rename", async () => {
+    renderEdit(DATED);
+    expect(
+      within(screen.getByRole("radiogroup", { name: "Timing" })).getByRole(
+        "radio",
+        { name: "All day" },
+      ),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByLabelText("Last day")).toHaveValue(
+      formatDateEntry("2026-12-03", new Date()),
+    );
+    fireEvent.change(screen.getByLabelText("Event name"), {
+      target: { value: "Spring recruitment" },
+    });
+    const body = await save();
+    expect(body).toEqual(
+      expect.objectContaining({ name: "Spring recruitment" }),
+    );
+    for (const key of [
+      "timing",
+      "start_date",
+      "end_date",
+      "start_time",
+      "end_time",
+    ]) {
+      expect(body).not.toHaveProperty(key);
+    }
+  });
+
+  it("sends the shape and days, never times, when a dated event's days change", async () => {
+    renderEdit(DATED);
+    typeDay("Last day", "2026-12-05");
+    const body = await save();
+    expect(body).toMatchObject({
+      timing: "all_day",
+      start_date: "2026-12-01",
+      end_date: "2026-12-05",
+    });
+    expect(body).not.toHaveProperty("start_time");
+    expect(body).not.toHaveProperty("recurrence_rule");
+  });
+
+  it("makes a timed event all-day on its day", async () => {
+    renderEdit({
+      id: "t1",
+      name: "Exec Sync",
+      start_time: "2026-07-01T18:00:00.000Z",
+      end_time: "2026-07-01T19:00:00.000Z",
+    });
+    const day = (screen.getByLabelText("Starts, day") as HTMLInputElement)
+      .value;
+    pickTiming("All day");
+    const body = await save();
+    expect(body).toMatchObject({ timing: "all_day", end_date: null });
+    expect(formatDateEntry(String(body.start_date), new Date())).toBe(day);
+    expect(body).not.toHaveProperty("start_time");
+  });
+
+  it("confirms a tentative event", async () => {
+    renderEdit({ ...DATED, is_tentative: true });
+    const tentative = screen.getByRole("switch", { name: "Tentative" });
+    expect(tentative).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(tentative);
+    const body = await save();
+    expect(body).toMatchObject({ is_tentative: false });
+    expect(body).not.toHaveProperty("timing");
+  });
+
+  it("offers only Set time on a series head, which holds the repeat", () => {
+    renderEdit({
+      id: "s1",
+      name: "Chapter",
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+      recurrence_rule: "WEEKLY",
+    });
+    const timing = screen.getByRole("radiogroup", { name: "Timing" });
+    expect(
+      within(timing)
+        .getAllByRole("radio")
+        .map((each) => each.textContent),
+    ).toEqual(["Set time"]);
+  });
+
+  it("keeps On the calendar only off a started series, where a save can't reach the series", () => {
+    renderEdit({
+      id: "s2",
+      name: "Chapter",
+      start_time: "2020-07-01T18:00:00.000Z",
+      end_time: "2020-07-01T19:00:00.000Z",
+      recurrence_rule: "WEEKLY",
+    });
+    openRow("Who's coming");
+    expect(
+      within(
+        screen.getByRole("radiogroup", {
+          name: "Attendance for everyone else",
+        }),
+      ).queryByRole("radio", { name: "On the calendar only" }),
+    ).toBeNull();
   });
 });

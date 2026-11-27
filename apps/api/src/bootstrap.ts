@@ -13,6 +13,7 @@ import {
   type DeploymentEnvironment,
 } from './interface/http/deployment-environment';
 import { createProxyChainTripwire } from './interface/middleware/proxy-chain-tripwire.middleware';
+import { jsonCompression } from './interface/middleware/json-compression.middleware';
 import { bodyParserErrorMiddleware } from './interface/middleware/body-parser-errors.middleware';
 import { requestIdMiddleware } from './interface/middleware/request-id.middleware';
 import { requestReadsMiddleware } from './interface/middleware/request-reads.middleware';
@@ -208,6 +209,9 @@ export function configureApp(
   // guard rejection before any handler runs — carries the same security
   // headers.
   app.use(helmet(HELMET_OPTIONS));
+
+  // JSON bodies go out gzipped to a caller that accepts it (#6088).
+  app.use(jsonCompression());
 
   // Behind Render, Express must resolve the caller from `X-Forwarded-For`, or
   // `req.ip` is the proxy's address and every unauthenticated caller shares one

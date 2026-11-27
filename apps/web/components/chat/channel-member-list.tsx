@@ -162,7 +162,7 @@ export function ChannelMemberList({
             }}
             placeholder={`Search ${rows.length} members`}
             aria-label="Search members"
-            className="h-8 px-2.5 pointer-coarse:h-11"
+            className="h-control-field px-2.5 pointer-coarse:h-11"
           />
         </div>
       ) : null}
@@ -214,10 +214,7 @@ function MemberGroup({
   const labelId = useId();
   return (
     <div className="pb-3">
-      <p
-        id={labelId}
-        className={cn("px-2 pb-1 text-muted-foreground", EYEBROW)}
-      >
+      <p id={labelId} className={cn("px-2 pb-1 text-muted", EYEBROW)}>
         {group.label}
         <span className="ml-1.5 tabular-nums">{group.rows.length}</span>
       </p>
@@ -309,7 +306,7 @@ function MemberRow({
   );
   const rowClass = cn(
     "flex w-full items-center gap-2 rounded-md px-2",
-    title || row.line ? "h-10" : "h-8",
+    title || row.line ? "h-10" : "h-control-list-row",
   );
   return (
     <li data-presence={row.status ?? undefined}>
@@ -338,7 +335,7 @@ function MemberListSkeleton() {
     <div aria-hidden="true" className="space-y-1 px-2">
       <Skeleton className="mb-2 h-3 w-16" />
       {["w-24", "w-32", "w-20", "w-28", "w-24", "w-16"].map((width, index) => (
-        <div key={index} className="flex h-8 items-center gap-2">
+        <div key={index} className="flex h-control-list-row items-center gap-2">
           <Skeleton className="h-6 w-6 shrink-0 rounded-full" />
           <Skeleton className={cn("h-3", width)} />
         </div>

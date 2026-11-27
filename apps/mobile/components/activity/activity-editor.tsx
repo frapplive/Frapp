@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { eyebrowStyle } from "@/components/eyebrow";
 import {
   BackHandler,
   Platform,
@@ -302,10 +303,8 @@ function createStyles(tokens: SignetTokens) {
       color: tokens.color.gold.onHouse,
     },
     eyebrow: {
-      ...typeRole(tokens.typography.role.caption),
+      ...eyebrowStyle(tokens),
       color: tokens.color.text.muted,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
       marginTop: tokens.spacing.md,
     },
     list: {

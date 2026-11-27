@@ -16,7 +16,12 @@ import {
   formatWeekdayDay,
   parseInstant,
 } from "@repo/formatting";
-import { checkInWindowBounds } from "@repo/validation";
+import {
+  checkInWindowBounds,
+  eventDatedPhase,
+  eventTakesAttendance,
+  type EventTimingFields,
+} from "@repo/validation";
 
 function clock(date: Date): string {
   return date.toLocaleTimeString(undefined, {
@@ -151,11 +156,41 @@ export function sortEventsByStart<T extends { start_time?: unknown }>(
  * Whether an event is worth showing on the list: still ahead, or recent enough
  * that its check-in window has not closed. A chapter's history belongs in
  * reports, not in the member-facing list.
+ *
+ * Passed the event as `shape`, an all-day or time-TBD event is current
+ * through its last day, by the viewer's own days rather than the saver's
+ * stored midnights (#6098).
  */
 export function isCurrentOrUpcoming(
   startTime: string,
   endTime: string,
   now: Date,
+  shape?: EventTimingFields,
 ): boolean {
+  const dated = shape ? eventDatedPhase(shape, now) : null;
+  if (dated !== null) return dated !== "after";
   return resolveCheckInWindow(startTime, endTime, now).state !== "closed";
+}
+
+/**
+ * Whether the event's check-in is open now: never for one that takes no
+ * attendance (on the calendar only, or time TBD, #6098), else the window.
+ */
+export function checkInOpenFor(
+  event: EventTimingFields & {
+    start_time: string;
+    end_time: string;
+    check_in_opens_minutes?: unknown;
+  },
+  now: Date,
+): boolean {
+  if (!eventTakesAttendance(event)) return false;
+  return (
+    resolveCheckInWindow(
+      event.start_time,
+      event.end_time,
+      now,
+      event.check_in_opens_minutes,
+    ).state === "open"
+  );
 }

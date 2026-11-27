@@ -17,14 +17,15 @@
 const SCREENS_BY_ROUTE: readonly (readonly [string, readonly string[]])[] = [
   // Events suggested from this time last year are reviewed here (#3930).
   ["/events", ["events", "ai_suggestions"]],
-  // The board's Suggested list is where suggested tasks are reviewed (#4313).
-  ["/tasks", ["tasks", "ai_suggestions"]],
   // And under the minutes they came from, where the push for them opens
   // (`/meetings/<id>`; the Meetings list itself folded into Documents, #5949).
   ["/meetings", ["ai_suggestions"]],
   // A submitted task's review opens here (`?review=`), as do the tasks
-  // waiting on the member, so a visit reads task rows too, and the weekly
-  // recap push (#4985) opens here.
+  // waiting on the member and every task link (the Tasks page folded in,
+  // #5948), so a visit reads task rows too, and the weekly recap push
+  // (#4985) opens here. Suggested tasks (#4313) are drawn only on Everyone's,
+  // which a pathname can't tell from Mine, so that view marks them itself
+  // (`MarkScreensSeen` in `tasks-board.tsx`).
   ["/activity", ["tasks", "activity"]],
   // A member's own points and service hours are read on their Profile, whose
   // figures and panels show what those rows are about (#5950).

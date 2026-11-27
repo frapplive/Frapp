@@ -39,15 +39,20 @@ import {
   checkSeriesLength,
   isRepeatRule,
   eventLimitsAudience,
+  eventIsDated,
   eventOthersInvited,
+  eventTakesAttendance,
 } from '@repo/validation';
 import {
   attendanceCreate,
   attendanceUpdate,
+  calendarOnlyRolesProblem,
+  calendarOnlyShape,
   keepAgendaTabledFrom,
   normalizeAgenda,
   normalizeCheckInZone,
 } from './event-input';
+import { resolveCreateTiming, resolveUpdateTiming } from './event-timing-input';
 import {
   keepUnseenLinks,
   normalizeFrappLinks,
@@ -162,11 +167,19 @@ export class EventService {
   async checkInNeedsCode(
     event: Pick<
       Event,
-      'id' | 'chapter_id' | 'start_time' | 'end_time' | 'check_in_opens_minutes'
+      | 'id'
+      | 'chapter_id'
+      | 'start_time'
+      | 'end_time'
+      | 'check_in_opens_minutes'
+      | 'timing'
+      | 'calendar_only'
     >,
     viewerId: string,
     now: Date = new Date(),
   ): Promise<boolean> {
+    // No check-in at all on an event that takes no attendance (#6098).
+    if (!eventTakesAttendance(event)) return false;
     const start = new Date(event.start_time);
     const end = new Date(event.end_time);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -344,21 +357,19 @@ export class EventService {
     rawInput: CreateEventInput,
     requestZone?: string | null,
   ): Promise<CreateEventResult> {
-    const { start_time, end_time } = rawInput;
-
-    const start = new Date(start_time);
-    const end = new Date(end_time);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    // A dated event's bounds are the request zone's midnights (#6098).
+    const when = resolveCreateTiming(rawInput, requestZone);
+    const start = new Date(when.start_time);
+    if (when.timing !== 'timed' && rawInput.recurrence_rule) {
       throw new BadRequestException(
-        'start_time and end_time must be valid ISO dates',
+        "A repeating event needs a time for now; make it timed, or add each day's event on its own.",
       );
-    }
-    if (end <= start) {
-      throw new BadRequestException('end_time must be after start_time');
     }
 
     const setsRequirements = await this.canSetRequirements(rawInput);
-    const input = setsRequirements ? rawInput : withoutRequirements(rawInput);
+    const input = calendarOnlyShape(
+      setsRequirements ? rawInput : withoutRequirements(rawInput),
+    );
 
     // The DTO checks the rule's shape; whether it fits this first meeting (an
     // UNTIL that leaves no second meeting, or one past the series cap) needs
@@ -410,6 +421,17 @@ export class EventService {
       required_role_ids: input.required_role_ids,
       excluded_role_ids: input.excluded_role_ids,
     });
+    // A chat card is a snapshot of start and end times (#1717), which a
+    // dated or calendar-only event would misstate; `/event` can make
+    // neither, so only a direct POST reaches this (#6098).
+    if (
+      (when.timing !== 'timed' || input.calendar_only) &&
+      (input.channel_id || input.client_message_id)
+    ) {
+      throw new BadRequestException(
+        'An all-day, time-TBD or calendar-only event cannot post a chat card yet. Create it without channel_id/client_message_id.',
+      );
+    }
     if (limitsAudience && (input.channel_id || input.client_message_id)) {
       throw new BadRequestException(
         'An event that leaves anyone out cannot post a chat card: the card ' +
@@ -430,9 +452,11 @@ export class EventService {
       name: input.name,
       description: input.description ?? null,
       location: input.location ?? null,
-      start_time: input.start_time,
-      end_time: input.end_time,
-      // A member's is 0 already (`withoutRequirements`).
+      ...when,
+      is_tentative: input.is_tentative ?? false,
+      calendar_only: input.calendar_only ?? false,
+      // A member's is 0 already (`withoutRequirements`), and so is a
+      // calendar-only event's (`calendarOnlyShape`).
       point_value: input.point_value ?? 10,
       is_mandatory: input.is_mandatory ?? false,
       recurrence_rule: input.recurrence_rule ?? null,
@@ -554,26 +578,94 @@ export class EventService {
   async update(
     id: string,
     chapterId: string,
-    input: UpdateEventInput,
+    rawInput: UpdateEventInput,
     scope: EventMutationScope = 'instance',
     actorId?: string,
     requestZone?: string | null,
   ): Promise<Event> {
     let existing: Event | null = null;
-    if (input.start_time || input.end_time) {
+    let input = rawInput;
+    // When it happens (#6098): the shape, its days and its times resolve
+    // together, so the row is always one consistent shape.
+    if (
+      rawInput.timing !== undefined ||
+      rawInput.start_date !== undefined ||
+      rawInput.end_date !== undefined ||
+      rawInput.start_time !== undefined ||
+      rawInput.end_time !== undefined
+    ) {
       existing = await this.findById(id, chapterId);
-      const startTime = input.start_time ?? existing.start_time;
-      const endTime = input.end_time ?? existing.end_time;
+      const when = resolveUpdateTiming(rawInput, existing, requestZone);
+      if (when) {
+        const repeats =
+          scope === 'series' ||
+          !!(rawInput.recurrence_rule !== undefined
+            ? rawInput.recurrence_rule
+            : existing.recurrence_rule);
+        if (when.timing !== 'timed' && repeats) {
+          throw new BadRequestException(
+            'A repeating event needs a time for now; change this one event, or make it timed.',
+          );
+        }
+        // A time edit to a timed event goes through as sent, as before:
+        // the series rules read which of start and end it names. Every
+        // other change writes the shape whole.
+        if (when.timing !== 'timed' || eventIsDated(existing)) {
+          input = { ...rawInput, ...when };
+        }
+      }
+    }
 
-      const start = new Date(startTime);
-      const end = new Date(endTime);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    // A repeat rule added on its own to a dated event is refused like one
+    // sent with a dated timing above (#6098).
+    if (rawInput.recurrence_rule && input === rawInput) {
+      existing ??= await this.findById(id, chapterId);
+      if (eventIsDated(existing) && rawInput.timing === undefined) {
         throw new BadRequestException(
-          'start_time and end_time must be valid ISO dates',
+          'A repeating event needs a time for now; make it timed first.',
         );
       }
-      if (end <= start) {
-        throw new BadRequestException('end_time must be after start_time');
+    }
+
+    // On the calendar only is the whole series' or nothing (#6098): a series
+    // edit spreads points and Required to every upcoming meeting, which one
+    // calendar-only meeting among them couldn't hold.
+    if (rawInput.calendar_only !== undefined && scope === 'instance') {
+      existing ??= await this.findById(id, chapterId);
+      if (
+        rawInput.calendar_only !== existing.calendar_only &&
+        (existing.parent_event_id !== null || !!existing.recurrence_rule)
+      ) {
+        throw new BadRequestException(
+          'Put a repeating event on the calendar only for all upcoming events, not for one of them.',
+        );
+      }
+    }
+
+    // On the calendar only (#6098): no points, nobody required, and no role
+    // Required or Optional, whether the switch is turned on now or was on.
+    if (
+      input.calendar_only === true ||
+      (input.calendar_only === undefined &&
+        (input.point_value !== undefined ||
+          input.is_mandatory !== undefined ||
+          input.required_role_ids !== undefined ||
+          input.optional_role_ids !== undefined))
+    ) {
+      existing ??= await this.findById(id, chapterId);
+      if (input.calendar_only ?? existing.calendar_only) {
+        const problem = calendarOnlyRolesProblem({
+          required_role_ids:
+            input.required_role_ids !== undefined
+              ? input.required_role_ids
+              : existing.required_role_ids,
+          optional_role_ids:
+            input.optional_role_ids !== undefined
+              ? input.optional_role_ids
+              : existing.optional_role_ids,
+        });
+        if (problem) throw new BadRequestException(problem);
+        input = { ...input, point_value: 0, is_mandatory: false };
       }
     }
 

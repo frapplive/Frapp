@@ -48,6 +48,14 @@ describe("every pushed phone screen has a way back", () => {
     expect(SCREENS.length).toBeGreaterThan(20);
   });
 
+  // An exemption holds only while the route really draws nothing: a route
+  // listed above that grows a screen (`ScreenShell`) is checked like any
+  // other, so a forgotten entry can't hide a screen with no way back.
+  it.each(Object.keys(NO_SCREEN))("%s still draws no screen", (name) => {
+    const source = readFileSync(path.join(APP, `${name}.tsx`), "utf8");
+    expect(source).not.toMatch(/\bScreenShell\b/);
+  });
+
   it.each(SCREENS)("%s draws a back row or a close", (name) => {
     const source = readFileSync(path.join(APP, `${name}.tsx`), "utf8");
     const drawn =

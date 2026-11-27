@@ -1,10 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ link: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  link: vi.fn(),
+  events: [] as Record<string, unknown>[],
+}));
 
 vi.mock("@repo/hooks", () => ({
-  useEvents: () => ({ data: [] }),
+  useEvents: () => ({ data: mocks.events }),
   useMeetings: () => ({ data: [] }),
   useRoles: () => ({ data: [] }),
   useLinkMeetingEvent: () => ({ mutateAsync: mocks.link, isPending: false }),
@@ -47,4 +50,26 @@ describe("LinkEventPanel", () => {
       );
     },
   );
+
+  it("never offers a calendar-only event as the meeting (#6098)", () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const event = (id: string, name: string, extra = {}) => ({
+      id,
+      name,
+      start_time: yesterday.toISOString(),
+      end_time: new Date(yesterday.getTime() + 3_600_000).toISOString(),
+      ...extra,
+    });
+    mocks.events = [
+      event("e-1", "Chapter meeting"),
+      event("e-2", "Last day of classes", { calendar_only: true }),
+    ];
+    render(
+      <LinkEventPanel meetingId="m-1" meetingName="" onLinked={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Link a meeting" }));
+    expect(screen.getByText("Chapter meeting")).toBeTruthy();
+    expect(screen.queryByText("Last day of classes")).toBeNull();
+    mocks.events = [];
+  });
 });

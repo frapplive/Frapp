@@ -179,7 +179,7 @@ function ProspectBody({
                   if (stage) onMove(candidate, [stage]);
                 }}
               >
-                <SelectTrigger aria-label="Stage" className="h-9">
+                <SelectTrigger aria-label="Stage" className="h-control-small">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -359,7 +359,7 @@ function ProspectBody({
                 items={addable}
                 nameOf={(tag) => tag.label}
                 keyOf={(tag) => tag.id}
-                itemClassName="min-h-8 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+                itemClassName="min-h-control-row text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
                 renderItem={(tag) => (
                   <span className="min-w-0 flex-1 break-words">
                     {tag.label}

@@ -23,6 +23,12 @@ import { BlockedMessageTombstone } from "./blocked-message-tombstone";
 import { JumpToLatestButton } from "./jump-to-latest-button";
 import { useJumpToLatest } from "@/lib/chat/use-jump-to-latest";
 import type { LatestRow } from "@repo/chat-core/jump-to-latest";
+import type { NewMessagesMark, NewMessagesRow } from "@repo/hooks";
+import {
+  NewMessagesDivider,
+  NewMessagesPill,
+  THREAD_DIVIDER_ROW,
+} from "./new-messages-pill";
 import {
   ImageViewer,
   ImageViewerProvider,
@@ -46,6 +52,7 @@ import {
   placeAskTurns,
   resolveAuthorAvatar,
   useAuthorAvatars,
+  useNewMessages,
 } from "@repo/hooks";
 import {
   AskChannelTurn,
@@ -306,10 +313,18 @@ function useStickToBottom({
   virtuoso,
   rowCount,
   hold,
+  opensAtBottom,
 }: {
   virtuoso: React.RefObject<VirtuosoHandle | null>;
   rowCount: number;
   hold: boolean;
+  /**
+   * Whether a fresh scroller opens on its newest row, read when it attaches.
+   * Not when the timeline opens it on a channel's first unread message
+   * (#6052), which a growing row must not pull back to the bottom before the
+   * first scroll event says where the list is.
+   */
+  opensAtBottom: React.RefObject<boolean>;
 }): {
   scrollerRef: (element: HTMLElement | Window | null) => void;
   totalListHeightChanged: () => void;
@@ -324,19 +339,22 @@ function useStickToBottom({
   });
   const detach = useRef<(() => void) | null>(null);
 
-  const scrollerRef = useCallback((element: HTMLElement | Window | null) => {
-    detach.current?.();
-    detach.current = null;
-    if (!(element instanceof HTMLElement)) return;
-    stuck.current = true;
-    const onScroll = () => {
-      stuck.current =
-        element.scrollHeight - element.scrollTop - element.clientHeight <=
-        STICK_TO_BOTTOM_SLACK_PX;
-    };
-    element.addEventListener("scroll", onScroll, { passive: true });
-    detach.current = () => element.removeEventListener("scroll", onScroll);
-  }, []);
+  const scrollerRef = useCallback(
+    (element: HTMLElement | Window | null) => {
+      detach.current?.();
+      detach.current = null;
+      if (!(element instanceof HTMLElement)) return;
+      stuck.current = opensAtBottom.current;
+      const onScroll = () => {
+        stuck.current =
+          element.scrollHeight - element.scrollTop - element.clientHeight <=
+          STICK_TO_BOTTOM_SLACK_PX;
+      };
+      element.addEventListener("scroll", onScroll, { passive: true });
+      detach.current = () => element.removeEventListener("scroll", onScroll);
+    },
+    [opensAtBottom],
+  );
   useEffect(() => () => detach.current?.(), []);
 
   const totalListHeightChanged = useCallback(() => {
@@ -416,7 +434,7 @@ function OlderHistoryRow({ context }: { context?: TimelineHeaderContext }) {
           <Button
             variant="secondary"
             size="sm"
-            className="h-8"
+            className="h-control-row"
             onClick={context.onRetryOlder}
           >
             Retry
@@ -558,6 +576,8 @@ export interface MessageTimelineProps {
   /** A row's Report and Block (#2687); see `MessageItemProps`. */
   onReport?: (message: ChatMessage) => void;
   onBlock?: (message: ChatMessage) => void;
+  /** Time out a message's sender (#6006); see `MessageItem`. */
+  onTimeOut?: (message: ChatMessage) => void;
   /** A row's Forward (#4907); see `MessageItemProps`. */
   onForward?: (message: ChatMessage) => void;
   /** Opens a member's profile by `users.id` (#3726); see `MessageItemProps`. */
@@ -606,6 +626,16 @@ export interface MessageTimelineProps {
    * `messages` and never becomes one. Omitted, nothing is drawn.
    */
   askTurns?: readonly AskChannelPlace[];
+  /**
+   * What the unread counts said as this channel opened (#6052): where the
+   * member had read to, and how many were new. Drawn as the "New messages"
+   * divider above the first unread message, and the pill pointing to it while
+   * it is off screen. Taken once per channel by the shell, so the read stamps
+   * that follow move neither. Omitted or `null`, neither is drawn.
+   */
+  newMessages?: NewMessagesMark | null;
+  /** The pill's Mark as read, which also takes the divider away. */
+  onMarkRead?: () => void;
 }
 
 /**
@@ -656,6 +686,7 @@ export const MessageTimeline = forwardRef<
     inAuditLog,
     onReport,
     onBlock,
+    onTimeOut,
     onForward,
     onOpenProfile,
     isMember,
@@ -668,6 +699,8 @@ export const MessageTimeline = forwardRef<
     header,
     tapRevealed: sharedTapRevealed,
     askTurns,
+    newMessages = null,
+    onMarkRead,
   },
   ref,
 ) {
@@ -810,10 +843,13 @@ export const MessageTimeline = forwardRef<
     [decorated, askTurns],
   );
   const { firstItemIndex, prepended } = usePrependAwareFirstIndex(rowKeys);
+  // Set below, once the divider is placed; read when a fresh list attaches.
+  const opensAtBottom = useRef(true);
   const stickToBottom = useStickToBottom({
     virtuoso,
     rowCount: decorated.length,
     hold: holdFollow,
+    opensAtBottom,
   });
 
   // The way back to the newest message once the member has read back through
@@ -837,6 +873,7 @@ export const MessageTimeline = forwardRef<
     followWithin: STICK_TO_BOTTOM_SLACK_PX,
   });
   const markNewest = jump.markNewest;
+  const measureJump = jump.measure;
   const pinToBottom = stickToBottom.pinned;
   const jumpToLatest = useCallback(() => {
     if (!virtuoso.current) return;
@@ -850,6 +887,82 @@ export const MessageTimeline = forwardRef<
     pinToBottom();
     markNewest();
   }, [markNewest, pinToBottom]);
+
+  // The "New messages" divider and the pill pointing to it (#6052), on the
+  // same rows the jump control reads, oldest first as the list draws them.
+  const newMessagesRows = useMemo<NewMessagesRow[]>(
+    () =>
+      decorated.map(({ message, visibility }) => ({
+        id: message.client_message_id ?? message.id,
+        createdAt: message.created_at,
+        own: viewerId !== null && message.sender_id === viewerId,
+        silent: visibility === "tombstone" || message.is_deleted === true,
+      })),
+    [decorated, viewerId],
+  );
+  /*
+    Puts a row at the top of the screen: the divider, when a channel opens on
+    it or the pill is tapped. Instant, for the reason `scrollToMessage` gives,
+    and a frame later, as the jump to the member's own send is: a fresh
+    Virtuoso's deferred scroll to its newest row, or the channel switch's
+    below, would otherwise replace it in the same commit. The scroll fires a
+    scroll event, from which the bottom pin learns the list left its newest
+    row. The jump control's zone only leaves the newest row on a scroll up,
+    which this is not, so it is measured once the list has settled there.
+  */
+  const rowFrame = useRef<number | null>(null);
+  const scrollRowToTop = useCallback(
+    (index: number) => {
+      if (rowFrame.current !== null) cancelAnimationFrame(rowFrame.current);
+      rowFrame.current = requestAnimationFrame(() => {
+        rowFrame.current = requestAnimationFrame(() => {
+          rowFrame.current = null;
+          measureJump();
+        });
+        virtuoso.current?.scrollToIndex({
+          index,
+          align: "start",
+          behavior: "auto",
+        });
+      });
+    },
+    [measureJump],
+  );
+  useEffect(
+    () => () => {
+      if (rowFrame.current !== null) cancelAnimationFrame(rowFrame.current);
+    },
+    [],
+  );
+  const unread = useNewMessages({
+    channelKey: channelId ?? null,
+    mark: newMessages,
+    rows: newMessagesRows,
+    hasOlder,
+    isLoadingOlder,
+    olderError,
+    scrollToRow: scrollRowToTop,
+    loadOlder: onLoadOlder,
+    onMarkRead,
+    // A jump into this channel (a search hit, a bookmark, a link to one
+    // message) owns where it opens.
+    holdLanding: holdFollow,
+  });
+  /*
+    Where a list mounting now opens. On the divider when there is one, at the
+    top of the screen, as `useNewMessages` lands it: a fresh Virtuoso settles
+    on `initialTopMostItemIndex` after a scroll made in its first frames, so
+    the open lands this way, and the hook's own scroll then finds it there.
+    A list already mounted (a channel switch, a mark arriving late) is
+    scrolled by the hook. A jump to one message owns where it opens.
+  */
+  const opensOnDivider = !holdFollow && unread.dividerIndex >= 0;
+  const openingIndex = opensOnDivider
+    ? ({ index: unread.dividerIndex, align: "start" } as const)
+    : Math.max(decorated.length - 1, 0);
+  useInsertionEffect(() => {
+    opensAtBottom.current = !opensOnDivider;
+  });
 
   /*
     A question the member just asked Frapp brings the list to it, as their
@@ -1094,20 +1207,33 @@ export const MessageTimeline = forwardRef<
     },
     [stickScrollerRef, jumpScrollerRef],
   );
+  const reportUnreadRange = unread.reportRange;
   const reportVisible = useCallback(() => {
     const range = visibleRange.current;
-    if (!onVisibleMessagesChange || !range) return;
+    if (!range) return;
     const view = scroller.current?.getBoundingClientRect();
     const ids: string[] = [];
+    let first = -1;
+    let last = -1;
     for (let i = range.startIndex; i <= range.endIndex; i++) {
       const entry = decorated[i - firstItemIndex];
-      if (!entry || entry.visibility === "tombstone") continue;
+      if (!entry) continue;
       // Virtuoso's range includes a row with one pixel showing. A row
       // counts once half of it is on screen (or it fills half the screen),
       // as mobile's viewability threshold does.
       const row = view
-        ? scroller.current?.querySelector<HTMLElement>(`[data-index="${i}"]`)
+        ? // Virtuoso's `data-index` is the row's index in `data`, not offset
+          // by `firstItemIndex` as the range is: offset, this matched no
+          // row, so every row in the range counted as shown.
+          scroller.current?.querySelector<HTMLElement>(
+            `[data-index="${i - firstItemIndex}"]`,
+          )
         : null;
+      // Virtuoso reports a range before it has drawn the rows newly in it,
+      // so a row with no element yet is not on screen; the report a frame
+      // later (`handleRangeChanged`) finds it. Counting it as shown marked
+      // rows below the screen seen.
+      if (view && !row) continue;
       if (view && row) {
         const box = row.getBoundingClientRect();
         const shown =
@@ -1116,16 +1242,32 @@ export const MessageTimeline = forwardRef<
           continue;
         }
       }
-      ids.push(entry.message.id);
+      if (first < 0) first = i - firstItemIndex;
+      last = i - firstItemIndex;
+      if (entry.visibility !== "tombstone") ids.push(entry.message.id);
     }
-    onVisibleMessagesChange(ids);
-  }, [decorated, firstItemIndex, onVisibleMessagesChange]);
+    onVisibleMessagesChange?.(ids);
+    // The "New messages" pill (#6052) reads the same rows, by the same rule.
+    if (first >= 0) reportUnreadRange(first, last);
+  }, [decorated, firstItemIndex, onVisibleMessagesChange, reportUnreadRange]);
+  const rangeFrame = useRef<number | null>(null);
   const handleRangeChanged = useCallback(
     (range: ListRange) => {
       visibleRange.current = range;
       reportVisible();
+      if (rangeFrame.current !== null) cancelAnimationFrame(rangeFrame.current);
+      rangeFrame.current = requestAnimationFrame(() => {
+        rangeFrame.current = null;
+        reportVisible();
+      });
     },
     [reportVisible],
+  );
+  useEffect(
+    () => () => {
+      if (rangeFrame.current !== null) cancelAnimationFrame(rangeFrame.current);
+    },
+    [],
   );
   // A channel switch keeps this component and its index space, so the last
   // channel's range would map onto the new channel's rows: forget it until
@@ -1320,7 +1462,7 @@ export const MessageTimeline = forwardRef<
           // the live page landing over the cached tail prepends rows; following
           // those is what keeps a cold open at the newest message.
           followOutput={holdFollow || (prepended && armed) ? false : "smooth"}
-          initialTopMostItemIndex={Math.max(decorated.length - 1, 0)}
+          initialTopMostItemIndex={openingIndex}
           atTopStateChange={handleAtTop}
           rangeChanged={handleRangeChanged}
           // Holds the open on its newest row while rows above it grow: a photo
@@ -1334,120 +1476,152 @@ export const MessageTimeline = forwardRef<
             Scroller: TimelineScroller,
             Header: TimelineHeader,
           }}
-          itemContent={(_, entry) => (
-            <>
-              {entry === decorated[0] ? askTurnsAbove : null}
-              {entry.startsDay ? (
-                // components.md §11 § Grouping: a hairline either side of a
-                // centred 12.5 / 600 caption, and the only date in the thread.
-                <div
-                  data-slot="day-divider"
-                  className="flex items-center gap-3 px-5 pb-1 pt-4 text-caption font-semibold text-muted-foreground"
-                >
-                  <span aria-hidden="true" className="h-px flex-1 bg-border" />
-                  <span>{dayDividerLabel(entry.message.created_at)}</span>
-                  <span aria-hidden="true" className="h-px flex-1 bg-border" />
-                </div>
-              ) : null}
-              {entry.visibility === "tombstone" ? (
-                <BlockedMessageTombstone
-                  channelId={entry.message.channel_id}
-                  senderName={
-                    entry.message.sender_id
-                      ? nameFor(entry.message.sender_id)
-                      : null
-                  }
-                  canUnblock={tombstoneCanUnblock(entry.message, blockState)}
-                  onUnblock={() => {
-                    if (entry.message.sender_id) {
-                      onUnblock(entry.message.sender_id);
+          itemContent={(_, entry) => {
+            // The New messages line starts a run, as the day divider does
+            // (#6052): the first unread message names its author.
+            const newAbove =
+              (entry.message.client_message_id ?? entry.message.id) ===
+              unread.dividerKey;
+            return (
+              <>
+                {entry === decorated[0] ? askTurnsAbove : null}
+                {newAbove ? (
+                  // Above the first unread message (#6052), carrying the date
+                  // when that message also starts a day.
+                  <NewMessagesDivider
+                    dayLabel={
+                      entry.startsDay
+                        ? dayDividerLabel(entry.message.created_at)
+                        : undefined
                     }
-                  }}
-                  reload={
-                    entry.message.sender_id
-                      ? (maskedRefresh.get(entry.message.sender_id) ?? null)
-                      : null
-                  }
-                  onReload={() => {
-                    if (entry.message.sender_id) {
-                      onReloadMasked(entry.message.sender_id);
+                  />
+                ) : entry.startsDay ? (
+                  // components.md §11 § Grouping: a hairline either side of a
+                  // centred 12.5 / 600 caption, and the only date in the thread.
+                  <div
+                    data-slot="day-divider"
+                    className={cn(THREAD_DIVIDER_ROW, "text-muted-foreground")}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="h-px flex-1 bg-border"
+                    />
+                    <span>{dayDividerLabel(entry.message.created_at)}</span>
+                    <span
+                      aria-hidden="true"
+                      className="h-px flex-1 bg-border"
+                    />
+                  </div>
+                ) : null}
+                {entry.visibility === "tombstone" ? (
+                  <BlockedMessageTombstone
+                    channelId={entry.message.channel_id}
+                    senderName={
+                      entry.message.sender_id
+                        ? nameFor(entry.message.sender_id)
+                        : null
                     }
-                  }}
-                  showHeader={entry.showHeader}
-                />
-              ) : (
-                <MessageItem
-                  nameFor={nameFor}
-                  message={entry.message}
-                  authorColor={
-                    entry.message.sender_id
-                      ? roleColorFor?.(entry.message.sender_id)
-                      : null
-                  }
-                  blockState={blockState}
-                  avatarUrl={
-                    resolveAuthorAvatar(
-                      entry.message,
-                      avatarFor,
-                      avatars.data,
-                    ) ?? undefined
-                  }
-                  viewerId={viewerId}
-                  showHeader={entry.showHeader}
-                  endsRun={entry.endsRun}
-                  runStartedAt={entry.runStartedAt}
-                  onReact={onReact}
-                  onUnreact={onUnreact}
-                  onReply={onReply}
-                  onOpenThread={onOpenThread}
-                  avatarFor={avatarFor}
-                  roleColorFor={roleColorFor}
-                  threadUnread={threadUnread?.[entry.message.id] ?? 0}
-                  onJumpToParent={onJumpToParent}
-                  // The parent, or `null` when it is outside the loaded window.
-                  // `MessageItem` decides whether to draw a quote from
-                  // `message.reply_to_id`, not from this prop, so `null` and
-                  // `undefined` are equivalent to it — the `?? null` is here to say
-                  // "looked up and absent" rather than to drive a branch.
-                  replyParent={
-                    entry.message.reply_to_id
-                      ? (byId.get(entry.message.reply_to_id) ?? null)
-                      : undefined
-                  }
-                  onRetry={onRetry}
-                  onDiscard={onDiscard}
-                  onRetryUnconfirmed={onRetryUnconfirmed}
-                  onAct={onAct}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onClosePoll={onClosePoll}
-                  onCloseCard={onCloseCard}
-                  onFlag={onFlag}
-                  isBookmarked={bookmarkedMessageIds?.has(entry.message.id)}
-                  onToggleBookmark={onToggleBookmark}
-                  onRemind={onRemind}
-                  canManageChannel={canManageChannel}
-                  inAuditLog={inAuditLog}
-                  onReport={onReport}
-                  onBlock={onBlock}
-                  onForward={onForward}
-                  onOpenProfile={onOpenProfile}
-                  isMember={isMember}
-                  isTapRevealed={tapRevealed.isRevealed(entry.message)}
-                  onToggleTapReveal={() => tapRevealed.toggle(entry.message)}
-                />
-              )}
-              {askTurnsByRow
-                .get(entry.message.client_message_id ?? entry.message.id)
-                ?.map((turn) => (
-                  <AskChannelTurn key={turn.id} id={turn.id} />
-                ))}
-            </>
-          )}
+                    canUnblock={tombstoneCanUnblock(entry.message, blockState)}
+                    onUnblock={() => {
+                      if (entry.message.sender_id) {
+                        onUnblock(entry.message.sender_id);
+                      }
+                    }}
+                    reload={
+                      entry.message.sender_id
+                        ? (maskedRefresh.get(entry.message.sender_id) ?? null)
+                        : null
+                    }
+                    onReload={() => {
+                      if (entry.message.sender_id) {
+                        onReloadMasked(entry.message.sender_id);
+                      }
+                    }}
+                    showHeader={entry.showHeader || newAbove}
+                  />
+                ) : (
+                  <MessageItem
+                    nameFor={nameFor}
+                    message={entry.message}
+                    authorColor={
+                      entry.message.sender_id
+                        ? roleColorFor?.(entry.message.sender_id)
+                        : null
+                    }
+                    blockState={blockState}
+                    avatarUrl={
+                      resolveAuthorAvatar(
+                        entry.message,
+                        avatarFor,
+                        avatars.data,
+                      ) ?? undefined
+                    }
+                    viewerId={viewerId}
+                    showHeader={entry.showHeader || newAbove}
+                    endsRun={entry.endsRun}
+                    runStartedAt={entry.runStartedAt}
+                    onReact={onReact}
+                    onUnreact={onUnreact}
+                    onReply={onReply}
+                    onOpenThread={onOpenThread}
+                    avatarFor={avatarFor}
+                    roleColorFor={roleColorFor}
+                    threadUnread={threadUnread?.[entry.message.id] ?? 0}
+                    onJumpToParent={onJumpToParent}
+                    // The parent, or `null` when it is outside the loaded window.
+                    // `MessageItem` decides whether to draw a quote from
+                    // `message.reply_to_id`, not from this prop, so `null` and
+                    // `undefined` are equivalent to it — the `?? null` is here to say
+                    // "looked up and absent" rather than to drive a branch.
+                    replyParent={
+                      entry.message.reply_to_id
+                        ? (byId.get(entry.message.reply_to_id) ?? null)
+                        : undefined
+                    }
+                    onRetry={onRetry}
+                    onDiscard={onDiscard}
+                    onRetryUnconfirmed={onRetryUnconfirmed}
+                    onAct={onAct}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onClosePoll={onClosePoll}
+                    onCloseCard={onCloseCard}
+                    onFlag={onFlag}
+                    isBookmarked={bookmarkedMessageIds?.has(entry.message.id)}
+                    onToggleBookmark={onToggleBookmark}
+                    onRemind={onRemind}
+                    canManageChannel={canManageChannel}
+                    inAuditLog={inAuditLog}
+                    onReport={onReport}
+                    onBlock={onBlock}
+                    onTimeOut={onTimeOut}
+                    onForward={onForward}
+                    onOpenProfile={onOpenProfile}
+                    isMember={isMember}
+                    isTapRevealed={tapRevealed.isRevealed(entry.message)}
+                    onToggleTapReveal={() => tapRevealed.toggle(entry.message)}
+                  />
+                )}
+                {askTurnsByRow
+                  .get(entry.message.client_message_id ?? entry.message.id)
+                  ?.map((turn) => (
+                    <AskChannelTurn key={turn.id} id={turn.id} />
+                  ))}
+              </>
+            );
+          }}
           computeItemKey={(_, entry) =>
             entry.message.client_message_id ?? entry.message.id
           }
         />
+        {unread.direction ? (
+          <NewMessagesPill
+            count={unread.count}
+            direction={unread.direction}
+            onJump={unread.jump}
+            onMarkRead={unread.markRead}
+          />
+        ) : null}
         {jump.showsJump ? (
           <JumpToLatestButton hasNew={jump.hasNewBelow} onJump={jumpToLatest} />
         ) : null}

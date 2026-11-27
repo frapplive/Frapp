@@ -18,7 +18,11 @@ import {
   type DeviceInstant,
 } from "@repo/hooks";
 import { SignetTokens } from "@repo/theme/signet";
-import { can } from "@repo/validation";
+import {
+  can,
+  EVENT_NO_ATTENDANCE_COPY,
+  eventNoAttendanceReason,
+} from "@repo/validation";
 import {
   ErrorState,
   SkeletonBlock,
@@ -261,9 +265,19 @@ export default function HostCheckInScreen() {
     [eventQuery.data],
   );
 
+  // A time-TBD or calendar-only event takes no check-in (#6144): the screen
+  // says so in the API's words rather than drawing a code nobody can redeem.
+  // Neither the event page nor the pickers that open this screen
+  // (`selectHostableEvent`) send one here; an older link can.
+  const noCheckIn = event ? eventNoAttendanceReason(event) : null;
+
   // Both requests are officer-gated, so neither is fired for a member who would
-  // only get a 403 back.
-  const tokenQuery = useMintCheckInToken(eventId, canHost && focused);
+  // only get a 403 back. The code waits for the event's read, so an event that
+  // takes no check-in never flashes "Code unavailable" from the API's 409.
+  const tokenQuery = useMintCheckInToken(
+    eventId,
+    canHost && focused && event !== null && !noCheckIn,
+  );
   const { data: attendance } = useAttendance(canHost ? eventId : "", {
     refetchInterval: focused ? ATTENDANCE_POLL_MS : false,
   });
@@ -297,7 +311,7 @@ export default function HostCheckInScreen() {
   const checkedIn = countCheckedIn(attendance);
   const presence = useCheckInScreenReport(
     eventId,
-    canHost && focused && minted !== null,
+    canHost && focused && minted !== null && !noCheckIn,
   );
   const line = presenceLine(presence);
   const { accent } = useChapterBranding();
@@ -372,6 +386,10 @@ export default function HostCheckInScreen() {
           <InlineNote>
             Hosting check-in is for officers who manage events.
           </InlineNote>
+        </View>
+      ) : noCheckIn ? (
+        <View style={styles.stateWrap}>
+          <InlineNote>{EVENT_NO_ATTENDANCE_COPY[noCheckIn]}</InlineNote>
         </View>
       ) : !minted &&
         (tokenQuery.isError || (!tokenQuery.isPending && !cached)) ? (

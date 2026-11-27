@@ -11,16 +11,16 @@ import { cn } from "@/lib/utils";
  * size). One form body serves both, so a field or a rule lives in one place:
  *
  * - `dialog`: the centred Dialog (the Service and Points pages), controls at
- *   the Field step (40 to a mouse) and Cancel beside the primary.
+ *   the Field step (32 to a mouse) and Cancel beside the primary.
  * - `card`: inside the chat composer's + card (#3983), 360px wide, controls at
- *   the Small step (36 to a mouse, 44 to a finger), and a Discard draft icon
+ *   the Small step (28 to a mouse, 44 to a finger), and a Discard draft icon
  *   in place of Cancel, since closing the card keeps the draft.
  */
 export type FormLayout = "dialog" | "card";
 
 /** The Small step for a field in the card; the Field step's own class otherwise. */
 export function fieldClass(layout: FormLayout): string | undefined {
-  return layout === "card" ? "h-9" : undefined;
+  return layout === "card" ? "h-control-small" : undefined;
 }
 
 /** An inline message under a field: what's missing or wrong, never a toast. */

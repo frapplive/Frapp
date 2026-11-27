@@ -67,6 +67,8 @@ export interface DocumentFolder {
   pinned_at?: string | null;
   /** Who can see it (#5216), left out when everyone can. */
   who_can_see?: string[];
+  /** The Drive folder sync made it from (#5220), left out for any other. */
+  drive_folder_id?: string;
 }
 
 /** A list on a row, or `undefined` for none (everyone, or Same as folder). */
@@ -217,15 +219,17 @@ export function selectDocumentFolders(data: unknown): DocumentFolder[] {
         pinned_at: str(row, "pinned_at"),
         sort: num(row, "sort_order") ?? 0,
         who_can_see: accessList(row),
+        drive_folder_id: str(row, "drive_folder_id"),
       };
     })
     .filter((row): row is NonNullable<typeof row> => !!row)
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
-    .map(({ id, name, pinned_at, who_can_see }) => ({
+    .map(({ id, name, pinned_at, who_can_see, drive_folder_id }) => ({
       id,
       name,
       pinned_at,
       ...(who_can_see ? { who_can_see } : {}),
+      ...(drive_folder_id ? { drive_folder_id } : {}),
     }));
 }
 

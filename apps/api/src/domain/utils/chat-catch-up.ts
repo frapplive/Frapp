@@ -6,6 +6,7 @@ import {
 } from '@repo/validation';
 import type { LanguageModelMessage } from '../adapters/language-model.interface';
 import { normalizeCorpusText } from './corpus-chunker';
+import { chatLineKind } from './corpus-chat';
 import { isQuoteGrounded } from './quote-grounding';
 
 /**
@@ -21,7 +22,7 @@ import { isQuoteGrounded } from './quote-grounding';
  * Pure, so the service, its tests and the eval cases run the same code.
  */
 
-export const CHAT_CATCH_UP_PROMPT_VERSION = 'chat.catch-up@v1';
+export const CHAT_CATCH_UP_PROMPT_VERSION = 'chat.catch-up@v2';
 
 /** A message longer than this is cut before it is sent. */
 export const CATCH_UP_MESSAGE_MAX_CHARS = 1_200;
@@ -160,8 +161,10 @@ export function catchUpMessages(
   const reader = readerName.trim() || 'the reader';
   const body = lines.map((line) => {
     const name = line.message.senderName.trim() || UNNAMED_AUTHOR;
+    // How the message was written, in the words Ask's lines use
+    // (`chatLineKind`): an officer's announcement reads as one (#5180).
     const marks = [
-      line.message.threadRootId ? 'replying in a thread' : null,
+      chatLineKind(line.message.kind, line.message.threadRootId !== null),
       line.message.mentionsReader ? `mentions ${reader}` : null,
     ].filter(Boolean);
     const who = marks.length > 0 ? `${name} (${marks.join(', ')})` : name;

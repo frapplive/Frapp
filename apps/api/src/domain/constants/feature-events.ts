@@ -121,6 +121,14 @@ export const FEATURE_EVENTS = {
     feature: 'tasks',
     properties: ['asked_for_photo'],
   },
+  // Asking for more time (#6096): asked, then approved or declined by an
+  // officer (an automatic approval is `auto_approved` on the ask).
+  'task-extension-requested': {
+    feature: 'tasks',
+    properties: ['auto_approved', 'needs_officer', 'now_blocked'],
+  },
+  'task-extension-approved': { feature: 'tasks', properties: [] },
+  'task-extension-declined': { feature: 'tasks', properties: [] },
   // Tasks up for grabs (2026-11-18): posted, then claimed or handed out.
   'open-task-created': {
     feature: 'tasks',

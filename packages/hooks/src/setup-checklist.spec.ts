@@ -162,7 +162,7 @@ describe("SETUP_CHECKLIST_WEB_PATH", () => {
       SETUP_CHECKLIST_LINES.map((line) => line.key).sort(),
     );
     expect(SETUP_CHECKLIST_WEB_PATH["study-zone"]).toBe(
-      "/settings?tab=geofences",
+      "/settings?tab=geofences&page=study-zones",
     );
   });
 });

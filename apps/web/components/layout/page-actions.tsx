@@ -140,7 +140,7 @@ export function PageActions({ children, className }: PageActionsProps) {
       <div
         data-page-actions="body"
         className={cn(
-          "flex min-h-[34px] max-w-full flex-wrap items-center justify-end gap-2 empty:hidden",
+          "flex min-h-control-small max-w-full flex-wrap items-center justify-end gap-2 empty:hidden",
           className,
         )}
       >

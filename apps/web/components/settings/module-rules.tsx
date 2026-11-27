@@ -11,16 +11,21 @@ import {
   ADJUSTMENT_RATE_LIMIT_MAX,
   CHAPTER_POINTS_CONFIG_DEFAULTS,
   POINTS_ADJUSTMENT_MAX,
+  POINTS_RULES_COPY,
   SERVICE_MINUTES_PER_POINT_DEFAULT,
+  SERVICE_RULES_COPY,
+  moduleRulesFootnote,
+  readBoundedNumber,
+  serviceRateHint,
   servicePointsForDuration,
   type PatchChapterConfig,
 } from "@repo/validation";
 import type { OrgPoints, OrgWorkflow } from "@repo/hooks";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { SettingsGroup } from "@/components/shared/settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { cn, guardIntDraft, parseGuardedInt } from "@/lib/utils";
+import { cn, guardIntDraft } from "@/lib/utils";
 
 /**
  * The Rules block of a module page (#4073): only settings that are stored and
@@ -37,20 +42,8 @@ import { cn, guardIntDraft, parseGuardedInt } from "@/lib/utils";
 
 type Patch = (diff: PatchChapterConfig, successTitle: string) => Promise<void>;
 
-/** A bounded whole number as typed, or the sentence saying why it isn't one. */
-export function readBounded(
-  draft: string,
-  min: number,
-  max: number,
-): { value: number } | { error: string } {
-  const value = parseGuardedInt(draft, min);
-  if (draft.trim() === "") return { error: "Enter a number." };
-  if (value === undefined) return { error: `Use a whole number from ${min}.` };
-  if (value > max) {
-    return { error: `Use ${max.toLocaleString("en-US")} or less.` };
-  }
-  return { value };
-}
+/** A bounded whole number as typed, shared with the phone (#6030). */
+export const readBounded = readBoundedNumber;
 
 export function NumberRule({
   label,
@@ -62,6 +55,7 @@ export function NumberRule({
   onBlur,
   disabled,
   example,
+  asItem = false,
 }: {
   label: string;
   hint: ReactNode;
@@ -73,10 +67,21 @@ export function NumberRule({
   disabled: boolean;
   /** One line saying what the number means for a real member. */
   example?: ReactNode;
+  /**
+   * A row of a `RuleGroup` (`SettingsGroup`): an `<li>` at the settings row's
+   * height, rather than a block of an older `RulesList`.
+   */
+  asItem?: boolean;
 }) {
   const id = useId();
+  const Row = asItem ? "li" : "div";
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+    <Row
+      className={cn(
+        "flex flex-col gap-3 px-4 sm:flex-row sm:justify-between sm:gap-8",
+        asItem ? "min-h-11 py-2.5 sm:items-center" : "py-4 sm:items-start",
+      )}
+    >
       <div className="min-w-0 space-y-0.5">
         <label htmlFor={id} className="text-sm font-medium text-foreground">
           {label}
@@ -110,7 +115,7 @@ export function NumberRule({
           </p>
         ) : null}
       </div>
-    </div>
+    </Row>
   );
 }
 
@@ -122,6 +127,7 @@ export function SwitchRule({
   disabled,
   nested = false,
   muted = false,
+  asItem = false,
 }: {
   label: string;
   hint: ReactNode;
@@ -132,13 +138,17 @@ export function SwitchRule({
   nested?: boolean;
   /** Its label greys while the switch it waits on is off. */
   muted?: boolean;
+  /** A row of a `RuleGroup`: an `<li>` at the settings row's height. */
+  asItem?: boolean;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
+  const Row = asItem ? "li" : "div";
   return (
-    <div
+    <Row
       className={cn(
-        "flex items-start justify-between gap-8 px-4 py-4",
+        "flex justify-between gap-8 px-4",
+        asItem ? "min-h-11 items-center py-2.5" : "items-start py-4",
         nested && "pl-10",
       )}
     >
@@ -163,7 +173,28 @@ export function SwitchRule({
         onCheckedChange={onChange}
         aria-describedby={hintId}
       />
-    </div>
+    </Row>
+  );
+}
+
+/**
+ * A module page's group of rules (#6030): the settings group, its heading and
+ * at most one footnote, holding `NumberRule`s and `SwitchRule`s drawn
+ * `asItem`, and any `SettingsRow` that opens a rule's own page.
+ */
+export function RuleGroup({
+  heading = "Rules",
+  footnote,
+  children,
+}: {
+  heading?: string;
+  footnote?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsGroup heading={heading} footnote={footnote}>
+      {children}
+    </SettingsGroup>
   );
 }
 
@@ -201,12 +232,6 @@ function workflowEnabled(
   key: string,
 ): boolean {
   return workflows.find((wf) => wf.key === key)?.enabled === true;
-}
-
-function hoursForPoints(points: number, minutesPerPoint: number): string {
-  const hours = (points * minutesPerPoint) / 60;
-  const shown = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
-  return `${shown} ${hours === 1 ? "hour" : "hours"}`;
 }
 
 /** Service hours → Rules: the point rate and the proof switch. */
@@ -261,59 +286,48 @@ export function ServiceHoursRules({
   );
 
   return (
-    <ProfileSection
+    <form
       id="settings-module-hours-rules"
-      title="Rules"
-      hint="Changes are written to the chapter audit log."
+      aria-label="Rules"
+      onSubmit={submit}
+      className="scroll-mt-16 space-y-3"
+      noValidate
     >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <RulesList>
-          <NumberRule
-            label="Minutes of service per point"
-            hint="Approved service earns points at this rate. Entries already approved keep what they earned."
-            suffix="minutes"
-            draft={draft}
-            onDraft={setDraft}
-            onBlur={() => void check()}
-            error={error}
-            disabled={!canManage || savingRate}
-            example={
-              <>
-                A 3-hour volunteer shift earns{" "}
-                {shiftPoints.toLocaleString("en-US")}{" "}
-                {shiftPoints === 1 ? "point" : "points"}, and 10 points take{" "}
-                {hoursForPoints(10, rate)}.
-              </>
+      <RuleGroup footnote={moduleRulesFootnote(canManage)}>
+        <NumberRule
+          asItem
+          label={SERVICE_RULES_COPY.rate.label}
+          hint={serviceRateHint(shiftPoints, rate)}
+          suffix={SERVICE_RULES_COPY.rate.suffix}
+          draft={draft}
+          onDraft={setDraft}
+          onBlur={() => void check()}
+          error={error}
+          disabled={!canManage || savingRate}
+        />
+        {hasProofWorkflow ? (
+          <SwitchRule
+            asItem
+            label={SERVICE_RULES_COPY.proof.label}
+            hint={SERVICE_RULES_COPY.proof.hint}
+            checked={proof}
+            disabled={!canManage || savingWorkflows}
+            onChange={(enabled) =>
+              void onPatch(
+                { workflows: [{ key: "wf_hours_receipt", enabled }] },
+                enabled ? "Proof is now required" : "Proof is now optional",
+              )
             }
           />
-          {hasProofWorkflow ? (
-            <SwitchRule
-              label="Ask for proof"
-              hint="Members attach a photo or a signed slip when they log service. The officer approving it sees it."
-              checked={proof}
-              disabled={!canManage || savingWorkflows}
-              onChange={(enabled) =>
-                void onPatch(
-                  { workflows: [{ key: "wf_hours_receipt", enabled }] },
-                  enabled ? "Proof is now required" : "Proof is now optional",
-                )
-              }
-            />
-          ) : null}
-        </RulesList>
-        <SaveRow
-          dirty={draft !== String(saved)}
-          saving={savingRate}
-          disabled={!canManage}
-          label="Save rate"
-        />
-      </form>
-      {!canManage ? (
-        <p className="text-caption text-muted-foreground">
-          Your role can&apos;t change these.
-        </p>
-      ) : null}
-    </ProfileSection>
+        ) : null}
+      </RuleGroup>
+      <SaveRow
+        dirty={draft !== String(saved)}
+        saving={savingRate}
+        disabled={!canManage}
+        label="Save rate"
+      />
+    </form>
   );
 }
 
@@ -377,47 +391,46 @@ export function PointsRules({
   const disabled = !canManage || saving;
 
   return (
-    <ProfileSection
+    <form
       id="settings-module-points-rules"
-      title="Rules"
-      hint="Limits on officers adding or taking points by hand. Points from events, tasks and service aren't limited. Changes are written to the chapter audit log."
+      aria-label="Rules"
+      onSubmit={submit}
+      className="scroll-mt-16 space-y-3"
+      noValidate
     >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <RulesList>
-          <NumberRule
-            label="Adjustments per officer each hour"
-            hint="Past this, an officer's next adjustment is refused until the hour is up. It keeps a slip, or someone using an officer's account, from rewriting the board."
-            suffix="an hour"
-            draft={rateDraft}
-            onDraft={setRateDraft}
-            onBlur={() => void checkRate()}
-            error={rateError}
-            disabled={disabled}
-          />
-          <NumberRule
-            label="Flag adjustments of"
-            hint="An adjustment this size or bigger, up or down, is flagged in the ledger below for another officer to look at. It still goes through."
-            suffix="points"
-            draft={flagDraft}
-            onDraft={setFlagDraft}
-            onBlur={() => void checkFlag()}
-            error={flagError}
-            disabled={disabled}
-          />
-        </RulesList>
-        <SaveRow
-          dirty={dirty}
-          saving={saving}
-          disabled={!canManage}
-          label="Save limits"
+      <RuleGroup
+        footnote={moduleRulesFootnote(canManage, POINTS_RULES_COPY.lead)}
+      >
+        <NumberRule
+          asItem
+          label={POINTS_RULES_COPY.rate.label}
+          hint={POINTS_RULES_COPY.rate.hint}
+          suffix={POINTS_RULES_COPY.rate.suffix}
+          draft={rateDraft}
+          onDraft={setRateDraft}
+          onBlur={() => void checkRate()}
+          error={rateError}
+          disabled={disabled}
         />
-      </form>
-      {!canManage ? (
-        <p className="text-caption text-muted-foreground">
-          Your role can&apos;t change these.
-        </p>
-      ) : null}
-    </ProfileSection>
+        <NumberRule
+          asItem
+          label={POINTS_RULES_COPY.flag.label}
+          hint={POINTS_RULES_COPY.flag.hint}
+          suffix={POINTS_RULES_COPY.flag.suffix}
+          draft={flagDraft}
+          onDraft={setFlagDraft}
+          onBlur={() => void checkFlag()}
+          error={flagError}
+          disabled={disabled}
+        />
+      </RuleGroup>
+      <SaveRow
+        dirty={dirty}
+        saving={saving}
+        disabled={!canManage}
+        label="Save limits"
+      />
+    </form>
   );
 }
 

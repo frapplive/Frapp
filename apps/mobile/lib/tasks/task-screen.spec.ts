@@ -218,6 +218,8 @@ describe("taskScreenControls", () => {
       deleteForEveryone: false,
       reassign: false,
       duplicate: false,
+      // Their own open, dated task (#6096).
+      askForMoreTime: true,
     });
   });
 
@@ -438,6 +440,8 @@ describe("Confirm and Send back (#5513)", () => {
       sendBackInMore: false,
       editRound: false,
       editInMore: true,
+      askRound: false,
+      askInMore: false,
       moreShown: true,
       rounds: 2,
     });
@@ -486,8 +490,12 @@ describe("taskMenuKeys (#5492)", () => {
       scope,
     );
 
-  it("gives a member only Mark done and Start on their own To do", () => {
-    expect(keysFor({}, "me", false)).toEqual(["markDone", "start"]);
+  it("gives a member only Mark done, Start and Ask for more time on their own To do", () => {
+    expect(keysFor({}, "me", false)).toEqual([
+      "markDone",
+      "start",
+      "askForMoreTime",
+    ]);
   });
 
   it("gives a member nothing on a task that isn't theirs", () => {
@@ -830,5 +838,84 @@ describe("Delete on a repeating task (#5119)", () => {
         }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("Ask for more time on the task screen (#6096)", () => {
+  const controls = (overrides: Record<string, unknown>, viewerId = "me") =>
+    taskScreenControls({
+      row: row(overrides),
+      viewerId,
+      canManage: false,
+      toggleRefused: false,
+    });
+
+  it("is the assignee's on an open, dated task, and nobody else's", () => {
+    expect(controls({}).askForMoreTime).toBe(true);
+    expect(controls({}, "officer").askForMoreTime).toBe(false);
+    expect(controls({ fixed_deadline: true }).askForMoreTime).toBe(false);
+    expect(controls({ due_date: null }).askForMoreTime).toBe(false);
+  });
+
+  it("is in the row's long-press menu after Start", () => {
+    expect(taskMenuKeys(controls({}))).toEqual([
+      "markDone",
+      "start",
+      "askForMoreTime",
+    ]);
+  });
+
+  it("is a round beside Mark done alone, else in More, so the pill keeps its verb", () => {
+    // Started: nothing else on the bar.
+    const alone = taskBarLayout({
+      controls: {
+        confirm: false,
+        sendBack: false,
+        edit: false,
+        askForMoreTime: true,
+      },
+      removePeople: false,
+      otherMoreRows: 0,
+    });
+    expect(alone).toMatchObject({
+      askRound: true,
+      askInMore: false,
+      moreShown: false,
+      rounds: 1,
+    });
+    // A To do: Start is in More, so Ask joins it there.
+    const withMore = taskBarLayout({
+      controls: {
+        confirm: false,
+        sendBack: false,
+        edit: false,
+        askForMoreTime: true,
+      },
+      removePeople: false,
+      otherMoreRows: 1, // Start
+    });
+    expect(withMore).toMatchObject({
+      askRound: false,
+      askInMore: true,
+      moreShown: true,
+      rounds: 1,
+    });
+    // An officer's own task: Edit, Remove people and More fill the bar.
+    const full = taskBarLayout({
+      controls: {
+        confirm: false,
+        sendBack: false,
+        edit: true,
+        askForMoreTime: true,
+      },
+      removePeople: true,
+      otherMoreRows: 1,
+    });
+    expect(full).toMatchObject({
+      askRound: false,
+      askInMore: true,
+      moreShown: true,
+      rounds: 3,
+    });
   });
 });

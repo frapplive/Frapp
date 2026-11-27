@@ -4,6 +4,7 @@ import {
   foldIcsLine,
   icsDate,
   icsInstant,
+  type IcsItem,
 } from './ics';
 
 const NOW = new Date('2026-11-12T19:00:00.000Z');
@@ -150,5 +151,52 @@ describe('buildIcsCalendar', () => {
       ],
     });
     expect(out).toContain('DTEND;VALUE=DATE:20270101');
+  });
+});
+
+describe('buildIcsCalendar, dated and tentative events (#6098)', () => {
+  function one(item: Partial<IcsItem>) {
+    return buildIcsCalendar({
+      name: 'x',
+      now: NOW,
+      items: [
+        {
+          uid: 'event-9@frapp.live',
+          when: { kind: 'day', date: '2027-01-11' },
+          summary: 'First day of classes',
+          location: null,
+          description: null,
+          url: 'https://app.frapp.live/events?event=9',
+          ...item,
+        },
+      ],
+    }).split('\r\n');
+  }
+
+  it('writes a one-day all-day event ending the next day (exclusive)', () => {
+    const lines = one({});
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'DTSTART;VALUE=DATE:20270111',
+        'DTEND;VALUE=DATE:20270112',
+      ]),
+    );
+    expect(lines).not.toContain('STATUS:TENTATIVE');
+  });
+
+  it('writes a multi-day all-day event ending the day after its last day', () => {
+    const lines = one({
+      when: { kind: 'day', date: '2027-01-22', endDate: '2027-02-12' },
+    });
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'DTSTART;VALUE=DATE:20270122',
+        'DTEND;VALUE=DATE:20270213',
+      ]),
+    );
+  });
+
+  it('marks a tentative item STATUS:TENTATIVE', () => {
+    expect(one({ tentative: true })).toContain('STATUS:TENTATIVE');
   });
 });

@@ -34,7 +34,10 @@ export function LinkedAppRow({
 }) {
   const off = state.tone === "off";
   return (
-    <li className="flex items-center gap-3 py-3" data-linked-state={state.tone}>
+    <li
+      className="flex items-center gap-3 px-4 py-2.5"
+      data-linked-state={state.tone}
+    >
       <span
         aria-hidden="true"
         className={cn(

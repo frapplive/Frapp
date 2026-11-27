@@ -166,7 +166,8 @@ const EventEditorDialog = deferredPanel(
 );
 
 const RESULT_LINKS: Record<string, { href: string; label: string }> = {
-  tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
+  // The Tasks page folded into Activity (#5948).
+  tasks: { href: "/activity", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
 
@@ -1248,7 +1249,7 @@ function ActCard({
           inputMode="numeric"
           value={eventPoints}
           disabled={busy}
-          className="ml-auto h-8 w-20 text-right"
+          className="ml-auto h-control-row w-20 text-right"
           aria-invalid={pointsMissing || undefined}
           aria-describedby={`${suggestion.id}-event-points-hint`}
           onChange={(change) => {
@@ -1717,7 +1718,7 @@ function CardField({
 }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className={cn(EYEBROW, "text-muted-foreground")}>
+      <label htmlFor={id} className={cn(EYEBROW, "text-muted")}>
         {label}
       </label>
       {children}
@@ -1753,9 +1754,7 @@ function MemberList({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
-        <p className={cn(EYEBROW, "text-muted-foreground")}>
-          {ACT_COPY.field_members}
-        </p>
+        <p className={cn(EYEBROW, "text-muted")}>{ACT_COPY.field_members}</p>
         {collapsible ? (
           <button
             type="button"

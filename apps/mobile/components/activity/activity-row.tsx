@@ -41,6 +41,7 @@ import { createUnreadDotStyles } from "@/components/unread-dot";
 import { activityBadgeHue } from "@/lib/activity/badge-hue";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { initialsFor } from "@/lib/chat/display-name";
+import { activityRowFixedDue } from "@/lib/tasks/extension";
 import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -278,12 +279,21 @@ function ActivityRowDetail({
   const styles = createActivityRowStyles(tokens);
   if (!row.detail) return null;
   const { lead, soon } = activityDetailParts(row);
+  // A fixed deadline on the member's own task reads in the red (#6096), as
+  // on the board and the task screen.
+  const fixed = activityRowFixedDue(row);
   return (
-    <Text numberOfLines={lines} style={styles.detail}>
+    <Text
+      numberOfLines={lines}
+      style={[styles.detail, fixed ? styles.detailUrgent : null]}
+    >
       {lead}
       {lead && soon ? " · " : null}
       {soon ? (
-        <Text style={styles.soon} testID="activity-soon">
+        <Text
+          style={[styles.soon, fixed ? styles.detailUrgent : null]}
+          testID="activity-soon"
+        >
           {soon}
         </Text>
       ) : null}
@@ -587,6 +597,9 @@ function createActivityRowStyles(tokens: SignetTokens) {
       // edge whatever its count says.
       minWidth: 54,
       textAlign: "right",
+    },
+    detailUrgent: {
+      color: tokens.color.semantic.destructiveText,
     },
     // The caption's size, at semibold: a weight is its own Figtree family.
     soon: {

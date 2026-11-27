@@ -20,8 +20,8 @@ function ReportRows() {
           </div>
           <Skeleton className="h-[13px] w-[60%]" />
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-20 rounded-md" />
-            <Skeleton className="h-8 w-24 rounded-md" />
+            <Skeleton className="h-control-small w-20 rounded-md" />
+            <Skeleton className="h-control-small w-24 rounded-md" />
           </div>
         </li>
       ))}
@@ -58,7 +58,7 @@ function ChannelsBody() {
             lines={1}
             trailing={["w-14", "w-16", "w-8"]}
             trailingHeight="h-5"
-            rowClassName="min-h-9 pointer-coarse:min-h-11"
+            rowClassName="min-h-control-list-row pointer-coarse:min-h-11"
           />
           <div className="space-y-3 @3xl:border-l @3xl:border-border @3xl:pl-6">
             <Skeleton className="h-4 w-36" />
@@ -74,34 +74,10 @@ function ChannelsBody() {
   );
 }
 
-/** The channels body, for its own load under the report queue. */
+/** The Channels group, for its own load on the Chat page and a channel's page. */
 export function ChannelsSkeleton() {
   return (
     <SectionSkeleton label="Loading channels">
-      <ChannelsBody />
-    </SectionSkeleton>
-  );
-}
-
-/**
- * Everything `/chat-admin` draws: the report queue (label, its
- * caption, the status tabs, rows) over the channels body. The permission
- * check and the route loader both show this.
- */
-export function ChatAdminBodySkeleton() {
-  return (
-    <SectionSkeleton label="Loading chat admin">
-      <section aria-hidden="true" className="space-y-3">
-        <SkeletonSectionLabel width="w-36" />
-        <Skeleton className="h-[11px] w-[40%]" />
-        <div className="flex h-11 items-center gap-6 border-b border-border">
-          <Skeleton className="h-[13px] w-10" />
-          <Skeleton className="h-[13px] w-16" />
-          <Skeleton className="h-[13px] w-16" />
-          <Skeleton className="h-[13px] w-16" />
-        </div>
-        <ReportRows />
-      </section>
       <ChannelsBody />
     </SectionSkeleton>
   );

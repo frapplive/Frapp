@@ -1,5 +1,10 @@
 import { checkInWindowBounds } from "./check-in-window";
 import {
+  eventDatedPhase,
+  eventTakesAttendance,
+  type EventTimingFields,
+} from "./event-timing";
+import {
   eventAttendanceFor,
   type EventAttendanceFields,
 } from "./event-attendance";
@@ -18,6 +23,13 @@ import {
  * The boundaries are the server's own window (`checkInWindowBounds`), so the
  * roster appears at the instant a check-in can first be accepted. Times that
  * don't parse read as `upcoming`, the phase that shows the least.
+ *
+ * An event that takes no attendance (on the calendar only, or time TBD) is
+ * never `live`: there is no check-in to lead with. Such an event that is
+ * dated is upcoming until its last day ends and past after it, by the
+ * viewer's own days; a calendar-only timed one is past after its end. An
+ * all-day event that takes attendance follows its check-in window like any
+ * other, across its days (#6098). Pass the event as `shape` for that.
  */
 export type EventPagePhase = "upcoming" | "live" | "past";
 
@@ -26,7 +38,20 @@ export function eventPagePhase(
   end: unknown,
   opensMinutes: unknown,
   now: number,
+  shape?: EventTimingFields,
 ): EventPagePhase {
+  if (shape) {
+    const dated = eventDatedPhase(shape, new Date(now));
+    if (dated !== null && !eventTakesAttendance(shape)) {
+      return dated === "after" ? "past" : "upcoming";
+    }
+    if (!eventTakesAttendance(shape)) {
+      const to = typeof end === "string" ? new Date(end) : null;
+      return to && !Number.isNaN(to.getTime()) && now > to.getTime()
+        ? "past"
+        : "upcoming";
+    }
+  }
   const from = typeof start === "string" ? new Date(start) : null;
   const to = typeof end === "string" ? new Date(end) : null;
   if (!from || !to) return "upcoming";

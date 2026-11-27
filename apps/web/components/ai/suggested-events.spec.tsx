@@ -41,7 +41,7 @@ vi.mock("@/components/events/local-input", () => ({
   isoToLocalInput: (value: string) => `local:${value}`,
 }));
 
-const { SuggestedEvents, useRecordPlannedEvent } =
+const { SuggestedEvents, planFromLastYear, useRecordPlannedEvent } =
   await import("./suggested-events");
 
 function suggestion(id: string, event: Record<string, unknown> = {}) {
@@ -227,5 +227,50 @@ describe("useRecordPlannedEvent (#3930)", () => {
 
     mocks.accept.mockRejectedValueOnce(new Error("offline"));
     await expect(record("1", "new-event")).resolves.toBeUndefined();
+  });
+});
+
+describe("planFromLastYear for a dated event (#6144)", () => {
+  // Stored as the saver's midnights; the plan reads the days.
+  const RETREAT = {
+    id: "last-r",
+    name: "Retreat 2025",
+    timing: "all_day",
+    start_date: "2025-11-22",
+    end_date: "2025-11-23",
+    is_tentative: true,
+    start_time: "2025-11-22T05:00:00.000Z",
+    end_time: "2025-11-24T05:00:00.000Z",
+  };
+  const now = new Date(2026, 10, 12, 15);
+
+  it("keeps it all-day on the same weekdays this year, as the phone does", () => {
+    const plan = planFromLastYear("s", RETREAT, now);
+    expect(plan.dated).toEqual({
+      timing: "all_day",
+      startDate: "2026-11-21",
+      endDate: "2026-11-22",
+      tentative: true,
+    });
+    // No clock from the stored midnight.
+    expect([plan.startAt, plan.endAt]).toEqual(["", ""]);
+    expect(plan.template.name).toBe("Retreat 2026");
+  });
+
+  it("keeps a time-TBD event on one day", () => {
+    const plan = planFromLastYear(
+      "s",
+      { ...RETREAT, timing: "time_tbd", end_date: "2025-11-22" },
+      now,
+    );
+    expect(plan.dated).toMatchObject({
+      timing: "time_tbd",
+      startDate: "2026-11-21",
+      endDate: "",
+    });
+  });
+
+  it("leaves a timed event timed", () => {
+    expect(planFromLastYear("s", LAST_YEAR_EVENT, now).dated).toBe(null);
   });
 });

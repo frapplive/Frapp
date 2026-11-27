@@ -39,7 +39,11 @@ import { presenceStatusKind } from "@/lib/realtime/presence-status";
  * this dot owns announcing the status.** Git history holds the labelled variant
  * if a non-interactive container ever needs one.
  */
-export function AvatarPresenceDot({ status }: { status: PresenceStatus | null }) {
+export function AvatarPresenceDot({
+  status,
+}: {
+  status: PresenceStatus | null;
+}) {
   if (!status) return null;
   return (
     <span

@@ -368,3 +368,24 @@ describe("resolveDue — No due date (#5761)", () => {
     });
   });
 });
+
+describe("a fixed deadline on create (#6096)", () => {
+  it("sends fixed_deadline on a task, never on one up for grabs", () => {
+    const task = createRequestOf({
+      title: "Book the venue",
+      who: { kind: "person", userId: "u1" },
+      due_date: "2026-11-20",
+      fixed_deadline: true,
+    });
+    expect(task.route).toBe("task");
+    expect(task.body).toMatchObject({ fixed_deadline: true });
+    const open = createRequestOf({
+      title: "Book the venue",
+      who: { kind: "someone", target: { kind: "chapter" } },
+      due_date: "2026-11-20",
+      fixed_deadline: true,
+    });
+    expect(open.route).toBe("open");
+    expect(open.body).not.toHaveProperty("fixed_deadline");
+  });
+});

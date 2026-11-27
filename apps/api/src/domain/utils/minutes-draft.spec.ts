@@ -84,7 +84,7 @@ describe('buildMinutesDraftPrompt', () => {
   it('carries the notes whole, between markers, and reads them back', () => {
     const prompt = buildMinutesDraftPrompt(request());
     expect(notesInPrompt(prompt.messages[0].content)).toBe(NOTES);
-    expect(prompt.promptVersion).toBe('minutes-draft@v10');
+    expect(prompt.promptVersion).toBe('minutes-draft@v11');
   });
 
   it('says the day of the week, so "by Wednesday" resolves', () => {

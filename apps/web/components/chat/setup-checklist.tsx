@@ -52,7 +52,7 @@ function SetupChecklistView({
         >
           {title}
         </h3>
-        <span className={cn("shrink-0 text-muted-foreground", EYEBROW)}>
+        <span className={cn("shrink-0 text-muted", EYEBROW)}>
           {checklist.doneCount} of {checklist.lines.length}
         </span>
         <button
@@ -78,7 +78,7 @@ function SetupChecklistView({
               className={cn(
                 // The Row step (foundations.md §9): 32 with a 14px label on a
                 // mouse, 44 with a 16px one on touch.
-                "flex min-h-8 w-full items-center gap-2 rounded-xs px-2 text-sm transition-colors hover:bg-card pointer-coarse:min-h-11 pointer-coarse:text-base",
+                "flex min-h-control-row w-full items-center gap-2 rounded-xs px-2 text-sm transition-colors hover:bg-card pointer-coarse:min-h-11 pointer-coarse:text-base",
                 line.done ? "text-muted-foreground" : "text-foreground",
                 FOCUS_RING,
               )}

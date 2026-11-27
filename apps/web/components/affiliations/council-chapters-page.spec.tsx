@@ -121,6 +121,10 @@ describe("CouncilChaptersPage", () => {
     ).toBeGreaterThan(0);
     expect(screen.queryByText("Pi Kappa Alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("Chi Phi")).not.toBeInTheDocument();
+    // Every chapter row, in all three sections, leads with its tile (#6071).
+    expect(screen.getAllByTestId("chapter-mark-text")).toHaveLength(
+      screen.getAllByRole("listitem").length,
+    );
   });
 
   it("accepts and declines a request, and cancels an invite", async () => {
