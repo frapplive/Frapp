@@ -179,7 +179,7 @@ export const DocumentActionsSheet = forwardRef<
             onUploadVersion ? (
               <ActionRow
                 label="Upload a new version"
-                glyph={<UploadGlyph color={accent} size={GLYPH_SIZE} />}
+                glyph={<UploadGlyph color={muted} size={GLYPH_SIZE} />}
                 onPress={() => choose(() => onUploadVersion(target))}
                 styles={styles}
               />
