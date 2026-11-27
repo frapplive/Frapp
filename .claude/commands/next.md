@@ -62,7 +62,7 @@ in the PR.
 tracker.** The opt-in is `ultracode` in this command's arguments or a session-level ultracode
 reminder; the harness never emits that reminder on a slash-command turn, so the argument alone
 counts. When opted in, run the named fan-out points with the Workflow tool: §1.1, §1.2, and Phase 2's
-narrow exception, sized and set up by the [`multi-agent`](../skills/multi-agent/SKILL.md) skill.
+narrow exception, sized by you, with the mechanics in the [`multi-agent`](../skills/multi-agent/SKILL.md) skill.
 Phase 3's `/diff-review` runs its workflow rounds with the Workflow tool. Everything else stays inline, and without the opt-in the fan-out points
 run inline in the same order. A Workflow launch that prompts or is refused is tool
 unavailability, not an opt-out: run that step inline instead of waiting on an approval. A subagent
@@ -321,7 +321,7 @@ each per its own Exits row.
 
 **1.1 — Blocked-by verification.** `Blocked by #N` lines go stale: blockers merge and nobody edits the
 body. Check each blocker (cap 6) against the repo and git history, not the tracker. Under ultracode
-hand them to [`claim-verifier`](../agents/claim-verifier.md) agents in batches of at most 5 claims "#N
+hand them to [`claim-verifier`](../agents/claim-verifier.md) agents, batched as you judge, with the claim "#N
 still blocks this issue", one `{blockerId, resolved, evidence, confidence}` per blocker. Otherwise run the
 same checks inline and stop at the first confirmed live blocker. A blocker is resolved only
 on evidence (a REFUTED verdict); PLAUSIBLE is still blocked. Still blocked: release
@@ -383,10 +383,10 @@ rest.
 
 ## Phase 2 — implement
 
-Run the second verify (§0.6) before the first file write. Then check that no open PR from another
-session or user touches the same screen ([AGENTS.md one-PR-per-screen rule](../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)).
-If one does, release the claim (`AGENT-RELEASE` `screen-busy`, naming that PR; see [Exits](#exits)) and return to Phase 0
-rather than build a second PR on it.
+Run the second verify (§0.6) before the first file write. Then check whether an open PR from another
+session or user touches the same screen ([AGENTS.md § Autonomous PR lifecycle](../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)).
+If one does and the overlap is heavy, release the claim (`AGENT-RELEASE` `screen-busy`, naming that PR; see [Exits](#exits)) and return to Phase 0;
+if it's small enough to settle at merge, go ahead and say so in the PR.
 
 Branch from `main` as `claude/<slug>`; in a harness-managed cloud session, the session's assigned
 branch always wins. That branch is the **unit branch**. Make focused commits locally and don't
@@ -434,9 +434,9 @@ delete, revert, stash, or gitignore a file to make it pass. If the gate objects 
 file.
 
 Pass every member's acceptance criteria as `acceptance` to every workflow round, so its
-acceptance-and-tests finder checks them. No second review
-goes on top of it ([ADR-23](../../spec/architecture/adr/adr-23.md)): no human reads the diff before
-the PR, so the gate is where the depth goes. A `PLAUSIBLE` finding you can't settle here goes in the
+acceptance-and-tests finder checks them. A second review on
+top of it is your call (ADR-23 amendment 3); weigh it against what the gate covered, and remember no
+human reads the diff before the PR. A `PLAUSIBLE` finding you can't settle here goes in the
 PR body under *Flagged for review*; that valve is what lets a run finish instead of stopping to ask.
 
 The *Flagged for review* block is a record, not an ask. Anything on it that needs Paul to act or
@@ -548,7 +548,7 @@ and the run ends only when every still-held member has its exit action.
 | Issue underspecified | `AGENT-RELEASE` `blocked-discovered`, remove `in-progress` **and** add **`triage`** back (keep a priority label), with an explanation |
 | Already shipped | Close as `completed`, `AGENT-RELEASE` `superseded` |
 | Lost the race | `AGENT-RELEASE` `lost-race`, **labels untouched** — a batch shrinks and continues |
-| Another open PR holds the screen | `AGENT-RELEASE` `screen-busy` naming that PR, remove `in-progress` (→ Backlog) |
+| Another open PR overlaps the screen heavily | `AGENT-RELEASE` `screen-busy` naming that PR, remove `in-progress` (→ Backlog) |
 | Batch member vetoed / blocked | Release **that member** per its row above (a veto's question travels in the release comment + end-of-run report, never a mid-batch ask); the rest continues |
 | Batch member superseded by a live `AGENT-RECLAIM` | Excise per §0.5's coherence rule — its commits stay out of your push; if the batch no longer coheres, release the rest per their rows |
 | Context nearly exhausted, work exists | `AGENT-HANDOFF` `session-ending`, labels untouched, claim left live |
