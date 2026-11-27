@@ -6,6 +6,7 @@ import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
 import { can } from "@repo/validation";
 import {
   effectiveLine,
+  driveLink,
   isDriveCopy,
   isMinutesDocument,
   minutesDocumentFacts,
@@ -17,6 +18,7 @@ import { Can } from "@/components/shared/can";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import {
   DocumentsGlyph,
+  DriveGlyph,
   PinGlyph,
   StarGlyph,
 } from "@/components/documents/resources-glyphs";
@@ -217,6 +219,14 @@ export function DocumentRow({
                 <span className="truncate">{doc.title}</span>
                 {limited ? <LimitedMark className="text-muted" /> : null}
                 {/*
+              Drive's mark on a synced file (#6055): its working copy is in
+              Drive, so that is where it is edited. The facts line says
+              "From Google Drive" for a screen reader.
+            */}
+                {isDriveCopy(doc) ? (
+                  <DriveGlyph className="h-3.5 w-3.5 shrink-0" />
+                ) : null}
+                {/*
               A star or pin stays in sight while the controls are away, as
               Drive's starred mark does: a mark is the file's state, not an
               action. The lit controls carry the names; these are the look.
@@ -278,9 +288,10 @@ const StarOnIcon = () => <StarGlyph className="h-4 w-4" active />;
 const StarOffIcon = () => <StarGlyph className="h-4 w-4" active={false} />;
 const PinOnIcon = () => <PinGlyph className="h-4 w-4" active />;
 const PinOffIcon = () => <PinGlyph className="h-4 w-4" active={false} />;
+const DriveMenuIcon = () => <DriveGlyph className="h-4 w-4" />;
 
 /**
- * The row's actions as one menu (#5576): Star, Pin, Who can see, Download
+ * The row's actions as one menu (#5576): Star, Pin, Who can see, Open in Google Drive, Download
  * and Delete, under the same names and gates as the hover controls. Opened
  * from the touch More button, or a right-click or long-press on the row.
  */
@@ -340,6 +351,17 @@ function useRowActions({
   // A meeting's minutes (#5949) have no file to save, and are deleted as
   // minutes, from their own page.
   if (isMinutesDocument(doc)) return entries;
+  const drive = driveLink(doc);
+  if (drive) {
+    entries.push({
+      type: "item",
+      key: "drive",
+      label: "Open in Google Drive",
+      icon: DriveMenuIcon,
+      href: drive,
+      external: true,
+    });
+  }
   entries.push({
     type: "item",
     key: "download",
@@ -366,7 +388,7 @@ function useRowActions({
 }
 
 /**
- * A file's own controls: Star, Pin, Who can see, Download and Delete.
+ * A file's own controls: Star, Pin, Who can see, Open in Google Drive, Download and Delete.
  */
 function DocumentControls({
   doc,
@@ -392,6 +414,7 @@ function DocumentControls({
   className?: string;
 }) {
   const pinned = !!doc.pinned_at;
+  const drive = driveLink(doc);
   return (
     <div className={cn("flex items-center gap-1", className)}>
       {/*
@@ -452,6 +475,17 @@ function DocumentControls({
           {...gate.controlProps()}
         >
           <Users />
+        </IconButton>
+      ) : null}
+      {/*
+        A Drive file opens in Drive (#6055), where its working copy is:
+        an edit there syncs back, and a downloaded copy would not.
+      */}
+      {drive ? (
+        <IconButton label={`Open ${doc.title} in Google Drive`} asChild>
+          <a href={drive} target="_blank" rel="noopener noreferrer">
+            <DriveGlyph />
+          </a>
         </IconButton>
       ) : null}
       {isMinutesDocument(doc) ? null : (

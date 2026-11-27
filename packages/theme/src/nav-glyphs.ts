@@ -277,3 +277,18 @@ export const MARK_GLYPH_PATHS = {
     muted: "M15.5 9.5l5 5M20.5 9.5l-5 5",
   },
 } as const;
+
+/**
+ * Google Drive's three-colour mark (#6055), on the same 24 grid as the marks
+ * above: on a file synced from the chapter's Drive folder, and on the control
+ * that opens it in Drive. Drawn in Drive's own colours rather than a token,
+ * because it names Drive, where the file's working copy lives, the way Slack
+ * and Notion mark a Drive link. One copy for web (`resources-glyphs.tsx`'s
+ * `DriveGlyph`) and mobile (`components/documents/document-glyphs.tsx`).
+ * Painted in this order, each piece filled with its `fill`.
+ */
+export const DRIVE_MARK_PIECES = [
+  { d: "M8 3.5h8l6 10.5h-8z", fill: "#FFBA00" },
+  { d: "M8 3.5l4 7-6 10-4-6.5z", fill: "#00AC47" },
+  { d: "M10 14h12l-4 6.5H6z", fill: "#2684FC" },
+] as const;

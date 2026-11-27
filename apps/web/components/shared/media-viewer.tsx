@@ -204,21 +204,28 @@ export function MediaViewer({
               text={many ? `${label}. ${capitalize(step.noun)} ${step.index + 1} of ${step.total}.` : ""}
             />
 
-            {heading ? (
-              <div className="pointer-events-none absolute left-3 top-3 max-w-[calc(100%-8.5rem)] rounded-lg bg-black/55 px-2.5 py-1.5">
-                {heading}
+            {/*
+              One row across the top: the heading takes what the controls
+              leave, so a third control (a document's Open in Google Drive,
+              #6055) never draws over a long title. The row itself lets
+              presses through to the backdrop; only its boxes take them.
+            */}
+            <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
+              {heading ? (
+                <div className="min-w-0 rounded-lg bg-black/55 px-2.5 py-1.5">
+                  {heading}
+                </div>
+              ) : null}
+              <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-0.5 rounded-lg bg-black/55 p-1">
+                {actions}
+                <DialogPrimitive.Close
+                  aria-label="Close"
+                  title="Close"
+                  className={cn(VIEWER_CONTROL, VIEWER_CONTROL_SIZE)}
+                >
+                  <X aria-hidden="true" className="size-5" />
+                </DialogPrimitive.Close>
               </div>
-            ) : null}
-
-            <div className="absolute right-3 top-3 flex items-center gap-0.5 rounded-lg bg-black/55 p-1">
-              {actions}
-              <DialogPrimitive.Close
-                aria-label="Close"
-                title="Close"
-                className={cn(VIEWER_CONTROL, VIEWER_CONTROL_SIZE)}
-              >
-                <X aria-hidden="true" className="size-5" />
-              </DialogPrimitive.Close>
             </div>
 
             {many ? (

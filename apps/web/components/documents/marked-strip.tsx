@@ -1,7 +1,10 @@
 "use client";
 
 import { formatDay } from "@repo/formatting";
-import type { MarkedItem as LibraryMarkedItem } from "@repo/hooks/document-library";
+import {
+  isDriveCopy,
+  type MarkedItem as LibraryMarkedItem,
+} from "@repo/hooks/document-library";
 import { folderCardText } from "@repo/hooks/document-folder-tree";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { IconButton } from "@/components/ui/icon-button";
@@ -9,6 +12,7 @@ import { SectionLabel } from "@/components/shared/section-label";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import {
   DocumentsGlyph,
+  DriveGlyph,
   FolderGlyph,
   StarGlyph,
 } from "@/components/documents/resources-glyphs";
@@ -182,6 +186,10 @@ function MarkedCard({
           <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
             <span className="truncate">{card ? card.title : name}</span>
             {limited ? <LimitedMark className="text-muted" /> : null}
+            {/* Drive's mark, as the file's row wears it (#6055). */}
+            {item.kind === "document" && isDriveCopy(item.doc) ? (
+              <DriveGlyph className="h-3.5 w-3.5 shrink-0" />
+            ) : null}
           </span>
           <span className="block truncate text-caption text-muted">{meta}</span>
         </span>

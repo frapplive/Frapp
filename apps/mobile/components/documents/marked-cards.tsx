@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import { formatDay } from "@repo/formatting";
-import type { MarkedItem } from "@repo/hooks/document-library";
+import { isDriveCopy, type MarkedItem } from "@repo/hooks/document-library";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { pageSurfaces } from "@/lib/surfaces";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -16,7 +16,7 @@ import {
   type DocumentFolder,
   type MobileDocument,
 } from "@/lib/more/documents";
-import { StarGlyph } from "./document-glyphs";
+import { DriveGlyph, StarGlyph } from "./document-glyphs";
 import { LIMITED_LABEL, LimitedMark } from "./limited-mark";
 
 /** A pinned or starred thing on s12: a folder, or a single file (#3934). */
@@ -251,6 +251,10 @@ function CardList({
                 color={tokens.color.text.mutedForeground}
                 size={16}
               />
+            ) : null}
+            {/* Drive's mark, as the file's row wears it (#6055). */}
+            {item.kind === "document" && isDriveCopy(item.doc) ? (
+              <DriveGlyph size={16} />
             ) : null}
             {starred ? <StarGlyph color={accent} on size={16} /> : null}
           </PressableRow>

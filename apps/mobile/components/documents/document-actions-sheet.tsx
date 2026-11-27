@@ -12,7 +12,7 @@ import {
   useSheetBackgroundStyle,
   useSheetClose,
 } from "@/components/sheet-scaffold";
-import { PinGlyph, StarGlyph } from "./document-glyphs";
+import { DriveGlyph, PinGlyph, StarGlyph } from "./document-glyphs";
 
 /** The rows' leading glyph, at the composer + sheet's size. */
 const GLYPH_SIZE = 20;
@@ -27,6 +27,8 @@ export interface DocumentActionsTarget {
   starred: boolean;
   /** A copy of a file in the chapter's Google Drive folder (#5157): no Delete. */
   fromDrive?: boolean;
+  /** The file's page in Google Drive (#6055): offers Open in Google Drive. */
+  driveUrl?: string | null;
   /**
    * A meeting's posted minutes, filed as a document (#5949): no Delete. They
    * are deleted as minutes, from their own screen, and the API refuses a
@@ -44,6 +46,8 @@ export interface DocumentActionsSheetProps {
   onTogglePin: (target: DocumentActionsTarget) => void;
   /** A file's delete, which confirms first; folders are managed on web. */
   onDelete: (target: DocumentActionsTarget) => void;
+  /** Opens a Drive file's page, in the Drive app when it's installed. */
+  onOpenInDrive: (url: string) => void;
 }
 
 /**
@@ -59,7 +63,7 @@ export const DocumentActionsSheet = forwardRef<
   BottomSheetModal,
   DocumentActionsSheetProps
 >(function DocumentActionsSheet(
-  { target, canManage, onToggleStar, onTogglePin, onDelete },
+  { target, canManage, onToggleStar, onTogglePin, onDelete, onOpenInDrive },
   ref,
 ) {
   const { tokens } = useFrappTheme();
@@ -133,6 +137,19 @@ export const DocumentActionsSheet = forwardRef<
                   />
                 }
                 onPress={() => choose(() => onTogglePin(target))}
+                styles={styles}
+              />
+            ) : null}
+            {/* Where a Drive file's working copy is (#6055): an edit in
+                Drive syncs back, a downloaded copy would not. */}
+            {target.kind === "document" && target.driveUrl ? (
+              <ActionRow
+                label="Open in Google Drive"
+                glyph={<DriveGlyph size={GLYPH_SIZE} />}
+                onPress={() => {
+                  const url = target.driveUrl;
+                  if (url) choose(() => onOpenInDrive(url));
+                }}
                 styles={styles}
               />
             ) : null}

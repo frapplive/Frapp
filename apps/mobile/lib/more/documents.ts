@@ -42,6 +42,8 @@ export interface MobileDocument {
    * Drive owns a copy: the row says so and offers no Delete.
    */
   drive_file_id: string | null;
+  /** The file's page in Google Drive (#6055), or null for an upload. */
+  drive_url: string | null;
   /**
    * The file's own who-can-see list (#5216), left out when it follows its
    * folder. The API only sends what this member may see, so it is only
@@ -121,6 +123,7 @@ export function selectDocuments(data: unknown): MobileDocument[] {
         storage_path: str(row, "storage_path"),
         pinned_at: str(row, "pinned_at"),
         drive_file_id: str(row, "drive_file_id"),
+        drive_url: str(row, "drive_url"),
         ...(accessList(row) ? { who_can_see: accessList(row) } : {}),
         meeting_id: str(row, "meeting_id"),
         minutes: selectMinutes(row.minutes),

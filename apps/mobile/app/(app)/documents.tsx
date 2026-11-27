@@ -9,6 +9,7 @@ import {
 import {
   AccessibilityInfo,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -39,6 +40,7 @@ import {
   deleteDocumentTitle,
   documentFolderHues,
   isActiveDateFilter,
+  driveLink,
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
@@ -89,6 +91,7 @@ import {
   LimitedMark,
 } from "@/components/documents/limited-mark";
 import { MarkedCards } from "@/components/documents/marked-cards";
+import { DocumentMarks } from "@/components/documents/document-marks";
 import { DocumentTiles } from "@/components/documents/document-tiles";
 import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
@@ -624,6 +627,7 @@ export default function DocumentsScreen() {
       pinned: !!doc.pinned_at,
       starred: starredDocuments.has(doc.id),
       fromDrive: isDriveCopy(doc),
+      driveUrl: driveLink(doc),
       minutes: isMinutesDocument(doc),
     };
   }
@@ -987,21 +991,12 @@ export default function DocumentsScreen() {
               canManage ? "Star, pin or delete" : "Star or unstar"
             }
             trailing={
-              row.doc.pinned_at ||
-              starredDocuments.has(row.doc.id) ||
-              isLimited(row.doc) ? (
-                <View style={styles.marks}>
-                  {isLimited(row.doc) ? (
-                    <LimitedMark color={tokens.color.text.mutedForeground} />
-                  ) : null}
-                  {row.doc.pinned_at ? (
-                    <PinGlyph color={accent} on size={14} />
-                  ) : null}
-                  {starredDocuments.has(row.doc.id) ? (
-                    <StarGlyph color={accent} on size={14} />
-                  ) : null}
-                </View>
-              ) : undefined
+              <DocumentMarks
+                limited={isLimited(row.doc)}
+                fromDrive={isDriveCopy(row.doc)}
+                pinned={!!row.doc.pinned_at}
+                starred={starredDocuments.has(row.doc.id)}
+              />
             }
             accessibilityValue={
               [
@@ -1285,6 +1280,13 @@ export default function DocumentsScreen() {
           onToggleStar={(target) => void toggleStar(target)}
           onTogglePin={(target) => void togglePin(target)}
           onDelete={(target) => confirmDelete(target.id, target.name)}
+          // The Drive app when it's installed (its links are universal
+          // links), the browser otherwise.
+          onOpenInDrive={(url) =>
+            void Linking.openURL(url).catch(() =>
+              Alert.alert("Couldn't open Google Drive."),
+            )
+          }
         />
 
         {canUpload ? (

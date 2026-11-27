@@ -4,10 +4,12 @@
  * fourth screen until #3871 retired it.)
  *
  * Every glyph here draws the shared two-tone set (`@repo/theme/nav-glyphs`,
- * `spec/ui/design-system/iconography.md` §1.1) except three: the re-exported
+ * `spec/ui/design-system/iconography.md` §1.1) except four: the re-exported
  * `SearchGlyph`, which keeps the §1 stroke recipe until #3491; `PinGlyph`,
- * chat's pin re-exported (#4292); and `StarGlyph`, drawn here from
- * `MARK_GLYPH_PATHS` (#3934) because the set has no star. Pin and star fill
+ * chat's pin re-exported (#4292); `StarGlyph`, drawn here from
+ * `MARK_GLYPH_PATHS` (#3934) because the set has no star; and `DriveGlyph`,
+ * Google Drive's mark in Drive's own colours, a trademark rather than a
+ * Signet glyph (iconography.md §1 rule 4, #6055). Pin and star fill
  * solid while on (#4289, #4292). The
  * intent → glyph map lives in `iconography.md` §6.2.5 and MUST be updated in
  * the same PR as any change here (§6.3).
@@ -38,7 +40,11 @@
  *   page labelling the PDF. Both now name what the control produces.
  */
 
-import { MARK_GLYPH_PATHS, NAV_GLYPHS } from "@repo/theme/nav-glyphs";
+import {
+  DRIVE_MARK_PIECES,
+  MARK_GLYPH_PATHS,
+  NAV_GLYPHS,
+} from "@repo/theme/nav-glyphs";
 import { Svg, markFillProps, stroke } from "@/components/ui/duotone";
 import type { DuotoneGlyphProps } from "@/components/ui/duotone";
 import { NavGlyph } from "@/components/layout/nav-glyphs";
@@ -92,6 +98,22 @@ export function StarGlyph({ className, active }: ResourcesGlyphProps) {
         {...stroke}
         {...markFillProps(active)}
       />
+    </Svg>
+  );
+}
+
+/**
+ * Google Drive's mark (#6055), in Drive's own colours: beside the name of a
+ * file synced from the chapter's Drive folder, and on Open in Google Drive.
+ * It says where the working copy lives, so members edit it there and the
+ * sync brings the change back.
+ */
+export function DriveGlyph({ className }: { className?: string }) {
+  return (
+    <Svg className={className}>
+      {DRIVE_MARK_PIECES.map((piece) => (
+        <path key={piece.d} d={piece.d} fill={piece.fill} />
+      ))}
     </Svg>
   );
 }

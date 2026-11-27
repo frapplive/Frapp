@@ -3554,6 +3554,58 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens a Drive file in Drive from its row, and offers it on no upload (#6055)", () => {
+    documentsQuery.data = [
+      BYLAWS,
+      {
+        ...BYLAWS,
+        id: "doc-3",
+        title: "Synced minutes",
+        drive_file_id: "drive-1",
+        drive_url: "https://drive.google.com/file/d/drive-1/view",
+      },
+    ];
+    render(<DocumentsPage />);
+
+    expect(
+      screen.getByRole("link", { name: "Open Synced minutes in Google Drive" }),
+    ).toHaveAttribute("href", "https://drive.google.com/file/d/drive-1/view");
+    expect(
+      screen.queryByRole("link", { name: "Open Chapter bylaws in Google Drive" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks a Drive file with Drive's mark, and offers it in the row's menu (#6055)", async () => {
+    documentsQuery.data = [
+      BYLAWS,
+      {
+        ...BYLAWS,
+        id: "doc-3",
+        title: "Synced minutes",
+        drive_file_id: "drive-1",
+        drive_url: "https://drive.google.com/file/d/drive-1/view",
+      },
+    ];
+    render(<DocumentsPage />);
+    const driveMark = (title: string) =>
+      screen
+        .getByRole("button", { name: new RegExp(`^${title}`) })
+        .querySelector('path[fill="#FFBA00"]');
+    expect(driveMark("Synced minutes")).not.toBeNull();
+    expect(driveMark("Chapter bylaws")).toBeNull();
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /^Synced minutes/ }),
+    );
+    const item = (await screen.findAllByRole("menuitem")).find(
+      (entry) => entry.textContent === "Open in Google Drive",
+    );
+    expect(item?.closest("a") ?? item).toHaveAttribute(
+      "href",
+      "https://drive.google.com/file/d/drive-1/view",
+    );
+  });
+
   it("treats Who can see for a file this member can't set as unavailable", async () => {
     manageGate.granted = false;
     window.history.replaceState(null, "", "/documents?access=doc-1");

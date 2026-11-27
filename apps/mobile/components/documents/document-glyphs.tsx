@@ -1,5 +1,5 @@
 import { Path } from "react-native-svg";
-import { MARK_GLYPH_PATHS } from "@repo/theme/nav-glyphs";
+import { DRIVE_MARK_PIECES, MARK_GLYPH_PATHS } from "@repo/theme/nav-glyphs";
 import { Frame, paint } from "@/components/glyph-recipe";
 
 /**
@@ -38,6 +38,21 @@ export function StarGlyph({ color, on = false, size = 16 }: MarkGlyphProps) {
   return (
     <Frame size={size}>
       <Path d={MARK_GLYPH_PATHS.star.body} {...body} />
+    </Frame>
+  );
+}
+
+/**
+ * Google Drive's mark (#6055), in Drive's own colours, as web's `DriveGlyph`:
+ * on a file synced from the chapter's Drive folder, and on Open in Google
+ * Drive. It says where the working copy lives.
+ */
+export function DriveGlyph({ size = 16 }: { size?: number }) {
+  return (
+    <Frame size={size}>
+      {DRIVE_MARK_PIECES.map((piece) => (
+        <Path key={piece.d} d={piece.d} fill={piece.fill} />
+      ))}
     </Frame>
   );
 }
