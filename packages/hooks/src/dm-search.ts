@@ -29,7 +29,9 @@
  * only contains it; within a rank a 1:1 DM leads a group DM, then the order
  * the conversations came in holds.
  */
-import { SYSTEM_SENDER_ID } from "@repo/validation";
+import { responseStatusOf, statusOf } from "@repo/api-sdk";
+import { MAX_GROUP_DM_MEMBERS, SYSTEM_SENDER_ID } from "@repo/validation";
+import { errorCopy } from "./error-copy";
 import { foldForSearch, NAME_SEPARATORS } from "./channel-members";
 import { resolveDisplayName, type DisplayNameMap } from "./display-names";
 
@@ -167,13 +169,13 @@ export function searchDirectMessages<C extends DmSearchConversation>({
   }
 
   const members: Array<{ member: DmSearchMember; rank: number }> = [];
-  const seen = new Set<string>();
-  for (const member of roster) {
-    const id = member.user_id;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    if (id === viewerId || id === SYSTEM_SENDER_ID) continue;
-    if (blockedIds.has(id) || inList.has(id)) continue;
+  for (const member of messageableMembers({
+    roster,
+    viewerId,
+    blockedIds,
+    blockListReady,
+  })) {
+    if (inList.has(member.user_id)) continue;
     const r = rank(member.display_name ?? "", needle);
     if (r !== null) members.push({ member, rank: r });
   }
@@ -210,6 +212,85 @@ export const DM_SEARCH_BLOCK_LIST_FAILED =
 /** Under the conversations when the roster couldn't be read, with Try again. */
 export const DM_SEARCH_ROSTER_FAILED =
   "Couldn't load your chapter's members, so only your conversations are listed.";
+
+/**
+ * New message (#6190, asked by Shawn 2026-11-27): the phone Messages pencil's
+ * people picker, as iMessage's, Instagram's and WhatsApp's compose button
+ * open a "To:" list. One person picked opens the DM with them
+ * (`POST /v1/channels/dm`); two or more start a group DM
+ * (`POST /v1/channels/group-dm`).
+ */
+export const NEW_MESSAGE_TITLE = "New message";
+
+/**
+ * The most people the viewer can pick: a group DM holds up to
+ * `MAX_GROUP_DM_MEMBERS`, the viewer included.
+ */
+export const NEW_MESSAGE_MAX_PEOPLE = MAX_GROUP_DM_MEMBERS - 1;
+
+/** The picker's one button, by how many people are picked. */
+export function newMessageButton(count: number): string {
+  if (count > NEW_MESSAGE_MAX_PEOPLE) {
+    return `Up to ${NEW_MESSAGE_MAX_PEOPLE} people`;
+  }
+  return count > 1 ? `Message ${count} people` : "Message";
+}
+
+/** New message's line when the roster couldn't be read, with Try again. */
+export const NEW_MESSAGE_MEMBERS_FAILED =
+  "Couldn't load your chapter's members.";
+/** The search's and New message's line while the roster read waits for the network. */
+export const DM_SEARCH_MEMBERS_WAITING =
+  "Your chapter's members will load when you're back online.";
+
+/** The alert's title when a group DM couldn't be started. */
+export const NEW_GROUP_FAILED_TITLE = "Couldn't start the group";
+
+/**
+ * Its body when the API answered 404: someone picked isn't a member of the
+ * chapter any more (the roster read can be a minute old). The server's own
+ * sentence says the same.
+ */
+export const NEW_GROUP_NOT_MEMBERS =
+  "Someone you picked isn't in your chapter anymore. Pick again.";
+
+/**
+ * The group failure's body: who isn't a member on a 404, the throttle's
+ * "wait a minute" on a 429, being offline when the request never left, and
+ * `fallback` otherwise, so a refusal retrying can't fix is never sent to
+ * "check your connection".
+ */
+export function newGroupFailedBody(error: unknown, fallback: string): string {
+  if ((statusOf(error) ?? responseStatusOf(error)) === 404) {
+    return NEW_GROUP_NOT_MEMBERS;
+  }
+  return errorCopy(error, fallback);
+}
+
+/**
+ * Who may be messaged, the rule the search and New message share: the roster
+ * once each, never the viewer, the system actor or a member the viewer
+ * blocked, and nobody until the viewer and the block list are known, since a
+ * list still loading can be missing a block.
+ */
+export function messageableMembers({
+  roster,
+  viewerId,
+  blockedIds,
+  blockListReady,
+}: Pick<
+  DmSearchInput<DmSearchConversation>,
+  "roster" | "viewerId" | "blockedIds" | "blockListReady"
+>): DmSearchMember[] {
+  if (viewerId === null || !blockListReady) return [];
+  const seen = new Set<string>();
+  return roster.filter((member) => {
+    const id = member.user_id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return id !== viewerId && id !== SYSTEM_SENDER_ID && !blockedIds.has(id);
+  });
+}
 
 /**
  * The channel id out of a `POST /v1/channels/dm` response, or `null` when the

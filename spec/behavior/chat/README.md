@@ -272,7 +272,8 @@ A message thread (#3785) opened from the channel shows the same background behin
     The database enforces it (`chat_channels_dm_pair_key`, keyed on the two member ids rather than the channel's name, #2788).
     Two overlapping opens, such as a double tap or both members opening at once, return the same channel.
 - **Finding or starting one by name** ([#4668](https://github.com/pdcarlson/Frapp/issues/4668), asked by Shawn 2026-11-12).
-  Both clients' Direct messages lists have a people search (web's Direct messages list, the phone's Messages screen), and the New message pencil opens it rather than the Directory.
+  Both clients' Direct messages lists have a people search (web's Direct messages list, the phone's Messages screen), and web's New message pencil opens it rather than the Directory.
+  Changed in [#6190](https://github.com/pdcarlson/Frapp/issues/6190), 2026-11-27, for the phone: its pencil opens New message, a people picker that opens a DM with one person or starts a group DM with several ([`spec/ui/mobile/screens.md`](../../ui/mobile/screens.md), the Messages row).
   A name finds the member's existing conversations first (a 1:1 DM on the other member's name, a group DM on any member's name or its title), then the members they could start a 1:1 with: everyone on the roster with no 1:1 DM in the list, a hidden one included, since opening it again is what brings it back.
   Never the viewer or the system actor, never a member the viewer has blocked, and no member at all until the block list has been read, which the search says in words, because a list still loading or failed could be missing a block (the member sheet's Message rule, [`spec/ui/mobile/screens.md`](../../ui/mobile/screens.md) s13).
   Alumni are offered like anyone else, since they may post in direct conversations ([`alumni.md`](../alumni.md)).
@@ -281,6 +282,7 @@ A message thread (#3785) opened from the channel shows the same background behin
 - **Group DM:** User selects multiple members (up to 10).
   Creates a GROUP_DM-type channel.
   Chapter-scoped.
+  The phone starts one from New message on its Messages screen (#6190); web has no way to start one yet.
 - **Only with members of the chapter** (2026-11-17).
   A new DM or group DM is refused unless everyone in it is a member of the caller's chapter: one 404 for an id that is no one and for someone in another chapter, naming no one.
   `POST /v1/channels/group-dm` takes at most 9 others in `member_ids` (10 people with the creator) and is held to 10 a minute, since each call adds a conversation to every listed member's list.
