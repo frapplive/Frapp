@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shiftRushDayKey } from "@repo/validation";
+import { setAddress } from "@/tests/address-search-params";
 
 const {
   permissions,
@@ -11,14 +12,12 @@ const {
   moveMutate,
   moduleOn,
   vocabulary,
-  searchParams,
 } = vi.hoisted(() => ({
   permissions: { current: ["*"] as string[] },
   pipeline: { current: null as unknown },
   moveMutate: vi.fn(),
   moduleOn: { current: true },
   vocabulary: { current: undefined as unknown },
-  searchParams: { current: new URLSearchParams() },
 }));
 
 // jsdom measures every box at 0, so the page reads as wide unless a test
@@ -126,7 +125,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     data: pipeline.current,
     isPending: false,
     isError: false,
-    refetch: vi.fn(),
+    isFetching: false,
+    fetchStatus: "idle",
+    refetch: pipelineRefetch,
   }),
   useViewerUserId: () => "me",
   useMoveRushStage: () => ({ mutate: moveMutate, isPending: false }),
@@ -157,8 +158,12 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useClearRushFollowUp: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchParams.current,
+// The pipeline's re-read, which a linked prospect it lacks asks for once.
+const pipelineRefetch = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
@@ -225,7 +230,7 @@ beforeEach(() => {
       candidate("c", "Leo Grant", "closed"),
     ],
   };
-  searchParams.current = new URLSearchParams();
+  setAddress("/rush");
   window.localStorage.clear();
 });
 
@@ -607,12 +612,35 @@ describe("follow-ups on the recruitment page (#5934)", () => {
   });
 
   it("opens the prospect a notification links to", async () => {
-    searchParams.current = new URLSearchParams("prospect=b");
+    setAddress("/rush?prospect=b");
     renderPage();
     expect(
       await screen.findByRole("heading", { name: "Owen Park" }),
     ).toBeInTheDocument();
     expect(screen.getByText("No contact logged yet")).toBeInTheDocument();
+    // It stays in the address while open (#6047).
+    expect(window.location.search).toBe("?prospect=b");
+  });
+
+  it("says a linked prospect isn't here, and drops it (#6047)", async () => {
+    setAddress("/rush?prospect=gone");
+    renderPage();
+    expect(
+      await screen.findByText(/That prospect isn't available/),
+    ).toBeInTheDocument();
+    // Read again once before they are called gone.
+    expect(pipelineRefetch).toHaveBeenCalled();
+    expect(window.location.search).toBe("");
+  });
+
+  it("puts the prospect it opens in the address with a push (#6047)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const push = vi.spyOn(window.history, "pushState");
+    await user.click((await screen.findAllByText("Owen Park"))[0]!);
+    expect(window.location.search).toBe("?prospect=b");
+    expect(push).toHaveBeenCalledTimes(1);
+    push.mockRestore();
   });
 });
 
