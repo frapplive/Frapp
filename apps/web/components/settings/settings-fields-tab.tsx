@@ -18,6 +18,7 @@ import {
 import {
   deleteMemberFieldConfirm,
   keyFromLabel,
+  MEMBER_FIELD_LABEL_MAX_LENGTH,
   MEMBER_FIELD_TYPE_LABEL,
   MEMBER_FIELD_VISIBILITY_LABEL,
   MEMBER_FIELDS_COPY,
@@ -401,7 +402,7 @@ function FieldPage({
     >
       <SettingsNameField
         value={field.label}
-        maxLength={120}
+        maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
         disabled={!canManage}
         onSave={(label) => patch({ label }, `Couldn't rename ${field.label}`)}
       />
@@ -716,7 +717,7 @@ function NewFieldPage({
           id="new-field-name"
           autoFocus
           value={label}
-          maxLength={120}
+          maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
           placeholder="Hometown"
           onChange={(event) => setLabel(event.target.value)}
           onKeyDown={(event) => {

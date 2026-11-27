@@ -14,6 +14,7 @@ import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import {
   can,
   deleteMemberFieldConfirm,
+  MEMBER_FIELD_LABEL_MAX_LENGTH,
   MEMBER_FIELD_TYPE_LABEL,
   MEMBER_FIELD_VISIBILITY_LABEL,
   MEMBER_FIELDS_COPY,
@@ -81,7 +82,6 @@ import {
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /** A field's name: the API takes up to this many characters. */
-const FIELD_LABEL_MAX_LENGTH = 80;
 
 const BACK_TO_MEMBER_FIELDS = {
   label: MEMBER_FIELDS_COPY.pageTitle,
@@ -379,7 +379,7 @@ function FieldRows({
           submitLabel={MEMBER_FIELDS_COPY.addOption}
           placeholder="Medium"
           fieldLabel={MEMBER_FIELDS_COPY.addOption}
-          maxLength={FIELD_LABEL_MAX_LENGTH}
+          maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
           onSubmit={async (typed) => {
             const problem = choiceProblem(choices, typed);
             if (problem) return problem;
@@ -479,7 +479,7 @@ function ExistingField({
         value={field.label}
         editable={canManage}
         failure={failure}
-        maxLength={FIELD_LABEL_MAX_LENGTH}
+        maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
         onSave={(label) => save({ label })}
       />
       <FieldRows
@@ -595,7 +595,7 @@ function NewField({
             onChangeText={(label) => edit({ label })}
             editable={canManage}
             placeholder="Shirt size"
-            maxLength={FIELD_LABEL_MAX_LENGTH}
+            maxLength={MEMBER_FIELD_LABEL_MAX_LENGTH}
           />
         </FormFields>
         <FieldRows

@@ -226,6 +226,12 @@ export function deletePledgeClassConfirm(
 }
 
 
+/**
+ * The longest name a member field takes, on both apps. The API sets none;
+ * this keeps a row's name to one readable line.
+ */
+export const MEMBER_FIELD_LABEL_MAX_LENGTH = 80;
+
 /** A field's type, as its row and its page say it, in the picker's order. */
 export const MEMBER_FIELD_TYPE_LABEL: Record<CustomFieldType, string> = {
   text: "Text",
