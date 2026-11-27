@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
@@ -21,7 +21,6 @@ import {
   isChatRoute,
   isFullWidthToolRoute,
   isMessagesRoute,
-  MESSAGES_ROUTE,
   PANE_FLOOR,
   SPLIT_QUERY,
   useMediaQueryState,
@@ -157,7 +156,6 @@ function Shell({
   defaultMembersHidden = false,
 }: DashboardShellProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   // Chapter accent, shell-wide: maps the persisted engine roles onto the
   // semantic tokens signet.css defines. Mounted here (not in ChatProvider) so
@@ -248,18 +246,13 @@ function Shell({
     it no room (Chapter settings, or a window too narrow to split) the pick
     goes to `/chat`, because a pick that showed nothing would be a dead click.
   */
-  // A pick that is moving the address: the panel's own kind-following
-  // (`followConversationKind`) stands down until the address has moved, or
-  // its replace would overwrite the pick's push in the same click.
-  const pickNavigating = useRef(false);
-  useEffect(() => {
-    pickNavigating.current = false;
-  }, [pathname]);
   const showPickedConversation = useCallback(
     (kind: ChatView, channelId: string) => {
       if (kind === "direct") return;
-      if (onMessages || (hasTool && (fullWidthTool || desktop !== true))) {
-        pickNavigating.current = true;
+      // On `/chat` and `/messages` the panel moves the address itself
+      // (`ChatShell`'s address sync, #6041), including a channel picked on
+      // Messages, which goes to `/chat`.
+      if (hasTool && (fullWidthTool || desktop !== true)) {
         router.push(chatDeepLink({ channelId }));
         return;
       }
@@ -268,28 +261,8 @@ function Shell({
         setChatOpen(true);
       }
     },
-    [onMessages, hasTool, fullWidthTool, desktop, chatOpen, router],
+    [hasTool, fullWidthTool, desktop, chatOpen, router],
   );
-  /*
-    The open conversation is the other kind from the page it is on: a link, a
-    notification, a Find result or a bookmark into a DM landed on `/chat`, or
-    one into a channel landed on Messages. The address follows the
-    conversation, keeping its target, so a DM is always read on Messages with
-    its list beside it. Replaced, not pushed: the link the member followed is
-    the one entry. Beside a page there is no list to disagree with, so
-    nothing moves.
-  */
-  const followConversationKind = useCallback(
-    (kind: ChatView) => {
-      if (hasTool || pickNavigating.current) return;
-      if ((kind === "direct") === onMessages) return;
-      const query = searchParams?.toString() ?? "";
-      const base = kind === "direct" ? MESSAGES_ROUTE : "/chat";
-      router.replace(query ? `${base}?${query}` : base);
-    },
-    [hasTool, onMessages, searchParams, router],
-  );
-
   /*
     The side a divider drag will close if released now (dragged to that
     edge), so the side can fade first and the release is no surprise.
@@ -647,7 +620,6 @@ function Shell({
                     defaultMembersHidden={defaultMembersHidden}
                     toolBeside={hasTool}
                     view={chatView}
-                    onViewChange={followConversationKind}
                     onPick={showPickedConversation}
                     shown={conversationShown}
                     onClose={

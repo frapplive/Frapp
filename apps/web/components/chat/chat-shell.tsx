@@ -148,7 +148,24 @@ import { asArray, cn } from "@/lib/utils";
 import { DmSearch } from "./dm-search-dialog";
 import { useRouter } from "next/navigation";
 import { channelSettingsPath } from "@/components/settings/settings-paths";
-import { chatDeepLink } from "@/lib/chat/chat-links";
+import {
+  CHAT_CHANNEL_PARAM,
+  CHAT_MESSAGE_PARAM,
+  CHAT_THREAD_PARAM,
+  chatDeepLink,
+} from "@/lib/chat/chat-links";
+import {
+  addressWith,
+  closeAddress,
+  consumeAddressParam,
+  pushAddress,
+  replaceAddress,
+  replacePushedCopy,
+} from "@/lib/address/address";
+import {
+  MESSAGES_ROUTE,
+  isMessagesRoute,
+} from "@/components/layout/shell-layout";
 import { useThreadUnread } from "@/lib/chat/use-thread-unread";
 import { useChatChannel } from "@/lib/chat/use-chat-channel";
 import {
@@ -426,6 +443,20 @@ const UNREACHABLE_COPY: Record<UnreachableReason, string> = {
  * `popstate`. A marker from another document is not ours to go back through.
  */
 const THREAD_PANE_HISTORY_KEY = "frappChatThreadPane";
+
+/**
+ * How soon after a `popstate` the address it moved to counts as history
+ * being walked rather than a link arriving (#6041). The router hands the new
+ * address over within a frame or two.
+ */
+const WALKED_HISTORY_MS = 1000;
+
+/**
+ * How long a move between `/chat` and `/messages` the address sync asked the
+ * router for holds the sync off. A navigation the router drops (another
+ * one overtook it) must not leave the sync off for the rest of the visit.
+ */
+const KIND_NAVIGATION_MS = 3000;
 const THREAD_PANE_DOCUMENT_TOKEN = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2)}`;
@@ -460,6 +491,32 @@ function unmarkUnderThreadPaneEntry(): void {
   const rest = { ...(window.history.state as Record<string, unknown>) };
   delete rest[UNDER_THREAD_PANE_HISTORY_KEY];
   window.history.replaceState(rest, "");
+}
+
+/**
+ * Marks an entry whose conversation a message thread was opened over (#6041),
+ * so a Back from the thread's entry below `lg` lands on the conversation, not
+ * the list. Unlike `THREAD_PANE_HISTORY_KEY`, the arrow doesn't go back
+ * through it: it was not a pick from the list.
+ */
+const CONVERSATION_HISTORY_KEY = "frappChatConversation";
+
+function isConversationEntry(state: unknown): boolean {
+  return (
+    typeof state === "object" &&
+    state !== null &&
+    (state as Record<string, unknown>)[CONVERSATION_HISTORY_KEY] ===
+      THREAD_PANE_DOCUMENT_TOKEN
+  );
+}
+
+/** Marks the current entry with `CONVERSATION_HISTORY_KEY`, keeping the rest. */
+function markConversationEntry(): void {
+  const current = window.history.state as Record<string, unknown> | null;
+  window.history.replaceState(
+    { ...current, [CONVERSATION_HISTORY_KEY]: THREAD_PANE_DOCUMENT_TOKEN },
+    "",
+  );
 }
 
 /** Pushes this document's marked, same-URL entry for an opened thread. */
@@ -542,17 +599,27 @@ export function prefillLocalInput(
 export function ChatShell({
   initialChannelId = null,
   initialMessageId = null,
+  initialThreadId = null,
+  addressed = false,
   defaultMembersHidden = false,
   toolBeside = false,
   onClose,
   view = "channels",
-  onViewChange,
   onPick,
   shown = true,
   newMessageAsked = false,
 }: {
   initialChannelId?: string | null;
   initialMessageId?: string | null;
+  /** The address's open thread (`&thread=<root message id>`, #6041). */
+  initialThreadId?: string | null;
+  /**
+   * The panel is the page (`/chat`, `/messages`), so the address follows the
+   * open conversation and thread (#6041, `spec/ui/web-dashboard/README.md`
+   * § Addresses). Beside any other page the conversation is remembered, not
+   * addressed, so Back keeps moving through that page (#5575).
+   */
+  addressed?: boolean;
   /**
    * The member list column's remembered state, read from its cookie on the
    * server (`lib/chat/members-panel.ts`) so the column paints right first time.
@@ -580,13 +647,6 @@ export function ChatShell({
    * own last conversation.
    */
   view?: ChatView;
-  /**
-   * The open conversation is the other kind from the page: a link, a
-   * notification, a search hit or a bookmark into a DM off the Messages
-   * page, or into a channel on it. The shell moves the address to match
-   * (`dashboard-shell.tsx`), so a DM is read with its list beside it.
-   */
-  onViewChange?: (view: ChatView) => void;
   /**
    * The member picked a row from a list: a channel in the sidebar, or a
    * conversation on the Messages page. The panel has selected it; the shell
@@ -792,6 +852,11 @@ export function ChatShell({
   const onThreadEntry = useRef(false);
   const backPending = useRef(false);
   const openAfterBack = useRef(false);
+  // Set by `openThreadPane` for the address sync, cleared every commit.
+  const paneEntryToAddress = useRef(false);
+  // When the last `popstate` landed: the address that follows it is history
+  // being walked, which sets the pane itself, not a link arriving.
+  const poppedAt = useRef(Number.NEGATIVE_INFINITY);
 
   // Seeded from the `?channel=` query param a caller (e.g. the member
   // directory's Message action, a chat notification, a command-palette
@@ -876,15 +941,29 @@ export function ChatShell({
   const [jumpAttempt, setJumpAttempt] = useState(0);
   // `initialChannelId`/`initialMessageId` are only read by `useState`'s
   // initializer on first mount. A second deep link (another notification, a
-  // second command-palette hit) navigated to while `/chat` is already
-  // mounted only changes these *props* — Next's App Router updates search
+  // second command-palette hit), or Back and Forward through the address
+  // (#6041), only changes these *props* — Next's App Router updates search
   // params without remounting the page — so without this, the new target is
-  // silently dropped. Re-applying it here whenever it's genuinely new (not
-  // on every render) is what makes each deep link a fresh navigation intent.
-  const appliedTargetRef = useRef({
+  // silently dropped. `adoptTarget` below re-applies it whenever it's
+  // genuinely new and not already on screen, which is what makes each deep
+  // link a fresh navigation intent and each Back a step.
+  const [seenTarget, setSeenTarget] = useState({
     channelId: initialChannelId,
     messageId: initialMessageId,
+    addressed,
   });
+  // Counted whenever the address brought a target the panel wasn't showing;
+  // `channel` says whether it named a conversation.
+  const [adoption, setAdoption] = useState({ count: 0, channel: false });
+  // The channel a link or the address asked for, held after an unreachable
+  // one is taken off the address (#6041), so its note stays.
+  const [requestedChannelId, setRequestedChannelId] =
+    useState(initialChannelId);
+  // An unreachable channel this panel took off the address itself: the
+  // address then naming none is not a new target.
+  const [droppedChannelId, setDroppedChannelId] = useState<string | null>(
+    null,
+  );
   /**
    * Which of the two columns is on screen below `lg`.
    *
@@ -953,37 +1032,21 @@ export function ChatShell({
   // The sidebar's place for the chapter's channels (`channel-list-slot.tsx`).
   const { slot: sidebarSlot, notifyPicked } = useChannelListSlot();
 
+  // A target the address brought (`adoptTarget` below): the entry is one
+  // Next or the browser moved to, not the one this mount marked (#3824), so
+  // the arrow must not go back through it and the next pick pushes its own.
+  // Below `lg` a link brings its conversation on screen, which is the whole
+  // point of following one. Not a walk through history, whose `popstate` has
+  // already set the pane, and not an address that names no conversation:
+  // yanking someone off the list they are reading is not what "no target"
+  // should mean.
   useEffect(() => {
-    if (
-      appliedTargetRef.current.channelId === initialChannelId &&
-      appliedTargetRef.current.messageId === initialMessageId
-    ) {
-      return;
-    }
-    appliedTargetRef.current = {
-      channelId: initialChannelId,
-      messageId: initialMessageId,
-    };
-    // A new URL target (a Find result, a notification) is a new history entry
-    // Next pushed, not the one this mount marked (#3824), so the arrow must
-    // not go back through it and the next pick pushes its own.
+    if (adoption.count === 0) return;
     onThreadEntry.current = false;
-    setSelectedChannelId(initialChannelId);
-    setChannelTargetDismissed(false);
-    setPendingMessageId(initialMessageId);
-    setPendingJumpChannelId(initialChannelId);
-    setUnreachableTarget(null);
-    setJumpAttempt((n) => n + 1);
-    // The route does not remount on a search-param change, so below `lg` the
-    // member can be looking at the channels column when a link lands. Showing
-    // the thread is the whole point of following one.
-    //
-    // Conditional, unlike the six above: a URL that clears back to `/chat`
-    // names no target, and yanking someone off the channel list they are
-    // reading is not what "no target" should mean.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronizing to the URL, the external system this whole effect exists to follow; the six setState calls above it are the same act
-    if (initialChannelId) setNarrowPane("thread");
-  }, [initialChannelId, initialMessageId]);
+    if (!adoption.channel) return;
+    if (performance.now() - poppedAt.current < WALKED_HISTORY_MS) return;
+    setNarrowPane("thread");
+  }, [adoption]);
 
   /*
     Getting back from a channel without hunting for the arrow (#3824): the
@@ -1040,6 +1103,9 @@ export function ChatShell({
     }
     pushThreadPaneEntry();
     onThreadEntry.current = true;
+    // The pick's own step: the address sync moves this entry to the picked
+    // conversation rather than pushing a second one over it.
+    paneEntryToAddress.current = true;
   }, [isDesktopShell]);
   // Read by `backToChannels` and the `popstate` listener, which subscribes once.
   const isDesktopShellRef = useRef(isDesktopShell);
@@ -1060,6 +1126,7 @@ export function ChatShell({
   }, []);
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
+      poppedAt.current = performance.now();
       const ownBack = backPending.current;
       if (isUnderThreadPaneEntry(event.state)) {
         unmarkUnderThreadPaneEntry();
@@ -1083,12 +1150,13 @@ export function ChatShell({
       }
       const thread = isThreadPaneEntry(event.state);
       onThreadEntry.current = thread;
+      const pane = thread || isConversationEntry(event.state);
       // From `lg` up the pane never follows history. With two columns it
       // changes nothing; beside a tool (#5575) chat stays mounted across tool
       // pages, and a Back between them must not swap the open conversation
       // for the list.
       if (isDesktopShellRef.current) return;
-      setNarrowPane(thread ? "thread" : "channels");
+      setNarrowPane(pane ? "thread" : "channels");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -1103,21 +1171,21 @@ export function ChatShell({
   // `enabled`, so without this a link with no chapter sent the 400 (#4094).
   const refetchChannels = channelsQuery.refetch;
   useEffect(() => {
-    if (initialChannelId === null || chapterScope !== "chapter") return;
+    if (requestedChannelId === null || chapterScope !== "chapter") return;
     void refetchChannels();
-  }, [initialChannelId, refetchChannels, chapterScope]);
+  }, [requestedChannelId, refetchChannels, chapterScope]);
 
   // A caller can pass a channel *name* (onboarding's completion redirect
   // uses the literal `general`) as well as an id, and `activeChannelId`
   // resolves either, so "missing" means neither matches.
   const requestedChannelMissing =
     !channelTargetDismissed &&
-    initialChannelId !== null &&
-    selectedChannelId === initialChannelId &&
+    requestedChannelId !== null &&
+    selectedChannelId === requestedChannelId &&
     channels.length > 0 &&
     !channelsQuery.isFetching &&
     !channels.some(
-      (ch) => ch.id === initialChannelId || ch.name === initialChannelId,
+      (ch) => ch.id === requestedChannelId || ch.name === requestedChannelId,
     );
   /*
     The member's last channel is remembered per browser, member and chapter.
@@ -1194,6 +1262,67 @@ export function ChatShell({
     directView,
   ]);
   /*
+    The address moved (#6041): a link, a notification, or Back and Forward
+    through what this panel pushed. Adjusted while rendering (React's pattern
+    for a reset on a prop), so the conversation the address names is the one
+    on screen before any effect runs, and the address sync below never reads
+    a stale pair and pushes the old conversation back. A move this panel made
+    itself (a pick, a jump) names what is already on screen, so it changes
+    nothing here; a `message=` taken off once its jump landed is not a new
+    target either.
+  */
+  // Set when this render took the address's conversation, so the list switch
+  // below (`seenView`) doesn't drop it: the address moving between `/chat` and
+  // `/messages` changes the view in the same render, and that block still
+  // reads the selection from before it.
+  let adoptedThisRender = false;
+  if (
+    seenTarget.channelId !== initialChannelId ||
+    seenTarget.messageId !== initialMessageId ||
+    seenTarget.addressed !== addressed
+  ) {
+    // Chat becoming the page again (Back onto `/chat`, a Message action from
+    // the Directory) is a target even when the address names what the docked
+    // panel last kept: a pick beside the page may have moved on from it.
+    const arrived = addressed && !seenTarget.addressed;
+    const ownDrop =
+      initialChannelId === null &&
+      droppedChannelId !== null &&
+      seenTarget.channelId === droppedChannelId;
+    const channelMoved =
+      (seenTarget.channelId !== initialChannelId || arrived) && !ownDrop;
+    const messageArrived =
+      initialMessageId !== null && seenTarget.messageId !== initialMessageId;
+    setSeenTarget({
+      channelId: initialChannelId,
+      messageId: initialMessageId,
+      addressed,
+    });
+    if (ownDrop) setDroppedChannelId(null);
+    const channelShown =
+      initialChannelId !== null &&
+      (initialChannelId === selectedChannelId ||
+        (selectedChannelId === null && initialChannelId === activeChannelId));
+    const adopt =
+      (channelMoved && !channelShown) ||
+      (messageArrived && initialMessageId !== pendingMessageId);
+    if (adopt) {
+      adoptedThisRender = true;
+      setAdoption((a) => ({
+        count: a.count + 1,
+        channel: initialChannelId !== null,
+      }));
+      setRequestedChannelId(initialChannelId);
+      setSelectedChannelId(initialChannelId);
+      setChannelTargetDismissed(false);
+      setPendingMessageId(initialMessageId);
+      setPendingJumpChannelId(initialChannelId);
+      setUnreachableTarget(null);
+      setJumpAttempt((n) => n + 1);
+    }
+  }
+
+  /*
     On a chapter switch the new chapter id lands one commit before the old
     chapter's channel list is cleared (`FrappProvider` drops the query cache
     in an effect that runs after this one), so the open channel would be
@@ -1243,7 +1372,8 @@ export function ChatShell({
 
     Anything else that opens the other kind (a link, a notification, a
     search hit or a bookmark into a DM off Messages) moves the address
-    instead (`onViewChange`), so a DM is read with its list beside it.
+    instead (the address sync below), so a DM is read with its list beside
+    it.
   */
   const [seenView, setSeenView] = useState(view);
   if (seenView !== view) {
@@ -1253,7 +1383,12 @@ export function ChatShell({
           (ch) => ch.id === selectedChannelId || ch.name === selectedChannelId,
         )
       : undefined;
-    if (selected && isDirectChannel(selected) !== directView && !toolBeside) {
+    if (
+      !adoptedThisRender &&
+      selected &&
+      isDirectChannel(selected) !== directView &&
+      !toolBeside
+    ) {
       setSelectedChannelId(null);
     }
   }
@@ -1262,9 +1397,6 @@ export function ChatShell({
       ? "direct"
       : "channels"
     : null;
-  useEffect(() => {
-    if (activeView && activeView !== view) onViewChange?.(activeView);
-  }, [activeView, view, onViewChange]);
 
   // A 1:1 DM has no list worth showing: its two members are the header's own
   // title and the viewer.
@@ -2625,13 +2757,24 @@ export function ChatShell({
       setPendingMessageId(messageId);
       setPendingJumpChannelId(channelId);
       setJumpAttempt((n) => n + 1);
+      // A jump into another conversation is a step Back returns from
+      // (#6041); `message=` comes off once it lands. One in the open
+      // conversation moves nothing, since that removal would leave the same
+      // address as the entry under it.
+      if (addressed && channelId !== activeChannelId) {
+        pushAddress({
+          [CHAT_CHANNEL_PARAM]: channelId,
+          [CHAT_THREAD_PARAM]: null,
+          [CHAT_MESSAGE_PARAM]: messageId,
+        });
+      }
       // Below `lg` the thread column may be off-screen. Jumping into a
       // `display:none` column consumes the target — `scrollToMessage` finds the
       // index, reports success, and the pending state clears — while nothing
       // visibly happens, so the link reads as broken.
       setNarrowPane("thread");
     },
-    [activeChannelId, refetchChannels],
+    [activeChannelId, refetchChannels, addressed],
   );
 
   // The channel's effective notification level, or `null` when it is not known
@@ -2841,7 +2984,11 @@ export function ChatShell({
   const [openThread, setOpenThread] = useState<{
     channelId: string;
     rootId: string;
-  } | null>(null);
+  } | null>(() =>
+    initialThreadId && initialChannelId
+      ? { channelId: initialChannelId, rootId: initialThreadId }
+      : null,
+  );
   // Leaving the channel closes its thread, so coming back shows the timeline
   // (state adjusted during render, React's pattern for a reset on a prop).
   // Not while the thread's channel is the one being switched to and the
@@ -2855,6 +3002,21 @@ export function ChatShell({
   ) {
     setOpenThread(null);
   }
+  // The address's thread (#6041): a link or a reload opens it, and Back or
+  // Forward onto an entry with another thread, or none, follows it. Adjusted
+  // while rendering, as the channel's target is above; a thread this panel
+  // opened or closed itself already matches, so it changes nothing.
+  const [seenThreadId, setSeenThreadId] = useState(initialThreadId);
+  if (seenThreadId !== initialThreadId) {
+    setSeenThreadId(initialThreadId);
+    if (initialThreadId !== (openThread?.rootId ?? null)) {
+      setOpenThread(
+        initialThreadId && initialChannelId
+          ? { channelId: initialChannelId, rootId: initialThreadId }
+          : null,
+      );
+    }
+  }
   // The chat column, and the live composer's attach path, for the drop
   // target over the column (#4143).
   const chatColumnRef = useRef<HTMLElement | null>(null);
@@ -2863,6 +3025,157 @@ export function ChatShell({
     openThread && openThread.channelId === activeChannel?.id
       ? openThread.rootId
       : null;
+  /*
+    The address follows the conversation (#6041; `spec/ui/web-dashboard/
+    README.md` § Addresses). On `/chat` and `/messages` the open conversation
+    and thread are the page, so what is on screen is written back:
+
+    - a pick, a thread opened, or All threads pushes, so Back walks them;
+    - a thread closed (its X, back arrow or Escape) goes Back when this tab
+      opened it, and otherwise replaces the address with the conversation;
+    - a landing (a bare `/chat`, the list's fallback after a delete or a
+      hide) replaces in place, so the entry names what it shows;
+    - the other kind's conversation moves the path too: a DM is read on
+      Messages with its list beside it, and a channel on `/chat`. A link that
+      named the wrong kind replaces; a pick pushes.
+
+    A move the address made (Back, a link) was adopted while rendering, so by
+    the time this runs the screen already names what the address does and
+    nothing is written. While the router still owes its props the address
+    (a `popstate`, a push or a navigation in flight), it waits for them.
+  */
+  // A move between `/chat` and `/messages` the sync asked the router for:
+  // until the route is the kind it asked for (or `KIND_NAVIGATION_MS`
+  // passes), the address in the window is the old route's.
+  const kindNavigation = useRef<{ view: ChatView; at: number } | null>(null);
+  const selectionUnresolved =
+    selectedChannelId !== null &&
+    activeChannel !== null &&
+    activeChannel.id !== selectedChannelId &&
+    activeChannel.name !== selectedChannelId;
+  useEffect(() => {
+    const paneStep = paneEntryToAddress.current;
+    if (!addressed || toolBeside) return;
+    if (kindNavigation.current !== null) {
+      const pending = kindNavigation.current;
+      if (
+        pending.view !== view &&
+        performance.now() - pending.at < KIND_NAVIGATION_MS
+      ) {
+        return;
+      }
+      kindNavigation.current = null;
+    }
+    const url = new URL(window.location.href);
+    const inAddress = {
+      channel: url.searchParams.get(CHAT_CHANNEL_PARAM),
+      thread: url.searchParams.get(CHAT_THREAD_PARAM),
+    };
+    // The router hasn't handed this address to the panel yet.
+    if (
+      inAddress.channel !== initialChannelId ||
+      inAddress.thread !== initialThreadId
+    ) {
+      return;
+    }
+    // A link to a channel the member can't reach keeps its note, and its id
+    // is taken off the address, so a reload or a copy doesn't repeat it.
+    if (requestedChannelMissing) {
+      if (inAddress.channel === null) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is the external system this effect follows; the drop and its record are one act
+      setDroppedChannelId(inAddress.channel);
+      replaceAddress({
+        [CHAT_CHANNEL_PARAM]: null,
+        [CHAT_THREAD_PARAM]: null,
+        [CHAT_MESSAGE_PARAM]: null,
+      });
+      return;
+    }
+    if (!activeChannel || !activeView || selectionUnresolved) return;
+    const kindPath = activeView === "direct" ? MESSAGES_ROUTE : "/chat";
+    const rightPath =
+      isMessagesRoute(url.pathname) === (activeView === "direct");
+    const names =
+      inAddress.channel === activeChannel.id ||
+      inAddress.channel === activeChannel.name;
+    if (names && inAddress.thread === threadRootId) {
+      if (!rightPath) {
+        kindNavigation.current = { view: activeView, at: performance.now() };
+        router.replace(
+          addressWith(`${kindPath}${url.search}`, {
+            [CHAT_CHANNEL_PARAM]: activeChannel.id,
+          }),
+          { scroll: false },
+        );
+      } else if (inAddress.channel !== activeChannel.id) {
+        replaceAddress({ [CHAT_CHANNEL_PARAM]: activeChannel.id });
+      }
+      return;
+    }
+    if (names && threadRootId === null) {
+      closeAddress([CHAT_THREAD_PARAM]);
+      return;
+    }
+    const changes = {
+      [CHAT_CHANNEL_PARAM]: activeChannel.id,
+      [CHAT_THREAD_PARAM]: threadRootId,
+      [CHAT_MESSAGE_PARAM]: null,
+    };
+    // A landing the address doesn't name yet (a bare address, the list's
+    // fallback after a delete) is written where it is; anything else the
+    // member opened is a step.
+    const inPlace = selectedChannelId === null && !names;
+    if (!rightPath) {
+      kindNavigation.current = { view: activeView, at: performance.now() };
+      const to = addressWith(`${kindPath}${url.search}`, changes);
+      if (inPlace) router.replace(to, { scroll: false });
+      else router.push(to, { scroll: false });
+      return;
+    }
+    if (inPlace) {
+      replaceAddress(changes);
+      return;
+    }
+    // A thread opened over the conversation: below `lg`, Back from it lands
+    // on the conversation, not the list.
+    if (names && !isDesktopShell) markConversationEntry();
+    if (paneStep) replacePushedCopy(changes);
+    else pushAddress(changes);
+  }, [
+    addressed,
+    toolBeside,
+    view,
+    activeChannel,
+    activeView,
+    selectionUnresolved,
+    selectedChannelId,
+    requestedChannelMissing,
+    threadRootId,
+    initialChannelId,
+    initialThreadId,
+    isDesktopShell,
+    router,
+  ]);
+  // After the sync: a pick's pane step is for that commit only.
+  useEffect(() => {
+    paneEntryToAddress.current = false;
+  });
+  // `message=` is a one-shot (#6041): off the address once its jump has
+  // landed, or been found unreachable, so a reload doesn't jump again.
+  useEffect(() => {
+    if (!addressed || initialMessageId === null) return;
+    const settled =
+      pendingMessageId !== initialMessageId ||
+      pendingTargetHeld ||
+      unreachableTarget?.messageId === initialMessageId;
+    if (settled) consumeAddressParam(CHAT_MESSAGE_PARAM, initialMessageId);
+  }, [
+    addressed,
+    initialMessageId,
+    pendingMessageId,
+    pendingTargetHeld,
+    unreachableTarget,
+  ]);
   // What's new in the threads the viewer follows here, for each card
   // (#4297). The open thread is left out: reading it re-reads this.
   const threadUnread = useThreadUnread(
@@ -3452,6 +3765,19 @@ export function ChatShell({
     !selectionPending &&
     userId !== null &&
     activeChannelId === null;
+  // Nothing open on Messages (the open DM was just hidden, or never was):
+  // the address names no conversation either, so a reload doesn't bring back
+  // a DM the member put away (#6041).
+  useEffect(() => {
+    if (!addressed || toolBeside || !directNoneOpen) return;
+    if (new URL(window.location.href).searchParams.get(CHAT_CHANNEL_PARAM)) {
+      replaceAddress({
+        [CHAT_CHANNEL_PARAM]: null,
+        [CHAT_THREAD_PARAM]: null,
+        [CHAT_MESSAGE_PARAM]: null,
+      });
+    }
+  }, [addressed, toolBeside, directNoneOpen]);
   // Nothing to pick at all: the member has never had a DM, or hid every one.
   const directEmpty =
     directNoneOpen && !directChannels.some((ch) => !ch.hidden);
@@ -4260,6 +4586,9 @@ export function ChatShell({
               <InlineNoteAction
                 onClick={() => {
                   setChannelTargetDismissed(true);
+                  // The landing takes its place, and the address sync writes
+                  // it (#6041).
+                  setSelectedChannelId(null);
                   // Below `lg` the list is a separate pane, so a control named
                   // "Browse channels" has to actually show it. Dismissing alone
                   // resolved the #general fallback and painted a timeline, which

@@ -89,14 +89,12 @@ vi.mock("@/components/chat/chat-page", () => ({
     toolBeside,
     onClose,
     view,
-    onViewChange,
     onPick,
     shown,
   }: {
     toolBeside?: boolean;
     onClose?: () => void;
     view?: string;
-    onViewChange?: (view: "channels" | "direct") => void;
     onPick?: (view: "channels" | "direct", channelId: string) => void;
     shown?: boolean;
   }) => (
@@ -104,12 +102,6 @@ vi.mock("@/components/chat/chat-page", () => ({
       <p data-testid="chat-stub">{toolBeside ? "beside a tool" : "alone"}</p>
       <p data-testid="chat-view">{view}</p>
       <p data-testid="chat-shown">{shown ? "shown" : "out of sight"}</p>
-      <button type="button" onClick={() => onViewChange?.("direct")}>
-        Open a DM link
-      </button>
-      <button type="button" onClick={() => onViewChange?.("channels")}>
-        Open a channel link
-      </button>
       <button type="button" onClick={() => onPick?.("channels", "c-general")}>
         Pick a channel
       </button>
@@ -852,35 +844,15 @@ describe("DashboardShell", () => {
       ).toHaveAttribute("aria-current", "page");
     });
 
-    it("moves a link into a DM from /chat to Messages, keeping its target", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/chat";
-      mockSearch.value = "channel=dm-1";
-      shell();
-      expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-      fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
-      expect(routerReplace).toHaveBeenCalledWith("/messages?channel=dm-1");
-    });
-
-    it("moves a channel picked from the sidebar off Messages to that conversation, and nothing replaces the push", () => {
+    it("leaves a channel picked from the sidebar on Messages to the panel, which moves the address (#6041)", () => {
       setWindowWidth(1440);
       mockPathname.value = "/messages";
       mockSearch.value = "channel=dm-1";
       shell();
       fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
-      expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
-      // The panel then reports a channel open on Messages, in the same click.
-      fireEvent.click(
-        screen.getByRole("button", { name: "Open a channel link" }),
-      );
-      expect(routerReplace).not.toHaveBeenCalled();
-    });
-
-    it("leaves a docked conversation alone beside a page, whichever kind it is", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/rush";
-      shell();
-      fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
+      // `ChatShell`'s address sync pushes `/chat?channel=` itself
+      // (`chat-shell.spec.tsx`); a second push here would be a second entry.
+      expect(routerPush).not.toHaveBeenCalled();
       expect(routerReplace).not.toHaveBeenCalled();
     });
   });

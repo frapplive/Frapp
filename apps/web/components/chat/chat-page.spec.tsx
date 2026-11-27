@@ -14,13 +14,21 @@ vi.mock("./chat-shell", () => ({
   ChatShell: ({
     initialChannelId,
     initialMessageId,
+    initialThreadId,
+    addressed,
   }: {
     initialChannelId: string | null;
     initialMessageId: string | null;
+    initialThreadId: string | null;
+    addressed: boolean;
   }) => (
-    <p data-testid="target">
-      {String(initialChannelId)}/{String(initialMessageId)}
-    </p>
+    <>
+      <p data-testid="target">
+        {String(initialChannelId)}/{String(initialMessageId)}
+      </p>
+      <p data-testid="thread">{String(initialThreadId)}</p>
+      <p data-testid="addressed">{String(addressed)}</p>
+    </>
   ),
 }));
 
@@ -32,6 +40,24 @@ afterEach(() => {
 });
 
 describe("ChatPage's target (#3779)", () => {
+  it("reads the thread and lets the panel write the address on a chat URL (#6041)", () => {
+    nav.search = "channel=c1&thread=t1";
+    const { rerender } = render(<ChatPage />);
+    expect(screen.getByTestId("thread")).toHaveTextContent("t1");
+    expect(screen.getByTestId("addressed")).toHaveTextContent("true");
+    // Forward onto another thread while mounted.
+    nav.search = "channel=c1&thread=t2";
+    rerender(<ChatPage />);
+    expect(screen.getByTestId("thread")).toHaveTextContent("t2");
+  });
+
+  it("writes no address beside a tool page (#5575)", () => {
+    nav.pathname = "/documents";
+    nav.search = "folder=Finance";
+    render(<ChatPage toolBeside />);
+    expect(screen.getByTestId("addressed")).toHaveTextContent("false");
+  });
+
   it("follows a chat URL's channel and message", () => {
     nav.search = "channel=c1&message=m1";
     render(<ChatPage />);
