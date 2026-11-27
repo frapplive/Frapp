@@ -12218,7 +12218,7 @@ export interface components {
             last_year_at: string | null;
             /**
              * Format: date
-             * @description Present when last year's event was all-day or time-TBD: its first day, with no time zone. Read it instead of `last_year_at`, which for such an event is only the saver's local midnight.
+             * @description Last year's all-day or time-TBD event's first day, with no time zone: read it instead of `last_year_at`, which for such an event is only the saver's local midnight. Absent for a timed event, and on suggestions stored before it was added, so its absence doesn't mean the event was timed.
              */
             last_year_date?: string;
             /** @description How many times it was held around then (a weekly series). */
