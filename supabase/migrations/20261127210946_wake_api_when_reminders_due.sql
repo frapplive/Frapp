@@ -16,19 +16,27 @@
 --    due. Each check mirrors that sweep's own candidate query, and each is an
 --    indexed `exists`, so the check costs a few index probes.
 --    - Pre-event reminder (`ScheduledJobsService.sweepEventReminders`): a
---      required, timed event starting in (now, now + 30m], plus 5 minutes of
---      lead, with no EVENT_REMINDER claim.
+--      timed event someone is required at (`eventRequiresAnyone` in
+--      @repo/validation, which the sweep applies after its query) starting in
+--      (now, now + 30m], plus 5 minutes of lead, with no EVENT_REMINDER claim.
 --    - Timed task due soon (`sweepTimedTaskReminders`): due_at in
 --      (now, now + 60m], plus the lead, with no DUE_SOON claim.
 --    - Timed task overdue (the same sweep): due_at in the recent window with
 --      no OVERDUE claim.
+--    - Repeating tasks (`materializeDueTaskSeries`, the same tick): a live
+--      series whose latest copy's due passes in the recent window, so the
+--      next copy is made, and can be reminded about, while it is still ahead.
 --    - Chat reminders (`ChatReminderSweepService`), meeting-date reminders
 --      (`MeetingDateReminderSweepService`) and scheduled messages
 --      (`ChatScheduledMessageSweepService`): a row due in the recent window.
 --
 --    Every check looks 5 minutes ahead, so the API is already up when the
---    item comes due, and only 30 minutes back, so a row that keeps failing
---    stops waking it after six checks instead of keeping it on for good.
+--    item comes due, and at most 30 minutes back, so nothing keeps it on for
+--    good. A row the sweep handles without leaving a claim (an event whose
+--    required members are all excused, a reminder whose sends all fail) keeps
+--    the check true until its window ends: at most seven checks for the
+--    look-back windows and the event's, thirteen for a timed task's due-soon
+--    hour. That is the instance's idle tail stretched by those minutes, once.
 -- 2. `wake_api_if_due()`: calls slice 1's `wake_api()` when work is due.
 --    `wake_api()` already limits itself to once a minute and does nothing
 --    until the API has written its address, as on local and CI databases.
@@ -58,7 +66,16 @@ as $$
          and e.start_time <= p_now + interval '35 minutes'
          and e.timing = 'timed'
          and e.calendar_only = false
-         and (e.is_mandatory or e.required_role_ids is not null)
+         -- `eventRequiresAnyone`: a required role, or mandatory for everyone
+         -- invited. Editors store a cleared role list as '{}', not null, so
+         -- the sweep's own `.or(...)` prefilter alone matches every event.
+         and (
+           coalesce(cardinality(e.required_role_ids), 0) > 0
+           or (
+             e.is_mandatory
+             and coalesce(e.others_invited, coalesce(cardinality(e.required_role_ids), 0) = 0)
+           )
+         )
          and not exists (
            select 1
              from public.scheduled_notification_dispatches d
@@ -99,6 +116,13 @@ as $$
               and d.threshold = 'OVERDUE'
               and d.due_date = t.due_date
          )
+    )
+    or exists (
+      select 1
+        from public.task_series s
+       where s.ended_at is null
+         and s.latest_due_at > p_now - interval '30 minutes'
+         and s.latest_due_at <= p_now + interval '5 minutes'
     )
     or exists (
       select 1

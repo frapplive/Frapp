@@ -30,14 +30,16 @@ export function wakeOrigin(apiUrl: string | undefined): string | null {
 }
 
 /**
- * Tells the database where this API lives, so a chat message sent while the
- * API sleeps can wake it (#6123).
+ * Tells the database where this API lives, so a chat message, or a reminder
+ * coming due, while the API sleeps can wake it (#6123, #6188).
  *
  * Staging's Cloud Run service runs at min 0 and stops about 15 minutes after
- * its last request, taking the push worker's Realtime subscription with it.
- * `wake_api()` (`20261127184653_api_wake_chat_push_catch_up.sql`) sends a
- * request to the address written here when a message is inserted, Cloud Run
- * starts an instance for it, and the push worker catches up on boot
+ * its last request, taking the push worker's Realtime subscription and every
+ * sweep with it. `wake_api()` (`20261127184653_api_wake_chat_push_catch_up.sql`)
+ * sends a request to the address written here when a message is inserted, or
+ * when the `wake-api-if-due` cron job finds due work
+ * (`20261127210946_wake_api_when_reminders_due.sql`). Cloud Run starts an
+ * instance for it, and the push worker catches up on boot
  * (`ChatPushWorkerService.catchUp`).
  *
  * Written at every boot, from the API's own `API_URL`, so no deploy step or

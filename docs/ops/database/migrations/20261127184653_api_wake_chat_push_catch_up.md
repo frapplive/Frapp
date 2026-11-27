@@ -28,7 +28,7 @@ A chat message wakes a sleeping API, and the push worker catches up on the messa
 
 ## Rollback
 
-Revert if the wake misbehaves (for example, `pg_net` requests piling up or failing inserts, which the exception handler should prevent). Dropping the trigger alone stops every wake and leaves the catch-up working, so try that first. A full revert, after shipping an API that no longer calls `chat_push_unclaimed_messages` or writes `api_wake` (the API logs and reports a failed catch-up read or wake-target write, and keeps running without them). Decision matrix: [playbook](../../db-rollback-playbook.md#decision-matrix).
+Revert if the wake misbehaves (for example, `pg_net` requests piling up or failing inserts, which the exception handler should prevent). Dropping the trigger alone stops the wakes on chat messages and leaves the catch-up working, so try that first. The `wake-api-if-due` cron job from [20261127210946](20261127210946_wake_api_when_reminders_due.md) also calls `wake_api()`: roll that one back first, before this one's full revert, or its ticks log a warning for the missing function. A full revert, after shipping an API that no longer calls `chat_push_unclaimed_messages` or writes `api_wake` (the API logs and reports a failed catch-up read or wake-target write, and keeps running without them). Decision matrix: [playbook](../../db-rollback-playbook.md#decision-matrix).
 
 ```sql
 drop trigger if exists chat_messages_wake_api on public.chat_messages;
