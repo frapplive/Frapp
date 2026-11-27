@@ -106,11 +106,11 @@ states as a rule rather than orientation, because the next session can't redisco
   [`file-follow-up`](../file-follow-up/SKILL.md), or a `research` card, which files its own issue)
   and waits for the user to choose it; it never rides into the next stage. A new-feature idea stays
   in the Backlog unless Paul asks for it ([`AGENTS.md` § Work tracking](../../../AGENTS.md#work-tracking)).
-- **Stages on the same screen wait their turn.** The one-PR-per-screen rule
-  ([`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)) holds between stages:
-  a next stage on the screen the last one changed opens its PR only after that one merges. Stages on
-  different screens and files can run as parallel lanes; a handoff says which lane it is and what
-  the other lane holds.
+- **Stages on the same screen usually wait their turn.** A next stage on the screen the last one
+  changed conflicts with it, so it usually opens its PR after that one merges; weigh the overlap
+  ([`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)). Stages on different
+  screens and files can run as parallel lanes; a handoff says which lane it is and what the other
+  lane holds.
 
 A coordinator's handoff to its successor is its own procedure and starts the successor without
 asking ([`coordinator`](../coordinator/SKILL.md)); this rule doesn't apply to it. A `research` or

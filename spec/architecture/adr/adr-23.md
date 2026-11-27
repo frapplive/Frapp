@@ -213,3 +213,17 @@ tests, types and lint already passed, and the account's weekly usage ran out dur
 but its author, the test suites and CI. That is the cost Paul chose. The trigger to revisit is the
 one above: a defect that reaches `main` through such a push and that a review round would plausibly
 have caught.
+
+## Amendment 3 (2026-11-27): the caps outside the review become judgment
+
+Paul, 2026-11-27: the hard limits on everything except `/diff-review` come out, because fixed rules
+now cost more than they save. A session sizes its own fan-outs and sets its own subagent effort.
+
+- **Removed:** `workflowSizeGuideline: "medium"` from `.claude/settings.json` (each user's `/config`
+  setting now applies), the 5-agents-per-step rule, the rule that verification outside the gate is
+  one opinion, and the rule that every workflow `agent()` passes `effort` and never `xhigh`.
+- **Kept:** `/diff-review` and its `frapp-review` workflow, and the effort pinned in `diff-finder`'s
+  and `claim-verifier`'s frontmatter, which belongs to that review. The measurements above (what
+  effort an agent actually runs at, and what each launch costs) still stand and are what a session
+  weighs.
+
