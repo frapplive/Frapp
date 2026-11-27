@@ -1,12 +1,99 @@
 import { SupabaseMeetingActionItemTaskRepository } from './supabase-meeting-action-item-task.repository';
 import type { FrappSupabaseClient } from '../database.types';
+import {
+  CHAPTER_A,
+  CHAPTER_B,
+  USER_SHARED,
+  createTenantHarness,
+  inA,
+  inB,
+} from '#test/helpers/tenant-scope.harness';
 
 /**
  * `meeting_action_item_tasks` (#6062): the claim that keeps an action item to
- * one task. The table has no `id`, which the tenant harness keys rows by, so
- * a recording fake checks each query's filters instead: every one is
- * chapter-first, and the takeover and the release touch only an empty claim.
+ * one task. Its key is `(meeting_id, item_key)`; the harness tracks rows by
+ * `id`, so the seed gives each twin one (as `meeting_drafts`' spec does). The
+ * A/B twins agree on everything but their chapter, so a query that drops the
+ * chapter predicate reaches the other chapter's twin.
+ *
+ * The harness doesn't enforce the primary key, so the unique violation a
+ * second claim meets, and the takeover after it, are pinned with a recording
+ * fake below.
  */
+
+const T_MINUTES = '0f000000-0000-4000-8000-000000006062';
+const T_KEY_DONE = 'a'.repeat(32);
+const T_KEY_EMPTY = 'b'.repeat(32);
+const T_TASK = '0d000000-0000-4000-8000-000000006062';
+
+const seeded = (key: string, over: Record<string, unknown> = {}) => ({
+  meeting_id: T_MINUTES,
+  item_key: key,
+  task_id: null,
+  task_group_id: null,
+  created_by: USER_SHARED,
+  created_at: '2026-11-25T00:00:00.000Z',
+  ...over,
+});
+
+describe('SupabaseMeetingActionItemTaskRepository — tenant scope', () => {
+  const build = () => {
+    const harness = createTenantHarness({
+      tables: {
+        meeting_action_item_tasks: [
+          inA({ id: 'done-a', ...seeded(T_KEY_DONE, { task_id: T_TASK }) }),
+          inB({ id: 'done-b', ...seeded(T_KEY_DONE, { task_id: T_TASK }) }),
+          inA({ id: 'empty-a', ...seeded(T_KEY_EMPTY) }),
+          inB({ id: 'empty-b', ...seeded(T_KEY_EMPTY) }),
+        ],
+      },
+    });
+    return {
+      harness,
+      repo: new SupabaseMeetingActionItemTaskRepository(harness.client),
+      row: (id: string) =>
+        harness.rows('meeting_action_item_tasks').find((r) => r.id === id),
+    };
+  };
+
+  it('lists only the chapter’s links for the minutes', async () => {
+    const { harness, repo } = build();
+    const rows = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.listForMeeting(CHAPTER_A, T_MINUTES),
+    );
+    expect(rows.map((r) => (r as { id?: string }).id).sort()).toEqual([
+      'done-a',
+      'empty-a',
+    ]);
+  });
+
+  it('fills in only the chapter’s claim', async () => {
+    const { harness, repo, row } = build();
+    await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.setTask(CHAPTER_A, T_MINUTES, T_KEY_EMPTY, {
+        id: T_TASK,
+        group_id: null,
+      }),
+    );
+    expect(row('empty-a')?.task_id).toBe(T_TASK);
+    expect(row('empty-b')?.task_id).toBeNull();
+  });
+
+  it('gives back only the chapter’s empty claim, never one with its task', async () => {
+    const { harness, repo, row } = build();
+    await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.release(CHAPTER_A, T_MINUTES, T_KEY_EMPTY),
+    );
+    expect(row('empty-a')).toBeUndefined();
+    expect(row('empty-b')).toBeDefined();
+    await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.release(CHAPTER_A, T_MINUTES, T_KEY_DONE),
+    );
+    expect(row('done-a')).toBeDefined();
+  });
+});
+
+/** The claim's conflict paths, which the harness can't raise. */
 
 const CHAPTER = '11111111-1111-4111-8111-111111111111';
 const MINUTES = '0f000000-0000-4000-8000-000000006062';
@@ -63,7 +150,7 @@ const row = {
 const has = (calls: Call[], ...call: unknown[]) =>
   calls.some((entry) => JSON.stringify(entry) === JSON.stringify(call));
 
-describe('SupabaseMeetingActionItemTaskRepository', () => {
+describe('SupabaseMeetingActionItemTaskRepository — the claim', () => {
   it('claims a free item with one insert', async () => {
     const { client, calls } = fake({});
     await expect(

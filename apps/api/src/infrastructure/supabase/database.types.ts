@@ -95,8 +95,8 @@ import type {
   InterestFormVerification,
   Invite,
   Meeting,
-  MeetingDateReminder,
   MeetingActionItemTaskLink,
+  MeetingDateReminder,
   MeetingDraft,
   MeetingLiveRecording,
   MeetingMinutesRequest,
@@ -302,8 +302,8 @@ export interface Database {
       interest_form_submissions: TableDefinition<InterestFormSubmission>;
       interest_form_verifications: TableDefinition<InterestFormVerification>;
       invites: TableDefinition<Invite>;
-      meeting_date_reminders: TableDefinition<MeetingDateReminder>;
       meeting_action_item_tasks: TableDefinition<MeetingActionItemTaskLink>;
+      meeting_date_reminders: TableDefinition<MeetingDateReminder>;
       meeting_drafts: TableDefinition<MeetingDraft>;
       meeting_live_recordings: TableDefinition<MeetingLiveRecording>;
       meeting_minutes_requests: TableDefinition<MeetingMinutesRequest>;
