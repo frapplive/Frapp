@@ -29,7 +29,10 @@ const {
 
 vi.mock("@repo/hooks", () => ({
   useMembers: () => ({
-    data: [{ id: "m2", user_id: "u2", display_name: "Sam Lee" }],
+    data: [
+      { id: "m1", user_id: "u1", display_name: "Pat Kim" },
+      { id: "m2", user_id: "u2", display_name: "Sam Lee" },
+    ],
     isPending: false,
     isError: false,
   }),
@@ -184,6 +187,16 @@ describe("Transfer presidency", () => {
     expect(
       screen.getByRole("button", { name: "Transfer presidency, now Pat Kim" }),
     ).toHaveTextContent("Pat Kim");
+  });
+
+  it("never offers the President themselves", async () => {
+    const user = userEvent.setup();
+    render(<TransferPresidencyRow />);
+    await user.click(
+      screen.getByRole("button", { name: /^transfer presidency/i }),
+    );
+    expect(await screen.findByRole("option", { name: "Sam Lee" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Pat Kim" })).toBeNull();
   });
 
   it("moves the presidency only after an in-product confirmation", async () => {

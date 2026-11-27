@@ -31,6 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import Link from "next/link";
 import { FOCUS_RING } from "@/components/ui/focus";
 import {
   Select,
@@ -112,11 +113,14 @@ const OUTSIDE = "__outside__";
 export function RolePage({
   roleId,
   backHref,
+  tierHref,
   onDeleted,
 }: {
   roleId: string;
   /** Roles and groups, where the back line and a deletion return. */
   backHref: string;
+  /** The page of the role's tier, linked from its Tier row. */
+  tierHref?: (tierId: string) => string;
   onDeleted: () => void;
 }) {
   const data = useRolesData();
@@ -159,6 +163,7 @@ export function RolePage({
       role={role}
       data={data}
       backHref={backHref}
+      tierHref={tierHref}
       onDeleted={onDeleted}
     />
   );
@@ -180,11 +185,13 @@ function RoleBody({
   role,
   data,
   backHref,
+  tierHref,
   onDeleted,
 }: {
   role: TieredRole;
   data: ReturnType<typeof useRolesData>;
   backHref: string;
+  tierHref?: (tierId: string) => string;
   onDeleted: () => void;
 }) {
   const { tiers, roles, reach, canManage, words, memberCounts } = data;
@@ -202,6 +209,9 @@ function RoleBody({
   const { permissionsOf, toggle, pending } = useRolePermissionToggle(holders);
 
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
+  // A tier_id naming a tier this chapter doesn't have reads as outside the
+  // tiers, the way the overview lists it and the API ranks it.
+  const tierId = tier?.id ?? null;
   // The Everyone role (#4191): its permissions and @everyone switch are
   // edited here; its name and tier are fixed, as the API holds them.
   const everyone = isEveryoneRole(role);
@@ -222,7 +232,7 @@ function RoleBody({
   // Whether the officer picked a color: an unpaintable stored value shows as
   // "No color", so the draft alone can't tell "left alone" from "cleared".
   const [colorTouched, setColorTouched] = useState(false);
-  const [placement, setPlacement] = useState(role.tier_id ?? OUTSIDE);
+  const [placement, setPlacement] = useState(tierId ?? OUTSIDE);
   const [mentionable, setMentionable] = useState(role.mentionable);
   // "Non-chapter business" (#4958, Shawn 2026-11-14): members add and remove
   // the role themselves. Judged against the drafted placement, since a move
@@ -236,7 +246,7 @@ function RoleBody({
     // stored ones while it stays put, else the drafted tier's with its own
     // overrides on top (a role moved out of a tier drops that tier's).
     permissions:
-      draftTierId === (role.tier_id ?? null)
+      draftTierId === tierId
         ? role.permissions
         : permissionsAfterMove(
             tiers.find((candidate) => candidate.id === draftTierId)
@@ -370,7 +380,7 @@ function RoleBody({
             key: "delete",
             label: PEOPLE_SETTINGS_COPY.deleteRole,
             destructive: true,
-            disabled: !editable,
+            disabled: !editable || deleteRole.isPending,
             onSelect: () => void remove(),
           } satisfies RowMenuEntry,
         ]),
@@ -438,6 +448,17 @@ function RoleBody({
           <SettingsRow
             icon={Layers}
             label={words.Singular}
+            description={
+              tier && tierHref ? (
+                // What the tier gives lives on its page: the way there.
+                <Link
+                  href={tierHref(tier.id)}
+                  className={cn("underline underline-offset-2", FOCUS_RING)}
+                >
+                  Open {tier.name}
+                </Link>
+              ) : undefined
+            }
             control={
               <Select
                 value={placement}
@@ -456,7 +477,7 @@ function RoleBody({
                       key={candidate.id}
                       value={candidate.id}
                       disabled={
-                        candidate.id !== role.tier_id &&
+                        candidate.id !== tierId &&
                         !reachesTier(reach, candidate)
                       }
                     >
@@ -465,7 +486,7 @@ function RoleBody({
                   ))}
                   <SelectItem
                     value={OUTSIDE}
-                    disabled={role.tier_id !== null && !reachesOutside(reach)}
+                    disabled={tierId !== null && !reachesOutside(reach)}
                   >
                     {outsideTiersHeading(words.plural)}
                   </SelectItem>

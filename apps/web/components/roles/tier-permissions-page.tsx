@@ -208,8 +208,6 @@ export function TierPermissionsPage({
     >
       {confirmDialog}
       <SettingsNameField
-        // Keyed on the saved name, so a rename from elsewhere shows.
-        key={tier.name}
         value={tier.name}
         maxLength={ROLE_TIER_NAME_MAX_LENGTH}
         disabled={!editable}

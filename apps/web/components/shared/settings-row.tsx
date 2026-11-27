@@ -35,7 +35,10 @@ export function SettingsGroup({
   footnote,
   children,
   className,
+  id,
 }: {
+  /** For a settings-search jump or a deep link to land on the group. */
+  id?: string;
   /** Accessible name when the group has no visible heading above it. */
   label?: string;
   /**
@@ -56,6 +59,7 @@ export function SettingsGroup({
   const headingId = useId();
   const list = (
     <ul
+      id={heading || footnote ? undefined : id}
       aria-label={heading ? undefined : label}
       aria-labelledby={heading ? headingId : undefined}
       className={cn(
@@ -68,7 +72,7 @@ export function SettingsGroup({
   );
   if (!heading && !footnote) return list;
   return (
-    <div className={cn("space-y-2", className)}>
+    <div id={id} className={cn("space-y-2", className)}>
       {heading ? <SectionLabel id={headingId}>{heading}</SectionLabel> : null}
       {list}
       {footnote ? (
@@ -225,6 +229,7 @@ export function SettingsRow(
       <Link
         id={props.id}
         href={props.href}
+        data-row-link={props.menu ? "" : undefined}
         className={cn(
           row,
           props.menu && "min-w-0 flex-1",
@@ -290,7 +295,7 @@ export function SettingsRow(
   }
 
   return (
-    <li className="group">
+    <li id={props.id} className="group">
       <div className={row}>
         {glyph}
         {text}

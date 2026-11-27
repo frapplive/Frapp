@@ -188,6 +188,8 @@ export function TransferPresidencyRow() {
     <>
       {confirmDialog}
       <SettingsRow
+        // Settings search lands here (`settings-search.ts`).
+        id="settings-transfer-presidency"
         icon={Crown}
         label={PEOPLE_SETTINGS_COPY.transferPresidency}
         control={

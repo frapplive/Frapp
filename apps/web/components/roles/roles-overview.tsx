@@ -223,6 +223,10 @@ function TierList({
     // refuses the move until it's unmarked on its role page, so the menu
     // doesn't offer one. Actives (#5802) stays in its tier, as the API holds it.
     const movable = !role.self_assignable && !isActiveRole(role);
+    // A tier_id naming a missing tier reads as outside, as `rolesIn` groups it.
+    const tierId = tiers.some((tier) => tier.id === role.tier_id)
+      ? role.tier_id
+      : null;
     const stepTo = (by: -1 | 1) =>
       void run(
         () => stepper.step(role, by),
@@ -251,7 +255,7 @@ function TierList({
           ]
         : []),
       ...tiers
-        .filter((tier) => movable && tier.id !== role.tier_id)
+        .filter((tier) => movable && tier.id !== tierId)
         .map((tier): RowMenuEntry => ({
           type: "item",
           key: `move-${tier.id}`,
@@ -259,7 +263,7 @@ function TierList({
           disabled: !editable || !reachesTier(reach, tier),
           onSelect: () => moveRole(role, tier.id),
         })),
-      ...(role.tier_id === null || !movable
+      ...(tierId === null || !movable
         ? []
         : [
             {

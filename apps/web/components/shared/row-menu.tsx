@@ -97,14 +97,21 @@ export const ROW_REVEAL =
 const DESTRUCTIVE_ITEM_CLASS =
   "text-destructive-text focus:bg-destructive-tint focus:text-destructive-text";
 
-/** Where a right-click should fall through to the browser's own menu. */
+/**
+ * Where a right-click should fall through to the browser's own menu. A link
+ * that is the row itself (`data-row-link`, a settings row that opens a page)
+ * opens the row's menu instead, as Discord's channel list does; any other
+ * link keeps "Open in new tab".
+ */
 export function keepsBrowserMenu(
   target: EventTarget | null,
   row: Element,
 ): boolean {
   if (
     target instanceof Element &&
-    target.closest("a[href], input, textarea, select, [contenteditable='true']")
+    target.closest(
+      "a[href]:not([data-row-link]), input, textarea, select, [contenteditable='true']",
+    )
   ) {
     return true;
   }

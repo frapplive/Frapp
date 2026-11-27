@@ -179,6 +179,7 @@ export function GroupsGroup({
                   key: "delete",
                   label: PEOPLE_SETTINGS_COPY.deleteGroup,
                   destructive: true,
+                  disabled: remove.isPending,
                   onSelect: () => void handleDelete(group),
                 },
               ],
@@ -199,6 +200,8 @@ export function GroupsGroup({
     <>
       {confirmDialog}
       <SettingsGroup
+        // Settings search lands here (`settings-search.ts`).
+        id="settings-groups"
         heading={PEOPLE_SETTINGS_COPY.groupsHeading}
         footnote={GROUPS_FOOTNOTE}
       >
@@ -347,6 +350,7 @@ export function AutomaticGroupsPage({
   groupHref: (groupId: string) => string;
 }) {
   const groupsQuery = useGroups();
+  const { isOffline } = useNetwork();
   const automatic = (groupsQuery.data ?? []).filter(
     (group) => group.kind !== "manual",
   );
@@ -356,7 +360,13 @@ export function AutomaticGroupsPage({
       backLabel={PEOPLE_SETTINGS_COPY.pageTitle}
       title={PEOPLE_SETTINGS_COPY.autoGroupsRow}
     >
-      {groupsQuery.isLoading ? (
+      {isOffline && anyReadUncached(groupsQuery) ? (
+        <OfflineState
+          title="Groups are unavailable offline"
+          description="Reconnect to load them."
+          onRetry={() => void groupsQuery.refetch()}
+        />
+      ) : groupsQuery.isLoading || pausedRead(groupsQuery) ? (
         <SettingsListCardSkeleton label="Loading groups" />
       ) : groupsQuery.isError && groupsQuery.data === undefined ? (
         <ErrorState
@@ -416,9 +426,27 @@ export function GroupPage({
   const membersQuery = useMembers();
   const group = (groupsQuery.data ?? []).find((g) => g.id === groupId) ?? null;
   const members = membersQuery.data;
+  const { isOffline } = useNetwork();
 
+  if (isOffline && anyReadUncached(groupsQuery, membersQuery)) {
+    return (
+      <div className="space-y-4">
+        <SettingsBackLink href={backHref} label={backLabel} />
+        <OfflineState
+          title="This group is unavailable offline"
+          description="Reconnect to load it and make changes."
+          onRetry={() => {
+            void groupsQuery.refetch();
+            void membersQuery.refetch();
+          }}
+        />
+      </div>
+    );
+  }
   if (
     groupsQuery.isLoading ||
+    pausedRead(groupsQuery) ||
+    (group && members === undefined && pausedRead(membersQuery)) ||
     (group && members === undefined && membersQuery.isLoading)
   ) {
     return (
@@ -600,7 +628,14 @@ function GroupBody({
     },
   ];
   const autoFootnote =
-    group.kind === "manual" ? undefined : AUTO_GROUP_FOOTNOTE[group.kind];
+    [
+      group.kind === "manual" ? null : AUTO_GROUP_FOOTNOTE[group.kind],
+      // Disabled with the reason (rulebook): a viewer who can open the page
+      // but not change it is told why.
+      editable ? null : "Only officers who manage groups can change these.",
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   return (
     <SettingsSubpage

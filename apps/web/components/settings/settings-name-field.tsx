@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
  * It saves on its own, the way the settings spec says typed text does: on
  * Enter or on leaving the field, then a quiet "Saved" beside the label;
  * Escape puts the saved name back. A blank name is never sent. Read-only
- * (`disabled`) for a viewer who can't change it. Key it on the saved name so a
- * rename from elsewhere replaces what it shows.
+ * (`disabled`) for a viewer who can't change it. A rename made elsewhere
+ * replaces what it shows while the field isn't being edited; it isn't keyed
+ * on the name, so its own save keeps its focus and its "Saved".
  */
 export function SettingsNameField({
   value,
@@ -35,6 +36,10 @@ export function SettingsNameField({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(value);
+  }, [value]);
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -79,7 +84,13 @@ export function SettingsNameField({
           setText(event.target.value);
           setSaved(false);
         }}
-        onBlur={() => void commit()}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onBlur={() => {
+          focused.current = false;
+          void commit();
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();

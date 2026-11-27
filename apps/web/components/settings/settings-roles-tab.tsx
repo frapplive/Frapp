@@ -134,7 +134,14 @@ export function SettingsRolesTab({
     );
   }
   if (roleId) {
-    return <RolePage roleId={roleId} backHref={BASE} onDeleted={backToRoles} />;
+    return (
+      <RolePage
+        roleId={roleId}
+        backHref={BASE}
+        tierHref={links.tier}
+        onDeleted={backToRoles}
+      />
+    );
   }
   if (groupId) {
     const backHref = fromAutomatic ? links.automatic : BASE;
@@ -331,6 +338,8 @@ function DefaultInviteRoleRow({
 
   return (
     <SettingsRow
+      // Settings search lands here (`settings-search.ts`).
+      id="default-invite-role"
       icon={UserPlus}
       label={PEOPLE_SETTINGS_COPY.defaultInviteRole}
       description={
