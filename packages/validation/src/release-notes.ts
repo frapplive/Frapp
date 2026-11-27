@@ -129,6 +129,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "In Documents, Back now returns to the folder or file you had open, and a reload or a shared link lands on the same folder and file.",
       "In Activity, Back now returns to Everyone's tasks, the Archive or the task or item you had open, and a reload or a shared link lands on the same place.",
       "In Recruitment, Back now returns to the view or prospect you had open, and a shared link to a prospect opens them.",
+      "In the Directory, Back now returns to the tab or member profile you had open, and a shared link to a member's profile opens it.",
+      "On your profile, closing Points, Service hours or Study now goes Back, so Forward reopens it.",
     ],
   },
   {
