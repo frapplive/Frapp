@@ -5,8 +5,9 @@ import { Frame, paint } from "@/components/glyph-recipe";
  * The glyphs at the start of a settings row that opens a page or a sheet of
  * its own, as Discord's channel settings and iOS Settings draw them (Paul,
  * 2026-11-20). They are Lucide's (`Palette`, `Wallpaper`, `ScrollText`,
- * `Image`, `Landmark`, `Building2`, `Type`, `Cake`, and personal Settings'
- * rows below them, #6032), the icon set web's `SettingsRow` draws from
+ * `Image`, `Landmark`, `Building2`, `Type`, `Cake`, personal Settings'
+ * rows below them, #6032, and the module pages', #6030), the icon set web's
+ * `SettingsRow` draws from
  * (`apps/web/components/shared/settings-row.tsx`); where a row is on both,
  * both draw the same one (Accent color is `Palette` on each). A switch row,
  * or one that opens nothing, goes without, as on web.
@@ -318,6 +319,101 @@ export function HeartHandshakeGlyph({
         d="M19.414 14.414C21 12.828 22 11.5 22 9.5a5.5 5.5 0 0 0-9.591-3.676.6.6 0 0 1-.818.001A5.5 5.5 0 0 0 2 9.5c0 2.3 1.5 4 3 5.5l5.535 5.362a2 2 0 0 0 2.879.052 2.12 2.12 0 0 0-.004-3 2.124 2.124 0 1 0 3-3 2.124 2.124 0 0 0 3.004 0 2 2 0 0 0 0-2.828l-1.881-1.882a2.41 2.41 0 0 0-3.409 0l-1.71 1.71a2 2 0 0 1-2.828 0 2 2 0 0 1 0-2.828l2.823-2.762"
         {...detail}
       />
+    </Frame>
+  );
+}
+
+/** A module page's Goals rows (#6030): Lucide's `Target`, as web's. */
+export function TargetGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Circle cx={12} cy={12} r={10} {...detail} />
+      <Circle cx={12} cy={12} r={6} {...detail} />
+      <Circle cx={12} cy={12} r={2} {...detail} />
+    </Frame>
+  );
+}
+
+/** Meetings → Sections in the minutes (#6030): Lucide's `ListChecks`. */
+export function ListChecksGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="m3 17 2 2 4-4" {...detail} />
+      <Path d="m3 7 2 2 4-4" {...detail} />
+      <Path d="M13 6h8" {...detail} />
+      <Path d="M13 12h8" {...detail} />
+      <Path d="M13 18h8" {...detail} />
+    </Frame>
+  );
+}
+
+/** Recruitment → Stages (#6030): Lucide's `Columns3`. */
+export function ColumnsGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Rect x={3} y={3} width={18} height={18} rx={2} {...detail} />
+      <Path d="M9 3v18" {...detail} />
+      <Path d="M15 3v18" {...detail} />
+    </Frame>
+  );
+}
+
+/** Recruitment → Tags (#6030): Lucide's `Tag`. */
+export function TagGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"
+        {...detail}
+      />
+      <Circle cx={7.5} cy={7.5} r={0.5} fill={color} />
+    </Frame>
+  );
+}
+
+/** Recruitment → Interest form (#6030): Lucide's `ClipboardList`. */
+export function ClipboardListGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Rect x={8} y={2} width={8} height={4} rx={1} {...detail} />
+      <Path
+        d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+        {...detail}
+      />
+      <Path d="M12 11h4" {...detail} />
+      <Path d="M12 16h4" {...detail} />
+      <Path d="M8 11h.01" {...detail} />
+      <Path d="M8 16h.01" {...detail} />
+    </Frame>
+  );
+}
+
+/** Announcements → Announcements channel (#6030): Lucide's `Hash`. */
+export function HashGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M4 9h16" {...detail} />
+      <Path d="M4 15h16" {...detail} />
+      <Path d="M10 3 8 21" {...detail} />
+      <Path d="M16 3l-2 18" {...detail} />
     </Frame>
   );
 }

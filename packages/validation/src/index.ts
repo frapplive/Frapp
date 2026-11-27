@@ -189,6 +189,7 @@ export * from "./minutes-request-copy";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
+export * from "./module-settings-copy";
 export * from "./name-lock";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen

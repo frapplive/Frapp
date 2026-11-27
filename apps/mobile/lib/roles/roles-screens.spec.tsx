@@ -308,14 +308,16 @@ afterEach(() => {
 });
 
 describe("Chapter settings (#4074)", () => {
-  it("holds the accent, chat background, study zones and Roles for an officer", () => {
+  it("holds the accent, chat background, Roles and the modules for an officer", () => {
     const text = screenText(render(<ChapterSettingsScreen />));
     expect(text).toContain("Chapter accent");
     expect(text).toContain("Chat background");
     expect(text).toContain("Midnight");
-    expect(text).toContain(
-      "Study zones\nManaged on the web dashboard.\n2 zones",
-    );
+    // Study zones is a module row now (#6030); its zone count moved to its
+    // screen.
+    expect(text).toContain("Modules");
+    expect(text).toContain("Study zones");
+    expect(text).not.toContain("Managed on the web dashboard.");
     expect(text).toContain("Roles");
     expect(text).not.toContain("Set by an officer");
   });

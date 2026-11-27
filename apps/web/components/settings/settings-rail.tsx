@@ -3,7 +3,7 @@
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { EYEBROW } from "@/components/ui/typography";
-import { MODULE_SETTINGS } from "@/components/settings/settings-modules";
+import { MODULE_SETTINGS } from "@repo/hooks/module-settings";
 import { InlineNote } from "@/components/shared/inline-note";
 import { CHAPTER_LOGS_TITLE } from "@repo/validation";
 import { SettingsSearch } from "@/components/settings/settings-search";

@@ -60,7 +60,8 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 const { RushModuleSettings, RushNotesAccess } =
   await import("./rush-module-settings");
-const { RushStageEditor, stagesBody } = await import("./rush-stage-editor");
+const { RushStageEditor } = await import("./rush-stage-editor");
+const { stagesBody } = await import("@repo/hooks/rush-stage-drafts");
 const { RushStaleDaysRow } = await import("./rush-stale-days");
 
 const stage = (key: string, label: string, category: string, position = 0) => ({

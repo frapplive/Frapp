@@ -3,12 +3,12 @@ import { StyleSheet, Text, View, type ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
+  rushPipelineAccess,
   useAiChapterSettings,
   useAiConsent,
   useCategories,
   useChannelAccessOptions,
   useChapterChatBackground,
-  useGeofences,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
 import {
@@ -18,6 +18,7 @@ import {
   chapterVocabularyValue,
 } from "@repo/hooks/chapter-tab";
 import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
+import { shownModuleSettings } from "@repo/hooks/module-settings";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_SETTINGS_COPY,
@@ -54,7 +55,6 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
-import { InterestFormSettingsSection } from "@/components/rush/interest-form-settings-section";
 import { PlusGlyph } from "@/components/control-glyphs";
 import {
   ChannelFormSheet,
@@ -88,8 +88,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * - **About the chapter**: Identity & founding, Organization type and
  *   Vocabulary, each a pushed page.
  * - **Chapter**: Birthday posts (a channel sheet, Off or a channel), Members
- *   can change their own name (#5801), Study zones (read-only; zones are
- *   drawn on the web dashboard), then Logs.
+ *   can change their own name (#5801), then Logs.
  *
  * A member who can't change something still reads every value: a row that
  * opens a sheet doesn't open for them and says an officer sets it; a row
@@ -109,8 +108,14 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * - **People**: Roles and groups, the chapter's tiers and their roles, then
  *   its groups (`app/(app)/chapter-roles.tsx`), and New role.
  *
- * Web's other pages (Plan and billing, the module pages, member fields) stay
- * on web for now: they are setup an officer does once, at a desk.
+ * - **Modules** (#6030): a row per module, in web's rail order, each pushing
+ *   the module's screen (`app/(app)/module-settings.tsx`) with web's module
+ *   page's rows: the switch, rules, goals and who can. Study zones' zone
+ *   count moved there from Chapter. The officer tools stay on web.
+ *
+ * Web's other pages (Plan and billing, the semester, privacy, pledge
+ * classes, member fields) stay on web for now: they are setup an officer
+ * does once, at a desk.
  * Grouped rows with a chevron, as iOS Settings and Discord mobile's Server
  * Settings draw theirs.
  *
@@ -142,7 +147,6 @@ export default function ChapterSettingsScreen() {
   // config read refuses a council (#5933), so its parts don't draw there.
   const tab = useChapterTab();
   const {
-    permissions,
     access,
     chapterQuery,
     orgConfig,
@@ -162,16 +166,6 @@ export default function ChapterSettingsScreen() {
     typeof config?.birthday_channel_id === "string"
       ? config.birthday_channel_id
       : null;
-  const geofencesEnabled =
-    access.chapter &&
-    isModuleEnabled(chapterQuery.data?.enabled_modules, "geofences");
-  // Gated, not just hidden: the route requires `members:view` and the
-  // `geofences` module, so firing it for a member who won't see the row
-  // spends a request to collect a 403. No response schema, so narrowed
-  // through `unknown`.
-  const geofencesQuery = useGeofences({ enabled: geofencesEnabled });
-  const zones = geofencesQuery.data as unknown;
-  const zoneCount = Array.isArray(zones) ? zones.length : null;
 
   // The consent read says whether the server has AI at all (null when it
   // doesn't), as every AI entry on the phone asks before drawing.
@@ -191,6 +185,11 @@ export default function ChapterSettingsScreen() {
   );
 
   const readOnlyLine = canEditProfile ? null : CHAPTER_TAB_COPY.rowReadOnly;
+  // Recruitment's screen reads only what `rush:view` opens, with the module
+  // on, so a chair without the config key still reaches its interest form.
+  const recruitmentChair =
+    rushPipelineAccess(tab.permissions).view &&
+    isModuleEnabled(chapterQuery.data?.enabled_modules, "rush");
 
   return (
     <ScreenShell
@@ -329,7 +328,7 @@ export default function ChapterSettingsScreen() {
                 ) : null}
                 {/* Every row below is conditional, so the group draws only
                     when one of them does, never as an empty card. */}
-                {config || geofencesEnabled || access.logs ? (
+                {config || access.logs ? (
                   <>
                     <SectionHeader>Chapter</SectionHeader>
                     <ListSection>
@@ -385,19 +384,6 @@ export default function ChapterSettingsScreen() {
                             }
                           />
                         </SettingAnchor>
-                      ) : null}
-                      {geofencesEnabled ? (
-                        // Read-only here (the phone has no zone editor), so it says
-                        // where zones are changed: the dashboard's Study zones tool.
-                        <ListRow
-                          label="Study zones"
-                          description="Managed on the web dashboard."
-                          value={
-                            zoneCount === null
-                              ? "—"
-                              : `${zoneCount} ${zoneCount === 1 ? "zone" : "zones"}`
-                          }
-                        />
                       ) : null}
                       {access.logs ? (
                         // Last in Chapter, as web's Logs row is (Paul,
@@ -479,15 +465,6 @@ export default function ChapterSettingsScreen() {
         {access.newChannel ? (
           <ChatSection searching={search.searching} />
         ) : null}
-        {search.searching ? null : (
-          <InterestFormSettingsSection
-            permissions={permissions}
-            moduleOn={isModuleEnabled(
-              chapterQuery.data?.enabled_modules,
-              "rush",
-            )}
-          />
-        )}
         {access.roles ? (
           access.newRole ? (
             <PeopleSectionWithNewRole searching={search.searching} />
@@ -495,10 +472,23 @@ export default function ChapterSettingsScreen() {
             <PeopleSection searching={search.searching} placements={[]} />
           )
         ) : null}
-        {/* Where the phone stops (Shawn, 2026-11-22): permissions, channel
-            access, reordering, the chapter profile and the rest are web's
-            Settings, which an officer sets up once, at a desk. One quiet
-            line, as iOS Settings ends a group with its footnote. */}
+        {search.searching || !tab.chapterFeatures ? null : (
+          <ModulesSection
+            enabledModules={
+              orgConfig.data?.enabled_modules ??
+              chapterQuery.data?.enabled_modules
+            }
+            // A council's config route refuses it (#5933), so it has none.
+            // A recruitment chair without `chapter-config:view` gets
+            // Recruitment alone, for the interest form (#5977).
+            only={access.chapter ? null : recruitmentChair ? ["rush"] : []}
+          />
+        )}
+        {/* Where the phone stops (Shawn, 2026-11-22): Plan and billing, the
+            semester, privacy, pledge classes, member fields and the officer
+            tools are web's Settings, which an officer sets up once, at a
+            desk. One quiet line, as iOS Settings ends a group with its
+            footnote. */}
         {search.searching ? null : (
           <Text style={styles.footnote}>{MORE_ON_THE_WEB}</Text>
         )}
@@ -511,6 +501,48 @@ export default function ChapterSettingsScreen() {
         </>
       ) : null}
     </ScreenShell>
+  );
+}
+
+/**
+ * Modules (#6030): a row per module, in web's rail order and words
+ * (`shownModuleSettings`), saying Off where the chapter switched it off, each
+ * pushing the module's screen: its switch, rules, goals and who can.
+ */
+function ModulesSection({
+  enabledModules,
+  only,
+}: {
+  enabledModules: Record<string, boolean> | null | undefined;
+  /** The modules this viewer may open, or `null` for every one. */
+  only: readonly string[] | null;
+}) {
+  const router = useRouter();
+  const modules = shownModuleSettings().filter(
+    (module) => only === null || only.includes(module.key),
+  );
+  if (modules.length === 0) return null;
+  return (
+    <>
+      <SectionHeader>Modules</SectionHeader>
+      <ListSection>
+        {modules.map((module) => (
+          <SettingAnchor key={module.key} id={`module-${module.key}`}>
+            <ListRow
+              label={module.label}
+              value={isModuleEnabled(enabledModules, module.key) ? null : "Off"}
+              accessibilityHint={`Opens ${module.label}: its switch, rules and who can.`}
+              onPress={() =>
+                router.push({
+                  pathname: "/module-settings",
+                  params: { module: module.key },
+                })
+              }
+            />
+          </SettingAnchor>
+        ))}
+      </ListSection>
+    </>
   );
 }
 

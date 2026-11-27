@@ -5,7 +5,6 @@ import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineNote } from "@/components/shared/inline-note";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { modulePermissions } from "@/components/settings/settings-modules";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@repo/hooks/role-tiers";
 import { CANT_GIVE } from "@repo/hooks/use-roles-data";
 import {
+  modulePermissions,
   whoCanHolders,
   whoCanPageId,
   whoCanSummary,

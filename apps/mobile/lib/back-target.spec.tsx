@@ -132,6 +132,28 @@ describe("useScreenBelow", () => {
   });
 });
 
+describe("useScreenBelow over a module's screen (#6030)", () => {
+  // Any screen pushed over a module's screen (a push notification's, say)
+  // names the module or the setting from that screen's own route.
+  it.each([
+    [{ module: "points" }, "Points"],
+    [{ module: "hours", page: "goal-service" }, "Service hours goal"],
+    [{ module: "points", page: "can-points:adjust" }, "Add or remove points"],
+    [{ module: "rush", page: "interest-form" }, "Interest form"],
+    [{ module: "dues" }, "Chapter settings"],
+  ])("titles %o as %s", (params, title) => {
+    const seen: { below?: ScreenBelow | null } = {};
+    const { element } = stackScreen(
+      [{ name: "module-settings", params }],
+      <Probe onRender={(below) => (seen.below = below)} />,
+    );
+    act(() => {
+      create(element);
+    });
+    expect(seen.below).toMatchObject({ name: "module-settings", title });
+  });
+});
+
 describe("useHoldSwipeBack", () => {
   function Holder({ hold }: { hold: boolean }) {
     useHoldSwipeBack(hold);
