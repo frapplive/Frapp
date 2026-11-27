@@ -868,8 +868,8 @@ The #489 decision above, that a reply lands in the timeline, still holds for Rep
 **Message links** (#3723): a message's link is `https://app.frapp.live/chat?channel=<id>&message=<id>` (`packages/validation/src/message-link.ts`, on the build's dashboard origin).
 The phone's long-press sheet copies it with Copy message link, after Copy text, as Discord's does, on a channel message (never a thread reply, whose link would open on a timeline it isn't in).
 The web opens it on the message (the same `?channel=`/`?message=` link a notification or a search hit uses).
-The phone opens a `/chat` link on its own build's origin, or the web's channel-only Copy link, in place when it's tapped inside a message, replacing an open channel rather than stacking a second; a proof link on a task keeps opening in the browser.
-The app doesn't claim the https path as a universal or App Link yet, so a link opened from another app goes to the web on every phone (#4869); `frapp://chat?…` opens it in the app.
+The phone opens a link to its own build's dashboard in place when it's tapped inside a message, through the shared address table ([`../../ui/mobile/navigation.md` § Deep links](../../ui/mobile/navigation.md#deep-links), #6050): a `/chat` link or the web's channel-only Copy link opens its channel, replacing an open channel rather than stacking a second, and a thread link opens the thread over its channel. A proof link on a task keeps opening in the browser.
+The app doesn't claim the https path as a universal or App Link yet, so a link opened from another app goes to the web on every phone (#6185); `frapp://chat?…` opens it in the app.
 Reading the message still needs access to its channel.
 
 **Pinned messages (chapter-elevated):**
