@@ -4321,6 +4321,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/meetings/{id}/action-items/{index}/task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make an action item of posted minutes a task for these members, when no suggestion is waiting for it (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion. The service also checks Meetings is on */
+        post: operations["MeetingActionItemTasksController_makeTask_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meetings/series/{key}/open-action-items": {
         parameters: {
             query?: never;
@@ -12520,6 +12537,16 @@ export interface components {
             group: components["schemas"]["ActionItemTaskGroupDto"] | null;
             /** @description The task and who it went to, for a caller with `tasks:manage`; null for everyone else. */
             task: components["schemas"]["ActionItemTaskRefDto"] | null;
+        };
+        MakeActionItemTaskDto: {
+            /** @description The item’s text as the officer saw it, so an edit to the minutes meanwhile is caught. */
+            text: string;
+            /** @description One member gets the task; several each get their own copy. */
+            assignee_ids: string[];
+            /** @description Defaults to the item’s text. */
+            title?: string;
+            /** @description `YYYY-MM-DD`, or null for none. Defaults to the day the minutes named. */
+            due_date?: string | null;
         };
         OpenActionItemDto: {
             /** @description The action item’s place in its minutes’ list, from 0. */
@@ -25894,6 +25921,48 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MeetingActionItemTaskDto"][];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MeetingActionItemTasksController_makeTask_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MakeActionItemTaskDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingActionItemTaskDto"];
+                };
+            };
+            /** @description The minutes changed since they were read, or the item is a task already (another officer made it at the same moment, or it was accepted up for grabs) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

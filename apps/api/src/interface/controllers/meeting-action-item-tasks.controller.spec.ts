@@ -63,4 +63,19 @@ describe('MeetingActionItemTasksController', () => {
       withTask: false,
     });
   });
+
+  it('passes a make-task on with the chapter’s modules and answers its mark (#6062)', async () => {
+    const makeTask = jest.fn(async () => mark);
+    const controller = new MeetingActionItemTasksController(
+      { makeTask } as never,
+      { memberHasAnyPermission: jest.fn() } as never,
+    );
+    const body = { text: 'Book the bus', assignee_ids: ['u-1'] };
+    await expect(
+      controller.makeTask(CHAPTER, USER, { tasks: true }, MEETING, 2, body),
+    ).resolves.toEqual(mark);
+    expect(makeTask).toHaveBeenCalledWith(CHAPTER, USER, MEETING, 2, body, {
+      tasks: true,
+    });
+  });
 });
