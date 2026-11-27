@@ -53,6 +53,7 @@ import {
   isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
+  mayUploadNewVersion,
   tierRows,
   type DocumentFilters,
   type DocumentSort,
@@ -488,6 +489,12 @@ function ChapterDocumentsPage() {
       manages: canManageTypes,
       uploads: canUpload,
     });
+  // Upload a new version (#6055): the same who, as the API decides it.
+  const canUploadVersion = (doc: ChapterDocument) =>
+    mayUploadNewVersion(doc, viewerId, {
+      manages: canManageTypes,
+      uploads: canUpload,
+    });
   // Who can see, for one file: `access=<id>`, pushed, closed by its rule.
   const accessId = address.values[DOC.access];
   // Only a file this member may set: the same check that draws the row's
@@ -845,6 +852,7 @@ function ChapterDocumentsPage() {
             onHoldRow={hold}
             isLimited={isLimited}
             canSetAccess={canSetAccess}
+            canUploadVersion={canUploadVersion}
             onSetAccess={setAccessDoc}
             folderHue={folderHue}
             folderPicker={

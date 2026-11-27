@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Loader2, Trash2, Users } from "lucide-react";
+import { Download, FileUp, Loader2, Trash2, Users } from "lucide-react";
 import { formatDay, formatWeekdayDay } from "@repo/formatting";
 import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
 import { can } from "@repo/validation";
@@ -27,6 +27,7 @@ import { OPEN_DOCUMENT_ATTRIBUTE } from "@/components/documents/document-viewer"
 import { KEEP_FOCUS_ATTRIBUTE } from "@/components/documents/use-keep-focus";
 import { LimitedMark } from "@/components/documents/document-access";
 import { useDocumentDownload } from "@/components/documents/use-document-download";
+import { useDocumentNewVersion } from "@/components/documents/use-document-new-version";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import type { ChapterDocument } from "@/components/documents/document-types";
 import { cn } from "@/lib/utils";
@@ -136,7 +137,40 @@ const ROW_CONTROLS_CLASS = [
   "pointer-fine:group-focus-within/row:pointer-events-auto pointer-fine:group-focus-within/row:opacity-100",
 ].join(" ");
 
-export function DocumentRow({
+type DocumentRowProps = Omit<
+  Parameters<typeof DocumentRowView>[0],
+  "newVersion"
+> & {
+  /**
+   * The member may upload a new version of this file (#6055), as the page
+   * decides once (`mayUploadNewVersion`): its uploader or a documents
+   * manager, while they hold upload or manage. Never a Drive file or
+   * minutes. Absent rather than offered and refused.
+   */
+  canUploadVersion?: boolean;
+};
+
+/**
+ * One file in the list. Only a row that offers Upload a new version mounts
+ * its picker and mutations, so a Drive file, minutes, or a member who may
+ * not carries none of it.
+ */
+export function DocumentRow({ canUploadVersion, ...props }: DocumentRowProps) {
+  return canUploadVersion ? (
+    <DocumentRowWithNewVersion {...props} />
+  ) : (
+    <DocumentRowView {...props} />
+  );
+}
+
+function DocumentRowWithNewVersion(
+  props: Omit<DocumentRowProps, "canUploadVersion">,
+) {
+  const newVersion = useDocumentNewVersion(props.doc);
+  return <DocumentRowView {...props} newVersion={newVersion} />;
+}
+
+function DocumentRowView({
   doc,
   uploader,
   hue,
@@ -150,6 +184,7 @@ export function DocumentRow({
   onTogglePin,
   limited = false,
   onSetAccess,
+  newVersion,
 }: {
   doc: ChapterDocument;
   /** Who uploaded it, when the roster can name them (#3852). */
@@ -171,6 +206,8 @@ export function DocumentRow({
   limited?: boolean;
   /** Opens Who can see; absent for a member who may not set it. */
   onSetAccess?: (doc: ChapterDocument) => void;
+  /** Upload a new version (#6055), with its hidden picker; absent when not offered. */
+  newVersion?: ReturnType<typeof useDocumentNewVersion>;
 }) {
   const facts = documentFacts(doc, uploader);
   const pinned = !!doc.pinned_at;
@@ -184,6 +221,7 @@ export function DocumentRow({
     onToggleStar,
     onTogglePin,
     onSetAccess,
+    newVersion,
   });
   return (
     /*
@@ -268,8 +306,10 @@ export function DocumentRow({
             onToggleStar={onToggleStar}
             onTogglePin={onTogglePin}
             onSetAccess={onSetAccess}
+            newVersion={newVersion}
             className={ROW_CONTROLS_CLASS}
           />
+          {newVersion?.input}
           {/*
         Touch only: with a mouse the hover controls above are the visible
         door, and the right-click menu holds the same list.
@@ -291,8 +331,8 @@ const PinOffIcon = () => <PinGlyph className="h-4 w-4" active={false} />;
 const DriveMenuIcon = () => <DriveGlyph className="h-4 w-4" />;
 
 /**
- * The row's actions as one menu (#5576): Star, Pin, Who can see, Open in Google Drive, Download
- * and Delete, under the same names and gates as the hover controls. Opened
+ * The row's actions as one menu (#5576): Star, Pin, Who can see, Open in Google Drive, Download,
+ * Upload a new version and Delete, under the same names and gates as the hover controls. Opened
  * from the touch More button, or a right-click or long-press on the row.
  */
 function useRowActions({
@@ -305,6 +345,7 @@ function useRowActions({
   onToggleStar,
   onTogglePin,
   onSetAccess,
+  newVersion,
 }: Omit<Parameters<typeof DocumentControls>[0], "className">): RowMenuEntry[] {
   const { download, fetchingId } = useDocumentDownload();
   const permissions = useMyPermissions().data?.permissions;
@@ -370,6 +411,19 @@ function useRowActions({
     disabled: fetchingId === doc.id,
     onSelect: () => void download(doc.id),
   });
+  // Opens the system file picker at once, as Drive's and Dropbox's do.
+  if (newVersion) {
+    entries.push({
+      type: "item",
+      key: "new-version",
+      label: "Upload a new version",
+      icon: FileUp,
+      disabled: !gate.allowed || newVersion.busy,
+      describedBy,
+      title,
+      onSelect: newVersion.choose,
+    });
+  }
   // A copy of a Drive file has no Delete (see `DocumentControls`).
   if (canManage && !isDriveCopy(doc)) {
     entries.push({
@@ -388,7 +442,7 @@ function useRowActions({
 }
 
 /**
- * A file's own controls: Star, Pin, Who can see, Open in Google Drive, Download and Delete.
+ * A file's own controls: Star, Pin, Who can see, Open in Google Drive, Download, Upload a new version and Delete.
  */
 function DocumentControls({
   doc,
@@ -400,6 +454,7 @@ function DocumentControls({
   onToggleStar,
   onTogglePin,
   onSetAccess,
+  newVersion,
   className,
 }: {
   doc: ChapterDocument;
@@ -411,6 +466,8 @@ function DocumentControls({
   onToggleStar: (doc: ChapterDocument) => void;
   onTogglePin: (doc: ChapterDocument) => void;
   onSetAccess?: (doc: ChapterDocument) => void;
+  /** Upload a new version (#6055); absent for a member who may not. */
+  newVersion?: { choose: () => void; busy: boolean };
   className?: string;
 }) {
   const pinned = !!doc.pinned_at;
@@ -491,6 +548,21 @@ function DocumentControls({
       {isMinutesDocument(doc) ? null : (
         <DownloadButton id={doc.id} title={doc.title} />
       )}
+      {/*
+        Upload a new version (#6055), beside Download: the way back for a
+        file downloaded and changed. The picker opens at once and the file
+        lands on this same row, as Drive's and Dropbox's do.
+      */}
+      {newVersion ? (
+        <IconButton
+          label={`Upload a new version of ${doc.title}`}
+          onClick={newVersion.choose}
+          aria-busy={newVersion.busy}
+          {...gate.controlProps(newVersion.busy)}
+        >
+          {newVersion.busy ? <Loader2 className="animate-spin" /> : <FileUp />}
+        </IconButton>
+      ) : null}
       {/*
         A copy of a Drive file (#5157) has no Delete: Drive owns it, the API
         refuses, and the next sync would bring it back. Nor do a meeting's
