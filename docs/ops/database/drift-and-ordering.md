@@ -70,12 +70,29 @@ structurally blind to #1373.
 
 In the merge queue it runs on the queue's own commit, built from `main` plus
 every PR ahead of it, and measures against `main`'s tip there, so the introduced
-set is every queued PR's migrations up to this one. It still compares them only
-with what a deployed database has applied, not with each other: two queued PRs
-whose new migrations sort the wrong way round both pass, as they would on PRs.
-`migration-replay` in the queue applies the whole pending set, the PRs ahead
-included, so two migrations that conflict in SQL fail the later PR there
+set is every queued PR's migrations up to this one, each judged against what the
+deployed databases have applied. It also applies the base-branch rule a second
+time, against `merge_group.base_sha`, the commit the queue built this entry on:
+the PR's own migrations must sort after everything on `main` **and** everything
+queued ahead of it. That is the guard against two PRs whose checks each ran
+against a `main` holding neither migration (a PR need not be up to date to
+merge). Before it, the queue let both through: #5925's `20261123194106` merged 8
+seconds before #5923's `20261123183858` on 2026-11-24, staging applied the later
+version first and refused the earlier one, and every staging deploy stopped
+until #5958 renamed it (#4795). Now the entry behind fails with
+`back-dated-against-queue` and leaves the queue. Nothing queues it again or
+tells its author, so it is re-queued by hand: after `PR base sync` has renumbered
+it, once the PR ahead has merged, or as it is, if the PR ahead left the queue
+without merging.
+
+This holds inside a queue group too: each entry is built on the one ahead of it,
+so a group's second PR is compared with its first
 ([`github-branch-protection-runbook.md` § Merge queue](../github-branch-protection-runbook.md#merge-queue)).
+Two PRs with the same version aren't this check's to catch: `migration-safety`'s
+duplicate-version check refuses them.
+
+`migration-replay` in the queue applies the whole pending set, the PRs ahead
+included, so two migrations that conflict in SQL fail the later PR there.
 
 ### `migration-drift` — reports, does not block
 

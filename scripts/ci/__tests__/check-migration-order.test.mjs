@@ -408,6 +408,191 @@ test("THE RACE: two PRs in flight, caught with no database consulted", async () 
   assert.deepEqual(calls, []);
 });
 
+// ── Clause 1 in the merge queue (#4795) ─────────────────────────────────────
+
+// 2026-11-24: #5925 (`…194106`) was queued ahead of #5923 (`…183858`). Each
+// entry's run measured against `main`'s tip, where both read as introduced and
+// neither sorted before anything on `main`, so both merged, 8 seconds apart.
+// Staging applied `…194106` and then refused `…183858` until #5958 renamed it.
+const QUEUE_MAIN = [m("20261123120000", "on_main")];
+const QUEUE_AHEAD = m("20261123194106", "tenant_slugs_and_kind");
+const QUEUE_BEHIND = m("20261123183858", "task_attachments");
+const refs = (map) => (ref) => {
+  if (!(ref in map)) throw new Error(`unknown ref ${ref}`);
+  return map[ref];
+};
+
+test("#4795 replays: a queued PR whose migration sorts before the entry ahead's is refused", async () => {
+  const queueBase = [...QUEUE_MAIN, QUEUE_AHEAD];
+  const { fetchImpl, calls } = makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name }))));
+  let failure = "";
+  let summary = "";
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...queueBase, QUEUE_BEHIND],
+    readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": queueBase }),
+    fetchImpl,
+    log: () => {},
+    error: (text) => {
+      failure += `${text}\n`;
+    },
+    writeSummary: (text) => {
+      summary += text;
+    },
+  });
+  assert.equal(code, 1);
+  assert.match(failure, /20261123183858_task_attachments\.sql/);
+  assert.match(failure, /a PR ahead of it in the merge queue adds/);
+  assert.doesNotMatch(failure, /20261123194106_tenant_slugs_and_kind\.sql/, "the entry ahead is not this PR's to rename");
+  assert.match(summary, /Merge queue: this PR adds \*\*1\*\*/);
+  // Decided from git alone, like the PR-time rule.
+  assert.deepEqual(calls, []);
+});
+
+test("the same two PRs queued the other way round pass", async () => {
+  const queueBase = [...QUEUE_MAIN, QUEUE_BEHIND];
+  const applied = QUEUE_MAIN.map(({ version, name }) => ({ version, name }));
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...queueBase, QUEUE_AHEAD],
+    readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": queueBase }),
+    fetchImpl: makeFetchMock(appliedRoute(applied)).fetchImpl,
+    ...quiet,
+  });
+  assert.equal(code, 0);
+});
+
+test("the first entry in the queue (built on main itself) is judged as before", async () => {
+  // `merge_group.base_sha` is `main`'s tip for the head of the queue, so the
+  // queue clause adds nothing and reads nothing twice.
+  const reads = [];
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "main-tip",
+    environments: ENVIRONMENTS,
+    readHead: () => [...QUEUE_MAIN, QUEUE_BEHIND],
+    readBase: (ref) => {
+      reads.push(ref);
+      return QUEUE_MAIN;
+    },
+    fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+    ...quiet,
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(reads, ["main-tip"]);
+});
+
+test("a migration this PR shares with the entry ahead (a stacked PR) is not this PR's", async () => {
+  // A PR built on another's branch carries the other's migration too. Once the
+  // other is ahead in the queue that file is base, so only the stacked PR's own
+  // migration is judged. The shared file sorts BELOW a third entry's, so a gate
+  // that judged it as this PR's (against main) would refuse it.
+  const shared = m("20261123150000", "stacked_base");
+  const queueBase = [...QUEUE_MAIN, shared, QUEUE_AHEAD];
+  const own = m("20261123200000", "stacked_on_top");
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...queueBase, own],
+    readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": queueBase }),
+    fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+    ...quiet,
+  });
+  assert.equal(code, 0);
+});
+
+test("a rename out of a bad far-future version passes while queued behind another entry", async () => {
+  // The floor is what this PR keeps. A fix PR renaming `29990101000000` out of
+  // the way removes it from the queue's floor as it does from main's, or the
+  // fix could never merge through the queue.
+  const farFuture = m("29990101000000", "bad_version");
+  const main = [...QUEUE_MAIN, farFuture];
+  const queueBase = [...main, QUEUE_AHEAD];
+  const renamed = m("20261123200000", "bad_version");
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...QUEUE_MAIN, QUEUE_AHEAD, renamed],
+    readBase: refs({ "main-tip": main, "queue-base": queueBase }),
+    fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+    ...quiet,
+  });
+  assert.equal(code, 0);
+});
+
+test("the queue base comes from ORDER_GATE_QUEUE_BASE_REF when not passed", async () => {
+  // The workflow hands it over as an env var (merge-queue-triggers.test.mjs pins
+  // that line); this pins the script's side of the same wire.
+  const queueBase = [...QUEUE_MAIN, QUEUE_AHEAD];
+  const saved = process.env.ORDER_GATE_QUEUE_BASE_REF;
+  let failure = "";
+  process.env.ORDER_GATE_QUEUE_BASE_REF = "queue-base";
+  try {
+    const code = await runOrderGate({
+      accessToken: "t",
+      baseRef: "main-tip",
+      environments: ENVIRONMENTS,
+      readHead: () => [...queueBase, QUEUE_BEHIND],
+      readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": queueBase }),
+      fetchImpl: makeFetchMock(appliedRoute(QUEUE_MAIN.map(({ version, name }) => ({ version, name })))).fetchImpl,
+      log: () => {},
+      error: (text) => {
+        failure += `${text}\n`;
+      },
+      writeSummary: () => {},
+    });
+    assert.equal(code, 1);
+    assert.match(failure, /a PR ahead of it in the merge queue adds/);
+  } finally {
+    if (saved === undefined) delete process.env.ORDER_GATE_QUEUE_BASE_REF;
+    else process.env.ORDER_GATE_QUEUE_BASE_REF = saved;
+  }
+});
+
+test("an unreadable queue base is an invocation error, not a pass", async () => {
+  let failure = "";
+  const code = await runOrderGate({
+    accessToken: "t",
+    baseRef: "main-tip",
+    queueBaseRef: "queue-base",
+    environments: ENVIRONMENTS,
+    readHead: () => [...QUEUE_MAIN, QUEUE_AHEAD, QUEUE_BEHIND],
+    readBase: refs({ "main-tip": QUEUE_MAIN, "queue-base": [] }),
+    fetchImpl: makeFetchMock(appliedRoute([])).fetchImpl,
+    log: () => {},
+    error: (text) => {
+      failure += `${text}\n`;
+    },
+    writeSummary: () => {},
+  });
+  assert.equal(code, 2);
+  assert.match(failure, /No migrations found at `queue-base`/);
+});
+
+test("back-dated against main outranks back-dated against the queue", () => {
+  // `main`'s floor is never above the queue's, so a migration failing both gets
+  // the plain rename remedy rather than "wait for the PR ahead".
+  const offending = [m("20260101000000", "old")];
+  const outcome = decideOrderOutcome({
+    local: { floor: "20260102000000", offending },
+    queue: { floor: "20260103000000", offending, own: offending, ref: "q" },
+    results: [],
+    introduced: offending,
+  });
+  assert.equal(outcome.code, "back-dated-against-base");
+});
+
 // ── Clause 3: stranding ─────────────────────────────────────────────────────
 
 test("removing a migration an environment has applied is fatal", () => {
