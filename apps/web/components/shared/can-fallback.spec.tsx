@@ -85,9 +85,24 @@ function renderGate(
   );
 }
 
-const PAUSED = { data: undefined, isPending: true, isError: false, fetchStatus: "paused" };
-const IDLE = { data: undefined, isPending: true, isError: false, fetchStatus: "idle" };
-const LOADING = { data: undefined, isPending: true, isError: false, fetchStatus: "fetching" };
+const PAUSED = {
+  data: undefined,
+  isPending: true,
+  isError: false,
+  fetchStatus: "paused",
+};
+const IDLE = {
+  data: undefined,
+  isPending: true,
+  isError: false,
+  fetchStatus: "idle",
+};
+const LOADING = {
+  data: undefined,
+  isPending: true,
+  isError: false,
+  fetchStatus: "fetching",
+};
 
 describe("a paused permission check is never silent", () => {
   it("would have caught the twelve surfaces that rendered nothing offline", () => {
@@ -153,7 +168,12 @@ describe("a check that failed offline is the paused state, reached the other way
    * `isError && !data` branch and hid every gated control, which is the
    * denial §5 rule 4 reserves for permissions the member will never hold.
    */
-  const FAILED = { data: undefined, isPending: false, isError: true, fetchStatus: "idle" };
+  const FAILED = {
+    data: undefined,
+    isPending: false,
+    isError: true,
+    fetchStatus: "idle",
+  };
 
   function rerenderGate(
     rerender: (ui: ReactElement) => void,
@@ -329,26 +349,38 @@ describe("the branches this change did not touch", () => {
 
     permissionsResult.value = { ...PAUSED };
     const anyPaused = render(
-      <Can anyOf={["chapter_docs:upload", "chapter_docs:manage"]}>{upload}</Can>,
+      <Can anyOf={["chapter_docs:upload", "chapter_docs:manage"]}>
+        {upload}
+      </Can>,
     );
     expect(anyPaused.getByText(/can't check your access/i)).toBeInTheDocument();
     anyPaused.unmount();
 
     permissionsResult.value = cached;
     const anyCached = render(
-      <Can anyOf={["chapter_docs:upload", "chapter_docs:manage"]}>{upload}</Can>,
+      <Can anyOf={["chapter_docs:upload", "chapter_docs:manage"]}>
+        {upload}
+      </Can>,
     );
-    expect(anyCached.getByRole("button", { name: /upload/i })).toBeInTheDocument();
+    expect(
+      anyCached.getByRole("button", { name: /upload/i }),
+    ).toBeInTheDocument();
     anyCached.unmount();
 
     permissionsResult.value = { ...PAUSED };
-    const allPaused = render(<Can allOf={["chapter_docs:upload"]}>{upload}</Can>);
+    const allPaused = render(
+      <Can allOf={["chapter_docs:upload"]}>{upload}</Can>,
+    );
     expect(allPaused.getByText(/can't check your access/i)).toBeInTheDocument();
     allPaused.unmount();
 
     permissionsResult.value = cached;
-    const allCached = render(<Can allOf={["chapter_docs:upload"]}>{upload}</Can>);
-    expect(allCached.getByRole("button", { name: /upload/i })).toBeInTheDocument();
+    const allCached = render(
+      <Can allOf={["chapter_docs:upload"]}>{upload}</Can>,
+    );
+    expect(
+      allCached.getByRole("button", { name: /upload/i }),
+    ).toBeInTheDocument();
     allCached.unmount();
   });
 });
@@ -390,14 +422,42 @@ describe("the branches this change did not touch", () => {
  * make someone justify.
  */
 const SURFACE_GATES: readonly { file: string; match: string }[] = [
-  { file: "components/reports/reports-page.tsx", match: 'permission="reports:export"' },
-  { file: "components/geofences/study-zones-manager.tsx", match: 'permission="geofences:manage"' },
-  { file: "components/settings/settings-semester-tab.tsx", match: 'permission="semester:rollover"' },
-  { file: "components/chat-admin/chat-admin-page.tsx", match: 'permission="channels:manage"' },
-  { file: "components/chat-admin/chat-reports-card.tsx", match: "allOf={CHAT_REPORT_QUEUE_PERMISSIONS}" },
-  { file: "components/discord-import/discord-import-page.tsx", match: 'permission="channels:manage"' },
-  { file: "components/backwork/bulk/bulk-upload-page.tsx", match: 'permission="backwork:upload"' },
-  { file: "components/events/event-detail-sheet.tsx", match: 'permission="events:update"' },
+  {
+    file: "components/reports/reports-page.tsx",
+    match: 'permission="reports:export"',
+  },
+  {
+    file: "components/geofences/study-zones-manager.tsx",
+    match: 'permission="geofences:manage"',
+  },
+  {
+    file: "components/settings/settings-semester-tab.tsx",
+    match: 'permission="semester:rollover"',
+  },
+  {
+    file: "components/chat-admin/chat-admin-page.tsx",
+    match: 'permission="channels:manage"',
+  },
+  {
+    file: "components/chat-admin/channel-settings-page.tsx",
+    match: 'permission="channels:manage"',
+  },
+  {
+    file: "components/chat-admin/chat-reports-card.tsx",
+    match: "allOf={CHAT_REPORT_QUEUE_PERMISSIONS}",
+  },
+  {
+    file: "components/discord-import/discord-import-page.tsx",
+    match: 'permission="channels:manage"',
+  },
+  {
+    file: "components/backwork/bulk/bulk-upload-page.tsx",
+    match: 'permission="backwork:upload"',
+  },
+  {
+    file: "components/events/event-detail-sheet.tsx",
+    match: 'permission="events:update"',
+  },
 ];
 
 /**
@@ -411,6 +471,7 @@ const CONSUMERS: readonly string[] = [
   "components/backwork/bulk/bulk-upload-page.tsx",
   "components/billing/invoice-list.tsx",
   "components/billing/plan-panel.tsx",
+  "components/chat-admin/channel-settings-page.tsx",
   "components/chat-admin/chat-admin-page.tsx",
   "components/chat-admin/chat-reports-card.tsx",
   "components/chat/renderers/task-card.tsx",
@@ -439,17 +500,23 @@ const WEB_ROOT = join(__dirname, "..", "..");
  * missing one: it reports coverage it does not have.
  */
 function stripComments(source: string): string {
-  return source
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
+  return (
+    source
+      // One JSX comment, `{/* … */}`: never across a second comment's close,
+      // or a type literal opening on a doc comment (`{ /** … */ prop }`)
+      // would swallow everything to the next comment that ends at a brace.
+      .replace(/\{\s*\/\*(?:(?!\*\/)[\s\S])*\*\/\s*\}/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+  );
 }
 
 /** The local name the file bound the import to — `Can`, or whatever it renamed it to. */
 function localName(source: string): string | null {
-  const clause = /import\s*\{([^}]*)\}\s*from\s*["']@\/components\/shared\/can["']/.exec(
-    source,
-  );
+  const clause =
+    /import\s*\{([^}]*)\}\s*from\s*["']@\/components\/shared\/can["']/.exec(
+      source,
+    );
   if (!clause) return null;
   for (const spec of clause[1]!.split(",")) {
     const [imported, alias] = spec.split(/\s+as\s+/).map((part) => part.trim());

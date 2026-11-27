@@ -239,15 +239,8 @@ describe("app stack", () => {
       .screens.map((screen) => screen.props.name as string)
       // `ask` only redirects to Chat home, `chat` (a message's link,
       // #3723) only hands off to the thread, and `minutes` only forwards to
-      // Documents on the Minutes file type (#5949), and `channel-settings`
-      // pops down to Chat home until its screen lands (#6031): none draws a
-      // screen.
-      .filter(
-        (name) =>
-          !["(tabs)", "ask", "chat", "minutes", "channel-settings"].includes(
-            name,
-          ),
-      );
+      // Documents on the Minutes file type (#5949): none draws a screen.
+      .filter((name) => !["(tabs)", "ask", "chat", "minutes"].includes(name));
 
     // A route that only re-exports a screen kept outside `app/` (so its
     // spec can sit beside it, as the member profile's does, #5568) is read

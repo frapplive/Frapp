@@ -237,3 +237,55 @@ describe("settings while the AI read is out", () => {
     expect(eventsSwitch()).toBeInTheDocument();
   });
 });
+
+/**
+ * A new-report link from before the queue had a page of its own (#6031)
+ * carried `?tab=chat#reported-messages`; it now opens the queue's page.
+ */
+describe("the old report-queue anchor", () => {
+  beforeEach(() => {
+    mockCurrentChapter.mockReturnValue({
+      data: { id: "chap-1", name: "Test", subscription_status: "active" },
+      isPending: false,
+      isError: false,
+    });
+    searchParams = new URLSearchParams();
+    activeChapterId = "chap-1";
+  });
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("turns #reported-messages on the Chat page into its page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(window.location.hash).toBe("");
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("turns #reported-messages on Chat admin into the queue's page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&page=chat-admin#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("leaves a channel's address alone", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&channel=c1#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).has("page")).toBe(false);
+  });
+});

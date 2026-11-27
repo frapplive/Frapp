@@ -165,6 +165,40 @@ export function CakeGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   );
 }
 
+/*
+ * A channel's settings (#6031): Lucide's `Folder`, `Eye` and `Pin`, with
+ * `MessageSquare` and `Bell` below, the icons web's channel page draws on the
+ * same rows.
+ */
+
+export function FolderGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+export function EyeGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+        {...detail}
+      />
+      <Circle cx={12} cy={12} r={3} {...detail} />
+    </Frame>
+  );
+}
+
 /** Lucide's `Bell`. */
 export function BellGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   const { detail } = paint({ color });
@@ -173,6 +207,20 @@ export function BellGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
       <Path d="M10.268 21a2 2 0 0 0 3.464 0" {...detail} />
       <Path
         d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+/** Lucide's `Pin`. */
+export function PinGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M12 17v5" {...detail} />
+      <Path
+        d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"
         {...detail}
       />
     </Frame>
