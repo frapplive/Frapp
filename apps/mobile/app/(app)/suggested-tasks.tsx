@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { codeOf } from "@repo/api-sdk";
 import {
@@ -166,8 +166,21 @@ export default function SuggestedTasksScreen() {
   // Every way in is drawn only where the server has AI; this catches one
   // that skips them, such as an old notification after AI was turned off.
   const available = useAiSurfaces().available;
-  if (available === false) return <Redirect href="/activity" />;
+  if (available === false) return <ToActivity />;
   return <SuggestedTasks />;
+}
+
+/**
+ * Pops down to the Activity tab, where tasks live (#5948): `dismissTo`,
+ * never `<Redirect>`, which would replace this pushed screen with the tab
+ * and stack a second tab navigator (`navigation.md` § Going back).
+ */
+function ToActivity() {
+  const router = useRouter();
+  useEffect(() => {
+    router.dismissTo("/activity");
+  }, [router]);
+  return null;
 }
 
 function SuggestedTasks() {

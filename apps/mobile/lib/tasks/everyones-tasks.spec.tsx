@@ -194,7 +194,10 @@ import {
   EVERYONES_TASKS_EMPTY,
   EveryonesTasks,
 } from "@/components/tasks/everyones-tasks";
-import { UpForGrabs } from "@/components/tasks/up-for-grabs";
+import {
+  UP_FOR_GRABS_LINE_MS,
+  UpForGrabs,
+} from "@/components/tasks/up-for-grabs";
 import { InlineNote } from "@/components/inline-note";
 import { SectionHeader } from "@/components/list-section";
 import { UndoBar } from "@/components/tasks/undo-bar";
@@ -613,24 +616,82 @@ describe("Everyone's lanes (#5948)", () => {
 });
 
 describe("The Tasks screen's redirect (#5948)", () => {
-  it("sends a task link on to Activity, keeping what Activity reads", () => {
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
-      task: "task-2",
-      other: "dropped",
-    });
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(<TasksRedirect />);
-    });
-    const redirect = tree.root.find(
-      (node) => (node.type as unknown) === expoRouter.Redirect,
-    );
-    expect(redirect.props.href).toEqual({
-      pathname: "/activity",
-      params: { task: "task-2" },
-    });
+  it.each([
+    [{ task: "task-2", other: "dropped" }, { task: "task-2" }],
+    [{ released: "1" }, { released: "1" }],
+    [{ assigned: "user-3" }, { assigned: "user-3" }],
+  ])(
+    "pops down to Activity with %o, never stacking a second tab bar",
+    (given, kept) => {
+      const router = vi.mocked(expoRouter.useRouter)();
+      vi.mocked(router.dismissTo).mockClear();
+      vi.mocked(router.replace).mockClear();
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue(given);
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(<TasksRedirect />);
+      });
+      expect(router.dismissTo).toHaveBeenCalledWith({
+        pathname: "/activity",
+        params: kept,
+      });
+      expect(router.replace).not.toHaveBeenCalled();
+      act(() => tree.unmount());
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+    },
+  );
+});
+
+describe("Everyone's box is the assignee's (#5948)", () => {
+  afterEach(() => {
+    tasks = TASKS;
+  });
+
+  it("offers the box on the viewer's own task and on no one else's", () => {
+    tasks = [
+      ...TASKS,
+      {
+        id: "task-3",
+        title: "Sam's task",
+        stored_status: "TODO",
+        status: "TODO",
+        due_date: "2026-10-05",
+        assignee_id: "user-3",
+        point_reward: 0,
+        points_awarded: false,
+      },
+    ];
+    const tree = render();
+    const byId = (id: string) =>
+      rows(tree).find((node) => node.props.row.id === id)!;
+    expect(byId("task-1").props.onToggle).toBeDefined();
+    expect(byId("task-3").props.onToggle).toBeUndefined();
     act(() => tree.unmount());
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+  });
+});
+
+describe("Up for grabs' line (#5948)", () => {
+  it("goes after a few seconds, Give it back with it", () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+        released: "1",
+      });
+      const tree = renderUpForGrabs();
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+      expect(screenText(tree)).toContain(
+        `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+      );
+      act(() => {
+        vi.advanceTimersByTime(UP_FOR_GRABS_LINE_MS);
+      });
+      expect(screenText(tree)).not.toContain(
+        `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+      );
+      act(() => tree.unmount());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

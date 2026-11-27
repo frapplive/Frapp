@@ -583,7 +583,7 @@ describe("The task's states", () => {
 
   it("says where to open a task from without an id", () => {
     const tree = render(null);
-    expect(screenText(tree)).toContain("Open a task from Tasks.");
+    expect(screenText(tree)).toContain("Open a task from Activity.");
     act(() => tree.unmount());
   });
 });

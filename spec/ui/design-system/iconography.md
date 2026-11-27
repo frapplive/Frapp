@@ -206,7 +206,7 @@ second, filled variant to swap to.
 | Activity tab | `activity`, `tray` | Tab 2 since #4610 (2026-11-12); the glyph web's Activity row draws. |
 | Messages tab | `direct`, `paper-plane-tilt` | Tab 3 since #5310, where the Calendar tab (`events`, `calendar-dots`; named Events until #4610) was. |
 | You tab | — | The member's own avatar, not a glyph (#3839, `components/you-tab-avatar.tsx`): their photo, else their initials in their member tint, never the accent; active, a 1.5pt accent ring with a gap ([`navigation.md` § Tab bar](../mobile/navigation.md#tab-bar--4-tabs-locked)). The More tab drew `more` (`squares-four`, a 2×2 grid) until then; nothing else drew it, so it left the nav set. |
-| Task board (pushed, and the task card) | `tasks`, `seal-check` | A tab until #4610; the glyph stays on the task card, Up next and the + panel. |
+| Task card (and the task board, until #5948) | `tasks`, `seal-check` | A tab until #4610, then a pushed screen until it folded into Activity (#5948); the glyph stays on the task card, Up next and the + panel. |
 
 Retired with the 4-tab collapse: the Home, Points, and Profile tabs. Home and
 Points no longer exist as screens; Profile moved into the More hub, which became the You tab (#3839).

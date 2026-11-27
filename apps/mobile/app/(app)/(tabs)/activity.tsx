@@ -120,6 +120,7 @@ import { useRefetchAll } from "@/components/pull-to-refresh";
 import { ScreenShell, type ScreenViews } from "@/components/screen-shell";
 import { EveryonesTasks } from "@/components/tasks/everyones-tasks";
 import { UpForGrabs } from "@/components/tasks/up-for-grabs";
+import { ASSIGNED_PARAM, RELEASED_PARAM } from "@/lib/tasks/open-tasks";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { activityRowActionsAllowed } from "@/lib/activity/row-action";
 import { useActivityReread } from "@/lib/activity/use-activity-reread";
@@ -289,7 +290,9 @@ function ActivityScreen() {
   const shows = (key: ActivityCardKey) => arrangement.shown.includes(key);
   // Up for grabs' read (#5948), here so a pull reads it too; the card reads
   // the same query.
-  const tasksOn = moduleOn("tasks");
+  // Only once the chapter is read: an unread `enabled_modules` counts as on,
+  // and the Tasks reads below would go to routes a Tasks-off chapter refuses.
+  const tasksOn = chapterRead.isSuccess === true && moduleOn("tasks");
   const openTasks = useOpenTasks({ enabled: tasksOn });
   // Pull to refresh reads the arrangement too, so an edit made on web shows.
   const refreshPage = useRefetchAll([activity, layout, tasksOn ? openTasks : null]);
@@ -628,6 +631,21 @@ function ActivityScreen() {
   // Mine or Everyone's (#5948 slice 3). Never stored: the tab opens on the
   // member's own, as web's bare `/activity` does.
   const [viewPick, setViewPick] = useState<ActivityView>("mine");
+  // A link or push that lands here (a review, a request for more time, a
+  // task given back or handed over) is Mine's: its sheet and its Up for
+  // grabs line are drawn there, so it brings the tab back to Mine.
+  const { [RELEASED_PARAM]: releasedParam, [ASSIGNED_PARAM]: assignedParam } =
+    useLocalSearchParams<{
+      [RELEASED_PARAM]?: string;
+      [ASSIGNED_PARAM]?: string;
+    }>();
+  const arrivedForMine = [
+    reviewTaskId,
+    extensionTaskId,
+    releasedParam,
+    assignedParam,
+  ].some((value) => typeof value === "string" && value !== "");
+  if (arrivedForMine && viewPick !== "mine") setViewPick("mine");
   const everyoneOffered = useEveryoneOffered(tasksOn);
   const view: ActivityView = everyoneOffered ? viewPick : "mine";
 

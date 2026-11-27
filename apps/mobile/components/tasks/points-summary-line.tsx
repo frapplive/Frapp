@@ -4,10 +4,11 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 import type { HouseRank, PointsSummary } from "@/lib/tasks/points-card";
 
 /**
- * The member's semester points and house rank, one muted line under the
- * profile's head on You: "1,240 semester points · #3 of 42 in the house".
- * It led the phone's Tasks screen until that screen folded into Activity
- * (#5948 slice 3), which made You, beside the standing, its home.
+ * The member's semester points and house rank, one muted line: "1,240
+ * semester points · #3 of 42 in the house". It led the phone's Tasks screen
+ * until that screen folded into Activity (#5948 slice 3); You draws its rank
+ * half under the profile's head, since This semester's gauge says the
+ * points.
  *
  * It was a card with a 32pt balance (`canvas-screens.dc.html:282-288`) until
  * #5570 (Paul, 2026-11-19): the card sat above the tasks and was bigger than

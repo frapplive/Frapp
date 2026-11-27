@@ -96,10 +96,12 @@ const MINUTES: NotificationTarget = { pathname: "/minutes-details" };
  * review: Activity (`/activity?review=`), which pushes the task's screen
  * with Confirm and Send back over it (#5513), since
  * the Tasks screen listed only the viewer's own tasks. Every other task push
- * opens Activity (`/activity?task=`), which pushes the task's screen over it
- * (#5492, #5948): the reader's own (assigned, confirmed, sent back, overdue),
- * or one they assigned (Overdue also reaches the assigner). A task the reader
- * can't read says so on its screen. "Asks for more time" (`view: "extension"`,
+ * pushes the task's own screen (#5492) over wherever the member is, so Back
+ * returns them there; it went through the Tasks screen (`/tasks?task=`) until
+ * that folded into Activity (#5948), and a tab would pop the member's place
+ * away. The reader's own (assigned, confirmed, sent back, overdue), or one
+ * they assigned (Overdue also reaches the assigner). A task the reader can't
+ * read says so on its screen. "Asks for more time" (`view: "extension"`,
  * #6096) opens the request in Activity (`/activity?extension=`), where the
  * officer approves or declines it.
  */
@@ -111,7 +113,7 @@ function taskTarget(taskId: string, view: string | null): NotificationTarget {
   if (view === "extension") {
     return { pathname: "/activity", params: { extension: taskId } };
   }
-  return { pathname: "/activity", params: { task: taskId } };
+  return { pathname: "/task-details", params: { id: taskId } };
 }
 
 /**

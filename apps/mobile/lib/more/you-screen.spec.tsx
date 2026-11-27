@@ -301,7 +301,7 @@ describe("You's semester line (#5948)", () => {
     semesterRead = { points: undefined, board: undefined };
   });
 
-  it("says the semester points and the house rank under the head, the Tasks screen's line", () => {
+  it("says the house rank under the head, the Tasks screen's line", () => {
     semesterRead = {
       points: { balance: 1240, transactions: [] },
       board: [
@@ -310,14 +310,14 @@ describe("You's semester line (#5948)", () => {
       ],
     };
     const tree = render();
-    expect(screenText(tree)).toContain(
-      "1,240 semester points · #2 of 2 in the house",
-    );
+    expect(screenText(tree)).toContain("#2 of 2 in the house");
+    // The semester's points are This semester's gauge, not said twice.
+    expect(screenText(tree)).not.toContain("1,240 semester points");
   });
 
   it("draws nothing before either read answers", () => {
     const tree = render();
-    expect(screenText(tree)).not.toContain("semester points");
+    expect(screenText(tree)).not.toContain("in the house");
   });
 });
 

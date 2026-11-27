@@ -119,7 +119,7 @@ describe("useNotificationSyncRuntime: the change ping (#3929)", () => {
 
 describe("useNotificationSyncRuntime: seen on screen (#3929)", () => {
   it("reads the notices about the open screen while the app is in front", () => {
-    state.pathname = "/tasks";
+    state.pathname = "/task-details";
     renderHook(() => useNotificationSyncRuntime());
 
     expect(state.seen).toHaveBeenLastCalledWith(["tasks"], {

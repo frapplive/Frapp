@@ -31,6 +31,10 @@ import { useFrappTheme } from "@/lib/theme";
 
 const CLAIM_FAILED = "Couldn't claim that task. Try again.";
 
+/** How long the card's line stays, the undo bar's few seconds. */
+export const UP_FOR_GRABS_LINE_MS = 8_000;
+const LINE_MS = UP_FOR_GRABS_LINE_MS;
+
 /** The card's one line: what a claim or a give-back did, and its Undo. */
 type UpForGrabsLine = {
   text: string;
@@ -84,6 +88,15 @@ export function UpForGrabs({ now }: { now: Date }) {
       ),
     [openTasksQuery.data, lostClaims, readAt],
   );
+
+  // The line goes after a few seconds, as the board's undo bar did: a Give it
+  // back left standing would outlive the claim (the task done, its proof
+  // sent) and fail when pressed.
+  useEffect(() => {
+    if (line === null) return undefined;
+    const timer = setTimeout(() => setLine(null), LINE_MS);
+    return () => clearTimeout(timer);
+  }, [line]);
 
   const say = useCallback((next: UpForGrabsLine | null) => {
     setLine(next);

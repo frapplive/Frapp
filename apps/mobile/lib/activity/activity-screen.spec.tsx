@@ -137,7 +137,7 @@ const activity = vi.hoisted(() => ({
 }));
 
 /**
- * The chapter read: its module switches, which hide the Task board door,
+ * The chapter read: its module switches, which hide Mine / Everyone's,
  * and its plan, which decides whether rows carry Confirm and Approve (#4437).
  */
 const chapter = vi.hoisted(() => ({
@@ -350,6 +350,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useCurrentChapter: () => ({
     data: chapter.data,
     isPending: chapter.isPending,
+    isSuccess: !chapter.isPending,
   }),
   // What a row's long press reads (#5492): the viewer's tasks and the
   // chapter's events, as the board and the Calendar read them.
@@ -449,6 +450,7 @@ import {
 } from "@/components/item-actions-menu";
 import { UndoBar } from "@/components/tasks/undo-bar";
 import { EveryonesTasks } from "@/components/tasks/everyones-tasks";
+import { UpForGrabs } from "@/components/tasks/up-for-grabs";
 import { OpenTaskRow } from "@/components/tasks/open-task-row";
 import { TaskRow } from "@/components/tasks/task-row";
 import { ViewLabels } from "@/components/view-labels";
@@ -711,6 +713,51 @@ describe("Activity screen (#3897)", () => {
       const [posting] = tree.root.findAllByType(OpenTaskRow);
       act(() => posting!.props.onClaim());
       expect(tasksFold.claim).toHaveBeenCalledWith("o1", expect.anything());
+    });
+
+    it("draws no Up for grabs, and reads none, while Tasks is off or the chapter is unread", () => {
+      tasksFold.postings = [
+        { id: "o1", title: "Run the grill", status: "open", viewer_can_claim: true },
+      ];
+      chapter.data = { enabled_modules: { tasks: false } };
+      expect(render().root.findAllByType(UpForGrabs)).toHaveLength(0);
+      chapter.data = undefined;
+      chapter.isPending = true;
+      expect(render().root.findAllByType(UpForGrabs)).toHaveLength(0);
+    });
+
+    it("draws no views over the Archive", () => {
+      tasksFold.everyoneOffered = true;
+      const tree = render();
+      expect(viewLabels(tree)).toHaveLength(1);
+      act(() => {
+        tree.root
+          .findAll(
+            (node) =>
+              (node.type as unknown) === "Pressable" &&
+              node.props.accessibilityRole === "button" &&
+              drawnText(node) === "Archive",
+          )[0]!
+          .props.onPress();
+      });
+      expect(viewLabels(tree)).toHaveLength(0);
+    });
+
+    it("comes back to Mine for a push that lands on it, as a request for more time", () => {
+      tasksFold.everyoneOffered = true;
+      const tree = render();
+      act(() => viewLabels(tree)[0]!.props.onChange("everyone"));
+      expect(tree.root.findAllByType(EveryonesTasks)).toHaveLength(1);
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+        released: "1",
+      });
+      try {
+        act(() => tree.update(screen()));
+        expect(tree.root.findAllByType(EveryonesTasks)).toHaveLength(0);
+        expect(viewLabels(tree)[0]!.props.value).toBe("mine");
+      } finally {
+        vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+      }
     });
 
     it("opens a task link's screen over the tab, and drops the link", () => {

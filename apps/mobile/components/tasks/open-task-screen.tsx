@@ -73,11 +73,12 @@ const POSTING_FAILED = "That didn't go through. Try again.";
  * claim it; Assign to someone and Delete, rounds, for an officer who manages
  * tasks (`tasks:manage` under `members:view`, the quick actions' grant).
  *
- * The posting is read off the board's `GET /v1/open-tasks`, which the board
- * that pushed this screen has already read. A claim takes the member to the
- * task it made (the screen is replaced, so back is the board), where Give it
- * back sits in More. A hand-over goes back to the board, which says who has
- * it in its line (`/tasks?assigned=<userId>`); a delete goes back to it too.
+ * The posting is read off `GET /v1/open-tasks`, which Activity's Up for
+ * grabs card that pushed this screen has already read. A claim takes the
+ * member to the task it made (the screen is replaced, so back is Activity),
+ * where Give it back sits in More. A hand-over goes back to Activity, whose
+ * card says who has it in its line (`/activity?assigned=<userId>`); a delete
+ * goes back there too. (The Tasks screen's, until #5948.)
  * A posting someone else took or an officer took down while it was open
  * says so, rather than a load failure.
  */

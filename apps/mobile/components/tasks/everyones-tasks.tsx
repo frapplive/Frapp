@@ -59,11 +59,11 @@ export const EVERYONES_TASKS_EMPTY = "No tasks in the chapter yet.";
  * board, and a member who follows someone else's task (#5473). Mine stays
  * the member's own (To do, Running, Up for grabs).
  *
- * The phone's board was always personal (`selectTaskRows`), so this is new
- * rather than moved. Each row leads its meta line with whose task it is; a
- * press opens the task's screen, the box and the long press work as on the
- * member's own rows (`useTaskToggle`, `useTaskMenu`), each to the viewer the
- * API allows. Web's By person grouping and its Filter button are not on the
+ * The phone's board was always personal, so this is new rather than moved.
+ * Each row leads its meta line with whose task it is; a press opens the
+ * task's screen. The box works on the viewer's own rows only, as on the
+ * board it came from (`useTaskToggle`); the long press offers each viewer
+ * what the API allows them (`useTaskMenu`). Web's By person grouping and its Filter button are not on the
  * phone yet (#6198 holds them).
  *
  * Its own `ScreenShell`, swapped for Activity's while the view is on, so the
@@ -127,7 +127,17 @@ export function EveryonesTasks({
       row,
       now,
       isPending: pendingId === row.id,
-      onToggle: canToggle(row) ? () => void toggle(row) : undefined,
+      // The box is the assignee's (`checkboxSequence` reads the moves as
+      // theirs), as on web's Everyone's: on anyone else's task it would send
+      // a write the API refuses, a follower's or an officer's take-back of
+      // someone's completion. An officer acts on those from the task's
+      // screen or its long press, which follow `taskScreenControls`.
+      onToggle:
+        row.assigneeId !== null &&
+        row.assigneeId === viewerUserId &&
+        canToggle(row)
+          ? () => void toggle(row)
+          : undefined,
       onOpen: () => openTask(row.id),
       menu: menuFor(row),
       who: row.assigneeId ? nameOf(row.assigneeId) : null,

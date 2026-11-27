@@ -66,7 +66,7 @@ describe("resolveNotificationTarget", () => {
     ).toEqual({ pathname: "/activity" });
   });
 
-  it("opens a submitted task's review, and the reader's own task, on Activity (#5948)", () => {
+  it("opens a submitted task's review on Activity, and the reader's own task on its screen (#5948)", () => {
     // "Shawn submitted: Clean his room" goes to the officer who assigned it;
     // their board lists only their own tasks, so the review opens on Activity.
     expect(
@@ -77,7 +77,7 @@ describe("resolveNotificationTarget", () => {
     // Assigned, confirmed, sent back: the reader's own task, opened.
     expect(
       resolveNotificationTarget(payload({ screen: "tasks", taskId: "t1" })),
-    ).toEqual({ pathname: "/activity", params: { task: "t1" } });
+    ).toEqual({ pathname: "/task-details", params: { id: "t1" } });
     expect(
       notificationHref({ pathname: "/activity", params: { review: "t1" } }),
     ).toBe("/activity?review=t1");

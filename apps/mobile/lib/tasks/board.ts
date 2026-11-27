@@ -1,6 +1,7 @@
 /**
- * The s08 task board: narrow `GET /v1/tasks`, keep the viewer's own rows, and
- * split them into the two drawn sections.
+ * The phone's task rows: narrow `GET /v1/tasks` into `TaskRowModel`, and
+ * group the chapter's for Activity's Everyone's (`selectEveryonesTasks`,
+ * #5948; the s08 board's My tasks until it folded into Activity).
  *
  * `GET /v1/tasks` is declared in `openapi.json` with no response schema, so
  * `openapi-typescript` infers its body as `never`. Narrowed at the boundary
@@ -13,12 +14,10 @@ import { dayDelta } from "@repo/formatting";
 import {
   isSentBack,
   isTaskStatus,
-  myTasksGroup,
   readLiveTaskPhotos,
   readTaskSeries,
   type LiveTaskPhoto,
   type TaskExtensionSummary,
-  type MyTasksGroup,
 } from "@repo/hooks";
 import {
   readFrappLinks,
@@ -217,22 +216,6 @@ function toSubtasks(value: unknown): TaskRowSubtask[] {
   return rows;
 }
 
-/**
- * The board by My tasks' groups (#4295 step 5): Overdue (#5906), Today, This
- * week, Later, then No due date (#5761), by the rule web's My tasks uses
- * (`myTasksGroup`).
- */
-export interface TaskBoard {
-  groups: Record<MyTasksGroup, TaskRowModel[]>;
-  /** Rows kept after filtering — what distinguishes an empty board from a full one. */
-  total: number;
-}
-
-const EMPTY_BOARD: TaskBoard = {
-  groups: { overdue: [], today: [], week: [], later: [], none: [] },
-  total: 0,
-};
-
 /** One `GET /v1/tasks` row as the board draws it, or `null` if it can't be. */
 export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
   const id = str(row, "id");
@@ -364,106 +347,6 @@ function compareRows(a: RankedRow, b: RankedRow): number {
   // Ties break on title so the board does not reshuffle between renders of the
   // same data — two tasks due the same day is the ordinary case, not an edge.
   return a.row.title.localeCompare(b.row.title);
-}
-
-/**
- * The viewer's board.
- *
- * ## Why this filters by assignee
- *
- * `TaskService.list` returns the chapter's *whole* task set to a `tasks:manage`
- * holder and only the caller's own rows to everyone else, and `useTasks()`
- * deliberately takes no assignee argument (`GET /v1/tasks` accepts no query
- * parameters). s08 is drawn as a personal board, so an officer would otherwise
- * see every brother's tasks under "Semester points" and a checkbox they cannot
- * legally tap. The hook's own doc comment names this as the caller's job.
- *
- * ## `viewerUserId === null` is not "no tasks"
- *
- * It means `/v1/users/me` has not resolved yet. Returning an empty board is
- * correct here — there is no identity to filter against — but the *screen* must
- * treat it as still-loading, or every cold start flashes "No tasks assigned"
- * before the real rows arrive.
- */
-export function selectTaskRows(
-  data: unknown,
-  viewerUserId: string | null,
-  now: Date,
-): TaskBoard {
-  if (!viewerUserId) return EMPTY_BOARD;
-
-  const groups: Record<MyTasksGroup, RankedRow[]> = {
-    overdue: [],
-    today: [],
-    week: [],
-    later: [],
-    none: [],
-  };
-
-  for (const raw of records(data)) {
-    if (str(raw, "assignee_id") !== viewerUserId) continue;
-    const row = toTaskRow(raw);
-    if (!row) continue;
-
-    const days = dueInDays(row, now);
-
-    // A finished task stops being news. Without a retention rule the board
-    // accumulates every task the member has ever closed, and no other surface
-    // holds that history — the ledger in `spec/behavior/points.md` records the
-    // award, not the task. Canvas draws one done row and specifies no policy;
-    // this window is the PR's proposal.
-    //
-    // Only a confirmed row retires. One still waiting on an officer is still
-    // the member's business: it says so, and its box can take the completion
-    // back until it is confirmed, so it stays however old it is. A confirmed
-    // row's age runs from its confirmation (its completion where that is
-    // missing), and a row with neither timestamp readable is **kept**: the
-    // alternative is retiring a task on a timestamp this module never saw.
-    if (row.isDone && row.pointsAwarded) {
-      const sinceDone = daysSinceCompletion(
-        row.confirmedAt ?? row.completedAt,
-        now,
-      );
-      if (sinceDone !== null && sinceDone > COMPLETED_RETENTION_DAYS) continue;
-    }
-
-    // Overdue, Today, This week or Later by the shared rule. Overdue has its
-    // own section above Today since #5906 (Shawn: "the stuff that's overdue
-    // should go into an overdue section not the today section"). A finished
-    // row stays where it was finished until it retires above: one finished
-    // late in Overdue, one whose day has since passed in Today.
-    const stored = isTaskStatus(row.storedStatus) ? row.storedStatus : null;
-    const shown = isTaskStatus(row.displayStatus) ? row.displayStatus : stored;
-    const group = myTasksGroup(
-      {
-        due_date: row.dueDay ?? row.dueDate,
-        due_at: row.dueAt,
-        status: shown,
-        stored_status: stored ?? undefined,
-        completed_at: row.completedAt,
-      },
-      now,
-    );
-    groups[group].push({ row, days });
-  }
-
-  const sorted = (rows: RankedRow[]) =>
-    rows.sort(compareRows).map((entry) => entry.row);
-  return {
-    groups: {
-      overdue: sorted(groups.overdue),
-      today: sorted(groups.today),
-      week: sorted(groups.week),
-      later: sorted(groups.later),
-      none: sorted(groups.none),
-    },
-    total:
-      groups.overdue.length +
-      groups.today.length +
-      groups.week.length +
-      groups.later.length +
-      groups.none.length,
-  };
 }
 
 /**
