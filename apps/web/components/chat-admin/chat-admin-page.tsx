@@ -1044,10 +1044,7 @@ function ChatAdminBody({
                   aria-labelledby="ca-pins-label"
                   className="space-y-2 border-t border-border pt-6"
                 >
-                  <h3
-                    id="ca-pins-label"
-                    className={`${EYEBROW} text-muted-foreground`}
-                  >
+                  <h3 id="ca-pins-label" className={`${EYEBROW} text-muted`}>
                     Pinned messages
                     {/* A count only once there is a list to count. */}
                     {pinsQuery.data !== undefined ? ` (${pins.length})` : ""}
@@ -1228,7 +1225,7 @@ function ChatAdminBody({
                               onChange={(event) =>
                                 setCategoryNameDraft(event.target.value)
                               }
-                              className="h-8"
+                              className="h-control-row"
                               autoFocus
                             />
                             <div className="flex gap-1">
@@ -1350,7 +1347,7 @@ function ChatAdminBody({
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
                   placeholder="Officers"
-                  className="h-8"
+                  className="h-control-row"
                 />
               </div>
               <Button
@@ -1617,7 +1614,7 @@ function CategoryChannelList({
           <Link
             href={channelSettingsPath(channel.id)}
             className={cn(
-              "group flex min-h-9 items-center gap-2 rounded-md border border-transparent px-2 text-sm text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
+              "group flex min-h-control-list-row items-center gap-2 rounded-md border border-transparent px-2 text-sm text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           >

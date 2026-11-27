@@ -13,12 +13,16 @@
  */
 
 /**
- * The uppercase section label §2 draws above a grouped list.
+ * The section title §2 draws above a grouped list: a sidebar category, a
+ * settings group, a list's heading, a chat card's kind.
  *
- * `caption` (12.5) at 600, tracked out 0.12em. Deliberately not `font-mono`:
- * foundations §7 reserves mono for numeric, status and code-like strings, and a
- * section label is a label. It carries no colour — callers pair it with the
- * tone their surface calls for, which is `--muted-foreground` in every current
- * consumer.
+ * `caption` (12.5) at 600 in sentence case, as Claude's "Pinned" and Discord's
+ * "Events" draw theirs (Paul, 2026-11-26, #6115: "can we make the section
+ * titles smaller? more like claude and discord"). Until then it was uppercase
+ * and tracked out 0.12em. Deliberately not `font-mono`: foundations §7
+ * reserves mono for numeric, status and code-like strings, and a section
+ * label is a label. It carries no colour: callers pair it with `text-muted`,
+ * the tone a section title takes under the rows it heads, or with the accent
+ * where a page's own eyebrow calls for one.
  */
-export const EYEBROW = "text-caption font-semibold uppercase tracking-[0.12em]";
+export const EYEBROW = "text-caption font-semibold";

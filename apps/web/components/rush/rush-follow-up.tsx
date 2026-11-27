@@ -301,7 +301,7 @@ function FollowUpDialog({
               items={choices}
               nameOf={(m) => m.display_name}
               keyOf={(m) => m.user_id}
-              itemClassName="min-h-8 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+              itemClassName="min-h-control-row text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
               renderItem={(m) => (
                 <RushMemberName member={m} viewerId={viewerId} />
               )}

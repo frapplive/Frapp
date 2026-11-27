@@ -356,7 +356,7 @@ function CountedAnswerCards({
  * finger.
  */
 const QUIET_ACTION =
-  "h-8 w-8 text-muted-foreground/70 hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11";
+  "h-control-row w-control-row text-muted-foreground/70 hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11";
 
 /**
  * Copy, the thumbs, Think harder and Report under a finished answer, and under them what a
@@ -792,7 +792,7 @@ function SourceChip({
   const { name: words, when, meta } = askSourceChip(source);
   const name = [`Source ${number}: ${words}`, meta].filter(Boolean).join(", ");
   const chip =
-    "inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border bg-surface-1 pl-2.5 pr-3 text-caption pointer-coarse:h-11";
+    "inline-flex h-control-row max-w-full items-center gap-1.5 rounded-full border border-border bg-surface-1 pl-2.5 pr-3 text-caption pointer-coarse:h-11";
   const body = (pending: boolean) => (
     <>
       <span

@@ -56,7 +56,8 @@ const ICONS: Record<FrappLinkKind, typeof Link2> = {
   message: MessageSquare,
 };
 
-const ROW = "flex min-h-9 items-center gap-2 pointer-coarse:min-h-11";
+const ROW =
+  "flex min-h-control-list-row items-center gap-2 pointer-coarse:min-h-11";
 const ROW_LINK = cn(
   "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-sm hover:underline",
   FOCUS_RING_OFFSET,
@@ -302,7 +303,7 @@ export function FrappLinkPicker({
                   type="button"
                   onClick={() => attach(candidate.target)}
                   className={cn(
-                    "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card-hover pointer-coarse:min-h-11",
+                    "flex min-h-control-list-row w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card-hover pointer-coarse:min-h-11",
                     FOCUS_RING_OFFSET,
                   )}
                 >

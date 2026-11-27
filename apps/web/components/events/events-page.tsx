@@ -1400,7 +1400,7 @@ export function EventsPage() {
                 wired (#336): events have no assignee concept and no archive
                 state.
               */}
-              <div className="flex min-h-9 items-center gap-1 pointer-coarse:min-h-11">
+              <div className="flex min-h-control-list-row items-center gap-1 pointer-coarse:min-h-11">
                 <div className="min-w-0 flex-1 px-2">
                   <SectionLabel
                     id="events-list-label"

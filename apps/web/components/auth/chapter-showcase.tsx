@@ -291,7 +291,7 @@ function PollCard({ t }: { t: number }) {
   const total = options.reduce((sum, option) => sum + option.count, 0);
   return (
     <Card className={cn(MESSAGE_CARD, ENTER)}>
-      <p className={cn(EYEBROW, "text-muted-foreground")}>Poll</p>
+      <p className={cn(EYEBROW, "text-muted")}>Poll</p>
       <div className="mt-2 text-base font-bold">Formal theme?</div>
       <ul className="mt-3 space-y-2">
         {options.map((option) => {

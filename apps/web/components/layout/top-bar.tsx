@@ -149,7 +149,7 @@ function MobileNavTrigger({ onOpen }: { onOpen: () => void }) {
       /*
        * The bar exists ONLY on the touch tier, where the 44px floor binds,
        * and this is the only route to navigation there, so it cannot take
-       * the board's 34px pointer geometry.
+       * the shell's pointer geometry (the Small step on a mouse).
        */
       className={cn(
         SHELL_ICON_BUTTON,

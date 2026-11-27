@@ -205,7 +205,7 @@ function createStyles(tokens: SignetTokens) {
     },
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     zoneRow: {
       flexDirection: "row",

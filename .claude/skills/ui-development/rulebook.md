@@ -1,6 +1,6 @@
 # The owner's UI rulebook
 
-Every UI ruling Paul has given, from 2026-11-04 to 2026-11-24, as rules you follow without being told
+Every UI ruling Paul has given, from 2026-11-04 to 2026-11-26, as rules you follow without being told
 again. He has said most of these more than once, and the reason this file exists is his message of
 2026-11-19: "I'M SO SO TIRED OF TELLING YOU THE SAME STUFF EVERY FUCKING TIME AND ITERATING ON EVERY
 FUCKING UI CHANGE … it's like a never ending loop of fix one problem and find 4 more that you fix to a
@@ -248,8 +248,15 @@ These cause most of the iterations, so they come first.
 
 - **lint** **No emoji** in anything Frapp draws or writes, mockups and proposal pages included: lint checks
   every string in product source, specs aside. Members' own emoji are their content. (11-05)
-- **Compact controls** from the control size scale (Chip 24, Row 32, Small 36, Field 40; 44 for touch).
-  "All the bubbles just feel way too big." (11-05, foundations §9)
+- **Compact controls** from the control size scale (Chip 20, Row 28, Small 28, Field 32, List row 32,
+  Settings row 36 on a mouse; 44 for touch), through the `h-control-*` tokens, never a literal `h-9`.
+  "All the bubbles just feel way too big." (11-05, foundations §9) *Changed 11-26 by Paul: "buttons in
+  general have been too big for too long", so the mouse column moved one step denser after Claude,
+  Discord, Slack and Linear; labels stay 14 and touch stays 44 (#6115).*
+- **Section titles are small, muted and in sentence case**, with a fold chevron after the name: "Pinned ⌄",
+  as Claude and Discord draw them. Never bold capitals or letter-spacing. `EYEBROW` in `text-muted` on
+  web, `eyebrowStyle` in `muted` on the phone. "can we make the section titles smaller? more like claude
+  and discord." (11-26, #6115)
 - **No giant full-width buttons.** A button is sized to its label, from the control size scale, never
   stretched across a profile, card, panel or page body. A person's profile puts Message beside the other
   actions as a compact button (iMessage, Slack and Linear profiles), not a bar under the name. Web and phone

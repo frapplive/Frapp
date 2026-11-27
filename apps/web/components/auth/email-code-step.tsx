@@ -270,8 +270,8 @@ export function EmailCodeStep({
           type="button"
           variant="link"
           size="sm"
-          // 36 to a mouse, 44 to a finger: components.md §2's compact carve-out.
-          className="h-9 px-0 pointer-coarse:h-11"
+          // The Small step: 28 to a mouse, 44 to a finger (components.md §2).
+          className="h-control-small px-0 pointer-coarse:h-11"
           onClick={onBack}
           disabled={verifying}
         >
@@ -281,7 +281,7 @@ export function EmailCodeStep({
           type="button"
           variant="link"
           size="sm"
-          className="h-9 px-0 pointer-coarse:h-11"
+          className="h-control-small px-0 pointer-coarse:h-11"
           onClick={() => void sendAgain()}
           disabled={disabled || verifying || sending || cooldown > 0}
         >

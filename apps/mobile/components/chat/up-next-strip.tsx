@@ -386,7 +386,7 @@ function createStyles(tokens: SignetTokens) {
     // The shared eyebrow, as Chat home's section headings draw it.
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     // The Activity row's frame inside a card: lead tile, two lines, chevron.
     row: {

@@ -129,7 +129,7 @@ export function WelcomeCard({
           onClick={close}
           aria-label={WELCOME_CARD_COPY.close}
           className={cn(
-            "-mr-2 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11",
+            "-mr-2 -mt-1 inline-flex h-control-small w-control-small shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11",
             FOCUS_RING,
           )}
         >

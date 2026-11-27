@@ -175,7 +175,7 @@ export function ChapterLinkSection({
           <Select value={newRole} onValueChange={pick}>
             <SelectTrigger
               aria-label="Role the new link joins at"
-              className="h-9 w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm hover:bg-card-hover pointer-coarse:h-11"
+              className="h-control-small w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm hover:bg-card-hover pointer-coarse:h-11"
             >
               <span className="text-muted-foreground">Joins as</span>
               <span className="font-semibold">

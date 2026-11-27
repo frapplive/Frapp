@@ -271,7 +271,7 @@ describe("ChannelMemberList", () => {
     expect(row.firstElementChild).toHaveClass("h-10");
     expect(
       screen.getByText("Bob Member").closest("li")!.firstElementChild,
-    ).toHaveClass("h-8");
+    ).toHaveClass("h-control-list-row");
   });
 
   // The viewer's own Invisible row reads as the chapter sees it: dimmed.

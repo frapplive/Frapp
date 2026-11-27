@@ -46,7 +46,7 @@ export function NewMessagesPill({
         aria-label={newMessagesPillLabel(count, direction)}
         onClick={onJump}
         className={cn(
-          "flex h-8 items-center gap-1.5 whitespace-nowrap rounded-l-full pl-3 pr-2.5 hover:bg-card-hover pointer-coarse:h-11",
+          "flex h-control-row items-center gap-1.5 whitespace-nowrap rounded-l-full pl-3 pr-2.5 hover:bg-card-hover pointer-coarse:h-11",
           FOCUS_RING,
         )}
       >
@@ -63,7 +63,7 @@ export function NewMessagesPill({
         type="button"
         onClick={onMarkRead}
         className={cn(
-          "h-8 whitespace-nowrap rounded-r-full pl-2.5 pr-3 text-muted-foreground hover:bg-card-hover hover:text-foreground pointer-coarse:h-11",
+          "h-control-row whitespace-nowrap rounded-r-full pl-2.5 pr-3 text-muted-foreground hover:bg-card-hover hover:text-foreground pointer-coarse:h-11",
           FOCUS_RING,
         )}
       >

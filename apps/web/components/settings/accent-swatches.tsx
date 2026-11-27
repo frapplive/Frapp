@@ -58,7 +58,7 @@ export function AccentSwatches({
         disabled={disabled}
         onClick={() => onPick(swatch.hex)}
         className={cn(
-          "group flex min-h-9 items-center gap-2 rounded-full pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:opacity-60",
+          "group flex min-h-control-list-row items-center gap-2 rounded-full pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:opacity-60",
           labelled ? "pr-3" : "",
           FOCUS_RING,
         )}
@@ -100,16 +100,14 @@ export function AccentSwatches({
           aria-label="Your organization's colors"
           className="space-y-1.5"
         >
-          <p className={`${EYEBROW} text-muted-foreground`}>
-            Your organization
-          </p>
+          <p className={`${EYEBROW} text-muted`}>Your organization</p>
           <div className="flex flex-wrap gap-x-2 gap-y-1">
             {orgColors.map((swatch) => swatchButton(swatch, true))}
           </div>
         </div>
       ) : null}
       <div role="group" aria-label="More colors" className="space-y-1.5">
-        <p className={`${EYEBROW} text-muted-foreground`}>
+        <p className={`${EYEBROW} text-muted`}>
           {orgColors.length > 0 ? "More colors" : "Colors"}
         </p>
         <div className="flex flex-wrap gap-1">

@@ -1045,10 +1045,7 @@ function Minutes({
                   at > 0 && "border-t border-border pt-6",
                 )}
               >
-                <h3
-                  id={`${ids}-${key}`}
-                  className={`${EYEBROW} text-muted-foreground`}
-                >
+                <h3 id={`${ids}-${key}`} className={`${EYEBROW} text-muted`}>
                   {sectionLabel(key)}
                 </h3>
                 {key === "tldr" ? (
@@ -1218,9 +1215,7 @@ function DraftingPlaceholders() {
     <div aria-hidden="true" className="space-y-8">
       {rows.map((row) => (
         <section key={row.key} className="space-y-3">
-          <h3 className={`${EYEBROW} text-muted-foreground`}>
-            {sectionLabel(row.key)}
-          </h3>
+          <h3 className={`${EYEBROW} text-muted`}>{sectionLabel(row.key)}</h3>
           {row.widths.map((width, at) => (
             <div
               key={at}
@@ -1506,7 +1501,7 @@ function TabledEditor({
               )}
               onClick={() => onChange([...items, tabledRowFromAgenda(item)])}
               className={cn(
-                "inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
+                "inline-flex min-h-control-row max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
                 FOCUS_RING_OFFSET,
               )}
             >

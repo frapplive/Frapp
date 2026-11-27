@@ -41,13 +41,13 @@ export const COMPOSER_INPUT_CLASS =
  * on it.
  *
  * `pointer-coarse:h-11` is not decoration and is not what `ComposerSkeleton`
- * reserved: `compactControlClassName` is `h-8 pointer-coarse:h-11` and the Send
+ * reserved: `compactControlClassName` is `h-control-row pointer-coarse:h-11` and the Send
  * button carries the same pair, so on a touch device the real row is 44px and
- * the old skeleton reserved 32px — a 12px shift directly above the composer on
+ * the old skeleton reserved 32px (the Row step then) — a 12px shift directly above the composer on
  * exactly the devices least able to absorb it. `Composer` does not use this
  * constant; its row's height is intrinsic. See the comment at that row.
  */
-export const COMPOSER_TOOLBAR_CLASS = "mt-2 h-8 pointer-coarse:h-11";
+export const COMPOSER_TOOLBAR_CLASS = "mt-2 h-control-row pointer-coarse:h-11";
 
 /** The accessible name the shell and the real editor share — see `ComposerShell`. */
 export const COMPOSER_LABEL = "Message composer";

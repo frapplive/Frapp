@@ -211,13 +211,14 @@ export function navRowClassName({
 }): string {
   return cn(
     /*
-     * 34px is the board's POINTER geometry. The drawer that renders this
-     * below `lg` is touch-only, and `--touch-min` (44px) is binding on
-     * web as well as mobile (foundations §9) - so the row is 44px until
-     * the desktop breakpoint, then takes the board's density.
+     * The Row step is POINTER geometry (foundations §9; 34px, the board's
+     * number, until #6115). The drawer that renders this below `lg` is
+     * touch-only, and `--touch-min` (44px) is binding on web as well as
+     * mobile - so the row is 44px until the desktop breakpoint, then takes
+     * the Row step's density.
      */
-    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-[34px] lg:min-h-0",
-    collapsed ? "w-[34px] justify-center" : "w-full gap-2.5 px-2.5",
+    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-control-row lg:min-h-0 lg:pointer-coarse:h-11",
+    collapsed ? "w-control-row justify-center pointer-coarse:w-11" : "w-full gap-2.5 px-2.5",
     focusClassName,
     active
       ? "bg-accent-subtle font-semibold text-accent-text"
@@ -261,7 +262,8 @@ export function ProtectedNavItem({
   const isActive = current !== undefined;
 
   /*
-   * Greenfield nav row (board option `1b`, pin 2): 34px tall, radius 10, 10px
+   * Greenfield nav row (board option `1b`, pin 2): the Row step tall (28 on a
+   * mouse since #6115; the board drew 34), radius 10, 10px
    * padding and gap, an 18px duotone glyph and a 14px label.
    *
    * Active is a tinted fill plus accent text and a weight bump — deliberately

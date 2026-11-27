@@ -487,7 +487,7 @@ _(Changed 2026-11-11: Block was a red row at the foot of the sheet, and mobile h
 A viewer holding `members:invite` gets the floating + "Invite members", which opens `(app)/invite.tsx` ([`navigation.md` § Inviting members](navigation.md#inviting-members)).
 Each row carries the member's presence dot on the avatar and their custom status line under the name, as web's Directory and the member profile draw them, off chapter presence and absent until it has synced (#4137, Shawn, 2026-11-12).
 The search field leads with a magnifier and reads "Search members", web's words, because `GET /v1/members/search` matches more than the name; Documents and Roles take the same glyph.
-Deliberately different from web (#4137): a 40pt avatar in a touch-height row (44pt and up) where web draws a 24px avatar in a 36px dense row;
+Deliberately different from web (#4137): a 40pt avatar in a touch-height row (44pt and up) where web draws a 24px avatar in a 32px dense row (36 until #6115);
 the meta line is class · company · city · year, what a member looks someone up by on a phone, where web's officer roster reads role · class · joined · email;
 and the placeholder takes `text.muted` as every phone field does (it clears 4.5:1 since the 2026-11-09 ladder), as web's do since 2026-11-22 ([#5666](https://github.com/frapplive/Frapp/issues/5666)); until then web's took `--muted-foreground`.
 Web's Directory shows each member's points under any sort and the phone's shows a total only under a standing.

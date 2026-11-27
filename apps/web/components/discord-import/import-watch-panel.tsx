@@ -190,7 +190,7 @@ function Section({
 }) {
   return (
     <div className="space-y-1">
-      <p className={cn(EYEBROW, "text-muted-foreground")}>{title}</p>
+      <p className={cn(EYEBROW, "text-muted")}>{title}</p>
       <ul className="space-y-1">{children}</ul>
     </div>
   );

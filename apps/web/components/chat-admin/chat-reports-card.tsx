@@ -335,10 +335,7 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
     >
       {confirmDialog}
       <div className="space-y-1">
-        <h2
-          id="chat-reports-label"
-          className={`${EYEBROW} text-muted-foreground`}
-        >
+        <h2 id="chat-reports-label" className={`${EYEBROW} text-muted`}>
           {copy.title}
         </h2>
         <p className="text-caption text-muted">{copy.description}</p>

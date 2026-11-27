@@ -510,7 +510,7 @@ export function QuestionField({
               <label
                 key={option.id}
                 className={cn(
-                  "flex min-h-9 items-center gap-3 rounded-md px-2 text-sm pointer-coarse:min-h-11",
+                  "flex min-h-control-list-row items-center gap-3 rounded-md px-2 text-sm pointer-coarse:min-h-11",
                   readOnly
                     ? "cursor-default"
                     : "cursor-pointer hover:bg-card-hover",

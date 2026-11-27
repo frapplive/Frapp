@@ -385,6 +385,17 @@
     --touch-min: 44px;
     --touch-button: 44px;
 
+    /* ── Control size scale, pointer column (foundations §9) ──────
+     * What a mouse gets; `pointer-coarse:` gives each the 44 above.
+     * Bound as `h-control-*` / `min-h-control-*` / `size-control-*`
+     * by the shared preset. 2026-11-26 (#6115): one step denser. */
+    --control-chip: 20px;
+    --control-row: 28px;
+    --control-small: 28px;
+    --control-field: 32px;
+    --control-list-row: 32px;
+    --control-settings-row: 36px;
+
     /* ── Scrollbars ───────────────────────────────────────────────
      * A scroll region on a Signet surface draws its own bar. The browser
      * default renders as a light-mode artifact on this ladder.

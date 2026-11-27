@@ -470,7 +470,7 @@ function Notice({
         aria-busy={action.busy}
         className={cn(
           VIEWER_CONTROL,
-          "mt-3 h-9 gap-2 border-white/25 px-3.5 text-sm font-semibold text-white pointer-coarse:h-11",
+          "mt-3 h-control-small gap-2 border-white/25 px-3.5 text-sm font-semibold text-white pointer-coarse:h-11",
         )}
       >
         {action.label === "Download" ? <Download aria-hidden="true" className="size-4" /> : null}

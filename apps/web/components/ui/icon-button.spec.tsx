@@ -52,12 +52,12 @@ describe("IconButton", () => {
   });
 
   it("defaults to the neutral ghost paint at the scale's Small step", () => {
-    // foundations.md §9: an icon button is 36 to a mouse and 44 to a finger.
+    // foundations.md §9: an icon button is the Small step (28) to a mouse and 44 to a finger.
     render(<IconButton label="Edit North Library">×</IconButton>);
     const button = screen.getByRole("button", { name: "Edit North Library" });
     expect(button.className).toContain("text-muted-foreground");
-    expect(button.className).toMatch(/(^| )h-9( |$)/);
-    expect(button.className).toMatch(/(^| )w-9( |$)/);
+    expect(button.className).toMatch(/(^| )h-control-small( |$)/);
+    expect(button.className).toMatch(/(^| )w-control-small( |$)/);
     expect(button.className).toContain("pointer-coarse:h-11");
     expect(button.className).toContain("pointer-coarse:w-11");
   });
