@@ -1,9 +1,7 @@
-import { Skeleton } from "@/components/shared/async-states";
 import {
   SectionSkeleton,
-  SkeletonRows,
+  SkeletonSettingsGroup,
 } from "@/components/shared/page-skeletons";
-import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 
 /**
  * Discord import while its one read loads, inside the page's frame: a group
@@ -13,16 +11,13 @@ import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
  */
 export function DiscordImportSkeleton() {
   return (
-    <SectionSkeleton label="Loading the import" className="space-y-2">
-      <SkeletonRows
+    <SectionSkeleton label="Loading the import">
+      <SkeletonSettingsGroup
         rows={2}
         lead="glyph"
         trailing={["w-4"]}
-        trailingHeight="h-4"
-        rowClassName="min-h-control-settings-row px-4 py-2"
-        listClassName={SETTINGS_GROUP_FRAME}
+        footnote="w-[70%]"
       />
-      <Skeleton aria-hidden="true" className="ml-1 h-[11px] w-[70%]" />
     </SectionSkeleton>
   );
 }

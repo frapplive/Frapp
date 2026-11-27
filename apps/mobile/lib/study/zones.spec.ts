@@ -88,11 +88,13 @@ describe("findZone", () => {
 describe("graceWindowCopy", () => {
   it("uses the zone's own window, not the drawn five", () => {
     const [tenMinutes] = selectActiveZones([zone({ pause_grace_minutes: 10 })]);
-    expect(graceWindowCopy(tenMinutes!)).toContain("10-min");
+    expect(graceWindowCopy(tenMinutes!)).toBe(
+      "Leaving the zone pauses with a 10-minute grace window.",
+    );
   });
 
   it("falls back to the server default when no zone is selected", () => {
-    expect(graceWindowCopy(null)).toContain("5-min");
+    expect(graceWindowCopy(null)).toContain("5-minute grace window");
   });
 });
 

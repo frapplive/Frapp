@@ -334,7 +334,7 @@ the chapter accent in a back-row slot (2026-11-05).
 Since the #920 shell slice the dashboard's shell chrome draws Signet glyphs,
 not Lucide. The glyphs live in `apps/web/components/layout/nav-glyphs.tsx`
 and `apps/web/components/layout/nav-config.ts` consumes them. The sidebar
-rows and the in-screen `RolesGlyph`, `StudyZonesGlyph` and
+rows and the in-screen `RolesGlyph` and
 `ReportsGlyph` draw the shared nav set (§1.1); the top-bar controls keep the
 §1 stroke recipe.
 Sidebar items render them at 18px ([components.md](components.md) §7);
@@ -362,7 +362,6 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Billing | `BillingGlyph` | `billing`, `credit-card` |
 | Settings | `SettingsGlyph` | `settings`, `gear-six` |
 | Roles (in-screen) | `RolesGlyph` | `roles`, `shield-check` |
-| Study zones (in-screen) | `StudyZonesGlyph` | `studyZones`, `map-pin-area` |
 | Reports (in-screen) | `ReportsGlyph` | `reports`, `chart-line-up` |
 | Search (top bar) | `SearchGlyph` | §1 stroke recipe |
 | Notifications (top bar) | `NotificationsGlyph` | §1 stroke recipe |
@@ -371,10 +370,13 @@ This table is the intent → glyph map; it MUST change in the same PR as
 Service hours and Reports are distinct glyphs (hand-heart vs. rising chart),
 so the legacy nav's `FileText` double-duty stays resolved. The nav's Admin group
 (Roles, Study Zones, Discord Import, Chat Admin, Reports) folded into the
-Settings row in #2946, so those intents left this table. `RolesGlyph`,
-`StudyZonesGlyph` and `ReportsGlyph` survive in `nav-glyphs.tsx` because
-in-screen surfaces import them. `ImportGlyph` and `ChannelsGlyph` had no other
-consumer and were deleted. Utility glyphs inside the
+Settings row in #2946, so those intents left this table. `RolesGlyph` and
+`ReportsGlyph` survive in `nav-glyphs.tsx` because in-screen surfaces import
+them. `ImportGlyph` and `ChannelsGlyph` had no other consumer and were deleted.
+`StudyZonesGlyph` (`map-pin-area`) followed in #6031 (2026-11-27): the zone
+list became a settings group, whose rows lead with a Lucide glyph as every
+settings row does (`SettingsRow`'s `icon`), so a zone row draws Lucide
+`MapPin` and nothing else drew the glyph. Utility glyphs inside the
 shell chrome (`ChevronRight` breadcrumb separator, `ChevronsUpDown`, `Check`,
 `Loader2`, `LogOut`, `User`, the notification drawer's internals) remain
 Lucide: control furniture, not nav intents.
@@ -536,9 +538,10 @@ four and is corrected here rather than left drifting):
 Since the #920 Chapter Ops slice these families draw Signet glyphs, all from
 the nav set (§1.1) except the stroke-recipe search glyph. The glyphs live in
 [`apps/web/components/events/chapter-ops-glyphs.tsx`](../../../apps/web/components/events/chapter-ops-glyphs.tsx),
-one file for the events, study hours and study zones screens rather than one
-each, because they share their intents rather than partitioning them — the map
-pin marks an event's location, a running session's zone and a zone row alike.
+one file for the events and study hours screens rather than one each, because
+they share their intents rather than partitioning them. Study zones drew from
+it too until #6031 (2026-11-27), when its rows became settings rows with
+Lucide `MapPin`, as every settings row leads with a Lucide glyph.
 Tasks and service hours were in the family too; their only glyphs were the ones
 before their dialog titles, which went in 2026-11-05 (§ Chrome weight in
 [`components.md`](components.md#chrome-weight)), so they draw none from it now.
@@ -547,13 +550,12 @@ before their dialog titles, which went in 2026-11-05 (§ Chrome weight in
 |---|---|
 | An event (its panel titles carry none, [`components.md` § Surface size](components.md#surface-size)) | `EventsGlyph` (re-export) |
 | An event's schedule row | `ScheduleGlyph` |
-| A location, a study zone, a session's zone | `StudyZonesGlyph` (re-export) |
 | Role targeting on an event | `RolesGlyph` (re-export) |
 | The attendance roster | `DirectoryGlyph` (re-export) |
 | An event's point value | `PointsGlyph` (re-export) |
 | Search, in the events toolbar | `SearchGlyph` (re-export) |
 
-Six of the seven are re-exports from
+Five of the six are re-exports from
 [`apps/web/components/layout/nav-glyphs.tsx`](../../../apps/web/components/layout/nav-glyphs.tsx),
 which is the rule §1 rule 1 already sets and the Directory family already
 follows: a second copy of the same path data is the drift the rule exists to

@@ -1,5 +1,9 @@
 import { PageActions } from "@/components/layout/page-actions";
 import { Skeleton } from "@/components/shared/async-states";
+import {
+  SETTINGS_GROUP_FRAME,
+  SETTINGS_ROW_HEIGHT,
+} from "@/components/shared/settings-row";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { cn } from "@/lib/utils";
 
@@ -179,8 +183,8 @@ export function SkeletonRows({
   listClassName,
 }: {
   /**
-   * The list's own frame in place of the dense list's hairlines: a settings
-   * group's (`SETTINGS_GROUP_FRAME`), for a page in the settings-rows shape.
+   * The list's own frame in place of the dense list's hairlines; only
+   * `SkeletonSettingsGroup` passes one.
    */
   listClassName?: string;
   rows?: number;
@@ -258,6 +262,48 @@ function RowLeadBlock({ lead }: { lead: RowLead }) {
     default:
       return null;
   }
+}
+
+/**
+ * A settings group while its page loads (#6031): `SettingsGroup`'s frame,
+ * rows as tall as `SettingsRow`'s (36 to a mouse, 44 to a finger), and its
+ * footnote when the loaded group has one. Every page in the settings-rows
+ * shape draws its loading rows with this, so none drifts from the row.
+ */
+export function SkeletonSettingsGroup({
+  rows = 3,
+  lines = 2,
+  lead = "none",
+  trailing = [],
+  trailingHeight = "h-4",
+  footnote,
+}: {
+  rows?: number;
+  lines?: 1 | 2 | 3;
+  lead?: RowLead | RowLead[];
+  trailing?: string[];
+  trailingHeight?: string;
+  /** The footnote line's width class, when the loaded group has one. */
+  footnote?: string;
+}) {
+  const group = (
+    <SkeletonRows
+      rows={rows}
+      lines={lines}
+      lead={lead}
+      trailing={trailing}
+      trailingHeight={trailingHeight}
+      rowClassName={cn("gap-4 px-4", SETTINGS_ROW_HEIGHT)}
+      listClassName={SETTINGS_GROUP_FRAME}
+    />
+  );
+  if (!footnote) return group;
+  return (
+    <div aria-hidden="true" className="space-y-2">
+      {group}
+      <Skeleton className={cn("ml-1 h-[11px]", footnote)} />
+    </div>
+  );
 }
 
 /**

@@ -24,6 +24,8 @@ const { hooks } = vi.hoisted(() => ({
     listCached: true,
     offline: false,
     loading: false,
+    // A delete in flight (`useDeleteDiscordImport().isPending`).
+    removePending: false,
     botAvailable: true,
     // The page's query string, for the `?wizard=bot` resume.
     search: "",
@@ -72,7 +74,7 @@ vi.mock("@repo/hooks", () => ({
   }),
   useDeleteDiscordImport: () => ({
     mutateAsync: hooks.remove,
-    isPending: false,
+    isPending: hooks.removePending,
   }),
 }));
 
@@ -187,6 +189,7 @@ beforeEach(() => {
   hooks.listCached = true;
   hooks.offline = false;
   hooks.loading = false;
+  hooks.removePending = false;
   hooks.botAvailable = true;
   hooks.search = "";
   hooks.clear.mockResolvedValue(undefined);
@@ -795,6 +798,27 @@ describe("DiscordImportPage — finished", () => {
     expect(screen.queryByText(/Only the last/)).toBeNull();
   });
 
+  it("opens what didn't come over only for a finished import (#6031)", () => {
+    // A stale `&page=issues` link to an import that is moving again (or
+    // being deleted) lands on that state, not on a list that's still growing.
+    hooks.rows = [{ ...done, status: "running", completed_at: null }];
+    render(<DiscordImportPage page="issues" />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Didn't come over" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop import" })).toBeVisible();
+  });
+
+  it("holds Delete import while a delete is already in flight", () => {
+    hooks.removePending = true;
+    render(<DiscordImportPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Delete import" }),
+    ).toBeDisabled();
+  });
+
   it("offers to resume an import that failed, counting the channels it got through", async () => {
     hooks.rows = [
       {
@@ -934,8 +958,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
     reducedMotion(false);
     const { container } = render(<DiscordImportPage />);
 
-    const list = screen.getByRole("heading", { name: "By Discord category" })
-      .nextElementSibling as HTMLElement;
+    const list = screen.getByRole("list", { name: "By Discord category" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows.map((item) => item.firstChild?.textContent)).toEqual([
       "No category",

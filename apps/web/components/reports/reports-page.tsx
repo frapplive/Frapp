@@ -23,6 +23,7 @@ import { formatDayTime, formatEventDayTime } from "@repo/formatting";
 import { formatEventWhenOr } from "@repo/formatting";
 import {
   can,
+  POINTS_PERIODS,
   REPORTS_COPY,
   reportPreviewHeading,
   type ReportKindKey,
@@ -387,34 +388,66 @@ function ReportsForm() {
       : shownDates === "semester" && semester.start
         ? { start_date: semester.start }
         : {};
-  const usesDates = kind === "attendance" || kind === "service";
+  const [memberId, setMemberId] = useState("");
+  const [eventId, setEventId] = useState("");
+  // One event's attendance is that event: the API ANDs `event_id` with the
+  // date range, so a default This semester would hide last semester's
+  // meeting. Once an event is picked the Dates row goes and no dates are
+  // sent (#6031).
+  const usesDates =
+    kind === "service" || (kind === "attendance" && eventId === "");
   // A semester report waits for the semester's start rather than running
   // as all time and saying it was this semester.
   const waitingForDates =
     usesDates && shownDates === "semester" && semesterPending;
-  const [memberId, setMemberId] = useState("");
-  const [eventId, setEventId] = useState("");
+  // Custom with neither date would run as all time under a row that says
+  // Custom, so the buttons wait for one date and the row says so.
+  const customNeedsDate =
+    usesDates && shownDates === "custom" && !startDate && !endDate;
+  const datesBlocked = waitingForDates || customNeedsDate;
   const [pointsWindow, setPointsWindow] = useState<
     "all" | "semester" | "month"
   >("all");
-  const [preview, setPreview] = useState<ReportRow[] | null>(null);
-  /** Truncation reported alongside the current preview, if any. */
-  const [truncation, setTruncation] = useState<ReportTruncation | null>(null);
   /*
-    A failed run used to be a toast and nothing else: `setPreview` was
+    What a run asks the API for, as one string. A preview belongs to the
+    request it was generated from: the effective range can change without a
+    filter edit (the semester's start arrives, fails, or moves), and a
+    preview from the old range beside a Dates row naming the new one would
+    export rows the PDF button no longer asks for. A preview whose request
+    isn't the current one is treated as cleared (#6031).
+  */
+  const requestKey = JSON.stringify([
+    kind,
+    kind === "attendance" ? eventId : "",
+    kind === "points" || kind === "service" ? memberId : "",
+    kind === "points" ? pointsWindow : "",
+    usesDates ? range : null,
+  ]);
+  const [result, setResult] = useState<{
+    key: string;
+    preview: ReportRow[] | null;
+    /** Truncation reported alongside the preview, if any. */
+    truncation: ReportTruncation | null;
+    error: string | null;
+  } | null>(null);
+  const current = result !== null && result.key === requestKey ? result : null;
+  const preview = current?.preview ?? null;
+  const truncation = current?.truncation ?? null;
+  /*
+    A failed run used to be a toast and nothing else: the preview was
     never reached, so `preview` stayed `null` and the panel fell through to
     "Generate a report to see a preview here." — a failure rendering as the
     initial state, with no retry. README §4 requires an error state with a
     retry path on every async view, and `writing.md` §7's Reports table had
     no Error row for it, which is why nothing caught it.
   */
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewError = current?.error ?? null;
   /*
     Which run the preview belongs to.
 
     `onFilterChange` clears the preview the moment a filter is edited, but it
     cannot cancel a request already in flight — so a generate started under the
-    old filters would resolve afterwards and call `setPreview` with rows that no
+    old filters would resolve afterwards and write the preview with rows that no
     longer match what the form says. The member sees a table scoped to nobody
     beside a Member ID field naming somebody, and "Export" — which gates
     only on `preview` being non-empty — exports those rows under that
@@ -437,10 +470,12 @@ function ReportsForm() {
     return (value: T) => {
       setter(value);
       runToken.current += 1;
-      setPreview(null);
-      setTruncation(null);
-      setPreviewError(null);
+      setResult(null);
     };
+  }
+  function clearPreview() {
+    runToken.current += 1;
+    setResult(null);
   }
   // Tracked separately from the mutation's own isPending: the PDF export reuses
   // the same mutation, so without this the preview panel would flip to its
@@ -485,7 +520,7 @@ function ReportsForm() {
         format,
         body: {
           event_id: eventId || undefined,
-          ...range,
+          ...(usesDates ? range : {}),
         },
       });
     }
@@ -513,19 +548,21 @@ function ReportsForm() {
   async function runReport() {
     runToken.current += 1;
     const token = runToken.current;
+    const key = requestKey;
     // The previous run's verdict is not this run's. Without this the header
     // keeps its "Incomplete report" badge for the whole time a fresh request
     // is in flight, describing a result nobody has seen yet.
-    setTruncation(null);
-    setPreviewError(null);
+    setResult((last) =>
+      last && last.key === key
+        ? { ...last, truncation: null, error: null }
+        : null,
+    );
     try {
       const { payload, truncation } = await invokeReport("json");
       if (token !== runToken.current) return;
 
       const rows = extractRows(payload);
-      setPreview(rows);
-      setTruncation(truncation);
-      setPreviewError(null);
+      setResult({ key, preview: rows, truncation, error: null });
 
       if (rows.length === 0) {
         toast({
@@ -560,9 +597,7 @@ function ReportsForm() {
       // Both, deliberately: the toast reports the moment, and the panel keeps
       // saying so after the toast dismisses. A failed run that leaves the idle
       // copy on screen is a failure reported as "nothing has happened yet".
-      setPreview(null);
-      setTruncation(null);
-      setPreviewError(description);
+      setResult({ key, preview: null, truncation: null, error: description });
       toast({
         title: `Couldn't generate ${reportLabel[kind].toLowerCase()} report`,
         description,
@@ -674,17 +709,14 @@ function ReportsForm() {
               <Select
                 value={kind}
                 // Also locked during a plain "Generate report": the run in
-                // flight resolves into setPreview regardless of what the
+                // flight resolves into the preview regardless of what the
                 // select says by then, so switching mid-run would label one
                 // report's rows as another's — and the export names the file
                 // from the *new* kind.
                 disabled={busy}
                 onValueChange={(value) => {
                   setKind(value as ReportKind);
-                  runToken.current += 1;
-                  setPreview(null);
-                  setTruncation(null);
-                  setPreviewError(null);
+                  clearPreview();
                 }}
               >
                 <SelectTrigger
@@ -753,9 +785,15 @@ function ReportsForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{REPORTS_COPY.allTime}</SelectItem>
-                    <SelectItem value="semester">Current semester</SelectItem>
-                    <SelectItem value="month">Rolling month</SelectItem>
+                    {/*
+                      The leaderboard's periods and names: the same
+                      semester the Dates row calls This semester.
+                    */}
+                    {POINTS_PERIODS.map((period) => (
+                      <SelectItem key={period.value} value={period.value}>
+                        {period.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               }
@@ -765,6 +803,9 @@ function ReportsForm() {
           {usesDates ? (
             <SettingsRow
               label={<span id="report-dates-label">{REPORTS_COPY.dates}</span>}
+              description={
+                customNeedsDate ? REPORTS_COPY.customNeedsDate : undefined
+              }
               control={
                 <Select
                   value={shownDates}
@@ -832,7 +873,7 @@ function ReportsForm() {
             // Gate on pdfPending too: activeMutation swaps when the report
             // kind changes, so keying only off it would re-enable this
             // button mid-export and let a second render be queued.
-            {...gate.controlProps(busy || waitingForDates)}
+            {...gate.controlProps(busy || datesBlocked)}
           >
             {pdfPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -843,7 +884,7 @@ function ReportsForm() {
           </Button>
           <Button
             onClick={runReport}
-            {...gate.controlProps(busy || waitingForDates)}
+            {...gate.controlProps(busy || datesBlocked)}
           >
             {activeMutation.isPending && !pdfPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

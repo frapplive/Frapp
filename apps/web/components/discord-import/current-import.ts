@@ -1,5 +1,6 @@
 import {
   DISCORD_IMPORT_COPY,
+  discordImportedMessagesLabel,
   discordImportingLabel,
   isDiscordImportClearable,
 } from "@repo/validation";
@@ -54,20 +55,25 @@ export function importStage(row: ImportRow): ImportStage {
 
 /**
  * The import's state in a few words, at the end of the Chat page's Discord
- * import row (#6031): "Not started", "Importing 42%", "4,120 messages",
- * "Stopped on an error".
+ * import row (#6031), saying what the page says: "Not started", "Waiting to
+ * start", "Importing 42%", "4,120 messages", "Stopped on an error",
+ * "Deletion stopped" (a delete that failed part-way, #2944, which Resume
+ * doesn't pick up), "Stopped", "Deleting".
  */
 export function importRowState(rows: readonly ImportRow[]): string {
+  const words = DISCORD_IMPORT_COPY.rowState;
   const { current } = currentImport(rows);
-  if (!current) return DISCORD_IMPORT_COPY.notStarted;
+  if (!current) return words.notStarted;
+  if (current.status === "ready") return words.waiting;
   const stage = importStage(current);
   if (stage === "importing")
     return discordImportingLabel(importPercent(current));
-  if (stage === "deleting") return "Deleting";
-  if (current.status === "completed") {
-    const messages = current.imported_messages;
-    return `${messages.toLocaleString("en-US")} ${messages === 1 ? "message" : "messages"}`;
-  }
-  if (current.status === "failed") return DISCORD_IMPORT_COPY.stopped;
-  return "Stopped";
+  if (stage === "deleting") return words.deleting;
+  if (current.status === "completed")
+    return discordImportedMessagesLabel(current.imported_messages);
+  if (current.status === "failed")
+    return (current.purged_messages ?? 0) > 0
+      ? words.deletionStopped
+      : words.stoppedOnError;
+  return words.stopped;
 }

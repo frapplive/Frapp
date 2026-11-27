@@ -270,8 +270,9 @@ export function StudyZonesManager() {
             // create, so they follow the same gate.
             <SettingsGroup label="Study zones">
               {zones.map((zone) => {
-                const blocked = !gate.allowed;
-                const describedBy = gate.controlProps()["aria-describedby"];
+                const gated = gate.controlProps();
+                const blocked = gated.disabled;
+                const describedBy = gated["aria-describedby"];
                 const entries: RowMenuEntry[] = [
                   {
                     type: "item",
@@ -315,6 +316,7 @@ export function StudyZonesManager() {
                     onClick={() => openEditor(zone)}
                     disabled={blocked}
                     describedBy={describedBy}
+                    title={gated.title}
                     menu={{ entries, label: `More for ${zone.name}` }}
                   />
                 );

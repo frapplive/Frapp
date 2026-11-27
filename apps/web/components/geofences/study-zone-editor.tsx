@@ -8,7 +8,7 @@ import { KeptDraftNote } from "@/components/shared/kept-draft-note";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { STUDY_ZONES_COPY } from "@repo/validation";
+import { STUDY_ZONES_COPY, studyZoneRuleUnit } from "@repo/validation";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   Panel,
@@ -66,26 +66,30 @@ const RULE_DEFAULTS: Record<RuleKey, string> = {
  * Each row's number box sits at its end with its unit after it (#6031), as
  * iOS Settings puts a value at a row's end.
  */
-const RULES: readonly { key: RuleKey; label: string; unit: string }[] = [
+const RULES: readonly {
+  key: RuleKey;
+  label: string;
+  unit: "points" | "minutes";
+}[] = [
   {
     key: "points_per_interval",
     label: STUDY_ZONES_COPY.points,
-    unit: STUDY_ZONES_COPY.pointsUnit,
+    unit: "points",
   },
   {
     key: "minutes_per_point",
     label: STUDY_ZONES_COPY.every,
-    unit: STUDY_ZONES_COPY.minutesUnit,
+    unit: "minutes",
   },
   {
     key: "min_session_minutes",
     label: STUDY_ZONES_COPY.shortestSession,
-    unit: STUDY_ZONES_COPY.minutesUnit,
+    unit: "minutes",
   },
   {
     key: "pause_grace_minutes",
     label: STUDY_ZONES_COPY.pauseGrace,
-    unit: STUDY_ZONES_COPY.minutesUnit,
+    unit: "minutes",
   },
 ];
 
@@ -377,7 +381,7 @@ export function StudyZoneEditor({
                           }}
                         />
                         <span className="w-14 text-sm text-muted-foreground">
-                          {rule.unit}
+                          {studyZoneRuleUnit(rule.unit, rules[rule.key])}
                         </span>
                       </span>
                     }

@@ -215,7 +215,9 @@ export function ImportRunning({
       <section aria-labelledby="discord-import-running" className="space-y-4">
         <div className="space-y-1">
           <p className={cn(EYEBROW, "text-muted")}>
-            {row.status === "ready" ? "Waiting to start" : "Importing"}
+            {row.status === "ready"
+              ? DISCORD_IMPORT_COPY.rowState.waiting
+              : "Importing"}
             {row.guild_name ? ` · ${row.guild_name}` : ""}
           </p>
           <h2

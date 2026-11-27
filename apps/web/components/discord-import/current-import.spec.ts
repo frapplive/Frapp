@@ -92,4 +92,36 @@ describe("importRowState (#6031)", () => {
   it("says a failed import stopped on an error", () => {
     expect(importRowState([with_("failed")])).toBe("Stopped on an error");
   });
+
+  it("names one finished message in the singular", () => {
+    expect(importRowState([with_("completed", { imported_messages: 1 })])).toBe(
+      "1 message",
+    );
+  });
+
+  it("says a queued import is waiting, as the page does, not Importing 0%", () => {
+    expect(
+      importRowState([
+        with_("ready", {
+          source: "upload",
+          imported_messages: 0,
+          total_messages: 100,
+          channels_total: null,
+        }),
+      ]),
+    ).toBe("Waiting to start");
+  });
+
+  it("says a delete that stopped part-way stopped, not a resumable import", () => {
+    expect(
+      importRowState([
+        with_("failed", { purged_messages: 12, imported_messages: 40 }),
+      ]),
+    ).toBe("Deletion stopped");
+  });
+
+  it("says Deleting while a delete runs, and Stopped for one the admin stopped", () => {
+    expect(importRowState([with_("purging")])).toBe("Deleting");
+    expect(importRowState([with_("cancelled")])).toBe("Stopped");
+  });
 });

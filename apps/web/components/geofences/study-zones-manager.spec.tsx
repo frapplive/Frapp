@@ -50,6 +50,12 @@ const ZONE = {
   created_at: "2026-08-01T00:00:00Z",
 };
 
+const { network } = vi.hoisted(() => ({ network: { isOffline: false } }));
+vi.mock("@/lib/providers/network-provider", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/providers/network-provider")>()),
+  useNetwork: () => network,
+}));
+
 vi.mock("@repo/hooks", () => ({
   useCurrentChapter: () => mockCurrentChapter(),
   // Drives the New study zone button. Read as a boolean rather than through
@@ -153,7 +159,23 @@ const turnOffItem = () => menuItem(/turn off/i);
 const deleteItem = () => menuItem(/delete/i);
 
 describe("StudyZonesManager subscription gating", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    network.isOffline = false;
+  });
+
+  it("gives a zone row the gate's tooltip, as the create trigger has", () => {
+    // Offline has no notice to point at, so the reason is the controls'
+    // `title`; a row that dropped it would be disabled with no word why.
+    chapter.active();
+    network.isOffline = true;
+    render(<StudyZonesManager />);
+
+    const reason = createTrigger().getAttribute("title");
+    expect(reason).toBeTruthy();
+    expect(editButton()).toBeDisabled();
+    expect(editButton()).toHaveAttribute("title", reason);
+  });
 
   it("leaves every write alone on an active chapter", async () => {
     chapter.active();
@@ -369,6 +391,13 @@ describe("StudyZonesManager layout", () => {
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
+    // Each unit agrees with its box: the zone earns 1 point every 30 minutes.
+    expect(screen.getByText("point")).toBeInTheDocument();
+    expect(screen.queryByText("points")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Every (minutes)"), {
+      target: { value: "1" },
+    });
+    expect(screen.getAllByText("minute")).toHaveLength(1);
   });
 
   it("keeps coordinates off the row and out of the editor", async () => {

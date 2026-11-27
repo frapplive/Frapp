@@ -18,8 +18,11 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { countUpValue, signatureMoment } from "@repo/theme/signature";
-import { EYEBROW } from "@/components/ui/typography";
-import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
+import { SectionLabel } from "@/components/shared/section-label";
+import {
+  SETTINGS_GROUP_FRAME,
+  SETTINGS_ROW_HEIGHT,
+} from "@/components/shared/settings-row";
 import { cn } from "@/lib/utils";
 import type { ImportRow } from "./import-progress";
 import type { CategoryTile } from "./category-progress";
@@ -205,25 +208,27 @@ export function ArrivalCategories({
   playing: boolean;
 }) {
   if (tiles.length === 0) return null;
-  // A settings group's frame and rows (#6031), drawn here rather than with
-  // `SettingsRow` because each row carries its own drop-in delay.
+  // A settings group's heading, frame and row height (#6031), drawn here
+  // rather than with `SettingsGroup` and `SettingsRow` because each row
+  // carries its own drop-in delay.
   return (
     <section
       aria-labelledby="discord-import-arrived-categories"
       className="space-y-2"
     >
-      <h3
-        id="discord-import-arrived-categories"
-        className={cn(EYEBROW, "text-muted")}
-      >
+      <SectionLabel id="discord-import-arrived-categories">
         By Discord category
-      </h3>
-      <ul className={SETTINGS_GROUP_FRAME}>
+      </SectionLabel>
+      <ul
+        aria-labelledby="discord-import-arrived-categories"
+        className={SETTINGS_GROUP_FRAME}
+      >
         {tiles.map((tile, index) => (
           <li
             key={tile.key}
             className={cn(
-              "flex min-h-control-settings-row min-w-0 items-center justify-between gap-4 px-4 py-1.5 text-sm",
+              "flex min-w-0 items-center justify-between gap-4 px-4 text-sm",
+              SETTINGS_ROW_HEIGHT,
               playing && "motion-safe:animate-signature-drop",
             )}
             style={

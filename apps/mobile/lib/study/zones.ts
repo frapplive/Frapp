@@ -107,11 +107,13 @@ export function findZone(
  * Canvas hard-codes "a 5-min grace window", but the window is per-zone
  * (`study_geofences.pause_grace_minutes`) and `patterns.md` says s10 "surfaces
  * it" — so the number comes from the zone. A chapter that configures ten
- * minutes must not be told five.
+ * minutes must not be told five. The unit is spelled out, as every other
+ * minute in the app is (`writing.md`): "a 10-minute grace window", a
+ * compound before its noun, so singular even past one.
  */
 export function graceWindowCopy(zone: StudyZoneModel | null): string {
   const minutes = zone?.pauseGraceMinutes ?? DEFAULTS.pauseGraceMinutes;
-  return `Leaving the zone pauses with a ${minutes}-min grace window.`;
+  return `Leaving the zone pauses with a ${minutes}-minute grace window.`;
 }
 
 /** What a zone pays, "1 point every 30 minutes · 15 minute minimum", as web says it. */

@@ -30,14 +30,33 @@ export const DISCORD_IMPORT_COPY = {
   deleteFootnote:
     "Removes the messages and files it brought in. The roles and read permissions it made stay.",
   resumeImport: "Resume import",
-  /** The state the Chat page's Discord import row shows at its end. */
-  notStarted: "Not started",
-  stopped: "Stopped on an error",
+  /**
+   * The state the Chat page's Discord import row shows at its end, in the
+   * page's own words (`importRowState`). Counts and percents are the
+   * functions below.
+   */
+  rowState: {
+    notStarted: "Not started",
+    /** `ready`: queued, the worker hasn't picked it up (the page's eyebrow). */
+    waiting: "Waiting to start",
+    deleting: "Deleting",
+    /** `failed` with nothing deleted: Resume picks it up again. */
+    stoppedOnError: "Stopped on an error",
+    /** `failed` after a delete removed some of it (#2944): not resumable. */
+    deletionStopped: "Deletion stopped",
+    /** `cancelled`: the admin stopped it. */
+    stopped: "Stopped",
+  },
 } as const;
 
 /** "Importing 42%", or "Importing" before there is an honest percent. */
 export function discordImportingLabel(percent: number | null): string {
   return percent === null ? "Importing" : `Importing ${percent}%`;
+}
+
+/** A finished import's row value: "1 message", "4,120 messages". */
+export function discordImportedMessagesLabel(count: number): string {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? "message" : "messages"}`;
 }
 
 /** A category row's value while importing: "12 of 40 done". */
@@ -54,6 +73,8 @@ export const REPORTS_COPY = {
   member: "Member",
   dates: "Dates",
   timeWindow: "Time window",
+  /** The Dates row's line while Custom has neither date (#6031). */
+  customNeedsDate: "Pick a From or To date.",
   from: "From",
   to: "To",
   allEvents: "All events",
@@ -101,8 +122,22 @@ export const STUDY_ZONES_COPY = {
   every: "Every",
   shortestSession: "Shortest session",
   pauseGrace: "Pause grace",
+  /** Each Earns box's unit, plural; `studyZoneRuleUnit` picks by the box. */
   pointsUnit: "points",
   minutesUnit: "minutes",
   earnsFootnote:
     "Shorter sessions earn nothing. A session left in the background past its grace ends.",
 } as const;
+
+/**
+ * The unit after an Earns box, agreeing with what's in it: "1 point",
+ * "30 minutes". A box left empty or mid-edit reads plural.
+ */
+export function studyZoneRuleUnit(
+  unit: "points" | "minutes",
+  value: string | number,
+): string {
+  const one = String(value).trim() === "1";
+  if (unit === "points") return one ? "point" : STUDY_ZONES_COPY.pointsUnit;
+  return one ? "minute" : STUDY_ZONES_COPY.minutesUnit;
+}
