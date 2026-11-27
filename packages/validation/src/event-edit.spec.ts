@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarOnlyEditable,
+  datedTimingEditable,
   deleteOffersSeriesChoice,
   eventEditPatch,
   isEmptyEventPatch,
@@ -362,5 +364,116 @@ describe("the series' real next meeting", () => {
       new Date("2027-03-19T04:30:00.000Z"),
     );
     expect(repeatEditSeriesOf(target, start, now).nextStart).toBeNull();
+  });
+});
+
+describe("eventEditPatch, dates (#6098)", () => {
+  const ALL_DAY: EventEditStored = {
+    ...STORED,
+    timing: "all_day",
+    start_date: "2026-11-09",
+    end_date: "2026-11-11",
+  };
+
+  it("sends the shape and its days, never times, when made all-day", () => {
+    expect(
+      eventEditPatch(STORED, null, {
+        timing: "all_day",
+        start_date: "2026-11-09",
+        start: new Date(EVENT.start_time),
+        end: new Date(EVENT.end_time),
+      }),
+    ).toEqual({ timing: "all_day", start_date: "2026-11-09", end_date: null });
+  });
+
+  it("sends nothing when the days are the same", () => {
+    expect(
+      eventEditPatch(ALL_DAY, null, {
+        timing: "all_day",
+        start_date: "2026-11-09",
+        end_date: "2026-11-11",
+      }),
+    ).toEqual({});
+  });
+
+  it("sends both days together when the last one moves", () => {
+    expect(
+      eventEditPatch(ALL_DAY, null, {
+        timing: "all_day",
+        start_date: "2026-11-09",
+        end_date: "2026-11-12",
+      }),
+    ).toEqual({
+      timing: "all_day",
+      start_date: "2026-11-09",
+      end_date: "2026-11-12",
+    });
+  });
+
+  it("sends Time TBD as one day", () => {
+    expect(
+      eventEditPatch(ALL_DAY, null, {
+        timing: "time_tbd",
+        start_date: "2026-11-09",
+        end_date: "2026-11-11",
+      }),
+    ).toEqual({ timing: "time_tbd", start_date: "2026-11-09", end_date: null });
+  });
+
+  it("sends the times whole when a dated event gets a time", () => {
+    const start = new Date("2026-11-09T23:00:00.000Z");
+    const end = new Date("2026-11-10T00:00:00.000Z");
+    expect(
+      eventEditPatch(ALL_DAY, null, { timing: "timed", start, end }),
+    ).toEqual({
+      timing: "timed",
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+    });
+  });
+
+  it("sends tentative and calendar only when they change", () => {
+    expect(
+      eventEditPatch(STORED, null, {
+        is_tentative: false,
+        calendar_only: false,
+      }),
+    ).toEqual({});
+    expect(
+      eventEditPatch(STORED, null, { is_tentative: true, calendar_only: true }),
+    ).toEqual({ is_tentative: true, calendar_only: true });
+  });
+});
+
+describe("saveScopeFor, dates (#6098)", () => {
+  it("saves calendar only for the series and a dated meeting on its own", () => {
+    expect(saveScopeFor(occurrence, { calendar_only: true }, NOW)).toBe(
+      "series",
+    );
+    expect(
+      saveScopeFor(
+        occurrence,
+        { timing: "all_day", start_date: "2026-11-09" },
+        NOW,
+      ),
+    ).toBe("instance");
+  });
+});
+
+describe("what a series edit may change (#6098)", () => {
+  it("offers calendar only on a series only while a series edit reaches it", () => {
+    expect(calendarOnlyEditable(single, NOW)).toBe(true);
+    expect(calendarOnlyEditable(occurrence, NOW)).toBe(true);
+    const started = new Date("2026-11-10T00:00:00Z");
+    expect(calendarOnlyEditable(occurrence, started)).toBe(false);
+    expect(calendarOnlyEditable(single, started)).toBe(true);
+  });
+
+  it("keeps a series head timed and lets one generated meeting go dated", () => {
+    expect(datedTimingEditable(EVENT)).toBe(true);
+    expect(datedTimingEditable(occurrence.event)).toBe(true);
+    expect(
+      datedTimingEditable({ parent_event_id: null, recurrence_rule: "WEEKLY" }),
+    ).toBe(false);
   });
 });

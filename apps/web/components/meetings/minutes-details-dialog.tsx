@@ -17,6 +17,8 @@ import {
   MINUTES_READ_COPY,
   STANDARDS_MEETING_NOTE,
   eventInvitedRoleNames,
+  eventIsDated,
+  eventTimingFieldsOf,
   type MeetingType,
 } from "@repo/validation";
 import { inlineNoteActionClassName } from "@/components/shared/inline-note";
@@ -118,16 +120,26 @@ function DetailsForm({
   const [saving, setSaving] = useState(false);
   const [tried, setTried] = useState(false);
 
+  // The minutes carry no shape of their event, so it is read from the event
+  // itself. An all-day or time-TBD event (#6098) has no times to edit, and
+  // a time sent with the rename would make it timed: until the event reads,
+  // or when it is dated, only its name is edited and sent.
+  const shapeKnown =
+    !meeting.event_id || event.data !== undefined || event.isError;
+  const dated =
+    event.data !== undefined &&
+    event.data !== null &&
+    eventIsDated(eventTimingFieldsOf(event.data as Record<string, unknown>));
+  const timesShown = canEditEvent && shapeKnown && !dated;
   const nameMissing = canEditEvent && name.trim().length === 0;
   // A cleared start can't be sent (the event needs one), so it holds Save.
-  const startMissing = canEditEvent && !Number.isFinite(Date.parse(start));
+  const startMissing = timesShown && !Number.isFinite(Date.parse(start));
   const endBeforeStart =
-    canEditEvent && !!start && !!end && Date.parse(end) <= Date.parse(start);
+    timesShown && !!start && !!end && Date.parse(end) <= Date.parse(start);
+  const timesChanged =
+    timesShown && (start !== startAt || (end !== endAt && !!end));
   const eventChanged =
-    canEditEvent &&
-    (name.trim() !== meeting.event_name ||
-      start !== startAt ||
-      (end !== endAt && !!end));
+    canEditEvent && (name.trim() !== meeting.event_name || timesChanged);
   const typeChanged =
     nextType.meeting_type !== type.meeting_type ||
     (nextType.meeting_type === "other" &&
@@ -155,8 +167,12 @@ function DetailsForm({
           id: meeting.event_id,
           body: {
             name: name.trim(),
-            start_time: new Date(start).toISOString(),
-            ...(end ? { end_time: new Date(end).toISOString() } : {}),
+            ...(timesChanged
+              ? {
+                  start_time: new Date(start).toISOString(),
+                  ...(end ? { end_time: new Date(end).toISOString() } : {}),
+                }
+              : {}),
           },
         });
         onEventSaved();
@@ -197,46 +213,48 @@ function DetailsForm({
                 <FieldError>{copy.nameRequired}</FieldError>
               ) : null}
             </div>
-            <fieldset className="grid gap-2 sm:grid-cols-2">
-              <legend className="sr-only">{copy.when}</legend>
-              <div className="grid min-w-0 gap-1">
-                <Label htmlFor={`${ids}-start`}>{copy.starts}</Label>
-                <Input
-                  id={`${ids}-start`}
-                  type="datetime-local"
-                  value={start}
-                  onChange={(next) => {
-                    const value = next.target.value;
-                    // The meeting keeps its length when its start moves, as
-                    // on the phone.
-                    const moved = Date.parse(value) - Date.parse(start);
-                    if (end && Number.isFinite(moved)) {
-                      setEnd(
-                        isoToLocalInput(
-                          new Date(Date.parse(end) + moved).toISOString(),
-                        ),
-                      );
-                    }
-                    setStart(value);
-                  }}
-                />
-              </div>
-              <div className="grid min-w-0 gap-1">
-                <Label htmlFor={`${ids}-end`}>{copy.ends}</Label>
-                <Input
-                  id={`${ids}-end`}
-                  type="datetime-local"
-                  value={end}
-                  onChange={(next) => setEnd(next.target.value)}
-                />
-              </div>
-              {tried && startMissing ? (
-                <FieldError>{copy.startRequired}</FieldError>
-              ) : null}
-              {tried && endBeforeStart ? (
-                <FieldError>{copy.endBeforeStart}</FieldError>
-              ) : null}
-            </fieldset>
+            {timesShown ? (
+              <fieldset className="grid gap-2 sm:grid-cols-2">
+                <legend className="sr-only">{copy.when}</legend>
+                <div className="grid min-w-0 gap-1">
+                  <Label htmlFor={`${ids}-start`}>{copy.starts}</Label>
+                  <Input
+                    id={`${ids}-start`}
+                    type="datetime-local"
+                    value={start}
+                    onChange={(next) => {
+                      const value = next.target.value;
+                      // The meeting keeps its length when its start moves, as
+                      // on the phone.
+                      const moved = Date.parse(value) - Date.parse(start);
+                      if (end && Number.isFinite(moved)) {
+                        setEnd(
+                          isoToLocalInput(
+                            new Date(Date.parse(end) + moved).toISOString(),
+                          ),
+                        );
+                      }
+                      setStart(value);
+                    }}
+                  />
+                </div>
+                <div className="grid min-w-0 gap-1">
+                  <Label htmlFor={`${ids}-end`}>{copy.ends}</Label>
+                  <Input
+                    id={`${ids}-end`}
+                    type="datetime-local"
+                    value={end}
+                    onChange={(next) => setEnd(next.target.value)}
+                  />
+                </div>
+                {tried && startMissing ? (
+                  <FieldError>{copy.startRequired}</FieldError>
+                ) : null}
+                {tried && endBeforeStart ? (
+                  <FieldError>{copy.endBeforeStart}</FieldError>
+                ) : null}
+              </fieldset>
+            ) : null}
           </>
         ) : null}
         <div className="grid gap-2">

@@ -2,7 +2,6 @@ import { MODULE_CATALOG } from "@repo/org-archetypes";
 import { isBetaOffModule } from "@repo/validation";
 import { DASHBOARD_NAV_ITEMS } from "@/components/layout/nav-config";
 import { SETTINGS_TOOLS } from "@/components/settings/settings-access";
-import { EYEBROW } from "@/components/ui/typography";
 import { ProChip } from "@/components/billing/pro-chip";
 
 /**
@@ -76,6 +75,10 @@ import { ProChip } from "@/components/billing/pro-chip";
  *   the `/polls` page, polls live only in chat (the `/poll` command and the
  *   poll card's Vote), so no nav row carries the key, but the module still
  *   gates them and the subscription still buys it.
+ * - **`tasks` is listed by hand for the same reason.** Since #5948 the Tasks
+ *   page folded into Activity, whose row carries no module, so no nav row
+ *   carries the key; the module still gates tasks (Activity's Mine and
+ *   Everyone's) and the subscription still buys it.
  * - **`billing` can never appear**, and would be actively self-contradicting
  *   if it did. `BillingController` is class-level `@SubscriptionExempt()`
  *   precisely so the chapter can reach the screen that ungates it
@@ -99,6 +102,7 @@ const SHIPPED_PAID_KEYS = new Set<string>([
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",
   "polls",
+  "tasks",
 ]);
 
 const FREE_MODULES = MODULE_CATALOG.filter((entry) => entry.tier === "free");
@@ -152,22 +156,36 @@ const ROW_CLASS =
   "grid min-h-10 grid-cols-[1fr_72px_72px] items-center gap-2 border-t border-border px-4 py-1.5 @md:grid-cols-[1fr_120px_120px]";
 
 /**
- * `onPaidPlan` is whether the chapter holds the subscription (`active` or
- * `past_due`). A president on Pro opens Plan and billing to see what the
- * chapter is paying for, not to be sold it, so the heading says so and the
- * Pro column is marked as theirs. `false` and unknown keep the selling copy.
+ * The table's name, which is the title of the page it opens on (#6031) and
+ * the label of Plan and billing's row that opens it. `onPaidPlan` is whether
+ * the chapter holds the subscription (`active` or `past_due`): a president on
+ * Pro opens Plan and billing to see what the chapter is paying for, not to be
+ * sold it, so the name says so. `false` and unknown keep the selling copy.
+ */
+export function planMatrixTitle(onPaidPlan: boolean): string {
+  return onPaidPlan
+    ? "What your plan includes"
+    : "What the subscription unlocks";
+}
+
+/** The beta-off modules are sold to nobody right now, so they get no row. */
+function soldPaidModules() {
+  return SHIPPED_PAID_MODULES.filter((entry) => !isBetaOffModule(entry.key));
+}
+
+/** How many modules the table lists, free and Pro, for the row that opens it. */
+export function planMatrixModuleCount(): number {
+  return FREE_MODULES.length + soldPaidModules().length;
+}
+
+/**
+ * The plan table, on a page of its own that Plan and billing's row opens
+ * (#6031): the page's heading names it, so the table draws none of its own.
+ * On a paid plan (`onPaidPlan`) the Pro column is marked as the chapter's.
  */
 export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
   return (
-    <section aria-labelledby="plan-matrix-heading" className="space-y-2">
-      <h2
-        id="plan-matrix-heading"
-        className={`${EYEBROW} text-muted-foreground`}
-      >
-        {onPaidPlan
-          ? "What your plan includes"
-          : "What the subscription unlocks"}
-      </h2>
+    <section aria-label={planMatrixTitle(onPaidPlan)}>
       <div className="overflow-hidden rounded-lg border border-border">
         {/*
           A grid of rows rather than a `<table>`, matching the list grammar the
@@ -186,7 +204,7 @@ export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
           to remember. The visible header row stays a visual label.
         */}
         <div
-          className={`grid min-h-9 grid-cols-[1fr_72px_72px] items-center gap-2 bg-surface-1 px-4 text-caption font-semibold text-muted-foreground @md:grid-cols-[1fr_120px_120px]`}
+          className={`grid min-h-control-small grid-cols-[1fr_72px_72px] items-center gap-2 bg-surface-1 px-4 text-caption font-semibold text-muted-foreground @md:grid-cols-[1fr_120px_120px]`}
         >
           <span>Module</span>
           <span className="text-center">Free</span>
@@ -209,10 +227,7 @@ export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
           <Cell included column="Pro" />
         </div>
 
-        {/* A beta-off module is sold to nobody right now, so it gets no row. */}
-        {SHIPPED_PAID_MODULES.filter(
-          (entry) => !isBetaOffModule(entry.key),
-        ).map((entry) => (
+        {soldPaidModules().map((entry) => (
           <div key={entry.key} className={ROW_CLASS}>
             <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
               <span className="truncate">{entry.label}</span>

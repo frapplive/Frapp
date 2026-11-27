@@ -44,7 +44,7 @@ function MemberRows() {
       lead={["checkbox", "avatar"]}
       trailing={["hidden w-56 @2xl:block", "w-10"]}
       trailingHeight="h-[11px]"
-      rowClassName="min-h-9 py-1.5 pointer-coarse:min-h-11"
+      rowClassName="min-h-control-list-row py-1.5 pointer-coarse:min-h-11"
     />
   );
 }

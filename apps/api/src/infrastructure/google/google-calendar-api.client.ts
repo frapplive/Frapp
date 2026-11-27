@@ -219,7 +219,11 @@ export class GoogleCalendarApiClient implements IGoogleCalendarApi {
       `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.id)}`,
       // `status` brings back an event the member deleted by hand: Google
       // keeps a deleted event as cancelled, under the same id.
-      { ...eventBody(event), status: 'confirmed' },
+      // A tentative event is brought back as tentative (#6098).
+      {
+        ...eventBody(event),
+        status: event.tentative ? 'tentative' : 'confirmed',
+      },
     );
   }
 
@@ -311,6 +315,7 @@ function eventBody(event: GoogleCalendarEventInput): Record<string, unknown> {
     end: event.end,
     source: { title: 'Frapp', url: event.sourceUrl },
     transparency: event.transparent ? 'transparent' : 'opaque',
+    ...(event.tentative ? { status: 'tentative' } : {}),
     extendedProperties: {
       private: {
         [HASH_PROPERTY]: event.hash,

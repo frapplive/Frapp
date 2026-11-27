@@ -108,6 +108,12 @@ export interface AgentSource {
   title: string;
   /** The section, page or author, when it has one. */
   detail: string | null;
+  /**
+   * What the record is, for the model only, beside its title: a document's
+   * type, folder and uploader, who posted minutes (#5180). The member's chip
+   * does not show it; the page it opens does. Left out when there is none.
+   */
+  about?: string | null;
   /** ISO time of the thing itself, or null for live data read just now. */
   date: string | null;
   /** Where a tap on the chip opens. */

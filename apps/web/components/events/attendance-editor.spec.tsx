@@ -146,6 +146,7 @@ describe("AttendanceEditor", () => {
         .map((each) => each.textContent);
     expect(answers("Attendance for everyone else")).toEqual([
       "Optional",
+      "On the calendar only",
       "Not invited",
     ]);
     expect(answers("Attendance for Officers")).toEqual([
@@ -188,5 +189,51 @@ describe("AttendanceEditor", () => {
         .getByRole("radio", { name: "Required" })
         .getAttribute("aria-checked"),
     ).toBe("true");
+  });
+
+  it("offers On the calendar only on Everyone else; then a role is it or Not invited", () => {
+    render(
+      <Host
+        initial={{
+          everyone: "required",
+          roles: { "role-officers": "optional", "role-new": "not_invited" },
+        }}
+      />,
+    );
+    const answers = (name: string) =>
+      within(group(name))
+        .getAllByRole("radio")
+        .map((each) => each.textContent);
+    expect(answers("Attendance for everyone else")).toEqual([
+      "Required",
+      "Optional",
+      "On the calendar only",
+      "Not invited",
+    ]);
+    fireEvent.click(
+      within(group("Attendance for everyone else")).getByRole("radio", {
+        name: "On the calendar only",
+      }),
+    );
+    // Nobody attends: only the role left out stays set apart.
+    expect(latest).toEqual({
+      calendarOnly: true,
+      everyone: "optional",
+      roles: { "role-new": "not_invited" },
+    });
+    expect(answers("Attendance for Officers")).toEqual([
+      "On the calendar only",
+      "Not invited",
+    ]);
+    expect(
+      within(group("Attendance for New Members"))
+        .getByRole("radio", { name: "Not invited" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      screen.getByText(
+        "New Members not invited, everyone else on the calendar only",
+      ),
+    ).toBeTruthy();
   });
 });

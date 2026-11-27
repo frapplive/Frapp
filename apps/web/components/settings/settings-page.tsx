@@ -21,7 +21,7 @@ import {
   type ChapterLogoUpload,
   type SemesterArchive,
 } from "@repo/hooks";
-import { type PatchChapterConfig } from "@repo/validation";
+import { type GoalMetric, type PatchChapterConfig } from "@repo/validation";
 import { memberViewVocabulary, titleCase, vocab } from "@repo/org-archetypes";
 import { InlineNote } from "@/components/shared/inline-note";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -50,7 +50,9 @@ import { downscaleImage } from "@/lib/downscale-image";
 import {
   isSettingsTabVisible,
   visibleSettingsTools,
+  type SettingsTool,
 } from "@/components/settings/settings-access";
+import { SettingsGroup } from "@/components/shared/settings-row";
 import {
   SETTINGS_TABS,
   SettingsNothingHere,
@@ -58,31 +60,59 @@ import {
   resolveSettingsTabParam,
 } from "@/components/settings/settings-rail";
 import {
+  MODULE_GOAL_METRICS,
+  goalPageId,
   isModuleSettingsTab,
   shownModuleSettings,
-} from "@/components/settings/settings-modules";
-import { chapterProfileSaveBody } from "@/components/settings/chapter-profile-save-body";
-import { ModuleSettingsPage } from "@/components/settings/module-settings-page";
-import { RushModuleSettings } from "@/components/settings/rush-module-settings";
+} from "@repo/hooks/module-settings";
 import {
-  SettingsToolBody,
+  chapterProfileSaveBody,
+  readChapterBranding,
+} from "@repo/hooks/chapter-tab";
+import {
+  ModuleSettingsPage,
+  type ModulePage,
+} from "@/components/settings/module-settings-page";
+import {
+  RUSH_READ_NOTES,
+  RushModuleSettings,
+  RushInterestFormPage,
+  RushNotesAccess,
+  RushStagesPage,
+  RushTagsPage,
+} from "@/components/settings/rush-module-settings";
+import {
+  AnnouncementsChannelGroup,
+  ModuleToolsGroup,
+} from "@/components/settings/module-settings-groups";
+import {
+  SettingsToolPage,
   SettingsToolSubpage,
 } from "@/components/settings/settings-tool-views";
 import {
   SETTINGS_SUBPAGE_PARAMS,
   chapterSettingsHref,
   isChapterSettingsPage,
+  moduleSettingsHref,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
 import { settingEntryById } from "@repo/hooks/settings-search";
-import { MeetingSectionsRules } from "@/components/meetings/meeting-sections-rules";
+import { rushPipelineAccess } from "@repo/hooks/rush-pipeline";
+import {
+  MeetingSectionsRow,
+  MeetingSectionsRules,
+} from "@/components/meetings/meeting-sections-rules";
 import {
   DuesGraceRule,
   PointsRules,
   ServiceHoursRules,
 } from "@/components/settings/module-rules";
-import { ModuleGoals } from "@/components/settings/module-goals";
+import {
+  ModuleGoals,
+  ModuleGoalsGroup,
+  goalPageTitle,
+} from "@/components/settings/module-goals";
 import {
   SettingsAccentTab,
   useAccentDraft,
@@ -107,15 +137,6 @@ import {
   SettingsTabSkeleton,
 } from "@/components/settings/settings-skeleton";
 
-type Branding = {
-  greek_letters?: string;
-  short_name?: string;
-  show_greek_letters?: boolean;
-  designation?: string;
-  school_short?: string;
-  founded_at?: number;
-};
-
 // Fallback shown before the config query resolves. Mirrors the API's
 // chapter_dues_config defaults for an unconfigured chapter.
 const DEFAULT_DUES: OrgDues = {
@@ -134,6 +155,20 @@ const DEFAULT_DUES: OrgDues = {
 function chapterPageOfSetting(settingId: string | null): string | undefined {
   const web = settingEntryById(settingId)?.web;
   return web?.page === "org" ? web.params?.page : undefined;
+}
+
+/**
+ * The page inside module page `moduleKey` a settings-search result lives on
+ * (#6030), for a `?setting=` link made before the pages existed: a shipped
+ * phone build opens `/settings?tab=points&setting=points-goal` with no
+ * `page`, and the goal it names is on the Points goal page.
+ */
+function modulePageOfSetting(
+  settingId: string | null,
+  moduleKey: string,
+): string | null {
+  const web = settingEntryById(settingId)?.web;
+  return web?.page === moduleKey ? (web.params?.page ?? null) : null;
 }
 
 function SettingsPageContent() {
@@ -213,12 +248,21 @@ function SettingsPageContent() {
   const toolParam = searchParams.get("tool");
   // A search result (`?setting=`) on one of the Chapter tab's pages opens that
   // page even from a link made before the pages existed, and the old Accent
-  // tab (`?tab=theme`) opens Accent color.
+  // tab (`?tab=theme`) opens Accent color. `?page=` is the Chapter tab's only
+  // on that tab: another row's page (Plan and billing's, #6031) is that row's.
+  const onChapterTab =
+    rawTabParam === null || rawTabParam === "org" || rawTabParam === "theme";
   const pageParam =
-    searchParams.get("page") ??
+    (onChapterTab ? searchParams.get("page") : null) ??
     chapterPageOfSetting(searchParams.get("setting")) ??
     (rawTabParam === "theme" ? "accent" : null);
   const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
+  // A page opened from one of a module page's rows (#6030): a tool, a goal,
+  // a rule's own page, one permission's Who can. The module page checks it
+  // against its own pages, so an unknown one shows the module page.
+  const modulePageParam = (moduleKey: string) =>
+    searchParams.get("page") ??
+    modulePageOfSetting(searchParams.get("setting"), moduleKey);
   // Write a page the address only implied into it, so it stays open once the
   // setting jump drops `?setting=`, and a refresh lands on it.
   useEffect(() => {
@@ -434,33 +478,8 @@ function SettingsPageContent() {
   // name the pledge class tab and everything in it (#3939).
   const classTerm = vocab("class", chapterWords);
   const orderTerm = vocab("order", chapterWords);
-  const brandingRaw = config?.branding ?? {};
-  const branding: Branding = {
-    greek_letters:
-      typeof brandingRaw.greek_letters === "string"
-        ? brandingRaw.greek_letters
-        : undefined,
-    short_name:
-      typeof brandingRaw.short_name === "string"
-        ? brandingRaw.short_name
-        : undefined,
-    show_greek_letters:
-      typeof brandingRaw.show_greek_letters === "boolean"
-        ? brandingRaw.show_greek_letters
-        : undefined,
-    designation:
-      typeof brandingRaw.designation === "string"
-        ? brandingRaw.designation
-        : undefined,
-    school_short:
-      typeof brandingRaw.school_short === "string"
-        ? brandingRaw.school_short
-        : undefined,
-    founded_at:
-      typeof brandingRaw.founded_at === "number"
-        ? brandingRaw.founded_at
-        : undefined,
-  };
+  // Key by key, so one malformed key doesn't empty the rest (#2844).
+  const branding = readChapterBranding(config?.branding);
   const enabledModules = config?.enabled_modules;
   const workflows = config?.workflows ?? [];
   const dues = config?.dues ?? DEFAULT_DUES;
@@ -562,40 +581,63 @@ function SettingsPageContent() {
     return node;
   }
 
-  /** The Rules block for a module that has stored rules, else nothing. */
-  function renderModuleRules(key: string): React.ReactNode {
+  /**
+   * A module page's own groups and the pages their rows open (#6030): its
+   * Rules typed in place, its officer tools, its Goals, in that order, and
+   * any line a Who can page carries. Rules and Goals read chapter config, so
+   * they show only to a viewer who can read it; a tool shows to its holder.
+   */
+  function moduleContent(
+    key: string,
+    moduleTools: readonly SettingsTool[],
+  ): {
+    body: React.ReactNode;
+    pages: ModulePage[];
+    permissionNotes?: Record<string, React.ReactNode>;
+  } {
+    const href = (page: string) => moduleSettingsHref(key, page);
     const patchRules = (diff: PatchChapterConfig, title: string) =>
       patchConfig(diff, title);
-    if (key === "hours") {
-      return renderConfigGated(
-        <div className="space-y-4">
-          <ServiceHoursRules
-            minutesPerPoint={config?.service?.minutes_per_point}
-            workflows={workflows}
-            canManage={canManage}
-            savingRate={pendingConfigKeys.has("service")}
-            savingWorkflows={pendingConfigKeys.has("workflows")}
-            onPatch={patchRules}
-          />
-          <ModuleGoals metrics={["service", "study"]} canManage={canManage} />
-        </div>,
+    const pages: ModulePage[] = [];
+    let rules: React.ReactNode = null;
+    let goals: React.ReactNode = null;
+    let permissionNotes: Record<string, React.ReactNode> | undefined;
+
+    const goalsFor = (metrics: readonly GoalMetric[]) => {
+      goals = <ModuleGoalsGroup metrics={metrics} pageHref={href} />;
+      for (const metric of metrics) {
+        pages.push({
+          id: goalPageId(metric),
+          title: goalPageTitle(metric),
+          body: <ModuleGoals metrics={[metric]} canManage={canManage} />,
+        });
+      }
+    };
+
+    if (key === "hours" && canViewConfig) {
+      rules = renderConfigGated(
+        <ServiceHoursRules
+          minutesPerPoint={config?.service?.minutes_per_point}
+          workflows={workflows}
+          canManage={canManage}
+          savingRate={pendingConfigKeys.has("service")}
+          savingWorkflows={pendingConfigKeys.has("workflows")}
+          onPatch={patchRules}
+        />,
       );
-    }
-    if (key === "points") {
-      return renderConfigGated(
-        <div className="space-y-4">
-          <PointsRules
-            points={config?.points}
-            canManage={canManage}
-            saving={pendingConfigKeys.has("points")}
-            onPatch={patchRules}
-          />
-          <ModuleGoals metrics={["points"]} canManage={canManage} />
-        </div>,
+      goalsFor(MODULE_GOAL_METRICS.hours!);
+    } else if (key === "points" && canViewConfig) {
+      rules = renderConfigGated(
+        <PointsRules
+          points={config?.points}
+          canManage={canManage}
+          saving={pendingConfigKeys.has("points")}
+          onPatch={patchRules}
+        />,
       );
-    }
-    if (key === "dues") {
-      return renderConfigGated(
+      goalsFor(MODULE_GOAL_METRICS.points!);
+    } else if (key === "dues" && canViewConfig) {
+      rules = renderConfigGated(
         <div className="space-y-4">
           <SettingsDuesTab
             dues={dues}
@@ -612,11 +654,79 @@ function SettingsPageContent() {
           />
         </div>,
       );
+    } else if (key === "meetings" && canViewConfig) {
+      rules = (
+        <SettingsGroup heading="Rules">
+          <MeetingSectionsRow href={href("sections")} />
+        </SettingsGroup>
+      );
+      pages.push({
+        id: "sections",
+        title: "Sections in the minutes",
+        body: <MeetingSectionsRules canManage={canManage} />,
+      });
+    } else if (key === "rush") {
+      // Recruitment's stages, tags and picks read through the pipeline's own
+      // routes, not the config.
+      rules = (
+        <RushModuleSettings
+          moduleOn={moduleOn(key)}
+          canSeeWhoCan={canSeeWhoCan}
+          pageHref={href}
+        />
+      );
+      // The stages and tags read through the pipeline's routes, which
+      // refuse a viewer without rush:view and a chapter with Recruitment
+      // off, so their pages exist only where their rows do.
+      if (moduleOn(key) && rushPipelineAccess(permissions).view) {
+        pages.push(
+          {
+            id: "interest-form",
+            title: "Interest form",
+            body: <RushInterestFormPage />,
+          },
+          { id: "stages", title: "Stages", body: <RushStagesPage /> },
+          { id: "tags", title: "Tags", body: <RushTagsPage /> },
+        );
+      }
+      if (canSeeWhoCan) {
+        permissionNotes = {
+          [RUSH_READ_NOTES]: (
+            <RushNotesAccess canEditRoles={can("roles:manage", permissions)} />
+          ),
+        };
+      }
+    } else if (key === "announcements") {
+      rules = <AnnouncementsChannelGroup canOpen={holdsTool("chat-admin")} />;
     }
-    if (key === "meetings") {
-      return <MeetingSectionsRules canManage={canManage} />;
+
+    // Every tool but Discord import opens as this page's own page; Discord
+    // import keeps `?tool=`, which its consent screen comes back to.
+    for (const tool of moduleTools) {
+      if (tool.id === "discord-import") continue;
+      pages.push({
+        id: tool.id,
+        title: tool.label,
+        body: <SettingsToolPage toolId={tool.id} />,
+      });
     }
-    return undefined;
+
+    return {
+      body: (
+        <>
+          {rules}
+          <ModuleToolsGroup
+            tools={moduleTools}
+            hrefOf={(tool) =>
+              tool.id === "discord-import" ? tool.href : href(tool.id)
+            }
+          />
+          {goals}
+        </>
+      ),
+      pages,
+      permissionNotes,
+    };
   }
 
   /*
@@ -711,10 +821,11 @@ function SettingsPageContent() {
           visibleTabs={visibleTabs}
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import) and goes back to the row's own page.
+            // settings, Discord import, the plan table) and goes back to the
+            // row's own page.
             if (
               value === shownTab &&
-              (channelParam || toolParam || chapterPage)
+              (channelParam || toolParam || searchParams.get("page"))
             ) {
               changeTab(value);
             }
@@ -822,7 +933,7 @@ function SettingsPageContent() {
             it reads the billing record and invoices, not chapter config.
           */}
           <TabsContent value="billing" className="mt-0">
-            <PlanAndBilling />
+            <PlanAndBilling page={searchParams.get("page")} />
           </TabsContent>
 
           {/*
@@ -888,6 +999,10 @@ function SettingsPageContent() {
           */}
           {shownModuleSettings().map((module) => {
             const subpage = subpageFor(module.key);
+            const content = moduleContent(
+              module.key,
+              tools.filter((tool) => tool.page === module.key),
+            );
             return (
               <TabsContent key={module.key} value={module.key} className="mt-0">
                 {subpage ? (
@@ -908,30 +1023,15 @@ function SettingsPageContent() {
                           : `${module.label} turned off`,
                       )
                     }
-                    tools={tools.filter((tool) => tool.page === module.key)}
-                    toolBody={
-                      <SettingsToolBody
-                        moduleKey={module.key}
-                        holdsTool={holdsTool}
-                      />
-                    }
+                    body={content.body}
+                    pages={content.pages}
+                    page={modulePageParam(module.key)}
+                    pageHref={(page) => moduleSettingsHref(module.key, page)}
+                    permissionNotes={content.permissionNotes}
                     canSeeWhoCan={canSeeWhoCan}
                     canEditRoles={can("roles:manage", permissions)}
                     focusSwitch={focusModuleKey === module.key}
                     onSwitchFocused={handleModuleFocused}
-                    rules={
-                      // Recruitment's stages, tags and notes access read
-                      // through the pipeline's own routes, not the config.
-                      module.key === "rush" ? (
-                        <RushModuleSettings
-                          moduleOn={moduleOn(module.key)}
-                          canEditRoles={can("roles:manage", permissions)}
-                          canSeeWhoCan={canSeeWhoCan}
-                        />
-                      ) : canViewConfig ? (
-                        renderModuleRules(module.key)
-                      ) : undefined
-                    }
                   />
                 )}
               </TabsContent>

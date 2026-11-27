@@ -139,7 +139,7 @@ function TodayButton({ onClick }: { onClick?: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-8 shrink-0 rounded-md px-2 text-caption font-semibold text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
+        "min-h-control-row shrink-0 rounded-md px-2 text-caption font-semibold text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
         FOCUS_RING,
       )}
     >
@@ -361,7 +361,7 @@ export function KindKey({
             aria-label={`${label}, ${counts[value]}`}
             onClick={() => onToggle(value)}
             className={cn(
-              "flex min-h-8 items-center gap-2 rounded-md px-2 text-left text-caption transition-colors hover:bg-card-hover pointer-coarse:min-h-11",
+              "flex min-h-control-row items-center gap-2 rounded-md px-2 text-left text-caption transition-colors hover:bg-card-hover pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           >

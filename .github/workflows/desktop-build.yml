@@ -2,9 +2,10 @@ name: Desktop build
 
 # Packages the desktop shell (apps/desktop, ADR-29) on each OS it ships for,
 # so a change that breaks packaging fails on its PR, and attaches the
-# installers to the run for trying by hand. Unsigned until #4843 adds signing:
-# macOS asks to confirm the first open (System Settings, Privacy & Security,
-# Open Anyway), and Windows SmartScreen needs More info, then Run anyway.
+# installers to the run for trying by hand. These are unsigned and never
+# update themselves (the signed ones come from desktop-release.yml): macOS
+# asks to confirm the first open (System Settings, Privacy & Security, Open
+# Anyway), and Windows SmartScreen needs More info, then Run anyway.
 # Lint, types and unit tests run in ci.yml's lint-and-typecheck.
 
 on:
@@ -67,7 +68,7 @@ jobs:
       - name: Package
         shell: bash
         env:
-          # No certificate yet: don't let electron-builder go looking for one.
+          # Unsigned on purpose: don't let electron-builder go looking for a certificate.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run dist -w apps/desktop
 

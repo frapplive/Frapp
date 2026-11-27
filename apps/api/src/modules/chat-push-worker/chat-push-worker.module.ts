@@ -14,6 +14,7 @@ import { RbacModule } from '../rbac/rbac.module';
 import { ChannelCacheModule } from '../channel-cache/channel-cache.module';
 import { ChatBlockModule } from '../chat-block/chat-block.module';
 import { AuthModule } from '../auth/auth.module';
+import { ProfilePhotoModule } from '../profile-photo/profile-photo.module';
 
 /**
  * Push worker (ADR-09). Runs in-process on the API; the
@@ -36,8 +37,11 @@ import { AuthModule } from '../auth/auth.module';
   // surfaces that owe it.
   // `AuthModule` → `USER_REPOSITORY`, for the sender's display name that every
   // chat push title carries (#2771).
+  // `ProfilePhotoModule` → `ProfilePhotoUrlService`, for the sender's signed
+  // photo a chat push carries for the phone to draw (#6024).
   imports: [
     AuthModule,
+    ProfilePhotoModule,
     NotificationModule,
     ChapterModule,
     RbacModule,

@@ -654,6 +654,15 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
       },
     ],
   },
+  'application/services/interest-form.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'not-hidden',
+        why: 'A new interest-form submission, to rush:manage and the recruitment contacts (#5977). It names a prospect, never a member, so a block has nothing to hide.',
+      },
+    ],
+  },
   'application/services/invite.service.ts': {
     calls: 3,
     entries: [
@@ -683,6 +692,26 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
   // Scheduled messages (#4956): tells the author their own message did not
   // post. It names the channel only when the failure isn't lost access, so
   // never one the author can no longer see; nothing another member wrote.
+  // Chat timeouts (#6006): tell a member an officer timed them out, lifted
+  // it, or that it ran out.
+  'application/services/chat-timeout.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Tells a member about their own timeout: who set or lifted it, how long, and the reason the officer wrote for them. It quotes no chat message.',
+      },
+    ],
+  },
+  'application/workers/chat-timeout-sweep.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'no-foreign-content',
+        why: 'Hands an ended timeout to `ChatTimeoutService.notifyEnded`, whose fixed sentence quotes nothing.',
+      },
+    ],
+  },
   'application/services/chat-scheduled-message.service.ts': {
     calls: 1,
     entries: [
@@ -766,6 +795,15 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
   },
   'application/services/service-entry.service.ts': {
     calls: 2,
+    entries: [MEMBER_TEXT],
+  },
+  // Asking for more time (#6096): "<name> asks for more time" to the
+  // officers who can decide, and the answer to the member. Each names the
+  // task as an officer titled it and quotes the member's reason or the
+  // officer's, never chat. The count is the notify-named calls and helpers
+  // (`notifyApprovers`, `notifyRequester`, `notifyQuietly` twice).
+  'application/services/task-extension/task-extension.service.ts': {
+    calls: 6,
     entries: [MEMBER_TEXT],
   },
   // The one `notifyUser` behind TaskService's and OpenTaskService's pushes

@@ -1,5 +1,14 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import { TASK_PROOF_KINDS, type TaskProofKind } from '@repo/validation';
+import {
+  EVENT_TIMINGS,
+  TASK_EXTENSION_NEEDS_OFFICER,
+  TASK_PROOF_KINDS,
+  type TaskProofKind,
+} from '@repo/validation';
+import type {
+  TaskExtensionAiVerdict,
+  TaskExtensionNeedsOfficer,
+} from '#domain/entities/task-extension-request.entity';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -61,6 +70,7 @@ import type {
   ActivityProgress,
   ActivitySection,
   ActivityTask,
+  ActivityTaskExtension,
   ActivityTaskGroup,
   ActivityTaskItem,
   ActivityView,
@@ -182,6 +192,12 @@ export class ActivityTaskDto implements ActivityTask {
       'On a task for everyone, its group (#5492), as every task read carries it: each member’s copy has the same `id`, and the counts say how far the group is. Null for a one-person task.',
   })
   group: TaskGroupSummaryDto | null;
+
+  @ApiProperty({
+    description:
+      'A fixed deadline (#6096): no extensions, and its assignee’s row reads more urgent.',
+  })
+  fixed_deadline: boolean;
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;
@@ -504,6 +520,40 @@ export class ActivityEventDto implements ActivityEvent {
 
   @ApiProperty({ format: 'date-time' })
   end_time: string;
+
+  @ApiProperty({
+    enum: EVENT_TIMINGS,
+    description:
+      'The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`.',
+  })
+  timing: ActivityEvent['timing'];
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event.',
+  })
+  start_date: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event.',
+  })
+  end_date: string | null;
+
+  @ApiProperty({ description: 'Whether the event might not happen.' })
+  is_tentative: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether the event is on the calendar only: nobody checks in, earns points or is marked absent.',
+  })
+  calendar_only: boolean;
 
   @ApiProperty({
     enum: ACTIVITY_EVENT_ATTENDANCE,
@@ -955,6 +1005,56 @@ export class MarkActivityReadDto {
   items: ActivityItemRefDto[];
 }
 
+/** A request for more time the caller can decide (#6096). */
+export class ActivityTaskExtensionDto implements ActivityTaskExtension {
+  @ApiProperty({ format: 'uuid', description: 'The request’s id.' })
+  id: string;
+
+  @ApiProperty({ type: () => ActivityTaskDto })
+  task: ActivityTaskDto;
+
+  @ApiProperty({
+    description: 'Empty when the member cannot be resolved (they have left).',
+  })
+  requester_name: string;
+
+  @ApiProperty()
+  reason: string;
+
+  @ApiProperty({ format: 'date' })
+  from_due_date: string;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  from_due_at: string | null;
+
+  @ApiProperty({ format: 'date' })
+  to_due_date: string;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  to_due_at: string | null;
+
+  @ApiProperty({
+    enum: TASK_EXTENSION_NEEDS_OFFICER,
+    nullable: true,
+    description:
+      'Why it waits on an officer: more than a day, a second request on the task, a repeating task extended on its previous copy too, a reason AI judged invalid, or AI off or failing.',
+  })
+  needs_officer: TaskExtensionNeedsOfficer | null;
+
+  @ApiProperty({
+    enum: ['valid', 'invalid'],
+    nullable: true,
+    description: 'What AI made of the reason, when it was asked.',
+  })
+  ai_verdict: TaskExtensionAiVerdict | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  ai_note: string | null;
+
+  @ApiProperty({ format: 'date-time' })
+  created_at: string;
+}
+
 export class ActivityNeedsYouDto {
   @ApiProperty({
     type: [ActivityTaskDto],
@@ -968,6 +1068,13 @@ export class ActivityNeedsYouDto {
       'Finished tasks the caller can confirm (`tasks:manage`, never their own), longest waiting first.',
   })
   task_confirmations: ActivityTaskDto[];
+
+  @ApiProperty({
+    type: [ActivityTaskExtensionDto],
+    description:
+      'Requests for more time the caller can decide (#6096: `tasks:manage`, never their own), oldest first. Counted in `needs_you_count`; not snoozable.',
+  })
+  task_extensions: ActivityTaskExtensionDto[];
 
   @ApiProperty({
     type: [ActivityHoursEntryDto],
@@ -1193,6 +1300,16 @@ export class ActivityQueryDto extends ActivityWeekQueryDto {
   @IsOptional()
   @IsIn(['true'])
   minutes?: 'true';
+
+  @ApiProperty({
+    required: false,
+    enum: ['true'],
+    description:
+      '`true` asks for the requests for more time (`needs_you.task_extensions`) and counts them in `needs_you_count`. Omitted, they are served empty and not counted, for builds from before them (#6096).',
+  })
+  @IsOptional()
+  @IsIn(['true'])
+  extensions?: 'true';
 }
 
 /**

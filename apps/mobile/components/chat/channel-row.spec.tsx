@@ -23,7 +23,6 @@ import { expectRoundedRipple } from "@/test/pressable-row";
 import { SkeletonBlock } from "@/components/state-block";
 import {
   accessibilityLabelFor,
-  badgeLabel,
   ChannelListSkeleton,
   ChannelRow,
   HIDE_ACTION,
@@ -91,23 +90,6 @@ function findBadgeStyle(
     .at(0);
   return match ? flatten(match.props.style) : null;
 }
-
-describe("badgeLabel", () => {
-  it("shows the unread total when nothing mentions the viewer", () => {
-    expect(badgeLabel(7, 0)).toBe("7");
-  });
-
-  it("shows the mention count, not the total, when addressed", () => {
-    // The drawn row reads `@ 2` while its unread total is higher: the badge
-    // answers "how many messages are about you", not "how many are new".
-    expect(badgeLabel(9, 2)).toBe("@ 2");
-  });
-
-  it("caps at 99+ in both states", () => {
-    expect(badgeLabel(150, 0)).toBe("99+");
-    expect(badgeLabel(150, 120)).toBe("@ 99+");
-  });
-});
 
 // `initialsFor` moved to `lib/chat/display-name.ts` (shared with the message
 // bubble) and its cases moved with it — see `display-name.spec.ts`.
@@ -634,7 +616,9 @@ describe("ChannelRow time and read check (#5519)", () => {
 
   it("keeps the badge on a Messages row, on its last line", () => {
     const style = findBadgeStyle(messagesRow({ unreadCount: 2 }));
-    expect(style?.backgroundColor).toBe(signetDarkTokens.color.semantic.mention);
+    expect(style?.backgroundColor).toBe(
+      signetDarkTokens.color.semantic.mention,
+    );
   });
 
   it("says Read or Sent after the line, then when", () => {

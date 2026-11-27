@@ -647,3 +647,85 @@ describe("EventCard time line", () => {
     expect(screen.getByText("Tomorrow · 10:00 – 11:00 AM")).toBeInTheDocument();
   });
 });
+
+describe("EventCard dated, tentative and calendar-only events (#6098)", () => {
+  beforeEach(() => {
+    chapter.active();
+    vi.clearAllMocks();
+    mockUseAttendance.mockReturnValue({ data: [] });
+    mockUseMyPermissions.mockReturnValue({ data: { permissions: [] } });
+    mockMyAttendance.mockReturnValue({
+      data: null,
+      isPending: false,
+      fetchStatus: "idle",
+    });
+    mockUseEvent.mockReturnValue({
+      data: { id: "evt-1", check_in_zone: null },
+      isError: false,
+    });
+    mockEventCardExcuse.mockReturnValue({ kind: "offer" });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 5, 12, 9));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("words an all-day event by its day, never its midnight", () => {
+    render(
+      <EventCard
+        message={makeMessage({
+          timing: "all_day",
+          start_date: "2026-06-13",
+          end_date: null,
+          start_time: new Date(2026, 5, 13).toISOString(),
+          end_time: new Date(2026, 5, 14).toISOString(),
+        })}
+        isConfirmed
+      />,
+    );
+    expect(screen.getByText("Tomorrow · All day")).toBeInTheDocument();
+    expect(screen.queryByText(/12:00/)).toBeNull();
+  });
+
+  it("badges a tentative event beside its name", () => {
+    render(
+      <EventCard message={makeMessage({ is_tentative: true })} isConfirmed />,
+    );
+    expect(screen.getByText("Tentative")).toBeInTheDocument();
+  });
+
+  it("offers no check-in, points or excuse on a time-TBD event, even on its day", () => {
+    render(
+      <EventCard
+        message={makeMessage({
+          timing: "time_tbd",
+          start_date: "2026-06-12",
+          end_date: null,
+          start_time: new Date(2026, 5, 12).toISOString(),
+          end_time: new Date(2026, 5, 13).toISOString(),
+        })}
+        isConfirmed
+      />,
+    );
+    expect(screen.getByText("Today · Time TBD")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /check in/i })).toBeNull();
+    expect(screen.queryByText(/pts/)).toBeNull();
+    expect(screen.queryByText(/Can't make it/)).toBeNull();
+  });
+
+  it("offers no check-in on a calendar-only event while it is on", () => {
+    render(
+      <EventCard
+        message={makeMessage({
+          calendar_only: true,
+          start_time: new Date(2026, 5, 12, 8, 55).toISOString(),
+          end_time: new Date(2026, 5, 12, 10).toISOString(),
+        })}
+        isConfirmed
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /check in/i })).toBeNull();
+  });
+});

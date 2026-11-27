@@ -354,6 +354,11 @@ export class EventSeriesService {
       location: parent.location,
       start_time: instanceStart.toISOString(),
       end_time: new Date(instanceStart.getTime() + durationMs).toISOString(),
+      // A series is always timed (#6098 refuses a repeating dated event), so
+      // each meeting takes the default `timing`; tentative and calendar-only
+      // are the series' own, like its points.
+      is_tentative: parent.is_tentative,
+      calendar_only: parent.calendar_only,
       point_value: parent.point_value,
       is_mandatory: parent.is_mandatory,
       recurrence_rule: null,

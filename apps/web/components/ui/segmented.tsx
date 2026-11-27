@@ -91,7 +91,7 @@ export function SegmentedChoice<T extends string>({
             className={cn(
               // The transparent border is what the held edge and
               // `FOCUS_RING`'s swap both draw on, so neither changes the size.
-              "flex min-h-8 items-center justify-center whitespace-nowrap rounded-sm border border-transparent font-semibold transition-colors pointer-coarse:min-h-11",
+              "flex min-h-control-row items-center justify-center whitespace-nowrap rounded-sm border border-transparent font-semibold transition-colors pointer-coarse:min-h-11",
               dense ? "px-2 text-caption" : "px-3 text-sm",
               fill && "flex-1",
               held

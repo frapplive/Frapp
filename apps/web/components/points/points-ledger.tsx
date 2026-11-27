@@ -46,8 +46,8 @@ import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 
 type Category = PointCategory;
 
-/** The square refresh control at the toolbar height: 36, or 44 to a finger. */
-const TOOLBAR_ICON = `${dashboardToolbarHeightClassName} w-9 pointer-coarse:w-11`;
+/** The square refresh control at the toolbar height: the Small step, or 44 to a finger. */
+const TOOLBAR_ICON = `${dashboardToolbarHeightClassName} w-control-small pointer-coarse:w-11`;
 
 type TransactionRow = {
   id?: string;

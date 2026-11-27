@@ -22,6 +22,7 @@ import { SkeletonBlock, SkeletonRegion } from "@/components/state-block";
 import { type ChannelMark } from "@repo/hooks/channel-start";
 import {
   HIDE_CONVERSATION_LABEL,
+  badgeLabel,
   countsAddressMember,
   countsLookUnread,
   PIN_TO_TOP_LABEL,
@@ -171,16 +172,6 @@ export const HIDE_ACTION = "hide";
 
 /** The pin action's `name`; its spoken label says pin or unpin. */
 export const PIN_ACTION = "pin";
-
-/**
- * Badge text. A mention badge leads with `@` and shows the mention count, not
- * the total — the drawn `@ 2` on a row whose unread total is higher.
- */
-export function badgeLabel(unreadCount: number, mentionCount: number): string {
-  const count = mentionCount > 0 ? mentionCount : unreadCount;
-  const capped = count > 99 ? "99+" : String(count);
-  return mentionCount > 0 ? `@ ${capped}` : capped;
-}
 
 export function ChannelRow({
   name,
@@ -468,8 +459,8 @@ function MutedMark({ color }: { color: string }) {
  * The count badge, drawn only when the member was addressed (a mention or an
  * unread DM), in the fixed mention red. A merely unread channel carries no
  * number since 2026-11-07, so the neutral fill it used is gone. Exported for
- * the folded section headers on s04 (#2877), so a header's total draws with
- * the row's recipe.
+ * Search's Jump to a channel rows (#6053), so a row there counts as its row
+ * on Chat home does.
  */
 export function UnreadBadge({
   unreadCount,

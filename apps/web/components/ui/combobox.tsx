@@ -177,7 +177,7 @@ export function ComboboxOption({
       aria-selected={selected ?? highlighted}
       onClick={onPick}
       className={cn(
-        "flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm pointer-coarse:min-h-11",
+        "flex min-h-control-row cursor-pointer items-center rounded-md px-2 text-sm pointer-coarse:min-h-11",
         selected
           ? "bg-accent-subtle font-semibold text-accent-text"
           : highlighted

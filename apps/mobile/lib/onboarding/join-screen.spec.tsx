@@ -63,7 +63,7 @@ vi.mock("@/lib/auth-session", () => ({
     userId: "user-1",
     signOut,
     signInWithOAuthProvider,
-    sendMagicLink: vi.fn().mockResolvedValue(undefined),
+    sendEmailCode: vi.fn().mockResolvedValue(undefined),
     verifyEmailCode: vi.fn().mockResolvedValue(undefined),
   }),
 }));

@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ActionMenuButton } from "@/components/shared/row-menu";
 import { useToast } from "@/lib/hooks/use-toast";
+import { tasksTaskLink } from "@/lib/tasks/task-links";
 import { getErrorMessage, initials } from "@/lib/utils";
 import {
   ProofLinkChip,
@@ -192,10 +193,12 @@ export function TaskReview({
               : []),
             {
               type: "item",
-              key: "open-tasks",
-              label: "Open Tasks",
+              // The task panel on Activity (#5948): the task's full record,
+              // where an officer edits it; a copy opens its group.
+              key: "open-task",
+              label: "Open task",
               icon: SquareArrowOutUpRight,
-              href: "/tasks",
+              href: tasksTaskLink(live.id),
             },
           ]}
         />

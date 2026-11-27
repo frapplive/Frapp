@@ -1,3 +1,4 @@
+import { formatEventRelativeWhen, formatEventWhenOr } from "@repo/formatting";
 import { useCallback } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useStartMeeting, type MeetingSummary } from "@repo/hooks";
@@ -133,7 +134,14 @@ export function meetingChoices(
   const recent = events
     .filter((event) => {
       // A hearing has no minutes in Frapp (§ Standards meetings): never here.
-      if (refused.has(event.id) || looksLikeHearing(event.name)) return false;
+      // Nor does an event that's on the calendar only (#6098): nobody meets.
+      if (
+        refused.has(event.id) ||
+        looksLikeHearing(event.name) ||
+        event.calendar_only
+      ) {
+        return false;
+      }
       const start = Date.parse(event.start_time);
       if (Number.isNaN(start)) return false;
       return (
@@ -157,7 +165,12 @@ export function meetingChoices(
         detail: [
           event.id === inRoom?.id
             ? MEETING_START_COPY.onNow
-            : meetingWhenLabel(event.start_time, now),
+            : // By its day, never its stored midnight (#6098).
+              formatEventWhenOr(
+                event,
+                (start) => meetingWhenLabel(start, now),
+                (shape) => formatEventRelativeWhen(shape, now),
+              ),
           ownDraftFor.has(event.id) ? MEETING_START_COPY.yours : null,
           opens
             ? MEETING_START_COPY.openMinutes

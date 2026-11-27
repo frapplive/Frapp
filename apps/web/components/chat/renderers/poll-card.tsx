@@ -140,7 +140,7 @@ export function PollCard({
   // now, so a card here reads as the step above it (foundations §2).
   return (
     <Card className={cn(MESSAGE_CARD)}>
-      <p className={cn(EYEBROW, "text-muted-foreground")}>
+      <p className={cn(EYEBROW, "text-muted")}>
         {pollCardEyebrow(payload, now)}
       </p>
       <div className="mt-2 text-base font-bold">{payload.question}</div>

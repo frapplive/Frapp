@@ -41,31 +41,44 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 const { ModuleSettingsPage } = await import("./module-settings-page");
 const { PointsRules, ServiceHoursRules } = await import("./module-rules");
-const { moduleSettingsFor } = await import("./settings-modules");
+const { moduleSettingsFor } = await import("@repo/hooks/module-settings");
 
 const hours = moduleSettingsFor("hours")!;
+
+/** The Service hours page, or one of its pages (`?page=`). */
+function renderHours(
+  props: Partial<Parameters<typeof ModuleSettingsPage>[0]> = {},
+) {
+  return render(
+    <ModuleSettingsPage
+      module={hours}
+      on
+      canManage
+      onToggle={vi.fn()}
+      page={null}
+      pageHref={(page) =>
+        page ? `/settings?tab=hours&page=${page}` : "/settings?tab=hours"
+      }
+      canSeeWhoCan={false}
+      {...props}
+    />,
+  );
+}
 
 /**
  * A module page (#4073) shows what is stored and read, for an officer setting
  * the module up for a 100-member chapter: the switch, the rules that save,
- * and who can do what, from the same roles the Roles page edits.
+ * and who can do what, from the same roles the Roles page edits. Since #6030
+ * it is in the settings-rows shape: Who can is a row per permission with its
+ * answer, opening that permission's page.
  */
 describe("a module page", () => {
   it("says what switching it off took away, and that nothing was deleted", () => {
-    render(
-      <ModuleSettingsPage
-        module={hours}
-        on={false}
-        canManage
-        onToggle={vi.fn()}
-        tools={[]}
-        canSeeWhoCan={false}
-      />,
-    );
+    renderHours({ on: false });
     expect(
-      screen.getByRole("switch", { name: /service hours on/i }),
+      screen.getByRole("switch", { name: "Service hours" }),
     ).not.toBeChecked();
-    expect(screen.getByText(/service hours is off/i)).toHaveTextContent(
+    expect(screen.getByText(/^Off\./)).toHaveTextContent(
       /nothing was deleted/i,
     );
   });
@@ -77,7 +90,8 @@ describe("a module page", () => {
         on
         canManage
         onToggle={vi.fn()}
-        tools={[]}
+        page={null}
+        pageHref={() => "/settings?tab=chat"}
         canSeeWhoCan={false}
       />,
     );
@@ -85,7 +99,7 @@ describe("a module page", () => {
     expect(screen.getByText("Always on")).toBeInTheDocument();
   });
 
-  it("lists each permission with the tiers and roles that have it, leaving the President's wildcard out", () => {
+  it("answers each permission in its row, tiers first, leaving the President's wildcard out", () => {
     tiers.current = [
       {
         id: "t1",
@@ -113,39 +127,39 @@ describe("a module page", () => {
         tier_id: "t3",
       },
     ];
-    render(
-      <ModuleSettingsPage
-        module={hours}
-        on
-        canManage
-        onToggle={vi.fn()}
-        tools={[]}
-        canSeeWhoCan
-      />,
-    );
-    const list = screen.getByRole("region", { name: /who can/i });
-    const approve = within(list)
-      .getByText(/approve service/i)
-      .closest("li")!;
+    renderHours({ canSeeWhoCan: true });
+    const list = screen.getByRole("list", { name: "Who can" });
     // The tier answers for its roles; a role shows on its own only where
     // it differs from its tier.
-    expect(approve).toHaveTextContent("Exec board");
-    expect(approve).toHaveTextContent("Service Chair");
+    const approve = within(list).getByRole("link", {
+      name: /approve service hours/i,
+    });
+    expect(approve).toHaveTextContent("Exec board, Service Chair");
     expect(approve).not.toHaveTextContent("President");
-    const log = within(list)
-      .getByText(/^log service/i)
-      .closest("li")!;
+    expect(approve).toHaveAttribute(
+      "href",
+      "/settings?tab=hours&page=can-service:approve",
+    );
+    const log = within(list).getByRole("link", { name: /^log service/i });
     expect(log).toHaveTextContent("Members");
-    expect(log).not.toHaveTextContent("Member,");
     expect(log).not.toHaveTextContent("Service Chair");
     expect(
-      within(list).getByRole("link", { name: /change in roles/i }),
-    ).toHaveAttribute("href", "/settings?tab=roles");
-    // Read-only without roles:manage: no remove or add controls.
-    expect(within(list).queryByRole("button")).toBeNull();
+      screen.getByText("The President can do everything."),
+    ).toBeInTheDocument();
   });
 
-  it("lets a roles:manage holder take a permission from a tier right there", async () => {
+  it("says Only the President where no tier or role holds it", () => {
+    tiers.current = [];
+    roles.current = [
+      { id: "p", name: "President", permissions: ["*"], display_order: 0 },
+    ];
+    renderHours({ canSeeWhoCan: true });
+    expect(
+      screen.getByRole("link", { name: /approve service hours/i }),
+    ).toHaveTextContent("Only the President");
+  });
+
+  it("takes a permission from a tier with its switch on the permission's page", async () => {
     const user = userEvent.setup();
     updateTier.mockReset().mockResolvedValue(undefined);
     tiers.current = [
@@ -167,29 +181,31 @@ describe("a module page", () => {
         tier_id: "t2",
       },
     ];
-    render(
-      <ModuleSettingsPage
-        module={hours}
-        on
-        canManage
-        onToggle={vi.fn()}
-        tools={[]}
-        canSeeWhoCan
-        canEditRoles
-      />,
+    renderHours({
+      canSeeWhoCan: true,
+      canEditRoles: true,
+      page: "can-service:approve",
+    });
+    expect(
+      screen.getByRole("heading", { name: "Approve service hours" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Service hours" })).toHaveAttribute(
+      "href",
+      "/settings?tab=hours",
     );
-    await user.click(
-      screen.getByRole("button", {
-        name: /remove officers from approve service/i,
-      }),
-    );
+    const officers = screen.getByRole("switch", { name: "Officers" });
+    expect(officers).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Exec board" }),
+    ).not.toBeChecked();
+    await user.click(officers);
     expect(updateTier).toHaveBeenCalledWith({
       id: "t2",
       body: { permissions: ["service:log"] },
     });
   });
 
-  it("adds a role to a permission from a list it can filter, leaving the President out", async () => {
+  it("adds a role from a list it can filter, leaving the President out", async () => {
     const user = userEvent.setup();
     updateRole.mockReset().mockResolvedValue(undefined);
     tiers.current = [];
@@ -203,22 +219,14 @@ describe("a module page", () => {
       },
       { id: "m", name: "Member", permissions: [], display_order: 9 },
     ];
-    render(
-      <ModuleSettingsPage
-        module={hours}
-        on
-        canManage
-        onToggle={vi.fn()}
-        tools={[]}
-        canSeeWhoCan
-        canEditRoles
-      />,
-    );
-    await user.click(
-      screen.getByRole("button", { name: /add to approve service/i }),
-    );
+    renderHours({
+      canSeeWhoCan: true,
+      canEditRoles: true,
+      page: "can-service:approve",
+    });
+    await user.click(screen.getByRole("button", { name: "Add a role" }));
     expect(screen.queryByRole("option", { name: /president/i })).toBeNull();
-    await user.type(screen.getByPlaceholderText("Find a tier or role"), "trea");
+    await user.type(screen.getByPlaceholderText("Find a role"), "trea");
     expect(screen.queryByRole("option", { name: "Member" })).toBeNull();
     await user.click(screen.getByRole("option", { name: "Treasurer" }));
     expect(updateRole).toHaveBeenCalledWith({
@@ -227,8 +235,7 @@ describe("a module page", () => {
     });
   });
 
-  it("offers no tier ranked at or above the caller's own", async () => {
-    const user = userEvent.setup();
+  it("locks a tier ranked at or above the caller's own, and says why", () => {
     mine.permissions = ["roles:manage", "service:approve", "members:view"];
     tiers.current = [
       { id: "t1", name: "Exec board", position: 1, permissions: [] },
@@ -243,25 +250,93 @@ describe("a module page", () => {
         tier_id: "t1",
       },
     ];
-    render(
-      <ModuleSettingsPage
-        module={hours}
-        on
-        canManage
-        onToggle={vi.fn()}
-        tools={[]}
-        canSeeWhoCan
-        canEditRoles
-      />,
-    );
-    await user.click(
-      screen.getByRole("button", { name: /add to approve service/i }),
-    );
+    renderHours({
+      canSeeWhoCan: true,
+      canEditRoles: true,
+      page: "can-service:approve",
+    });
+    expect(screen.getByRole("switch", { name: "Exec board" })).toBeDisabled();
     expect(
-      screen.getByRole("option", { name: "Officers" }),
+      screen.getByText("At or above your rank, so your role can't change it."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Exec board" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Officers" })).toBeEnabled();
     mine.permissions = ["*"];
+  });
+
+  it("says a module is off and that the viewer's role can't switch it", () => {
+    renderHours({ on: false, canManage: false });
+    const line = screen.getByText(/^Off\./);
+    expect(line).toHaveTextContent(/nothing was deleted/i);
+    expect(line).toHaveTextContent("Your role can't switch modules on or off.");
+    expect(
+      screen.getByRole("switch", { name: "Service hours" }),
+    ).toBeDisabled();
+  });
+
+  it("keeps what was typed on the page and on a page it opened, both ways (#4857)", async () => {
+    const user = userEvent.setup();
+    const pages = [
+      {
+        id: "goal-service",
+        title: "Service hours goal",
+        body: <input aria-label="Goal draft" />,
+      },
+    ];
+    const body = <input aria-label="Rule draft" />;
+    const { rerender } = renderHours({ body, pages });
+    await user.type(screen.getByLabelText("Rule draft"), "42");
+    const at = (page: string | null) =>
+      rerender(
+        <ModuleSettingsPage
+          module={hours}
+          on
+          canManage
+          onToggle={vi.fn()}
+          page={page}
+          pageHref={(next) =>
+            next ? `/settings?tab=hours&page=${next}` : "/settings?tab=hours"
+          }
+          canSeeWhoCan={false}
+          body={body}
+          pages={pages}
+        />,
+      );
+    at("goal-service");
+    await user.type(screen.getByLabelText("Goal draft"), "20");
+    at(null);
+    expect(screen.getByLabelText("Rule draft")).toHaveValue("42");
+    at("goal-service");
+    expect(screen.getByLabelText("Goal draft")).toHaveValue("20");
+  });
+
+  it("mounts a page only once it has been opened", () => {
+    renderHours({
+      pages: [
+        { id: "points-ledger", title: "Points ledger", body: <p>ledger</p> },
+      ],
+    });
+    expect(screen.queryByText("ledger")).toBeNull();
+  });
+
+  it("puts a permission's own note on its page", () => {
+    tiers.current = [];
+    roles.current = [
+      { id: "p", name: "President", permissions: ["*"], display_order: 0 },
+    ];
+    renderHours({
+      canSeeWhoCan: true,
+      page: "can-service:approve",
+      permissionNotes: { "service:approve": <p>A note for approvers</p> },
+    });
+    expect(screen.getByText("A note for approvers")).toBeInTheDocument();
+  });
+
+  it("shows the module page for a permission that isn't this module's", () => {
+    renderHours({ canSeeWhoCan: true, page: "can-events:create" });
+    expect(
+      screen.getByRole("switch", { name: "Service hours" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create events" })).toBeNull();
   });
 });
 
@@ -283,7 +358,7 @@ describe("Service hours rules", () => {
     await user.clear(rate);
     await user.type(rate, "30");
     expect(
-      screen.getByText(/3-hour volunteer shift earns 6 points/i),
+      screen.getByText(/3-hour shift earns 6 points/i),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /save rate/i }));
     expect(onPatch).toHaveBeenCalledWith(

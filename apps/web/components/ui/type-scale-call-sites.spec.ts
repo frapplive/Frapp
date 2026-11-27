@@ -126,12 +126,6 @@ const EXCEPTIONS: { file: string; literal: string; count: number; reason: string
     count: 1,
     reason: "Grandfathered: board 4b's chip geometry, held by its docstring. #3075 decides.",
   },
-  {
-    file: "components/billing/plan-panel.tsx",
-    literal: "text-[22px]",
-    count: 1,
-    reason: "Grandfathered: board 4d's plan name. #3075 decides.",
-  },
 ];
 
 /** Every `text-[Npx]` literal in some text, normalised. */

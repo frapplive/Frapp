@@ -18,7 +18,8 @@ import {
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
-import { formatDayTime } from "@repo/formatting";
+import { formatDayTime, formatEventDayTime } from "@repo/formatting";
+import { formatEventWhenOr } from "@repo/formatting";
 import { can } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,7 +99,14 @@ function buildEventOptions(data: unknown): PickerOption[] {
         id,
         // The time as well as the day: two events can share a name and a
         // date (a morning and an evening chapter meeting).
-        label: [name, formatDayTime(event.start_time)]
+        label: [
+          name,
+          formatEventWhenOr(
+            event,
+            (start) => formatDayTime(start),
+            (record) => formatEventDayTime(record),
+          ),
+        ]
           .filter(Boolean)
           .join(" · "),
       };

@@ -89,7 +89,45 @@ export interface CorpusSourceAdapter {
     userId: string,
     candidates: readonly CorpusCandidate[],
   ): Promise<CorpusAdmission>;
+  /**
+   * {@link CorpusSourceDescription} for sources a reader may already open
+   * (the caller checked `readableBy`), by source id. An id it cannot describe is
+   * left out. Optional: chat says what it is in each line instead.
+   */
+  describe?(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceDescription>>;
 }
+
+/**
+ * What a document or minutes is, beside its title (#5180): read live when it
+ * is retrieved, never indexed, so a rename, a refiling or a member leaving
+ * reaches it at once (`spec/behavior/ai.md` § Context over rules). Every
+ * field is a fact a member who opens the source sees on its page.
+ */
+export interface CorpusSourceFacts {
+  /** A document's type, as the chapter named it ("Policy"). Null otherwise. */
+  type: string | null;
+  /** The folder a document is filed in. Null otherwise. */
+  folder: string | null;
+  /**
+   * Who added it: uploaded a document, posted minutes. Null when nobody is
+   * on record, or when they are no longer a member of the chapter.
+   */
+  by: { verb: 'uploaded' | 'posted'; name: string } | null;
+  /** A document copied from the chapter's Google Drive. */
+  fromDrive: boolean;
+}
+
+/**
+ * {@link CorpusSourceFacts} as an adapter reads it: who added the source by
+ * user id. `CorpusRetrievalService.describe` names them, in one read of the
+ * chapter's members for every source it describes.
+ */
+export type CorpusSourceDescription = Omit<CorpusSourceFacts, 'by'> & {
+  by: { verb: 'uploaded' | 'posted'; userId: string } | null;
+};
 
 /** Injection token for the list of adapters, one per source type. */
 export const CORPUS_SOURCE_ADAPTERS = 'CORPUS_SOURCE_ADAPTERS';

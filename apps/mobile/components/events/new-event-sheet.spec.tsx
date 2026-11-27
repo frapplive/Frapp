@@ -780,6 +780,116 @@ describe("New event", () => {
   });
 });
 
+describe("the When row's shapes (#6098)", () => {
+  /** Press the When row's shape: Set time, All day or Time TBD. */
+  function shape(tree: ReactTestRenderer, label: string) {
+    const group = byLabel(tree, "When it happens");
+    const [node] = group.findAll(
+      (each) =>
+        each.props.accessibilityLabel === label &&
+        typeof each.props.onPress === "function",
+    );
+    if (!node) throw new Error(`no shape ${label}`);
+    act(() => node.props.onPress());
+  }
+
+  it("creates an all-day event of several days, with no times or lengths", () => {
+    const tree = render();
+    type(tree, "Event name", "Formal recruitment");
+    shape(tree, "All day");
+    // No times and no lengths; Repeat goes, since a series stays timed.
+    expect(drawn(tree, "Starts time")).toBe(false);
+    expect(drawn(tree, "Lasts 1 hr")).toBe(false);
+    expect(drawn(tree, "Repeat")).toBe(false);
+    pick(tree, "Day", local(9, 0));
+    act(() => chip(tree, "Ends another day").props.onPress());
+    pick(tree, "Last day", local(12, 0));
+    act(() => createButton(tree).props.onPress());
+    const body = mutate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body).toMatchObject({
+      name: "Formal recruitment",
+      timing: "all_day",
+      start_date: "2026-11-09",
+      end_date: "2026-11-12",
+    });
+    expect(body).not.toHaveProperty("start_time");
+    expect(body).not.toHaveProperty("end_time");
+    act(() => tree.unmount());
+  });
+
+  it("refuses a last day before the first under the When row", () => {
+    const tree = render();
+    type(tree, "Event name", "Rush");
+    shape(tree, "All day");
+    pick(tree, "Day", local(12, 0));
+    act(() => chip(tree, "Ends another day").props.onPress());
+    pick(tree, "Last day", local(10, 0));
+    act(() => createButton(tree).props.onPress());
+    expect(mutate).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "The last day can't be before the first.",
+    );
+    act(() => tree.unmount());
+  });
+
+  it("keeps the day across shapes, and sends a time-TBD event as its day", () => {
+    const tree = render();
+    type(tree, "Event name", "Philanthropy");
+    pick(tree, "Starts day", local(10, 0));
+    shape(tree, "Time TBD");
+    expect(drawn(tree, "Ends another day")).toBe(false);
+    // No check-in until there is a time.
+    expect(drawn(tree, "Check-in")).toBe(false);
+    act(() => createButton(tree).props.onPress());
+    expect(mutate.mock.calls[0]![0]).toMatchObject({
+      timing: "time_tbd",
+      start_date: "2026-11-10",
+    });
+    act(() => tree.unmount());
+  });
+
+  it("sends Tentative only when it's switched on", () => {
+    const tree = render();
+    type(tree, "Event name", "Mixer");
+    const toggle = byLabel(tree, "Tentative");
+    act(() => toggle.props.onValueChange(true));
+    act(() => createButton(tree).props.onPress());
+    expect(mutate.mock.calls[0]![0]).toMatchObject({
+      is_tentative: true,
+      start_time: local(5, 19).toISOString(),
+    });
+    act(() => tree.unmount());
+  });
+
+  it("hides Points and Check-in on the calendar only, and sends neither", () => {
+    const tree = render();
+    type(tree, "Event name", "First day of classes");
+    const attendance = tree.root.find(
+      (node) =>
+        typeof node.props.onChange === "function" &&
+        node.props.value?.everyone !== undefined,
+    );
+    act(() =>
+      attendance.props.onChange({
+        calendarOnly: true,
+        everyone: "optional",
+        roles: {},
+      }),
+    );
+    expect(byLabel(tree, "Who's coming").props.accessibilityLabel).toBe(
+      "Who's coming: On the calendar only for everyone",
+    );
+    expect(drawn(tree, "Points for attending")).toBe(false);
+    expect(drawn(tree, "Check-in")).toBe(false);
+    act(() => createButton(tree).props.onPress());
+    const body = mutate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body).toMatchObject({ calendar_only: true, point_value: 0 });
+    expect(body).not.toHaveProperty("check_in_opens_minutes");
+    expect(body).not.toHaveProperty("required_role_ids");
+    act(() => tree.unmount());
+  });
+});
+
 describe("the When row on iOS", () => {
   it("draws the system's compact day and time pickers", () => {
     const onChange = vi.fn();
@@ -1261,6 +1371,7 @@ describe("New event from a chat's + (#3865)", () => {
       id: null,
       name: "Formal",
       cardKeptOut: false,
+      cardNotPostable: false,
       cardLost: false,
     });
     act(() => tree.unmount());
@@ -1329,6 +1440,27 @@ describe("New event from a chat's + (#3865)", () => {
     expect(mutateAsync.mock.calls.at(-1)![0]).not.toHaveProperty("channel_id");
     expect(onCreated).toHaveBeenCalledWith(
       expect.objectContaining({ cardKeptOut: true }),
+    );
+    act(() => tree.unmount());
+  });
+  it("asks for no card for an all-day event, which a card can't show yet (#6098)", async () => {
+    const onCreated = vi.fn();
+    const tree = renderFromChat(onCreated);
+    type(tree, "Event name", "Formal");
+    const group = byLabel(tree, "When it happens");
+    const [allDay] = group.findAll(
+      (each) =>
+        each.props.accessibilityLabel === "All day" &&
+        typeof each.props.onPress === "function",
+    );
+    act(() => allDay!.props.onPress());
+    await act(async () => createButton(tree).props.onPress());
+    expect(trackCard).not.toHaveBeenCalled();
+    const body = mutateAsync.mock.calls.at(-1)![0];
+    expect(body).not.toHaveProperty("channel_id");
+    expect(body).not.toHaveProperty("client_message_id");
+    expect(onCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ cardNotPostable: true }),
     );
     act(() => tree.unmount());
   });

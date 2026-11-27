@@ -3,6 +3,8 @@ import { isModuleEnabled } from '@repo/validation';
 import { z } from 'zod';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { CorpusSourceType } from '#domain/entities/corpus.entity';
+import type { CorpusSourceFacts } from '../../../corpus/corpus-source';
+import { recordFactsLine } from '../../ask-lines';
 import {
   CorpusRetrievalService,
   type CorpusPassage,
@@ -82,6 +84,7 @@ export function recordSource(passage: {
   text: string;
   pageStart: number | null;
   sourceAt: string | null;
+  facts: CorpusSourceFacts | null;
 }): AgentSource {
   const minutes = passage.sourceType === MINUTES_SOURCE_TYPE;
   const page = passage.pageStart === null ? null : `page ${passage.pageStart}`;
@@ -92,6 +95,7 @@ export function recordSource(passage: {
     kind: minutes ? 'minutes' : 'document',
     title: passage.title,
     detail: [passage.heading, page].filter(Boolean).join(', ') || null,
+    about: recordFactsLine(passage.facts),
     date: passage.sourceAt,
     target: minutes
       ? { type: 'meeting', meeting_id: passage.sourceId }

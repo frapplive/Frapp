@@ -73,7 +73,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 }));
 
 import { LinkedAppsSection } from "./linked-apps-section";
-import { CalendarSection } from "@/components/personal-settings/calendar-section";
+import { SignInMethodRows } from "./sign-in-methods";
 
 function renderWithClient(ui: React.ReactNode) {
   return render(
@@ -185,8 +185,34 @@ describe("Settings → Linked apps (#5407)", () => {
     );
   });
 
-  it("lists the ways the account signs in, checked where it has them", async () => {
+  it("heads its rows with the chapter they belong to, in the phone's order (#6032)", () => {
     renderWithClient(<LinkedAppsSection />);
+    const group = screen.getByRole("list", { name: "In FIJI Lambda" });
+    expect(
+      within(group)
+        .getAllByRole("listitem")
+        .map((item) => item.querySelector(".truncate")?.textContent),
+    ).toEqual(["Google Calendar", "Calendar apps"]);
+    // The ways the account signs in are on Account now.
+    expect(screen.queryByText("Sign in")).toBeNull();
+  });
+
+  it("makes no calendar link just because the page opened", () => {
+    renderWithClient(<LinkedAppsSection />);
+    expect(feedLink).toHaveBeenLastCalledWith({ enabled: false });
+    expect(
+      within(row("Calendar apps")).getByRole("button", { name: "Copy link" }),
+    ).toBeEnabled();
+  });
+});
+
+describe("Settings → Account → Sign in (#5407, #6032)", () => {
+  it("lists the ways the account signs in, checked where it has them", async () => {
+    renderWithClient(
+      <ul>
+        <SignInMethodRows />
+      </ul>,
+    );
     expect(await screen.findByText("g@gmail.com")).toBeInTheDocument();
     expect(
       within(row("Google")).getByRole("img", { name: "Connected" }),
@@ -194,25 +220,5 @@ describe("Settings → Linked apps (#5407)", () => {
     expect(
       within(row("Apple")).getByRole("img", { name: "Not connected" }),
     ).toBeInTheDocument();
-  });
-});
-
-describe("Settings → Calendar (#5407)", () => {
-  it("makes no calendar link just because the page opened", () => {
-    renderWithClient(<CalendarSection />);
-    expect(feedLink).toHaveBeenLastCalledWith({ enabled: false });
-    expect(screen.getByRole("button", { name: "Copy link" })).toBeEnabled();
-  });
-
-  it("connects Google back to the Calendar section", async () => {
-    const assign = vi.fn();
-    vi.stubGlobal("location", { ...window.location, assign });
-    renderWithClient(<CalendarSection />);
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-    expect(startSpy).toHaveBeenCalledWith({
-      client: "web",
-      webReturn: "calendar",
-    });
-    vi.unstubAllGlobals();
   });
 });

@@ -13,10 +13,7 @@ import {
 import { OpenLinkedEvent } from "./open-linked-event";
 import { CalendarSubscribeMenu } from "./calendar-subscribe-menu";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  RolesGlyph,
-  SearchGlyph,
-} from "@/components/events/chapter-ops-glyphs";
+import { RolesGlyph } from "@/components/events/chapter-ops-glyphs";
 import {
   useAutoAbsent,
   useCalendarBirthdays,
@@ -73,15 +70,18 @@ import {
   canAll,
   CHECK_IN_OPEN_LABEL,
   EVENT_CREATE_PERMISSIONS,
+  EVENT_TENTATIVE_LABEL,
+  eventIsDated,
   eventSetsRolesApart,
+  eventTakesAttendance,
+  eventTimingFieldsOf,
   eventsCount,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
 import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
+import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
   ActiveFilterChips,
@@ -102,8 +102,6 @@ import {
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
-  dashboardToolbarSearchClassName,
-  dashboardToolbarSearchGlyphClassName,
   denseListClassName,
 } from "@/components/shared/table-controls";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -127,14 +125,16 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import {
   formatDayHeading,
+  formatEventRowTime,
   formatRelativeDayTime,
-  formatTimeRange,
   localIsoDate,
+  parseBareDateLocalMidnight,
   parseInstant,
 } from "@repo/formatting";
 import {
   AGENDA_SPAN_DAYS,
   buildAgenda,
+  datedEventDays,
   dateOfKey,
   kindsByDay,
   type AgendaDay,
@@ -192,7 +192,18 @@ const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
   all: "All events",
 };
 
+/**
+ * When the event starts, for sorting and the time filter. An all-day or
+ * time-TBD event starts at the viewer's own midnight of its first day
+ * (#6098): its stored time is the saver's midnight, which can be another day
+ * in another zone.
+ */
 function startMsOf(event: EventRow): number | null {
+  if (eventIsDated(eventTimingFieldsOf(event))) {
+    return typeof event.start_date === "string"
+      ? (parseBareDateLocalMidnight(event.start_date)?.getTime() ?? null)
+      : null;
+  }
   return parseInstant(event.start_time)?.getTime() ?? null;
 }
 
@@ -239,9 +250,6 @@ export function EventsPage() {
     useState<AttendanceFilter>("all");
   const [recurrenceFilter, setRecurrenceFilter] =
     useState<CadenceFilter>("all");
-  // Beside chat the search is a glyph until pressed (#5560); it stays a
-  // field while it holds text.
-  const [searchOpen, setSearchOpen] = useState(false);
   // Bulk actions live behind Select (#3822): the default list has no
   // checkboxes.
   const [selecting, setSelecting] = useState(false);
@@ -539,6 +547,19 @@ export function EventsPage() {
     const now = nowTick;
     const inWindow = calendarEvents.filter((event) => {
       if (timeFilter === "all") return true;
+      // A dated event by its days: Upcoming while its last day is at or
+      // after the anchor's, so a recruitment week under way still lists.
+      const days = datedEventDays(event);
+      if (days) {
+        if (timeFilter === "upcoming") {
+          return days.at(-1)! >= localIsoDate(new Date(anchorMs));
+        }
+        // Past: begun by now, or by the picked day.
+        return (
+          days[0]! <=
+          localIsoDate(new Date(Math.min(now, dayAfterAnchorMs - 1)))
+        );
+      }
       const start = startMsOf(event);
       // An event whose start cannot be read is shown under "upcoming" and
       // hidden under "past": it may still be ahead, and hiding it everywhere
@@ -570,6 +591,7 @@ export function EventsPage() {
         entries: agendaEntries,
         items: agendaItems,
         startOf: (event: EventRow) => event.start_time,
+        daysOf: datedEventDays,
         keyOf: eventIdOf,
         anchor,
         direction: timeFilter === "past" ? -1 : 1,
@@ -612,6 +634,7 @@ export function EventsPage() {
         (event: EventRow) => event.start_time,
         agendaItems,
         hiddenKinds,
+        datedEventDays,
       ),
     [calendarEvents, agendaItems, hiddenKinds],
   );
@@ -976,15 +999,22 @@ export function EventsPage() {
     const cadence = series ? seriesCadenceOf(events, event) : null;
     // Start to end, "7:00 – 9:00 PM", as the phone's row says it: a member
     // deciding whether to go wants to know when it lets out (2026-11-19).
-    const time = formatTimeRange(event.start_time, event.end_time, nowDate);
+    // An all-day or time-TBD event says so in place of a time, and a span
+    // its days ("All day · Dec 1 – Dec 4"), never its midnights (#6098).
+    const shape = eventTimingFieldsOf(event);
+    const takesAttendance = eventTakesAttendance(shape);
+    const time = formatEventRowTime(event, nowDate);
     // Said on the row while it lasts, as the phone's row says it, so a member
-    // walking in sees where to check in without opening the event.
-    const checkInOpen = checkInOpenNow(
-      event.start_time,
-      event.end_time,
-      event.check_in_opens_minutes,
-      nowTick,
-    );
+    // walking in sees where to check in without opening the event. Never on
+    // an event that takes no attendance.
+    const checkInOpen =
+      takesAttendance &&
+      checkInOpenNow(
+        event.start_time,
+        event.end_time,
+        event.check_in_opens_minutes,
+        nowTick,
+      );
     // One derived value: the row fill and the checkbox must never disagree
     // about whether the row is selected.
     const isSelected = selecting && selectedIdSet.has(eventId);
@@ -993,7 +1023,11 @@ export function EventsPage() {
         ? event.location.trim()
         : null;
     // An absent fact drops out of the line rather than reading "TBD" or "0".
-    const meta = [time, location, pointsLabel(event.point_value)]
+    const meta = [
+      time,
+      location,
+      takesAttendance ? pointsLabel(event.point_value) : null,
+    ]
       .filter(Boolean)
       .join(" · ");
     const hue = EVENT_HUE;
@@ -1047,6 +1081,12 @@ export function EventsPage() {
                 >
                   Required
                 </span>
+              ) : null}
+              {shape.is_tentative ? (
+                // A status beside the name, not an alarm (#6098).
+                <Badge variant="outline" className="shrink-0">
+                  {EVENT_TENTATIVE_LABEL}
+                </Badge>
               ) : null}
             </span>
             {meta ? (
@@ -1209,40 +1249,15 @@ export function EventsPage() {
         pressed and closes again on Escape or blur while empty.
       */}
       <PageActions className={cn("gap-x-2 gap-y-2", narrow && "flex-nowrap")}>
-        {narrow && !searchOpen && !query ? (
-          <IconButton
-            variant="secondary"
-            className="shrink-0"
-            label="Search events"
-            onClick={() => setSearchOpen(true)}
-          >
-            <SearchGlyph className="h-4 w-4" />
-          </IconButton>
-        ) : (
-          <div
-            className={cn(
-              "relative min-w-0 flex-1",
-              !narrow && "basis-full @xl:max-w-56 @xl:basis-auto",
-            )}
-          >
-            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-            <Input
-              type="search"
-              value={query}
-              autoFocus={narrow && searchOpen}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && !query) setSearchOpen(false);
-              }}
-              onBlur={() => {
-                if (!query) setSearchOpen(false);
-              }}
-              placeholder="Search events"
-              aria-label="Search events by name or location"
-              className={dashboardToolbarSearchClassName}
-            />
-          </div>
-        )}
+        <HeaderSearch
+          narrow={narrow}
+          value={query}
+          onChange={setQuery}
+          placeholder="Search events"
+          label="Search events by name or location"
+          glyphLabel="Search events"
+          className="flex-1 basis-full @xl:max-w-56 @xl:basis-auto"
+        />
         <FilterMenu filters={eventFilters} thing="events" narrow={narrow} />
         <CalendarSubscribeMenu iconOnly={narrow} />
         <Can allOf={EVENT_CREATE_PERMISSIONS}>
@@ -1385,7 +1400,7 @@ export function EventsPage() {
                 wired (#336): events have no assignee concept and no archive
                 state.
               */}
-              <div className="flex min-h-9 items-center gap-1 pointer-coarse:min-h-11">
+              <div className="flex min-h-control-list-row items-center gap-1 pointer-coarse:min-h-11">
                 <div className="min-w-0 flex-1 px-2">
                   <SectionLabel
                     id="events-list-label"

@@ -511,10 +511,14 @@ it beside `GOOGLE_DRIVE_SERVICE_ACCOUNT` fails boot.
 
 **Verify after setup.** `GET /v1/google-drive` (signed in as an officer with
 Manage documents) answers `"available": true` with the `frapp-docs` address.
-With step 4 done it also carries `"picker"`; in a test chapter, Connect
-Google Drive → Choose a folder in Google Drive, sign in, pick a folder you can
-edit, and Connect: within a minute its files appear there, and the folder's
-Share list in Drive shows `frapp-docs` as a Viewer. Without step 4, share a
+With step 4 done it also carries `"picker"`; in a test chapter, Documents'
+add menu → Connect Google Drive opens Google's sign-in and picker: pick a
+folder you can edit, then Connect in the dialog. Google lets the picker's
+sign-in share only an empty folder, so for one with files the dialog shows the
+address to share it with: share it in Drive, and the dialog connects by
+itself. Within a minute its files appear
+in Documents, and the folder's Share list in Drive shows `frapp-docs` as a
+Viewer. Without step 4, share a
 Drive folder with that address as a Viewer and connect it by its link.
 
 **What goes wrong.**
@@ -532,4 +536,5 @@ Drive folder with that address as a Viewer and connect it by its link.
 | Google's sign-in shows `redirect_uri_mismatch` or `origin_mismatch` | The web app's address is missing from the Calendar client's Authorized JavaScript origins (§ 7B step 3) |
 | Connecting a picked folder says your organization doesn't let its folders be shared outside it | The officer's school or company Workspace blocks sharing outside it; a personal Google account's folder, or the admin, fixes it |
 | Connecting a picked folder says only the owner, or the shared drive's Managers, can share it | Google says the officer can edit but not share it (`canShare`): the My Drive owner turned off sharing for editors, or the officer is a Content manager or Contributor in a shared drive. The owner or a Manager connects it, or shares it with `frapp-docs` by hand. Any other refusal is a Sentry warning, "Google Drive refused to share a picked folder", tagged with Google's reason |
+| Connecting a picked folder shows "Share it with Frapp as a Viewer" | Expected for any folder with files in it: Google lets the picker's sign-in share only the folder, not what's inside (`appNotAuthorizedToChild`). Sharing it with `frapp-docs` in Drive connects it |
 | Connecting says Frapp can't see the folder, though it is shared | It was shared with the other environment's `frapp-docs`, or with a person instead of the address |

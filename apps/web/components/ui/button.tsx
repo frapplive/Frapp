@@ -35,14 +35,15 @@ import { FOCUS_RING } from "@/components/ui/focus";
  * drawings; the sizes below differentiate by height and padding instead.
  */
 /*
- * The Small step (foundations.md §9): 36 to a mouse, 44 to a finger. Padding
+ * The Small step (foundations.md §9): 28 to a mouse (36 until #6115), 44 to a
+ * finger. Padding
  * does not change with the pointer on purpose: a `pointer-coarse:px-*` class
  * survives `cn()` next to a caller's plain `px-0` (tailwind-merge only merges
  * classes with the same variant), so link-style buttons would grow a box on
  * touch. Only the height splits, and a caller that cancels it says so with
  * `pointer-coarse:h-auto`.
  */
-const SMALL = "h-9 px-3 text-sm pointer-coarse:h-11";
+const SMALL = "h-control-small px-3 text-sm pointer-coarse:h-11";
 
 const buttonVariants = cva(
   cn(
@@ -103,15 +104,16 @@ const buttonVariants = cva(
         link: "font-semibold text-accent-text underline-offset-4 hover:underline disabled:border-transparent disabled:bg-transparent",
       },
       size: {
-        // §3's ladder. `sm` is the Inline size (36 to a mouse, 44 to a finger:
-        // action rows inside cards) and `default` the standalone one (40, 44);
+        // §3's ladder. `sm` is the Inline size (Small: 28 to a mouse, 44 to a
+        // finger: action rows inside cards) and `default` the standalone one
+        // (Field: 32, 44; 36 and 40 until #6115);
         // the names are the scaffold's and are kept so 68 call sites do not
         // churn for a rename.
-        default: "h-10 px-4 text-sm pointer-coarse:h-11",
+        default: "h-control-field px-4 text-sm pointer-coarse:h-11",
         sm: SMALL,
-        // Square: 36 to a mouse, and 44 to a finger so an icon-only control
+        // Square: the Small step to a mouse, and 44 to a finger so an icon-only control
         // clears the touch-target floor (§2) on the 375px layout.
-        icon: "h-9 w-9 pointer-coarse:h-11 pointer-coarse:w-11",
+        icon: "h-control-small w-control-small pointer-coarse:h-11 pointer-coarse:w-11",
         // A toolbar row's controls (the PageActions row, filters, search):
         // §3's Compact on a mouse, the 44 touch floor on a finger, which is
         // the README's row rule. At 48 the primary action stood taller than

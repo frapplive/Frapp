@@ -82,6 +82,11 @@ import { DueDateField, dueEntryPassed } from "./due-date-field";
 import { TaskSubtaskList } from "./task-subtasks";
 import { TaskRepeatLine } from "./task-repeat";
 import {
+  AskForMoreTime,
+  FixedDeadlineSwitch,
+  taskExtensionView,
+} from "./task-extension";
+import {
   MarkDoneControl,
   TaskPhotoPicker,
   TaskProof,
@@ -142,7 +147,7 @@ export function TaskPanel(props: TaskPanelProps) {
       open={target !== null}
       onOpenChange={(open) => !open && onClose()}
       docked
-      backLabel="Back to tasks"
+      backLabel="Back to Activity"
     >
       {target ? (
         <PanelContent aria-describedby={undefined}>
@@ -355,6 +360,11 @@ function TaskPanelBody({
   }
 
   const statusWord = taskStatusLabel(task);
+  // Asking for more time (#6096): a group's tile asks nothing; a copy asks
+  // for that copy alone.
+  const extensionView = isGroup
+    ? { cant: "not_mine" as const, urgent: false, lines: [] }
+    : taskExtensionView(task, { viewerId: myUserId, canManage });
 
   const assignee = personOf(task.assignee_id);
   const references = (task.photos ?? []).filter(
@@ -509,6 +519,41 @@ function TaskPanelBody({
           // A repeating copy keeps its day (#5761).
           canClear={!task.series}
           onSave={save}
+          urgent={extensionView.urgent}
+          action={
+            // An officer moves their own due; anyone else asks (#6096).
+            !isGroup && !editable && extensionView.cant === null ? (
+              <AskForMoreTime task={task} gate={gate} />
+            ) : null
+          }
+          below={
+            extensionView.lines.length > 0 ||
+            (editable && task.due_date) ? (
+              <div className="grid gap-1 px-2 pb-1">
+                {extensionView.lines.map((line) => (
+                  <p
+                    key={line.text}
+                    className={cn(
+                      "text-caption",
+                      line.tone === "danger"
+                        ? "text-destructive-text"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {line.text}
+                  </p>
+                ))}
+                {editable && task.due_date ? (
+                  <FixedDeadlineSwitch
+                    id={`task-panel-${task.id}-fixed`}
+                    checked={!!task.fixed_deadline}
+                    disabled={saving || !!gate.controlProps().disabled}
+                    onChange={(fixed_deadline) => void save({ fixed_deadline })}
+                  />
+                ) : null}
+              </div>
+            ) : null
+          }
         />
         <PointsRow
           task={task}
@@ -740,7 +785,7 @@ function FollowerRow({
               if (next !== value) void onSave(next);
             }}
             disabled={disabled}
-            className="h-8 w-fit min-w-[10rem]"
+            className="h-control-row w-fit min-w-[10rem]"
           />
           {value ? (
             <span className="text-caption text-muted-foreground">
@@ -1017,6 +1062,9 @@ export function DueRow({
   editable,
   canClear,
   onSave,
+  urgent = false,
+  action,
+  below,
 }: {
   task: { due_date: string | null; due_at?: string | null };
   editable: boolean;
@@ -1026,6 +1074,12 @@ export function DueRow({
     body: { due_date: string | null; due_at: string | null },
     options: { movesDay: boolean },
   ) => Promise<boolean>;
+  /** A fixed deadline, to its assignee (#6096): the due in the danger red. */
+  urgent?: boolean;
+  /** Beside the due: the assignee's Ask for more time (#6096). */
+  action?: ReactNode;
+  /** Under the due: its extension lines and the Fixed deadline switch. */
+  below?: ReactNode;
 }) {
   const stored = dueEntryFromTask(task);
   const [draft, setDraft] = useState<string | null>(null);
@@ -1034,22 +1088,43 @@ export function DueRow({
   const none = stored === "";
   if (!editable) {
     return (
-      <FieldRow label="Due">
-        <StaticValue muted={none}>{shown}</StaticValue>
+      <FieldRow label="Due" alignTop={!!below}>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <span
+            className={cn(
+              "block min-w-0 px-2 py-1.5 text-sm",
+              urgent
+                ? "font-medium text-destructive-text"
+                : none
+                  ? "text-muted-foreground"
+                  : "text-foreground",
+            )}
+          >
+            {shown}
+          </span>
+          {action}
+        </div>
+        {below}
       </FieldRow>
     );
   }
   if (draft === null) {
     return (
-      <FieldRow label="Due">
+      <FieldRow label="Due" alignTop={!!below}>
         <button
           type="button"
-          className={cn(valueButtonClass, none && "text-muted-foreground")}
+          className={cn(
+            valueButtonClass,
+            urgent
+              ? "font-medium text-destructive-text"
+              : none && "text-muted-foreground",
+          )}
           aria-label={`Due: ${shown}`}
           onClick={() => setDraft(stored)}
         >
           {shown}
         </button>
+        {below}
       </FieldRow>
     );
   }

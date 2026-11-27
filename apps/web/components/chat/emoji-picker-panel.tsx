@@ -285,7 +285,7 @@ export function EmojiPickerPanel({
           <div
             aria-hidden="true"
             className={cn(
-              "absolute inset-x-1 top-0 z-10 flex h-7 items-end bg-popover px-2 pb-1 text-muted-foreground",
+              "absolute inset-x-1 top-0 z-10 flex h-7 items-end bg-popover px-2 pb-1 text-muted",
               EYEBROW,
             )}
           >
@@ -316,7 +316,7 @@ export function EmojiPickerPanel({
                         key={row.key}
                         role="presentation"
                         className={cn(
-                          "absolute inset-x-0 flex items-end px-2 pb-1 text-muted-foreground",
+                          "absolute inset-x-0 flex items-end px-2 pb-1 text-muted",
                           EYEBROW,
                         )}
                         style={{ top, height }}

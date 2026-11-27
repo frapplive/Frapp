@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  Type,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SUPABASE_CLIENT } from '../../infrastructure/supabase/supabase.provider';
@@ -16,7 +15,10 @@ import {
   PERMISSIONS_ANY_KEY,
 } from '../decorators/permissions.decorator';
 import { WILDCARD } from '#domain/constants/permissions';
-import { flattenPermissionSets } from '#domain/utils/permissions';
+import {
+  flattenPermissionSets,
+  resolveRequiredPermissions,
+} from '#domain/utils/permissions';
 import type { RequestContext } from '../types/request-context.types';
 import type { FrappSupabaseClient } from '../../infrastructure/supabase/database.types';
 
@@ -35,17 +37,15 @@ export class PermissionsGuard implements CanActivate {
     const handler = context.getHandler();
     const controllerClass = context.getClass();
 
-    const requiredPermissions = this.mergeUniquePermissionLists(
-      this.reflector.get<string[]>(PERMISSIONS_KEY, handler),
-      this.reflector.get<string[]>(PERMISSIONS_KEY, controllerClass),
-    );
+    const { all: requiredPermissions, anyOf: anyOfGroups } =
+      resolveRequiredPermissions(
+        this.reflector.get<string[]>(PERMISSIONS_KEY, handler),
+        this.reflector.get<string[]>(PERMISSIONS_KEY, controllerClass),
+        this.reflector.get<string[]>(PERMISSIONS_ANY_KEY, handler),
+        this.reflector.get<string[]>(PERMISSIONS_ANY_KEY, controllerClass),
+      );
 
-    const anyOfGroups = this.collectAnyOfPermissionGroups(
-      handler as (...args: unknown[]) => unknown,
-      controllerClass,
-    );
-
-    if (!requiredPermissions.length && !anyOfGroups?.length) {
+    if (!requiredPermissions.length && !anyOfGroups.length) {
       return true;
     }
 
@@ -112,55 +112,15 @@ export class PermissionsGuard implements CanActivate {
       }
     }
 
-    if (anyOfGroups?.length) {
-      for (const group of anyOfGroups) {
-        const satisfied = group.some((p) => userPermissions.has(p));
-        if (!satisfied) {
-          throw new ForbiddenException(
-            `Missing one of required permissions: ${group.join(', ')}`,
-          );
-        }
+    for (const group of anyOfGroups) {
+      const satisfied = group.some((p) => userPermissions.has(p));
+      if (!satisfied) {
+        throw new ForbiddenException(
+          `Missing one of required permissions: ${group.join(', ')}`,
+        );
       }
     }
 
     return true;
-  }
-
-  /** Union of class- and handler-level `@RequirePermissions` (order preserved, de-duplicated). */
-  private mergeUniquePermissionLists(a?: string[], b?: string[]): string[] {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const list of [a, b]) {
-      if (!list?.length) continue;
-      for (const p of list) {
-        if (!seen.has(p)) {
-          seen.add(p);
-          out.push(p);
-        }
-      }
-    }
-    return out;
-  }
-
-  /**
-   * When `@RequireAnyOfPermissions` appears on both handler and class, each level is a separate
-   * OR-group; the caller must satisfy every group (AND of ORs). A single level is one group.
-   */
-  private collectAnyOfPermissionGroups(
-    handler: (...args: unknown[]) => unknown,
-    controllerClass: Type<unknown>,
-  ): string[][] | undefined {
-    const handlerAny = this.reflector.get<string[]>(
-      PERMISSIONS_ANY_KEY,
-      handler,
-    );
-    const classAny = this.reflector.get<string[]>(
-      PERMISSIONS_ANY_KEY,
-      controllerClass,
-    );
-    const groups: string[][] = [];
-    if (handlerAny?.length) groups.push(handlerAny);
-    if (classAny?.length) groups.push(classAny);
-    return groups.length ? groups : undefined;
   }
 }

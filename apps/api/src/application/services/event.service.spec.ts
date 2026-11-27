@@ -462,6 +462,12 @@ describe('EventService', () => {
       location: null,
       start_time: baseEvent.start_time,
       end_time: baseEvent.end_time,
+      // No timing sent: a timed event, as before #6098.
+      timing: 'timed',
+      start_date: null,
+      end_date: null,
+      is_tentative: false,
+      calendar_only: false,
       point_value: 10,
       is_mandatory: false,
       recurrence_rule: null,
@@ -744,6 +750,128 @@ describe('EventService', () => {
         end_time: '2026-02-26T18:00:00.000Z',
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  describe('dates, tentative and on the calendar only (#6098)', () => {
+    beforeEach(() => {
+      mockRbacService.memberHasAnyPermission.mockResolvedValue(true);
+    });
+
+    it('stores a calendar-only event with no points and nobody required', async () => {
+      mockEventRepo.create.mockResolvedValue(baseEvent);
+
+      await service.create(
+        {
+          chapter_id: 'ch-1',
+          name: 'First day of classes',
+          timing: 'all_day',
+          start_date: '2027-01-11',
+          calendar_only: true,
+          point_value: 10,
+          is_mandatory: true,
+          created_by: 'user-officer',
+        },
+        'America/New_York',
+      );
+
+      expect(mockEventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timing: 'all_day',
+          start_date: '2027-01-11',
+          end_date: '2027-01-11',
+          start_time: '2027-01-11T05:00:00.000Z',
+          end_time: '2027-01-12T05:00:00.000Z',
+          calendar_only: true,
+          point_value: 0,
+          is_mandatory: false,
+        }),
+      );
+    });
+
+    it('refuses a Required role on a calendar-only event', async () => {
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          name: 'Deadline',
+          timing: 'all_day',
+          start_date: '2027-01-12',
+          calendar_only: true,
+          required_role_ids: ['role-rush'],
+          created_by: 'user-officer',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockEventRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a repeating dated event, on create and when a rule is added', async () => {
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          name: 'Study day',
+          timing: 'all_day',
+          start_date: '2027-01-11',
+          recurrence_rule: 'WEEKLY',
+          created_by: 'user-officer',
+        }),
+      ).rejects.toThrow('A repeating event needs a time');
+
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        timing: 'all_day',
+        start_date: '2027-01-11',
+        end_date: '2027-01-11',
+      });
+      await expect(
+        service.update('evt-1', 'ch-1', { recurrence_rule: 'WEEKLY' }),
+      ).rejects.toThrow('A repeating event needs a time');
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses calendar-only on one meeting of a series', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        parent_event_id: 'head-1',
+      });
+
+      await expect(
+        service.update('evt-1', 'ch-1', { calendar_only: true }),
+      ).rejects.toThrow('for all upcoming events');
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('zeroes points sent to an event already on the calendar only', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        calendar_only: true,
+        point_value: 0,
+      });
+      mockEventRepo.update.mockResolvedValue(baseEvent);
+
+      await service.update('evt-1', 'ch-1', {
+        point_value: 15,
+        is_mandatory: true,
+      });
+
+      expect(mockEventRepo.update).toHaveBeenCalledWith(
+        'evt-1',
+        'ch-1',
+        expect.objectContaining({ point_value: 0, is_mandatory: false }),
+      );
+    });
+
+    it('refuses a chat card for a dated event', async () => {
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          name: 'Bids out',
+          timing: 'all_day',
+          start_date: '2027-02-05',
+          channel_id: 'chan-1',
+          client_message_id: 'msg-1',
+          created_by: 'user-officer',
+        }),
+      ).rejects.toThrow('cannot post a chat card');
+    });
   });
 
   it('should validate updated times on update', async () => {

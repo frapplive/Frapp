@@ -41,6 +41,8 @@ const SHIPPED = new Set<string>([
   // Polls live in chat since #3871 retired the nav row, as dues lives on
   // /billing: still paid, still shipped, with no row for the nav to read.
   "polls",
+  // Tasks live in Activity since #5948 retired the Tasks row, the same way.
+  "tasks",
 ]);
 const PAID = MODULE_CATALOG.filter(
   (entry) => entry.tier === "paid" && SHIPPED.has(entry.key),
@@ -65,7 +67,18 @@ describe("PlanMatrix", () => {
     // Study Zones left the nav for the Settings rail (#2946) and dropped out of
     // a derivation that read only nav rows.
     render(<PlanMatrix />);
-    for (const key of ["events", "tasks", "points", "hours", "polls", "documents", "backwork", "reports", "geofences", "dues"]) {
+    for (const key of [
+      "events",
+      "tasks",
+      "points",
+      "hours",
+      "polls",
+      "documents",
+      "backwork",
+      "reports",
+      "geofences",
+      "dues",
+    ]) {
       const entry = MODULE_CATALOG.find((m) => m.key === key);
       expect(entry, `${key} is not in the catalog`).toBeDefined();
       if (entry?.tier !== "paid") continue;
@@ -217,5 +230,31 @@ describe("ProChip", () => {
     expect(chip.className).toContain("rounded-[5px]");
     expect(chip.className).toContain("text-[10.5px]");
     expect(chip.className).toContain("tracking-[0.04em]");
+  });
+});
+
+describe("the table's name and its rows' names (#6031)", () => {
+  it("names the table for what a paid chapter has, and sells it to the rest", async () => {
+    const { planMatrixTitle } = await import("./plan-matrix");
+    expect(planMatrixTitle(true)).toBe("What your plan includes");
+    expect(planMatrixTitle(false)).toBe("What the subscription unlocks");
+  });
+
+  it("calls modules what the app calls them (Paul's pick, 2026-11-25)", () => {
+    render(<PlanMatrix />);
+    expect(
+      screen.getByText("Chat, Members, Announcements, Logs, Chapter settings"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Study zones")).toBeInTheDocument();
+    for (const retired of ["Geofences", "Audit Log", "Chapter Settings"]) {
+      expect(screen.queryByText(new RegExp(retired))).toBeNull();
+    }
+  });
+});
+
+describe("the row that opens the table (#6031)", () => {
+  it("counts the modules the table lists, free and Pro", async () => {
+    const { planMatrixModuleCount } = await import("./plan-matrix");
+    expect(planMatrixModuleCount()).toBe(FREE.length + PAID.length);
   });
 });

@@ -30,6 +30,7 @@ export { localClock, localIsoDate } from "./local-date";
 export {
   formatDay,
   formatDayHeading,
+  formatDayWords,
   formatDayRange,
   formatDayTime,
   formatDayTimeRange,
@@ -50,6 +51,16 @@ export {
   formatWeekSpan,
   isDueOverdue,
 } from "./display";
+export {
+  type EventWhenFields,
+  eventChipWords,
+  eventDatedWord,
+  formatEventDayTime,
+  formatEventRelativeWhen,
+  formatEventRowTime,
+  formatEventWhen,
+  formatEventWhenOr,
+} from "./event-when";
 export {
   type DateLean,
   dueEntryFields,

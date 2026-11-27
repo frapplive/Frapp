@@ -234,7 +234,7 @@ export function UpForGrabs({
                   type="button"
                   size="toolbar"
                   variant="secondary"
-                  className="h-8"
+                  className="h-control-row"
                   aria-label={`${TASK_AUDIENCE_COPY.claim}: ${posting.title}`}
                   {...gate.controlProps(claim.isPending)}
                   onClick={() => void claimIt(posting)}
@@ -257,7 +257,7 @@ export function UpForGrabs({
                       type="button"
                       size="toolbar"
                       variant="ghost"
-                      className="h-8"
+                      className="h-control-row"
                       aria-label={`Assign ${posting.title}`}
                       {...gate.controlProps(assign.isPending)}
                     >
@@ -292,7 +292,7 @@ export function OpenTaskPanel({
       open={posting !== null}
       onOpenChange={(open) => !open && onClose()}
       docked
-      backLabel="Back to tasks"
+      backLabel="Back to Activity"
     >
       {posting ? (
         <PanelContent aria-describedby={undefined}>

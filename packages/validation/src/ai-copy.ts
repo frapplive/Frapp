@@ -19,10 +19,7 @@ import { AI_MINIMUM_AGE } from "./legal";
 
 /** The president's switches, as the API names them (`AI_CHAPTER_SWITCHES`). */
 export type AiChapterSwitchKey =
-  | "meeting_notes"
-  | "ask"
-  | "chat_source"
-  | "nudges";
+  "meeting_notes" | "ask" | "chat_source" | "nudges";
 
 export interface AiSwitchCopy {
   key: AiChapterSwitchKey;
@@ -74,7 +71,7 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
     key: "nudges",
     label: "Nudges on Activity",
     description:
-      "Frapp puts a short card on a member's Activity when one of their own tasks is coming due, late or sent back, with a place to start, and says thanks when they finish on time.",
+      "Frapp puts a short card on a member's Activity when one of their own tasks is coming due, late or sent back, with a place to start, and says thanks when they finish on time. It also judges a member's reason when they ask for a day more on a task; with this off, an officer decides every request.",
     short:
       "A short card on a member's Activity when one of their tasks could use a word.",
   },
@@ -191,10 +188,9 @@ export const FRAPP_AI_COPY = {
    */
   settingsCaption:
     "Ask questions, catch up on channels, draft minutes and get nudges.",
-  /** The phone's Settings section that holds Frapp Intelligence and nudges. */
-  settingsSection: "AI",
-  /** The line under that section; `privacyLink` is the linked words. */
-  settingsFootnote: "What Frapp Intelligence reads and who it works with is in the",
+  /** The line under the Frapp Intelligence page's group; `privacyLink` is the linked words. */
+  settingsFootnote:
+    "What Frapp Intelligence reads and who it works with is in the",
   turnOffFailed: "Couldn't turn off Frapp Intelligence",
   turnedOn: "Frapp Intelligence is on",
   turnedOff: "Frapp Intelligence is off",

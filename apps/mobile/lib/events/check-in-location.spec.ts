@@ -148,9 +148,7 @@ describe("locationBlockerCopy", () => {
     expect(locationBlockerCopy("services_off", "android").action).toBe(
       "turn_on",
     );
-    expect(locationBlockerCopy("services_off", "ios").action).toBe(
-      "settings",
-    );
+    expect(locationBlockerCopy("services_off", "ios").action).toBe("settings");
   });
 
   it("sends a refusal the OS won't ask about again to Settings, and asks again otherwise", () => {

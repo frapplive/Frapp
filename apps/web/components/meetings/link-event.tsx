@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEventWhenOr } from "@repo/formatting";
 import { useId, useMemo, useState } from "react";
 import { codeOf } from "@repo/api-sdk";
 import { useEvents, useLinkMeetingEvent, useMeetings } from "@repo/hooks";
@@ -22,7 +23,10 @@ import {
 /** How far back the picker looks for the meeting's event. */
 const RECENT_DAYS = 60;
 
-type EventRow = { id: string; name: string; start_time: string };
+type EventRow = { id: string; name: string; start_time: string } & Record<
+  string,
+  unknown
+>;
 
 /**
  * Minutes with no meeting (`spec/behavior/meetings.md` § Linking a meeting
@@ -71,7 +75,13 @@ export function LinkEventPanel({
       .filter((event) => {
         const at = Date.parse(event?.start_time ?? "");
         return (
-          !!event?.id && at >= from && at <= now && !withMinutes.has(event.id)
+          !!event?.id &&
+          // On the calendar only is never a meeting (#6098), as the
+          // phone's `meetingChoices` leaves it out.
+          event.calendar_only !== true &&
+          at >= from &&
+          at <= now &&
+          !withMinutes.has(event.id)
         );
       })
       .sort((a, b) => Date.parse(b.start_time) - Date.parse(a.start_time));
@@ -152,7 +162,7 @@ export function LinkEventPanel({
                   >
                     <span className="text-sm font-semibold">{event.name}</span>
                     <span className="text-caption text-muted-foreground">
-                      {meetingWhenLabel(event.start_time)}
+                      {formatEventWhenOr(event, meetingWhenLabel)}
                     </span>
                   </button>
                 </li>

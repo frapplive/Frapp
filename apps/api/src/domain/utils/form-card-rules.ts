@@ -161,6 +161,30 @@ function normalizeQuestion(
 }
 
 /**
+ * A list of questions as stored, or the reason it can't be: each checked as
+ * a form card's are, every id its own. The interest form (#5977) asks the
+ * card's question types with one builder, so it reads its questions here;
+ * its own ceiling on how many is the caller's. An empty list is allowed.
+ */
+export function normalizeFormQuestions(
+  raw: unknown,
+): { questions: FormQuestion[] } | { error: string } {
+  if (!Array.isArray(raw)) return { error: 'Questions must be a list' };
+  const seen = new Set<string>();
+  const questions: FormQuestion[] = [];
+  for (const entry of raw as unknown[]) {
+    const checked = normalizeQuestion(entry);
+    if ('error' in checked) return checked;
+    if (seen.has(checked.question.id)) {
+      return { error: 'Each question needs its own id' };
+    }
+    seen.add(checked.question.id);
+    questions.push(checked.question);
+  }
+  return { questions };
+}
+
+/**
  * The card as it is stored, or the reason it can't be. Text is trimmed; a
  * blank description is dropped; options on a question that takes none are
  * dropped; any key the card doesn't define is left out, which includes a
@@ -204,17 +228,9 @@ export function normalizeFormCard(
       error: `A form can have at most ${FORM_QUESTIONS_MAX} questions`,
     };
   }
-  const seen = new Set<string>();
-  const questions: FormQuestion[] = [];
-  for (const entry of payload.questions as unknown[]) {
-    const checked = normalizeQuestion(entry);
-    if ('error' in checked) return checked;
-    if (seen.has(checked.question.id)) {
-      return { error: 'Each question needs its own id' };
-    }
-    seen.add(checked.question.id);
-    questions.push(checked.question);
-  }
+  const checkedQuestions = normalizeFormQuestions(payload.questions);
+  if ('error' in checkedQuestions) return checkedQuestions;
+  const { questions } = checkedQuestions;
 
   const closing = normalizeClosesAt(payload.closes_at, 'A form', now);
   if ('error' in closing) return closing;

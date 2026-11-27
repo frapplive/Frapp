@@ -6,9 +6,10 @@ import {
   Post,
   Put,
   Req,
+  Res,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import request from 'supertest';
 import {
   configureApp,
@@ -18,6 +19,7 @@ import {
 import { enqueueSanitizedLog } from './infrastructure/analytics/posthog-runtime';
 import { getRequestId } from './infrastructure/observability/request-als';
 import type { DeploymentEnvironment } from './interface/http/deployment-environment';
+import { CORS_ALLOWED_ORIGINS } from './interface/http/cors.options';
 import { createProxyChainTripwire } from './interface/middleware/proxy-chain-tripwire.middleware';
 
 jest.mock('./infrastructure/analytics/posthog-runtime', () => ({
@@ -91,6 +93,31 @@ class ChannelsEchoController {
   }
 }
 
+/** Stands in for a list read and a stream (#6088). */
+@Controller('bodies')
+class BodiesController {
+  /** About the size a chapter's document list is per hundred files. */
+  @Get('large')
+  large(): { id: string; title: string }[] {
+    return Array.from({ length: 500 }, (_, i) => ({
+      id: `document-${i}`,
+      title: `Document ${i}`,
+    }));
+  }
+
+  @Get('small')
+  small(): { ok: boolean } {
+    return { ok: true };
+  }
+
+  @Get('stream')
+  stream(@Res() res: Response): void {
+    res.status(200).set({ 'Content-Type': 'text/event-stream' });
+    res.write(`data: ${'x'.repeat(4096)}\n\n`);
+    res.end();
+  }
+}
+
 /** No `environment` configures for this process, which under Jest is `local`. */
 async function createConfiguredEchoApp(
   environment?: DeploymentEnvironment,
@@ -102,6 +129,7 @@ async function createConfiguredEchoApp(
       AiReportsEchoController,
       DiscordImportsEchoController,
       ChannelsEchoController,
+      BodiesController,
     ],
   }).compile();
   const app = moduleRef.createNestApplication();
@@ -240,6 +268,60 @@ describe('configureApp', () => {
   });
   afterAll(async () => {
     await app?.close();
+  });
+
+  describe('response compression (#6088)', () => {
+    let app: INestApplication;
+
+    beforeAll(async () => {
+      app = await createConfiguredEchoApp();
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it('gzips a large JSON body for a caller that accepts it', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/v1/bodies/large')
+        .set('Accept-Encoding', 'gzip');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      expect(res.body).toHaveLength(500);
+    });
+
+    it('sends JSON as it is to a caller that does not accept gzip', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/v1/bodies/large')
+        .set('Accept-Encoding', 'identity');
+
+      expect(res.headers['content-encoding']).toBeUndefined();
+      expect(res.body).toHaveLength(500);
+    });
+
+    it('leaves a body under a kilobyte alone', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/v1/bodies/small')
+        .set('Accept-Encoding', 'gzip');
+
+      expect(res.headers['content-encoding']).toBeUndefined();
+    });
+
+    it('never compresses a stream, which would hold its events back', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/v1/bodies/stream')
+        .set('Accept-Encoding', 'gzip')
+        .buffer(true)
+        .parse((response, done) => {
+          let text = '';
+          response.on('data', (chunk: Buffer) => (text += chunk.toString()));
+          response.on('end', () => done(null, text));
+        });
+
+      expect(res.headers['content-encoding']).toBeUndefined();
+      expect(res.body).toContain('data: ');
+    });
   });
 
   describe('trust proxy (#864)', () => {
@@ -454,6 +536,22 @@ describe('configureApp', () => {
     ] as const)('%s refuses %s', async (environment, origin) => {
       expect(await allowOrigin(environment, origin)).toBeUndefined();
     });
+
+    // Without it Chrome reuses a preflight for five seconds, and an open
+    // after that paid an extra round trip before every first read (#6121).
+    it.each(['production', 'staging', 'local'] as const)(
+      '%s lets a browser keep a preflight answer for two hours',
+      async (environment) => {
+        const configured = apps.get(environment) as INestApplication;
+        const res = await request(configured.getHttpServer())
+          .options('/v1/echo')
+          .set('Origin', CORS_ALLOWED_ORIGINS[environment][0])
+          .set('Access-Control-Request-Method', 'GET')
+          .set('Access-Control-Request-Headers', 'authorization,x-chapter-id')
+          .expect(204);
+        expect(res.headers['access-control-max-age']).toBe('7200');
+      },
+    );
   });
 
   describe('security headers (#483)', () => {

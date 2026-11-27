@@ -29,12 +29,7 @@ export function AnnouncementCard({ message }: AnnouncementCardProps) {
 
   return (
     <Card className={cn(MESSAGE_CARD)}>
-      <div
-        className={cn(
-          EYEBROW,
-          "flex items-center gap-1.5 text-muted-foreground",
-        )}
-      >
+      <div className={cn(EYEBROW, "flex items-center gap-1.5 text-muted")}>
         <AnnouncementGlyph className="h-4 w-4" /> Announcement
       </div>
       <div className="mt-2 whitespace-pre-wrap break-words text-base">

@@ -13,6 +13,7 @@ import {
   type RushStage,
   type RushTag,
   rushNotesMode,
+  rushAddedBy,
   rushRowMark,
   rushLastContactLine,
   rushMemberOptions,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { FieldRow, StaticValue } from "@/components/tasks/task-panel";
+import { RushProspectForm } from "./rush-prospect-form";
 import { toastFailure } from "@/lib/failure-toast";
 import { cn } from "@/lib/utils";
 import { RushRatingControl } from "./rush-rating";
@@ -177,7 +179,7 @@ function ProspectBody({
                   if (stage) onMove(candidate, [stage]);
                 }}
               >
-                <SelectTrigger aria-label="Stage" className="h-9">
+                <SelectTrigger aria-label="Stage" className="h-control-small">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -238,7 +240,7 @@ function ProspectBody({
         ) : null}
         <FieldRow label="Added">
           <StaticValue>
-            {`${candidate.created_by_name} · ${formatDay(candidate.created_at) ?? ""}`}
+            {`${rushAddedBy(candidate)} · ${formatDay(candidate.created_at) ?? ""}`}
           </StaticValue>
         </FieldRow>
         {access.vote || rating ? (
@@ -357,7 +359,7 @@ function ProspectBody({
                 items={addable}
                 nameOf={(tag) => tag.label}
                 keyOf={(tag) => tag.id}
-                itemClassName="min-h-8 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+                itemClassName="min-h-control-row text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
                 renderItem={(tag) => (
                   <span className="min-w-0 flex-1 break-words">
                     {tag.label}
@@ -378,6 +380,10 @@ function ProspectBody({
         key={`contacts-${candidate.id}`}
         candidateId={candidate.id}
         today={today}
+      />
+      <RushProspectForm
+        candidateId={candidate.id}
+        fromForm={candidate.origin === "pnm"}
       />
       {rushNotesMode(access, candidate.user_id, viewerId) ? (
         <div className="border-t border-border pt-4">

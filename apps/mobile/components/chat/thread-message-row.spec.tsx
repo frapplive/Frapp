@@ -64,6 +64,7 @@ vi.mock("@repo/hooks", async () => {
     useUpdateTaskStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useConfirmTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRejectTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRequestTaskExtension: () => ({ mutateAsync: vi.fn(), isPending: false }),
     // The hours card's live read (#3383); its own spec covers the badge.
     useServiceEntry: () => ({ data: undefined }),
     // The rush card's live read and writes (#3383); its own spec covers them.
@@ -166,6 +167,7 @@ function renderRow(
     onReload?: (userId: string) => void;
     startsRun?: boolean;
     startsDay?: boolean;
+    newMessagesAbove?: boolean;
     roleColorFor?: (userId: string) => string | null;
     onOpenThread?: (message: ChatMessage) => void;
   } = {},
@@ -178,6 +180,7 @@ function renderRow(
           row={row}
           startsRun={overrides.startsRun ?? true}
           startsDay={overrides.startsDay ?? false}
+          newMessagesAbove={overrides.newMessagesAbove}
           viewerId={VIEWER}
           nameFor={(id) => (id === BLOCKED ? "Blake" : "Casey")}
           roleColorFor={overrides.roleColorFor}
@@ -807,6 +810,39 @@ describe("ThreadMessageRow — runs and day dividers (#2873)", () => {
 
     const later = renderRow(row, { startsDay: false });
     expect(allDrawnText(later)).not.toContain("Today");
+  });
+
+  it("draws the New messages divider above the first unread row, with the date when it starts a day (#6052)", () => {
+    const today = new Date();
+    today.setHours(9, 30, 0, 0);
+    const row = visible(
+      message({ sender_id: FRIEND, created_at: today.toISOString() }),
+    );
+    const dividers = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "View" &&
+          node.props.testID === "new-messages-divider",
+      );
+    const dayHeaders = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "View" &&
+          node.props.accessibilityRole === "header",
+      );
+
+    const plain = renderRow(row, { newMessagesAbove: true });
+    expect(dividers(plain)).toHaveLength(1);
+    expect(dividers(plain)[0]!.props.accessibilityLabel).toBe("New messages");
+
+    // One line carries both, rather than two rules stacked.
+    const both = renderRow(row, { newMessagesAbove: true, startsDay: true });
+    expect(dividers(both)[0]!.props.accessibilityLabel).toBe(
+      "New messages, Today",
+    );
+    expect(dayHeaders(both)).toHaveLength(0);
+
+    expect(dividers(renderRow(row))).toHaveLength(0);
   });
 
   it("draws the author line only on a row that starts a run", () => {

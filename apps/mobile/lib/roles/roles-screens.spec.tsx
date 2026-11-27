@@ -53,7 +53,8 @@ const h = vi.hoisted(() => ({
   aiSaving: false,
   // Chapter config (#5801): whether members may rename themselves.
   config: { members_can_change_name: false } as Record<string, unknown>,
-  patchConfig: vi.fn(),
+  // The config PATCH's `mutateAsync`, which Chapter settings awaits (#6027).
+  patchConfig: vi.fn<(diff: unknown) => Promise<object>>(async () => ({})),
 }));
 
 vi.mock("react-native", async () => {
@@ -101,8 +102,18 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       ok(options?.enabled === false ? undefined : h.aiSettings),
     useOrgConfig: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.config),
-    usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
+    usePatchOrgConfig: () => ({
+      mutate: vi.fn(),
+      mutateAsync: h.patchConfig,
+      isPending: false,
+    }),
+    // The Chapter tab's profile and birthday posts (#6027).
+    useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannels: () => ok([]),
     useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
       mutateAsync: h.createChannel,
@@ -297,14 +308,16 @@ afterEach(() => {
 });
 
 describe("Chapter settings (#4074)", () => {
-  it("holds the accent, chat background, study zones and Roles for an officer", () => {
+  it("holds the accent, chat background, Roles and the modules for an officer", () => {
     const text = screenText(render(<ChapterSettingsScreen />));
     expect(text).toContain("Chapter accent");
     expect(text).toContain("Chat background");
     expect(text).toContain("Midnight");
-    expect(text).toContain(
-      "Study zones\nManaged on the web dashboard.\n2 zones",
-    );
+    // Study zones is a module row now (#6030); its zone count moved to its
+    // screen.
+    expect(text).toContain("Modules");
+    expect(text).toContain("Study zones");
+    expect(text).not.toContain("Managed on the web dashboard.");
     expect(text).toContain("Roles");
     expect(text).not.toContain("Set by an officer");
   });
@@ -323,10 +336,9 @@ describe("Chapter settings (#4074)", () => {
     );
     expect(toggle.props.value).toBe(false);
     act(() => toggle.props.onValueChange(true));
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      { members_can_change_name: true },
-      expect.anything(),
-    );
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      members_can_change_name: true,
+    });
   });
 
   it("shows the member-names switch read-only to a viewer without :manage (#5801)", () => {

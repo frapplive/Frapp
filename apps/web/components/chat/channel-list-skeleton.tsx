@@ -33,7 +33,7 @@ export function ChannelListSkeleton() {
   return (
     <div aria-hidden="true" className="space-y-0.5">
       {SKELETON_ROW_WIDTHS.map((width, index) => (
-        <div key={index} className="flex h-8 items-center gap-2 px-2">
+        <div key={index} className="flex h-control-row items-center gap-2 px-2 pointer-coarse:h-11">
           <Skeleton className="h-4 w-4 shrink-0 rounded-xs" />
           <Skeleton className={cn("h-[13px]", width)} />
         </div>

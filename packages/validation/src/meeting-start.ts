@@ -1,4 +1,5 @@
 import { checkInWindowBounds } from "./check-in-window";
+import { eventIsDated, type EventTimingFields } from "./event-timing";
 
 /**
  * Which meeting a set of minutes starts on (`spec/behavior/meetings.md`
@@ -14,7 +15,7 @@ export type MeetingEventLike = {
   start_time: string;
   end_time?: string | null;
   check_in_opens_minutes?: number | null;
-};
+} & EventTimingFields;
 
 /** The name a meeting gets when the officer types none (#5219). */
 export const DEFAULT_MEETING_NAME = "Chapter meeting";
@@ -37,8 +38,13 @@ export function looksLikeHearing(name: string): boolean {
   return HEARING_NAME.test(name);
 }
 
-/** Whether `event`'s check-in window is open at `now`: the meeting is on. */
+/**
+ * Whether `event`'s check-in window is open at `now`: the meeting is on. An
+ * all-day, time-TBD or calendar-only event is never the meeting in the room
+ * (#6098): its window is a whole day, and minutes belong to a meeting.
+ */
 export function meetingIsOn(event: MeetingEventLike, now: number): boolean {
+  if (eventIsDated(event) || event.calendar_only) return false;
   const start = new Date(event.start_time);
   const end = new Date(event.end_time ?? "");
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -62,7 +68,11 @@ export function likelyMeeting<T extends MeetingEventLike>(
   withMinutes: ReadonlySet<string>,
   now: number,
 ): T | null {
-  const open = events.filter((event) => !withMinutes.has(event.id));
+  // A dated or calendar-only event is no meeting to take minutes on.
+  const open = events.filter(
+    (event) =>
+      !withMinutes.has(event.id) && !eventIsDated(event) && !event.calendar_only,
+  );
   const on = open.find((event) => meetingIsOn(event, now));
   if (on) return on;
   return (

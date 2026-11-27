@@ -10,10 +10,29 @@
  * redirect, which would lose a `#reported-messages` anchor on the way.
  */
 
-/** The Chat page: channels, categories, background and the report queue. */
-export const CHAT_SETTINGS_PATH = "/settings?tab=chat";
+/**
+ * A module's page in Chapter settings, or a page one of its rows opens
+ * (`?page=`, #6030): a tool, a goal, a rule's own page or one permission's
+ * Who can.
+ */
+export function moduleSettingsHref(
+  moduleKey: string,
+  page: string | null = null,
+): string {
+  const base = `/settings?tab=${encodeURIComponent(moduleKey)}`;
+  return page ? `${base}&page=${encodeURIComponent(page)}` : base;
+}
 
-/** One channel's own settings, opened in place of the Chat page. */
+/** The Chat module page: its switch, its tools and who can. */
+export const CHAT_MODULE_SETTINGS_PATH = moduleSettingsHref("chat");
+
+/**
+ * Chat admin, opened from the Chat page's row: channels, categories,
+ * background and the report queue.
+ */
+export const CHAT_SETTINGS_PATH = moduleSettingsHref("chat", "chat-admin");
+
+/** One channel's own settings, opened from Chat admin. */
 export function channelSettingsPath(channelId: string): string {
   return `${CHAT_SETTINGS_PATH}&channel=${encodeURIComponent(channelId)}`;
 }
@@ -28,13 +47,16 @@ export const CHAT_REPORTS_SETTINGS_PATH = `${CHAT_SETTINGS_PATH}#${CHAT_REPORTS_
 const DISCORD_IMPORT_TOOL = "discord-import";
 
 /** Discord import, opened in place of the Chat page. */
-export const DISCORD_IMPORT_SETTINGS_PATH = `${CHAT_SETTINGS_PATH}&tool=${DISCORD_IMPORT_TOOL}`;
+export const DISCORD_IMPORT_SETTINGS_PATH = `${CHAT_MODULE_SETTINGS_PATH}&tool=${DISCORD_IMPORT_TOOL}`;
 
-/** The Reports page, whose body is the export form. */
-export const REPORTS_SETTINGS_PATH = "/settings?tab=reports";
+/** The export form, opened from the Reports page's row. */
+export const REPORTS_SETTINGS_PATH = moduleSettingsHref("reports", "reports");
 
-/** The Points page, whose body is the chapter's points ledger (#5950). */
-export const POINTS_SETTINGS_PATH = "/settings?tab=points";
+/** The chapter's points ledger (#5950), opened from the Points page's row. */
+export const POINTS_SETTINGS_PATH = moduleSettingsHref(
+  "points",
+  "points-ledger",
+);
 
 /** `?member=` narrows the ledger to one member's transactions. */
 export const LEDGER_MEMBER_PARAM = "member";
@@ -44,11 +66,17 @@ export function pointsLedgerPath(userId: string): string {
   return `${POINTS_SETTINGS_PATH}&${LEDGER_MEMBER_PARAM}=${encodeURIComponent(userId)}`;
 }
 
-/** The Service hours page, whose body is the chapter's reviewed entries (#5950). */
-export const HOURS_SETTINGS_PATH = "/settings?tab=hours";
+/** The chapter's reviewed service entries (#5950), from the Service hours page. */
+export const HOURS_SETTINGS_PATH = moduleSettingsHref(
+  "hours",
+  "service-history",
+);
 
-/** The Study zones page, whose body is the zone list. */
-export const STUDY_ZONES_SETTINGS_PATH = "/settings?tab=geofences";
+/** The zone list, opened from the Study zones page's row. */
+export const STUDY_ZONES_SETTINGS_PATH = moduleSettingsHref(
+  "geofences",
+  "study-zones",
+);
 
 /**
  * Search params that open a page inside a module page (a channel's settings,
@@ -64,7 +92,7 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "handshake",
   // Consumed once by the module page's switch focus (#492).
   "module",
-  // A page opened from one of the Chapter tab's rows.
+  // A page opened from one of the Chapter tab's or a module page's rows.
   "page",
   // Roles and groups' pages: a tier, a role, a group, the automatic groups,
   // and where a group's page was opened from (#6029).

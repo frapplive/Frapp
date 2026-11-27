@@ -58,6 +58,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { UnreadDot } from "@/components/shared/unread-dot";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { EYEBROW } from "@/components/ui/typography";
 import {
   ROLE_NAME_CLASS,
   roleNameStyle,
@@ -68,6 +69,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { standingHref } from "@/components/standing/standing-doors";
+import { everyonesTasksLink, tasksTaskLink } from "@/lib/tasks/task-links";
 import { asArray, cn } from "@/lib/utils";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
@@ -110,7 +112,10 @@ type Notification = {
       /** "Minutes posted" (`meeting.service.ts`) names the minutes too. */
       meetingId?: string;
       taskId?: string;
-      /** "review": a task submitted to the reader for sign-off. */
+      /**
+       * "review": a task submitted to the reader for sign-off; "extension":
+       * a request for more time on it, for the reader to decide (#6096).
+       */
       view?: string;
       invoiceId?: string;
       /** "Suggested tasks to review" names what they were drawn from. */
@@ -185,20 +190,26 @@ export function deepLinkFor(notification: Notification): string {
     case "billing":
       return "/billing";
     // "Shawn Klein submitted: Clean his room" opens that review in
-    // Activity's panel; the board lists the viewer's own tasks, and an
-    // officer's review was never one of them.
+    // Activity's panel; any other task row opens its task in the task panel
+    // on Activity, where the Tasks page folded in (#5948).
     case "tasks":
       return target.view === "review" && target.taskId
         ? `/activity?review=${encodeURIComponent(target.taskId)}`
-        : "/tasks";
+        : // "Sam asks for more time" opens that request's panel (#6096).
+          target.view === "extension" && target.taskId
+          ? `/activity?extension=${encodeURIComponent(target.taskId)}`
+          : target.taskId
+          ? tasksTaskLink(target.taskId)
+          : "/activity";
     // Suggested tasks to review (#4313): on the minutes they came from, where
-    // the action items are; from any other source, the board's Suggested list.
+    // the action items are; from any other source, the suggestions strip on
+    // Activity's Everyone's (#5948).
     // One drawn from last year's event (#3930) is reviewed on Events.
     case AI_SUGGESTIONS_NOTIFICATION_SCREEN:
       if (target.sourceType === "event") return "/events";
       return target.sourceType === "meeting" && target.sourceId
         ? `/meetings/${target.sourceId}`
-        : "/tasks";
+        : everyonesTasksLink();
     // "Service hours approved" and "rejected" go to whoever logged the
     // entry: their own log, on their Profile (#5950).
     case "service":
@@ -486,7 +497,7 @@ export function NotificationsPopover({
             <div className="-mx-3 grid gap-2">
               {groups.map((group) => (
                 <section key={group.heading} aria-label={group.heading}>
-                  <h3 className="px-3 pb-1 text-caption font-semibold uppercase tracking-[0.08em] text-muted">
+                  <h3 className={`${EYEBROW} px-3 pb-1 text-muted`}>
                     {group.heading}
                   </h3>
                   <ul className="divide-y divide-border">

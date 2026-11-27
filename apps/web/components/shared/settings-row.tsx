@@ -117,8 +117,12 @@ type Trailing =
       href?: never;
     };
 
+/**
+ * foundations §9's Settings row step: 36 to a mouse (44 until #6115), 44 to a
+ * finger. A row with its muted line grows past it.
+ */
 const ROW =
-  "flex min-h-11 items-center gap-4 px-4 py-2.5 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
+  "flex min-h-control-settings-row items-center gap-4 px-4 py-1.5 pointer-coarse:min-h-11 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
 
 export function SettingsRow(
   props: {
@@ -139,7 +143,10 @@ export function SettingsRow(
      * own: a role's or group's dot (Discord's role list).
      */
     leading?: ReactNode;
-    /** The id of the row's link or button, for focus to come back to. */
+    /**
+     * The id of the row's link, button or switch, for focus to come back to
+     * and for a deep link or a search result to land on.
+     */
     id?: string;
     /**
      * Actions on the row (a page or picker row only): right-click and ⋯.
@@ -154,7 +161,8 @@ export function SettingsRow(
   const row = cn(ROW, nested && "pl-10");
   const labelId = useId();
   const descriptionId = useId();
-  const switchId = useId();
+  const generatedSwitchId = useId();
+  const switchId = props.id ?? generatedSwitchId;
   const isSwitch = "onCheckedChange" in props && !!props.onCheckedChange;
   // A switch row's label is a real <label>, so clicking the words flips it.
   const LabelTag = isSwitch ? "label" : "span";

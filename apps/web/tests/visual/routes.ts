@@ -24,10 +24,10 @@ export const DASHBOARD_ROUTES = [
   // surface is covered by `/settings`, and so are `/geofences`, `/reports`,
   // `/discord-import` and `/chat-admin`, which redirect to their pages in
   // Chapter settings (#3837). `/points`, `/service` and `/study` redirect to
-  // the member's own panels on `/profile` (#5950), which is listed.
+  // the member's own panels on `/profile` (#5950), which is listed. `/tasks`
+  // redirects to `/activity` (#5948), which is listed.
   "/activity",
   "/events",
-  "/tasks",
   "/rush",
   "/documents",
   "/backwork",

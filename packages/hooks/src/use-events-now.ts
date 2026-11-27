@@ -7,7 +7,9 @@ import { dayDelta, formatClockShort } from "@repo/formatting";
 import {
   CHECK_IN_OPEN_LABEL,
   EVENT_NOW_COPY,
+  eventIsDated,
   eventOnAt,
+  eventTimingFieldsOf,
 } from "@repo/validation";
 import { activityKeys } from "./use-activity";
 import { useNow } from "./use-now";
@@ -133,10 +135,16 @@ export function eventNowPill(
     start_time?: unknown;
     end_time?: unknown;
     check_in_opens_minutes?: unknown;
+    timing?: unknown;
+    calendar_only?: unknown;
   },
   now: Date,
 ): { live: boolean; label: string } | null {
   const at = now.getTime();
+  // An all-day, time-TBD or calendar-only event is never on and never
+  // "Ended": its times are midnights (#6098).
+  const shape = eventTimingFieldsOf(event as Record<string, unknown>);
+  if (eventIsDated(shape) || shape.calendar_only) return null;
   if (
     eventOnAt(
       event.start_time,

@@ -94,9 +94,9 @@ const rowOf = (container: HTMLElement, id: string) =>
 
 /** Row titles under a section header, in DOM order. */
 function titlesUnder(container: HTMLElement, label: string): string[] {
-  const header = Array.from(container.querySelectorAll("p.uppercase")).find(
-    (node) => node.textContent === label,
-  );
+  const header = Array.from(
+    container.querySelectorAll('p[data-flip^="head:"]'),
+  ).find((node) => node.textContent === label);
   const list = header?.parentElement?.querySelector("ul");
   return Array.from(list?.querySelectorAll("li") ?? []).map(
     (li) => li.querySelector("span.truncate")?.textContent ?? "",
@@ -349,6 +349,26 @@ describe("ChannelList reorder", () => {
       await waitFor(() => expect(rowOf(container, "c-alum")).not.toBeNull());
       expect(slotOf(container)).toBeNull();
       expect(document.body.querySelector("[data-reorder-ghost]")).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  // #6053: the heading's ⋯ goes while anything is held, as the + does, so
+  // the heading under the pointer stays the whole drop target.
+  it("hides a heading's ⋯ while a row is held", () => {
+    const { container } = setup({ withSidebar: true });
+    expect(
+      screen.queryAllByRole("button", { name: /^More for / }).length,
+    ).toBeGreaterThan(0);
+    const restore = hold(
+      rowOf(container, "c-gen")!,
+      rowOf(container, "c-rand")!,
+    );
+    try {
+      expect(screen.queryAllByRole("button", { name: /^More for / })).toEqual(
+        [],
+      );
     } finally {
       restore();
     }

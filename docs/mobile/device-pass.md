@@ -78,21 +78,21 @@ the smoke account set up first), so row 18 still walks the You rows by hand.
 | 18 | iPhone | You: open each row, and leave each by its back row | Every row opens its page, and nothing on the page is a dead end (a control that looks tappable does something) | smoke checklist §§ 2-3 |
 | 19 | iPhone | A channel's ⋯, Edit channel, Who can see. Then Chapter settings, any module, Who can | Each sheet opens over the one before and closes back to it. On the iPhone, swipe back from Chapter settings works | #4526, #4502 |
 | 20 | Both | You: change your photo, then put the old one back | The new photo shows at the top of You, on the You tab itself and on your chat messages without a restart | #808 row 8, #4486 |
-| 21 | iPhone | Settings: switch chat density, open a channel, then switch it back. Then change the quiet-hours end time, leave Settings, come back, and set it back | The open channel redraws in the new density. The new end time is still there when you come back | #3640, #808 row 14 |
+| 21 | iPhone | Settings → Chat: switch chat density, open a channel, then switch it back. Then on Settings → Notifications change the quiet-hours end time, leave Settings, come back, and set it back | The open channel redraws in the new density. The new end time is still there when you come back | #3640, #808 row 14 |
 
 ## 6. Offline and push (2 minutes)
 
 | # | Phone | Do | Expect | From |
 |---|---|---|---|---|
 | 22 | Both | Turn on airplane mode, send a message, turn it off | A small "Offline" pill fades in and nothing on screen moves. The message waits in gray and sends on its own when you reconnect | smoke checklist § 4 |
-| 23 | Both | Settings, Push notifications. If it's off, turn it on. Note the time | The OS prompt, or the OS settings app if it asked before. Note the time in your comment so the token row can be checked | #808 row 5, #2617, #3452, #3635 |
+| 23 | Both | Settings → Notifications, Push notifications. If it's off, turn it on. Note the time | The OS prompt, or the OS settings app if it asked before. Note the time in your comment so the token row can be checked | #808 row 5, #2617, #3452, #3635 |
 | 24 | Both | Force-quit the app and lock the phone. Ask your brother to @mention you in #general | The push arrives naming him and the message. Tapping it opens #general | #808 row 5 |
 
 ## 7. Sign out and back in (1 minute)
 
 | # | Phone | Do | Expect | From |
 |---|---|---|---|---|
-| 25 | Android | Settings, Sign out, Continue with email, tap the password field | The field and Sign in sit above the keyboard. Android back returns to the first view without leaving the app | #4208, #808 row 2 |
+| 25 | Android | Settings → Account, Sign out, Continue with email, tap the password field | The field and Sign in sit above the keyboard. Android back returns to the first view without leaving the app | #4208, #808 row 2 |
 | 26 | Android | Sign back in | Straight to the chat, with no chapter picker | smoke checklist § 1 |
 
 ## 8. Check-in link and Scan code (4 minutes)

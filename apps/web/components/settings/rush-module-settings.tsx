@@ -1,77 +1,147 @@
 "use client";
 
 import { useState } from "react";
+import { Columns3, Tag } from "lucide-react";
+import { countSummary } from "@repo/hooks/module-settings";
+import { RUSH_SETTINGS_COPY } from "@repo/validation";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   rushPipelineAccess,
   useMyPermissions,
   useRushPipeline,
 } from "@repo/hooks";
-import { isWildcardRole, mayGrant, reachesTier } from "@repo/hooks/role-tiers";
+import {
+  RUSH_READ_NOTES,
+  rushNotesAccess,
+} from "@repo/hooks/rush-notes-access";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { InlineNote } from "@/components/shared/inline-note";
 import { Button } from "@/components/ui/button";
 import { useTierPermissionToggle } from "@/components/roles/use-role-permission-toggle";
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { RushStageEditor } from "./rush-stage-editor";
-import { RushRecruitmentPicks } from "./rush-recruitment-picks";
-import { RushStaleDays } from "./rush-stale-days";
+import {
+  RushBidExpiryRow,
+  RushRecruitmentPicks,
+} from "./rush-recruitment-picks";
+import { RushStaleDaysRow } from "./rush-stale-days";
 import { RushTagList } from "./rush-tag-list";
+import {
+  InterestFormRow,
+  InterestFormSettingsSection,
+} from "./interest-form-settings";
 
 /** The key that lets a role read recruitment notes. */
-export const RUSH_READ_NOTES = "rush:read_notes";
+export { RUSH_READ_NOTES };
 
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
- * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live):
- * its stages, its tags, how many days without a contact a prospect needs a
- * follow-up after (#5934), the role an accepted prospect joins with and who
- * hears about sign-ups (#5973), and turning notes on for a chapter where
- * nobody can read them yet. One page, no second recruitment settings screen. The
- * stages and tags read through the pipeline's routes, so they show only to a
- * viewer who can open the pipeline while the module is on; `rush:manage`
- * edits them.
+ * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live), in
+ * the settings-rows shape (#6030): the interest form (#5977) as a row with
+ * whether it's open, opening its own page; a Rules group with the two day
+ * counts typed in place (follow-ups #5934, bids) and a row each for the
+ * stages and the tags, which open their own pages; then who an accepted
+ * prospect joins as and who hears about sign-ups (#5973). One page, no
+ * second recruitment settings screen. The stages, tags and form read through
+ * the pipeline's routes, so they show only to a viewer who can open the
+ * pipeline while the module is on; `rush:manage` edits them.
  */
 export function RushModuleSettings({
   moduleOn,
-  canEditRoles,
   canSeeWhoCan,
+  pageHref,
 }: {
   moduleOn: boolean;
-  /** `roles:manage`, the guard on the tier write. */
-  canEditRoles: boolean;
   /** `members:view`, which reading the chapter's roles needs. */
   canSeeWhoCan: boolean;
+  /** Where one of the page's own pages is (`?page=`). */
+  pageHref: (page: string) => string;
 }) {
   const permissions = useMyPermissions().data?.permissions;
   const access = rushPipelineAccess(permissions);
   const pipeline = useRushPipeline({ enabled: moduleOn && access.view });
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
+      {moduleOn && access.view ? (
+        <SettingsGroup label="Interest form">
+          <InterestFormRow href={pageHref("interest-form")} />
+        </SettingsGroup>
+      ) : null}
       {moduleOn && access.view ? (
         pipeline.data ? (
-          <>
-            <RushStageEditor
-              stages={pipeline.data.stages}
-              canEdit={access.manage}
-            />
-            <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />
-            <RushStaleDays
+          <SettingsGroup heading="Rules">
+            <RushStaleDaysRow
               staleDays={pipeline.data.stale_days}
               canEdit={access.manage}
             />
-            <RushRecruitmentPicks
-              canEdit={access.manage}
-              canSeeRoles={canSeeWhoCan}
+            <RushBidExpiryRow canEdit={access.manage} />
+            <SettingsRow
+              id="module-row-stages"
+              icon={Columns3}
+              label={RUSH_SETTINGS_COPY.stages.title}
+              value={countSummary(
+                pipeline.data.stages.filter((stage) => !stage.hidden).length,
+                "stage",
+                "stages",
+              )}
+              href={pageHref("stages")}
             />
-          </>
+            <SettingsRow
+              id="module-row-tags"
+              icon={Tag}
+              label={RUSH_SETTINGS_COPY.tags.title}
+              value={countSummary(pipeline.data.tags.length, "tag", "tags")}
+              href={pageHref("tags")}
+            />
+          </SettingsGroup>
         ) : pipeline.isError ? (
-          <InlineNote>Couldn&apos;t load the stages and tags.</InlineNote>
+          <InlineNote>{RUSH_SETTINGS_COPY.stagesAndTagsFailed}</InlineNote>
         ) : null
       ) : null}
-      {canSeeWhoCan ? <RushNotesAccess canEditRoles={canEditRoles} /> : null}
+      {/*
+        The picks read the recruitment settings route, which refuses a viewer
+        without rush:view and a chapter with Recruitment off, as the pipeline
+        does.
+      */}
+      {moduleOn && access.view ? (
+        <RushRecruitmentPicks
+          canEdit={access.manage}
+          canSeeRoles={canSeeWhoCan}
+        />
+      ) : null}
     </div>
   );
+}
+
+/** Recruitment → Interest form, the page its row opens. */
+export function RushInterestFormPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  return <InterestFormSettingsSection canManage={access.manage} />;
+}
+
+/** Recruitment → Stages, the page its row opens. */
+export function RushStagesPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  const pipeline = useRushPipeline({ enabled: access.view });
+  if (pipeline.isError) {
+    return <InlineNote>{RUSH_SETTINGS_COPY.stages.loadFailed}</InlineNote>;
+  }
+  if (!pipeline.data) return null;
+  return (
+    <RushStageEditor stages={pipeline.data.stages} canEdit={access.manage} />
+  );
+}
+
+/** Recruitment → Tags, the page its row opens. */
+export function RushTagsPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  const pipeline = useRushPipeline({ enabled: access.view });
+  if (pipeline.isError) {
+    return <InlineNote>{RUSH_SETTINGS_COPY.tags.loadFailed}</InlineNote>;
+  }
+  if (!pipeline.data) return null;
+  return <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />;
 }
 
 /**
@@ -80,7 +150,8 @@ export function RushModuleSettings({
  * isn't a grant anyone chose). New chapters start with it on for their top
  * two tiers; an existing chapter turns it on here, in one press, for the
  * same two (`spec/behavior/rush.md` § Notes). Once anyone holds
- * it the line goes, and the Who can block below says who.
+ * it the line goes, and the switches under it on the Read recruitment notes
+ * page (#6030) say who.
  *
  * The write is a tier's permission list (`useTierPermissionToggle`), so it
  * needs `roles:manage` and the rank rules: the button is dimmed with the
@@ -93,31 +164,16 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   if (rolesQuery.isPending || tiersQuery.isPending) return null;
   if (rolesQuery.isError || tiersQuery.isError) return null;
 
-  const top = [...tiers].sort((a, b) => a.position - b.position).slice(0, 2);
-  const holds = (tier: (typeof tiers)[number]) =>
-    toggle.permissionsOf(tier).includes(RUSH_READ_NOTES);
-  // Anyone holding it beyond the top two means the chapter chose who reads
-  // notes: the line goes. Only part of the top two holding it (a grant that
-  // half failed) keeps the line, so the press can finish the job.
-  const heldElsewhere =
-    tiers.some((tier) => !top.includes(tier) && holds(tier)) ||
-    roles.some(
-      (role) =>
-        !isWildcardRole(role) && role.permissions.includes(RUSH_READ_NOTES),
-    );
-  const missing = top.filter((tier) => !holds(tier));
-  if (heldElsewhere || (top.length > 0 && missing.length === 0)) return null;
-  const partly = missing.length < top.length;
-
-  const why =
-    top.length === 0
-      ? `Your chapter has no ${words.plural} yet.`
-      : !canEditRoles
-        ? "Your role can't change roles."
-        : !mayGrant(reach, RUSH_READ_NOTES) ||
-            !top.every((tier) => reachesTier(reach, tier))
-          ? "Only the President can turn this on."
-          : null;
+  const access = rushNotesAccess({
+    tiers,
+    roles,
+    tierHolds: (tier) => toggle.permissionsOf(tier).includes(RUSH_READ_NOTES),
+    reach,
+    canEditRoles,
+    tierPlural: words.plural,
+  });
+  if (!access) return null;
+  const { why, missing } = access;
 
   async function grant() {
     setGranting(true);
@@ -135,14 +191,7 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   return (
     <ProfileSection id="settings-module-rush-notes" title="Notes">
       <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-foreground">
-          {partly
-            ? `Only ${top
-                .filter(holds)
-                .map((tier) => tier.name)
-                .join(" and ")} can read recruitment notes so far.`
-            : "Nobody can read recruitment notes yet."}
-        </p>
+        <p className="text-sm text-foreground">{access.line}</p>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <Button
             type="button"
@@ -152,9 +201,7 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
             title={why ?? undefined}
             onClick={() => void grant()}
           >
-            {partly
-              ? `Let ${missing.map((tier) => tier.name).join(" and ")} read them too`
-              : `Let the top two ${words.plural} read them`}
+            {access.action}
           </Button>
           {why ? (
             <span className="text-caption text-muted-foreground">{why}</span>

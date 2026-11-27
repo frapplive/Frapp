@@ -709,7 +709,7 @@ function createStyles(tokens: SignetTokens) {
     },
     groupHeading: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     point: {
       minHeight: tokens.touch.minimum,

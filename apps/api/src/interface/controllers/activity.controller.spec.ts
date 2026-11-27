@@ -80,7 +80,12 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       enabledModules,
-      { weekStart: undefined, now: expect.any(Date), minutes: false },
+      {
+        weekStart: undefined,
+        now: expect.any(Date),
+        minutes: false,
+        extensions: false,
+      },
     );
     expect(result).toBe(view);
   });
@@ -97,7 +102,7 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       null,
-      { weekStart, now: expect.any(Date), minutes: false },
+      { weekStart, now: expect.any(Date), minutes: false, extensions: false },
     );
   });
 
@@ -116,7 +121,12 @@ describe('ActivityController', () => {
       'chapter-1',
       'user-1',
       null,
-      { weekStart: yearAgo, now: expect.any(Date), minutes: false },
+      {
+        weekStart: yearAgo,
+        now: expect.any(Date),
+        minutes: false,
+        extensions: false,
+      },
     );
   });
 
@@ -125,13 +135,20 @@ describe('ActivityController', () => {
 
     await controller.getActivity('chapter-1', 'user-1', null, {
       minutes: 'true',
+      // And the requests for more time (#6096), the same way.
+      extensions: 'true',
     });
 
     expect(activityService.getActivity).toHaveBeenCalledWith(
       'chapter-1',
       'user-1',
       null,
-      { weekStart: undefined, now: expect.any(Date), minutes: true },
+      {
+        weekStart: undefined,
+        now: expect.any(Date),
+        minutes: true,
+        extensions: true,
+      },
     );
   });
 

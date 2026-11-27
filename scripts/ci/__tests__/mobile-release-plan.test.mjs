@@ -74,6 +74,15 @@ describe("compareNativeInputs", () => {
     assert.deepEqual(results[1].changed, ["expo-haptics 57.0.1 -> 57.0.3"]);
     assert.match(results[2].error, /Commit 3{40} of the base isn't available/);
   });
+
+  it("names a change to the app's own native source (#6024)", () => {
+    const { git } = fakeGit({
+      ...locksAt({ [IOS_SHA]: HEAD_LOCK }),
+      [`diff --quiet ${IOS_SHA} HEAD -- apps/mobile/targets`]: { status: 1 },
+    });
+    const [result] = compareNativeInputs({ builds: [entry("ios", "0.9.2", "9", IOS_SHA)], git, headLock: HEAD_LOCK, isNative });
+    assert.deepEqual(result.changed, ["apps/mobile/targets"]);
+  });
 });
 
 // ── The plan ────────────────────────────────────────────────────────────────

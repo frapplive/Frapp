@@ -214,17 +214,18 @@ function categoryAccessSummary(
 }
 
 /**
- * Chat admin, inside Chapter settings' Chat page (#3837). Two views, the way
+ * Chat admin, opened from the Chat page of Chapter settings (#3837, #6030:
+ * `?tab=chat&page=chat-admin`). Two views, the way
  * Discord splits channel settings from server settings (Paul, 2026-11-11:
  * "scope the chat admin panel to whatever channel you're editing"):
  *
  * - **`?channel=<id>`: that channel's settings, and nothing else**, drawn in
- *   place of the Chat page. The channel start's Edit channel shortcut
+ *   place of Chat admin. The channel start's Edit channel shortcut
  *   (`components/chat/channel-start.tsx`) and the chat rail's right-click
  *   Edit channel (`chat-shell.tsx`) open it, as Discord's Edit Channel opens
  *   its full-screen settings. Its settings first, then its pins, then the
  *   reports filed in it, and a way back to all chat settings.
- * - **No channel: the chapter's chat settings**, the body of the Chat page.
+ * - **No channel: the chapter's chat settings**, the Chat admin page itself.
  *   New channel, the categories with every channel under its own (#5727;
  *   a channel row opens that channel's settings), the chapter's chat
  *   background, and the whole report queue last (the only
@@ -833,12 +834,15 @@ function ChatAdminBody({
             <div className="@container">
               <section aria-labelledby="ca-edit-label" className="space-y-6">
                 {/*
-                  Drawn in place of the Chat page of Chapter settings, so it
+                  Drawn in place of Chat admin in Chapter settings, so it
                   heads itself the way that page does, with the way back to
                   it above (`SettingsSubpage`'s shape, plus the badges).
                 */}
                 <header className="space-y-1 border-b border-border pb-6">
-                  <SettingsBackLink href={CHAT_SETTINGS_PATH} label="Chat" />
+                  <SettingsBackLink
+                    href={CHAT_SETTINGS_PATH}
+                    label="Chat admin"
+                  />
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2
                       id="ca-edit-label"
@@ -1040,10 +1044,7 @@ function ChatAdminBody({
                   aria-labelledby="ca-pins-label"
                   className="space-y-2 border-t border-border pt-6"
                 >
-                  <h3
-                    id="ca-pins-label"
-                    className={`${EYEBROW} text-muted-foreground`}
-                  >
+                  <h3 id="ca-pins-label" className={`${EYEBROW} text-muted`}>
                     Pinned messages
                     {/* A count only once there is a list to count. */}
                     {pinsQuery.data !== undefined ? ` (${pins.length})` : ""}
@@ -1135,7 +1136,7 @@ function ChatAdminBody({
               <Button asChild variant="secondary" size="sm" className="gap-1.5">
                 <Link href={CHAT_SETTINGS_PATH}>
                   <ArrowLeft className="h-4 w-4" />
-                  All chat settings
+                  Chat admin
                 </Link>
               </Button>
             </div>
@@ -1224,7 +1225,7 @@ function ChatAdminBody({
                               onChange={(event) =>
                                 setCategoryNameDraft(event.target.value)
                               }
-                              className="h-8"
+                              className="h-control-row"
                               autoFocus
                             />
                             <div className="flex gap-1">
@@ -1346,7 +1347,7 @@ function ChatAdminBody({
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
                   placeholder="Officers"
-                  className="h-8"
+                  className="h-control-row"
                 />
               </div>
               <Button
@@ -1613,7 +1614,7 @@ function CategoryChannelList({
           <Link
             href={channelSettingsPath(channel.id)}
             className={cn(
-              "group flex min-h-9 items-center gap-2 rounded-md border border-transparent px-2 text-sm text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
+              "group flex min-h-control-list-row items-center gap-2 rounded-md border border-transparent px-2 text-sm text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           >

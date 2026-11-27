@@ -54,7 +54,8 @@ const WEB_ACTIONS: Record<
     icon: MeetingsGlyph,
   },
   newEvent: { href: newIntentHref("/events"), icon: EventsGlyph },
-  newTask: { href: newIntentHref("/tasks"), icon: TasksGlyph },
+  // Activity's New task (#5948): the board's Mine part opens its add line.
+  newTask: { href: newIntentHref("/activity"), icon: TasksGlyph },
   message: { href: newIntentHref(MESSAGES_ROUTE), icon: DirectMessagesGlyph },
   // The member's own Service hours panel on Profile holds the form (#5950).
   logHours: {
