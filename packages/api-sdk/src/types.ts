@@ -14191,6 +14191,25 @@ export interface components {
             /** Format: date-time */
             end_time: string;
             /**
+             * @description The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`.
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event.
+             */
+            start_date: string | null;
+            /**
+             * Format: date
+             * @description A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event.
+             */
+            end_date: string | null;
+            /** @description Whether the event might not happen. */
+            is_tentative: boolean;
+            /** @description Whether the event is on the calendar only: nobody checks in, earns points or is marked absent. */
+            calendar_only: boolean;
+            /**
              * @description What the event asks of the caller, not the event’s default: a role of theirs the event lists decides it, and an alumnus the default alone would require is optional.
              * @enum {string}
              */

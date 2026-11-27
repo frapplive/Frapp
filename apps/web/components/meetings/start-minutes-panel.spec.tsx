@@ -284,6 +284,31 @@ describe("StartMinutesPanel picks the meeting", () => {
     });
   });
 
+  it("never lists a calendar-only event as a meeting (#6098)", () => {
+    const now = Date.now();
+    mocks.events.current = [
+      {
+        id: "e-info",
+        name: "Council deadline",
+        calendar_only: true,
+        start_time: new Date(now - 0.25 * hour).toISOString(),
+        end_time: new Date(now + hour).toISOString(),
+      },
+      {
+        id: "e-exec",
+        name: "Exec meeting",
+        start_time: new Date(now - 48 * hour).toISOString(),
+        end_time: new Date(now - 47 * hour).toISOString(),
+      },
+    ];
+    mocks.meetings.current = [];
+    render(<StartMinutesPanel open onOpenChange={() => {}} />);
+    expect(screen.queryByText("Council deadline")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Exec meeting/ }),
+    ).toBeInTheDocument();
+  });
+
   it("skips meetings that already have minutes", () => {
     const now = Date.now();
     mocks.events.current = [

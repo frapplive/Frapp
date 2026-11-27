@@ -8,11 +8,16 @@ import {
   describeAttendance,
   EVENT_FORM_ROW_LABELS,
   EVENT_PAGE_COPY,
+  EVENT_TENTATIVE_LABEL,
   eventPagePhase,
   statusLabel,
 } from "@repo/validation";
 import type { EventFormGlyphName } from "@repo/theme/event-form-glyphs";
-import { formatDayTime, formatPointsChip } from "@repo/formatting";
+import {
+  formatDayTime,
+  formatEventWhen,
+  formatPointsChip,
+} from "@repo/formatting";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
@@ -71,7 +76,6 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import {
   formatCheckInOpens,
   formatEventClock,
-  formatEventWindow,
   resolveCheckInWindow,
   sortEventsByStart,
   type CheckInWindow,
@@ -83,6 +87,7 @@ import {
   selectSeriesOccurrences,
   type EventDetail,
 } from "@/lib/events/select";
+import { eventPageShows } from "@/lib/events/event-page-shape";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { eyebrowStyle } from "@/components/eyebrow";
 import { pageSurfaces } from "@/lib/surfaces";
@@ -259,12 +264,19 @@ export default function EventDetailsScreen() {
     event.check_in_opens_minutes,
   );
   const requiredOfViewer = requiredOf(event.attendance);
+  // The shape decides what attending looks like here (#6098): no check-in
+  // for a calendar-only or time-TBD event, no roster, points or excuses on
+  // one that's on the calendar only, and never on now for a dated one.
+  const shows = eventPageShows(event);
   const phase = eventPagePhase(
     event.start_time,
     event.end_time,
     event.check_in_opens_minutes,
     now.getTime(),
+    event,
   );
+  const nowPill = eventNowPill(event, now);
+  const points = shows.points ? event.point_value : 0;
 
   return (
     // Around the shell, not inside it: a provider in the body would fold the
@@ -292,30 +304,35 @@ export default function EventDetailsScreen() {
         }
         title={event.name}
         subtitle={[
-          formatEventWindow(event.start_time, event.end_time, now),
+          // By its days for an all-day or time-TBD event, never its stored
+          // midnights (#6098).
+          formatEventWhen(event, now),
           event.location,
         ]
           .filter(Boolean)
           .join(" · ")}
       >
-        {requiredOfViewer || event.point_value || eventNowPill(event, now) ? (
+        {requiredOfViewer || points || nowPill || shows.tentative ? (
           <View style={styles.badgeRow}>
             {/* Where it stands, first (#5777): on now, or ended today. */}
-            <EventNowPill event={event} now={now} />
+            {nowPill ? <EventNowPill event={event} now={now} /> : null}
+            {/* It might not happen (#6098): a status beside the name, in
+                the neutral hairline, never an alarm. */}
+            {shows.tentative ? (
+              <HairlineChip label={EVENT_TENTATIVE_LABEL} />
+            ) : null}
             {requiredOfViewer ? (
               // The hairline kind, as the list and the chat card draw it
               // (#4132): one look for Mandatory on every screen.
               <HairlineChip label={EVENT_PAGE_COPY.required} />
             ) : null}
-            {event.point_value ? (
-              <AccentChip label={formatPointsChip(event.point_value)} />
-            ) : null}
+            {points ? <AccentChip label={formatPointsChip(points)} /> : null}
           </View>
         ) : null}
 
         {/* While check-in is open it is the one thing to do, so its card
             leads (web's sheet lifts its Check-in row the same way). */}
-        {phase === "live" ? (
+        {shows.checkIn && phase === "live" ? (
           <CheckInCard event={event} window={window} now={now} />
         ) : null}
 
@@ -328,19 +345,21 @@ export default function EventDetailsScreen() {
           event={event}
           now={now}
           excuse={
-            <MyExcuse
-              eventId={event.id}
-              required={requiredOfViewer}
-              start={event.start_time}
-              end={event.end_time}
-              opensMinutes={event.check_in_opens_minutes}
-              now={now}
-              startWriting={startExcuse}
-            />
+            shows.excuses ? (
+              <MyExcuse
+                eventId={event.id}
+                required={requiredOfViewer}
+                start={event.start_time}
+                end={event.end_time}
+                opensMinutes={event.check_in_opens_minutes}
+                now={now}
+                startWriting={startExcuse}
+              />
+            ) : null
           }
         />
 
-        {phase !== "live" ? (
+        {shows.checkIn && phase !== "live" ? (
           <CheckInCard event={event} window={window} now={now} />
         ) : null}
 
@@ -363,8 +382,9 @@ export default function EventDetailsScreen() {
 
         {/* The event's creator receives its excuses; an events:update
             holder may decide them too (§ Excuses). */}
-        {canDecideExcuses ||
-        (viewerId !== null && event.created_by === viewerId) ? (
+        {shows.excuses &&
+        (canDecideExcuses ||
+          (viewerId !== null && event.created_by === viewerId)) ? (
           <ExcuseReviewSection
             eventId={event.id}
             viewerId={viewerId}
@@ -379,7 +399,7 @@ export default function EventDetailsScreen() {
           eventId={event.id}
           audience={event.attendance}
           phase={phase}
-          canTakeAttendance={canDecideExcuses && !eventGone}
+          canTakeAttendance={shows.roster && canDecideExcuses && !eventGone}
         />
 
         <EventMinutesRow eventId={event.id} eventName={event.name} />

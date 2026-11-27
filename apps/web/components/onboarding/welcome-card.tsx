@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEventWhenOr } from "@repo/formatting";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, X } from "lucide-react";
@@ -149,7 +150,9 @@ export function WelcomeCard({
                 {event.name}
               </span>
               <span className="shrink-0 text-muted-foreground">
-                {welcomeCardEventWhen(event.start_time, new Date())}
+                {formatEventWhenOr(event, (start) =>
+                  welcomeCardEventWhen(start, new Date()),
+                )}
               </span>
             </Link>
           </li>

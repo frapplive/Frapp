@@ -43468,6 +43468,35 @@
             "type": "string",
             "format": "date-time"
           },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "The event’s shape: `timed`, `all_day` or `time_tbd`. A dated event is drawn by `start_date` and `end_date`, never by the midnights in `start_time` and `end_time`."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "A dated event’s first day, `YYYY-MM-DD`, with no zone. Null for a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "A dated event’s last day, inclusive, `YYYY-MM-DD`. Null for a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "Whether the event might not happen."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "Whether the event is on the calendar only: nobody checks in, earns points or is marked absent."
+          },
           "attendance": {
             "type": "string",
             "enum": [
@@ -43542,6 +43571,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "attendance",
           "point_value",
           "check_in_opens_minutes",

@@ -46,6 +46,12 @@ export interface ActivityEventRow {
   location: string | null;
   start_time: string;
   end_time: string;
+  /** The event's shape (#6098); a row from an API before it reads as timed. */
+  timing?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  is_tentative?: boolean | null;
+  calendar_only?: boolean | null;
   attendance: "required" | "optional";
   point_value: number;
   check_in_opens_minutes: number;
@@ -120,6 +126,11 @@ export function activityEventMessage(event: ActivityEventRow): ChatMessage {
     is_mandatory: event.attendance === "required",
     viewer_required: event.attendance === "required",
     check_in_opens_minutes: event.check_in_opens_minutes,
+    timing: event.timing ?? "timed",
+    start_date: event.start_date ?? null,
+    end_date: event.end_date ?? null,
+    is_tentative: event.is_tentative === true,
+    calendar_only: event.calendar_only === true,
     created_at: event.start_time,
   });
 }

@@ -1,5 +1,5 @@
 import { nameForThisYear, sameWeekdayThisYear } from "@repo/formatting";
-import { noRepeatDraft } from "@repo/validation";
+import { addEventDays, noRepeatDraft } from "@repo/validation";
 import type { NewEventDraft } from "@/lib/events/create-event";
 import { draftFromEvent } from "@/lib/events/edit-event";
 import type { EventDetail } from "@/lib/events/select";
@@ -20,6 +20,28 @@ export function lastYearTemplate(
   event: EventDetail,
   now: Date = new Date(),
 ): NewEventDraft {
+  const draft = draftFromEvent({ event, seriesRule: null, parent: null });
+  if (draft.timing && draft.timing !== "timed" && draft.start) {
+    // An all-day or time-TBD event moves by its own days, not its stored
+    // midnights (#6098), and its last day moves with its first.
+    const from = draft.start;
+    const start = sameWeekdayThisYear(from.toISOString(), now);
+    const moved = start
+      ? Math.round(
+          (Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()) -
+            Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) /
+            86_400_000,
+        )
+      : 0;
+    return {
+      ...draft,
+      name: nameForThisYear(event.name, from.toISOString(), start),
+      start,
+      end: start ? new Date(start.getTime() + 60 * 60_000) : null,
+      lastDay: draft.lastDay ? addEventDays(draft.lastDay, moved) : null,
+      repeat: noRepeatDraft(),
+    };
+  }
   const start = sameWeekdayThisYear(event.start_time, now);
   // The end keeps its distance from the start. Moving it on its own would
   // shorten an event of a week or more to what is left over after whole
@@ -31,7 +53,7 @@ export function lastYearTemplate(
       ? new Date(start.getTime() + length)
       : null;
   return {
-    ...draftFromEvent({ event, seriesRule: null, parent: null }),
+    ...draft,
     name: nameForThisYear(event.name, event.start_time, start),
     start,
     end,

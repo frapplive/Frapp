@@ -58,3 +58,16 @@ describe("EVENT_NOW_COPY", () => {
     expect(EVENT_NOW_COPY.checkedIn(null)).toBe("Checked in");
   });
 });
+
+describe("eventOnAt, dated and calendar-only events (#6098)", () => {
+  const start = "2026-11-25T08:00:00.000Z";
+  const end = "2026-11-26T08:00:00.000Z";
+  const at = Date.parse("2026-11-25T20:00:00.000Z");
+  it("is never on for an all-day, TBD or calendar-only event", () => {
+    expect(eventOnAt(start, end, 10, at)).toBe(true);
+    expect(eventOnAt(start, end, 10, at, { timing: "all_day" })).toBe(false);
+    expect(eventOnAt(start, end, 10, at, { timing: "time_tbd" })).toBe(false);
+    expect(eventOnAt(start, end, 10, at, { calendar_only: true })).toBe(false);
+    expect(eventOnAt(start, end, 10, at, { timing: "timed" })).toBe(true);
+  });
+});

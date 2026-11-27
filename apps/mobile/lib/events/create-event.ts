@@ -1,6 +1,9 @@
 import { randomClientId } from "@repo/api-sdk";
+import { localIsoDate } from "@repo/formatting";
 import { startOfDay } from "@repo/hooks/calendar-time-grid";
 import {
+  eventDatesProblem,
+  eventTakesAttendance,
   DEFAULT_CHECK_IN_OPENS_MINUTES,
   attendanceInvitesNobody,
   CHECK_IN_OPENS_ERROR,
@@ -15,6 +18,7 @@ import {
   agendaWithPending,
   type EventAgendaItem,
   type EventAttendanceDraft,
+  type EventTiming,
   type RepeatDraft,
 } from "@repo/validation";
 import { parsePointReward } from "@/lib/tasks/create-task";
@@ -70,6 +74,20 @@ export interface NewEventDraft {
   start: Date | null;
   /** `null` until picked: an hour after the start. */
   end: Date | null;
+  /**
+   * The When row's shape (#6098): a time, all day, or a day whose time is
+   * TBD. Optional because a draft kept by an older build has none, which
+   * reads as timed ({@link draftTiming}). A dated event's day is `start`'s
+   * local day, so switching shapes keeps the day picked.
+   */
+  timing?: EventTiming;
+  /**
+   * An all-day event's last day (`YYYY-MM-DD`), or `null` for one day. Only
+   * all-day reads it.
+   */
+  lastDay?: string | null;
+  /** Tentative (`is_tentative`): it might not happen. */
+  tentative?: boolean;
   location: string;
   /** Raw keypad text, so a half-typed value is not silently coerced. */
   pointsInput: string;
@@ -114,6 +132,71 @@ export interface NewEventDraft {
 /** The New event rows that open in place on the phone; one at a time. */
 export type EventFormOpenRow = "repeat" | "checkIn" | null;
 
+/** The draft's shape; a draft kept by an older build reads as timed. */
+export function draftTiming(draft: Pick<NewEventDraft, "timing">): EventTiming {
+  return draft.timing ?? "timed";
+}
+
+/** Whether the draft is on the calendar only (Who's coming's fourth answer). */
+export function draftCalendarOnly(
+  draft: Pick<NewEventDraft, "attendance">,
+): boolean {
+  return draft.attendance.calendarOnly === true;
+}
+
+/**
+ * Whether the draft takes attendance: Points and Check-in show, and are
+ * checked and sent, only then (`eventTakesAttendance`).
+ */
+export function draftTakesAttendance(
+  draft: Pick<NewEventDraft, "timing" | "attendance">,
+): boolean {
+  return eventTakesAttendance({
+    timing: draftTiming(draft),
+    calendar_only: draftCalendarOnly(draft),
+  });
+}
+
+/**
+ * A dated draft's days as the API takes them: the first is `start`'s local
+ * day, the last an all-day event's `lastDay` (absent for one day, and never
+ * for a time-TBD event, which is one day).
+ */
+export function draftDays(
+  draft: Pick<NewEventDraft, "timing" | "lastDay">,
+  start: Date,
+): { start_date: string; end_date: string | null } {
+  const first = localIsoDate(start);
+  const last =
+    draftTiming(draft) === "all_day" && draft.lastDay && draft.lastDay !== first
+      ? draft.lastDay
+      : null;
+  return { start_date: first, end_date: last };
+}
+
+/**
+ * Why a dated draft's days are wrong, as the API says it
+ * (`eventDatesProblem`), or why its first day can't be used: one already
+ * gone, on a create or when the day moved. `null` when they're fine.
+ */
+export function draftDaysProblems(
+  draft: Pick<NewEventDraft, "timing" | "lastDay">,
+  start: Date,
+  now: Date,
+  firstDayMayHavePassed = false,
+): { start?: string; end?: string } {
+  const timing = draftTiming(draft);
+  if (timing === "timed") return {};
+  const days = draftDays(draft, start);
+  const problems: { start?: string; end?: string } = {};
+  if (!firstDayMayHavePassed && days.start_date < localIsoDate(now)) {
+    problems.start = "That day has already passed.";
+  }
+  const problem = eventDatesProblem(timing, days.start_date, days.end_date);
+  if (problem) problems.end = problem;
+  return problems;
+}
+
 /** A fresh draft. */
 export function emptyEventDraft(): NewEventDraft {
   return {
@@ -122,6 +205,9 @@ export function emptyEventDraft(): NewEventDraft {
     name: "",
     start: null,
     end: null,
+    timing: "timed",
+    lastDay: null,
+    tentative: false,
     location: "",
     pointsInput: DEFAULT_POINTS,
     checkInOpensInput: String(DEFAULT_CHECK_IN_OPENS_MINUTES),
@@ -166,8 +252,11 @@ export function applyEventType(
     ? {
         eventTypeId: type.id,
         pointsInput: String(type.point_value),
+        // A draft that invites only some roles, or is on the calendar only
+        // (nobody attends), keeps its answer.
         attendance:
-          draft.attendance.everyone === "not_invited"
+          draft.attendance.everyone === "not_invited" ||
+          draft.attendance.calendarOnly
             ? draft.attendance
             : withEveryone(
                 draft.attendance,
@@ -292,8 +381,19 @@ export function withDay(time: Date, day: Date): Date {
 
 export interface ValidatedNewEvent {
   name: string;
-  start_time: string;
-  end_time: string;
+  /** A timed event's; a dated one sends its days instead (#6098). */
+  start_time?: string;
+  end_time?: string;
+  /**
+   * Sent only for a dated event, and `is_tentative` and `calendar_only` only
+   * when true, so a plain event still creates against an API from before
+   * #6098, which refuses keys it doesn't know.
+   */
+  timing?: Exclude<EventTiming, "timed">;
+  start_date?: string;
+  end_date?: string;
+  is_tentative?: true;
+  calendar_only?: true;
   location?: string;
   description?: string;
   notes?: string;
@@ -321,7 +421,6 @@ export interface NewEventErrors {
   repeat?: string;
 }
 
-
 /**
  * The draft as a request body, or the reasons it isn't one.
  *
@@ -348,17 +447,31 @@ export function validateNewEvent(
   const name = draft.name.trim();
   if (name.length === 0) errors.name = "Give the event a name.";
 
-  const { start, end } = resolveEventTimes(draft, now);
-  if (start < now) errors.start = "That start time has already passed.";
-  if (end <= start) errors.end = "The event has to end after it starts.";
+  const timing = draftTiming(draft);
+  const dated = timing !== "timed";
+  const calendarOnly = draftCalendarOnly(draft);
+  // Points and check-in belong to an event that takes attendance; one on
+  // the calendar only, or whose time is TBD, neither checks nor sends them.
+  const takes = draftTakesAttendance(draft);
 
-  const points = setsRequirements
-    ? parsePointReward(draft.pointsInput)
-    : ({ kind: "omit" } as const);
+  const { start, end } = resolveEventTimes(draft, now);
+  if (dated) {
+    Object.assign(errors, draftDaysProblems(draft, start, now));
+  } else {
+    if (start < now) errors.start = "That start time has already passed.";
+    if (end <= start) errors.end = "The event has to end after it starts.";
+  }
+
+  const points =
+    setsRequirements && takes
+      ? parsePointReward(draft.pointsInput)
+      : ({ kind: "omit" } as const);
   if (points.kind === "invalid") {
     errors.points = "Points must be a whole number, up to 100,000.";
   }
-  const opens = parseCheckInOpens(draft.checkInOpensInput);
+  const opens = takes
+    ? parseCheckInOpens(draft.checkInOpensInput)
+    : DEFAULT_CHECK_IN_OPENS_MINUTES;
   if (opens === null) errors.checkInOpens = CHECK_IN_OPENS_ERROR;
 
   const wire = attendanceToWire(draft.attendance);
@@ -369,7 +482,11 @@ export function validateNewEvent(
       "Only officers who manage events can make one required. Set it to optional.";
   }
 
-  const repeat = repeatRuleOf(draft.repeat, start);
+  // A repeating event stays timed (#6098): a dated one has no Repeat row,
+  // so whatever it held is neither checked nor sent.
+  const repeat = dated
+    ? ({ ok: true, rule: null } as const)
+    : repeatRuleOf(draft.repeat, start);
   if (!repeat.ok) errors.repeat = repeat.error;
 
   if (Object.keys(errors).length > 0 || opens === null) {
@@ -381,11 +498,20 @@ export function validateNewEvent(
   const notes = (draft.notes ?? "").trim();
   const body: ValidatedNewEvent = {
     name,
-    start_time: start.toISOString(),
-    end_time: end.toISOString(),
     point_value: points.kind === "value" ? points.points : 0,
     is_mandatory: wire.is_mandatory,
   };
+  if (dated) {
+    const days = draftDays(draft, start);
+    body.timing = timing;
+    body.start_date = days.start_date;
+    if (days.end_date) body.end_date = days.end_date;
+  } else {
+    body.start_time = start.toISOString();
+    body.end_time = end.toISOString();
+  }
+  if (draft.tentative) body.is_tentative = true;
+  if (calendarOnly) body.calendar_only = true;
   // Sent only when a row without it would read differently, so a plain event
   // still creates against an API that predates the field.
   const othersInvited = othersInvitedForCreate(wire);
@@ -414,9 +540,8 @@ export function validateNewEvent(
   if (draft.eventTypeId) body.event_type_id = draft.eventTypeId;
   // Sent only when it isn't the default the server applies, so an ordinary
   // event still creates against an API that predates the field.
-  if (opens !== DEFAULT_CHECK_IN_OPENS_MINUTES) {
+  if (takes && opens !== DEFAULT_CHECK_IN_OPENS_MINUTES) {
     body.check_in_opens_minutes = opens;
   }
   return { ok: true, body };
 }
-

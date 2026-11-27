@@ -1646,7 +1646,7 @@ describe("Calendar day screen", () => {
     expect(
       tree.root.findAll(
         (node) =>
-          node.props.accessibilityLabel === "Open Retreat, all day" &&
+          node.props.accessibilityLabel === "Open Retreat, All day" &&
           typeof node.props.onPress === "function",
       ),
     ).toHaveLength(1);

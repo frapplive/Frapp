@@ -70,7 +70,11 @@ import {
   canAll,
   CHECK_IN_OPEN_LABEL,
   EVENT_CREATE_PERMISSIONS,
+  EVENT_TENTATIVE_LABEL,
+  eventIsDated,
   eventSetsRolesApart,
+  eventTakesAttendance,
+  eventTimingFieldsOf,
   eventsCount,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
@@ -121,14 +125,16 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import {
   formatDayHeading,
+  formatEventRowTime,
   formatRelativeDayTime,
-  formatTimeRange,
   localIsoDate,
+  parseBareDateLocalMidnight,
   parseInstant,
 } from "@repo/formatting";
 import {
   AGENDA_SPAN_DAYS,
   buildAgenda,
+  datedEventDays,
   dateOfKey,
   kindsByDay,
   type AgendaDay,
@@ -186,7 +192,18 @@ const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
   all: "All events",
 };
 
+/**
+ * When the event starts, for sorting and the time filter. An all-day or
+ * time-TBD event starts at the viewer's own midnight of its first day
+ * (#6098): its stored time is the saver's midnight, which can be another day
+ * in another zone.
+ */
 function startMsOf(event: EventRow): number | null {
+  if (eventIsDated(eventTimingFieldsOf(event))) {
+    return typeof event.start_date === "string"
+      ? (parseBareDateLocalMidnight(event.start_date)?.getTime() ?? null)
+      : null;
+  }
   return parseInstant(event.start_time)?.getTime() ?? null;
 }
 
@@ -530,6 +547,19 @@ export function EventsPage() {
     const now = nowTick;
     const inWindow = calendarEvents.filter((event) => {
       if (timeFilter === "all") return true;
+      // A dated event by its days: Upcoming while its last day is at or
+      // after the anchor's, so a recruitment week under way still lists.
+      const days = datedEventDays(event);
+      if (days) {
+        if (timeFilter === "upcoming") {
+          return days.at(-1)! >= localIsoDate(new Date(anchorMs));
+        }
+        // Past: begun by now, or by the picked day.
+        return (
+          days[0]! <=
+          localIsoDate(new Date(Math.min(now, dayAfterAnchorMs - 1)))
+        );
+      }
       const start = startMsOf(event);
       // An event whose start cannot be read is shown under "upcoming" and
       // hidden under "past": it may still be ahead, and hiding it everywhere
@@ -561,6 +591,7 @@ export function EventsPage() {
         entries: agendaEntries,
         items: agendaItems,
         startOf: (event: EventRow) => event.start_time,
+        daysOf: datedEventDays,
         keyOf: eventIdOf,
         anchor,
         direction: timeFilter === "past" ? -1 : 1,
@@ -603,6 +634,7 @@ export function EventsPage() {
         (event: EventRow) => event.start_time,
         agendaItems,
         hiddenKinds,
+        datedEventDays,
       ),
     [calendarEvents, agendaItems, hiddenKinds],
   );
@@ -967,15 +999,22 @@ export function EventsPage() {
     const cadence = series ? seriesCadenceOf(events, event) : null;
     // Start to end, "7:00 – 9:00 PM", as the phone's row says it: a member
     // deciding whether to go wants to know when it lets out (2026-11-19).
-    const time = formatTimeRange(event.start_time, event.end_time, nowDate);
+    // An all-day or time-TBD event says so in place of a time, and a span
+    // its days ("All day · Dec 1 – Dec 4"), never its midnights (#6098).
+    const shape = eventTimingFieldsOf(event);
+    const takesAttendance = eventTakesAttendance(shape);
+    const time = formatEventRowTime(event, nowDate);
     // Said on the row while it lasts, as the phone's row says it, so a member
-    // walking in sees where to check in without opening the event.
-    const checkInOpen = checkInOpenNow(
-      event.start_time,
-      event.end_time,
-      event.check_in_opens_minutes,
-      nowTick,
-    );
+    // walking in sees where to check in without opening the event. Never on
+    // an event that takes no attendance.
+    const checkInOpen =
+      takesAttendance &&
+      checkInOpenNow(
+        event.start_time,
+        event.end_time,
+        event.check_in_opens_minutes,
+        nowTick,
+      );
     // One derived value: the row fill and the checkbox must never disagree
     // about whether the row is selected.
     const isSelected = selecting && selectedIdSet.has(eventId);
@@ -984,7 +1023,11 @@ export function EventsPage() {
         ? event.location.trim()
         : null;
     // An absent fact drops out of the line rather than reading "TBD" or "0".
-    const meta = [time, location, pointsLabel(event.point_value)]
+    const meta = [
+      time,
+      location,
+      takesAttendance ? pointsLabel(event.point_value) : null,
+    ]
       .filter(Boolean)
       .join(" · ");
     const hue = EVENT_HUE;
@@ -1038,6 +1081,12 @@ export function EventsPage() {
                 >
                   Required
                 </span>
+              ) : null}
+              {shape.is_tentative ? (
+                // A status beside the name, not an alarm (#6098).
+                <Badge variant="outline" className="shrink-0">
+                  {EVENT_TENTATIVE_LABEL}
+                </Badge>
               ) : null}
             </span>
             {meta ? (

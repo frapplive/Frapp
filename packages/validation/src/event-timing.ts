@@ -124,3 +124,94 @@ export function eventDatesProblem(
   }
   return null;
 }
+
+/**
+ * A dated event's last day (`end_date`, else its one day), or null for a
+ * timed event or a dated one whose first day doesn't read.
+ */
+export function eventLastDay(event: EventTimingFields): string | null {
+  if (!eventIsDated(event)) return null;
+  if (eventDayNumber(event.start_date) === null) return null;
+  return eventDayNumber(event.end_date) !== null
+    ? (event.end_date as string)
+    : (event.start_date as string);
+}
+
+/** How many days a dated event covers, first to last inclusive; 0 for a timed one. */
+export function eventDaySpan(event: EventTimingFields): number {
+  const first = eventDayNumber(event.start_date);
+  const last = eventDayNumber(eventLastDay(event));
+  if (!eventIsDated(event) || first === null || last === null) return 0;
+  return Math.max(1, last - first + 1);
+}
+
+/**
+ * Whether a dated event covers `day` (`YYYY-MM-DD`). The calendar views draw
+ * a dated event on each of its days by these zone-free dates, never by its
+ * stored instants, which are the saver's midnights (§ Dates, tentative and on
+ * the calendar only). False for a timed event.
+ */
+export function eventCoversDay(event: EventTimingFields, day: string): boolean {
+  const first = eventDayNumber(event.start_date);
+  const last = eventDayNumber(eventLastDay(event));
+  const at = eventDayNumber(day);
+  if (!eventIsDated(event) || first === null || last === null || at === null) {
+    return false;
+  }
+  return at >= first && at <= last;
+}
+
+/**
+ * The day a dated event has reached by `now`, as the viewer's own calendar
+ * day: before its first day, on one of its days, or after its last. Null for
+ * a timed event. The "on now" rules read this instead of instants, so an
+ * all-day event is never "the meeting on now" and never "starts soon".
+ */
+export function eventDatedPhase(
+  event: EventTimingFields,
+  now: Date,
+): "before" | "during" | "after" | null {
+  const first = eventDayNumber(event.start_date);
+  const last = eventDayNumber(eventLastDay(event));
+  if (!eventIsDated(event) || first === null || last === null) return null;
+  const today = Math.round(
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000,
+  );
+  if (today < first) return "before";
+  if (today > last) return "after";
+  return "during";
+}
+
+/**
+ * The fields of a loosely typed event record (a list row, a Realtime payload)
+ * these rules read, dropping anything malformed.
+ */
+export function eventTimingFieldsOf(
+  event: Record<string, unknown>,
+): EventTimingFields {
+  const text = (value: unknown) => (typeof value === "string" ? value : null);
+  return {
+    timing: text(event.timing),
+    start_date: text(event.start_date),
+    end_date: text(event.end_date),
+    is_tentative: event.is_tentative === true,
+    calendar_only: event.calendar_only === true,
+  };
+}
+
+/**
+ * The days (`YYYY-MM-DD`) a dated event is on, first to last, or none for a
+ * timed event or one whose first day doesn't read. Both apps' list, month
+ * and week views place a dated event on each of these (`eventCoversDay`'s
+ * rule).
+ */
+export function eventDatedDays(event: EventTimingFields): string[] {
+  const span = eventDaySpan(event);
+  if (span === 0 || !event.start_date) return [];
+  const days: string[] = [];
+  for (let offset = 0; offset < span; offset += 1) {
+    const day = addEventDays(event.start_date, offset);
+    if (day) days.push(day);
+  }
+  return days;
+}

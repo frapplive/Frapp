@@ -1,4 +1,5 @@
 import { checkInWindowBounds } from "./check-in-window";
+import { eventIsDated, type EventTimingFields } from "./event-timing";
 
 /**
  * Whether an event is on: the one rule every "now" surface reads
@@ -11,6 +12,11 @@ import { checkInWindowBounds } from "./check-in-window";
  * next start (2026-11-19). The end is exclusive, so a 9:25 – 10:25 meeting is
  * off at 10:25; the 15 minutes of check-in grace after it are not "on".
  *
+ * An all-day, time-TBD or calendar-only event is never on (#6098): its
+ * stored times are midnights, not a meeting in a room, so it never takes the
+ * Now card or a "Now · until 12:00 AM" pill. Pass the event as `shape` for
+ * that; without it the times decide.
+ *
  * `now` is epoch ms. Times that don't parse are never on.
  */
 export function eventOnAt(
@@ -18,7 +24,9 @@ export function eventOnAt(
   end: unknown,
   opensMinutes: unknown,
   now: number,
+  shape?: EventTimingFields,
 ): boolean {
+  if (shape && (eventIsDated(shape) || shape.calendar_only)) return false;
   const from = typeof start === "string" ? new Date(start) : null;
   const to = typeof end === "string" ? new Date(end) : null;
   if (!from || !to) return false;

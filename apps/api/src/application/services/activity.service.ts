@@ -338,6 +338,16 @@ export interface ActivityEvent {
   start_time: string;
   end_time: string;
   /**
+   * The event's shape (`spec/behavior/events.md` § Dates, tentative and on
+   * the calendar only, #6098): a dated event is drawn by `start_date` and
+   * `end_date`, never by the midnights in its times.
+   */
+  timing: Event['timing'];
+  start_date: string | null;
+  end_date: string | null;
+  is_tentative: boolean;
+  calendar_only: boolean;
+  /**
    * What the event asks of this member (`spec/behavior/events.md` §
    * Attendance by role), not the event's default: a role of theirs the event
    * lists decides it, and an alumnus the default alone would require is
@@ -837,6 +847,11 @@ function activityEventRow(
     location: event.location,
     start_time: event.start_time,
     end_time: event.end_time,
+    timing: event.timing,
+    start_date: event.start_date,
+    end_date: event.end_date,
+    is_tentative: event.is_tentative,
+    calendar_only: event.calendar_only,
     attendance: member.attendance,
     point_value: event.point_value,
     check_in_opens_minutes: event.check_in_opens_minutes,
@@ -1650,6 +1665,7 @@ export class ActivityService {
         event.end_time,
         event.check_in_opens_minutes,
         now,
+        event,
       ),
     );
     if (events.length === 0) return { events: [] };
