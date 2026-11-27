@@ -26,6 +26,7 @@ import {
 } from "@repo/hooks";
 import {
   can,
+  DOCUMENTS_NO_FOLDER_PARAM_VALUE,
   MINUTES_TYPE_PARAM_VALUE,
   WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
@@ -33,6 +34,7 @@ import {
   useAddressParams,
   useDeadAddressParam,
 } from "@/lib/address/use-address-params";
+import { replaceAddress } from "@/lib/address/address";
 import { Can } from "@/components/shared/can";
 import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -105,12 +107,22 @@ export function DocumentsPage() {
 
 function DocumentsPageForLink() {
   const chapterId = useChapterStore((state) => state.activeChapterId);
+  // The address outlives the remount, so a switch also clears what the
+  // address had open: those belong to the chapter they were opened in.
+  const shownChapter = useRef(chapterId);
+  useEffect(() => {
+    if (shownChapter.current === chapterId) return;
+    shownChapter.current = chapterId;
+    replaceAddress(
+      Object.fromEntries(DOCUMENT_ADDRESS.map((name) => [name, null])),
+    );
+  }, [chapterId]);
   return <ChapterDocumentsPage key={chapterId ?? "none"} />;
 }
 
 /**
  * What the address holds on `/documents` (spec § Addresses, #6042): the
- * folder open (`folder=`, its name, or `-` for No folder), the file in the
+ * folder open (`folder=`, its name, or a space for No folder), the file in the
  * viewer (`document=`), the file whose Who can see is open (`access=`) and
  * the Minutes view (`type=minutes`). Back walks the folders and files the
  * member opened, the way Finder and Google Drive do.
@@ -122,17 +134,15 @@ const DOCUMENT_ADDRESS = [
   DOC.access,
   DOC.type,
 ] as const;
-/** `folder=-`: No folder. A folder is never named `-` alone in practice. */
-export const NO_FOLDER_PARAM_VALUE = "-";
 
 function folderFromParam(value: string | null): string | null {
   if (value === null) return null;
-  return value === NO_FOLDER_PARAM_VALUE ? "" : value;
+  return value === DOCUMENTS_NO_FOLDER_PARAM_VALUE ? "" : value;
 }
 
 function folderToParam(folder: string | null): string | null {
   if (folder === null) return null;
-  return folder === "" ? NO_FOLDER_PARAM_VALUE : folder;
+  return folder === "" ? DOCUMENTS_NO_FOLDER_PARAM_VALUE : folder;
 }
 
 function ChapterDocumentsPage() {
@@ -165,11 +175,8 @@ function ChapterDocumentsPage() {
     useState<DocumentFilters>(NO_DOCUMENT_FILTERS);
   const filters = useMemo<DocumentFilters>(
     () =>
-      minutesView
-        ? { ...ownFilters, kind: "minutes" }
-        : ownFilters.kind === "minutes"
-          ? { ...ownFilters, kind: NO_DOCUMENT_FILTERS.kind }
-          : ownFilters,
+      // `ownFilters` never holds Minutes: `setFilters` moves it to the address.
+      minutesView ? { ...ownFilters, kind: "minutes" } : ownFilters,
     [minutesView, ownFilters],
   );
   const setFilters = useCallback(
@@ -262,15 +269,14 @@ function ChapterDocumentsPage() {
   // Opening a folder pushes, so Back walks the folders opened; a folder
   // renamed or deleted under the member moves the address in place.
   /*
-    Folders this page moved to itself (a pick, a rename it followed). Only a
-    folder that arrived from a link, Back or a reload can be dead: a renamed
-    folder's new name is missing from the list until its re-read lands.
+    The folder this page last moved to itself (a pick, a rename it followed).
+    It isn't judged dead: a renamed folder's new name is missing from the list
+    until its re-read lands. Any other folder (from a link, Back or a reload)
+    is judged against the list.
   */
-  const [chosenFolders, setChosenFolders] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [chosenFolder, setChosenFolder] = useState<string | null>(null);
   const noteChosen = useCallback((folder: string | null) => {
-    if (folder) setChosenFolders((prev) => new Set(prev).add(folder));
+    setChosenFolder(folder);
   }, []);
   const setActiveFolder = useCallback(
     (folder: string | null) => {
@@ -484,10 +490,17 @@ function ChapterDocumentsPage() {
     });
   // Who can see, for one file: `access=<id>`, pushed, closed by its rule.
   const accessId = address.values[DOC.access];
-  const accessDoc =
+  // Only a file this member may set: the same check that draws the row's
+  // control, so an address can't open an editor the page wouldn't offer.
+  const accessTarget =
     accessId === null
-      ? null
-      : (documents.find((doc) => doc.id === accessId) ?? null);
+      ? undefined
+      : documents.find((doc) => doc.id === accessId);
+  const permissionsKnown = permissionsPayload !== undefined;
+  const accessDoc =
+    accessTarget && permissionsKnown && canSetAccess(accessTarget)
+      ? accessTarget
+      : null;
   const setAccessDoc = useCallback(
     (doc: ChapterDocument | null) =>
       doc === null
@@ -512,20 +525,28 @@ function ChapterDocumentsPage() {
     foldersKnown &&
       activeFolder !== null &&
       activeFolder !== "" &&
-      !chosenFolders.has(activeFolder) &&
+      activeFolder !== chosenFolder &&
       !folders.some((folder) => folder.name === activeFolder),
   );
+  // A file's note lasts until the member moves on (another folder, a search,
+  // the Minutes view); the folder's own note goes with the next folder.
+  const unavailableContext = `${activeFolder ?? ""}\u0000${minutesView}\u0000${deferredSearch}`;
   const deadDocument = useDeadAddressParam(
     DOC.document,
     openId,
     documentsKnown &&
       openId !== null &&
       !documents.some((doc) => doc.id === openId),
+    unavailableContext,
   );
   const deadAccess = useDeadAddressParam(
     DOC.access,
     accessId,
-    documentsKnown && accessId !== null && accessDoc === null,
+    documentsKnown &&
+      permissionsKnown &&
+      accessId !== null &&
+      accessDoc === null,
+    unavailableContext,
   );
   const unavailable =
     deadFolder !== null
@@ -926,6 +947,11 @@ function OpenAddressedDocument({
   // The file this address has shown, so a later hide is the member's own.
   const shownId = useRef<string | null>(null);
   useEffect(() => {
+    if (openId === null) {
+      // Closed: the next time the address names a file, it is revealed.
+      shownId.current = null;
+      return;
+    }
     if (visible) {
       shownId.current = openId;
       return;

@@ -471,6 +471,23 @@ describe("DocumentsPage subscription gating", () => {
     }
   });
 
+  it("reveals a file the address names again after it was shown and closed", async () => {
+    const user = userEvent.setup();
+    chapter.active();
+    render(<DocumentsPage />);
+    await user.click(screen.getByRole("button", { name: /^Chapter bylaws/ }));
+    await screen.findByRole("dialog", { name: "Chapter bylaws" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.change(screen.getByLabelText("Search documents"), {
+      target: { value: "zzz" },
+    });
+    act(() => window.history.pushState(null, "", "/documents?document=doc-1"));
+    expect(
+      await screen.findByRole("dialog", { name: "Chapter bylaws" }),
+    ).toBeInTheDocument();
+  });
+
   it("says a linked file isn't there, and takes it out of the address", async () => {
     chapter.active();
     linkedDocument.current = "doc-gone";
@@ -1730,10 +1747,16 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /^Rush schedule/ }));
+    // Stepping replaces, so Back closes the viewer rather than walking back
+    // through the files seen (#6042).
+    const push = vi.spyOn(window.history, "pushState");
     await user.keyboard("{ArrowRight}");
     expect(
       screen.getByRole("dialog", { name: "Rush budget" }),
     ).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    expect(window.location.search).toContain("document=doc-3");
+    push.mockRestore();
     // Wraps within Ryan's two files: Marcus's bylaws are filtered out.
     await user.keyboard("{ArrowRight}");
     expect(
@@ -2231,7 +2254,7 @@ describe("DocumentsPage folder tree (#5337)", () => {
     await user.click(row("Rush"));
     expect(window.location.search).toBe("?folder=Town+in+Fiji+%2F+Rush");
     await user.click(screen.getByRole("button", { name: /^No folder$/ }));
-    expect(window.location.search).toBe("?folder=-");
+    expect(window.location.search).toBe("?folder=+");
     window.history.back();
     await waitFor(() =>
       expect(window.location.search).toBe("?folder=Town+in+Fiji+%2F+Rush"),
@@ -3553,6 +3576,17 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("treats Who can see for a file this member can't set as unavailable", async () => {
+    manageGate.granted = false;
+    window.history.replaceState(null, "", "/documents?access=doc-1");
+    render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/That file isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("puts Who can see in the address", async () => {
     manageGate.granted = true;
     const user = userEvent.setup();
@@ -3904,6 +3938,17 @@ describe("DocumentsPage minutes rows (#5949)", () => {
         /Minutes · Recorded · 2 decisions · Formal moved to December 4/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("puts the Minutes view in the address, and leaving it closes through the address", async () => {
+    const user = userEvent.setup();
+    render(<DocumentsPage />);
+    await user.click(await filterButton(user, "File type"));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /^Minutes/ }),
+    );
+    await waitFor(() => expect(window.location.search).toBe("?type=minutes"));
+    expect(screen.queryByText("Chapter bylaws")).not.toBeInTheDocument();
   });
 
   it("opens on the Minutes filter from /documents?type=minutes, where /meetings lands", async () => {
