@@ -39,7 +39,8 @@ import { BootstrapDto, BootstrapQueryDto } from '../dtos/bootstrap.dto';
  * `/settings`) need less, and a caller with no chapter never asks: the client
  * middleware sends no batch without a chapter, so those reads go to their own
  * routes until one is active. The guards still
- * run per request (#3752); this route only makes an open one request.
+ * run per request (#3752); this route only makes an open one request, or
+ * two when web splits it into the shell's sections and the page's (#5049).
  *
  * `AuthSyncInterceptor` because `/users/me` and `/chapters` carry it: an open
  * may be the first request after a profile change at the identity provider.
