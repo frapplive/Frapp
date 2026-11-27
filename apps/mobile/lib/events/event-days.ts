@@ -1,6 +1,5 @@
 import { localIsoDate, parseInstant } from "@repo/formatting";
 import {
-  eventCoversDay,
   eventDatedDays,
   eventIsDated,
   type EventTimingFields,
@@ -47,22 +46,4 @@ export function eventsByDay<
   for (const event of events) if (eventIsDated(event)) file(event);
   for (const event of events) if (!eventIsDated(event)) file(event);
   return map;
-}
-
-/**
- * A day's events split for the hour grid: the dated ones that cover `day`
- * (`YYYY-MM-DD`) go in its All day strip, and the timed ones are what the
- * grid lays out by the clock. A dated event is never placed at 12 AM.
- */
-export function splitForTimeGrid<E extends EventTimingFields>(
-  events: readonly E[],
-  day: string,
-): { dated: E[]; timed: E[] } {
-  const dated: E[] = [];
-  const timed: E[] = [];
-  for (const event of events) {
-    if (!eventIsDated(event)) timed.push(event);
-    else if (eventCoversDay(event, day)) dated.push(event);
-  }
-  return { dated, timed };
 }

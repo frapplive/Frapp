@@ -1,6 +1,11 @@
-import { nameForThisYear, sameWeekdayThisYear } from "@repo/formatting";
-import { addEventDays, noRepeatDraft } from "@repo/validation";
+import {
+  datedDaysThisYear,
+  nameForThisYear,
+  sameWeekdayThisYear,
+} from "@repo/formatting";
+import { noRepeatDraft } from "@repo/validation";
 import type { NewEventDraft } from "@/lib/events/create-event";
+import { parseCalendarDayParam } from "@/lib/events/calendar-day";
 import { draftFromEvent } from "@/lib/events/edit-event";
 import type { EventDetail } from "@/lib/events/select";
 
@@ -23,22 +28,31 @@ export function lastYearTemplate(
   const draft = draftFromEvent({ event, seriesRule: null, parent: null });
   if (draft.timing && draft.timing !== "timed" && draft.start) {
     // An all-day or time-TBD event moves by its own days, not its stored
-    // midnights (#6098), and its last day moves with its first.
-    const from = draft.start;
-    const start = sameWeekdayThisYear(from.toISOString(), now);
-    const moved = start
-      ? Math.round(
-          (Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()) -
-            Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) /
-            86_400_000,
+    // midnights (#6098), and its last day moves with its first; the shared
+    // rule web's suggestion uses too (`datedDaysThisYear`, #6144).
+    const days = datedDaysThisYear(
+      event.start_date,
+      draft.lastDay ?? null,
+      now,
+    );
+    const day = days ? parseCalendarDayParam(days.startDate) : null;
+    // The form holds the day at its usual hour (`draftFromEvent`'s), shown
+    // only if the officer sets a time.
+    const start = day
+      ? new Date(
+          day.getFullYear(),
+          day.getMonth(),
+          day.getDate(),
+          draft.start.getHours(),
+          draft.start.getMinutes(),
         )
-      : 0;
+      : null;
     return {
       ...draft,
-      name: nameForThisYear(event.name, from.toISOString(), start),
+      name: nameForThisYear(event.name, draft.start.toISOString(), start),
       start,
       end: start ? new Date(start.getTime() + 60 * 60_000) : null,
-      lastDay: draft.lastDay ? addEventDays(draft.lastDay, moved) : null,
+      lastDay: days?.lastDay ?? null,
       repeat: noRepeatDraft(),
     };
   }

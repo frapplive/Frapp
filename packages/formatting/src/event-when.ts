@@ -65,6 +65,58 @@ export function eventDatedWord(event: EventTimingFields): string | null {
   return null;
 }
 
+/**
+ * An all-day event's check-in, by its days (#6144). Its window is stored
+ * around the saver's midnights, so a clock reads "opens 11:50 PM" or "closes
+ * 12:15 AM"; the phone's card says these instead (web's row, already named
+ * Check-in, says "Open all day").
+ */
+export const ALL_DAY_CHECK_IN_OPEN = "Check-in is open all day";
+
+/**
+ * What an all-day event's check-in may say by its days rather than a clock,
+ * for this viewer: null for any other shape or days that don't read.
+ *
+ * - `opens`: when it opens, mid-sentence ("tomorrow", "Sunday", "Saturday,
+ *   March 14"), only when the window opens no later than the viewer's own
+ *   start of its first day. Otherwise (a viewer east of the saver, where it
+ *   opens mid-morning) null, and the caller says the clock.
+ * - `openAllDay`: only when the window stays open through the end of the
+ *   viewer's last day. A viewer west of the saver sees it close in their
+ *   evening, so the caller keeps saying when it closes.
+ */
+export function allDayCheckInWords(
+  event: EventTimingFields,
+  window: { opensAt: Date | null; closesAt: Date | null },
+  now: Date = new Date(),
+): { opens: string | null; openAllDay: boolean } | null {
+  const days = eventTiming(event) === "all_day" ? datedDays(event) : null;
+  if (!days) return null;
+  const [first, last] = days;
+  const firstStart = new Date(
+    first.getFullYear(),
+    first.getMonth(),
+    first.getDate(),
+  );
+  const afterLast = new Date(
+    last.getFullYear(),
+    last.getMonth(),
+    last.getDate() + 1,
+  );
+  const opens =
+    window.opensAt && window.opensAt.getTime() <= firstStart.getTime()
+      ? relativeDay(first, now).replace(
+          /^(Today|Tomorrow|Yesterday)\b/,
+          (word) => word.toLowerCase(),
+        )
+      : null;
+  return {
+    opens,
+    openAllDay:
+      !!window.closesAt && window.closesAt.getTime() >= afterLast.getTime(),
+  };
+}
+
 /** The dated event's first and last day, or null for a timed one. */
 function datedDays(event: EventTimingFields): [Date, Date] | null {
   if (eventTiming(event) === "timed") return null;

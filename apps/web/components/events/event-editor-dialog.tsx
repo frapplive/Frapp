@@ -501,6 +501,17 @@ function keepEditsOver(
   };
 }
 
+/**
+ * An all-day or time-TBD event a fresh create opens as (#6144): its days
+ * (`YYYY-MM-DD`; `endDate` empty for one day) and whether it is tentative.
+ */
+export type DatedFill = {
+  timing: Exclude<EventTiming, "timed">;
+  startDate: string;
+  endDate: string;
+  tentative: boolean;
+};
+
 /** What the form opens on: the record, a template, or a fresh event. */
 function openingDraft({
   mode,
@@ -512,10 +523,12 @@ function openingDraft({
   initialLocation,
   initialPointValue,
   initialRepeatRule,
+  initialDated,
 }: {
   mode: "create" | "edit";
   event: EventRecord | null;
   template: EventRecord | null | undefined;
+  initialDated?: DatedFill | null;
   initialStartAt?: string;
   initialEndAt?: string;
   initialName?: string;
@@ -575,11 +588,12 @@ function openingDraft({
       location: text(template.location),
       startAt: initialStartAt ?? "",
       endAt: initialEndAt ?? "",
-      // Its schedule is never copied, its shape with it.
-      timing: "timed",
-      startDate: "",
-      endDate: "",
-      tentative: false,
+      // Its schedule is never copied, its shape with it, unless the caller
+      // moved a dated one's days (This time last year, #6144).
+      timing: initialDated?.timing ?? "timed",
+      startDate: initialDated?.startDate ?? "",
+      endDate: initialDated?.endDate ?? "",
+      tentative: initialDated?.tentative ?? false,
       pointValue: points(template.point_value),
       attendance: attendanceFromEvent(attendanceFieldsOf(template)),
       repeat: openingRepeat,
@@ -809,6 +823,12 @@ type EventEditorDialogProps = {
    */
   template?: EventRecord | null;
   /**
+   * The shape and days a fresh create from `template` opens with, when it
+   * stays dated (This time last year, #6144). Ignored without `template`
+   * and in edit mode.
+   */
+  initialDated?: DatedFill | null;
+  /**
    * The repeat a fresh create opens with: the series Ask proposed (#5117),
    * following the first meeting as the officer moves it. Ignored in edit
    * mode.
@@ -857,6 +877,7 @@ export function EventEditorDialog({
   initialLocation,
   initialPointValue,
   template,
+  initialDated,
   initialRepeatRule,
   keptDraft,
   onCreated,
@@ -1126,6 +1147,7 @@ export function EventEditorDialog({
       initialLocation,
       initialPointValue,
       initialRepeatRule,
+      initialDated,
     });
     const draft = takeKept();
     openedOnDraft.current = draft !== undefined;
@@ -1174,6 +1196,7 @@ export function EventEditorDialog({
     initialLocation,
     initialPointValue,
     initialRepeatRule,
+    initialDated,
     takeKept,
     fillCount,
   ]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventDayKeys, eventsByDay, splitForTimeGrid } from "./event-days";
+import { eventDayKeys, eventsByDay } from "./event-days";
 
 /** A timed event at a local wall-clock time, so the spec reads in any zone. */
 const timed = (id: string, day: number, hour: number) => ({
@@ -49,12 +49,5 @@ describe("which days an event sits on (#6098)", () => {
       "formal",
     ]);
     expect(byDay.has("2026-11-23")).toBe(false);
-  });
-
-  it("keeps dated events out of the hours, in the day's All day strip", () => {
-    const meeting = timed("meeting", 21, 19);
-    const split = splitForTimeGrid([meeting, formal, tbd], "2026-11-22");
-    expect(split.dated.map((event) => event.id)).toEqual(["formal"]);
-    expect(split.timed.map((event) => event.id)).toEqual(["meeting"]);
   });
 });

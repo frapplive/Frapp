@@ -1035,7 +1035,7 @@ So once a week Frapp compares the coming six weeks with the same six weeks a yea
   Category `events` or `tasks`, by the first thing in it.
 - **An event is added by the officer, in the ordinary form.**
   "Add to calendar" opens the event form filled in as a copy of last year's event, moved 52 weeks on (same weekday, same time of day;
-  a week further at a time if that day has already passed), never repeating, with the year in its name carried forward ("Winter Formal 2025" opens as "Winter Formal 2026").
+  a week further at a time if that day has already passed; an all-day or time-TBD event stays one, its days moved the same way and today counting as ahead, `datedDaysThisYear`, #6144), never repeating, with the year in its name carried forward ("Winter Formal 2025" opens as "Winter Formal 2026").
   Nothing is made until the officer saves it, by the ordinary route with its ordinary checks; the suggestion then records the event it became.
   Only the member who made the event can record it against the suggestion; anyone else's event answers as one that does not exist.
   Recording it is not counted as a change to the suggestion (`edited` stays false).

@@ -27,7 +27,7 @@ import { useMeetingQuickActions } from "@/components/quick-actions/meeting-actio
 import { LogHoursSheet } from "@/components/service-hours/log-hours-sheet";
 import { NewTaskSheet } from "@/components/tasks/new-task-sheet";
 import { taskCreatedLine } from "@/lib/tasks/create-task";
-import { selectEventRows } from "@/lib/events/select";
+import { selectHostableEvent } from "@/lib/events/select";
 import { selectDocumentFolders } from "@/lib/more/documents";
 import type { QuickActionKey } from "@/lib/quick-actions";
 
@@ -188,9 +188,9 @@ export function useQuickActionsHost({
           router.push("/search");
           return;
         case "hostCheckIn": {
-          // The event an officer would host: the soonest still checkable-in,
-          // as You's Host check-in row picks it.
-          const next = selectEventRows(eventsQuery.data, new Date())[0];
+          // The event an officer would host, as You's Host check-in row
+          // picks it: the soonest still checkable-in that takes attendance.
+          const next = selectHostableEvent(eventsQuery.data, new Date());
           if (next) {
             router.push({
               pathname: "/host-check-in",

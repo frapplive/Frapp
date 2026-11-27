@@ -319,6 +319,56 @@ describe("EventsPage bulk actions", () => {
     expect(autoAbsentMutateAsync).not.toHaveBeenCalled();
   });
 
+  it("says an all-day event's check-in stays open by its days, not a midnight clock (#6144)", async () => {
+    const day = new Date();
+    day.setDate(day.getDate() + 1);
+    const first = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const after = new Date(first);
+    after.setDate(after.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const iso = `${first.getFullYear()}-${pad(first.getMonth() + 1)}-${pad(first.getDate())}`;
+    EVENTS.push({
+      id: "evt-drive",
+      name: "Service Drive",
+      location: null,
+      // Stored around this zone's midnights, as a save from here would be.
+      start_time: first.toISOString(),
+      end_time: after.toISOString(),
+      is_mandatory: true,
+      point_value: 5,
+      ...{ timing: "all_day", start_date: iso, end_date: iso },
+    });
+    try {
+      const user = userEvent.setup();
+      render(<EventsPage />);
+      await user.click(screen.getByRole("button", { name: "Select" }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /select service drive/i }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /mark attendance complete/i }),
+      );
+      await user.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: /^mark attendance complete$/i,
+        }),
+      );
+
+      await waitFor(() =>
+        expect(toastSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: expect.stringContaining(
+              "Service Drive: Check-in hasn't closed yet; it stays open through the event's last day.",
+            ),
+          }),
+        ),
+      );
+      expect(autoAbsentMutateAsync).not.toHaveBeenCalled();
+    } finally {
+      EVENTS.pop();
+    }
+  });
+
   it("names each failure against its own event when some are held back and some rejected", async () => {
     // `results` lines up with the events sent, not with the selection.
     autoAbsentMutateAsync.mockRejectedValue({

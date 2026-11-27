@@ -14,6 +14,8 @@ import {
 } from "@repo/validation";
 import type { EventFormGlyphName } from "@repo/theme/event-form-glyphs";
 import {
+  ALL_DAY_CHECK_IN_OPEN,
+  allDayCheckInWords,
   formatDayTime,
   formatEventWhen,
   formatPointsChip,
@@ -508,14 +510,20 @@ function CheckInCard({
   const isOpen = window.state === "open";
   const hostable = canHost && (isOpen || window.state === "upcoming");
 
+  // An all-day event's window sits around the saver's midnights, so it says
+  // its day rather than a clock where that is true for this viewer (#6144):
+  // "Check-in opens tomorrow", "Check-in is open all day".
+  const allDay = allDayCheckInWords(event, window, now);
   const title = checkedInAt
     ? `Checked in at ${formatEventClock(checkedInAt)}`
     : marked
       ? `Marked ${statusLabel("attendance", marked).toLowerCase()}`
       : isOpen
-        ? "Check-in is open"
+        ? allDay?.openAllDay
+          ? ALL_DAY_CHECK_IN_OPEN
+          : "Check-in is open"
         : window.state === "upcoming" && window.opensAt
-          ? `Check-in opens ${formatCheckInOpens(window.opensAt, now)}`
+          ? `Check-in opens ${allDay?.opens ?? formatCheckInOpens(window.opensAt, now)}`
           : window.state === "closed"
             ? "Check-in is closed"
             : "Check-in is unavailable";
@@ -523,7 +531,7 @@ function CheckInCard({
     ? event.point_value
       ? formatPointsChip(event.point_value)
       : null
-    : isOpen && !own
+    : isOpen && !own && !allDay?.openAllDay
       ? `closes ${formatEventClock(window.closesAt)}`
       : null;
   const zone =

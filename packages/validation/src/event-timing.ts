@@ -68,6 +68,30 @@ export function eventTakesAttendance(event: EventTimingFields): boolean {
   return !event.calendar_only && eventTiming(event) !== "time_tbd";
 }
 
+/**
+ * Why an event takes no attendance, as the API's 409 code names it
+ * (`attendance.calendar_only`, `attendance.time_tbd`), or null when it takes
+ * attendance. Calendar-only wins: it never takes any, whatever its time.
+ */
+export function eventNoAttendanceReason(
+  event: EventTimingFields,
+): "calendar_only" | "time_tbd" | null {
+  if (eventTakesAttendance(event)) return null;
+  return event.calendar_only ? "calendar_only" : "time_tbd";
+}
+
+/**
+ * The API's refusal words for each reason, which the phone's host check-in
+ * screen says too rather than drawing a code nobody can redeem (#6144).
+ */
+export const EVENT_NO_ATTENDANCE_COPY: Record<
+  "calendar_only" | "time_tbd",
+  string
+> = {
+  calendar_only: "This event is on the calendar only, so nobody checks in.",
+  time_tbd: "This event's time isn't set yet, so check-in hasn't opened.",
+};
+
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** A real calendar date written `YYYY-MM-DD`, as a UTC day number, or null. */

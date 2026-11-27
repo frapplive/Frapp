@@ -171,14 +171,18 @@ vi.mock("@/components/events/my-check-in", async (importOriginal) => ({
     zone,
     eventUnavailable,
     eventPending,
+    shape,
   }: {
     zone: string;
     eventUnavailable?: boolean;
     eventPending?: boolean;
+    shape?: { timing?: string | null; start_date?: string | null };
   }) => (
     <div
       data-testid="my-check-in"
       data-zone={zone}
+      data-timing={shape?.timing ?? ""}
+      data-start-date={shape?.start_date ?? ""}
       data-unavailable={String(Boolean(eventUnavailable))}
       data-pending={String(Boolean(eventPending))}
     />
@@ -1314,8 +1318,16 @@ describe("EventDetailSheet event shapes (#6098)", () => {
     expect(screen.getByText(/· All day$/)).toBeInTheDocument();
     expect(screen.queryByText(/12:00/)).toBeNull();
     expect(screen.queryByTestId("event-now-pill")).toBeNull();
-    // It still takes attendance: check-in and points stay.
-    expect(screen.getByTestId("my-check-in")).toBeInTheDocument();
+    // It still takes attendance: check-in and points stay, and the check-in
+    // row is handed the event's shape so it says its day (#6144).
+    expect(screen.getByTestId("my-check-in")).toHaveAttribute(
+      "data-timing",
+      "all_day",
+    );
+    expect(screen.getByTestId("my-check-in")).toHaveAttribute(
+      "data-start-date",
+      today,
+    );
     expect(screen.getByText("Points")).toBeInTheDocument();
   });
 

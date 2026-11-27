@@ -434,6 +434,7 @@ export function EventDetailSheet({
           eventUnavailable={eventUnavailable}
           zone={zoneState}
           eventPending={checkInReadPending}
+          shape={shape}
         />
       ) : null}
       {checkInZoneIsMalformed && phase !== "past" ? (
