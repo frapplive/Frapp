@@ -40,7 +40,7 @@ import {
   type AskSuggestion,
 } from "@repo/validation";
 import { useAiConsentGate } from "@/components/ai/meet-frapp-ai";
-import { AskSendGlyph } from "@/components/ask/ask-bar";
+import { AskSendGlyph } from "@/components/ask/ask-send-glyph";
 import {
   DictationDone,
   DictationHeard,
@@ -92,7 +92,8 @@ import {
  * panel does (`useAsk`), in the same words (`ASK_COPY`).
  *
  * A member asks walking to class, so the whole thing is one sheet, opened
- * from the Ask Frapp bar above the tab bar (`ask-bar.tsx`, #4702). ChatGPT's,
+ * from the Frapp Intelligence field at the top of the + panel (`ask-entry.tsx`,
+ * #5983; a bar above the tab bar from #4702 until then). ChatGPT's,
  * Claude's and Perplexity's phone apps put the field at the bottom above the
  * keyboard and the thread above it; so does this.
  *
@@ -457,22 +458,18 @@ export const AskSheet = forwardRef<
       >
         <SheetBackToClose onClose={closeSheet} />
         <View style={styles.headerRow}>
-          {/* Before the first turn the opening's big crest is the mark; the
-              name comes back here with the conversation (#4904). Until #5945
-              the bar that opened the sheet said the name ("Ask Frapp"); it
-              reads "What do you need?" now, so nothing visible names
-              Frapp Intelligence before the first turn. #5946 rebuilds this
-              entry and owns that. */}
-          {exchanges.length > 0 ? (
-            <View style={styles.headerName}>
+          {/* The name shows from the first frame, whatever opened the sheet
+              (#5983, carried from #5945's review): before the first turn the
+              opening's big crest is the mark, so the small one joins the name
+              with the conversation (#4904). */}
+          <View style={styles.headerName}>
+            {exchanges.length > 0 ? (
               <FrappCrest height={20} color={accent} />
-              <Text accessibilityRole="header" style={styles.headerTitle}>
-                {ASK_COPY.name}
-              </Text>
-            </View>
-          ) : (
-            <View />
-          )}
+            ) : null}
+            <Text accessibilityRole="header" style={styles.headerTitle}>
+              {ASK_COPY.name}
+            </Text>
+          </View>
           <View style={styles.headerActions}>
             {exchanges.length > 0 ? (
               <IconButton
