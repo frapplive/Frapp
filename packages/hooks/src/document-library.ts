@@ -5,6 +5,7 @@ import {
   ROLE_COLOR_PALETTE,
   roleColor,
   type RoleColorHex,
+  latestSemesterArchive,
 } from "@repo/validation";
 import { folderPlace } from "./document-folder-tree";
 import { fnv1a32 } from "./member-avatar-color";
@@ -540,16 +541,7 @@ function searchText(
 export function semesterSince(
   archives: readonly { end_date: string; created_at?: string }[],
 ): Date | null {
-  let latest: { end_date: string; created_at?: string } | null = null;
-  for (const archive of archives) {
-    if (!archive.end_date) continue;
-    if (
-      latest === null ||
-      (archive.created_at ?? "") > (latest.created_at ?? "")
-    ) {
-      latest = archive;
-    }
-  }
+  const latest = latestSemesterArchive(archives);
   return latest
     ? new Date(`${latest.end_date.slice(0, 10)}T23:59:59.999Z`)
     : null;

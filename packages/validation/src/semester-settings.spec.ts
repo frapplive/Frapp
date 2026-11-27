@@ -54,12 +54,11 @@ describe("the Semester page's rules (#6028)", () => {
   });
 
   it("fills the new page's dates from the archives and today", () => {
-    const now = new Date(2026, 11, 15, 10);
-    expect(newSemesterDefaults([spring], now)).toEqual({
+    expect(newSemesterDefaults([spring], "2026-12-15")).toEqual({
       start: "2026-05-09",
       end: "2026-12-15",
     });
-    expect(newSemesterDefaults([], now).start).toBe("");
+    expect(newSemesterDefaults([], "2026-12-15").start).toBe("");
   });
 
   it("names the semester that ends, which is what the API archives", () => {

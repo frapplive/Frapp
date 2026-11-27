@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { PRIVACY_SETTINGS_COPY as COPY } from "@repo/validation";
+import {
+  PRIVACY_SETTINGS_COPY as COPY,
+  privacySettingsFootnote,
+} from "@repo/validation";
+import { InlineNote } from "@/components/inline-note";
 import { BACK_TO_CHAPTER_SETTINGS } from "@/components/back-row";
 import { ListRow, ListSection } from "@/components/list-section";
 import { ScreenShell } from "@/components/screen-shell";
@@ -27,32 +31,38 @@ export function ChapterPrivacyPage() {
 
   return (
     <ScreenShell back={BACK_TO_CHAPTER_SETTINGS} title={COPY.title}>
-      <ChapterPageState query={orgConfig}>
-        <ListSection
-          footnote={
-            canManage ? COPY.footnote : `${COPY.footnote} ${COPY.readOnly}`
-          }
-        >
-          <ListRow
-            label={COPY.label}
-            description={failed ? `${COPY.saveFailed}. Try again.` : COPY.line}
-            descriptionTone={failed ? "destructive" : "default"}
-            trailing={
-              <Toggle
-                value={analyticsOn}
-                disabled={!canManage || patchConfig.isPending}
-                onValueChange={(next) => {
-                  setFailed(false);
-                  patchConfig
-                    .mutateAsync({ analytics_opt_out: !next })
-                    .catch(() => setFailed(true));
-                }}
-                accessibilityLabel={COPY.label}
-              />
-            }
-          />
-        </ListSection>
-      </ChapterPageState>
+      {/* The config read runs only for `chapter-config:view` (the row and the
+          search result gate on it), so a stale link from anyone else would
+          wait on a read that never starts. A council's reaches
+          `ChapterPageState`, which says the setting is on the web. */}
+      {!tab.access.chapter && tab.chapterFeatures ? (
+        <InlineNote>{COPY.unavailable}</InlineNote>
+      ) : (
+        <ChapterPageState query={orgConfig}>
+          <ListSection footnote={privacySettingsFootnote(canManage)}>
+            <ListRow
+              label={COPY.label}
+              description={
+                failed ? `${COPY.saveFailed}. Try again.` : COPY.line
+              }
+              descriptionTone={failed ? "destructive" : "default"}
+              trailing={
+                <Toggle
+                  value={analyticsOn}
+                  disabled={!canManage || patchConfig.isPending}
+                  onValueChange={(next) => {
+                    setFailed(false);
+                    patchConfig
+                      .mutateAsync({ analytics_opt_out: !next })
+                      .catch(() => setFailed(true));
+                  }}
+                  accessibilityLabel={COPY.label}
+                />
+              }
+            />
+          </ListSection>
+        </ChapterPageState>
+      )}
     </ScreenShell>
   );
 }

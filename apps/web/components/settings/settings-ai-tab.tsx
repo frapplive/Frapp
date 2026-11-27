@@ -10,6 +10,7 @@ import {
 import {
   AI_SETTINGS_COPY,
   AI_SWITCHES,
+  aiSettingsFootnote,
   aiSwitchState,
   formatAiAnswerDate,
   type AiSwitchCopy,
@@ -92,17 +93,10 @@ export function SettingsAiTab() {
     );
   } else {
     const footnote = settings
-      ? [
-          settings.can_change ? null : AI_SETTINGS_COPY.presidentOnly,
-          AI_SETTINGS_COPY.footnote,
-          settings.updated_at
-            ? AI_SETTINGS_COPY.lastChanged(
-                formatAiAnswerDate(settings.updated_at),
-              )
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" ")
+      ? aiSettingsFootnote(
+          settings.can_change,
+          settings.updated_at ? formatAiAnswerDate(settings.updated_at) : null,
+        )
       : null;
     body = (
       <SettingsGroup

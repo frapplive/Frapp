@@ -1,6 +1,9 @@
 "use client";
 
-import { PRIVACY_SETTINGS_COPY as COPY } from "@repo/validation";
+import {
+  PRIVACY_SETTINGS_COPY as COPY,
+  privacySettingsFootnote,
+} from "@repo/validation";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 
 type Props = {
@@ -38,7 +41,7 @@ export function SettingsPrivacyTab({
     <SettingsGroup
       id="settings-privacy"
       label={COPY.title}
-      footnote={canManage ? COPY.footnote : `${COPY.footnote} ${COPY.readOnly}`}
+      footnote={privacySettingsFootnote(canManage)}
     >
       <SettingsRow
         id="settings-analytics"

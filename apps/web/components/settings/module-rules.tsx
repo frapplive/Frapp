@@ -125,8 +125,6 @@ export function SwitchRule({
   checked,
   onChange,
   disabled,
-  nested = false,
-  muted = false,
   asItem = false,
 }: {
   label: string;
@@ -134,10 +132,6 @@ export function SwitchRule({
   checked: boolean;
   onChange: (next: boolean) => void;
   disabled: boolean;
-  /** A switch that only matters under the row above it: drawn indented. */
-  nested?: boolean;
-  /** Its label greys while the switch it waits on is off. */
-  muted?: boolean;
   /** A row of a `RuleGroup`: an `<li>` at the settings row's height. */
   asItem?: boolean;
 }) {
@@ -149,17 +143,10 @@ export function SwitchRule({
       className={cn(
         "flex justify-between gap-8 px-4",
         asItem ? "min-h-11 items-center py-2.5" : "items-start py-4",
-        nested && "pl-10",
       )}
     >
       <div className="min-w-0 space-y-0.5">
-        <label
-          htmlFor={id}
-          className={cn(
-            "text-sm font-medium",
-            muted ? "text-muted-foreground" : "text-foreground",
-          )}
-        >
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
           {label}
         </label>
         <div id={hintId} className="text-caption text-muted-foreground">

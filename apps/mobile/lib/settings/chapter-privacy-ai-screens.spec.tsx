@@ -35,6 +35,8 @@ const h = vi.hoisted(() => ({
   renameClass: vi.fn(),
   sheets: new Map<string, Sheet>(),
   aiOn: true,
+  consentFailed: false,
+  retryConsent: vi.fn(),
   ai: null as Record<string, unknown> | null,
   optOut: false,
   patchConfig: vi.fn<(body: unknown) => Promise<unknown>>(),
@@ -79,7 +81,15 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useChapterChatBackground: () =>
     ok({ background: "midnight", photo_url: null }),
   useGeofences: () => ok([]),
-  useAiConsent: () => ({ data: h.aiOn ? { answer: "yes" } : null }),
+  useAiConsent: () =>
+    h.consentFailed
+      ? {
+          data: undefined,
+          isError: true,
+          isRefetching: false,
+          refetch: h.retryConsent,
+        }
+      : { data: h.aiOn ? { answer: "yes" } : null },
   useAiChapterSettings: (options?: { enabled?: boolean }) =>
     ok(options?.enabled === false ? undefined : (h.ai ?? undefined)),
   useUpdateAiChapterSettings: () => ({
@@ -202,6 +212,7 @@ beforeEach(() => {
   h.permissions = OFFICER;
   h.council = false;
   h.aiOn = true;
+  h.consentFailed = false;
   h.ai = aiSettings();
   h.optOut = false;
   h.patchConfig.mockReset().mockResolvedValue({});
@@ -304,6 +315,13 @@ describe("the AI screen (#6028)", () => {
     expect(screenText(tree)).toContain(AI_SETTINGS_COPY.dependsOnAsk);
   });
 
+  it("offers Retry when the AI read failed, rather than loading forever", () => {
+    h.consentFailed = true;
+    const tree = render(<ChapterAiScreen />);
+    expect(screenText(tree)).toContain("Couldn't load chapter settings");
+    expect(byLabel(tree, "Switch", "Minutes from notes")).toHaveLength(0);
+  });
+
   it("shows no switches where the server has no AI", () => {
     h.aiOn = false;
     const tree = render(<ChapterAiScreen />);
@@ -335,6 +353,15 @@ describe("the Privacy screen (#6028)", () => {
     const tree = render(<ChapterPrivacyScreen />);
     expect(toggle(tree, PRIVACY_SETTINGS_COPY.label).props.disabled).toBe(true);
     expect(screenText(tree)).toContain(PRIVACY_SETTINGS_COPY.readOnly);
+  });
+
+  it("says so to a viewer it doesn't open to, rather than loading forever", () => {
+    h.permissions = ["members:view"];
+    const tree = render(<ChapterPrivacyScreen />);
+    expect(byLabel(tree, "Switch", PRIVACY_SETTINGS_COPY.label)).toHaveLength(
+      0,
+    );
+    expect(screenText(tree)).toContain(PRIVACY_SETTINGS_COPY.unavailable);
   });
 
   it("shows a refused save on the row", async () => {

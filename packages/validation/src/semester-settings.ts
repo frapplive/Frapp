@@ -17,7 +17,13 @@ export interface SemesterArchiveDates {
   created_at?: string;
 }
 
-function latestArchive<T extends SemesterArchiveDates>(
+/**
+ * The chapter's latest archive, picked as the API picks it
+ * (`findLatestByChapter`, newest `created_at`), skipping a row without an
+ * end day. The one home of that rule: Documents' "This semester" filter
+ * (`semesterSince`), Service hours' gauge and the Semester page all read it.
+ */
+export function latestSemesterArchive<T extends SemesterArchiveDates>(
   archives: readonly T[],
 ): T | null {
   let latest: T | null = null;
@@ -46,7 +52,7 @@ function isoDay(at: Date): string {
 export function currentSemesterStart(
   archives: readonly SemesterArchiveDates[],
 ): string | null {
-  const latest = latestArchive(archives);
+  const latest = latestSemesterArchive(archives);
   return latest ? dayAfter(latest.end_date) : null;
 }
 
@@ -66,7 +72,7 @@ export function semesterRolloverOpensOn(
   archives: readonly SemesterArchiveDates[],
   now: Date = new Date(),
 ): string | null {
-  const latest = latestArchive(archives);
+  const latest = latestSemesterArchive(archives);
   if (!latest?.created_at) return null;
   const created = new Date(latest.created_at);
   if (Number.isNaN(created.getTime())) return null;
@@ -82,17 +88,13 @@ export function semesterRolloverOpensOn(
 /**
  * The new-semester page's dates before the officer types any: the first day
  * of the semester ending (the day after the last archive, or none) and its
- * last day, today (local, as the officer reads the calendar).
+ * last day, `today` (the caller's `localIsoDate()`, as the officer reads the
+ * calendar).
  */
 export function newSemesterDefaults(
   archives: readonly SemesterArchiveDates[],
-  now: Date = new Date(),
+  today: string,
 ): { start: string; end: string } {
-  const today = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
   return { start: currentSemesterStart(archives) ?? "", end: today };
 }
 
@@ -168,10 +170,20 @@ export const SEMESTER_SETTINGS_COPY = {
       ? `${name} is archived, and every ${promote.pledgeTerm} is now a full member.`
       : `${name} is archived.`,
   failed: "Couldn't start a new semester",
+  /** The archives couldn't be read: the page says so rather than guess. */
+  loadFailed: "Couldn't load past semesters",
+  /** The new page's dimmed button while the archives are unread. */
+  waitingForArchives: "Loading past semesters",
   failedFallback: "A chapter can start one new semester a month.",
 } as const;
 
 /** Chapter settings → Privacy, on web and the phone. */
+export function privacySettingsFootnote(canManage: boolean): string {
+  return canManage
+    ? PRIVACY_SETTINGS_COPY.footnote
+    : `${PRIVACY_SETTINGS_COPY.footnote} ${PRIVACY_SETTINGS_COPY.readOnly}`;
+}
+
 export const PRIVACY_SETTINGS_COPY = {
   title: "Privacy",
   label: "Chapter analytics",
@@ -185,4 +197,6 @@ export const PRIVACY_SETTINGS_COPY = {
   turnedOn: "Analytics turned on",
   turnedOff: "Analytics turned off",
   saveFailed: "Couldn't change analytics",
+  /** The phone's screen reached by a viewer it doesn't open to. */
+  unavailable: "Your role can't open the chapter's privacy settings.",
 } as const;

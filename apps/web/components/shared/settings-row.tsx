@@ -87,6 +87,11 @@ type Trailing =
       checked: boolean;
       onCheckedChange: (next: boolean) => void;
       disabled?: boolean;
+      /**
+       * A subscription gate's reason (`SubscriptionGate.controlProps`): its
+       * hover title and the notice it points a screen reader to.
+       */
+      gate?: { title?: string; "aria-describedby"?: string };
       value?: never;
       onClick?: never;
       href?: never;
@@ -97,6 +102,7 @@ type Trailing =
       onClick: () => void;
       checked?: never;
       onCheckedChange?: never;
+      gate?: never;
       disabled?: boolean;
       href?: never;
       control?: never;
@@ -106,6 +112,7 @@ type Trailing =
       value?: ReactNode;
       checked?: never;
       onCheckedChange?: never;
+      gate?: never;
       disabled?: never;
       onClick?: never;
       control?: never;
@@ -115,6 +122,7 @@ type Trailing =
       control: ReactNode;
       checked?: never;
       onCheckedChange?: never;
+      gate?: never;
       disabled?: never;
       value?: never;
       onClick?: never;
@@ -312,7 +320,15 @@ export function SettingsRow(
             disabled={props.disabled}
             onCheckedChange={props.onCheckedChange}
             aria-labelledby={labelId}
-            aria-describedby={description ? descriptionId : undefined}
+            title={props.gate?.title}
+            aria-describedby={
+              [
+                description ? descriptionId : null,
+                props.gate?.["aria-describedby"],
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
           />
         </div>
       </li>

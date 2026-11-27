@@ -321,7 +321,6 @@ export function NewspaperGlyph({
   );
 }
 
-/** Lucide's `Shield`. */
 /** Lucide's `Lock`: Chapter settings' Privacy row (#6028). */
 export function LockGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   const { detail } = paint({ color });
@@ -333,6 +332,7 @@ export function LockGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   );
 }
 
+/** Lucide's `Shield`. */
 export function ShieldGlyph({
   color,
   size = DEFAULT_SIZE,

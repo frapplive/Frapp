@@ -947,6 +947,10 @@ function SettingsPageContent() {
               rolloverGate={rolloverGate}
               semesters={semesters}
               semestersPending={semestersQuery.isPending}
+              semestersFailed={
+                semestersQuery.isError && semestersQuery.data === undefined
+              }
+              onRetrySemesters={() => void semestersQuery.refetch()}
               page={searchParams.get("page")}
             />
           </TabsContent>

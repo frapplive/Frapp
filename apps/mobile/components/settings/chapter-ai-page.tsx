@@ -7,6 +7,7 @@ import {
 import {
   AI_SETTINGS_COPY,
   AI_SWITCHES,
+  aiSettingsFootnote,
   aiSwitchState,
   formatAiAnswerDate,
   type AiChapterSwitchKey,
@@ -50,27 +51,26 @@ export function ChapterAiPage() {
   const [failedKey, setFailedKey] = useState<AiChapterSwitchKey | null>(null);
 
   const footnote = settings
-    ? [
-        settings.can_change ? null : AI_SETTINGS_COPY.presidentOnly,
-        AI_SETTINGS_COPY.footnote,
-        settings.updated_at
-          ? AI_SETTINGS_COPY.lastChanged(
-              formatAiAnswerDate(settings.updated_at),
-            )
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" ")
+    ? aiSettingsFootnote(
+        settings.can_change,
+        settings.updated_at ? formatAiAnswerDate(settings.updated_at) : null,
+      )
     : null;
 
   return (
     <ScreenShell back={BACK_TO_CHAPTER_SETTINGS} title={AI_SETTINGS_COPY.title}>
-      {aiConsent.data === null || !tab.access.chapter ? (
+      {aiConsent.data === null ||
+      (!tab.access.chapter && tab.chapterFeatures) ? (
         // No AI on this server, or a viewer web's page doesn't open to: a
         // stale link lands here, never on switches that can't apply.
         <InlineNote>{AI_SETTINGS_COPY.unavailable}</InlineNote>
       ) : (
-        <ChapterPageState query={settingsQuery}>
+        // Until the consent read answers, its own state is the page's: a
+        // failed one offers its Retry, where the switches' read, which waits
+        // on it, would never start.
+        <ChapterPageState
+          query={aiConsent.data === undefined ? aiConsent : settingsQuery}
+        >
           {settings ? (
             <ListSection footnote={footnote}>
               {AI_SWITCHES.map((entry) => {

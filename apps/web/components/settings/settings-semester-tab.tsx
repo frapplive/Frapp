@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { type SemesterArchive, type useSemesterRollover } from "@repo/hooks";
-import { formatDay, formatDayRange } from "@repo/formatting";
+import { formatDay, formatDayRange, localIsoDate } from "@repo/formatting";
 import {
   currentSemesterStart,
   dayAfter,
@@ -15,7 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
-import { PermissionsOfflineSurface } from "@/components/shared/async-states";
+import {
+  PermissionsOffline,
+  PermissionsOfflineSurface,
+} from "@/components/shared/async-states";
+import { NestedError } from "@/components/shared/nested-states";
 import { Can } from "@/components/shared/can";
 import { type useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
@@ -99,6 +103,13 @@ type Props = {
   rolloverGate: SubscriptionGate;
   semesters: SemesterArchive[];
   semestersPending: boolean;
+  /**
+   * The archives couldn't be read (and none are cached). Neither page then
+   * guesses from an empty list: "never ended a semester" would be false, and
+   * the month's limit unknown.
+   */
+  semestersFailed: boolean;
+  onRetrySemesters: () => void;
   /** `?page=`: `new` opens the new-semester page. */
   page: string | null;
 };
@@ -141,7 +152,13 @@ export function SettingsSemesterTab(props: Props) {
 function SemesterPage({
   semesters,
   semestersPending,
-}: Pick<Props, "semesters" | "semestersPending">) {
+  semestersFailed,
+  onRetrySemesters,
+}: Pick<
+  Props,
+  "semesters" | "semestersPending" | "semestersFailed" | "onRetrySemesters"
+>) {
+  const known = !semestersPending && !semestersFailed;
   const since = currentSemesterStart(semesters);
   const opensOn = semesterRolloverOpensOn(semesters);
   // Newest first, as the archives were filed.
@@ -158,19 +175,32 @@ function SemesterPage({
         <SettingsRow
           label={COPY.currentRow}
           control={
-            semestersPending ? null : (
+            !known ? null : (
               <Value>
                 {COPY.currentValue(since ? formatDay(since) : null)}
               </Value>
             )
           }
         />
-        <Can permission="semester:rollover" deniedFallback={null}>
+        <Can
+          permission="semester:rollover"
+          deniedFallback={null}
+          // Inside the group's list, so the offline chip takes a row of its own.
+          offlineFallback={(retry) => (
+            <li className="px-4 py-1.5">
+              <PermissionsOffline onRetry={retry} />
+            </li>
+          )}
+        >
           <SettingsRow
             id="settings-start-a-new-semester"
             icon={CalendarPlus}
             label={COPY.newRow}
-            value={opensOn ? COPY.opensOn(formatDay(opensOn) ?? "") : undefined}
+            value={
+              known && opensOn
+                ? COPY.opensOn(formatDay(opensOn) ?? "")
+                : undefined
+            }
             href={NEW_SEMESTER_SETTINGS_PATH}
           />
         </Can>
@@ -187,6 +217,12 @@ function SemesterPage({
             bare
           />
         </SectionSkeleton>
+      ) : semestersFailed ? (
+        <NestedError
+          title={COPY.loadFailed}
+          description="Check your connection and try again."
+          onRetry={onRetrySemesters}
+        />
       ) : (
         <SettingsGroup
           id="settings-archived-semesters"
@@ -239,9 +275,17 @@ function NewSemesterPage({
   rollover,
   rolloverGate,
   semesters,
+  semestersPending,
+  semestersFailed,
 }: Props) {
   const { toast } = useToast();
-  const defaults = newSemesterDefaults(semesters);
+  // Until the archives are read, the first day and the month's limit are
+  // unknown: the button waits, and First day stays empty rather than wrong.
+  const known = !semestersPending && !semestersFailed;
+  const defaults = newSemesterDefaults(
+    known ? semesters : [],
+    localIsoDate(new Date()),
+  );
   const name = form.label.trim();
   const start = form.start ?? defaults.start;
   const end = form.end ?? defaults.end;
@@ -250,11 +294,15 @@ function NewSemesterPage({
   const promote = form.promoteNewMembers ? { pledgeTerm } : null;
   const gateProps = rolloverGate.controlProps(rollover.isPending);
   // The button says what's missing while it can't be pressed (rulebook § 9).
-  const blockedBy = opensOnWords ?? (name ? null : COPY.nameFirst);
+  const blockedBy = semestersFailed
+    ? COPY.loadFailed
+    : semestersPending
+      ? COPY.waitingForArchives
+      : (opensOnWords ?? (name ? null : COPY.nameFirst));
 
   async function startRollover(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!name || opensOn) return;
+    if (!name || !known || opensOn) return;
     // The date fields hold "" while their text is not a date (`DateField`).
     if (!start || !end) {
       toast({
@@ -387,6 +435,7 @@ function NewSemesterPage({
               checked={form.promoteNewMembers}
               onCheckedChange={form.setPromoteNewMembers}
               disabled={gateProps.disabled}
+              gate={gateProps}
             />
           </SettingsGroup>
         </Can>
