@@ -5,6 +5,9 @@ import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   rushPipelineAccess,
   useAiChapterSettings,
+  useCustomFields,
+  usePledgeClasses,
+  useRoles,
   useAiConsent,
   useCategories,
   useChannelAccessOptions,
@@ -18,6 +21,7 @@ import {
   chapterVocabularyValue,
 } from "@repo/hooks/chapter-tab";
 import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
+import { parseChapterRoles } from "@repo/hooks/chapter-roles";
 import { shownModuleSettings } from "@repo/hooks/module-settings";
 import { SignetTokens } from "@repo/theme/signet";
 import {
@@ -29,18 +33,24 @@ import {
   CHAPTER_LOGS_TITLE,
   CHAPTER_LOOK_FOOTNOTE,
   CHAT_BACKGROUND_LABELS,
+  canAny,
   isModuleEnabled,
+  MEMBER_FIELDS_COPY,
   NAME_LOCK_COPY,
+  PEOPLE_SETTINGS_COPY,
 } from "@repo/validation";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import {
   BuildingGlyph,
+  GraduationCapGlyph,
+  IdCardGlyph,
   ImageGlyph,
   LandmarkGlyph,
   PaletteGlyph,
   ScrollTextGlyph,
+  ShieldGlyph,
   TypeGlyph,
   WallpaperGlyph,
 } from "@/components/settings-glyphs";
@@ -60,12 +70,10 @@ import {
   ChannelFormSheet,
   type ChannelFormMode,
 } from "@/components/chat/channel-form-sheet";
-import { NewRoleSheet } from "@/components/roles/new-role-sheet";
 import { accessOptionsStateOf } from "@/lib/chat/create-channel";
 import { useCreateChannelAndOpen } from "@/lib/chat/use-create-channel-and-open";
 import { selectCategories } from "@/lib/chat/channel-list";
-import { newRolePlacements, type NewRolePlacement } from "@/lib/roles/new-role";
-import { useRolesData } from "@/lib/roles/use-roles-data";
+import { usePledgeClassTerms } from "@/lib/directory/pledge-class";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { useChapterTab } from "@/lib/settings/chapter-tab";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -106,16 +114,18 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *   a page of their own. Drawn only where the server has AI.
  * - **Chat**: New channel.
  * - **People**: Roles and groups, the chapter's tiers and their roles, then
- *   its groups (`app/(app)/chapter-roles.tsx`), and New role.
+ *   its groups (`app/(app)/chapter-roles.tsx`); Pledge class
+ *   (`pledge-classes.tsx`) and Member fields (`member-fields.tsx`), each
+ *   with web's page's rows (#6029). Adding a role sits in its tier on Roles
+ *   and groups, as on web, so New role is no longer a row here.
  *
  * - **Modules** (#6030): a row per module, in web's rail order, each pushing
  *   the module's screen (`app/(app)/module-settings.tsx`) with web's module
  *   page's rows: the switch, rules, goals and who can. Study zones' zone
  *   count moved there from Chapter. The officer tools stay on web.
  *
- * Web's other pages (Plan and billing, the semester, privacy, pledge
- * classes, member fields) stay on web for now: they are setup an officer
- * does once, at a desk.
+ * Web's other pages (Plan and billing, the semester, privacy) stay on web
+ * for now: they are setup an officer does once, at a desk.
  * Grouped rows with a chevron, as iOS Settings and Discord mobile's Server
  * Settings draw theirs.
  *
@@ -460,17 +470,20 @@ export default function ChapterSettingsScreen() {
           </>
         )}
         {/* Mounted through a search, as the accent and background sheets
-            are, so a New role draft kept on a close survives typing in
+            are, so a New channel draft kept on a close survives typing in
             Search settings; only their rows hide (`searching`). */}
         {access.newChannel ? (
           <ChatSection searching={search.searching} />
         ) : null}
-        {access.roles ? (
-          access.newRole ? (
-            <PeopleSectionWithNewRole searching={search.searching} />
-          ) : (
-            <PeopleSection searching={search.searching} placements={[]} />
-          )
+        {access.roles && !search.searching ? (
+          <PeopleSection
+            canSeeRoles={canAny(
+              ["roles:manage", "chapter-config:view"],
+              tab.permissions,
+            )}
+            pledgeClasses={access.pledgeClasses}
+            memberFields={access.memberFields}
+          />
         ) : null}
         {search.searching || !tab.chapterFeatures ? null : (
           <ModulesSection
@@ -485,8 +498,7 @@ export default function ChapterSettingsScreen() {
           />
         )}
         {/* Where the phone stops (Shawn, 2026-11-22): Plan and billing, the
-            semester, privacy, pledge classes, member fields and the officer
-            tools are web's Settings, which an officer sets up once, at a
+            semester, privacy and the officer tools are web's Settings, which an officer sets up once, at a
             desk. One quiet line, as iOS Settings ends a group with its
             footnote. */}
         {search.searching ? null : (
@@ -613,81 +625,92 @@ function ChatSection({ searching }: { searching: boolean }) {
 
 const NEW_CHANNEL_MODE: ChannelFormMode = { kind: "create", categoryId: null };
 
-/**
- * People for a `roles:manage` holder: the roles reads, then Roles and groups
- * and New role (#5296). Split from {@link PeopleSection} so the reads (the
- * roles, tiers and member list) are spent only on someone who can add a role.
- */
-function PeopleSectionWithNewRole({ searching }: { searching: boolean }) {
-  const { tiers, reach, words } = useRolesData();
-  const placements = useMemo(
-    () => newRolePlacements(reach, tiers, `Outside the ${words.plural}`),
-    [reach, tiers, words.plural],
-  );
-  return (
-    <PeopleSection
-      searching={searching}
-      placements={placements}
-      tierLabel={words.Singular}
-    />
-  );
+/** "1 role", "12 roles": the Roles and groups row's value. */
+function roleCountLabel(count: number): string {
+  return count === 1 ? "1 role" : `${count} roles`;
+}
+
+/** "No fields", "1 field", "4 fields": the Member fields row's value. */
+function fieldCountLabel(count: number): string {
+  if (count === 0) return "No fields";
+  return count === 1 ? "1 field" : `${count} fields`;
 }
 
 /**
- * People: Roles and groups, then New role where the officer has somewhere to
- * put one (#5296): a name, a tier and a color, then the role's page, where
- * what it can do is switched.
+ * People (#6029), in web's rail order: Roles and groups, Pledge class (titled
+ * with the chapter's own word) and Member fields, each a pushed page with
+ * its count, each shown only to whoever web's tab shows to.
  */
 function PeopleSection({
-  searching,
-  placements,
-  tierLabel = "Tier",
+  canSeeRoles,
+  pledgeClasses,
+  memberFields,
 }: {
-  searching: boolean;
-  placements: readonly NewRolePlacement[];
-  tierLabel?: string;
+  /** Roles are read for a roles manager or config viewer, not a groups-only one. */
+  canSeeRoles: boolean;
+  pledgeClasses: boolean;
+  memberFields: boolean;
 }) {
   const router = useRouter();
   const { tokens } = useFrappTheme();
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const showNewRole = placements.length > 0;
-
+  const glyphColor = tokens.color.text.mutedForeground;
+  const rolesQuery = useRoles({ enabled: canSeeRoles });
+  const roleCount =
+    canSeeRoles && rolesQuery.data !== undefined
+      ? parseChapterRoles(rolesQuery.data).length
+      : undefined;
   return (
     <>
-      {searching ? null : (
-        <>
-          <SectionHeader>People</SectionHeader>
-          <ListSection>
-            <ListRow
-              label="Roles and groups"
-              accessibilityHint="Opens the chapter's tiers, roles and groups."
-              onPress={() => router.push("/chapter-roles")}
-            />
-            {showNewRole ? (
-              <SettingAnchor id="new-role">
-                <ListRow
-                  label="New role"
-                  leading={
-                    <PlusGlyph color={tokens.color.text.mutedForeground} />
-                  }
-                  accessibilityHint="Opens the form for a new role."
-                  onPress={() => sheetRef.current?.present()}
-                />
-              </SettingAnchor>
-            ) : null}
-          </ListSection>
-        </>
-      )}
-      {showNewRole ? (
-        <NewRoleSheet
-          ref={sheetRef}
-          chapterRole={{ placements, tierLabel }}
-          onCreated={(roleId) =>
-            router.push({ pathname: "/role", params: { roleId } })
-          }
+      <SectionHeader>People</SectionHeader>
+      <ListSection>
+        <ListRow
+          leading={<ShieldGlyph color={glyphColor} />}
+          label={PEOPLE_SETTINGS_COPY.pageTitle}
+          value={roleCount === undefined ? null : roleCountLabel(roleCount)}
+          accessibilityHint="Opens the chapter's tiers, roles and groups."
+          onPress={() => router.push("/chapter-roles")}
         />
-      ) : null}
+        {pledgeClasses ? <PledgeClassRow glyphColor={glyphColor} /> : null}
+        {memberFields ? <MemberFieldsRow glyphColor={glyphColor} /> : null}
+      </ListSection>
     </>
+  );
+}
+
+/** People → Pledge class, in the chapter's own word, with how many it has. */
+function PledgeClassRow({ glyphColor }: { glyphColor: string }) {
+  const router = useRouter();
+  const { classTerm } = usePledgeClassTerms();
+  const classesQuery = usePledgeClasses();
+  const count = classesQuery.data?.length;
+  return (
+    <SettingAnchor id="pledge-class">
+      <ListRow
+        leading={<GraduationCapGlyph color={glyphColor} />}
+        label={classTerm}
+        value={count === undefined ? null : String(count)}
+        accessibilityHint="Opens the chapter's list, oldest first, and who is in each."
+        onPress={() => router.push("/pledge-classes")}
+      />
+    </SettingAnchor>
+  );
+}
+
+/** People → Member fields, with how many the chapter has. */
+function MemberFieldsRow({ glyphColor }: { glyphColor: string }) {
+  const router = useRouter();
+  const fieldsQuery = useCustomFields();
+  const count = fieldsQuery.data?.length;
+  return (
+    <SettingAnchor id="member-fields">
+      <ListRow
+        leading={<IdCardGlyph color={glyphColor} />}
+        label={MEMBER_FIELDS_COPY.pageTitle}
+        value={count === undefined ? null : fieldCountLabel(count)}
+        accessibilityHint="Opens the questions members answer under More details."
+        onPress={() => router.push("/member-fields")}
+      />
+    </SettingAnchor>
   );
 }
 
