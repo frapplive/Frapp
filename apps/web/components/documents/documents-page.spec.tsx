@@ -49,8 +49,7 @@ const {
   // every write sends what it did before lists existed.
   accessQuery: {
     data: undefined as
-      | { options: unknown[]; always: string[] | null }
-      | undefined,
+      { options: unknown[]; always: string[] | null } | undefined,
     isSuccess: false,
     isError: false,
   },
@@ -87,7 +86,10 @@ const {
   canGate: { granted: true },
   // The chapter roster's names, which a test may change to drop someone.
   roster: {
-    names: { "u-1": "Marcus Ellison", "u-2": "Ryan Castellano" } as Record<string, string>,
+    names: { "u-1": "Marcus Ellison", "u-2": "Ryan Castellano" } as Record<
+      string,
+      string
+    >,
   },
   documentsQuery: {
     data: [] as unknown[],
@@ -119,7 +121,6 @@ const BYLAWS = {
   created_at: "2026-08-01T00:00:00Z",
 };
 
-
 // Drive's status (#5157), for the Upload menu's Drive item (#5576).
 const mockDriveStatus = vi.hoisted(() =>
   vi.fn<(options?: { enabled?: boolean }) => { data: unknown }>(() => ({
@@ -148,9 +149,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   },
   useDocumentFolders: () => foldersQuery,
   useDocumentTypes: () => typesQuery,
-  useCreateDocumentType: () => ({ mutateAsync: mockCreateType, isPending: false }),
-  useUpdateDocumentType: () => ({ mutateAsync: mockUpdateType, isPending: false }),
-  useDeleteDocumentType: () => ({ mutateAsync: mockDeleteType, isPending: false }),
+  useCreateDocumentType: () => ({
+    mutateAsync: mockCreateType,
+    isPending: false,
+  }),
+  useUpdateDocumentType: () => ({
+    mutateAsync: mockUpdateType,
+    isPending: false,
+  }),
+  useDeleteDocumentType: () => ({
+    mutateAsync: mockDeleteType,
+    isPending: false,
+  }),
   // The folder import's batch routes (#2242); its own spec covers them.
   useRequestDocumentUploadUrls: () => ({ mutateAsync: vi.fn() }),
   useConfirmDocumentUploads: () => ({ mutateAsync: vi.fn() }),
@@ -187,11 +197,25 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useSetDocumentStar: () => ({ mutateAsync: mockSetStar }),
   useSetDocumentPin: () => ({ mutateAsync: mockSetPin, isPending: false }),
   useDocumentAccessOptions: () => accessQuery,
-  useSetDocumentAccess: () => ({ mutateAsync: mockSetAccess, isPending: false }),
+  useSetDocumentAccess: () => ({
+    mutateAsync: mockSetAccess,
+    isPending: false,
+  }),
 }));
 
+/** Sets or clears one parameter of the address the page opens on. */
+function linkParam(name: string, value: string | null) {
+  const url = new URL(window.location.href);
+  if (value === null) url.searchParams.delete(name);
+  else url.searchParams.set(name, value);
+  window.history.replaceState(null, "", url);
+}
 // `/documents?document=<id>`: what a source cited by Ask links to.
-const linkedDocument = vi.hoisted(() => ({ current: null as string | null }));
+const linkedDocument = {
+  set current(value: string | null) {
+    linkParam("document", value);
+  },
+};
 // `meetings:record`, for New minutes in the add menu (#5949).
 const recordGate = vi.hoisted(() => ({ granted: false }));
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
@@ -204,16 +228,44 @@ vi.mock("@/components/meetings/start-minutes-panel", () => ({
 }));
 
 // `/documents?type=minutes`: where `/meetings` lands (#5949).
-const linkedType = vi.hoisted(() => ({ current: null as string | null }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () =>
-    new URLSearchParams({
-      ...(linkedDocument.current ? { document: linkedDocument.current } : {}),
-      ...(linkedType.current ? { type: linkedType.current } : {}),
-    }),
-  useRouter: () => router,
-  usePathname: () => "/documents",
-}));
+const linkedType = {
+  set current(value: string | null) {
+    linkParam("type", value);
+  },
+};
+// The router's search params follow the History API, as Next's do, so the
+// page's address (folder, viewer, Who can see, Minutes) moves as it would.
+vi.mock("next/navigation", async () => {
+  const { useMemo, useSyncExternalStore } = await import("react");
+  const listeners = new Set<() => void>();
+  const notify = () => listeners.forEach((listener) => listener());
+  for (const key of ["pushState", "replaceState"] as const) {
+    const original = window.history[key].bind(window.history);
+    window.history[key] = (...args: Parameters<History["pushState"]>) => {
+      original(...args);
+      notify();
+    };
+  }
+  window.addEventListener("popstate", notify);
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  return {
+    useSearchParams: () => {
+      const search = useSyncExternalStore(
+        subscribe,
+        () => window.location.search,
+      );
+      return useMemo(() => new URLSearchParams(search), [search]);
+    },
+    useRouter: () => router,
+    usePathname: () => "/documents",
+  };
+});
+// Every test opens on the bare library; the address carries no state over.
+beforeEach(() => window.history.replaceState(null, "", "/documents"));
+
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("@/lib/stores/chapter-store", () => ({
@@ -232,7 +284,9 @@ vi.mock("@/components/shared/can", () => ({
 }));
 
 // The folder import (#2242) reads the auth account it began under.
-vi.mock("@/lib/auth/use-auth-user-id", () => ({ useAuthUserId: () => "auth-1" }));
+vi.mock("@/lib/auth/use-auth-user-id", () => ({
+  useAuthUserId: () => "auth-1",
+}));
 
 vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
@@ -396,6 +450,55 @@ describe("DocumentsPage subscription gating", () => {
 
   // #3849: the row's name opens the document full screen, without a request
   // for the download link.
+  // #6042: the viewer is `?document=`, so Back closes it and Forward
+  // reopens it; closing what this tab opened goes Back.
+  it("puts the open file in the address, and its X goes Back", async () => {
+    const user = userEvent.setup();
+    chapter.active();
+    render(<DocumentsPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    const go = vi.spyOn(window.history, "go");
+    try {
+      await user.click(screen.getByRole("button", { name: /^Chapter bylaws/ }));
+      await screen.findByRole("dialog", { name: "Chapter bylaws" });
+      expect(window.location.search).toBe("?document=doc-1");
+      expect(push).toHaveBeenCalledTimes(1);
+      await user.click(screen.getByRole("button", { name: "Close" }));
+      expect(go).toHaveBeenCalledWith(-1);
+    } finally {
+      push.mockRestore();
+      go.mockRestore();
+    }
+  });
+
+  it("reveals a file the address names again after it was shown and closed", async () => {
+    const user = userEvent.setup();
+    chapter.active();
+    render(<DocumentsPage />);
+    await user.click(screen.getByRole("button", { name: /^Chapter bylaws/ }));
+    await screen.findByRole("dialog", { name: "Chapter bylaws" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.change(screen.getByLabelText("Search documents"), {
+      target: { value: "zzz" },
+    });
+    act(() => window.history.pushState(null, "", "/documents?document=doc-1"));
+    expect(
+      await screen.findByRole("dialog", { name: "Chapter bylaws" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says a linked file isn't there, and takes it out of the address", async () => {
+    chapter.active();
+    linkedDocument.current = "doc-gone";
+    render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/That file isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("opens a document in the viewer when its row is clicked", async () => {
     const user = userEvent.setup();
     chapter.active();
@@ -403,8 +506,12 @@ describe("DocumentsPage subscription gating", () => {
 
     await user.click(screen.getByRole("button", { name: /^Chapter bylaws/ }));
 
-    const viewer = await screen.findByRole("dialog", { name: "Chapter bylaws" });
-    expect(within(viewer).getByRole("button", { name: "Download" })).toBeVisible();
+    const viewer = await screen.findByRole("dialog", {
+      name: "Chapter bylaws",
+    });
+    expect(
+      within(viewer).getByRole("button", { name: "Download" }),
+    ).toBeVisible();
     expect(mockSignedLinks).not.toHaveBeenCalled();
 
     await user.click(within(viewer).getByRole("button", { name: "Close" }));
@@ -413,21 +520,23 @@ describe("DocumentsPage subscription gating", () => {
     );
   });
 
-  // #451: a source cited by Ask opens its file, and the link is spent so
-  // closing the viewer does not reopen it.
-  it("opens the document a link names, and takes it out of the address", async () => {
+  // #451: a source cited by Ask opens its file. Closing a viewer that came
+  // from a link replaces the address with the library, so Back leaves the
+  // page as it would have and the viewer doesn't reopen (#6042).
+  it("opens the document a link names, and closing it replaces the address", async () => {
     chapter.active();
     linkedDocument.current = "doc-1";
-    const replaceState = vi.spyOn(window.history, "replaceState");
+    const user = userEvent.setup();
     try {
       render(<DocumentsPage />);
-      expect(
-        await screen.findByRole("dialog", { name: "Chapter bylaws" }),
-      ).toBeVisible();
-      expect(replaceState).toHaveBeenCalledWith(null, "", window.location.pathname);
+      const viewer = await screen.findByRole("dialog", {
+        name: "Chapter bylaws",
+      });
+      await user.click(within(viewer).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(window.location.search).toBe(""));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     } finally {
       linkedDocument.current = null;
-      replaceState.mockRestore();
     }
   });
 
@@ -801,8 +910,20 @@ describe("DocumentsPage upload metadata", () => {
 
   it("offers the chapter's own types once they load (#3642)", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "By-Laws", sort_order: 1, created_at: "" },
-      { id: "t-2", chapter_id: "chap-1", name: "Contract", sort_order: 2, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "By-Laws",
+        sort_order: 1,
+        created_at: "",
+      },
+      {
+        id: "t-2",
+        chapter_id: "chap-1",
+        name: "Contract",
+        sort_order: 2,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     render(<DocumentsPage />);
@@ -815,7 +936,9 @@ describe("DocumentsPage upload metadata", () => {
     // defaults the chapter deleted are gone.
     expectType(dialog, "By-Laws");
     await userEvent.click(typeField(dialog));
-    expect(await screen.findByRole("option", { name: "Contract" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: "Contract" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Minutes" })).toBeNull();
     // Editing the list is for document managers only.
     expect(screen.queryByRole("button", { name: "Edit Contract" })).toBeNull();
@@ -823,7 +946,13 @@ describe("DocumentsPage upload metadata", () => {
 
   it("holds a type typed with Create and sends it with the upload", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Bylaws",
+        sort_order: 1,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     render(<DocumentsPage />);
@@ -841,7 +970,9 @@ describe("DocumentsPage upload metadata", () => {
     );
     expectType(dialog, "Accreditation");
 
-    await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^upload$/i }),
+    );
     await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
     expect(mockConfirmUpload).toHaveBeenCalledWith(
       expect.objectContaining({ document_type: "Accreditation" }),
@@ -850,7 +981,13 @@ describe("DocumentsPage upload metadata", () => {
 
   it("makes a typed type at once for a document manager", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Bylaws",
+        sort_order: 1,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     manageGate.granted = true;
@@ -873,7 +1010,13 @@ describe("DocumentsPage upload metadata", () => {
 
   it("deletes a type after a confirm in place and lets the upload go of it", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Bylaws",
+        sort_order: 1,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     manageGate.granted = true;
@@ -884,19 +1027,29 @@ describe("DocumentsPage upload metadata", () => {
     expectType(dialog, "Bylaws");
 
     await userEvent.click(typeField(dialog));
-    await userEvent.click(await screen.findByRole("button", { name: "Edit Bylaws" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Bylaws" }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Delete type" }));
     expect(
       screen.getByText("Its documents keep everything but the type."),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(mockDeleteType).toHaveBeenCalledWith("t-1"));
-    await waitFor(() => expect(typeField(dialog)).toHaveAccessibleName("Type: none"));
+    await waitFor(() =>
+      expect(typeField(dialog)).toHaveAccessibleName("Type: none"),
+    );
   });
 
   it("edits a type from its row in the Type menu, for a document manager", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Bylaws",
+        sort_order: 1,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     manageGate.granted = true;
@@ -906,13 +1059,18 @@ describe("DocumentsPage upload metadata", () => {
     pickFile(dialog, "bylaws.pdf");
 
     await userEvent.click(typeField(dialog));
-    await userEvent.click(await screen.findByRole("button", { name: "Edit Bylaws" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Bylaws" }),
+    );
     const name = screen.getByLabelText("Name");
     await userEvent.clear(name);
     await userEvent.type(name, "  Constitution {Enter}");
 
     await waitFor(() =>
-      expect(mockUpdateType).toHaveBeenCalledWith({ id: "t-1", name: "Constitution" }),
+      expect(mockUpdateType).toHaveBeenCalledWith({
+        id: "t-1",
+        name: "Constitution",
+      }),
     );
     // The edit view's submit stays inside the menu (it's portalled, but React
     // bubbles it up to the upload form around the trigger).
@@ -923,8 +1081,20 @@ describe("DocumentsPage upload metadata", () => {
 
   it("lets go of a picked type that left the list rather than re-adding it", async () => {
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
-      { id: "t-2", chapter_id: "chap-1", name: "Minutes", sort_order: 2, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Bylaws",
+        sort_order: 1,
+        created_at: "",
+      },
+      {
+        id: "t-2",
+        chapter_id: "chap-1",
+        name: "Minutes",
+        sort_order: 2,
+        created_at: "",
+      },
     ];
     typesQuery.isSuccess = true;
     const { rerender } = render(<DocumentsPage />);
@@ -935,8 +1105,20 @@ describe("DocumentsPage upload metadata", () => {
 
     // An officer renames Bylaws elsewhere; the list refetches.
     typesQuery.data = [
-      { id: "t-1", chapter_id: "chap-1", name: "Constitution", sort_order: 1, created_at: "" },
-      { id: "t-2", chapter_id: "chap-1", name: "Minutes", sort_order: 2, created_at: "" },
+      {
+        id: "t-1",
+        chapter_id: "chap-1",
+        name: "Constitution",
+        sort_order: 1,
+        created_at: "",
+      },
+      {
+        id: "t-2",
+        chapter_id: "chap-1",
+        name: "Minutes",
+        sort_order: 2,
+        created_at: "",
+      },
     ];
     rerender(<DocumentsPage />);
 
@@ -1080,7 +1262,9 @@ describe("DocumentsPage upload metadata", () => {
 
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "rush-schedule.pdf");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^upload$/i }),
+    );
 
     await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
     expect(mockConfirmUpload).toHaveBeenCalledWith(
@@ -1098,7 +1282,9 @@ describe("DocumentsPage upload metadata", () => {
 
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "fall-2026-bylaws.pdf");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^upload$/i }),
+    );
 
     await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
     expect(mockConfirmUpload).toHaveBeenCalledWith(
@@ -1117,7 +1303,9 @@ describe("DocumentsPage upload metadata", () => {
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "finance-committee-minutes.pdf");
     await pickType(dialog, "Budget");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^upload$/i }),
+    );
 
     await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
     expect(mockConfirmUpload).toHaveBeenCalledWith(
@@ -1138,7 +1326,9 @@ describe("DocumentsPage upload metadata", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("chapter-budget.pdf")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/title/i)).toHaveValue("Chapter budget");
+    expect(within(dialog).getByLabelText(/title/i)).toHaveValue(
+      "Chapter budget",
+    );
     expectType(dialog, "Budget");
   });
 
@@ -1347,7 +1537,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
   const rowTitles = () =>
     screen
       .queryAllByRole("button", { name: /^Download / })
-      .map((button) => button.getAttribute("aria-label")!.replace(/^Download /, ""));
+      .map((button) =>
+        button.getAttribute("aria-label")!.replace(/^Download /, ""),
+      );
 
   it("searches in memory and never asks the server to", async () => {
     // Backwork's model: one list response, re-ranked locally per keystroke.
@@ -1377,7 +1569,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     render(<DocumentsPage />);
 
     await user.click(await filterButton(user, "Uploaded by"));
-    await user.click(await screen.findByRole("menuitem", { name: "Marcus Ellison" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Marcus Ellison" }),
+    );
 
     await waitFor(() => expect(rowTitles()).toEqual(["Chapter bylaws"]));
     expect(
@@ -1416,9 +1610,13 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     expect(rowTitles()).toEqual(["Chapter bylaws", "Rush schedule"]);
 
     await user.click(await filterButton(user, "Sort: Name A–Z"));
-    await user.click(await screen.findByRole("menuitem", { name: "Newest first" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Newest first" }),
+    );
 
-    await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule", "Chapter bylaws"]));
+    await waitFor(() =>
+      expect(rowTitles()).toEqual(["Rush schedule", "Chapter bylaws"]),
+    );
   });
 
   it("narrows by Date added, and a custom range with no dates narrows nothing", async () => {
@@ -1432,7 +1630,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     render(<DocumentsPage />);
 
     await user.click(await filterButton(user, "Date added"));
-    await user.click(await screen.findByRole("radio", { name: "Custom range" }));
+    await user.click(
+      await screen.findByRole("radio", { name: "Custom range" }),
+    );
     expect(rowTitles()).toEqual(["Chapter bylaws", "Rush schedule"]);
     // Untinted too: the chip doesn't claim a filter that narrows nothing.
     expect(await filterButton(user, "Date added")).toBeInTheDocument();
@@ -1447,13 +1647,17 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     const user = userEvent.setup();
     const { rerender } = render(<DocumentsPage />);
     await user.click(await filterButton(user, "Uploaded by"));
-    await user.click(await screen.findByRole("menuitem", { name: "Ryan Castellano" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Ryan Castellano" }),
+    );
     await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule"]));
 
     documentsQuery.data = [BYLAWS];
     rerender(<DocumentsPage />);
 
-    expect(await screen.findByText("No documents match these filters.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No documents match these filters."),
+    ).toBeInTheDocument();
     expect(
       await filterButton(user, "Uploaded by: Ryan Castellano"),
     ).toBeInTheDocument();
@@ -1463,7 +1667,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     const user = userEvent.setup();
     const { rerender } = render(<DocumentsPage />);
     await user.click(await filterButton(user, "Uploaded by"));
-    await user.click(await screen.findByRole("menuitem", { name: "Ryan Castellano" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Ryan Castellano" }),
+    );
     await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule"]));
 
     roster.names = { "u-1": "Marcus Ellison" };
@@ -1498,7 +1704,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<DocumentsPage />);
       await user.click(await filterButton(user, "Date added"));
-      await user.click(await screen.findByRole("radio", { name: "Last 30 days" }));
+      await user.click(
+        await screen.findByRole("radio", { name: "Last 30 days" }),
+      );
       expect(rowTitles()).toEqual(["Rush schedule"]);
 
       act(() => {
@@ -1516,51 +1724,90 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     documentsQuery.data = [
       BYLAWS,
       RUSH,
-      { ...RUSH, id: "doc-3", title: "Rush budget", description: null, created_at: "2026-09-01T00:00:00Z" },
+      {
+        ...RUSH,
+        id: "doc-3",
+        title: "Rush budget",
+        description: null,
+        created_at: "2026-09-01T00:00:00Z",
+      },
     ];
     const user = userEvent.setup();
     render(<DocumentsPage />);
     await user.click(await filterButton(user, "Uploaded by"));
-    await user.click(await screen.findByRole("menuitem", { name: "Ryan Castellano" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Ryan Castellano" }),
+    );
     await user.click(await filterButton(user, "Sort: Name A–Z"));
-    await user.click(await screen.findByRole("menuitem", { name: "Newest first" }));
-    await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule", "Rush budget"]));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Newest first" }),
+    );
+    await waitFor(() =>
+      expect(rowTitles()).toEqual(["Rush schedule", "Rush budget"]),
+    );
 
     await user.click(screen.getByRole("button", { name: /^Rush schedule/ }));
+    // Stepping replaces, so Back closes the viewer rather than walking back
+    // through the files seen (#6042).
+    const push = vi.spyOn(window.history, "pushState");
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("dialog", { name: "Rush budget" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Rush budget" }),
+    ).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    expect(window.location.search).toContain("document=doc-3");
+    push.mockRestore();
     // Wraps within Ryan's two files: Marcus's bylaws are filtered out.
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("dialog", { name: "Rush schedule" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Rush schedule" }),
+    ).toBeInTheDocument();
 
     // A search typed behind the viewer drops the open file: the viewer closes.
-    fireEvent.change(screen.getByLabelText("Search documents"), { target: { value: "budget" } });
+    fireEvent.change(screen.getByLabelText("Search documents"), {
+      target: { value: "budget" },
+    });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("names the uploader inside the row's open button", () => {
     render(<DocumentsPage />);
     expect(
-      screen.getByRole("button", { name: /^Rush schedule.*Uploaded .* by Ryan Castellano/ }),
+      screen.getByRole("button", {
+        name: /^Rush schedule.*Uploaded .* by Ryan Castellano/,
+      }),
     ).toBeInTheDocument();
   });
 
   it("filters by a typed custom range, and Clear filters resets every filter", async () => {
-    documentsQuery.data = [BYLAWS, { ...RUSH, created_at: "2026-03-01T00:00:00Z" }];
+    documentsQuery.data = [
+      BYLAWS,
+      { ...RUSH, created_at: "2026-03-01T00:00:00Z" },
+    ];
     const user = userEvent.setup();
     render(<DocumentsPage />);
     await user.click(await filterButton(user, "Date added"));
-    await user.click(await screen.findByRole("radio", { name: "Custom range" }));
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-07-01" } });
+    await user.click(
+      await screen.findByRole("radio", { name: "Custom range" }),
+    );
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-07-01" },
+    });
     await waitFor(() => expect(rowTitles()).toEqual(["Chapter bylaws"]));
 
-    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-07-15" },
+    });
     // Nothing matches, so the empty list offers one too; the menu's is used.
-    const clear = await screen.findAllByRole("button", { name: "Clear filters" });
+    const clear = await screen.findAllByRole("button", {
+      name: "Clear filters",
+    });
     expect(clear).toHaveLength(2);
     await user.click(clear.at(-1)!);
 
-    await waitFor(() => expect(rowTitles()).toEqual(["Chapter bylaws", "Rush schedule"]));
+    await waitFor(() =>
+      expect(rowTitles()).toEqual(["Chapter bylaws", "Rush schedule"]),
+    );
     expect(await filterButton(user, "Date added")).toBeInTheDocument();
   });
 
@@ -1583,7 +1830,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<DocumentsPage />);
       await user.click(await filterButton(user, "Date added"));
-      await user.click(await screen.findByRole("radio", { name: "Last 30 days" }));
+      await user.click(
+        await screen.findByRole("radio", { name: "Last 30 days" }),
+      );
       await user.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: /^Rush schedule/ }));
 
@@ -1591,7 +1840,9 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
         vi.setSystemTime(new Date("2026-11-10T12:00:00Z"));
         vi.advanceTimersByTime(120_000);
       });
-      expect(screen.getByRole("dialog", { name: "Rush schedule" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: "Rush schedule" }),
+      ).toBeInTheDocument();
 
       await user.keyboard("{Escape}");
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -1719,9 +1970,7 @@ describe("DocumentsPage folder management (#791)", () => {
 
     await editFolders(user);
 
-    await user.click(
-      screen.getByRole("button", { name: /edit governance/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /edit governance/i }));
     const input = await screen.findByLabelText(/folder name/i);
     expect(input).toHaveValue("Governance");
 
@@ -1794,9 +2043,7 @@ describe("DocumentsPage folder management (#791)", () => {
 
     await user.click(folderRow("Governance"));
     await editFolders(user);
-    await user.click(
-      screen.getByRole("button", { name: /edit governance/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /edit governance/i }));
     const input = await screen.findByLabelText(/folder name/i);
     await user.clear(input);
     await user.type(input, "Charter");
@@ -1806,9 +2053,13 @@ describe("DocumentsPage folder management (#791)", () => {
     // The heading, and the narrow page's Folder control, track the active
     // folder.
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /^Charter/ })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("heading", { name: /^Charter/ }),
+      ).toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: "Folder: Charter" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Folder: Charter" }),
+    ).toBeInTheDocument();
   });
 
   it("reorders by writing indices, so equal sort_order values still move", async () => {
@@ -1996,6 +2247,33 @@ describe("DocumentsPage folder tree (#5337)", () => {
     expect(screen.queryByText("Rush flyer")).toBeNull();
   });
 
+  // #6042: each folder opened is a step Back returns from.
+  it("puts the folder opened in the address, and Back walks the folders", async () => {
+    const user = userEvent.setup();
+    render(<DocumentsPage />);
+    await user.click(row("Rush"));
+    expect(window.location.search).toBe("?folder=Town+in+Fiji+%2F+Rush");
+    await user.click(screen.getByRole("button", { name: /^No folder$/ }));
+    expect(window.location.search).toBe("?folder=+");
+    window.history.back();
+    await waitFor(() =>
+      expect(window.location.search).toBe("?folder=Town+in+Fiji+%2F+Rush"),
+    );
+    window.history.back();
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.getByText("Chapter bylaws")).toBeInTheDocument();
+  });
+
+  it("says a linked folder isn't there, and opens All files", async () => {
+    window.history.replaceState(null, "", "/documents?folder=Gone");
+    render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/That folder isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.getByText("Chapter bylaws")).toBeInTheDocument();
+  });
+
   it("opens a closed folder when it is chosen, as Drive's sidebar does", async () => {
     const user = userEvent.setup();
     render(<DocumentsPage />);
@@ -2021,7 +2299,9 @@ describe("DocumentsPage folder tree (#5337)", () => {
   it("keeps each member's picks apart, and each chapter's", async () => {
     const user = userEvent.setup();
     render(<DocumentsPage />);
-    await user.click(screen.getByRole("button", { name: "Close Town in Fiji" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close Town in Fiji" }),
+    );
     const keys = Object.keys(window.localStorage).filter((key) =>
       key.startsWith("frapp.documents.folders-open."),
     );
@@ -2047,7 +2327,9 @@ describe("DocumentsPage folder tree (#5337)", () => {
     const rail = screen.getByRole("navigation", { name: "Folders" });
     // 2024 is pinned, so it leads the rail; choosing it opens it to Flyers.
     await user.click(
-      within(rail).getByRole("button", { name: /^2024\s*Town in Fiji \/ Rush$/ }),
+      within(rail).getByRole("button", {
+        name: /^2024\s*Town in Fiji \/ Rush$/,
+      }),
     );
     await user.click(within(rail).getByRole("button", { name: /^Flyers$/ }));
     // Closing the folder above the one on screen chooses it instead.
@@ -2378,7 +2660,9 @@ describe("DocumentsPage offline write gating", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: /You're offline/ })).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: /You're offline/ }),
+    ).toHaveFocus();
     expect(document.body).not.toHaveFocus();
   });
 });
@@ -2552,10 +2836,16 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     const controls = star.closest("div")!;
     // jsdom can't run the media queries, so the classes are the contract.
     expect(controls.className).toContain("pointer-fine:opacity-0");
-    expect(controls.className).toContain("pointer-fine:group-hover/row:opacity-100");
-    expect(controls.className).toContain("pointer-fine:group-focus-within/row:opacity-100");
+    expect(controls.className).toContain(
+      "pointer-fine:group-hover/row:opacity-100",
+    );
+    expect(controls.className).toContain(
+      "pointer-fine:group-focus-within/row:opacity-100",
+    );
     expect(controls.className).toContain("pointer-coarse:hidden");
-    const more = screen.getByRole("button", { name: "More for Chapter bylaws" });
+    const more = screen.getByRole("button", {
+      name: "More for Chapter bylaws",
+    });
     const slot = more.parentElement!;
     expect(slot.className).toContain("pointer-coarse:inline-flex");
     expect(slot.className).toMatch(/(^|\s)hidden(\s|$)/);
@@ -2743,16 +3033,18 @@ describe("DocumentsPage pins and stars (#3934)", () => {
     await userEvent.click(
       within(rail()).getByRole("button", { name: "Star Governance" }),
     );
-    expect(mockSetStar).toHaveBeenCalledWith(
-      { target: { kind: "folder", id: "f-1" }, starred: true },
-    );
+    expect(mockSetStar).toHaveBeenCalledWith({
+      target: { kind: "folder", id: "f-1" },
+      starred: true,
+    });
 
     await userEvent.click(
       screen.getByRole("button", { name: "Star Chapter bylaws" }),
     );
-    expect(mockSetStar).toHaveBeenCalledWith(
-      { target: { kind: "document", id: "doc-1" }, starred: true },
-    );
+    expect(mockSetStar).toHaveBeenCalledWith({
+      target: { kind: "document", id: "doc-1" },
+      starred: true,
+    });
   });
 
   it("draws pinned and starred cards above All files, and a folder card opens the folder", async () => {
@@ -2850,21 +3142,31 @@ describe("DocumentsPage pins and stars (#3934)", () => {
     expect(starredChip).toHaveAttribute("aria-pressed", "true");
     // The cards give way to the list, as any filter does.
     await waitFor(() =>
-      expect(screen.queryByRole("region", { name: "Starred" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("region", { name: "Starred" }),
+      ).not.toBeInTheDocument(),
     );
     expect(shown()).toEqual(["Chapter agenda", "Chapter bylaws"]);
 
     await user.click(await filterButton(user, "Pinned"));
     // Both on: either, pinned leading.
-    expect(shown()).toEqual(["Meeting minutes", "Chapter agenda", "Chapter bylaws"]);
+    expect(shown()).toEqual([
+      "Meeting minutes",
+      "Chapter agenda",
+      "Chapter bylaws",
+    ]);
 
     await user.click(await filterButton(user, "Pinned"));
     await user.click(await filterButton(user, "File type"));
-    await user.click(await screen.findByRole("menuitem", { name: "Spreadsheet" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Spreadsheet" }),
+    );
     await waitFor(() => expect(shown()).toEqual(["Chapter agenda"]));
 
     await user.type(screen.getByLabelText("Search documents"), "bylaws");
-    await user.click(await screen.findByRole("button", { name: "Clear filters" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Clear filters" }),
+    );
     const starredAfter = await filterButton(user, "Starred");
     await waitFor(() =>
       expect(starredAfter).toHaveAttribute("aria-pressed", "false"),
@@ -2877,16 +3179,22 @@ describe("DocumentsPage pins and stars (#3934)", () => {
     const user = userEvent.setup();
     const { rerender } = render(<DocumentsPage />);
     await user.click(await filterButton(user, "Starred"));
-    const unstar = screen.getByRole("button", { name: "Unstar Chapter bylaws" });
+    const unstar = screen.getByRole("button", {
+      name: "Unstar Chapter bylaws",
+    });
     await user.click(unstar);
     expect(mockSetStar).toHaveBeenCalled();
     // The server's answer: the star is gone.
     stars.value = { folder_ids: [], document_ids: [] };
     rerender(<DocumentsPage />);
 
-    const star = await screen.findByRole("button", { name: "Star Chapter bylaws" });
+    const star = await screen.findByRole("button", {
+      name: "Star Chapter bylaws",
+    });
     expect(star).toHaveFocus();
-    expect(screen.queryByRole("button", { name: /^Meeting minutes/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Meeting minutes/ }),
+    ).not.toBeInTheDocument();
 
     await user.click(await filterButton(user, "Starred"));
     await user.click(await filterButton(user, "Starred"));
@@ -3221,7 +3529,12 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
 
   it("draws a lock on a limited folder and on the files filed in it", () => {
     foldersQuery.data = [
-      { id: "f-1", name: "Governance", sort_order: 0, who_can_see: ["tier:t-exec"] },
+      {
+        id: "f-1",
+        name: "Governance",
+        sort_order: 0,
+        who_can_see: ["tier:t-exec"],
+      },
       { id: "f-2", name: "Rush", sort_order: 1 },
     ];
     documentsQuery.data = [
@@ -3263,6 +3576,28 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("treats Who can see for a file this member can't set as unavailable", async () => {
+    manageGate.granted = false;
+    window.history.replaceState(null, "", "/documents?access=doc-1");
+    render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/That file isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("puts Who can see in the address", async () => {
+    manageGate.granted = true;
+    const user = userEvent.setup();
+    render(<DocumentsPage />);
+    await user.click(
+      screen.getByRole("button", { name: "Who can see Chapter bylaws" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(window.location.search).toBe("?access=doc-1");
+  });
+
   it("sets a file's own list and puts it back to Same as folder", async () => {
     manageGate.granted = true;
     documentsQuery.data = [{ ...BYLAWS, who_can_see: ["tier:t-exec"] }];
@@ -3275,7 +3610,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Executive board")).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("radio", { name: "Same as folder" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Same as folder" }),
+    );
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -3288,7 +3625,10 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
 
   it("keeps the setter's tiers on the list without a remove", async () => {
     manageGate.granted = true;
-    accessQuery.data = { options: [EXEC_TIER, TREASURER], always: ["tier:t-exec"] };
+    accessQuery.data = {
+      options: [EXEC_TIER, TREASURER],
+      always: ["tier:t-exec"],
+    };
     const user = userEvent.setup();
     render(<DocumentsPage />);
 
@@ -3296,7 +3636,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
       screen.getByRole("button", { name: "Who can see Chapter bylaws" }),
     );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("radio", { name: "Chosen roles" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Chosen roles" }),
+    );
 
     expect(within(dialog).getByText("Executive board")).toBeInTheDocument();
     expect(
@@ -3320,12 +3662,16 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     await user.click(screen.getByRole("button", { name: /^edit folders$/i }));
     await user.click(screen.getByRole("button", { name: /edit governance/i }));
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("radio", { name: "Chosen roles" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Chosen roles" }),
+    );
     await user.click(
       within(dialog).getByRole("button", { name: /add to who can see/i }),
     );
     await user.click(await screen.findByRole("option", { name: /treasurer/i }));
-    await user.click(within(dialog).getByRole("button", { name: /^save folder$/i }));
+    await user.click(
+      within(dialog).getByRole("button", { name: /^save folder$/i }),
+    );
 
     await waitFor(() =>
       expect(mockUpdateFolder).toHaveBeenCalledWith({
@@ -3383,7 +3729,10 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
 
   it("shows a stored list as it is and saves nothing when only looked at", async () => {
     manageGate.granted = true;
-    accessQuery.data = { options: [EXEC_TIER, TREASURER], always: ["tier:t-exec"] };
+    accessQuery.data = {
+      options: [EXEC_TIER, TREASURER],
+      always: ["tier:t-exec"],
+    };
     documentsQuery.data = [{ ...BYLAWS, who_can_see: ["role:r-treasurer"] }];
     const user = userEvent.setup();
     render(<DocumentsPage />);
@@ -3395,7 +3744,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     // Someone above set it to the Treasurer alone; this member's tier joins
     // only when they change the list, as the API adds it on save.
     expect(within(dialog).getByText("Treasurer")).toBeInTheDocument();
-    expect(within(dialog).queryByText("Executive board")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Executive board"),
+    ).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -3413,7 +3764,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
       screen.getByRole("button", { name: "Who can see Chapter bylaws" }),
     );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("radio", { name: "Chosen roles" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Chosen roles" }),
+    );
 
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
   });
@@ -3434,7 +3787,9 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
 
-    await user.click(within(dialog).getByRole("radio", { name: "Same as folder" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Same as folder" }),
+    );
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockSetAccess).toHaveBeenCalledWith({
@@ -3470,12 +3825,16 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     await user.click(screen.getByRole("button", { name: /new folder/i }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText(/folder name/i), "Finance");
-    await user.click(within(dialog).getByRole("radio", { name: "Chosen roles" }));
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Chosen roles" }),
+    );
     await user.click(
       within(dialog).getByRole("button", { name: /add to who can see/i }),
     );
     await user.click(await screen.findByRole("option", { name: /treasurer/i }));
-    await user.click(within(dialog).getByRole("button", { name: /^create folder$/i }));
+    await user.click(
+      within(dialog).getByRole("button", { name: /^create folder$/i }),
+    );
 
     await waitFor(() =>
       expect(mockCreateFolder).toHaveBeenCalledWith({
@@ -3581,6 +3940,17 @@ describe("DocumentsPage minutes rows (#5949)", () => {
     ).toBeInTheDocument();
   });
 
+  it("puts the Minutes view in the address, and leaving it closes through the address", async () => {
+    const user = userEvent.setup();
+    render(<DocumentsPage />);
+    await user.click(await filterButton(user, "File type"));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /^Minutes/ }),
+    );
+    await waitFor(() => expect(window.location.search).toBe("?type=minutes"));
+    expect(screen.queryByText("Chapter bylaws")).not.toBeInTheDocument();
+  });
+
   it("opens on the Minutes filter from /documents?type=minutes, where /meetings lands", async () => {
     linkedType.current = "minutes";
     render(<DocumentsPage />);
@@ -3594,7 +3964,9 @@ describe("DocumentsPage minutes rows (#5949)", () => {
     documentsQuery.data = [BYLAWS];
     const { unmount } = render(<DocumentsPage />);
     expect(
-      await screen.findByText(/No minutes yet\. Posted minutes are filed here\./),
+      await screen.findByText(
+        /No minutes yet\. Posted minutes are filed here\./,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/match these filters/)).not.toBeInTheDocument();
     expect(
@@ -3604,7 +3976,9 @@ describe("DocumentsPage minutes rows (#5949)", () => {
 
     recordGate.granted = true;
     render(<DocumentsPage />);
-    await user.click(await screen.findByRole("button", { name: "New minutes" }));
+    await user.click(
+      await screen.findByRole("button", { name: "New minutes" }),
+    );
     expect(
       screen.getByRole("dialog", { name: "New minutes" }),
     ).toBeInTheDocument();
@@ -3672,10 +4046,12 @@ describe("DocumentsPage with a long library (#6088)", () => {
     expect(drawnRows()).toBe(RENDER_WINDOW.first);
 
     act(() => {
-      observers.at(-1)!.callback(
-        [{ isIntersecting: true } as IntersectionObserverEntry],
-        {} as IntersectionObserver,
-      );
+      observers
+        .at(-1)!
+        .callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
     });
     expect(drawnRows()).toBe(RENDER_WINDOW.first + RENDER_WINDOW.step);
   });
@@ -3684,10 +4060,12 @@ describe("DocumentsPage with a long library (#6088)", () => {
     render(<DocumentsPage />);
     const reach = () =>
       act(() => {
-        observers.at(-1)!.callback(
-          [{ isIntersecting: true } as IntersectionObserverEntry],
-          {} as IntersectionObserver,
-        );
+        observers
+          .at(-1)!
+          .callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            {} as IntersectionObserver,
+          );
       });
     reach();
     const watched = observers.length;

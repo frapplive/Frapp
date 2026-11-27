@@ -1,3 +1,5 @@
+import { DOCUMENTS_TYPE_PARAM } from "./document-links";
+import { DOCUMENT_LINK_PARAM } from "./frapp-link";
 import {
   CHAT_LINK_CHANNEL_PARAM,
   CHAT_LINK_MESSAGE_PARAM,
@@ -33,9 +35,9 @@ export const WEB_ADDRESS_PARAMS = {
   },
   documents: {
     folder: "folder",
-    document: "document",
+    document: DOCUMENT_LINK_PARAM,
     access: "access",
-    type: "type",
+    type: DOCUMENTS_TYPE_PARAM,
   },
   events: {
     day: "day",
@@ -70,6 +72,12 @@ export const WEB_ADDRESS_PARAMS = {
     member: "member",
   },
 } as const;
+
+/**
+ * `/documents?folder=+` (a space): No folder. Folder names are trimmed when
+ * saved (`normalizeFolderName` in the API), so no folder is named a space.
+ */
+export const DOCUMENTS_NO_FOLDER_PARAM_VALUE = " ";
 
 /**
  * Marks a page acts on once and then takes off the address with a replace,

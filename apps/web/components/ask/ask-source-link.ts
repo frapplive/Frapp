@@ -10,7 +10,7 @@ import {
 } from "@/components/standing/standing-doors";
 
 /** `/documents?document=<id>` opens that file in the viewer (`documents-page.tsx`). */
-export const DOCUMENT_LINK_PARAM = WEB_ADDRESS_PARAMS.documents.document;
+const DOCUMENT_LINK_PARAM = WEB_ADDRESS_PARAMS.documents.document;
 
 /** The dashboard route each live-data source opens. Dues has no web page in the beta. */
 const PAGE_ROUTES: Record<string, string | null> = {

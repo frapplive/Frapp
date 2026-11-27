@@ -72,16 +72,19 @@ export function useAddressParams<Name extends string>(
  * A dead or forbidden id in the address (a deleted event, a folder the member
  * can't read): once the page knows `dead`, the parameter is replaced away and
  * this returns the id, so the page can say why the record isn't there with
- * its inline note in place of it (`NestedError`,
- * `components/shared/nested-states.tsx`). It returns `null` again once
- * something else is opened.
+ * a short inline note in place of it. The note lasts until something else is
+ * opened under the same parameter, or, when the page passes `context` (what
+ * it shows: a folder, a search), until that changes.
  */
 export function useDeadAddressParam(
   name: string,
   value: string | null,
   dead: boolean,
+  context?: string,
 ): string | null {
-  const [noted, setNoted] = useState<string | null>(null);
+  const [noted, setNoted] = useState<{ id: string; context?: string } | null>(
+    null,
+  );
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
     // A new id opened: forget the old note (React's "storing information
@@ -89,9 +92,11 @@ export function useDeadAddressParam(
     setSeen(value);
     if (value !== null) setNoted(null);
   }
-  if (value !== null && dead && noted !== value) setNoted(value);
+  if (value !== null && dead && noted?.id !== value) {
+    setNoted({ id: value, context });
+  }
   useEffect(() => {
     if (value !== null && dead) replaceAddress({ [name]: null });
   }, [name, value, dead]);
-  return noted;
+  return noted && noted.context === context ? noted.id : null;
 }

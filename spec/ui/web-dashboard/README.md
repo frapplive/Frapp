@@ -1252,6 +1252,7 @@ Comparables: Slack web and Discord web keep the open channel and thread in the a
 - **The conversation** is in the address only where it is the page: `/chat?channel=<id>&thread=<id>` and `/messages?channel=<id>`.
   Beside any other page it is remembered, not addressed, so Back keeps moving through that page (#5575).
 - **Never in the address:** typing, filter chips, menus, popovers, centred dialogs, Find, the bell, What's new, the image viewer.
+  The table's named exceptions stand: Documents' Minutes view (`type=minutes`, a filter value that is where `/meetings` lands) and its Who can see dialog (`access=`).
 
 ### History rules
 
@@ -1275,7 +1276,7 @@ It can't see a parameter a page reads without listing it there, so each family's
 |---|---|---|
 | `/chat?channel=&thread=&message=` | Conversation and thread push; a search or bookmark jump pushes `channel=` with `message=`, which is replaced away once the jump lands. Planned, #6041 | `/chat-thread` (`channelId`, `threadRootId`, `focusMessageId`); bare: Chat home |
 | `/messages?channel=&message=` | Push; a search jump as on `/chat`. Planned, #6041 | `/chat-thread` (`channelId`); bare: Messages |
-| `/documents?folder=&document=&access=&type=` | Push; `type=minutes` is a live view. Planned, #6042 | Documents |
+| `/documents?folder=&document=&access=&type=` | `folder=` is the folder's name (`+`, a space, for No folder: folder names are trimmed, so none is a space), and each one opened pushes, so Back walks them as Finder and Google Drive do. `document=` is the viewer: opening pushes, its previous and next replace, so Back closes it rather than stepping back through files. `access=` is Who can see, opened only for a file the member may set (the same check as the row's control); any other is unavailable. `type=minutes` is the Minutes view, pushed when Minutes is picked. A folder or file the member can't see shows a short note and is replaced away. Built in #6042; the docked upload and folder-import panels are not addressed yet (#6157) | Documents |
 | `/events?day=&event=&edit=&hours=&excuse=` | `day=YYYY-MM-DD` replaces; `event=`, `edit=1`, `new=1` and `hours=YYYY-MM-DD` push; `excuse=1` (a chat card's Can't make it) is one-shot. Planned, #6043 | `/event-details` (`id`, `excuse`), `/calendar-day` (`day`), Events |
 | `/activity?view=&task=&group=&posting=&item=&review=&extension=` | Push; `view=archive`; `extension=` is a notification's request for more time (#6096). Tasks folded in with #5948, and `/tasks` redirects here keeping `task=` and `group=`. Planned, #6044 | `/tasks` (`task`), `/activity` (`review`) |
 | `/members?tab=&member=&sort=` | `tab=` pushes (was replace), `member=` pushes, `sort=` replaces, `new=1`. Planned, #6046 | `/member` (`userId`), `/directory` (`sort`) |
