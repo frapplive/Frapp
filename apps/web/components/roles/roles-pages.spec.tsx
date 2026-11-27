@@ -2,15 +2,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { networkMock } from "@/tests/network";
-import {
-  expectClearingEntriesEmpty,
-  expectRefusedEntriesKeep,
-} from "@/tests/numeric-input";
 
 /**
- * The Roles pages (#3990), walked as an officer of a chapter with tiers: the
- * list of tiers and their roles, a tier's page of switches, and a role's own
- * page. The rank rules (#4071) are mirrored only to disable controls the API
+ * The Roles pages (#3990; in the settings-row shape since #6029), walked as
+ * an officer of a chapter with tiers: the groups of tiers and their roles, a
+ * tier's page (name, @mention, roles in it, switches, its ⋯), and a role's
+ * own page. The rank rules (#4071) are mirrored only to disable controls the API
  * would refuse, so the tests pin which controls are live for whom.
  */
 
@@ -181,17 +178,63 @@ beforeEach(() => {
   useRolePreviewStore.setState({ preview: null });
 });
 
+const BACK = "/settings?tab=roles";
+const LINKS = {
+  tier: (id: string) => `${BACK}&tier=${id}`,
+  role: (id: string) => `${BACK}&role=${id}`,
+};
+
+function overview(query = "") {
+  const onOpenRole = vi.fn();
+  render(<RolesOverview query={query} links={LINKS} onOpenRole={onOpenRole} />);
+  return { onOpenRole };
+}
+
+function tierPage(tierId: string) {
+  const onDeleted = vi.fn();
+  render(
+    <TierPermissionsPage
+      tierId={tierId}
+      backHref={BACK}
+      roleHref={LINKS.role}
+      onDeleted={onDeleted}
+    />,
+  );
+  return { onDeleted };
+}
+
+function rolePage(roleId: string) {
+  const onDeleted = vi.fn();
+  render(<RolePage roleId={roleId} backHref={BACK} onDeleted={onDeleted} />);
+  return { onDeleted };
+}
+
+/** A settings group, named by its heading. */
+const group = (name: string) => screen.getByRole("list", { name });
+
+/** Opens a role's permission picker and returns its three answers. */
+async function openPick(
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp,
+) {
+  await user.click(screen.getByRole("combobox", { name }));
+  return screen.getByRole("listbox");
+}
+
 /** Make the caller the Vice President: Exec board, not the President. */
 function asVicePresident() {
   h.members = [{ user_id: "me", role_ids: ["vp"] }];
   h.mine = EXEC.permissions;
 }
 
+const pickable = () =>
+  role("im", "Intramurals", null, [], { self_assignable: true });
+
 describe("the tier list", () => {
   it("shows the tiers in order with their roles, then the roles outside them", () => {
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    overview();
     const headings = screen
-      .getAllByRole("heading", { level: 3 })
+      .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
     expect(headings).toEqual([
       "Exec board",
@@ -200,40 +243,42 @@ describe("the tier list", () => {
       "Outside the tiers",
       "Non-chapter business",
     ]);
-    const members = screen.getByRole("region", { name: "Members" });
-    expect(members).toHaveTextContent("Brothers");
-    expect(members).toHaveTextContent("2 members");
+    const members = group("Members");
     expect(
-      screen.getByRole("region", { name: "Outside the tiers" }),
-    ).toHaveTextContent("Alumni");
+      within(members).getByRole("link", { name: /^Brothers/ }),
+    ).toHaveTextContent("2 members");
+    expect(group("Outside the tiers")).toHaveTextContent("Alumni");
     expect(screen.getByText("Can do everything")).toBeInTheDocument();
+    expect(screen.getByText("Pinged as @everyone")).toBeInTheDocument();
+  });
+
+  it("leads each tier with its Permissions row, counting what's on", () => {
+    overview();
+    const permissions = within(group("Officers and chairs")).getByRole("link", {
+      name: /^Permissions/,
+    });
+    expect(permissions).toHaveTextContent("2 on");
+    expect(permissions).toHaveAttribute("href", LINKS.tier("t2"));
   });
 
   it("lists the roles members pick themselves under Non-chapter business (#4958)", () => {
-    h.roles = [
-      ...h.roles,
-      role("im", "Intramurals", null, [], { self_assignable: true }),
-    ];
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    expect(
-      screen.getByRole("region", { name: "Non-chapter business" }),
-    ).toHaveTextContent("Intramurals");
-    expect(
-      screen.getByRole("region", { name: "Outside the tiers" }),
-    ).not.toHaveTextContent("Intramurals");
+    h.roles = [...h.roles, pickable()];
+    overview();
+    expect(group("Non-chapter business")).toHaveTextContent("Intramurals");
+    expect(group("Outside the tiers")).not.toHaveTextContent("Intramurals");
   });
 
   it("offers no move into a tier on a Non-chapter business role", async () => {
-    h.roles = [
-      ...h.roles,
-      role("im", "Intramurals", null, [], { self_assignable: true }),
-    ];
+    h.roles = [...h.roles, pickable()];
     const user = userEvent.setup();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    overview();
     await user.click(
       screen.getByRole("button", { name: "More for Intramurals" }),
     );
     expect(screen.queryByRole("menuitem", { name: "Exec board" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Outside the tiers" }),
+    ).toBeNull();
     expect(
       screen.getByRole("menuitem", { name: "Delete role" }),
     ).toBeInTheDocument();
@@ -243,13 +288,9 @@ describe("the tier list", () => {
   it("adds a Non-chapter business role already pickable, then opens it", async () => {
     h.createRole.mockResolvedValue({ id: "new-im" });
     const user = userEvent.setup();
-    const onOpenRole = vi.fn();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={onOpenRole} />);
-    const business = screen.getByRole("region", {
-      name: "Non-chapter business",
-    });
-    expect(business).toHaveTextContent("No roles here yet.");
-    expect(business).not.toHaveTextContent("Turn it on from");
+    const { onOpenRole } = overview();
+    const business = group("Non-chapter business");
+    expect(business).toHaveTextContent("None yet");
     await user.click(
       within(business).getByRole("button", { name: "Add role" }),
     );
@@ -271,74 +312,71 @@ describe("the tier list", () => {
   it("offers no Add role under Non-chapter business to a roles manager outside the tiers", () => {
     h.members = [{ user_id: "me", role_ids: ["alum"] }];
     h.mine = ["roles:manage", "members:view"];
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    const business = screen.getByRole("region", {
-      name: "Non-chapter business",
-    });
+    overview();
     expect(
-      within(business).queryByRole("button", { name: "Add role" }),
+      within(group("Non-chapter business")).queryByRole("button", {
+        name: "Add role",
+      }),
     ).toBeNull();
   });
 
   it("keeps Add role under Non-chapter business once it has roles", () => {
-    h.roles = [
-      ...h.roles,
-      role("im", "Intramurals", null, [], { self_assignable: true }),
-    ];
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    const business = screen.getByRole("region", {
-      name: "Non-chapter business",
-    });
+    h.roles = [...h.roles, pickable()];
+    overview();
     expect(
-      within(business).getByRole("button", { name: "Add role" }),
+      within(group("Non-chapter business")).getByRole("button", {
+        name: "Add role",
+      }),
     ).toBeInTheDocument();
   });
 
   it("hides an empty Non-chapter business from a member who can't manage roles", () => {
     h.members = [{ user_id: "me", role_ids: ["brother"] }];
     h.mine = MEMBERS.permissions;
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    overview();
     expect(
-      screen.queryByRole("region", { name: "Non-chapter business" }),
+      screen.queryByRole("heading", { name: "Non-chapter business" }),
     ).toBeNull();
+    // Nor any writes: no Add role, Add tier, or ⋯.
+    expect(screen.queryByRole("button", { name: "Add role" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add tier" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^More for/ })).toBeNull();
   });
 
-  it("uses the chapter's own word for a tier", () => {
+  it("uses the chapter's own word for a tier", async () => {
     h.vocabulary = { vocabulary: { tier: "Level" } };
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    expect(screen.getByText("7 roles in 3 levels")).toBeInTheDocument();
+    const user = userEvent.setup();
+    overview();
     expect(
       screen.getByRole("heading", { name: "Outside the levels" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByText("Rank below every level, like alumni or advisors."),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Add level" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More for Brothers" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Outside the levels" }),
     ).toBeInTheDocument();
   });
 
-  it("opens a tier's permissions and a role's page", async () => {
-    const user = userEvent.setup();
-    const onOpenTier = vi.fn();
-    const onOpenRole = vi.fn();
-    render(<RolesOverview onOpenTier={onOpenTier} onOpenRole={onOpenRole} />);
-    const officers = screen.getByRole("region", {
-      name: "Officers and chairs",
-    });
-    await user.click(
-      within(officers).getByRole("button", { name: "Edit permissions" }),
-    );
-    expect(onOpenTier).toHaveBeenCalledWith("t2");
-    await user.click(
-      within(officers).getByRole("button", { name: /^treasurer/i }),
-    );
-    expect(onOpenRole).toHaveBeenCalledWith("treas");
+  it("links a tier's permissions and a role's page", () => {
+    overview();
+    const officers = group("Officers and chairs");
+    expect(
+      within(officers).getByRole("link", { name: /^Permissions/ }),
+    ).toHaveAttribute("href", "/settings?tab=roles&tier=t2");
+    expect(
+      within(officers).getByRole("link", { name: /^Treasurer/ }),
+    ).toHaveAttribute("href", "/settings?tab=roles&role=treas");
   });
 
   it("adds a role into a tier, taking the tier's permissions", async () => {
     const user = userEvent.setup();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    const officers = screen.getByRole("region", {
-      name: "Officers and chairs",
-    });
+    overview();
+    const officers = group("Officers and chairs");
     await user.click(
       within(officers).getByRole("button", { name: "Add role" }),
     );
@@ -353,44 +391,23 @@ describe("the tier list", () => {
     });
   });
 
-  it("moves a tier down with the whole order, highest first", async () => {
+  it("adds a tier at the bottom, holding nothing", async () => {
     const user = userEvent.setup();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    await user.click(
-      screen.getByRole("button", { name: "More for Officers and chairs" }),
+    overview();
+    await user.click(screen.getByRole("button", { name: "Add tier" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "New tier name" }),
+      "Pledges{Enter}",
     );
-    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
-    expect(h.reorderTiers).toHaveBeenCalledWith(["t1", "t3", "t2"]);
-  });
-
-  it("deletes only an empty tier, after a confirmation", async () => {
-    const user = userEvent.setup();
-    h.tiers = [
-      ...h.tiers,
-      { id: "t4", name: "Pledges", position: 4, permissions: [] },
-    ];
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "More for Members" }));
-    expect(
-      screen.getByRole("menuitem", {
-        name: /delete \(move its roles out first\)/i,
-      }),
-    ).toHaveAttribute("data-disabled");
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "More for Pledges" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(h.deleteTier).not.toHaveBeenCalled();
-    await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete tier",
-      }),
-    );
-    await waitFor(() => expect(h.deleteTier).toHaveBeenCalledWith("t4"));
+    expect(h.createTier).toHaveBeenCalledWith({
+      name: "Pledges",
+      permissions: [],
+    });
   });
 
   it("moves a role to another tier from its menu", async () => {
     const user = userEvent.setup();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
+    overview();
     await user.click(screen.getByRole("button", { name: "More for Brothers" }));
     await user.click(
       screen.getByRole("menuitem", { name: "Officers and chairs" }),
@@ -401,54 +418,137 @@ describe("the tier list", () => {
     });
   });
 
+  it("deletes a role from its menu only after a confirmation", async () => {
+    const user = userEvent.setup();
+    overview();
+    await user.click(screen.getByRole("button", { name: "More for Alumni" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete role" }));
+    expect(h.deleteRole).not.toHaveBeenCalled();
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Delete role",
+      }),
+    );
+    await waitFor(() => expect(h.deleteRole).toHaveBeenCalledWith("alum"));
+  });
+
+  it("offers neither a move nor a delete on Everyone", () => {
+    overview();
+    expect(
+      screen.queryByRole("button", { name: "More for Everyone" }),
+    ).toBeNull();
+  });
+
+  // Two roles added at once share an order (every role here is 1): Move up
+  // renumbers the tier from 0, writing only the roles whose place changed.
+  it("moves a role up past a neighbour that shares its order", async () => {
+    const user = userEvent.setup();
+    overview();
+    await user.click(
+      screen.getByRole("button", { name: "More for President" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute(
+      "data-disabled",
+    );
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "More for Vice President" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toHaveAttribute(
+      "data-disabled",
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "vp",
+        body: { display_order: 0 },
+      }),
+    );
+    expect(h.updateRole).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Move up and Move down inside a role's own list", async () => {
+    // Intramurals sorts first by order, but it's Non-chapter business, so
+    // Alumni still leads the roles outside the tiers.
+    h.roles = [...h.roles, { ...pickable(), display_order: 0 }];
+    const user = userEvent.setup();
+    overview();
+    await user.click(screen.getByRole("button", { name: "More for Alumni" }));
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute(
+      "data-disabled",
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Move down" }),
+    ).not.toHaveAttribute("data-disabled");
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "More for Intramurals" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute(
+      "data-disabled",
+    );
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toHaveAttribute(
+      "data-disabled",
+    );
+  });
+
   it("keeps the caller's own tier and everything above it out of reach", async () => {
     const user = userEvent.setup();
     asVicePresident();
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    const exec = screen.getByRole("region", { name: "Exec board" });
+    overview();
     expect(
-      within(exec).getByRole("button", { name: "View permissions" }),
-    ).toBeInTheDocument();
-    expect(within(exec).queryByRole("button", { name: "Add role" })).toBeNull();
-    const officers = screen.getByRole("region", {
-      name: "Officers and chairs",
-    });
+      within(group("Exec board")).queryByRole("button", { name: "Add role" }),
+    ).toBeNull();
     expect(
-      within(officers).getByRole("button", { name: "Edit permissions" }),
+      within(group("Officers and chairs")).getByRole("button", {
+        name: "Add role",
+      }),
     ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "More for Vice President" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Delete role" }),
+    ).toHaveAttribute("data-disabled");
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "More for Brothers" }));
     expect(
       screen.getByRole("menuitem", { name: "Exec board" }),
     ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByRole("menuitem", { name: "Officers and chairs" }),
+    ).not.toHaveAttribute("data-disabled");
   });
 
-  it("finds a role by name across a chapter with many", async () => {
-    const user = userEvent.setup();
+  it("finds a role by name across a chapter with many", () => {
     h.roles = [
       ...h.roles,
       ...Array.from({ length: 100 }, (_, i) =>
         role(`r${i}`, `Committee ${i}`, "t3", MEMBERS.permissions),
       ),
     ];
-    render(<RolesOverview onOpenTier={vi.fn()} onOpenRole={vi.fn()} />);
-    await user.type(screen.getByPlaceholderText("Find a role"), "treas");
+    overview("treas");
     expect(
-      screen.getByRole("button", { name: /^treasurer/i }),
+      screen.getByRole("link", { name: /^Treasurer/ }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Committee 4")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Members" })).toBeNull();
+    // A search shows roles only: no Permissions rows, nothing to add.
+    expect(screen.queryByRole("link", { name: /^Permissions/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add role" })).toBeNull();
   });
 });
 
-describe("a tier's permissions", () => {
+describe("a tier's page", () => {
   it("lists every module's switches and saves a flip as the tier's whole list", async () => {
     const user = userEvent.setup();
-    render(
-      <TierPermissionsPage tierId="t2" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t2");
     expect(
       screen.getByRole("heading", { name: "Officers and chairs" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Roles and groups" }),
+    ).toHaveAttribute("href", BACK);
     expect(screen.getByRole("heading", { name: "Events" })).toBeInTheDocument();
     const approve = screen.getByRole("switch", {
       name: /approve service hours for officers and chairs/i,
@@ -467,9 +567,7 @@ describe("a tier's permissions", () => {
     h.updateTier.mockImplementationOnce(
       () => new Promise<void>((done) => (resolve = done)),
     );
-    render(
-      <TierPermissionsPage tierId="t3" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t3");
     await user.click(
       screen.getByRole("switch", { name: /^create events for/i }),
     );
@@ -484,25 +582,140 @@ describe("a tier's permissions", () => {
     });
   });
 
+  it("lists the roles in it, each linking to its page", () => {
+    tierPage("t1");
+    const roles = group("Roles in it");
+    expect(
+      within(roles).getByRole("link", { name: /^Vice President/ }),
+    ).toHaveAttribute("href", LINKS.role("vp"));
+    expect(
+      within(roles).getByRole("link", { name: /^President/ }),
+    ).toHaveTextContent("1 member");
+  });
+
+  it("renames the tier on Enter, and says Saved", async () => {
+    const user = userEvent.setup();
+    tierPage("t2");
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Officers{Enter}");
+    expect(h.updateTier).toHaveBeenCalledWith({
+      id: "t2",
+      body: { name: "Officers" },
+    });
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("renames on leaving the field, never sends a blank name, and Escape puts the name back", async () => {
+    const user = userEvent.setup();
+    tierPage("t2");
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.tab();
+    expect(h.updateTier).not.toHaveBeenCalled();
+    expect(name).toHaveValue("Officers and chairs");
+    await user.type(name, " too{Escape}");
+    expect(name).toHaveValue("Officers and chairs");
+    expect(h.updateTier).not.toHaveBeenCalled();
+    await user.type(name, "!");
+    await user.tab();
+    expect(h.updateTier).toHaveBeenCalledWith({
+      id: "t2",
+      body: { name: "Officers and chairs!" },
+    });
+  });
+
+  it("saves its @mention switch on the flip", async () => {
+    const user = userEvent.setup();
+    tierPage("t2");
+    await user.click(
+      screen.getByRole("switch", { name: "Anyone can @mention this tier" }),
+    );
+    expect(h.updateTier).toHaveBeenCalledWith({
+      id: "t2",
+      body: { mentionable: false },
+    });
+  });
+
+  it("moves a tier down with the whole order, highest first", async () => {
+    const user = userEvent.setup();
+    tierPage("t2");
+    await user.click(
+      screen.getByRole("button", { name: "More for Officers and chairs" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+    expect(h.reorderTiers).toHaveBeenCalledWith(["t1", "t3", "t2"]);
+  });
+
+  it("offers no Move up on the highest tier", async () => {
+    const user = userEvent.setup();
+    tierPage("t1");
+    await user.click(
+      screen.getByRole("button", { name: "More for Exec board" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute(
+      "data-disabled",
+    );
+  });
+
+  it("deletes only an empty tier, after a confirmation, then goes back", async () => {
+    const user = userEvent.setup();
+    h.tiers = [
+      ...h.tiers,
+      { id: "t4", name: "Pledges", position: 4, permissions: [] },
+    ];
+    const { unmount } = render(
+      <TierPermissionsPage
+        tierId="t3"
+        backHref={BACK}
+        roleHref={LINKS.role}
+        onDeleted={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More for Members" }));
+    expect(
+      screen.getByRole("menuitem", {
+        name: /delete tier \(move its roles out first\)/i,
+      }),
+    ).toHaveAttribute("data-disabled");
+    await user.keyboard("{Escape}");
+    unmount();
+
+    const { onDeleted } = tierPage("t4");
+    await user.click(screen.getByRole("button", { name: "More for Pledges" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete tier" }));
+    expect(h.deleteTier).not.toHaveBeenCalled();
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Delete tier",
+      }),
+    );
+    await waitFor(() => expect(h.deleteTier).toHaveBeenCalledWith("t4"));
+    expect(onDeleted).toHaveBeenCalled();
+  });
+
   it("is read-only for a tier at or above the caller's own, and says why", () => {
     asVicePresident();
-    render(
-      <TierPermissionsPage tierId="t1" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t1");
     expect(screen.getByText(/ranks at or above yours/i)).toBeInTheDocument();
     for (const control of screen.getAllByRole("switch")) {
       expect(control).toBeDisabled();
     }
+    expect(screen.getByLabelText("Name")).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "More for Exec board" }),
+    ).toBeNull();
   });
 
   it("won't switch on what the caller doesn't hold, and says so on the row", () => {
     asVicePresident();
-    render(
-      <TierPermissionsPage tierId="t2" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t2");
     expect(
       screen.getByRole("switch", { name: /^create events for/i }),
     ).toBeDisabled();
+    expect(
+      screen.getAllByText(/your role doesn't have it/i).length,
+    ).toBeGreaterThan(0);
     // On already, so taking it away is still allowed.
     expect(
       screen.getByRole("switch", { name: /approve service hours for/i }),
@@ -510,17 +723,13 @@ describe("a tier's permissions", () => {
   });
 
   it("never draws the wildcard as a switch", () => {
-    render(
-      <TierPermissionsPage tierId="t1" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t1");
     expect(screen.queryByRole("switch", { name: /everything/i })).toBeNull();
   });
 
   it("leaves out the AI switches while the server has AI off", () => {
     h.aiConsent = null;
-    render(
-      <TierPermissionsPage tierId="t1" onBack={vi.fn()} onOpenRole={vi.fn()} />,
-    );
+    tierPage("t1");
     expect(screen.queryByRole("switch", { name: /use ai/i })).toBeNull();
     expect(
       screen.queryByRole("switch", { name: /let ai take actions/i }),
@@ -530,13 +739,7 @@ describe("a tier's permissions", () => {
   it("offers the AI switches once the server has AI", () => {
     h.aiConsent = {};
     try {
-      render(
-        <TierPermissionsPage
-          tierId="t1"
-          onBack={vi.fn()}
-          onOpenRole={vi.fn()}
-        />,
-      );
+      tierPage("t1");
       expect(
         screen.getByRole("switch", { name: /use ai/i }),
       ).toBeInTheDocument();
@@ -548,54 +751,58 @@ describe("a tier's permissions", () => {
 
 describe("a role's page", () => {
   it("marks where the role differs from its tier", () => {
-    render(<RolePage roleId="treas" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("treas");
     expect(
-      screen.getByText(
-        /on for this role only\. officers and chairs has it off/i,
-      ),
+      screen.getByText("Set for this role. Officers and chairs has it off."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/starts from officers and chairs/i),
+      screen.getByText(
+        "Starts from Officers and chairs. Rows set apart from it say so.",
+      ),
     ).toBeInTheDocument();
   });
 
-  it("shows the tier's answer beside the role's own, Same as tier where it has none", () => {
-    render(<RolePage roleId="treas" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    const service = screen.getByRole("radiogroup", {
+  it("shows what the role ends up with, and Same as the tier where it has no answer of its own", async () => {
+    const user = userEvent.setup();
+    rolePage("treas");
+    const service = screen.getByRole("combobox", {
       name: /approve service hours for treasurer/i,
     });
+    expect(service).toHaveTextContent("On");
+    const answers = await openPick(
+      user,
+      /approve service hours for treasurer/i,
+    );
     expect(
-      within(service).getByRole("radio", { name: "Same as tier" }),
-    ).toHaveAttribute("aria-checked", "true");
-    const events = screen.getByRole("radiogroup", {
-      name: /create events for treasurer/i,
-    });
-    expect(within(events).getByRole("radio", { name: "On" })).toHaveAttribute(
-      "aria-checked",
+      within(answers).getByRole("option", {
+        name: "Same as Officers and chairs · On",
+      }),
+    ).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Escape}");
+    const events = await openPick(user, /create events for treasurer/i);
+    expect(within(events).getByRole("option", { name: "On" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
   });
 
-  it("saves a pick as one override key, and Same as tier clears it", async () => {
+  it("saves a pick as one override key, and Same as clears it", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="treas" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("treas");
     await user.click(
       within(
-        screen.getByRole("radiogroup", {
-          name: /approve service hours for treasurer/i,
-        }),
-      ).getByRole("radio", { name: "Off" }),
+        await openPick(user, /approve service hours for treasurer/i),
+      ).getByRole("option", { name: "Off" }),
     );
     expect(h.updateRole).toHaveBeenCalledWith({
       id: "treas",
       body: { permission_overrides: { "service:approve": false } },
     });
     await user.click(
-      within(
-        screen.getByRole("radiogroup", {
-          name: /create events for treasurer/i,
-        }),
-      ).getByRole("radio", { name: "Same as tier" }),
+      within(await openPick(user, /create events for treasurer/i)).getByRole(
+        "option",
+        { name: /^Same as Officers and chairs/ },
+      ),
     );
     expect(h.updateRole).toHaveBeenLastCalledWith({
       id: "treas",
@@ -603,31 +810,40 @@ describe("a role's page", () => {
     });
   });
 
-  it("puts the chapter's word for a tier on the Same as answer", () => {
+  it("puts the chapter's word for a tier on the tier picker", async () => {
     h.vocabulary = { vocabulary: { tier: "Level" } };
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    const user = userEvent.setup();
+    rolePage("brother");
+    await user.click(screen.getByRole("combobox", { name: "Level" }));
     expect(
-      screen.getAllByRole("radio", { name: "Same as level" }).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("option", { name: "Outside the levels" }),
+    ).toBeInTheDocument();
   });
 
-  it("won't switch on what the caller doesn't hold, and says so on the row", () => {
+  it("won't switch on what the caller doesn't hold, and says so on the row", async () => {
     asVicePresident();
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    const events = screen.getByRole("radiogroup", {
-      name: /create events for brothers/i,
-    });
-    expect(within(events).getByRole("radio", { name: "On" })).toBeDisabled();
-    expect(within(events).getByRole("radio", { name: "Off" })).toBeEnabled();
+    const user = userEvent.setup();
+    rolePage("brother");
     expect(
       screen.getAllByText(/your role doesn't have it/i).length,
     ).toBeGreaterThan(0);
+    const answers = await openPick(user, /create events for brothers/i);
+    expect(within(answers).getByRole("option", { name: "On" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(
+      within(answers).getByRole("option", { name: "Off" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("gives a role outside the tiers one column of live switches", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="alum" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    expect(screen.queryByRole("radiogroup")).toBeNull();
+    rolePage("alum");
+    expect(screen.queryByRole("combobox", { name: /for alumni/i })).toBeNull();
+    expect(
+      screen.getByText("Outside the tiers, so its permissions are its own."),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("switch", { name: /create events for alumni/i }),
     );
@@ -642,7 +858,7 @@ describe("a role's page", () => {
     h.roles = h.roles.map((r) =>
       r.id === "alum" ? { ...r, permissions: ["alumni:post"] } : r,
     );
-    render(<RolePage roleId="alum" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("alum");
     expect(
       screen.queryByRole("switch", { name: /post in the alumni channel/i }),
     ).toBeNull();
@@ -661,7 +877,7 @@ describe("a role's page", () => {
 
   it("views the app as the role, then comes back to its page", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("brother");
     await user.click(screen.getByRole("button", { name: "View as Brothers" }));
     expect(useRolePreviewStore.getState().preview).toEqual({
       chapterId: "c1",
@@ -675,7 +891,7 @@ describe("a role's page", () => {
 
   it("previews a role with what Everyone holds beside it, as every member has it", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="cabinet" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("cabinet");
     await user.click(screen.getByRole("button", { name: "View as Cabinet" }));
     expect(useRolePreviewStore.getState().preview?.permissions).toEqual([
       "channels:read:cabinet",
@@ -684,23 +900,33 @@ describe("a role's page", () => {
   });
 
   it("offers no View as on the President's role, or to someone who can't edit roles", () => {
-    render(<RolePage roleId="pres" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    const { unmount } = render(
+      <RolePage roleId="pres" backHref={BACK} onDeleted={vi.fn()} />,
+    );
+    expect(screen.queryByRole("button", { name: /^view as/i })).toBeNull();
+    unmount();
+    h.members = [{ user_id: "me", role_ids: ["brother"] }];
+    h.mine = MEMBERS.permissions;
+    rolePage("alum");
     expect(screen.queryByRole("button", { name: /^view as/i })).toBeNull();
   });
 
   it("locks every switch on the President's role", () => {
-    render(<RolePage roleId="pres" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("pres");
     expect(
       screen.getByText(/only moves through transfer presidency/i),
     ).toBeInTheDocument();
-    for (const control of screen.getAllByRole("switch")) {
+    for (const control of screen.getAllByRole("switch", {
+      name: / for President$/,
+    })) {
       expect(control).toBeDisabled();
     }
   });
 
   it("saves details without a permissions key, and moves the role between tiers", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("brother");
+    expect(group("Role")).toHaveTextContent("2 members");
     await user.click(screen.getByRole("combobox", { name: "Tier" }));
     await user.click(
       screen.getByRole("option", { name: "Officers and chairs" }),
@@ -714,16 +940,28 @@ describe("a role's page", () => {
       body: {
         name: undefined,
         color: undefined,
-        display_order: 1,
         mentionable: false,
+        self_assignable: undefined,
         tier_id: "t2",
       },
     });
   });
 
+  it("renames the role on Save role", async () => {
+    const user = userEvent.setup();
+    rolePage("brother");
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "  Actives ");
+    await user.click(screen.getByRole("button", { name: "Save role" }));
+    expect(h.updateRole.mock.calls[0]![0].body).toMatchObject({
+      name: "Actives",
+    });
+  });
+
   it("marks a role outside the tiers as Non-chapter business (#4958)", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="alum" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("alum");
     await user.click(
       screen.getByRole("switch", { name: "Non-chapter business" }),
     );
@@ -734,7 +972,7 @@ describe("a role's page", () => {
   });
 
   it("explains why a role in a tier can't be Non-chapter business", () => {
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("brother");
     expect(
       screen.getByRole("switch", { name: "Non-chapter business" }),
     ).toBeDisabled();
@@ -747,7 +985,7 @@ describe("a role's page", () => {
     // The switch judges the permissions the save leaves: Brothers carries
     // only its tier's, so outside the tiers it holds none.
     const user = userEvent.setup();
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("brother");
     await user.click(screen.getByRole("combobox", { name: "Tier" }));
     await user.click(screen.getByRole("option", { name: "Outside the tiers" }));
     const pick = screen.getByRole("switch", { name: "Non-chapter business" });
@@ -767,7 +1005,7 @@ describe("a role's page", () => {
         permission_overrides: { "events:create": true },
       }),
     ];
-    render(<RolePage roleId="rush" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("rush");
     expect(
       screen.getByRole("switch", { name: "Non-chapter business" }),
     ).toBeDisabled();
@@ -777,12 +1015,9 @@ describe("a role's page", () => {
   });
 
   it("judges a drafted move into a tier, and still lets a marked role be turned off", async () => {
-    h.roles = [
-      ...h.roles,
-      role("im", "Intramurals", null, [], { self_assignable: true }),
-    ];
+    h.roles = [...h.roles, pickable()];
     const user = userEvent.setup();
-    render(<RolePage roleId="im" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("im");
     await user.click(screen.getByRole("combobox", { name: "Tier" }));
     await user.click(screen.getByRole("option", { name: "Members" }));
     expect(
@@ -796,7 +1031,10 @@ describe("a role's page", () => {
   });
 
   it("offers no Non-chapter business switch on a built-in role", () => {
-    render(<RolePage roleId="member" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("everyone");
+    expect(
+      screen.getByRole("heading", { name: "Everyone" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: "Non-chapter business" }),
     ).toBeNull();
@@ -804,30 +1042,51 @@ describe("a role's page", () => {
 
   it("saves a picked swatch, and leaves an untouched color out", async () => {
     const user = userEvent.setup();
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("brother");
+    await user.click(screen.getByRole("button", { name: "No color" }));
     await user.click(
       within(screen.getByRole("group", { name: "Color" })).getByRole("button", {
         name: "Teal",
       }),
     );
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Save role" }));
     const body = h.updateRole.mock.calls[0]![0].body;
     expect(body.color).toBe("#3DD6C4");
     expect(body).not.toHaveProperty("permissions", expect.anything());
   });
 
-  it("keeps the last whole number in the position field (#2206)", () => {
-    render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    const field = screen.getByLabelText("Position in its list");
-    expectRefusedEntriesKeep(field, "4");
-    expectClearingEntriesEmpty(field, "4");
+  // Move up and Move down in the header's ⋯ replaced the "Position in its
+  // list" number box (#6029).
+  it("moves the role up its list from the header's ⋯", async () => {
+    h.roles = h.roles.map((r) =>
+      r.id === "pres" ? { ...r, display_order: 1 } : { ...r, display_order: 2 },
+    );
+    const user = userEvent.setup();
+    rolePage("vp");
+    await user.click(
+      screen.getByRole("button", { name: "More for Vice President" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toHaveAttribute(
+      "data-disabled",
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+    await waitFor(() => expect(h.updateRole).toHaveBeenCalledTimes(2));
+    expect(h.updateRole).toHaveBeenNthCalledWith(1, {
+      id: "vp",
+      body: { display_order: 1 },
+    });
+    expect(h.updateRole).toHaveBeenNthCalledWith(2, {
+      id: "pres",
+      body: { display_order: 2 },
+    });
   });
 
   it("deletes a role only after a confirmation, then goes back", async () => {
     const user = userEvent.setup();
-    const onBack = vi.fn();
-    render(<RolePage roleId="alum" onBack={onBack} onOpenTier={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "Delete role" }));
+    const { onDeleted } = rolePage("alum");
+    await user.click(screen.getByRole("button", { name: "More for Alumni" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete role" }));
     expect(h.deleteRole).not.toHaveBeenCalled();
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
@@ -835,13 +1094,17 @@ describe("a role's page", () => {
       }),
     );
     await waitFor(() => expect(h.deleteRole).toHaveBeenCalledWith("alum"));
-    expect(onBack).toHaveBeenCalled();
+    expect(onDeleted).toHaveBeenCalled();
   });
 
   it("is read-only for a role in the caller's own tier", () => {
     asVicePresident();
-    render(<RolePage roleId="vp" onBack={vi.fn()} onOpenTier={vi.fn()} />);
+    rolePage("vp");
     expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
     expect(screen.getByLabelText("Name")).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "More for Vice President" }),
+    ).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Tier" })).toBeDisabled();
   });
 });

@@ -33,6 +33,8 @@ vi.mock("@repo/hooks", () => ({
     isPending: false,
     isError: false,
   }),
+  useViewerUserId: () => "u1",
+  useViewerDisplayName: () => "Pat Kim",
   useTransferPresidency: () => transferPresidency,
   useCurrentChapter: () => currentChapter,
   usePresidencyClaimStatus: () => presidencyClaimStatus,
@@ -45,7 +47,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 import {
   PresidencyClaimBanner,
-  TransferPresidencySection,
+  TransferPresidencyRow,
 } from "@/components/roles/presidency";
 
 beforeEach(() => {
@@ -175,21 +177,28 @@ describe("the orphan-president claim banner", () => {
 });
 
 describe("Transfer presidency", () => {
+  // The row's trigger shows only today's President, so its accessible name
+  // carries what it does (#6029).
+  it("names the trigger for what it does, beside who holds it now", () => {
+    render(<TransferPresidencyRow />);
+    expect(
+      screen.getByRole("button", { name: "Transfer presidency, now Pat Kim" }),
+    ).toHaveTextContent("Pat Kim");
+  });
+
   it("moves the presidency only after an in-product confirmation", async () => {
     const user = userEvent.setup();
-    render(<TransferPresidencySection />);
+    render(<TransferPresidencyRow />);
     await user.click(
-      screen.getByRole("combobox", { name: /select the new president/i }),
+      screen.getByRole("button", { name: /^transfer presidency/i }),
     );
-    await user.click(screen.getByRole("option", { name: "Sam Lee" }));
-    await user.click(
-      screen.getByRole("button", { name: /transfer presidency/i }),
-    );
+    await user.click(await screen.findByRole("option", { name: "Sam Lee" }));
     expect(transferPresidency.mutateAsync).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", {
+      name: "Transfer presidency to Sam Lee?",
+    });
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: /transfer presidency/i,
-      }),
+      within(dialog).getByRole("button", { name: "Transfer presidency" }),
     );
     await waitFor(() =>
       expect(transferPresidency.mutateAsync).toHaveBeenCalledWith({
