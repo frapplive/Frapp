@@ -687,6 +687,32 @@ export interface ChatFormResponse {
   updated_at: string;
 }
 
+/**
+ * Activity's chat cards and what the caller did on them, in one round trip
+ * (`activity_card_reads`, #6061 step 2). Every channel's cards come back,
+ * readable or not, and the action and answer lists cover every card read:
+ * the caller filters both by access, as Activity does.
+ */
+export interface ActivityCardReads {
+  /** The chapter's newest poll cards, newest first. */
+  polls: ChatMessage[];
+  /** The caller's own newest poll cards, newest first. */
+  own_polls: ChatMessage[];
+  /** The chapter's newest sign-up sheets and headcounts, newest first. */
+  signups: ChatMessage[];
+  /** The chapter's newest form cards, newest first. */
+  forms: ChatMessage[];
+  /** The caller's vote rows on `polls` and `own_polls`. */
+  votes: Pick<ChatMessageAction, 'message_id' | 'payload' | 'created_at'>[];
+  /** Every member's claim rows on `signups`. */
+  signup_claims: Pick<
+    ChatMessageAction,
+    'message_id' | 'user_id' | 'payload' | 'created_at'
+  >[];
+  /** Which of `forms` the caller answered, and when; never what they wrote. */
+  form_answers: Pick<ChatFormResponse, 'message_id' | 'created_at'>[];
+}
+
 export interface MessageReaction {
   id: string;
   message_id: string;

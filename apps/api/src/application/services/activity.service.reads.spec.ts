@@ -226,6 +226,63 @@ const functionReads = (canManage: boolean) => ({
   shared: canManage ? [seeded('-copy-mine')] : [],
 });
 
+/** An open card of `kind` from OTHER in the readable channel. */
+const card = (id: string, kind: string, payload: Row): Row => ({
+  id,
+  channel_id: 'channel-1',
+  sender_id: OTHER,
+  content: kind,
+  kind,
+  payload: { closes_at: '2026-11-20T00:00:00.000Z', ...payload },
+  is_deleted: false,
+  created_at: '2026-11-09T00:00:00.000Z',
+});
+
+const CARD_READS = {
+  polls: [
+    card('poll-1', 'poll', {
+      question: 'Formal venue?',
+      options: [
+        { id: 'a', label: 'Downtown' },
+        { id: 'b', label: 'Campus' },
+      ],
+    }),
+  ],
+  own_polls: [],
+  signups: [
+    card('signup-1', 'signup', {
+      title: 'Sober drivers',
+      slots: [{ id: 'fri', label: 'Friday', capacity: 2 }],
+    }),
+  ],
+  forms: [
+    card('form-1', 'form', {
+      title: 'Room picks',
+      questions: [
+        { id: 'q1', type: 'short_answer', title: 'Your name', required: true },
+      ],
+    }),
+  ],
+  votes: [
+    {
+      message_id: 'poll-1',
+      payload: { option_id: ['a'] },
+      created_at: '2026-11-09T12:00:00.000Z',
+    },
+  ],
+  signup_claims: [
+    {
+      message_id: 'signup-1',
+      user_id: ME,
+      payload: { slot_ids: ['fri'] },
+      created_at: '2026-11-09T12:00:00.000Z',
+    },
+  ],
+  form_answers: [
+    { message_id: 'form-1', created_at: '2026-11-09T12:00:00.000Z' },
+  ],
+};
+
 function load(permissions: string[]) {
   const harness = createTenantHarness({
     tables: seed(),
@@ -272,15 +329,17 @@ function load(permissions: string[]) {
     listBlockedUserIds: stub([]),
     getEffectivePermissions: stub(permissions),
     getAlumniRoleId: stub('role-alumni'),
-    findCardsByChapter: stub([]),
-    findActionsOnMessages: stub([]),
+    // The polls, sign-ups and forms with the caller's votes, every claim
+    // and the caller's form answers: one function call (#6061). One open
+    // card of each kind from another member, each voted, claimed or
+    // answered, so a read per card would be counted here.
+    readActivityCards: stub(CARD_READS),
     findAllActionsOnMessages: stub([]),
     linksListFor: stub([]),
     remindersListFor: stub([]),
     membersByChapter: stub([]),
     findByUserAndChapter: stub({ user_id: ME, role_ids: ['role-member'] }),
     findByUserForEvents: stub([]),
-    findAnswered: stub([]),
     findUnreadStart: stub(null),
     findReads: stub([]),
     findSnoozes: stub([]),
@@ -301,11 +360,8 @@ function load(permissions: string[]) {
     } as never,
     { listFor: reads.linksListFor } as never,
     { listFor: reads.remindersListFor } as never,
-    { findCardsByChapter: reads.findCardsByChapter } as never,
-    {
-      findActionsOnMessages: reads.findActionsOnMessages,
-      findAllActionsOnMessages: reads.findAllActionsOnMessages,
-    } as never,
+    { readActivityCards: reads.readActivityCards } as never,
+    { findAllActionsOnMessages: reads.findAllActionsOnMessages } as never,
     userRepo as never,
     {
       findByChapter: reads.membersByChapter,
@@ -317,7 +373,6 @@ function load(permissions: string[]) {
       findReads: reads.findReads,
       findSnoozes: reads.findSnoozes,
     } as never,
-    { findAnswered: reads.findAnswered } as never,
     { readersOf: jest.fn() } as never,
     // Meetings rows (#5949) are their own service's reads, not counted here.
     {
@@ -354,7 +409,11 @@ describe('ActivityService reads per load (#5746)', () => {
   // sections' 14): every list read its
   // subtasks, photos, series, groups and open tasks, and ended on an empty
   // page, and two counts went on their own. #5746 brought it to 13 and 4;
-  // #6061 to one function call for both.
+  // #6061 to one function call for both. #6061 step 2 read the four card
+  // scans (the chapter's polls, the caller's own, sign-ups and forms) and the
+  // votes, claims and form answers on them in one call too: 15 for the page
+  // in this seed became 12, with a voted poll, a claimed sheet and an
+  // answered form in it (which before cost up to 3 reads more).
   it('an officer with tasks:manage: the task section in 1 request', async () => {
     const page = load([
       SystemPermissions.MEMBERS_VIEW,
@@ -378,7 +437,7 @@ describe('ActivityService reads per load (#5746)', () => {
         p_limit: 25,
       },
     });
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    expect(page.taskRequests + page.otherReads).toBe(12);
     // What the page shows is what it showed before.
     expect(
       view.needs_you.tasks.map((task) => [task.title, task.group?.total]),
@@ -404,6 +463,10 @@ describe('ActivityService reads per load (#5746)', () => {
       'task',
     ]);
     expect(view.unavailable).toEqual([]);
+    // Every card was answered this week, out of the one call: no read per
+    // card.
+    expect(view.week.polls).toEqual({ done: 1, total: 1 });
+    expect(view.week.cards).toEqual({ done: 2, total: 2 });
   });
 
   it('a member: the task section in 1 request, only their own tasks', async () => {
@@ -415,7 +478,7 @@ describe('ActivityService reads per load (#5746)', () => {
     // Their tasks with this week's done ones, and the group, in one call
     // that reads nothing of anyone else's.
     expect(page.taskRequests).toBe(1);
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    expect(page.taskRequests + page.otherReads).toBe(12);
     expect(page.harness.rpcCalls[0].args).toEqual(
       expect.objectContaining({ p_user_id: ME, p_can_manage: false }),
     );
