@@ -115,6 +115,9 @@ as $$
      where r.user_id = p_user_id
        and r.chapter_id = p_chapter_id
   ),
+  -- Due and waiting are each capped on their own, as the two reads were, so
+  -- a pile of old due reminders the member never cleared can't crowd a new
+  -- one off the list.
   due as (
     select * from mine
      where remind_at <= p_now

@@ -163,9 +163,12 @@ page on both clients. See [Week](#week).
   come from chat, which has no switch, so they are always read.
 - **Each list carries at most 25 rows**, except Made by you's polls (25 open and 25 closed) and
   Reminders (50 due and 50 waiting).
-- **One section failing does not fail the page.** The sections are read independently. One that
-  fails is served empty and named in `unavailable`, so a client can say that part couldn't load
-  rather than show it as empty.
+- **One section failing does not fail the page.** One that fails is served empty and named in
+  `unavailable`, so a client can say that part couldn't load rather than show it as empty. The
+  sections are read independently, except that polls, sign-ups and forms, and reminders share one
+  read with the member's snoozes and unread start (`activity_page_reads`, #6061), as they already
+  shared chat's channel list: when it fails those three sections are named, nothing is served as
+  snoozed and every row reads as read.
 - **Names are never invented.** A task's or entry's member who can no longer be resolved has an
   empty name, the same convention as the roster.
 
