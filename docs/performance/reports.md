@@ -65,9 +65,11 @@ Five consequences worth remembering when editing these queries:
   it already stops at its limit and the count is a second pass over every
   matching row. The trade-off: it stops at the count taken with the first
   page, so a row inserted between pages of a multi-page read drops the last
-  row where `fetchAllPages` would repeat one. The reports keep
-  `fetchAllPages`; Activity's task lists (`SupabaseTaskRepository.findByChapterCounted`)
-  count.
+  row where `fetchAllPages` would repeat one. No read counts since #6061:
+  Activity's task lists, the reads that did, now come from one database
+  function (`activity_task_reads`), and every other read, the reports
+  included, keeps `fetchAllPages`. The mode stays in the shared loop for the
+  next read that wants its total.
 - **Paged reads need a total order.** Every one sorts on the table's `id`,
   which is used for ordering and need not be projected. Offset paging over a
   non-unique sort key has no guaranteed order between statements, so rows

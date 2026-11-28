@@ -21,11 +21,13 @@ import {
  *
  * Only this build's own dashboard origin (`webAppOrigin`): on a staging build
  * a production link names records the staging API doesn't have. A web-only
- * page (Backwork, Chapter settings) and a path no page owns are not the
+ * page (Backwork, Meeting minutes) and a path no page owns are not the
  * app's: `null`, so the link stays a web page. So is an address the phone
  * would open without what it points at (a document, a folder, Alumni, a
- * message with no channel): a parameter the chosen screen drops, unless it
- * only picks a less specific screen of the same page (an event link's day).
+ * message with no channel, a Chapter settings page the phone lacks): a
+ * parameter the chosen screen drops, unless it only picks a less specific
+ * screen of the same page (an event link's day) or the screen names it as
+ * `implied` (`tab=roles` beside a role, #6049).
  * Ids are trimmed, and an empty one counts as absent.
  *
  * A message thread opens over its channel, as a thread notification does
@@ -58,7 +60,10 @@ export function webLinkTarget(
       candidate.pathname === screen.pathname &&
       (candidate.when ?? []).every((name) => query.get(name)),
   );
-  const kept = new Set(Object.keys(chosen?.params ?? {}));
+  const kept = new Set([
+    ...Object.keys(chosen?.params ?? {}),
+    ...(chosen?.implied ?? []),
+  ]);
   const context = new Set(
     row.phone
       .slice(chosen ? row.phone.indexOf(chosen) + 1 : 0)

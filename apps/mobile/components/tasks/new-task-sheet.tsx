@@ -273,7 +273,26 @@ export interface TaskSuggestionSeed {
    * error, whose refusal codes the sheet puts into words.
    */
   accept: (task: ValidatedNewTask) => Promise<void>;
+  /**
+   * Members only, one or several each getting a copy: no roles, groups,
+   * Everyone or up for grabs. An action item with no suggestion waiting
+   * (#6178), whose route takes members.
+   */
+  peopleOnly?: boolean;
+  /**
+   * A day, with no time of day and no subtasks: the route an action item
+   * with no suggestion waiting goes to takes neither (#6178).
+   */
+  dayOnly?: boolean;
+  /**
+   * The words for a refusal `accept` rejects with, in place of a suggestion's
+   * own (`aiSuggestionRefusalLine`): an action item's route answers with its
+   * own codes (#6178).
+   */
+  refusalLine?: (code: string | null | undefined) => string | null;
 }
+
+const NOBODY_MARKED: ReadonlySet<string> = new Set();
 
 export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
   function NewTaskSheet(
@@ -702,7 +721,9 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               setPosting(false);
               // Decided by someone else, expired, or its minutes changed:
               // asking again can't work, so the reason takes the button.
-              const line = aiSuggestionRefusalLine(codeOf(error));
+              const line = (suggestion.refusalLine ?? aiSuggestionRefusalLine)(
+                codeOf(error),
+              );
               if (line && isSameVisit(sentFrom)) {
                 sending.current = false;
                 setRefusal(line);
@@ -970,7 +991,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               accessibilityLabel="Due date"
             />
 
-            {dueDate ? (
+            {dueDate && !suggestion?.dayOnly ? (
               <View style={styles.field}>
                 <DueTimeField
                   value={dueTime}
@@ -1016,14 +1037,16 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               </Text>
             ) : null}
 
-            <SubtaskDraftField
-              items={subtasks}
-              onChange={setSubtasks}
-              text={subtaskText}
-              onTextChange={setSubtaskText}
-              disabled={pending}
-              fieldStyle={styles.field}
-            />
+            {suggestion?.dayOnly ? null : (
+              <SubtaskDraftField
+                items={subtasks}
+                onChange={setSubtasks}
+                text={subtaskText}
+                onTextChange={setSubtaskText}
+                disabled={pending}
+                fieldStyle={styles.field}
+              />
+            )}
 
             {/* Photos of what the job is, and what Mark done needs (#4635),
               the way Google Classroom and Canvas set what a submission takes.
@@ -1135,6 +1158,17 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
           people={whoRead.people}
           sets={whoRead.sets}
           single={!offerGroups}
+          // People only (#6178): ticks and one Done, as Add people.
+          add={
+            suggestion?.peopleOnly
+              ? {
+                  marked: NOBODY_MARKED,
+                  alreadyNote: "",
+                  label: () => "Done",
+                  onAdd: () => {},
+                }
+              : undefined
+          }
         />
       </>
     );

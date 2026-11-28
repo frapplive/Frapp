@@ -3,6 +3,12 @@
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { replaceAddress } from "@/lib/address/address";
+import { pushSameRouteLink } from "@/lib/address/address-links";
+import {
+  SettingsTabAddress,
+  useSettingsRowsAddress,
+} from "@/components/settings/settings-rows-address";
 import {
   type OrgDues,
   useCurrentChapter,
@@ -91,7 +97,6 @@ import {
 } from "@/components/settings/settings-tool-views";
 import {
   CHAT_REPORTS_ANCHOR,
-  SETTINGS_SUBPAGE_PARAMS,
   chapterSettingsHref,
   isChapterSettingsPage,
   moduleSettingsHref,
@@ -232,13 +237,9 @@ function SettingsPageContent() {
     rawTabParam === "modules" && requestedModuleKey
       ? requestedModuleKey
       : resolveSettingsTabParam(rawTabParam);
-  const [activeTab, setActiveTab] = useState(tabParam ?? "org");
-  useEffect(() => {
-    if (tabParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- follow `?tab=` deep links without wiping a tab the member already picked
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  // The row on screen is the address's (#6049): Back, Forward and a reload
+  // land on it, so no copy is kept in state.
+  const activeTab = tabParam ?? "org";
   /*
     A page opened inside a module page (#3837): one channel's settings
     (`?channel=`, the chat rail's Edit channel) or Discord import
@@ -270,9 +271,8 @@ function SettingsPageContent() {
     if (!chapterPage) return;
     const url = new URL(window.location.href);
     if (url.searchParams.get("page") === chapterPage) return;
-    url.searchParams.set("tab", "org");
-    url.searchParams.set("page", chapterPage);
-    window.history.replaceState(null, "", url.toString());
+    // In place, keeping the entry's mark, so its page still closes Back.
+    replaceAddress({ tab: "org", page: chapterPage });
   }, [chapterPage]);
   // A new-report link from before the queue had a page of its own (#6031)
   // carried `#reported-messages` on the Chat page or on Chat admin: it opens
@@ -289,20 +289,8 @@ function SettingsPageContent() {
     window.history.replaceState(null, "", url.toString());
   }, []);
   // Switching rows starts the panel at its top, not wherever the last one
-  // was scrolled to: the panel scrolls inside the shell's tool pane. The
-  // address follows the row, without the params that opened a page inside
-  // the last one, so Chat shows its own page when the officer comes back to
-  // it, and a refresh or a copied link lands on the row they were on. Next
-  // keeps `useSearchParams` in step with `replaceState`.
-  const changeTab = useCallback((next: string) => {
-    setActiveTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    for (const param of SETTINGS_SUBPAGE_PARAMS) url.searchParams.delete(param);
-    url.hash = "";
-    window.history.replaceState(null, "", url.toString());
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
-  }, []);
+  // was scrolled to: the panel scrolls inside the shell's tool pane.
+  const { changeTab, onRowClick } = useSettingsRowsAddress();
 
   /**
    * `?module=` lands an officer on that module's page with its switch
@@ -311,10 +299,10 @@ function SettingsPageContent() {
    * through.
    *
    * **Consumed once, not held for the visit.** `TabsContent` carries no
-   * `forceMount`, so Radix unmounts the inactive page, and the tab is driven
-   * by local state without rewriting the URL, so `?module=` survives the whole
-   * visit. Without this latch, an officer who follows the nudge, wanders to
-   * another row and comes back gets focus yanked to the switch every time.
+   * `forceMount`, so Radix unmounts the inactive page and remounts it when
+   * the officer comes back. The switch that took focus latches here and
+   * takes `?module=` off the address (a one-shot, § Addresses), so neither
+   * coming back to the row nor Back onto it yanks focus to the switch again.
    */
   const [consumedModuleKey, setConsumedModuleKey] = useState<string | null>(
     null,
@@ -337,10 +325,12 @@ function SettingsPageContent() {
     State rather than a ref because `focusModuleKey` is read during render, and
     `react-hooks/refs` rightly forbids reading `ref.current` there.
   */
-  const handleModuleFocused = useCallback(
-    (key: string) => setConsumedModuleKey(key),
-    [],
-  );
+  const handleModuleFocused = useCallback((key: string) => {
+    setConsumedModuleKey(key);
+    // One-shot (#6049): off the address once acted on, so a reload or Back
+    // doesn't focus the switch again. The page stays the module's.
+    replaceAddress({ tab: key, module: null });
+  }, []);
 
   // `?setting=` from settings search: scroll to the setting and light it.
   useSettingJump();
@@ -820,8 +810,15 @@ function SettingsPageContent() {
     );
   }
 
+  // A row's link to another page of Chapter settings pushes with the
+  // address's mark, so that page's back arrow goes Back to it (#6049).
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" onClickCapture={pushSameRouteLink}>
+      <SettingsTabAddress
+        rawTab={rawTabParam}
+        resolvedTab={activeTab}
+        shownTab={shownTab}
+      />
       {/*
         Above the tabs, so switching tab never unmounts an open confirmation
         mid-flight — `ConfirmDialogHost` would settle it `null` and the
@@ -846,21 +843,12 @@ function SettingsPageContent() {
       <Tabs
         value={shownTab}
         onValueChange={changeTab}
+        activationMode="manual"
         className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
       >
         <SettingsRail
           visibleTabs={visibleTabs}
-          onRowClick={(value) => {
-            // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import, the plan table) and goes back to the
-            // row's own page.
-            if (
-              value === shownTab &&
-              (channelParam || toolParam || searchParams.get("page"))
-            ) {
-              changeTab(value);
-            }
-          }}
+          onRowClick={(value) => onRowClick(value, shownTab)}
         />
 
         <div className="w-full min-w-0 max-w-[960px] flex-1">

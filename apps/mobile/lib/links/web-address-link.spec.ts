@@ -82,6 +82,25 @@ describe("a web address opens its phone screen (#6050)", () => {
     ).toBe("/event-details?id=e1");
   });
 
+  it("opens a role, a tier and bare Chapter settings, and leaves its other pages in the browser (#6049)", () => {
+    expect(
+      systemPathForWebLink(`${ORIGIN}/settings?tab=roles&role=r1`, [ORIGIN]),
+    ).toBe("/role?roleId=r1");
+    expect(
+      systemPathForWebLink(`${ORIGIN}/settings?tab=roles&tier=t1`, [ORIGIN]),
+    ).toBe("/role-tier?tierId=t1");
+    expect(systemPathForWebLink(`${ORIGIN}/settings`, [ORIGIN])).toBe(
+      "/chapter-settings",
+    );
+    for (const link of [
+      `${ORIGIN}/settings?tab=chat&page=chat-admin&channel=c1`,
+      `${ORIGIN}/settings?tab=roles&group=g1`,
+      `${ORIGIN}/settings?tab=geofences&page=study-zones&zone=z1`,
+    ]) {
+      expect(webLinkTarget(link, [ORIGIN]), link).toBeNull();
+    }
+  });
+
   it("trims ids, and treats an empty one as absent", () => {
     expect(
       systemPathForWebLink(`${ORIGIN}/chat?channel=%20c1%20`, [ORIGIN]),

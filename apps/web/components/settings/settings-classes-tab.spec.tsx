@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   params: "tab=classes",
   push: vi.fn(),
   replace: vi.fn(),
+  close: vi.fn(),
 }));
 
 const mockClasses = vi.fn();
@@ -30,6 +31,14 @@ const mockReorder = vi.fn();
 const mockDelete = vi.fn();
 const mockAssign = vi.fn();
 const mockToast = vi.fn();
+
+// Opens and closes go through the address (#6049); these record them.
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  pushAddressHref: h.push,
+  closeToAddress: h.close,
+  replaceAddress: h.replace,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push, replace: h.replace }),
@@ -504,7 +513,7 @@ describe("SettingsClassesTab", () => {
       await userEvent.click(
         within(dialog).getByRole("button", { name: "Delete Alpha" }),
       );
-      await waitFor(() => expect(h.push).toHaveBeenCalledWith(LIST));
+      await waitFor(() => expect(h.close).toHaveBeenCalledWith(LIST));
       expect(mockDelete).toHaveBeenCalledWith("alpha");
     });
 
@@ -522,7 +531,7 @@ describe("SettingsClassesTab", () => {
           expect.objectContaining({ title: "Couldn't delete Alpha" }),
         ),
       );
-      expect(h.push).not.toHaveBeenCalled();
+      expect(h.close).not.toHaveBeenCalled();
     });
 
     it("lists the class's members in fraternal order, numbered by the list", () => {
