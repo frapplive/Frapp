@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { components } from "@repo/api-sdk";
-import { minutesDraftElapsed } from "@repo/validation";
+import { throwUnlessOk, type components } from "@repo/api-sdk";
+import { can, isModuleEnabled, minutesDraftElapsed } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { aiSuggestionKeys } from "./use-ai-suggestions";
 import { eventsQueryKey } from "./use-events";
+import { useCurrentChapter } from "./use-chapters";
+import { taskKeys } from "./use-tasks";
+import { usePermissionList } from "./use-user";
 
 /** One row of the Minutes list (`GET /v1/meetings`), with what the list shows on it (#5290). */
 export type MeetingSummary = components["schemas"]["MeetingListItemDto"];
@@ -172,6 +175,102 @@ export function useMeetingActionItemTasks(
     enabled: (options?.enabled ?? true) && !!chapterId && !!id,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+/** The body `POST /v1/meetings/:id/action-items/:index/task` takes. */
+export type MakeActionItemTaskBody =
+  components["schemas"]["MakeActionItemTaskDto"];
+
+/**
+ * Whether the viewer may make tasks from the minutes: a Coming up date's
+ * task (#5672) and an action item's (#6178). These are the task routes' own
+ * checks, the tasks module and `tasks:manage` under the controllers'
+ * `members:view`, so no menu offers a form whose save is refused.
+ */
+export function useCanManageTasks(): boolean {
+  const permissions = usePermissionList();
+  const modules = useCurrentChapter().data?.enabled_modules;
+  return (
+    isModuleEnabled(modules, "tasks") &&
+    can("tasks:manage", permissions) &&
+    can("members:view", permissions)
+  );
+}
+
+/**
+ * Whether the mark the item's route answered with is a task for these
+ * people (#6178). The route answers an item that is already a task with that
+ * task's mark, unchanged and as a success, so a mark for other people means
+ * nothing was made: someone else made it first.
+ */
+export function actionItemTaskIsFor(
+  mark: MeetingActionItemTask,
+  assigneeIds: readonly string[],
+): boolean {
+  const had = new Set(mark.task?.who.assignee_ids ?? []);
+  return (
+    had.size === new Set(assigneeIds).size &&
+    assigneeIds.every((id) => had.has(id))
+  );
+}
+
+/**
+ * Makes an action item of posted minutes a task (#6178, over #6176's
+ * route): for an item with no suggestion waiting, or one whose suggestion
+ * the server accepts in its place. An item already a task is answered with
+ * its own mark as a success ({@link actionItemTaskIsFor} tells the two
+ * apart); a 409 says the item became a task some other way at that moment
+ * (accepted up for grabs, or being accepted) or the minutes changed. The
+ * answered mark is written to the minutes' marks at once, so the row turns
+ * into Open task before the read comes back.
+ */
+export function useMakeActionItemTask() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  const marksKey = (meetingId: string) =>
+    [...meetingKey(chapterId, meetingId), "action-item-tasks"] as const;
+  const refresh = (meetingId: string) => {
+    void queryClient.invalidateQueries({ queryKey: marksKey(meetingId) });
+    // A waiting suggestion the server accepted instead leaves the card.
+    void queryClient.invalidateQueries({
+      queryKey: aiSuggestionKeys.all(chapterId),
+    });
+  };
+  return useMutation({
+    mutationKey: ["meetings", "make-action-item-task"],
+    // Two at once would answer 409; never sent twice by itself.
+    retry: false,
+    mutationFn: async ({
+      meetingId,
+      index,
+      body,
+    }: {
+      meetingId: string;
+      index: number;
+      body: MakeActionItemTaskBody;
+    }): Promise<MeetingActionItemTask> => {
+      const result = await client.POST(
+        "/v1/meetings/{id}/action-items/{index}/task",
+        { params: { path: { id: meetingId, index } }, body },
+      );
+      // The status decides: an empty-bodied refusal has no `error`.
+      throwUnlessOk(result);
+      return result.data as MeetingActionItemTask;
+    },
+    onSuccess: (mark, { meetingId }) => {
+      queryClient.setQueryData<MeetingActionItemTask[]>(
+        marksKey(meetingId),
+        (marks) =>
+          marks
+            ? [...marks.filter((each) => each.index !== mark.index), mark]
+            : [mark],
+      );
+      refresh(meetingId);
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+    onError: (_error, { meetingId }) => refresh(meetingId),
   });
 }
 
