@@ -391,6 +391,8 @@ export interface Database {
           p_chapter_id: string;
           p_user_id: string;
           p_limit: number;
+          p_polls: boolean;
+          p_cards: boolean;
         };
         Returns: ActivityCardReads;
       };

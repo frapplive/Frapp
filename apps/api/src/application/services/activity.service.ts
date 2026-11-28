@@ -1115,15 +1115,17 @@ export class ActivityService {
       }));
 
     // The chat cards and what the caller did on them, one function call
-    // (#6061) read once for the polls and cards sections, and only when one
-    // of them runs.
+    // (#6061) shared by the polls and cards sections. The cards section has
+    // no module switch, so it always runs; the poll half is read only while
+    // Polls is on. One read means one failure: when it fails, both sections
+    // are served empty and named `unavailable`.
     let cardRead: Promise<ActivityCardReads> | null = null;
     const cardReads = () =>
-      (cardRead ??= this.messageRepo.readActivityCards(
-        chapterId,
-        userId,
-        CARD_SCAN_LIMIT,
-      ));
+      (cardRead ??= this.messageRepo.readActivityCards(chapterId, userId, {
+        limit: CARD_SCAN_LIMIT,
+        polls: on('polls'),
+        cards: true,
+      }));
 
     // The member's snoozes, read beside the sections. A failure serves
     // nothing as snoozed rather than failing the page.
@@ -1995,7 +1997,12 @@ export class ActivityService {
     const [channels, blockedUserIds, cards] = await Promise.all([
       this.chatService.getChannels(chapterId, userId),
       this.chatBlocks.listBlockedUserIds(chapterId, userId),
-      this.messageRepo.readActivityCards(chapterId, userId, CARD_SCAN_LIMIT),
+      // The poll half only: the Archive lists no sign-ups or forms.
+      this.messageRepo.readActivityCards(chapterId, userId, {
+        limit: CARD_SCAN_LIMIT,
+        polls: true,
+        cards: false,
+      }),
     ]);
     const recent = cards.polls;
     const own = cards.own_polls;

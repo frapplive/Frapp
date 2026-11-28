@@ -37,6 +37,8 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
   const otherChapterPoll = randomUUID();
   const signup1 = randomUUID();
   const signup2 = randomUUID();
+  // The caller's own sheet, oldest of all.
+  const mySignup = randomUUID();
   const form1 = randomUUID();
   const textMessage = randomUUID();
   const messageIds = [
@@ -48,6 +50,7 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
     otherChapterPoll,
     signup1,
     signup2,
+    mySignup,
     form1,
     textMessage,
   ];
@@ -147,6 +150,7 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
           message(otherChapterPoll, otherChannelId, me, 'poll', 6),
           message(signup1, channelId, other, 'signup', 7),
           message(signup2, channelId, other, 'signup', 8),
+          message(mySignup, channelId, me, 'signup', 0),
           message(form1, channelId, other, 'form', 9),
           message(textMessage, channelId, other, 'text', 10),
         ] as never)
@@ -193,6 +197,14 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
             action_type: 'signup',
             payload: { slot_ids: ['s2'] },
             created_at: at(24),
+          },
+          // A claim on the caller's own sheet, which Activity never lists.
+          {
+            message_id: mySignup,
+            user_id: other,
+            action_type: 'signup',
+            payload: { slot_ids: ['s3'] },
+            created_at: at(26),
           },
           // A reaction on a sign-up is not a claim.
           {
@@ -249,9 +261,49 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
   });
 
   const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+  const BOTH = { limit: 2, polls: true, cards: true };
+
+  it('reads no claim on a sheet the caller posted', async () => {
+    const reads = await repo.readActivityCards(chapterId, me, {
+      ...BOTH,
+      limit: 3,
+    });
+
+    expect(ids(reads.signups)).toEqual([signup2, signup1, mySignup]);
+    expect(reads.signup_claims.map((row) => row.message_id)).not.toContain(
+      mySignup,
+    );
+  });
+
+  it('reads only the half it is asked for', async () => {
+    const pollsOnly = await repo.readActivityCards(chapterId, me, {
+      ...BOTH,
+      cards: false,
+    });
+    const cardsOnly = await repo.readActivityCards(chapterId, me, {
+      ...BOTH,
+      polls: false,
+    });
+
+    expect(ids(pollsOnly.polls)).toEqual([theirPoll3, theirPoll2]);
+    expect(pollsOnly.votes).toHaveLength(1);
+    expect([
+      pollsOnly.signups,
+      pollsOnly.forms,
+      pollsOnly.signup_claims,
+      pollsOnly.form_answers,
+    ]).toEqual([[], [], [], []]);
+    expect(ids(cardsOnly.signups)).toEqual([signup2, signup1]);
+    expect(cardsOnly.form_answers).toHaveLength(1);
+    expect([cardsOnly.polls, cardsOnly.own_polls, cardsOnly.votes]).toEqual([
+      [],
+      [],
+      [],
+    ]);
+  });
 
   it('caps each kind at the limit, newest first, inside the chapter, without deleted rows', async () => {
-    const reads = await repo.readActivityCards(chapterId, me, 2);
+    const reads = await repo.readActivityCards(chapterId, me, BOTH);
 
     // Not the deleted poll, not the other chapter's newer one.
     expect(ids(reads.polls)).toEqual([theirPoll3, theirPoll2]);
@@ -260,14 +312,14 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
   });
 
   it('finds the caller’s own poll past the chapter-wide cap', async () => {
-    const reads = await repo.readActivityCards(chapterId, me, 2);
+    const reads = await repo.readActivityCards(chapterId, me, BOTH);
 
     expect(ids(reads.polls)).not.toContain(myOldPoll);
     expect(ids(reads.own_polls)).toEqual([myOldPoll]);
   });
 
   it('serves each card with the columns a chat message read serves', async () => {
-    const reads = await repo.readActivityCards(chapterId, me, 2);
+    const reads = await repo.readActivityCards(chapterId, me, BOTH);
 
     expect(Object.keys(reads.polls[0]).sort()).toEqual(
       CHAT_MESSAGE_COLUMNS.split(',')
@@ -277,7 +329,7 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
   });
 
   it('reads the caller’s votes and form answers, and every claim, on the cards it read only', async () => {
-    const reads = await repo.readActivityCards(chapterId, me, 2);
+    const reads = await repo.readActivityCards(chapterId, me, BOTH);
 
     // Not the vote on the other chapter's poll, nor the other member's.
     expect(reads.votes).toEqual([
@@ -305,7 +357,7 @@ describeIntegration('activity_card_reads against live Postgres (#6061)', () => {
   });
 
   it('reads nothing of a chapter the caller asks about wrongly', async () => {
-    const reads = await repo.readActivityCards(randomUUID(), me, 2);
+    const reads = await repo.readActivityCards(randomUUID(), me, BOTH);
 
     expect(reads).toEqual({
       polls: [],

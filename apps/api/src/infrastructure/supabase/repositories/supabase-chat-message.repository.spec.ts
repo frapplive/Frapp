@@ -666,7 +666,11 @@ describe('SupabaseChatMessageRepository — Activity’s cards in one read (#606
     const repo = new SupabaseChatMessageRepository(harness.client);
 
     const reads = await harness.expectTenantScoped(CHAPTER_B, () =>
-      repo.readActivityCards(CHAPTER_B, USER_SHARED, 100),
+      repo.readActivityCards(CHAPTER_B, USER_SHARED, {
+        limit: 100,
+        polls: true,
+        cards: false,
+      }),
     );
 
     expect(reads).toEqual(READS);
@@ -678,6 +682,8 @@ describe('SupabaseChatMessageRepository — Activity’s cards in one read (#606
           p_chapter_id: CHAPTER_B,
           p_user_id: USER_SHARED,
           p_limit: 100,
+          p_polls: true,
+          p_cards: false,
         },
       },
     ]);
@@ -693,7 +699,11 @@ describe('SupabaseChatMessageRepository — Activity’s cards in one read (#606
     const repo = new SupabaseChatMessageRepository(harness.client);
 
     await expect(
-      repo.readActivityCards(CHAPTER_B, USER_SHARED, 100),
+      repo.readActivityCards(CHAPTER_B, USER_SHARED, {
+        limit: 100,
+        polls: true,
+        cards: false,
+      }),
     ).rejects.toThrow('boom');
   });
 });

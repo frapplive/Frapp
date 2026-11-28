@@ -292,12 +292,14 @@ export interface IChatMessageRepository {
    * still open is not decided here: its deadline is an ISO string inside
    * `payload`, and comparing those as text is wrong across offsets, so the
    * caller parses it. Every channel's rows come back, readable or not; the
-   * caller filters by access, as with {@link findPollsByChapter}.
+   * caller filters by access, as with {@link findPollsByChapter}. `polls`
+   * and `cards` choose which half is read; the other comes back empty.
+   * Claims are read only on sign-ups the caller didn't post.
    */
   readActivityCards(
     chapterId: string,
     userId: string,
-    limit: number,
+    options: { limit: number; polls: boolean; cards: boolean },
   ): Promise<ActivityCardReads>;
   /**
    * Locate an already-persisted message by its idempotency triple. Used by

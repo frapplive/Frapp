@@ -83,7 +83,10 @@ function effectivePollListLimit(requested?: number): number {
  * exactly the archive import this column was added for.
  *
  * Adding a column to `chat_messages` means adding it here too. That is the
- * trade for not shipping the index payload to every reader.
+ * trade for not shipping the index payload to every reader. The same list is
+ * copied into `activity_card_reads` (`chapter_cards`, #6061), which serves
+ * Activity's cards: a column added here reaches those cards only through a
+ * migration that re-creates that function with it.
  *
  * `external_message_id` is the deliberate exception, for the same reason
  * `content_search` is: no client reads it. It is a Discord snowflake used by the
@@ -297,12 +300,14 @@ export class SupabaseChatMessageRepository implements IChatMessageRepository {
   async readActivityCards(
     chapterId: string,
     userId: string,
-    limit: number,
+    options: { limit: number; polls: boolean; cards: boolean },
   ): Promise<ActivityCardReads> {
     const { data, error } = await this.supabase.rpc('activity_card_reads', {
       p_chapter_id: chapterId,
       p_user_id: userId,
-      p_limit: limit,
+      p_limit: options.limit,
+      p_polls: options.polls,
+      p_cards: options.cards,
     });
     if (error) throw new SupabaseQueryError(error);
     if (!data) throw new Error('activity_card_reads returned nothing');

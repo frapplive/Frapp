@@ -26,15 +26,23 @@
 --     message is never a card)
 --   votes          the caller's vote rows on polls and own_polls:
 --                  message_id, payload, created_at
---   signup_claims  every member's claim rows on signups, in id order:
---                  message_id, user_id, payload, created_at
+--   signup_claims  every member's claim rows on signups the caller didn't
+--                  post (Activity never lists the caller's own), in id
+--                  order: message_id, user_id, payload, created_at
 --   form_answers   the caller's responses on forms: message_id, created_at
 --                  (never what they wrote)
+--
+-- `p_polls` and `p_cards` choose what is read: without `p_polls`, polls,
+-- own_polls and votes are empty and not scanned (the Polls module is off, or
+-- the caller is the Archive's sign-up-free poll list); without `p_cards`,
+-- signups, forms, signup_claims and form_answers are.
 
 create or replace function public.activity_card_reads(
   p_chapter_id uuid,
   p_user_id    uuid,
-  p_limit      integer
+  p_limit      integer,
+  p_polls      boolean,
+  p_cards      boolean
 )
 returns jsonb
 language sql
@@ -61,25 +69,25 @@ as $$
   ),
   polls as (
     select * from chapter_cards
-     where kind = 'poll'
+     where p_polls and kind = 'poll'
      order by created_at desc, id desc
      limit p_limit
   ),
   own_polls as (
     select * from chapter_cards
-     where kind = 'poll' and sender_id = p_user_id
+     where p_polls and kind = 'poll' and sender_id = p_user_id
      order by created_at desc, id desc
      limit p_limit
   ),
   signups as (
     select * from chapter_cards
-     where kind = 'signup'
+     where p_cards and kind = 'signup'
      order by created_at desc, id desc
      limit p_limit
   ),
   forms as (
     select * from chapter_cards
-     where kind = 'form'
+     where p_cards and kind = 'form'
      order by created_at desc, id desc
      limit p_limit
   ),
@@ -94,7 +102,8 @@ as $$
     select a.id, a.message_id, a.user_id, a.payload, a.created_at
       from chat_message_actions a
      where a.action_type = 'signup'
-       and a.message_id in (select id from signups)
+       and a.message_id in (
+             select id from signups where sender_id is distinct from p_user_id)
   ),
   form_answers as (
     select r.message_id, r.created_at
@@ -136,18 +145,18 @@ $$;
 
 -- The service role only. `public` always exists; the Supabase roles are
 -- absent in bare Postgres (PGlite in CI), so each is guarded.
-revoke execute on function public.activity_card_reads(uuid, uuid, integer) from public;
+revoke execute on function public.activity_card_reads(uuid, uuid, integer, boolean, boolean) from public;
 
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    revoke execute on function public.activity_card_reads(uuid, uuid, integer) from anon;
+    revoke execute on function public.activity_card_reads(uuid, uuid, integer, boolean, boolean) from anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    revoke execute on function public.activity_card_reads(uuid, uuid, integer) from authenticated;
+    revoke execute on function public.activity_card_reads(uuid, uuid, integer, boolean, boolean) from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
-    grant execute on function public.activity_card_reads(uuid, uuid, integer) to service_role;
+    grant execute on function public.activity_card_reads(uuid, uuid, integer, boolean, boolean) to service_role;
   end if;
 end
 $$;
