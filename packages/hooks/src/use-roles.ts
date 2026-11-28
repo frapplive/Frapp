@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { withHereMention } from "@repo/validation";
+import { rosterQueryKey } from "./use-members";
 
 /**
  * Role write bodies, read from the contract rather than restated: `color` is a
@@ -90,7 +91,7 @@ export function useUpdateRole() {
       // (#3485), so a role edit or delete repaints chat names now, not after
       // the roster's 60s staleTime.
       queryClient.invalidateQueries({
-        queryKey: ["members", chapterId, "roster"],
+        queryKey: rosterQueryKey(chapterId),
       });
       // A role's permissions decide who reads a ROLE_GATED channel, and its
       // order ranks the channel member list (#3536).

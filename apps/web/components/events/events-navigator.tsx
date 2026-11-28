@@ -345,7 +345,7 @@ export function KindKey({
   return (
     <div
       role="group"
-      aria-label="Show on Events"
+      aria-label="Show on Calendar"
       className={cn(
         compact ? "flex flex-wrap items-center gap-x-1" : "flex flex-col",
       )}

@@ -40,8 +40,9 @@ export interface FrappClientConfig {
    */
   getTimeZone?: () => string | null;
   /**
-   * Answer the reads a screen fires together from one `GET /v1/bootstrap`
-   * (#4709): see `createFirstScreenBatchMiddleware`. The web dashboard and
+   * Answer the reads a screen fires together from `GET /v1/bootstrap`, the
+   * shell's and the page's as two calls at once (#4709, #5049): see
+   * `createFirstScreenBatchMiddleware`. The web dashboard and
    * the phone app turn it on; off by default, so a client that doesn't ask
    * sends every read on its own route as before.
    */

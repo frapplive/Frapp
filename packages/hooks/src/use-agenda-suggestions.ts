@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgendaSuggestionList, EventAgendaItem } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { eventsQueryKey } from "./use-events";
 
 const EMPTY: AgendaSuggestionList = {
   suggestions: [],
@@ -136,7 +137,7 @@ export function useAgendaSuggestionActions(
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: detailKey, exact: true }),
         queryClient.invalidateQueries({
-          queryKey: ["events", chapterId],
+          queryKey: eventsQueryKey(chapterId),
           exact: true,
         }),
       ]);

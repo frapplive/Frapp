@@ -45,7 +45,9 @@ import {
   useFrappTheme,
 } from "@/lib/theme";
 import {
+  authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -58,6 +60,8 @@ import {
   SantaHat,
   useHolidayFlairOn,
 } from "@/components/chat/holiday-flair";
+import { SkeletonBlock } from "@/components/state-block";
+import { useRaisedSurfaces } from "@/lib/surfaces";
 import { AlertGlyph } from "@/components/control-glyphs";
 import { PinGlyph } from "@/components/documents/document-glyphs";
 import { ThreadChip, threadCardMiddle } from "./thread-chip";
@@ -119,6 +123,13 @@ export interface MessageItemProps {
    * is the state this replaced.
    */
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight (`useMemberDisplayNames().rosterLoading`).
+   * An author it hasn't named yet draws a name placeholder and a neutral
+   * avatar, not `Member 2f4a1c` and id initials (#6127). Optional; without it
+   * the row draws the fallback label at once.
+   */
+  rosterLoading?: boolean;
   /**
    * Resolves a `users.id` to the paintable color of the member's top colored
    * role (#3485), which paints their name on the author line. Optional: a
@@ -367,6 +378,7 @@ export function MessageRowFrame({
   message,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   avatarFor,
   startsRun,
@@ -383,6 +395,8 @@ export function MessageRowFrame({
   message: ChatMessage;
   viewerId: string;
   nameFor: (userId: string) => string | null;
+  /** The roster is still loading; see `MessageItemProps`. */
+  rosterLoading?: boolean;
   /** `users.id` → role color for the author line (#3485); see `MessageItemProps`. */
   roleColorFor?: (userId: string) => string | null;
   /** The author's photo for the run's avatar; see `MessageItemProps`. */
@@ -438,17 +452,15 @@ export function MessageRowFrame({
   // no roster entry and names its author in `author_name`.
   const holidayFlair = useHolidayFlairOn();
   const isSystem = message.sender_id === SYSTEM_SENDER_ID;
-  const { authorName, authorLabel, roleColor } = rowAuthor(
-    message,
-    nameFor,
-    viewerId,
-    roleColorFor,
-  );
+  const { authorName, authorLabel, roleColor, namePending, avatarPending } =
+    rowAuthor(message, nameFor, viewerId, roleColorFor, rosterLoading);
   const time = formatTimeOfDay(message.created_at);
   // The name and photo open the author's profile, as Discord's do. Each is a
   // nested touchable that would otherwise swallow the row's long-press, so it
-  // forwards it.
-  const openAuthor = authorProfileOpener(message, onOpenProfile, nameFor);
+  // forwards it. Not while the name is still loading (#6127).
+  const openAuthor = avatarPending
+    ? undefined
+    : authorProfileOpener(message, onOpenProfile, nameFor);
   const headerA11y = messageActionsA11yProps(onOpenActions, {
     onJumpToParent: quote ? onJumpToParent : undefined,
     onOpenProfile: openAuthor,
@@ -462,6 +474,7 @@ export function MessageRowFrame({
         message={message}
         viewerId={viewerId}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         roleColorFor={roleColorFor}
         avatarFor={avatarFor}
         startsRun={startsRun}
@@ -534,19 +547,23 @@ export function MessageRowFrame({
               {...headerA11y}
             >
               <Text style={styles.compactTime}>{time}</Text>
-              <Text
-                style={
-                  roleColor
-                    ? [styles.compactName, { color: roleColor }]
-                    : styles.compactName
-                }
-                numberOfLines={1}
-                onPress={openAuthor}
-                onLongPress={openAuthor ? onOpenActions : undefined}
-                suppressHighlighting
-              >
-                {authorLabel}
-              </Text>
+              {namePending ? (
+                <AuthorNamePlaceholder />
+              ) : (
+                <Text
+                  style={
+                    roleColor
+                      ? [styles.compactName, { color: roleColor }]
+                      : styles.compactName
+                  }
+                  numberOfLines={1}
+                  onPress={openAuthor}
+                  onLongPress={openAuthor ? onOpenActions : undefined}
+                  suppressHighlighting
+                >
+                  {authorLabel}
+                </Text>
+              )}
               {flag ? <FlagCaption view={flag} styles={styles} inline /> : null}
             </View>
           ) : null}
@@ -576,6 +593,7 @@ export function MessageRowFrame({
               message={message}
               avatarFor={avatarFor}
               authorName={authorName}
+              pending={avatarPending}
               roleColor={roleColor}
               openAuthor={openAuthor}
               onOpenActions={onOpenActions}
@@ -600,20 +618,26 @@ export function MessageRowFrame({
                 testID="author-line"
                 {...headerA11y}
               >
-                <Text
-                  style={
-                    roleColor
-                      ? [styles.name, { color: roleColor }]
-                      : styles.name
-                  }
-                  numberOfLines={1}
-                  onPress={openAuthor}
-                  onLongPress={openAuthor ? onOpenActions : undefined}
-                  suppressHighlighting
-                >
-                  {authorLabel}
-                </Text>
-                {holidayFlair && !isSystem ? <HollySprig /> : null}
+                {namePending ? (
+                  <AuthorNamePlaceholder />
+                ) : (
+                  <Text
+                    style={
+                      roleColor
+                        ? [styles.name, { color: roleColor }]
+                        : styles.name
+                    }
+                    numberOfLines={1}
+                    onPress={openAuthor}
+                    onLongPress={openAuthor ? onOpenActions : undefined}
+                    suppressHighlighting
+                  >
+                    {authorLabel}
+                  </Text>
+                )}
+                {holidayFlair && !isSystem && !namePending ? (
+                  <HollySprig />
+                ) : null}
                 <Text style={styles.time}>{time}</Text>
                 {flag ? (
                   <FlagCaption view={flag} styles={styles} inline />
@@ -645,14 +669,53 @@ function rowAuthor(
   nameFor: (userId: string) => string | null,
   viewerId: string,
   roleColorFor: ((userId: string) => string | null) | undefined,
+  rosterLoading = false,
 ) {
+  // While the roster loads, an author it hasn't named yet draws a placeholder
+  // name and a neutral avatar, not a fake identity built from their id
+  // (#6127). The viewer's own row keeps "You"; only its avatar waits.
+  const avatarPending = authorAwaitsRoster(message, nameFor, rosterLoading);
+  const namePending = authorNameAwaitsRoster(
+    message,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  );
   return {
+    namePending,
+    avatarPending,
     authorName: resolveAuthorName(message, nameFor),
-    authorLabel: resolveAuthorLabel(message, nameFor, viewerId),
+    authorLabel: namePending
+      ? LOADING_NAME
+      : resolveAuthorLabel(message, nameFor, viewerId),
     roleColor: message.sender_id
       ? (roleColorFor?.(message.sender_id) ?? null)
       : null,
   };
+}
+
+/** What a screen reader hears for an author whose name is still loading. */
+const LOADING_NAME = "Loading name";
+/** Compact's inline name placeholder: figure spaces, about a short name wide. */
+const COMPACT_NAME_PLACEHOLDER = "\u2007".repeat(10);
+
+/**
+ * The author line's name while the roster that names the author is still
+ * loading (#6127): a neutral bar the width of a short name, so the line
+ * doesn't jump when the name lands. Never a `Member 2f4a1c` stand-in, which
+ * reads as a real identity (`ui-development` rulebook § States).
+ */
+function AuthorNamePlaceholder() {
+  return (
+    <View
+      testID="author-name-placeholder"
+      accessible
+      accessibilityLabel={LOADING_NAME}
+      style={{ justifyContent: "center" }}
+    >
+      <SkeletonBlock width={88} height={12} radius={6} />
+    </View>
+  );
 }
 
 /**
@@ -665,6 +728,7 @@ function CompactLead({
   message,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   onOpenProfile,
   onOpenActions,
@@ -673,35 +737,53 @@ function CompactLead({
   message: ChatMessage;
   viewerId: string;
   nameFor: (userId: string) => string | null;
+  rosterLoading?: boolean;
   roleColorFor?: (userId: string) => string | null;
   onOpenProfile?: (userId: string) => void;
   onOpenActions?: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const openAuthor = authorProfileOpener(message, onOpenProfile, nameFor);
-  const { authorLabel, roleColor } = rowAuthor(
+  const surfaces = useRaisedSurfaces();
+  const { authorLabel, roleColor, namePending, avatarPending } = rowAuthor(
     message,
     nameFor,
     viewerId,
     roleColorFor,
+    rosterLoading,
   );
+  const openAuthor = avatarPending
+    ? undefined
+    : authorProfileOpener(message, onOpenProfile, nameFor);
   return (
     <Text>
       <Text style={styles.compactTime}>
         {formatTimeOfDay(message.created_at)}{" "}
       </Text>
-      <Text
-        style={
-          roleColor
-            ? [styles.compactName, { color: roleColor }]
-            : styles.compactName
-        }
-        onPress={openAuthor}
-        onLongPress={openAuthor ? onOpenActions : undefined}
-        suppressHighlighting
-      >
-        {authorLabel}
-      </Text>{" "}
+      {namePending ? (
+        // The lead is text inside the body's `Text`, which can't hold the
+        // placeholder's View, so the bar is blank figure spaces on the
+        // skeleton fill: the body keeps its place when the name lands (#6127).
+        <Text
+          testID="author-name-placeholder"
+          accessibilityLabel={LOADING_NAME}
+          style={[styles.compactName, { backgroundColor: surfaces.raised }]}
+        >
+          {COMPACT_NAME_PLACEHOLDER}
+        </Text>
+      ) : (
+        <Text
+          style={
+            roleColor
+              ? [styles.compactName, { color: roleColor }]
+              : styles.compactName
+          }
+          onPress={openAuthor}
+          onLongPress={openAuthor ? onOpenActions : undefined}
+          suppressHighlighting
+        >
+          {authorLabel}
+        </Text>
+      )}{" "}
     </Text>
   );
 }
@@ -781,6 +863,7 @@ export function MessageItem({
   message,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   avatarFor,
   startsRun,
@@ -818,6 +901,7 @@ export function MessageItem({
       <ThreadChip
         summary={message.thread}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         roleColorFor={roleColorFor}
         avatarFor={memberAvatarFor}
         unread={threadUnread}
@@ -867,6 +951,7 @@ export function MessageItem({
       forwarded={forwardedCopy}
       hidden={forwardedHidden}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       viewerId={viewerId}
       onLongPress={onOpenActions}
     />
@@ -911,6 +996,7 @@ export function MessageItem({
         replyParent={replyParent}
         hiddenText={replyParentHidden}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         viewerId={viewerId}
         onPress={onJumpToParent}
         onLongPress={onOpenActions}
@@ -943,6 +1029,7 @@ export function MessageItem({
       message={message}
       viewerId={viewerId}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       roleColorFor={roleColorFor}
       onOpenProfile={onOpenProfile}
       onOpenActions={onOpenActions}
@@ -972,6 +1059,7 @@ export function MessageItem({
         message={message}
         viewerId={viewerId}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         roleColorFor={roleColorFor}
         avatarFor={avatarFor}
         startsRun={startsRun}
@@ -1071,6 +1159,7 @@ export function MessageItem({
       message={message}
       viewerId={viewerId}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       roleColorFor={roleColorFor}
       avatarFor={avatarFor}
       startsRun={startsRun}
@@ -1140,6 +1229,7 @@ function RowAvatar({
   message,
   avatarFor,
   authorName,
+  pending = false,
   roleColor,
   openAuthor,
   onOpenActions,
@@ -1148,6 +1238,8 @@ function RowAvatar({
   message: ChatMessage;
   avatarFor?: (message: ChatMessage) => string | null;
   authorName: string | null;
+  /** The roster is still naming the author: a neutral disc, no initials (#6127). */
+  pending?: boolean;
   roleColor: string | null;
   openAuthor: (() => void) | undefined;
   onOpenActions?: () => void;
@@ -1180,11 +1272,15 @@ function RowAvatar({
       <MemberAvatar
         uri={avatarFor?.(message) ?? null}
         initials={
-          authorName ? initialsFor(authorName) : authorInitialsFallback(message)
+          pending
+            ? ""
+            : authorName
+              ? initialsFor(authorName)
+              : authorInitialsFallback(message)
         }
         size={MESSAGE_AVATAR_SIZE}
         tint={
-          message.sender_id
+          message.sender_id && !pending
             ? memberAvatarTint(memberAvatarHue(message.sender_id, roleColor))
             : null
         }
@@ -1193,7 +1289,7 @@ function RowAvatar({
         testID="message-avatar"
       />
       {/* The Holiday season tips a Santa hat onto the photo (#6149). */}
-      {holidayFlair ? <SantaHat size={22} /> : null}
+      {holidayFlair && !pending ? <SantaHat size={22} /> : null}
     </Pressable>
   );
 }
@@ -1208,6 +1304,7 @@ function BubbleRowFrame({
   message,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   avatarFor,
   startsRun,
@@ -1224,6 +1321,7 @@ function BubbleRowFrame({
   message: ChatMessage;
   viewerId: string;
   nameFor: (userId: string) => string | null;
+  rosterLoading?: boolean;
   roleColorFor?: (userId: string) => string | null;
   avatarFor?: (message: ChatMessage) => string | null;
   startsRun: boolean;
@@ -1246,14 +1344,12 @@ function BubbleRowFrame({
     !!viewerId && !message.is_deleted && message.mentions.includes(viewerId);
   const holidayFlair = useHolidayFlairOn();
   const isSystem = message.sender_id === SYSTEM_SENDER_ID;
-  const { authorName, authorLabel, roleColor } = rowAuthor(
-    message,
-    nameFor,
-    viewerId,
-    roleColorFor,
-  );
+  const { authorName, authorLabel, roleColor, namePending, avatarPending } =
+    rowAuthor(message, nameFor, viewerId, roleColorFor, rosterLoading);
   const time = formatTimeOfDay(message.created_at);
-  const openAuthor = authorProfileOpener(message, onOpenProfile, nameFor);
+  const openAuthor = avatarPending
+    ? undefined
+    : authorProfileOpener(message, onOpenProfile, nameFor);
   const headerA11y = messageActionsA11yProps(onOpenActions, {
     onJumpToParent: quote ? onJumpToParent : undefined,
     onOpenProfile: openAuthor,
@@ -1295,6 +1391,7 @@ function BubbleRowFrame({
                 message={message}
                 avatarFor={avatarFor}
                 authorName={authorName}
+                pending={avatarPending}
                 roleColor={roleColor}
                 openAuthor={openAuthor}
                 onOpenActions={onOpenActions}
@@ -1321,7 +1418,9 @@ function BubbleRowFrame({
               }
               {...headerA11y}
             >
-              {mine ? null : (
+              {mine ? null : namePending ? (
+                <AuthorNamePlaceholder />
+              ) : (
                 <Text
                   style={
                     roleColor
@@ -1336,7 +1435,9 @@ function BubbleRowFrame({
                   {authorLabel}
                 </Text>
               )}
-              {holidayFlair && !mine && !isSystem ? <HollySprig /> : null}
+              {holidayFlair && !mine && !isSystem && !namePending ? (
+                <HollySprig />
+              ) : null}
               <Text style={styles.time}>{time}</Text>
               {flag ? (
                 <FlagCaption

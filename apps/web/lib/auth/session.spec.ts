@@ -31,3 +31,37 @@ describe("signingOutHere (#4440)", () => {
     expect(signingOutHere(start + 31_000)).toBe(false);
   });
 });
+
+describe("sign-out and the shell cache (#5049)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signOut.mockReset().mockResolvedValue({ error: null });
+    localStorage.clear();
+  });
+
+  it("clears every row before signing out, and keeps none written during it", async () => {
+    const { signOutCurrentSession } = await import("./session");
+    const { writeShellRow } = await import("@/lib/shell-cache/shell-cache");
+    const scope = { authUserId: "auth-a", chapterId: "chapter-1" };
+    writeShellRow(scope, "roster", [{ user_id: "u-1" }]);
+    signOut.mockImplementation(async () => {
+      // A read that answers during the sign-out round trip.
+      writeShellRow(scope, "roster", [{ user_id: "u-1" }]);
+      return { error: null };
+    });
+    await signOutCurrentSession();
+    expect(
+      Object.keys(localStorage).filter((k) => k.startsWith("frapp.shell.v1|")),
+    ).toEqual([]);
+  });
+
+  it("reopens the store when the sign-out throws and the member stays", async () => {
+    const { signOutCurrentSession } = await import("./session");
+    const { shellCacheClosed } = await import(
+      "@/lib/shell-cache/shell-cache-clear"
+    );
+    signOut.mockRejectedValue(new Error("lock not acquired"));
+    await expect(signOutCurrentSession()).rejects.toThrow("lock not acquired");
+    expect(shellCacheClosed()).toBe(false);
+  });
+});

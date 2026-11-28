@@ -20,7 +20,7 @@ import {
 import { TASK_CREATE_PERMISSIONS } from "@repo/chat-core/plus-menu";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
-import { BACK_TO_TASKS } from "@/components/back-row";
+import { BACK_TO_ACTIVITY } from "@/components/back-row";
 import { HairlineChip } from "@/components/status-chip";
 import { InlineNote } from "@/components/inline-note";
 import { ErrorState } from "@/components/state-block";
@@ -73,11 +73,12 @@ const POSTING_FAILED = "That didn't go through. Try again.";
  * claim it; Assign to someone and Delete, rounds, for an officer who manages
  * tasks (`tasks:manage` under `members:view`, the quick actions' grant).
  *
- * The posting is read off the board's `GET /v1/open-tasks`, which the board
- * that pushed this screen has already read. A claim takes the member to the
- * task it made (the screen is replaced, so back is the board), where Give it
- * back sits in More. A hand-over goes back to the board, which says who has
- * it in its line (`/tasks?assigned=<userId>`); a delete goes back to it too.
+ * The posting is read off `GET /v1/open-tasks`, which Activity's Up for
+ * grabs card that pushed this screen has already read. A claim takes the
+ * member to the task it made (the screen is replaced, so back is Activity),
+ * where Give it back sits in More. A hand-over goes back to Activity, whose
+ * card says who has it in its line (`/activity?assigned=<userId>`); a delete
+ * goes back there too. (The Tasks screen's, until #5948.)
  * A posting someone else took or an officer took down while it was open
  * says so, rather than a load failure.
  */
@@ -138,7 +139,7 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
         if (taskId) {
           router.replace({ pathname: "/task-details", params: { id: taskId } });
         } else {
-          goBackTo(router, BACK_TO_TASKS.href);
+          goBackTo(router, BACK_TO_ACTIVITY.href);
         }
       },
       onError: failed,
@@ -158,7 +159,7 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
             taskCreatedLine(nameOf(userId), userId === viewerUserId),
           );
           goBackTo(router, {
-            pathname: "/tasks",
+            pathname: "/activity",
             params: { [ASSIGNED_PARAM]: userId },
           });
         },
@@ -181,7 +182,7 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
             deleteOpen.mutate(item.id, {
               onSuccess: () => {
                 setLeaving(true);
-                goBackTo(router, BACK_TO_TASKS.href);
+                goBackTo(router, BACK_TO_ACTIVITY.href);
               },
               onError: failed,
             });
@@ -193,14 +194,14 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
   if (!posting) {
     if (openTasksQuery.data === undefined && !openTasksQuery.isError) {
       return (
-        <ScreenShell back={BACK_TO_TASKS} title="Task">
+        <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
           <TaskDetailSkeleton />
         </ScreenShell>
       );
     }
     if (openTasksQuery.data === undefined) {
       return (
-        <ScreenShell back={BACK_TO_TASKS} title="Task">
+        <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
           <ErrorState
             title="Couldn't load this task"
             body={describeLoadFailure(openTasksQuery.error)}
@@ -211,7 +212,7 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
       );
     }
     return (
-      <ScreenShell back={BACK_TO_TASKS} title="Task">
+      <ScreenShell back={BACK_TO_ACTIVITY} title="Task">
         <InlineNote>
           {`This task isn't on ${TASK_AUDIENCE_COPY.upForGrabs} any more.`}
         </InlineNote>
@@ -225,7 +226,7 @@ export function OpenTaskScreen({ postingId }: { postingId: string }) {
 
   return (
     <View style={styles.frame}>
-      <ScreenShell back={BACK_TO_TASKS} title={posting.title}>
+      <ScreenShell back={BACK_TO_ACTIVITY} title={posting.title}>
         <View style={styles.chipRow}>
           <HairlineChip label={TASK_AUDIENCE_COPY.upForGrabs} />
         </View>

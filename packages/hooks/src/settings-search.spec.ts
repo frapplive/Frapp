@@ -201,6 +201,34 @@ describe("the phone's Chapter tab targets (#6027)", () => {
   });
 });
 
+// #6029: the People pages' routes refuse a council (ChapterGuard), and a
+// match lists only for whoever the Chapter settings row shows to.
+describe("the phone's People pages (#6029)", () => {
+  it("sends a council to the web dashboard for Pledge class and Member fields", () => {
+    for (const id of ["pledge-class", "member-fields"]) {
+      const entry = settingEntryById(id)!;
+      expect(settingPhoneTarget(entry), id).toBeDefined();
+      expect(
+        settingPhoneTarget(entry, { chapterFeatures: false }),
+        id,
+      ).toBeUndefined();
+    }
+  });
+
+  it("lists Pledge class only with roles:manage and members:view", () => {
+    const entry = settingEntryById("pledge-class")!;
+    const phone = (permissions: string[]): SettingsSearchContext => ({
+      permissions,
+      platform: "phone",
+    });
+    expect(isSettingListed(entry, phone(["roles:manage"]))).toBe(false);
+    expect(isSettingListed(entry, phone(["members:view"]))).toBe(false);
+    expect(
+      isSettingListed(entry, phone(["roles:manage", "members:view"])),
+    ).toBe(true);
+  });
+});
+
 /**
  * Personal Settings' pages (#6032): every entry opens a page both apps have,
  * so a mistyped or retired address can't send a search to the wrong page.

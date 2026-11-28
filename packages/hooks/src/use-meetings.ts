@@ -6,6 +6,7 @@ import type { components } from "@repo/api-sdk";
 import { minutesDraftElapsed } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { aiSuggestionKeys } from "./use-ai-suggestions";
+import { eventsQueryKey } from "./use-events";
 
 /** One row of the Minutes list (`GET /v1/meetings`), with what the list shows on it (#5290). */
 export type MeetingSummary = components["schemas"]["MeetingListItemDto"];
@@ -273,7 +274,7 @@ export function useStartMeeting() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: meetingsKey(chapterId) }),
         // A meeting with no event got one.
-        queryClient.invalidateQueries({ queryKey: ["events", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) }),
       ]);
     },
   });
@@ -749,7 +750,7 @@ export function useLinkMeetingEvent() {
       queryClient.setQueryData(meetingKey(chapterId, data.id), data);
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: meetingsKey(chapterId) }),
-        queryClient.invalidateQueries({ queryKey: ["events", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) }),
       ]);
     },
   });

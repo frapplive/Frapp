@@ -47,6 +47,7 @@ export * from './gif-favorite.entity';
 export * from './google-calendar-connection.entity';
 export * from './interest-form.entity';
 export * from './invite.entity';
+export * from './meeting-action-item-task.entity';
 export * from './meeting-date-reminder.entity';
 export * from './meeting-minutes-request.entity';
 export * from './meeting-next-agenda-item.entity';

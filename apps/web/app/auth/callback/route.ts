@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   AUTH_CALLBACK_INTENT_PARAM,
   EMAIL_CONFIRMED_AUTH_ERROR,
+  LINK_ERROR_PARAM,
   isEmailLinkIntent,
   isEmailOtpType,
   resolveRedirectPath,
@@ -49,6 +50,11 @@ function reportCallbackFailure(failure: { error?: unknown; code?: string }): voi
  * handing out the code, which confirms the address, so it lands with
  * `authError=email_confirmed` and the page says to sign in. A Google or Apple
  * code (`intent=sign-in`) that won't exchange is a real failure.
+ *
+ * A Google or Apple link from Settings → Account (`intent=link`, #2223) is
+ * the same `?code=` exchange, for a member who is already signed in, so its
+ * failure goes back to `next` with `linkError` set (GoTrue's code, or this
+ * route's own) instead of to `/sign-in`: the settings page says what happened.
  *
  * `next` is re-validated with the same open-redirect guard the proxy applies
  * (a same-origin path or `/chat`), so tampering with the link cannot send a
@@ -104,6 +110,14 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   // A failed exchange was reported above; what is left arrived failed.
   if (!code || linkError) reportCallbackFailure({ code: linkError ?? "missing_code" });
+  if (url.searchParams.get(AUTH_CALLBACK_INTENT_PARAM) === "link") {
+    const back = new URL(next, url.origin);
+    back.searchParams.set(
+      LINK_ERROR_PARAM,
+      linkError ?? (code ? "exchange_failed" : "missing_code"),
+    );
+    return NextResponse.redirect(back);
+  }
   const signIn = new URL("/sign-in", url.origin);
   signIn.searchParams.set("redirectTo", next);
   signIn.searchParams.set("authError", linkError ?? (code ? "exchange_failed" : "missing_code"));

@@ -17,6 +17,7 @@ describe('ChapterDocumentController', () => {
 
   const mockChapterDocumentService = {
     requestUploadUrl: jest.fn(),
+    requestVersionUploadUrl: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -126,6 +127,63 @@ describe('ChapterDocumentController', () => {
         ).toEqual([SystemPermissions.CHAPTER_DOCS_UPLOAD]);
       },
     );
+  });
+
+  describe('a new version (#6055)', () => {
+    // Storing a new file is an upload: an uploader who has lost upload (and
+    // doesn't manage) is refused at the guard, before the service's
+    // uploader-or-manager check runs.
+    it.each(['requestVersionUploadUrl', 'replaceFile'] as const)(
+      '%s takes chapter_docs:upload or chapter_docs:manage',
+      (handler) => {
+        expect(
+          Reflect.getMetadata(PERMISSIONS_KEY, controller[handler] as object),
+        ).toBeUndefined();
+        expect(
+          Reflect.getMetadata(
+            PERMISSIONS_ANY_KEY,
+            controller[handler] as object,
+          ),
+        ).toEqual([
+          SystemPermissions.CHAPTER_DOCS_UPLOAD,
+          SystemPermissions.CHAPTER_DOCS_MANAGE,
+        ]);
+      },
+    );
+
+    it('maps the version ticket as an upload ticket, and fails closed without one', async () => {
+      const dto = { filename: 'bylaws.pdf', content_type: 'application/pdf' };
+      mockChapterDocumentService.requestVersionUploadUrl.mockResolvedValueOnce({
+        signedUrl: 'https://storage.example/put',
+        storagePath: 'chapters/chapter-123/documents/up-1/bylaws.pdf',
+        documentId: 'up-1',
+      });
+      await expect(
+        controller.requestVersionUploadUrl(
+          'chapter-123',
+          'user-1',
+          'doc-1',
+          dto,
+        ),
+      ).resolves.toEqual({
+        upload_url: 'https://storage.example/put',
+        storage_path: 'chapters/chapter-123/documents/up-1/bylaws.pdf',
+        document_id: 'up-1',
+      });
+      mockChapterDocumentService.requestVersionUploadUrl.mockResolvedValueOnce({
+        signedUrl: '',
+        storagePath: '',
+        documentId: 'up-2',
+      });
+      await expect(
+        controller.requestVersionUploadUrl(
+          'chapter-123',
+          'user-1',
+          'doc-1',
+          dto,
+        ),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
   });
 
   describe('who can see (#3642 piece 1)', () => {

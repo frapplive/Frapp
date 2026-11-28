@@ -9,6 +9,11 @@
  * already in the case the sentence needs.
  */
 
+import type {
+  CustomFieldType,
+  CustomFieldVisibility,
+} from "./chapter-config";
+
 /** "1 member", "14 members", "No members": a role's or group's value. */
 export function memberCountLabel(count: number): string {
   if (count === 0) return "No members";
@@ -179,4 +184,172 @@ export function deleteGroupConfirm(name: string): {
     body: "Its members stay in the chapter. A channel that lists it stops letting them in through it.",
     action: `Delete ${name}`,
   };
+}
+
+/*
+ * Pledge class and Member fields (#6029's second half). The pledge class
+ * pages draw the chapter's own word for a class (`classTerm`) as typed, in a
+ * heading or a label, never inflected: a plural or lowercased form of a
+ * free-text word comes out wrong for "PC" or "Family".
+ */
+export const PLEDGE_CLASS_SETTINGS_COPY = {
+  footnote: "Oldest first.",
+  rename: "Rename",
+  members: "Members",
+  addMember: "Add a member",
+  nobodyYet: "Nobody is in it yet.",
+  everyoneIn: "Everyone is already in it.",
+  empty: "Nothing here yet. Add the oldest one first.",
+  readOnly: "Only officers who manage roles can change this list.",
+  /** The list's read failed (both apps' error state title). */
+  loadFailed: "Couldn't load the list",
+  /** The roster read failed, so counts and the member editor are unavailable. */
+  membersLoadFailed: "Couldn't load the chapter's members.",
+  /** A class's page whose class is no longer in the list. */
+  gone: "It isn't in the list any more.",
+  goneDetail: "Someone may have deleted it.",
+} as const;
+
+/** The last row of the pledge class list, in the chapter's own word as typed. */
+export function addPledgeClassLabel(classTerm: string): string {
+  return `Add ${classTerm}`;
+}
+
+/** The confirm for deleting a pledge class. `memberCount` null: not known. */
+export function deletePledgeClassConfirm(
+  name: string,
+  memberCount: number | null,
+): { title: string; body: string; action: string } {
+  return {
+    title: `Delete ${name}?`,
+    body:
+      memberCount === null
+        ? "Any members in it are left without one. They keep their number."
+        : memberCount > 0
+          ? `Its ${memberCountLabel(memberCount).toLowerCase()} ${memberCount === 1 ? "is" : "are"} left without one. They keep their number.`
+          : "No members are in it.",
+    action: `Delete ${name}`,
+  };
+}
+
+
+/**
+ * The longest name a member field takes, on both apps. The API sets none;
+ * this keeps a row's name to one readable line.
+ */
+export const MEMBER_FIELD_LABEL_MAX_LENGTH = 80;
+
+/** A field's type, as its row and its page say it, in the picker's order. */
+export const MEMBER_FIELD_TYPE_LABEL: Record<CustomFieldType, string> = {
+  text: "Text",
+  number: "Number",
+  decimal: "Decimal",
+  phone: "Phone",
+  select: "Pick one",
+  boolean: "Yes or no",
+};
+
+/** Who can see a field's values besides its member, in the picker's order. */
+export const MEMBER_FIELD_VISIBILITY_LABEL: Record<
+  CustomFieldVisibility,
+  string
+> = {
+  chapter: "Whole chapter",
+  exec: "Exec",
+  president: "President",
+  self: "Self only",
+};
+
+export const MEMBER_FIELDS_COPY = {
+  pageTitle: "Member fields",
+  addField: "Add a field",
+  createField: "Add field",
+  footnote: "Every change here is recorded in Logs.",
+  empty: "No fields yet. Members fill these in under More details.",
+  name: "Name",
+  type: "Type",
+  options: "Options",
+  addOption: "Add an option",
+  noOptions: "No options yet",
+  needsOption: "Add an option first",
+  needsName: "Add a name first",
+  visibleTo: "Visible to",
+  required: "Required",
+  sensitive: "Sensitive",
+  maxLength: "Longest answer",
+  noLimit: "No limit",
+  maxLengthFloor: "Longest answer starts at 1",
+  deleteField: "Delete field",
+  /** The fields' read failed (both apps' error state title). */
+  loadFailed: "Couldn't load member fields",
+  /** A field's page whose field is no longer in the list. */
+  gone: "This field is gone.",
+  goneDetail: "Someone may have deleted it.",
+} as const;
+
+/**
+ * A field row's muted line: its type, and its flags. "Pick one of 4 ·
+ * Required", "Phone · Required · Sensitive".
+ */
+export function memberFieldFacts(field: {
+  type: CustomFieldType;
+  required: boolean;
+  sensitive: boolean;
+  options?: { choices?: readonly string[] | null } | null;
+}): string {
+  const choices = field.options?.choices?.length ?? 0;
+  const type =
+    field.type === "select" && choices > 0
+      ? `Pick one of ${choices}`
+      : MEMBER_FIELD_TYPE_LABEL[field.type];
+  return [
+    type,
+    field.required ? MEMBER_FIELDS_COPY.required : null,
+    field.sensitive ? MEMBER_FIELDS_COPY.sensitive : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The confirm for deleting a member field. */
+export function deleteMemberFieldConfirm(label: string): {
+  title: string;
+  body: string;
+  action: string;
+} {
+  return {
+    title: `Delete ${label}?`,
+    body: "Members lose what they entered in it, and it leaves the directory. This can't be undone.",
+    action: MEMBER_FIELDS_COPY.deleteField,
+  };
+}
+
+/**
+ * The writes that put fields in `orderedIds`' order: each field whose `sort`
+ * isn't already its place gets its place. The API orders by `sort`, then by
+ * when the field was made, so equal sorts (every field starts at 0) are
+ * spread out the first time anything moves.
+ */
+export function memberFieldSortPatches(
+  orderedIds: readonly string[],
+  fields: readonly { id: string; sort: number }[],
+): { id: string; sort: number }[] {
+  const sortById = new Map(fields.map((field) => [field.id, field.sort]));
+  return orderedIds.flatMap((id, index) =>
+    sortById.has(id) && sortById.get(id) !== index ? [{ id, sort: index }] : [],
+  );
+}
+
+/** One place up or down: the ids in their new order, or null at an end. */
+export function moveId(
+  ids: readonly string[],
+  id: string,
+  by: -1 | 1,
+): string[] | null {
+  const index = ids.indexOf(id);
+  const target = index + by;
+  if (index < 0 || target < 0 || target >= ids.length) return null;
+  const next = [...ids];
+  [next[index], next[target]] = [next[target]!, next[index]!];
+  return next;
 }

@@ -129,7 +129,7 @@ afterEach(() => {
 });
 
 describe("A task up for grabs, on its own screen (#5570)", () => {
-  it("draws the posting: title, chip, facts, who can claim, notes; back to Tasks", () => {
+  it("draws the posting: title, chip, facts, who can claim, notes; back to Activity", () => {
     const tree = render();
     const text = screenText(tree);
     expect(text).toContain("Drive the van");
@@ -138,7 +138,7 @@ describe("A task up for grabs, on its own screen (#5570)", () => {
     expect(text).toContain("2 steps");
     expect(text).toContain("Someone in Philanthropy");
     expect(text).toContain("Pick up at the house at 9.");
-    expectBackRow(tree, "Tasks", "/tasks");
+    expectBackRow(tree, "Activity", "/activity");
     act(() => tree.unmount());
   });
 
@@ -219,7 +219,7 @@ describe("A task up for grabs, on its own screen (#5570)", () => {
     expect(announce).toHaveBeenCalledWith("Assigned to Sam Rivera.");
     announce.mockRestore();
     expect(router.dismissTo).toHaveBeenCalledWith({
-      pathname: "/tasks",
+      pathname: "/activity",
       params: { assigned: "user-3" },
     });
 
@@ -233,7 +233,7 @@ describe("A task up for grabs, on its own screen (#5570)", () => {
     expect(deleteMutate).toHaveBeenCalledWith("open-1", expect.anything());
     vi.mocked(router.dismissTo).mockClear();
     act(() => (deleteMutate.mock.calls[0]![1] as MutateOptions).onSuccess?.());
-    expect(router.dismissTo).toHaveBeenCalledWith("/tasks");
+    expect(router.dismissTo).toHaveBeenCalledWith("/activity");
     alert.mockRestore();
     act(() => tree.unmount());
   });

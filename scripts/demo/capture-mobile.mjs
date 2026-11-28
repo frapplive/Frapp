@@ -38,8 +38,9 @@
  * the default stack, where AI is off. Until 2026-11-12 the entry was a header
  * pill behind a build flag, `EXPO_PUBLIC_ASK_ENABLED`, and this stop saw it on
  * every tab. For a day the entry was a bar inside the + panel, which no shot
- * opens; since #4702 it is the Frapp Intelligence bar above the tab bar, on every tab
- * again for a member with Ask, so the stop sees it there too.
+ * opens; from #4702 until #5983 it was the Frapp Intelligence bar above the tab
+ * bar, on every tab, and since #5983 it is back in the + panel, which no shot
+ * opens, so the stop now sees only the rows and words below.
  * The presets and the checks each file must pass live in
  * `store-screenshots.mjs`; any failed check deletes the folders, like the Ask
  * refusal. Procedure and the sizes' provenance:
@@ -389,9 +390,9 @@ const STORE_SCREENS = [
 ];
 
 /**
- * Whether an AI surface is in the shot. Since #4702 Ask's entry is the bar
- * above the tab bar, a button that reads "What do you need?", on every tab for
- * a member with it. Also matched: a row that only exists with AI on (the Tasks
+ * Whether an AI surface is in the shot. From #4702 until #5983 Ask's entry was
+ * a bar above the tab bar that read "What do you need?", on every tab; it is in
+ * the + panel now, which no shot opens, and the match is kept in case one does. Also matched: a row that only exists with AI on (the Tasks
  * tab's "N suggested tasks"), the words "Frapp Intelligence" (the sheet's
  * title, should a shot ever open one), and every name the entry had before
  * (the ✦ glyph, bare "Ask", and "Ask Frapp" / "Ask Frapp anything" until

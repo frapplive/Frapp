@@ -199,7 +199,8 @@ function isOpenStatus(status: TaskStatus): boolean {
  *   The member's own tasks are Activity's To do; the board's My tasks list
  *   (Overdue, Today, This week, Later) is gone, so no task is listed twice.
  *
- * Who sees Everyone's: `everyoneOffered` (`./everyones-tasks.ts`).
+ * Who sees Everyone's: `everyoneOffered` (`@repo/hooks` `everyones-tasks.ts`,
+ * shared with the phone).
  */
 export type TasksBoardPart = "mine" | "everyone";
 /** How the chapter's board groups: its status lanes, or one group a person. */

@@ -124,6 +124,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     title: "New in this update",
     changes: [
       "A channel's settings now open as one page of rows, with its access, defaults, pinned messages and reports each a tap away, and each change saves as you make it.",
+      "Files from your chapter's Google Drive now show the Drive mark and open in Google Drive, so you can edit the real copy there.",
+      "In chat, the name above a message no longer shows a stand-in like \"Member d902ff\" for a moment while names load; a short grey bar holds its place until the real name arrives.",
+      "You can now upload a new version of a file in Documents, and it takes the old one's place, keeping its folder, pins, stars and links.",
+      "The Calendar shows the chapter's events and birthdays; your tasks live in Activity, and the Calendar's Tasks key puts them back on the calendar if you want them there.",
+      "You can link Google or Apple to the account you already have in Settings, so either one signs you in, and unlink one you no longer use.",
+      "In Chapter settings, pledge classes and member fields are now lists where each one opens its own page, and a member field can now be renamed, reordered and have its options changed.",
+      "Chat notifications for messages sent in a quiet hour no longer go missing: they now arrive, a few seconds late at most.",
     ],
     web: [
       "In Documents, Back now returns to the folder or file you had open, and a reload or a shared link lands on the same folder and file.",
@@ -132,6 +139,16 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "In the Directory, Back now returns to the tab or member profile you had open, and a shared link to a member's profile opens it.",
       "On your profile, closing Points, Service hours or Study now goes Back, so Forward reopens it.",
       "In the Calendar, Back now closes the event or the hour grid you opened, and a reload or a shared link lands on the same day and event.",
+      "In Chat and Messages, Back now returns to the conversation or thread you were reading, and a reload or a copied address opens the same conversation and thread.",
+      "When you come back to the dashboard, your name, your chapter, the sidebar, members' names and the calendar show right away while they refresh.",
+    ],
+    phone: [
+      "In Chapter settings, the Announcements page's channel row now opens that channel's settings.",
+      "The + is now New: Frapp Intelligence sits at the top of it, above your shortcuts, and the bar that sat above the tabs is gone.",
+      "Tasks are part of Activity now: your own sit in Mine with what's up for grabs, officers see the chapter's tasks under Everyone's, and your house rank is on You.",
+      "A link to an event, task, member, prospect or conversation on the web, tapped in a message, now opens that screen in the app.",
+      "Chapter settings now has Pledge class and Member fields, so you can add a class, move members into it and set up the chapter's own questions without a computer.",
+      "The pencil at the top of Messages now opens New message, where you pick one person to message or several to start a group.",
     ],
   },
   {

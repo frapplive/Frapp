@@ -50,7 +50,11 @@ import {
   ActionMenuButton,
   type RowMenuEntry,
 } from "@/components/shared/row-menu";
-import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SETTINGS_VALUE_TRIGGER,
+} from "@/components/shared/settings-row";
 import {
   SettingsBackLink,
   SettingsSubpage,
@@ -165,9 +169,6 @@ function PlainValue({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
-
-const VALUE_TRIGGER =
-  "h-8 w-auto max-w-[14rem] gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground hover:bg-card-hover";
 
 function RoleBody({
   role,
@@ -462,7 +463,7 @@ function RoleBody({
               >
                 <SelectTrigger
                   aria-label={words.Singular}
-                  className={VALUE_TRIGGER}
+                  className={SETTINGS_VALUE_TRIGGER}
                 >
                   <SelectValue>{tierName}</SelectValue>
                 </SelectTrigger>

@@ -19,6 +19,7 @@ import {
   pickDocumentFile,
   pickDocumentPhoto,
   uploadDocumentPhoto,
+  uploadDocumentVersion,
 } from "./document-upload";
 
 /**
@@ -622,5 +623,64 @@ describe("uploadDocumentPhoto", () => {
     );
     expect(result).toMatchObject({ status: "refused", final: false });
     expect(result.status === "refused" && result.reason).toMatch(/25 MB/);
+  });
+});
+
+// #6055: a new version goes onto the same document, never a second one.
+describe("uploadDocumentVersion", () => {
+  const replace = vi.fn();
+  const versionMutations = { requestUploadUrl, replace };
+
+  beforeEach(() => {
+    replace.mockResolvedValue({});
+  });
+
+  it("mints, PUTs, then replaces the document's file, filing nothing new", async () => {
+    await expect(
+      uploadDocumentVersion(IMAGE, versionMutations),
+    ).resolves.toEqual({ status: "uploaded" });
+
+    expect(requestUploadUrl).toHaveBeenCalledWith({
+      filename: "minutes.jpg",
+      content_type: "image/jpeg",
+      size_bytes: 4096,
+    });
+    expect(fs.uploadAsync).toHaveBeenCalledWith(
+      TICKET.upload_url,
+      IMAGE.uri,
+      expect.objectContaining({ httpMethod: "PUT" }),
+    );
+    expect(replace).toHaveBeenCalledWith({
+      storage_path: TICKET.storage_path,
+      content_type: "image/jpeg",
+      byte_size: 4096,
+    });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("stops at a refused link, such as a Drive file's, sending no bytes", async () => {
+    requestUploadUrl.mockRejectedValue({
+      statusCode: 409,
+      error: "Conflict",
+      message:
+        "This file comes from Google Drive. Change it in Google Drive, and Documents follows.",
+      requestId: "req_test",
+    });
+
+    const result = await uploadDocumentVersion(IMAGE, versionMutations);
+    expect(result.status).toBe("refused");
+    expect(fs.uploadAsync).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("reads the subscription gate refusing the replace in the member's words", async () => {
+    replace.mockRejectedValue(SUBSCRIPTION_REQUIRED);
+
+    await expect(
+      uploadDocumentVersion(IMAGE, versionMutations),
+    ).resolves.toEqual({
+      status: "refused",
+      reason: SUBSCRIPTION_REFUSAL_COPY.document,
+    });
   });
 });

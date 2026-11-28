@@ -12,6 +12,7 @@ import {
   useSheetBackgroundStyle,
   useSheetClose,
 } from "@/components/sheet-scaffold";
+import { UploadGlyph } from "@/components/control-glyphs";
 import { DriveGlyph, PinGlyph, StarGlyph } from "./document-glyphs";
 
 /** The rows' leading glyph, at the composer + sheet's size. */
@@ -35,6 +36,12 @@ export interface DocumentActionsTarget {
    * delete here.
    */
   minutes?: boolean;
+  /**
+   * The member may upload a new version of this file (#6055,
+   * `mayUploadNewVersion`): its uploader or whoever manages documents, never
+   * on a Drive file or minutes.
+   */
+  canUploadVersion?: boolean;
 }
 
 export interface DocumentActionsSheetProps {
@@ -48,6 +55,8 @@ export interface DocumentActionsSheetProps {
   onDelete: (target: DocumentActionsTarget) => void;
   /** Opens a Drive file's page, in the Drive app when it's installed. */
   onOpenInDrive: (url: string) => void;
+  /** Opens the system picker for a new version of the file (#6055). */
+  onUploadVersion?: (target: DocumentActionsTarget) => void;
 }
 
 /**
@@ -63,7 +72,15 @@ export const DocumentActionsSheet = forwardRef<
   BottomSheetModal,
   DocumentActionsSheetProps
 >(function DocumentActionsSheet(
-  { target, canManage, onToggleStar, onTogglePin, onDelete, onOpenInDrive },
+  {
+    target,
+    canManage,
+    onToggleStar,
+    onTogglePin,
+    onDelete,
+    onOpenInDrive,
+    onUploadVersion,
+  },
   ref,
 ) {
   const { tokens } = useFrappTheme();
@@ -150,6 +167,20 @@ export const DocumentActionsSheet = forwardRef<
                   const url = target.driveUrl;
                   if (url) choose(() => onOpenInDrive(url));
                 }}
+                styles={styles}
+              />
+            ) : null}
+            {/* The way back for a file shared out and changed (#6055): the
+                system picker opens once the sheet has closed, and the file
+                lands on this same document, as Drive's and Dropbox's
+                "Upload new version" do. */}
+            {target.kind === "document" &&
+            target.canUploadVersion &&
+            onUploadVersion ? (
+              <ActionRow
+                label="Upload a new version"
+                glyph={<UploadGlyph color={muted} size={GLYPH_SIZE} />}
+                onPress={() => choose(() => onUploadVersion(target))}
                 styles={styles}
               />
             ) : null}

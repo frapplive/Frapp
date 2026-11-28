@@ -98,6 +98,14 @@ export const SCREEN_TITLES = {
   // capsule has no room for, so both read as the list they belong to.
   "role-tier": "Roles",
   role: "Roles",
+  // Chapter settings' Pledge class list (#6029) is titled with the chapter's
+  // own word for a class, which this map can't know: a back control over it
+  // shows the label its screen passes (`NAMED_BY_SCREEN`). A class's page and
+  // a field's page are titled by their own name.
+  "pledge-classes": "Pledge class",
+  "pledge-class": "Pledge class",
+  "member-fields": "Member fields",
+  "member-field": "Member fields",
   // The recruitment list (#5924) is titled with the chapter's own word
   // ("Rush", "Intake"), which this map can't know: a back control over it
   // shows the label its screen passes instead (`NAMED_BY_SCREEN`). This
@@ -109,10 +117,13 @@ export const SCREEN_TITLES = {
 
 /**
  * Screens a back control over them names by the label its screen passes
- * rather than by `SCREEN_TITLES`: the recruitment list, titled with the
- * chapter's own word.
+ * rather than by `SCREEN_TITLES`: the recruitment list and the pledge class
+ * list, each titled with the chapter's own word.
  */
-const NAMED_BY_SCREEN: ReadonlySet<string> = new Set(["rush"]);
+const NAMED_BY_SCREEN: ReadonlySet<string> = new Set([
+  "rush",
+  "pledge-classes",
+]);
 
 /**
  * What a module's screen under this one is titled (#6030): the module

@@ -155,6 +155,7 @@ vi.mock("./supabase", async () => {
           return mockState.signInWithOAuthResult;
         },
       ),
+      linkIdentity: vi.fn(async () => mockState.signInWithOAuthResult),
       signOut: vi.fn(async () => {
         mockState.signOutCalls += 1;
         return { error: null };
@@ -1541,5 +1542,133 @@ describe("sessionStorageAdapter", () => {
 
     expect(mockState.secureStore.size).toBe(0);
     await expect(sessionStorageAdapter.getItem("sb-auth")).resolves.toBeNull();
+  });
+});
+
+describe("AuthSessionProvider — linking Google or Apple (#2223)", () => {
+  async function client() {
+    const { getSupabaseClient } = await import("./supabase");
+    return vi.mocked(getSupabaseClient)()!;
+  }
+  const RETURN = "frapp://preferences?page=account";
+  const LINKED = `${RETURN}#access_token=at-1&refresh_token=rt-1`;
+
+  beforeEach(async () => {
+    // An earlier spec queues a one-shot refusal it never spends.
+    vi.mocked((await client()).auth.exchangeCodeForSession)
+      .mockReset()
+      .mockResolvedValue({ data: {}, error: null } as never);
+    vi.mocked((await client()).auth.setSession)
+      .mockReset()
+      .mockResolvedValue({ data: {}, error: null } as never);
+  });
+
+  it("links through the browser sheet back to Account, and keeps the implicit flow's tokens", async () => {
+    mockState.authSessionResult = { type: "success", url: LINKED };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.linkOAuthProvider("apple");
+    });
+    expect(outcome).toBe("linked");
+    const auth = (await client()).auth;
+    expect(auth.linkIdentity).toHaveBeenCalledWith({
+      provider: "apple",
+      options: {
+        redirectTo: RETURN,
+        skipBrowserRedirect: true,
+        queryParams: undefined,
+      },
+    });
+    // Never the native sheets: they sign in, they don't link.
+    expect(mockAppleAuth.signInWithNativeApple).not.toHaveBeenCalled();
+    expect(auth.setSession).toHaveBeenCalledWith({
+      access_token: "at-1",
+      refresh_token: "rt-1",
+    });
+  });
+
+  it("exchanges a code too, should the client move to PKCE", async () => {
+    mockState.authSessionResult = { type: "success", url: `${RETURN}&code=c-1` };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await act(async () => {
+      await result.current.linkOAuthProvider("google");
+    });
+    expect((await client()).auth.exchangeCodeForSession).toHaveBeenCalledWith(
+      "c-1",
+    );
+  });
+
+  it("throws GoTrue's code from a refused return, without a session", async () => {
+    mockState.authSessionResult = {
+      type: "success",
+      url: `${RETURN}&error=server_error&error_code=identity_already_exists`,
+    };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await expect(
+      act(() => result.current.linkOAuthProvider("google")),
+    ).rejects.toEqual({ code: "identity_already_exists" });
+    const auth = (await client()).auth;
+    expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(auth.setSession).not.toHaveBeenCalled();
+  });
+
+  it("owns a return the app's link listener sees while the link waits", async () => {
+    const WebBrowser = await import("expo-web-browser");
+    let finish!: (value: { type: string }) => void;
+    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)) as never,
+    );
+    mockState.authSessionResult = { type: "dismiss" };
+    const { result, rerender } = renderHook(() => useAuthSession(), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    let linking!: Promise<unknown>;
+    act(() => {
+      // Settled as it's made, so its rejection is never unhandled.
+      linking = result.current
+        .linkOAuthProvider("google")
+        .then(() => "resolved", (error: unknown) => error);
+    });
+    await waitFor(() => expect(finish).toBeDefined());
+    // Android can hand the return to the app as a link, and the sheet then
+    // reports a dismiss.
+    mockState.deepLinkUrl = `${RETURN}&error=server_error&error_code=identity_already_exists`;
+    rerender();
+    await act(async () => {
+      finish({ type: "dismiss" });
+    });
+    expect(await linking).toEqual({ code: "identity_already_exists" });
+    // Not handled as a sign-in: no error left for the sign-in screen.
+    expect(result.current.callbackError).toBeNull();
+  });
+
+  it("throws the start's error, such as Manual linking off", async () => {
+    mockState.signInWithOAuthResult = {
+      data: { url: null },
+      error: { message: "Manual linking is disabled", code: "manual_linking_disabled" },
+    };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await expect(
+      act(() => result.current.linkOAuthProvider("google")),
+    ).rejects.toMatchObject({ code: "manual_linking_disabled" });
+    const WebBrowser = await import("expo-web-browser");
+    expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+  });
+
+  it("is cancelled, quietly, when the member closes the sheet", async () => {
+    mockState.authSessionResult = { type: "cancel" };
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.linkOAuthProvider("google");
+    });
+    expect(outcome).toBe("cancelled");
   });
 });

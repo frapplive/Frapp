@@ -379,3 +379,43 @@ export function isSessionOver(result: {
     error.status !== 429
   );
 }
+
+/**
+ * Why linking or unlinking Google or Apple on Settings → Account failed
+ * (#2223), from GoTrue's code; never its sentence.
+ *
+ * - `identity_already_exists`: that Google or Apple account already signs in
+ *   to another Frapp account, which GoTrue won't merge.
+ * - `manual_linking_disabled`: the project's Manual linking switch is off
+ *   (`docs/ops/deployment/supabase.md` § Auth OAuth providers).
+ * - `single_identity_not_deletable`: the last way in; the row never offers
+ *   it, so this is a stale screen.
+ * - `validation_failed` "provider is not enabled": the project has no Google
+ *   or Apple provider set up (a local stack, say).
+ *
+ * Read off a local GoTrue on 2026-11-27: `manual_linking_disabled`,
+ * `single_identity_not_deletable` and `validation_failed`. From GoTrue's
+ * source, not observed (a local stack has no Google or Apple to return an
+ * identity): `identity_already_exists` and `identity_not_found`.
+ */
+export function describeIdentityLinkError(
+  error: unknown,
+  label: string,
+): string {
+  switch (authCodeOf(error)) {
+    case "identity_already_exists":
+      return `That ${label} account already signs in to a different Frapp account. Sign in with it there, or use another ${label} account.`;
+    case "manual_linking_disabled":
+      return "Linking another sign-in method isn't turned on yet. Try again later.";
+    case "single_identity_not_deletable":
+      return "This is the only way you sign in, so it can't be unlinked. Link another method first.";
+    case "identity_not_found":
+      return `${label} is no longer on your account. Refresh to see how you sign in.`;
+    case "validation_failed":
+      return /provider is not enabled/i.test(authMessageOf(error))
+        ? `Signing in with ${label} isn't available yet.`
+        : AUTH_FALLBACK_COPY;
+    default:
+      return AUTH_FALLBACK_COPY;
+  }
+}

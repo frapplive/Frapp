@@ -48,6 +48,8 @@ export type SettingPhoneScreen =
   | "/chapter-vocabulary"
   | "/chapter-roles"
   | "/chapter-logs"
+  | "/pledge-classes"
+  | "/member-fields"
   | "/module-settings"
   | "/preferences";
 
@@ -621,8 +623,8 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     phone: { screen: "/chapter-roles" },
   },
   {
-    // The phone's Chapter settings row (#5296); web adds a role in its tier
-    // on the Roles tab.
+    // Both apps add a role in its tier on Roles and groups (#6029; the
+    // phone's Chapter settings row from #5296 is gone).
     id: "new-role",
     label: "New role",
     area: "chapter",
@@ -630,7 +632,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["create role", "add role", "make a role", "new position"],
     requires: ["roles:manage"],
     web: { page: "roles" },
-    phone: { screen: "/chapter-settings", anchor: "new-role" },
+    phone: { screen: "/chapter-roles" },
   },
   {
     id: "default-invite-role",
@@ -679,8 +681,12 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "order number",
       "roll number",
     ],
-    requires: ["roles:manage"],
+    // The row's gate (`chapterSettingsAccess`): the tab's `roles:manage`
+    // with the `members:view` its list and roster reads take.
+    requires: ["roles:manage", "members:view"],
     web: { page: "classes", anchor: "settings-classes" },
+    // `/v1/pledge-classes` refuses a council (ChapterGuard).
+    phone: { screen: "/pledge-classes", chapterOnly: true },
   },
   {
     id: "member-fields",
@@ -698,6 +704,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: CONFIG,
     web: { page: "fields", anchor: "settings-custom-member-fields" },
+    phone: { screen: "/member-fields", chapterOnly: true },
   },
 
   // ---- One per module page, then what sits on them ----------------------

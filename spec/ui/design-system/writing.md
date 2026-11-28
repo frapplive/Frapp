@@ -443,7 +443,7 @@ The rollover is the one that is **not** destructive-toned — it archives rather
 | Error | `Couldn't load chapter settings` | the load-failure line (§ copy rules), then `Changes you make here update every surface in the dashboard.` |
 | No chapter | `Chapter settings` | `Select an active chapter to edit its branding, semester state, or billing configuration.` |
 | Semester empty | — | `No archived semesters yet. Each rollover adds one.` (one line) |
-| Custom fields empty | — | `No custom fields yet.` (one line; the add form sits right under it) |
+| Custom fields empty | — | `No fields yet. Members fill these in under More details.` (one line, in the list's group; "Add a field" is the row under it) |
 | Nothing for this role (the settings rail) | — | `Nothing in Settings for your role. Officer tools come with an officer role; ask your chapter president if you need one.` (one line) |
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can start a new semester.` |
 | Accent hex needed | — | `Enter a hex code like #5AA9E6 to save an accent color.` (muted on an empty field, warning once something unsavable is typed) |

@@ -15,7 +15,6 @@ import {
   ChevronRight,
   Flag,
   ListPlus,
-  MoreHorizontal,
   Pencil,
   X,
 } from "lucide-react";
@@ -73,11 +72,9 @@ import { ToastAction } from "@/components/ui/toast";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { ReportAiDialog } from "@/components/ai/report-ai";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ActionMenuButton,
+  type RowMenuEntry,
+} from "@/components/shared/row-menu";
 import { tasksTaskLink } from "@/lib/tasks/task-links";
 import { cn, getErrorMessage } from "@/lib/utils";
 
@@ -892,49 +889,50 @@ function SuggestionMenu({
   const [reported, setReported] = useState(false);
   const permissions = useMyPermissions().data?.permissions;
   const mayReport = !!permissions && can("ai:use", permissions);
+  const entries: RowMenuEntry[] = [];
+  if (onChange) {
+    entries.push({
+      type: "item",
+      key: "change",
+      label: AI_SUGGESTION_COPY.change,
+      icon: Pencil,
+      onSelect: onChange,
+    });
+  }
+  if (onToAgenda) {
+    entries.push({
+      type: "item",
+      key: "to-agenda",
+      label: AI_SUGGESTION_COPY.toAgenda,
+      icon: ListPlus,
+      onSelect: onToAgenda,
+    });
+  }
+  entries.push({
+    type: "item",
+    key: "dismiss",
+    label: AI_SUGGESTION_COPY.dismiss,
+    icon: X,
+    onSelect: onDismiss,
+  });
+  // Gone once sent, as on the phone, whose menu has no greyed rows: a report
+  // can't be taken back or sent twice.
+  if (mayReport && !reported) {
+    entries.push({
+      type: "item",
+      key: "report",
+      label: AI_REPORT_COPY.action,
+      icon: Flag,
+      onSelect: () => setReporting(true),
+    });
+  }
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={`${AI_SUGGESTION_COPY.more}: ${item.task.title}`}
-            title={AI_SUGGESTION_COPY.more}
-            disabled={disabled}
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {onChange ? (
-            <DropdownMenuItem onSelect={onChange}>
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              {AI_SUGGESTION_COPY.change}
-            </DropdownMenuItem>
-          ) : null}
-          {onToAgenda ? (
-            <DropdownMenuItem onSelect={onToAgenda}>
-              <ListPlus className="h-4 w-4" aria-hidden="true" />
-              {AI_SUGGESTION_COPY.toAgenda}
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onSelect={onDismiss}>
-            <X className="h-4 w-4" aria-hidden="true" />
-            {AI_SUGGESTION_COPY.dismiss}
-          </DropdownMenuItem>
-          {/*
-            Gone once sent, as on the phone, whose menu has no greyed rows:
-            a report can't be taken back or sent twice.
-          */}
-          {mayReport && !reported ? (
-            <DropdownMenuItem onSelect={() => setReporting(true)}>
-              <Flag className="h-4 w-4" aria-hidden="true" />
-              {AI_REPORT_COPY.action}
-            </DropdownMenuItem>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ActionMenuButton
+        label={`${AI_SUGGESTION_COPY.more}: ${item.task.title}`}
+        disabled={disabled}
+        entries={entries}
+      />
       {reporting ? (
         <ReportAiDialog
           target={{ subject: "ai_suggestion", subjectId: item.id }}

@@ -7,6 +7,7 @@ import { Alert } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
+import { memberViewVocabulary, vocab } from "@repo/org-archetypes";
 import {
   GROUPS_FOOTNOTE,
   SELF_ASSIGNABLE_SECTION_CAPTION,
@@ -102,6 +103,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useRoleTiers: () => ok(h.tiers),
     useMembers: () => ok(h.members),
     useGroups: () => ok(h.groups),
+    usePledgeClasses: () => ok([{ id: "pc1", name: "Alpha" }]),
+    useCustomFields: () => ok([]),
     useViewerUserId: () => "me",
     useCurrentChapter: () =>
       ok({ enabled_modules: { geofences: true }, vocabulary: h.vocabulary }),
@@ -479,33 +482,26 @@ describe("Chapter settings (#4074)", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("keeps the New role sheet, and its draft, mounted through a search", () => {
-    h.permissions = ["roles:manage", "members:view"];
-    h.pickableSheet = null;
+  // #6029: People holds web's three pages, each with its count; a role is
+  // added in its tier on Roles and groups, so New role is no longer a row.
+  it("lists Roles and groups, Pledge class and Member fields under People", () => {
+    h.permissions = ["roles:manage", "members:view", "chapter-config:view"];
     const tree = render(<ChapterSettingsScreen />);
-    expect(h.pickableSheet).not.toBeNull();
-    const field = tree.root.find(
-      (node) =>
-        node.props.accessibilityLabel === "Search settings" &&
-        typeof node.props.onChangeText === "function",
+    const text = screenText(tree);
+    const classTerm = vocab(
+      "class",
+      memberViewVocabulary({ vocabulary: h.vocabulary }),
     );
-    act(() => field.props.onChangeText("role"));
-    // The rows give way to the results; the sheet stays, so a draft kept on
-    // a close survives (`spec/ui/mobile/patterns.md` § Bottom sheets).
-    expect(
-      tree.root.findAll(
-        (node) =>
-          (node.type as unknown) === "Pressable" &&
-          node.props.accessibilityLabel === "Roles and groups",
-      ),
-    ).toHaveLength(0);
-    expect(
-      tree.root.findAll(
-        (node) =>
-          node.props.chapterRole !== undefined &&
-          typeof node.props.onCreated === "function",
-      ).length,
-    ).toBeGreaterThan(0);
+    expect(text).toContain("Roles and groups");
+    expect(text).toContain(classTerm);
+    expect(text).toContain("Member fields");
+    expect(text).toContain("No fields");
+    expect(text).not.toContain("New role");
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => pressable(tree, classTerm).props.onPress());
+    act(() => pressable(tree, "Member fields").props.onPress());
+    expect(push.mock.calls).toEqual([["/pledge-classes"], ["/member-fields"]]);
   });
 
   it("offers no New channel without both channel permissions", () => {
@@ -514,28 +510,17 @@ describe("Chapter settings (#4074)", () => {
     expect(text).not.toContain("New channel");
   });
 
-  it("offers New role in the tiers the officer ranks above, and opens the role it made", () => {
-    // "me" is Treasurer (Officers, position 1): Brothers and outside only.
+  it("shows Pledge class only to a roles manager, and Member fields only to a config viewer", () => {
     h.permissions = ["roles:manage", "members:view"];
-    h.pickableSheet = null;
-    h.newRolePresent.mockClear();
-    const tree = render(<ChapterSettingsScreen />);
-    act(() => pressable(tree, "New role").props.onPress());
-    expect(h.newRolePresent).toHaveBeenCalled();
-    expect(h.pickableSheet!.chapterRole).toEqual({
-      tierLabel: "Tier",
-      placements: [
-        { value: "t-bro", label: "Brothers" },
-        { value: null, label: "Outside the tiers" },
-      ],
-    });
-    const push = vi.mocked(useRouter().push);
-    push.mockClear();
-    act(() => h.pickableSheet!.onCreated("r-new"));
-    expect(push).toHaveBeenCalledWith({
-      pathname: "/role",
-      params: { roleId: "r-new" },
-    });
+    expect(screenText(render(<ChapterSettingsScreen />))).not.toContain(
+      "Member fields",
+    );
+    h.permissions = ["chapter-config:view"];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).toContain("Member fields");
+    expect(text).not.toContain(
+      vocab("class", memberViewVocabulary({ vocabulary: h.vocabulary })),
+    );
   });
 
   it("offers no New role without roles:manage, and ends on the web line", () => {

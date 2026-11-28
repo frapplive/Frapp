@@ -14,11 +14,11 @@ import {
  * one), and draws nothing of its own. A link that names no channel goes to
  * Chat home, as a bare `/chat` on the web opens chat with nothing selected.
  *
- * It is reached by `frapp://chat?…` today. The app doesn't claim the https
- * path as a universal or App Link yet, because iOS reads claimed paths from
- * the web and the builds already installed have no such route (#4869); a
- * link tapped inside a message opens in-app without it
- * (`lib/chat/open-link.ts`).
+ * It is reached by `frapp://chat?…` today. A web `/chat` link, tapped inside
+ * a message or handed over by the system (`app/+native-intent.tsx`), opens
+ * `/chat-thread` through the shared address table instead
+ * (`lib/links/web-address-link.ts`, #6050); when the app claims the https
+ * path is #6185.
  *
  * `replace`, not `push`, so going back from the thread doesn't stop on this
  * empty route.

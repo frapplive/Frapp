@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import { setAddress } from "@/tests/address-search-params";
@@ -443,7 +443,8 @@ describe("Directory on the greenfield shell", () => {
     ).toBeInTheDocument();
     // Read again once before it is called gone.
     expect(membersRead.refetch).toHaveBeenCalledTimes(1);
-    expect(window.location.search).toBe("");
+    // The id is replaced away in an effect after the note draws.
+    await waitFor(() => expect(window.location.search).toBe(""));
   });
 
   it("drops an absent field from the meta line instead of rendering an em dash", () => {

@@ -30,7 +30,11 @@ const { selectChapter, toast, chaptersQuery, currentChapterQuery } = vi.hoisted(
       current: { data: [] as unknown[], isSuccess: true },
     },
     currentChapterQuery: {
-      current: { data: undefined as unknown, isError: false },
+      current: {
+        data: undefined as unknown,
+        isError: false,
+        isLoading: false,
+      },
     },
   }),
 );
@@ -43,6 +47,11 @@ vi.mock("@/lib/auth/select-chapter", () => ({
   useSelectChapter: () => selectChapter,
 }));
 vi.mock("@/lib/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+
+let keptChapter: { name?: string; logo_url?: string | null } | null = null;
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellCached: () => keptChapter,
+}));
 
 let activeChapterId: string | null = "chap-1";
 vi.mock("@/lib/stores/chapter-store", () => ({
@@ -88,7 +97,9 @@ describe("the chapter label and switching (#5946)", () => {
     currentChapterQuery.current = {
       data: { id: "chap-1", name: "Alpha Chapter", university: "Test U" },
       isError: false,
+      isLoading: false,
     };
+    keptChapter = null;
   });
 
   it("draws the chapter's name as a label, not a control", () => {
@@ -164,8 +175,35 @@ describe("the chapter label and switching (#5946)", () => {
   });
 
   it("says a chapter couldn't be read rather than drawing an empty label", () => {
-    currentChapterQuery.current = { data: undefined, isError: true };
+    currentChapterQuery.current = {
+      data: undefined,
+      isError: true,
+      isLoading: false,
+    };
     render(<Label />);
+    expect(screen.getByText("Chapter unavailable")).toBeInTheDocument();
+  });
+
+  it("draws the kept chapter while its read is out (#5049)", () => {
+    keptChapter = { name: "Kept Chapter", logo_url: null };
+    currentChapterQuery.current = {
+      data: undefined,
+      isError: false,
+      isLoading: true,
+    };
+    render(<Label />);
+    expect(screen.getByText("Kept Chapter")).toBeInTheDocument();
+  });
+
+  it("drops the kept chapter once its read has failed", () => {
+    keptChapter = { name: "Kept Chapter", logo_url: null };
+    currentChapterQuery.current = {
+      data: undefined,
+      isError: true,
+      isLoading: false,
+    };
+    render(<Label />);
+    expect(screen.queryByText("Kept Chapter")).toBeNull();
     expect(screen.getByText("Chapter unavailable")).toBeInTheDocument();
   });
 

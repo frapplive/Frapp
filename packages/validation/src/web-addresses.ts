@@ -16,8 +16,9 @@ import {
  *
  * The parameter names live here, not in `apps/web`: the web's own names
  * (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from here, and
- * the phone maps a web link to its own screen from the same rows once #6050
- * lands, so a rename can't split the two apps.
+ * the phone maps a web link to its own screen from the same rows
+ * (`apps/mobile/lib/links/web-address-link.ts`: a link tapped in a message,
+ * and `app/+native-intent.tsx`, #6050), so a rename can't split the two apps.
  * The chat names stay `CHAT_LINK_*` (`./message-link`), which the phone
  * already mints in copied message links.
  */
@@ -31,6 +32,7 @@ export const WEB_ADDRESS_PARAMS = {
   },
   messages: {
     channel: CHAT_LINK_CHANNEL_PARAM,
+    thread: "thread",
     message: CHAT_LINK_MESSAGE_PARAM,
   },
   documents: {
@@ -68,6 +70,7 @@ export const WEB_ADDRESS_PARAMS = {
     tier: "tier",
     role: "role",
     class: "class",
+    field: "field",
     zone: "zone",
     member: "member",
   },
@@ -161,6 +164,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
         pathname: "/chat-thread",
         params: {
           [P.messages.channel]: "channelId",
+          [P.messages.thread]: "threadRootId",
           [P.messages.message]: "focusMessageId",
         },
       },
@@ -170,7 +174,12 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
   {
     path: "/documents",
     params: Object.values(P.documents),
-    phone: [{ pathname: "/documents" }],
+    phone: [
+      {
+        pathname: "/documents",
+        params: { [P.documents.type]: DOCUMENTS_TYPE_PARAM },
+      },
+    ],
   },
   {
     path: "/events",
@@ -195,13 +204,18 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
     phone: [
       {
         when: [P.activity.task],
-        pathname: "/tasks",
+        pathname: "/activity",
         params: { [P.activity.task]: "task" },
       },
       {
         when: [P.activity.review],
         pathname: "/activity",
         params: { [P.activity.review]: "review" },
+      },
+      {
+        when: [P.activity.extension],
+        pathname: "/activity",
+        params: { [P.activity.extension]: "extension" },
       },
       { pathname: "/activity" },
     ],

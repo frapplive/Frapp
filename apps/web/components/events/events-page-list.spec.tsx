@@ -67,7 +67,14 @@ function weeklySeries(name: string, count = 13) {
   }));
 }
 
-const eventsQuery: { data: unknown; isError?: boolean } = { data: EVENTS };
+const eventsQuery: { data: unknown; isError?: boolean; isLoading?: boolean } =
+  { data: EVENTS };
+// The list this browser kept for the shell cache (#5049); none unless set.
+const keptEventsRef = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellCached: (part: string) =>
+    part === "events" ? keptEventsRef.current : null,
+}));
 type AttendanceFields = { is_mandatory?: boolean | null };
 // A viewer with no roles: the event's default decides.
 const byDefault = (fields: AttendanceFields) => fields.is_mandatory === true;
@@ -98,7 +105,7 @@ vi.mock("@repo/hooks", async () => {
     ...eventTypeHooks([]),
     useEvents: () => ({
       data: eventsQuery.data,
-      isLoading: false,
+      isLoading: eventsQuery.isLoading ?? false,
       isError: eventsQuery.isError ?? false,
       error: eventsQuery.isError ? new Error("boom") : null,
       refetch: vi.fn(),
@@ -213,6 +220,8 @@ beforeEach(() => {
   viewerRef.current = { userId: "user-1", isLoading: false };
   eventsQuery.data = EVENTS;
   eventsQuery.isError = false;
+  eventsQuery.isLoading = false;
+  keptEventsRef.current = null;
   permissionsRef.current = ["events:create", "events:update", "members:view"];
   setAddress("/events");
   birthdaysRef.current = [];
@@ -277,6 +286,41 @@ describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
       expect(detailSheetProps).toHaveBeenLastCalledWith(
         expect.objectContaining({ open: false }),
       ),
+    );
+  });
+});
+
+describe("EventsPage from the kept list (#5049)", () => {
+  it("draws the kept list while the read is out", () => {
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    render(<EventsPage />);
+
+    expect(
+      screen.getByRole("button", { name: /study night/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the address's event only from the live list, never a kept row", () => {
+    setAddress("/events?event=evt-2");
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    const { rerender } = render(<EventsPage />);
+
+    expect(detailSheetProps).not.toHaveBeenCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+
+    eventsQuery.data = EVENTS;
+    eventsQuery.isLoading = false;
+    rerender(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        event: expect.objectContaining({ id: "evt-2" }),
+      }),
     );
   });
 });
@@ -903,6 +947,12 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       "user-1",
     );
     tasksRef.current = { items };
+    // Tasks start off on the Calendar (#5948): these cases are a member who
+    // turned the Tasks key on.
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
   }
 
   const today = () => localIsoDate(new Date());
@@ -976,6 +1026,38 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     );
   });
 
+  it("hides tasks until the member turns the Tasks key on, and remembers it (#5948)", async () => {
+    withTasksToday();
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const first = render(<EventsPage />);
+
+    const toggle = screen.getByRole("button", { name: /^tasks, \d/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /^dues form/i })).toBeNull();
+    expect(screen.queryByTestId(`events-dot-${today()}-tasks`)).toBeNull();
+    expect(
+      screen.getByRole("group", { name: "Show on Calendar" }),
+    ).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
+      ),
+    ).toEqual({ hidden: [] });
+
+    first.unmount();
+    render(<EventsPage />);
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+  });
+
   it("switches a kind off from its key, hiding rows and dots, and remembers it", async () => {
     withBirthdayToday();
     const user = userEvent.setup();
@@ -995,7 +1077,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       JSON.parse(
         window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
       ),
-    ).toEqual({ hidden: ["birthdays"] });
+    ).toEqual({ hidden: ["tasks", "birthdays"] });
 
     first.unmount();
     render(<EventsPage />);
@@ -1144,6 +1226,10 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
         "user-1",
       ),
     };
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
     render(<EventsPage />);
 
     const headings = screen.getAllByRole("heading", { level: 3 });
@@ -1266,7 +1352,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     expect(days[0]).toHaveAttribute("aria-current", "date");
     // The key sits under the strip, as one row.
     expect(
-      screen.getByRole("group", { name: "Show on Events" }),
+      screen.getByRole("group", { name: "Show on Calendar" }),
     ).toBeInTheDocument();
 
     await user.click(within(strip).getByRole("button", { name: "Next week" }));
@@ -1324,7 +1410,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Events" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
     expect(
       screen.getByRole("region", { name: "Upcoming" }),
     ).toBeInTheDocument();

@@ -223,7 +223,7 @@ Supabase):
    [`docs/guides/demo-data.md` § Mobile setup](../../guides/demo-data.md#mobile-setup) (a cloud
    sandbox's bring-up writes it; on a machine, write it), and leave
    the API's `AI_ENABLED` off (the default). With AI on, the Tasks shot can carry a suggested-tasks row, and the run stops
-   rather than write a set containing it. (Since #4702 the Frapp Intelligence bar is also on every tab for a member with Ask, and the stop matches it by its name, so with AI on the run stops at the first tab shot.) The same section's `EVENT_CHECK_IN_TOKEN_SECRET` must be
+   rather than write a set containing it. (From #4702 until #5983 the Frapp Intelligence bar was also on every tab, so with AI on the run stopped at the first tab shot; since #5983 the entry lives in the + panel, which no shot opens.) The same section's `EVENT_CHECK_IN_TOKEN_SECRET` must be
    in `apps/api/.env.local` before the API starts (the cloud sandbox's bring-up writes a local
    one since 2026-11-24; on a machine, add it): without it the Host check-in screen shows "Code unavailable" instead of a QR, and that
    shot times out.

@@ -36,7 +36,8 @@ const PAGES: Record<string, NotificationTarget> = {
   points: { pathname: "/points" },
   standings: { pathname: "/directory", params: { sort: "points" } },
   dues: { pathname: "/dues" },
-  tasks: { pathname: "/tasks" },
+  // The Tasks screen folded into Activity (#5948).
+  tasks: { pathname: "/activity" },
 };
 
 export function askSourceOpening(source: AskSource): AskSourceOpening | null {

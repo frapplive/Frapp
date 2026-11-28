@@ -162,6 +162,7 @@ describe('GoogleDriveSyncService', () => {
       setPinnedAt: jest.fn(),
       setWhoCanSee: jest.fn(),
       updateFiling: jest.fn(),
+      replaceFile: jest.fn(),
       moveMany: jest.fn(),
       findInFolders: jest.fn().mockResolvedValue([]),
       fileMinutes: jest.fn(),

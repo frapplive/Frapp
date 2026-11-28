@@ -104,8 +104,9 @@ export function nextTapSequence(
  * is marked, signed off with nothing paid, so its box still unchecks; one an
  * officer confirmed doesn't (`taskSignedOffAutomatically`).
  *
- * Every row on the board is the viewer's own (`selectTaskRows` filters by
- * assignee), so this takes no assignee argument.
+ * It reads the moves as the assignee's and takes no assignee argument: a
+ * caller offers the box only on the viewer's own task (Everyone's checks
+ * `assigneeId`, #5948; the task screen, `taskScreenControls`).
  */
 export function checkboxSequence(row: {
   storedStatus: string | null;

@@ -187,6 +187,8 @@ function renderItem(
     onOpenThread?: () => void;
     threadUnread?: number;
     threadPreview?: ThreadLastReply | null;
+    nameFor?: (userId: string) => string | null;
+    rosterLoading?: boolean;
   } = {},
 ): ReactTestRenderer {
   let tree!: ReactTestRenderer;
@@ -196,7 +198,8 @@ function renderItem(
         <MessageItem
           message={message}
           viewerId={VIEWER}
-          nameFor={(id) => (id === OTHER ? "Casey" : null)}
+          nameFor={extra.nameFor ?? ((id) => (id === OTHER ? "Casey" : null))}
+          rosterLoading={extra.rosterLoading}
           roleColorFor={extra.roleColorFor}
           startsRun={extra.startsRun ?? true}
           endsRun={extra.endsRun}
@@ -261,6 +264,115 @@ describe("an imported author's row", () => {
         (node.type as unknown) === "Text" && node.props.children === "DD",
     );
     expect(JSON.stringify(initials.props.style)).toContain("Figtree_700Bold");
+  });
+});
+
+// #6127: rows painted from the device cache before the roster answers draw
+// a name placeholder and a neutral avatar, never the author's id.
+describe("a row drawn while the roster loads", () => {
+  const texts = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAll((node) => (node.type as unknown) === "Text")
+      .map((node) => node.props.children);
+  const hasPlaceholder = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => node.props.testID === "author-name-placeholder")
+      .length > 0;
+
+  it("draws a placeholder, not Member xxxxxx or id initials", () => {
+    const tree = renderItem(message(), undefined, {
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+    expect(hasPlaceholder(tree)).toBe(true);
+    expect(
+      texts(tree).some((t) => typeof t === "string" && t.startsWith("Member ")),
+    ).toBe(false);
+    expect(texts(tree)).not.toContain(OTHER.slice(0, 2).toUpperCase());
+  });
+
+  it("keeps You on the viewer's own row, with no id initials", () => {
+    const tree = renderItem(message({ sender_id: VIEWER }), undefined, {
+      nameFor: () => null,
+      rosterLoading: true,
+    });
+    expect(hasPlaceholder(tree)).toBe(false);
+    expect(texts(tree)).not.toContain(VIEWER.slice(0, 2).toUpperCase());
+  });
+
+  const loading = { nameFor: () => null, rosterLoading: true };
+  const memberText = (tree: ReactTestRenderer) =>
+    texts(tree).some((t) => typeof t === "string" && t.startsWith("Member "));
+
+  it("keeps compact's lead inline, with a blank bar and no Loading name text", () => {
+    resetChatDensityForTests();
+    act(() => setChatDensity("compact"));
+    const tree = renderItem(message({ content: "hello" }), undefined, loading);
+    resetChatDensityForTests();
+    expect(hasPlaceholder(tree)).toBe(true);
+    expect(memberText(tree)).toBe(false);
+    expect(texts(tree)).not.toContain("Loading name");
+    // Inline: the frame draws no author line of its own.
+    expect(tree.root.findAllByProps({ testID: "author-line" })).toHaveLength(0);
+  });
+
+  it("draws the bar in Bubbles, not the words Loading name", () => {
+    resetChatDensityForTests();
+    act(() => setChatDensity("bubbles"));
+    const tree = renderItem(message({ content: "hello" }), undefined, loading);
+    resetChatDensityForTests();
+    expect(hasPlaceholder(tree)).toBe(true);
+    expect(memberText(tree)).toBe(false);
+    expect(texts(tree)).not.toContain("Loading name");
+  });
+
+  it("leaves the quoted author out, never Member xxxxxx", () => {
+    const parent = message({ id: "msg-parent", content: "the original" });
+    const tree = renderItem(
+      message({ reply_to_id: "msg-parent" }),
+      parent,
+      loading,
+    );
+    expect(screenText(tree)).toContain("the original");
+    expect(memberText(tree)).toBe(false);
+    expect(screenText(tree)).not.toContain("Member ");
+  });
+
+  it("leaves a thread card's replier unnamed, with a blank face", () => {
+    const tree = renderItem(
+      message({
+        thread: {
+          reply_count: 2,
+          last_reply_at: "2026-11-06T20:29:00.000Z",
+          recent_sender_ids: [OTHER],
+        },
+      }),
+      undefined,
+      {
+        ...loading,
+        onOpenThread: vi.fn(),
+        threadPreview: {
+          id: "reply-9",
+          sender_id: OTHER,
+          content: "see you there",
+          kind: "text",
+          attachment_count: 0,
+          created_at: "2026-11-06T20:29:00.000Z",
+          sender_blocked: false,
+        },
+      },
+    );
+    expect(screenText(tree)).toContain("see you there");
+    expect(screenText(tree)).not.toContain("Member ");
+    expect(texts(tree)).not.toContain(OTHER.slice(0, 2).toUpperCase());
+  });
+
+  it("draws the fallback label once the roster has loaded or failed", () => {
+    const tree = renderItem(message(), undefined, {
+      nameFor: () => null,
+      rosterLoading: false,
+    });
+    expect(hasPlaceholder(tree)).toBe(false);
+    expect(texts(tree)).toContain(`Member ${OTHER.slice(0, 6)}`);
   });
 });
 

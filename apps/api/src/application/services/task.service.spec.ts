@@ -1260,6 +1260,19 @@ describe('TaskService', () => {
       });
     });
 
+    it('finds one live copy of a group whose linked copy is gone (copyOfGroups, #6062)', async () => {
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-2'),
+        copyOf('user-3'),
+      ]);
+      await expect(
+        service.copyOfGroups('ch-1', ['group-1', 'group-1']),
+      ).resolves.toEqual(new Map([['group-1', 'copy-user-2']]));
+      await expect(service.copyOfGroups('ch-1', [])).resolves.toEqual(
+        new Map(),
+      );
+    });
+
     it('names the people of a task for several, for an officer’s minutes row (doneMarks, #6051)', async () => {
       mockTaskRepo.findByIds.mockResolvedValue([copyOf('user-1')]);
       mockTaskRepo.findGroups.mockResolvedValue([

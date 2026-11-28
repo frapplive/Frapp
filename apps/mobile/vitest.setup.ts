@@ -523,6 +523,8 @@ vi.mock("@gorhom/bottom-sheet", () => ({
   // The Ask sheet (s17, C7) is the first sheet in the app to draw the scrim the
   // reference has always shown, so this stand-in arrives with it.
   BottomSheetBackdrop: "BottomSheetBackdrop",
+  // The Who picker's footer (Add people, New message) draws inside it.
+  BottomSheetFooter: "BottomSheetFooter",
   // Like `FlatList` (`test/react-native-stub.ts`), a string stand-in that
   // renders its props but never invokes `renderItem` — a spec needing a row
   // should render that row's component directly.

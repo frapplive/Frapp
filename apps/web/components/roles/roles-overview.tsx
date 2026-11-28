@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import { Layers, Plus, ShieldCheck } from "lucide-react";
+import { useMemo } from "react";
+import { Layers, ShieldCheck } from "lucide-react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import {
   useCreateRole,
@@ -27,9 +27,6 @@ import {
   roleColorOrNull,
   SELF_ASSIGNABLE_SECTION_CAPTION,
 } from "@repo/validation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { FOCUS_RING } from "@/components/ui/focus";
 import {
   ErrorState,
   OfflineState,
@@ -43,8 +40,8 @@ import {
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { useToast } from "@/lib/hooks/use-toast";
-import { cn, getErrorMessage } from "@/lib/utils";
+import { useToastedRun } from "@/lib/hooks/use-toasted-run";
+import { SettingsAddRow } from "@/components/shared/settings-add-row";
 import {
   byDisplayOrder,
   addsTiers,
@@ -150,7 +147,7 @@ function TierList({
   onOpenRole: (roleId: string) => void;
 }) {
   const { roles, tiers, memberCounts, reach, canManage, words } = data;
-  const { toast } = useToast();
+  const run = useToastedRun();
   const { confirm, confirmDialog } = useConfirmDialog();
   const createTier = useCreateRoleTier();
   const updateRole = useUpdateRole();
@@ -189,24 +186,6 @@ function TierList({
       ? all.filter((role) => matchesWordStarts(role.name, query))
       : all;
   };
-
-  async function run(
-    action: () => Promise<unknown>,
-    failTitle: string,
-    fallback: string,
-  ) {
-    try {
-      await action();
-      return true;
-    } catch (error) {
-      toast({
-        title: failTitle,
-        description: getErrorMessage(error, fallback),
-        variant: "destructive",
-      });
-      return false;
-    }
-  }
 
   async function removeRole(role: TieredRole) {
     const ok = await confirm({
@@ -416,10 +395,6 @@ function TierList({
   );
 }
 
-/** The shape of an "Add …" row's button, matching `SettingsRow`'s rows. */
-const ADD_ROW =
-  "flex min-h-11 w-full items-center gap-4 px-4 py-2.5 text-left text-sm font-medium text-foreground transition hover:bg-card-hover group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
-
 /**
  * "Add role" as the last row of a group: the new role starts with the tier's
  * permissions, so naming it is the whole form. Color, the @mention switch and
@@ -440,87 +415,35 @@ function AddRoleRow({
   pickable?: boolean;
   onCreated?: (roleId: string) => void;
 }) {
-  const { toast } = useToast();
+  const run = useToastedRun();
   const createRole = useCreateRole();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    try {
-      // `permissions: []` means "take the tier's" (`createAsMember`); outside
-      // the tiers that is nothing, which a pickable role must hold.
-      const created = await createRole.mutateAsync({
-        name: trimmed,
-        permissions: [],
-        tier_id: placement,
-        ...(pickable ? { self_assignable: true } : {}),
-      });
-      setName("");
-      setOpen(false);
-      if (created.id) onCreated?.(created.id);
-    } catch (error) {
-      toast({
-        title: NEW_PICKABLE_ROLE_COPY.failed,
-        description: getErrorMessage(error, NEW_PICKABLE_ROLE_COPY.failedBody),
-        variant: "destructive",
-      });
-    }
-  }
-
-  if (!open) {
-    return (
-      <li className="group">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={cn(ADD_ROW, FOCUS_RING)}
-        >
-          <Plus
-            className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          {PEOPLE_SETTINGS_COPY.addRole}
-        </button>
-      </li>
-    );
-  }
   return (
-    <li className="px-4 py-2">
-      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-        <Input
-          autoFocus
-          aria-label={pickable ? NEW_PICKABLE_ROLE_COPY.title : "New role name"}
-          placeholder={
-            pickable ? NEW_PICKABLE_ROLE_COPY.placeholder : "Philanthropy chair"
-          }
-          value={name}
-          maxLength={ROLE_NAME_MAX_LENGTH}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
-          className="max-w-xs"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!name.trim() || createRole.isPending}
-        >
-          {PEOPLE_SETTINGS_COPY.addRole}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </Button>
-      </form>
-    </li>
+    <SettingsAddRow
+      label={PEOPLE_SETTINGS_COPY.addRole}
+      inputLabel={pickable ? NEW_PICKABLE_ROLE_COPY.title : "New role name"}
+      placeholder={
+        pickable ? NEW_PICKABLE_ROLE_COPY.placeholder : "Philanthropy chair"
+      }
+      maxLength={ROLE_NAME_MAX_LENGTH}
+      onAdd={(name) =>
+        run(
+          async () => {
+            // `permissions: []` means "take the tier's" (`createAsMember`);
+            // outside the tiers that is nothing, which a pickable role must
+            // hold.
+            const created = await createRole.mutateAsync({
+              name,
+              permissions: [],
+              tier_id: placement,
+              ...(pickable ? { self_assignable: true } : {}),
+            });
+            if (created.id) onCreated?.(created.id);
+          },
+          NEW_PICKABLE_ROLE_COPY.failed,
+          NEW_PICKABLE_ROLE_COPY.failedBody,
+        )
+      }
+    />
   );
 }
 
@@ -536,63 +459,14 @@ function AddTierRow({
   words: ReturnType<typeof useRolesData>["words"];
   onAdd: (name: string) => Promise<boolean>;
 }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    if (await onAdd(trimmed)) {
-      setName("");
-      setOpen(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <li className="group">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={cn(ADD_ROW, FOCUS_RING)}
-        >
-          <Layers
-            className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          Add {words.singular}
-        </button>
-      </li>
-    );
-  }
   return (
-    <li className="px-4 py-2">
-      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-        <Input
-          autoFocus
-          aria-label={`New ${words.singular} name`}
-          placeholder="Committee chairs"
-          value={name}
-          maxLength={ROLE_TIER_NAME_MAX_LENGTH}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
-          className="max-w-xs"
-        />
-        <Button type="submit" size="sm" disabled={!name.trim()}>
-          Add {words.singular}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </Button>
-      </form>
-    </li>
+    <SettingsAddRow
+      icon={Layers}
+      label={addTierLabel(words.singular)}
+      inputLabel={`New ${words.singular} name`}
+      placeholder="Committee chairs"
+      maxLength={ROLE_TIER_NAME_MAX_LENGTH}
+      onAdd={onAdd}
+    />
   );
 }

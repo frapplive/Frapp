@@ -45,6 +45,8 @@ import { EVENT_AGENDA_SUGGESTION_REPOSITORY } from '#domain/repositories/event-a
 import { SupabaseEventAgendaSuggestionRepository } from '../../infrastructure/supabase/repositories/supabase-event-agenda-suggestion.repository';
 import { MEETING_NEXT_AGENDA_ITEM_REPOSITORY } from '#domain/repositories/meeting-next-agenda-item.repository.interface';
 import { SupabaseMeetingNextAgendaItemRepository } from '../../infrastructure/supabase/repositories/supabase-meeting-next-agenda-item.repository';
+import { MEETING_ACTION_ITEM_TASK_REPOSITORY } from '#domain/repositories/meeting-action-item-task.repository.interface';
+import { SupabaseMeetingActionItemTaskRepository } from '../../infrastructure/supabase/repositories/supabase-meeting-action-item-task.repository';
 
 /**
  * AI suggestions (#4309). A new kind is a handler added to the kinds list; a
@@ -133,6 +135,11 @@ import { SupabaseMeetingNextAgendaItemRepository } from '../../infrastructure/su
     {
       provide: MEETING_NEXT_AGENDA_ITEM_REPOSITORY,
       useClass: SupabaseMeetingNextAgendaItemRepository,
+    },
+    // Action items made tasks from the minutes (#6062).
+    {
+      provide: MEETING_ACTION_ITEM_TASK_REPOSITORY,
+      useClass: SupabaseMeetingActionItemTaskRepository,
     },
     // The batch push reads the chapter's modules (a kind's module off means
     // nobody is told).

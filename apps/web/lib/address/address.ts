@@ -94,8 +94,8 @@ export function pushAddress(changes: AddressChanges): void {
  * Moves through something in place (a day, a month, a sort, a one-shot mark
  * acted on, a dead id dropped): merges `changes` and replaces the entry,
  * keeping its mark. When that would make it the same address as the entry
- * this tab pushed it over (a dead record opened from its list, a jump's
- * `message=` dropped inside the open channel), it goes Back instead, so no
+ * this tab pushed it over (a dead record opened from its list), it goes
+ * Back instead, so no
  * Back press lands on an identical address.
  */
 export function replaceAddress(changes: AddressChanges): void {
@@ -144,4 +144,22 @@ export function consumeAddressParam(name: string, expected?: string): void {
   if (value === null) return;
   if (expected !== undefined && value !== expected) return;
   replaceAddress({ [name]: null });
+}
+
+/**
+ * Moves an entry this tab has just pushed as a copy of the one under it (the
+ * chat pane's same-address step below `lg`, `chat-shell.tsx`) to `changes`,
+ * marked as pushed over the address under it, so closing it goes Back as for
+ * any `pushAddress` entry, and one press is one step.
+ */
+export function replacePushedCopy(changes: AddressChanges): void {
+  const from = currentAddress();
+  const to = addressWith(from, changes);
+  if (to === from) return;
+  const state = ownState();
+  window.history.replaceState(
+    { ...state, [ADDRESS_FROM_KEY]: [...pushedOver(state), from] },
+    "",
+    to,
+  );
 }

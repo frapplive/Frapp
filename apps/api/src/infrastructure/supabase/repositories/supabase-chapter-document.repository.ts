@@ -304,6 +304,35 @@ export class SupabaseChapterDocumentRepository implements IChapterDocumentReposi
     return data;
   }
 
+  /**
+   * A new version's file in place of an upload's (#6055). The filters are
+   * the rule, not only the service's checks: never a Drive copy or linked
+   * file (Drive owns its bytes), never minutes, and only while the row
+   * still files `currentPath`, so of two versions racing one wins.
+   */
+  async replaceFile(
+    id: string,
+    chapterId: string,
+    currentPath: string,
+    file: Pick<
+      TablesUpdate<'chapter_documents'>,
+      'storage_path' | 'content_type' | 'byte_size'
+    >,
+  ): Promise<ChapterDocument | null> {
+    const { data, error } = await this.supabase
+      .from('chapter_documents')
+      .update(file)
+      .eq('id', id)
+      .eq('chapter_id', chapterId)
+      .eq('storage_path', currentPath)
+      .is('drive_file_id', null)
+      .is('meeting_id', null)
+      .select('*')
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
   /** Refiles many documents into `folder` at once; never a Drive folder copy. */
   async moveMany(
     ids: string[],

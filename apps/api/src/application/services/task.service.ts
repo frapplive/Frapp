@@ -601,6 +601,29 @@ export class TaskService {
   }
 
   /**
+   * One live copy of each of these groups, by group id: for a link that
+   * names a group whose linked copy was deleted (#6062). A group with no
+   * copy left is left out.
+   */
+  async copyOfGroups(
+    chapterId: string,
+    groupIds: string[],
+  ): Promise<Map<string, string>> {
+    const ids = [...new Set(groupIds)];
+    const copies =
+      ids.length > 0
+        ? await this.taskRepo.findGroupCopyStates(chapterId, ids)
+        : [];
+    const copyOf = new Map<string, string>();
+    for (const copy of copies) {
+      if (copy.group_id && !copyOf.has(copy.group_id)) {
+        copyOf.set(copy.group_id, copy.id);
+      }
+    }
+    return copyOf;
+  }
+
+  /**
    * Whether each of these tasks is done, by task id, in two reads whatever
    * the count: a task for everyone is done once every copy is (#4295 step 3),
    * and comes with its counts. Tasks that no longer exist are left out. For

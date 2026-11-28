@@ -159,6 +159,9 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "group",
   "groups",
   "from",
+  // A pledge class's page and a member field's page (#6029).
+  "class",
+  "field",
   // A channel's Description focused, from "Add a description" (#6031).
   FOCUS_DESCRIPTION_PARAM,
   // The points ledger's member, from a member's card.

@@ -35,7 +35,6 @@ import {
 import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { TasksBoard } from "@/components/tasks/tasks-board";
-import { useEveryoneOffered } from "@/components/tasks/everyones-tasks";
 import { SectionLabel } from "@/components/shared/section-label";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +140,7 @@ import {
   type ActivityPart,
   type ActivityRow,
   type ActivityRowProgress,
+  useEveryoneOffered,
 } from "@repo/hooks";
 import {
   ActivityArchiveSkeleton,

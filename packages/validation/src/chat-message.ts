@@ -23,6 +23,14 @@ import { CHAT_MESSAGE_CONTENT_MAX_LENGTH } from "./field-limits";
 export const SYSTEM_SENDER_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
+ * The most people in a group DM, its creator included
+ * (`spec/behavior/chat/README.md` § Direct Messages: "up to 10"). The API's
+ * `CreateGroupDmDto` takes at most this less one in `member_ids`, and the
+ * phone's New message lets a member pick that many.
+ */
+export const MAX_GROUP_DM_MEMBERS = 10;
+
+/**
  * The author name for a message the server posts as the system actor
  * (`SYSTEM_SENDER_ID`): the chapter welcome post and poll-expiry notices.
  *

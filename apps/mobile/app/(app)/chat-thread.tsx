@@ -442,6 +442,7 @@ function ChannelThreadScreen() {
     avatarFor: memberAvatarFor,
     avatarTintFor,
     refetch: refetchRoster,
+    rosterLoading,
   } = roster;
 
   // `#name` for a channel, the other member for a DM (#2775).
@@ -1730,6 +1731,7 @@ function ChannelThreadScreen() {
           newMessagesAbove={item.message.client_message_id === dividerKey}
           viewerId={viewerId}
           nameFor={nameFor}
+          rosterLoading={rosterLoading}
           roleColorFor={roleColorFor}
           avatarFor={avatarFor}
           replyParent={replyParent}
@@ -1782,6 +1784,7 @@ function ChannelThreadScreen() {
     [
       viewerId,
       nameFor,
+      rosterLoading,
       roleColorFor,
       avatarFor,
       retry,
