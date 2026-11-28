@@ -853,6 +853,15 @@ describe("EventEditorDialog form shape and attendance by role", () => {
   });
 
   it("opens a copy of last year's event filled in, never repeating, and reports the event it made (#3930)", async () => {
+    // Weeks out, so the day field shows its date rather than a relative
+    // word ("Tomorrow", "Saturday"), whatever day the suite runs (#6229).
+    const formal = new Date();
+    formal.setDate(formal.getDate() + 40);
+    formal.setHours(21, 0, 0, 0);
+    const localInput = (at: Date) => {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+    };
     createMutate.mockResolvedValue({ id: "evt-new" });
     const onCreated = vi.fn();
     render(
@@ -869,8 +878,8 @@ describe("EventEditorDialog form shape and attendance by role", () => {
           // Last year's repeat is not this year's plan.
           recurrence_rule: "WEEKLY",
         }}
-        initialStartAt="2026-12-05T21:00"
-        initialEndAt="2026-12-06T01:00"
+        initialStartAt={localInput(formal)}
+        initialEndAt={localInput(new Date(formal.getTime() + 4 * 3600_000))}
         onCreated={onCreated}
         usingPreviewData={false}
         onOpenChange={() => {}}
@@ -883,7 +892,9 @@ describe("EventEditorDialog form shape and attendance by role", () => {
     openRow("When");
     expect(
       (screen.getByLabelText("Starts, day") as HTMLInputElement).value,
-    ).toContain("December 5");
+    ).toContain(
+      formal.toLocaleDateString(undefined, { month: "long", day: "numeric" }),
+    );
     expect(
       (screen.getByLabelText("Starts, time") as HTMLInputElement).value,
     ).toBe("9 PM");
