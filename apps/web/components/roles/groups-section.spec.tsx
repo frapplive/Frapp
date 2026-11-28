@@ -288,6 +288,29 @@ describe("a group's page", () => {
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
+  it("leaves a member out of the picker while their add is saving, so it is never sent twice", async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    mockMembership.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    page("g-floor");
+    await user.type(screen.getByLabelText("Add a member"), "ben");
+    await user.click(screen.getByRole("option", { name: "Ben Park" }));
+    await waitFor(() => expect(mockMembership).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByLabelText("Add a member"), "ben");
+    expect(screen.queryByRole("option", { name: "Ben Park" })).toBeNull();
+    release();
+    // Back once the add has settled (the group read here never took him).
+    expect(
+      await screen.findByRole("option", { name: "Ben Park" }),
+    ).toBeInTheDocument();
+    expect(mockMembership).toHaveBeenCalledTimes(1);
+  });
+
   it("says a refused member change failed", async () => {
     const user = userEvent.setup();
     mockMembership.mockRejectedValueOnce(new Error("Not a member any more"));

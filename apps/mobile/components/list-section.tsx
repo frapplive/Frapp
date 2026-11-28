@@ -585,14 +585,16 @@ export function ListRow({
     </View>
   );
 
-  if (!onPress) return content;
+  // A row with only a long press (a class member's Move and Remove menu)
+  // still needs the Pressable, or its long press never reaches it.
+  if (!onPress && !onLongPress) return content;
 
   // The Pressable is one accessibility element, so the texts inside it are not
   // read on their own: the label names it, the trailing value is its value,
   // and the description goes into the hint (`listRowHint`).
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={label}
       accessibilityValue={
         (accessibilityValue ?? value)

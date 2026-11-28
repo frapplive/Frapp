@@ -4,6 +4,8 @@ import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { FrappClientProvider } from "@repo/hooks";
 import { dropAllKeptDrafts } from "@repo/hooks/kept-drafts";
 import {
   createFieldBody,
@@ -40,6 +42,8 @@ const h = vi.hoisted(() => ({
   assignClasses: vi.fn<(body: unknown) => Promise<unknown>>(),
   renameClass: vi.fn<(body: unknown) => Promise<unknown>>(),
   sheets: new Map<string, Sheet>(),
+  /** Where a save's re-read of the roster lands, as the real save's does. */
+  queryClient: null as unknown as import("@tanstack/react-query").QueryClient,
 }));
 
 vi.mock("react-native", async () => {
@@ -95,7 +99,22 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDeletePledgeClass: () => mutation(vi.fn()),
   useCreatePledgeClass: () => mutation(vi.fn()),
   useRenamePledgeClass: () => mutation(h.renameClass),
-  useAssignPledgeClasses: () => mutation(h.assignClasses),
+}));
+
+// The member editor (`useClassMembersEditor`) saves through the hooks
+// package's own import, so the save is stubbed where it lives. Like the
+// real one, it settles once the roster has been read again.
+vi.mock("@repo/hooks/use-pledge-classes", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks/use-pledge-classes")>()),
+  useAssignPledgeClasses: () =>
+    mutation(async (body: never) => {
+      const result = await h.assignClasses(body);
+      h.queryClient.setQueryData(
+        ["members", "c1"],
+        h.members.map((member) => ({ ...member })),
+      );
+      return result;
+    }),
 }));
 
 vi.mock("@/lib/tenant-kind", async (importOriginal) => ({
@@ -174,7 +193,13 @@ const mounted: ReactTestRenderer[] = [];
 function render(element: React.ReactElement): ReactTestRenderer {
   let tree!: ReactTestRenderer;
   act(() => {
-    tree = create(<FrappThemeProvider>{element}</FrappThemeProvider>);
+    tree = create(
+      <FrappClientProvider client={{} as never} chapterId="c1">
+        <QueryClientProvider client={h.queryClient}>
+          <FrappThemeProvider>{element}</FrappThemeProvider>
+        </QueryClientProvider>
+      </FrappClientProvider>,
+    );
   });
   mounted.push(tree);
   return tree;
@@ -243,7 +268,24 @@ beforeEach(() => {
   h.updateField.mockReset().mockResolvedValue({});
   h.createField.mockReset().mockResolvedValue({ id: "f-new" });
   h.reorderClasses.mockReset().mockResolvedValue({});
-  h.assignClasses.mockReset().mockResolvedValue({});
+  // The server: an assignment lands on the roster a re-read returns.
+  h.assignClasses.mockReset().mockImplementation(async (body) => {
+    for (const change of body as {
+      member_id: string;
+      pledge_class_id: string | null;
+      order_number: number | null;
+    }[]) {
+      const row = h.members.find((member) => member.id === change.member_id);
+      if (row) {
+        row.pledge_class_id = change.pledge_class_id;
+        row.order_number = change.order_number;
+      }
+    }
+    return {};
+  });
+  h.queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   h.renameClass.mockReset().mockResolvedValue({});
   h.sheets.clear();
   vi.mocked(useLocalSearchParams).mockReturnValue({});
@@ -476,6 +518,57 @@ describe("a pledge class's page (#6029)", () => {
         member_id: "m-cy",
         pledge_class_id: "c-alpha",
       }),
+    ]);
+  });
+
+  it("works a second change out against the roster as read back: adding Cy, then taking Cy out, sends Cy's removal", async () => {
+    h.members.push({
+      id: "m-cy",
+      user_id: "u-cy",
+      display_name: "Cy Park",
+      pledge_class_id: null,
+      order_number: null,
+    });
+    const tree = render(<PledgeClassScreen />);
+    const sheet = h.sheets.get(PLEDGE_CLASS_SETTINGS_COPY.addMember)!;
+    await act(async () => sheet.onSelect("m-cy"));
+    expect(h.assignClasses).toHaveBeenLastCalledWith([
+      { member_id: "m-cy", pledge_class_id: "c-alpha", order_number: 3 },
+    ]);
+    await act(async () =>
+      pressable(tree, "Remove Cy Park from Alpha").props.onPress(),
+    );
+    expect(h.assignClasses).toHaveBeenCalledTimes(2);
+    expect(h.assignClasses).toHaveBeenLastCalledWith([
+      { member_id: "m-cy", pledge_class_id: null, order_number: 3 },
+    ]);
+    expect(
+      byLabel(tree, "Pressable", "Remove Cy Park from Alpha"),
+    ).toHaveLength(0);
+  });
+
+  it("saves a move from a row's long press, the numbers following", async () => {
+    const tree = render(<PledgeClassScreen />);
+    // A row's long press opens the screen's own menu (`useItemMenu`).
+    const pick = async (name: string, label: string) => {
+      act(() => pressable(tree, name).props.onLongPress());
+      const menu = tree.root.findByType(ItemActionsMenu).props.target as {
+        actions: { label: string; run: () => void }[];
+      };
+      await act(async () =>
+        menu.actions.find((action) => action.label === label)!.run(),
+      );
+    };
+    await pick("Ann Lee", "Move down");
+    expect(h.assignClasses).toHaveBeenCalledWith([
+      { member_id: "m-bo", pledge_class_id: "c-alpha", order_number: 1 },
+      { member_id: "m-ann", pledge_class_id: "c-alpha", order_number: 2 },
+    ]);
+    await pick("Ann Lee", "Move up");
+    expect(h.assignClasses).toHaveBeenCalledTimes(2);
+    expect(h.assignClasses).toHaveBeenLastCalledWith([
+      { member_id: "m-ann", pledge_class_id: "c-alpha", order_number: 1 },
+      { member_id: "m-bo", pledge_class_id: "c-alpha", order_number: 2 },
     ]);
   });
 

@@ -18,6 +18,7 @@ import {
   PEOPLE_SETTINGS_COPY,
   ROLE_NAME_MAX_LENGTH,
   roleColorLabel,
+  tierMoveNeedsUnmark,
   roleColorOrNull,
   rolePermissionsFootnote,
   SELF_ASSIGNABLE_REFUSAL_COPY,
@@ -81,6 +82,7 @@ import {
   reachesOutside,
   reachesRole,
   reachesTier,
+  refusesTierMove,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
 
@@ -249,6 +251,18 @@ function RoleBody({
       [saveRole],
     ),
   );
+  // The picker's draft while it is open: a Custom drag picks on every move,
+  // so the color saves once, when the picker closes, as the phone's sheet
+  // does.
+  const [colorDraft, setColorDraft] = useState<string | null | undefined>(
+    undefined,
+  );
+  const shownColor = colorDraft === undefined ? color : colorDraft;
+  function commitColor() {
+    if (colorDraft === undefined) return;
+    setColorDraft(undefined);
+    if (colorDraft !== color) void changeColor(colorDraft);
+  }
   const [mentionable, changeMentionable] = usePendingSetting(
     role.mentionable,
     useCallback((next) => saveRole({ mentionable: next }), [saveRole]),
@@ -261,6 +275,12 @@ function RoleBody({
     useCallback((next) => saveRole({ self_assignable: next }), [saveRole]),
   );
   const pickRefusal = selfAssignableRefusal(role);
+  // A marked role can't sit in a tier, and the tier saves on its own, so a
+  // tier the API would refuse is held in the picker, with why under the row.
+  const tierRefused = (candidate: (typeof tiers)[number]) =>
+    candidate.id !== tierId && refusesTierMove(role, candidate, pickable);
+  const tiersHeld =
+    editable && !tierFixed && tiers.some((candidate) => tierRefused(candidate));
   // What the name field holds, for the color picker's preview.
   const [draftName, setDraftName] = useState(role.name);
 
@@ -425,6 +445,8 @@ function RoleBody({
                 >
                   Open {tier.name}
                 </Link>
+              ) : tiersHeld ? (
+                tierMoveNeedsUnmark(words.singular)
               ) : undefined
             }
             control={
@@ -446,7 +468,8 @@ function RoleBody({
                       value={candidate.id}
                       disabled={
                         candidate.id !== tierId &&
-                        !reachesTier(reach, candidate)
+                        (!reachesTier(reach, candidate) ||
+                          tierRefused(candidate))
                       }
                     >
                       {candidate.name}
@@ -466,7 +489,7 @@ function RoleBody({
             icon={Palette}
             label={PEOPLE_SETTINGS_COPY.color}
             control={
-              <Popover>
+              <Popover onOpenChange={(open) => (open ? null : commitColor())}>
                 <PopoverTrigger
                   disabled={!editable}
                   className={cn(
@@ -474,8 +497,8 @@ function RoleBody({
                     FOCUS_RING,
                   )}
                 >
-                  <ColorDot color={color} />
-                  {roleColorLabel(color)}
+                  <ColorDot color={shownColor} />
+                  {roleColorLabel(shownColor)}
                   <ChevronDown className="h-4 w-4 opacity-50" aria-hidden />
                 </PopoverTrigger>
                 <PopoverContent
@@ -487,8 +510,8 @@ function RoleBody({
                   </span>
                   <RoleColorPicker
                     labelId="role-color-label"
-                    value={color}
-                    onChange={(next) => void changeColor(next)}
+                    value={shownColor}
+                    onChange={setColorDraft}
                     previewName={draftName || role.name}
                     memberName={viewerName}
                     chapterColors={chapterColors}

@@ -15,6 +15,7 @@ import {
   reachesOutside,
   reachesRole,
   reachesTier,
+  refusesTierMove,
   type TieredRole,
   type TierRow,
 } from "@repo/hooks/role-tiers";
@@ -32,6 +33,7 @@ import {
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
   selfAssignableRefusal,
   setApartLabel,
+  tierMoveNeedsUnmark,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
@@ -231,6 +233,12 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
     ),
   );
   const pickRefusal = selfAssignableRefusal(role);
+  // A marked role can't sit in a tier, and the tier saves on its own, so a
+  // tier the API would refuse is left out of the sheet, with why on the row.
+  const tierRefused = (candidate: TierRow) =>
+    candidate.id !== tierId && refusesTierMove(role, candidate, pickable);
+  const tiersHeld =
+    editable && !tierFixed && tiers.some((candidate) => tierRefused(candidate));
 
   const placementName =
     placement === OUTSIDE
@@ -239,7 +247,9 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const tierOptions = [
     ...tiers
       .filter(
-        (candidate) => candidate.id === tierId || reachesTier(reach, candidate),
+        (candidate) =>
+          candidate.id === tierId ||
+          (reachesTier(reach, candidate) && !tierRefused(candidate)),
       )
       .map((candidate) => ({ value: candidate.id, label: candidate.name })),
     ...(tierId === null || reachesOutside(reach)
@@ -292,8 +302,11 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           label={words.Singular}
           value={placementName}
           disabled={!editable || tierFixed}
-          description={failureOf("tier_id")}
-          descriptionTone="destructive"
+          description={
+            failureOf("tier_id") ??
+            (tiersHeld ? tierMoveNeedsUnmark(words.singular) : null)
+          }
+          descriptionTone={failureOf("tier_id") ? "destructive" : "default"}
           onPress={
             editable && !tierFixed
               ? () => tierSheetRef.current?.present()

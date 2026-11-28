@@ -6,20 +6,17 @@ import { X } from "lucide-react";
 import {
   addableClassMembers,
   addRow,
-  classAssignments,
   classMemberCounts,
-  classRowsOf,
   movesFromLabel,
   type AddableMember,
   renumberRows,
-  useAssignPledgeClasses,
+  useClassMembersEditor,
   useCreatePledgeClass,
   useDeletePledgeClass,
   useMembers,
   usePledgeClasses,
   useRenamePledgeClass,
   useReorderPledgeClasses,
-  type ClassEditorRow,
   type MemberProfile,
   type PledgeClass,
 } from "@repo/hooks";
@@ -29,7 +26,6 @@ import {
   memberCountLabel,
   moveId,
   PEOPLE_SETTINGS_COPY,
-  PLEDGE_CLASS_ASSIGNMENTS_MAX,
   PLEDGE_CLASS_NAME_MAX_LENGTH,
   PLEDGE_CLASS_SETTINGS_COPY,
   PLEDGE_CLASSES_MAX,
@@ -226,7 +222,6 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
         members={members}
         membersFailed={membersQuery.isError && !members}
         onRetryMembers={() => void membersQuery.refetch()}
-        refetchMembers={async () => (await membersQuery.refetch()).data}
         canManage={canManage}
         classTerm={classTerm}
         orderTerm={orderTerm}
@@ -386,7 +381,6 @@ function ClassPage({
   members,
   membersFailed,
   onRetryMembers,
-  refetchMembers,
   canManage,
   classTerm,
   orderTerm,
@@ -399,7 +393,6 @@ function ClassPage({
   members: readonly MemberProfile[] | undefined;
   membersFailed: boolean;
   onRetryMembers: () => void;
-  refetchMembers: () => Promise<readonly MemberProfile[] | undefined>;
   canManage: boolean;
   classTerm: string;
   orderTerm: string;
@@ -465,7 +458,6 @@ function ClassPage({
           pledgeClass={pledgeClass}
           classes={classes}
           members={members}
-          refetchMembers={refetchMembers}
           canManage={canManage}
           orderTerm={orderTerm}
         />
@@ -485,74 +477,37 @@ function ClassMembers({
   pledgeClass,
   classes,
   members: liveMembers,
-  refetchMembers,
   canManage,
   orderTerm,
 }: {
   pledgeClass: PledgeClass;
   classes: readonly PledgeClass[];
   members: readonly MemberProfile[];
-  /** Reads the roster again and resolves with it (undefined if that fails). */
-  refetchMembers: () => Promise<readonly MemberProfile[] | undefined>;
   canManage: boolean;
   orderTerm: string;
 }) {
   const { toast } = useToast();
-  const run = useToastedRun();
-  const assign = useAssignPledgeClasses();
-  // The roster as last read. The rows are built from it, so each change is
-  // worked out against the same snapshot: a background re-read that brings in
-  // a member another officer just added to this class must not read as "the
-  // officer took them out". Every save reads it again.
-  const [members, setMembers] = useState(liveMembers);
-  const [rows, setRows] = useState<ClassEditorRow[]>(() =>
-    classRowsOf(liveMembers, pledgeClass.id, classes),
-  );
-  const [saving, setSaving] = useState(false);
-
-  /**
-   * Each add, removal and drag saves at once (#6033), the way Discord's role
-   * members do: only the members it changes are sent, then the roster is read
-   * again, so the next change is worked out against it. A refused change
-   * puts the rows back as they were.
-   */
-  async function commit(next: ClassEditorRow[]) {
-    const changes = classAssignments(pledgeClass.id, next, members);
-    if (changes === null) return;
-    if (changes.length === 0) {
-      setRows(next);
-      return;
-    }
-    // The batch cap stays as a guard; one change never comes near it.
-    if (changes.length > PLEDGE_CLASS_ASSIGNMENTS_MAX) {
+  // Each add, removal and drag saves at once, one save at a time, so the
+  // grip keeps its focus through a run of arrow keys (`useClassMembersEditor`).
+  const { rows, members, commit } = useClassMembersEditor({
+    classId: pledgeClass.id,
+    classes,
+    members: liveMembers,
+    onFailure: (failure) => {
+      if (!failure) return;
       toast({
-        title: `Couldn't save ${pledgeClass.name}`,
-        description: PLEDGE_CLASS_SETTINGS_COPY.tooManyAtOnce(
-          PLEDGE_CLASS_ASSIGNMENTS_MAX,
-        ),
+        title: PLEDGE_CLASS_SETTINGS_COPY.saveFailed(pledgeClass.name),
+        description:
+          failure.kind === "notSent"
+            ? failure.message
+            : getErrorMessage(
+                failure.error,
+                PLEDGE_CLASS_SETTINGS_COPY.saveFallback,
+              ),
         variant: "destructive",
       });
-      return;
-    }
-    const before = rows;
-    setRows(next);
-    // Held until the roster is read again, so the next change is worked out
-    // against it and never re-sends this one.
-    setSaving(true);
-    const ok = await run(
-      () => assign.mutateAsync(changes),
-      `Couldn't save ${pledgeClass.name}`,
-      PLEDGE_CLASS_SETTINGS_COPY.saveFallback,
-    );
-    const fresh = await refetchMembers();
-    if (fresh) {
-      setMembers(fresh);
-      setRows(classRowsOf(fresh, pledgeClass.id, classes));
-    } else if (!ok) {
-      setRows(before);
-    }
-    setSaving(false);
-  }
+    },
+  });
 
   const classNameById = useMemo(
     () => new Map(classes.map((entry) => [entry.id, entry.name])),
@@ -587,7 +542,6 @@ function ClassMembers({
             }
             onAdd={addMember}
             emptyText={PLEDGE_CLASS_SETTINGS_COPY.everyoneIn}
-            disabled={saving}
           />
         </div>
       ) : null}
@@ -610,7 +564,7 @@ function ClassMembers({
             getId={(row) => row.memberId}
             getLabel={(row) => row.name}
             onReorder={(next) => void commit(renumberRows(next))}
-            disabled={!canManage || saving}
+            disabled={!canManage}
             renderItem={(row) => (
               <div className="flex min-h-control-settings-row items-center gap-3 px-2 py-1 pointer-coarse:min-h-11">
                 {/* The number follows the row's place, not a field. */}
@@ -621,7 +575,6 @@ function ClassMembers({
                 {canManage ? (
                   <IconButton
                     label={`Remove ${row.name} from ${pledgeClass.name}`}
-                    disabled={saving}
                     onClick={() =>
                       void commit(
                         rows.filter((entry) => entry.memberId !== row.memberId),
@@ -636,7 +589,6 @@ function ClassMembers({
           />
         )}
       </div>
-
     </div>
   );
 }

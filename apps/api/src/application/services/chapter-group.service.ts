@@ -268,9 +268,10 @@ export class ChapterGroupService {
   }
 
   /**
-   * Put one member in a manual group, or take them out, from their profile
+   * Put one member in a manual group, or take them out: from their profile
    * (Paul, 2026-11-19: groups set where the person is, not only from the
-   * group's editor). The same gates as a whole-list save: `groups:manage`
+   * group's editor), and from the group's page on both apps, which saves
+   * each member on its own (#6033). The same gates as a whole-list save: `groups:manage`
    * (the controller), and `channels:manage` too when a channel list names
    * the group. A change that changes nothing (already in, already out) is
    * no write and no audit row. Answers the group with who is in it after.

@@ -6,6 +6,9 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { FrappClientProvider } from "@repo/hooks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -48,6 +51,12 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isPending: false,
   }),
   useDeletePledgeClass: () => ({ mutateAsync: mockDelete, isPending: false }),
+}));
+
+// The member editor (`useClassMembersEditor`) saves through the hooks
+// package's own import, so the save is stubbed where it lives.
+vi.mock("@repo/hooks/use-pledge-classes", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks/use-pledge-classes")>()),
   useAssignPledgeClasses: () => ({ mutateAsync: mockAssign, isPending: false }),
 }));
 
@@ -100,9 +109,23 @@ function tab(canManage = true) {
   );
 }
 
+/**
+ * The query cache the member editor reads the roster back from: a save's
+ * re-read (`useAssignPledgeClasses`' invalidation) lands here.
+ */
+let queryClient: QueryClient;
+
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <FrappClientProvider client={{} as never} chapterId="c1">
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </FrappClientProvider>
+  );
+}
+
 function renderTab(canManage = true, params = "tab=classes") {
   h.params = params;
-  return render(tab(canManage));
+  return render(tab(canManage), { wrapper: Providers });
 }
 
 /** Open `?tab=classes&class=<id>` from scratch. */
@@ -139,6 +162,10 @@ type Assignment = {
 
 /** What the server holds: the assign mock writes it, a re-read returns it. */
 let server: Member[] = MEMBERS;
+/** Whether a save's re-read of the roster works. */
+let rereadWorks = true;
+/** Another officer's write, landing while a save is in flight. */
+let meanwhile: (() => void) | null = null;
 
 function applyAssignments(changes: Assignment[]) {
   server = server.map((row) => {
@@ -171,8 +198,16 @@ function resetMocks() {
     refetch: vi.fn(async () => ({ data: server })),
   });
   mockReorder.mockResolvedValue(undefined);
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  rereadWorks = true;
+  meanwhile = null;
   mockAssign.mockImplementation(async (changes: Assignment[]) => {
     applyAssignments(changes);
+    meanwhile?.();
+    // As the real save does, it settles once the roster is read again.
+    if (rereadWorks) queryClient.setQueryData(["members", "c1"], server);
   });
   mockRename.mockResolvedValue(undefined);
   mockCreate.mockResolvedValue(undefined);
@@ -622,19 +657,72 @@ describe("SettingsClassesTab", () => {
       ]);
     });
 
-    it("reads the roster again after each save and shows what the server holds", async () => {
+    it("shows the roster as the save read it back, with no read of its own", async () => {
       openAlpha();
+      // Another officer adds Dee to Alpha while the removal saves.
+      meanwhile = () => {
+        server = server.map((row) =>
+          row.id === "m4"
+            ? { ...row, pledge_class_id: "alpha", order_number: 3 }
+            : row,
+        );
+      };
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
       );
       await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
-      const refetch = mockMembers.mock.results.at(-1)!.value.refetch;
-      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(
+        await screen.findByRole("button", { name: "Remove Dee from Alpha" }),
+      ).toBeInTheDocument();
       expect(
         within(screen.getByRole("list", { name: "Members of Alpha" }))
           .getAllByRole("listitem")
           .map((item) => item.textContent),
-      ).toEqual([expect.stringMatching(/^1Ben/)]);
+      ).toEqual([
+        expect.stringMatching(/^1Ben/),
+        expect.stringMatching(/^3Dee/),
+      ]);
+      // The save's own re-read is the one read: none is fired after it.
+      const refetch = mockMembers.mock.results.at(-1)!.value.refetch;
+      expect(refetch).not.toHaveBeenCalled();
+    });
+
+    it("keeps the grip usable while a move saves, and saves the next move after it", async () => {
+      let release!: () => void;
+      mockAssign.mockImplementationOnce(async (changes: Assignment[]) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        applyAssignments(changes);
+        queryClient.setQueryData(["members", "c1"], server);
+      });
+      openAlpha();
+      const grip = screen.getByRole("button", { name: "Reorder Ben" });
+      grip.focus();
+      fireEvent.keyDown(grip, { key: "ArrowDown" });
+      await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+      // Still focused and enabled mid-save, so the arrows keep working.
+      const moved = screen.getByRole("button", { name: "Reorder Ben" });
+      expect(moved).toBeEnabled();
+      expect(moved).toHaveFocus();
+      fireEvent.keyDown(moved, { key: "ArrowUp" });
+      expect(
+        within(screen.getByRole("list", { name: "Members of Alpha" }))
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([
+        expect.stringMatching(/^1Ben/),
+        expect.stringMatching(/^2Ada/),
+      ]);
+      // Not sent until the first save has settled…
+      expect(mockAssign).toHaveBeenCalledTimes(1);
+      release();
+      await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(2));
+      // …then worked out against the roster as saved: Ada 1, Ben 2.
+      expect(mockAssign).toHaveBeenLastCalledWith([
+        { member_id: "m2", pledge_class_id: "alpha", order_number: 1 },
+        { member_id: "m1", pledge_class_id: "alpha", order_number: 2 },
+      ]);
     });
 
     it("says a refused change failed and puts the rows back", async () => {
@@ -659,11 +747,7 @@ describe("SettingsClassesTab", () => {
 
     it("puts the rows back on a refusal even when the roster can't be read again", async () => {
       mockAssign.mockRejectedValue(new Error("nope"));
-      mockMembers.mockReturnValue({
-        data: MEMBERS,
-        isError: false,
-        refetch: vi.fn().mockResolvedValue({ data: undefined }),
-      });
+      rereadWorks = false;
       openAlpha();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
@@ -679,11 +763,7 @@ describe("SettingsClassesTab", () => {
     });
 
     it("keeps a saved change on screen when the roster can't be read again", async () => {
-      mockMembers.mockReturnValue({
-        data: MEMBERS,
-        isError: false,
-        refetch: vi.fn().mockResolvedValue({ data: undefined }),
-      });
+      rereadWorks = false;
       openAlpha();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),

@@ -4,8 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   addRow,
-  classAssignments,
-  useAssignPledgeClasses,
+  useClassMembersEditor,
   useDeletePledgeClass,
   useMembers,
   usePermissionList,
@@ -23,7 +22,6 @@ import {
   memberCountLabel,
   moveId,
   PEOPLE_SETTINGS_COPY,
-  PLEDGE_CLASS_ASSIGNMENTS_MAX,
   PLEDGE_CLASS_NAME_MAX_LENGTH,
   PLEDGE_CLASS_SETTINGS_COPY,
 } from "@repo/validation";
@@ -53,7 +51,6 @@ import { confirmAlert } from "@/lib/minutes/meetings-on";
 import {
   addableClassMembers,
   classMemberName,
-  classRowsOf,
   moveClassRow,
   movesFromLabel,
 } from "@repo/hooks";
@@ -73,10 +70,11 @@ function firstParam(value: string | string[] | undefined): string {
  * in no class first, then the others, "Moves from Alpha"), each row's number
  * follows its place (`renumberRows`), and a row's long press moves it or
  * takes it out, as its X does. Each add, removal and move saves on its own
- * at once (rulebook § 9, #6033), as on web: it sends only the members it
- * changes, in one request the API applies whole or not at all
- * (`classAssignments`), then reads the roster again. A refused change puts
- * the rows back and is said under the members (the phone has no toast).
+ * at once (rulebook § 9, #6033), as on web, through the same editor
+ * (`useClassMembersEditor`): only the members it changes are sent, one save
+ * at a time, in one request the API applies whole or not at all. A refused
+ * change puts the rows back and is said under the members (the phone has no
+ * toast).
  *
  * Every write needs `roles:manage`; the list opens this page only for it.
  */
@@ -140,7 +138,6 @@ export default function PledgeClassScreen() {
       entry={entry}
       classes={classes}
       liveMembers={membersQuery.data}
-      refetchMembers={async () => (await membersQuery.refetch()).data}
       canManage={canManage}
       back={back}
     />
@@ -164,14 +161,12 @@ function ClassPage({
   entry,
   classes,
   liveMembers,
-  refetchMembers,
   canManage,
   back,
 }: {
   entry: PledgeClass;
   classes: readonly PledgeClass[];
   liveMembers: readonly MemberProfile[];
-  refetchMembers: () => Promise<readonly MemberProfile[] | undefined>;
   canManage: boolean;
   back: { label: string; href: "/pledge-classes" };
 }) {
@@ -181,21 +176,35 @@ function ClassPage({
   const rename = useRenamePledgeClass();
   const reorder = useReorderPledgeClasses();
   const remove = useDeletePledgeClass();
-  const assign = useAssignPledgeClasses();
   const itemMenu = useItemMenu();
   const addRef = useRef<BottomSheetModal>(null);
-  // The roster as last read. The rows are built from it, so each change is
-  // worked out against the same snapshot: a member another officer adds
-  // meanwhile must not read as "taken out" (`classAssignments`). Every save
-  // reads it again.
-  const [members, setMembers] = useState(liveMembers);
-  const [rows, setRows] = useState<ClassEditorRow[]>(() =>
-    classRowsOf(liveMembers, entry.id, classes),
-  );
   // A failed rename is the name field's own line; a failed Move, Delete or
   // member change is the page's one line, under the members, said once.
   const [renameFailure, setRenameFailure] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // Each add, removal and move saves at once, one save at a time, so the
+  // rows stay usable while one saves (`useClassMembersEditor`).
+  const { rows, members, commit } = useClassMembersEditor({
+    classId: entry.id,
+    classes,
+    members: liveMembers,
+    onFailure: (said) =>
+      setFailure(
+        said
+          ? `${PLEDGE_CLASS_SETTINGS_COPY.saveFailed(entry.name)}. ${
+              said.kind === "notSent"
+                ? said.message
+                : errorCopy(
+                    said.error,
+                    PLEDGE_CLASS_SETTINGS_COPY.saveFallback,
+                    {
+                      serverWritesForMembers: true,
+                    },
+                  )
+            }`
+          : null,
+      ),
+  });
 
   const index = classes.findIndex((item) => item.id === entry.id);
   const classNames = useMemo(
@@ -211,10 +220,6 @@ function ClassPage({
       ),
     [members, rows, classNames],
   );
-  // Held through the roster's re-read too, so the next change is never
-  // worked out against the snapshot the last one changed.
-  const [saving, setSaving] = useState(false);
-  const busy = saving;
 
   async function run(
     action: () => Promise<unknown>,
@@ -266,55 +271,12 @@ function ClassPage({
     }
   }
 
-  /**
-   * Each add, removal and move saves at once (#6033), the way Discord's role
-   * members do: only the members it changes are sent, then the roster is
-   * read again, so the next change is worked out against it. A refused
-   * change puts the rows back as they were.
-   */
-  async function commit(next: ClassEditorRow[]) {
-    const changes = classAssignments(entry.id, next, members);
-    if (changes === null) return;
-    setFailure(null);
-    if (changes.length === 0) {
-      setRows(next);
-      return;
-    }
-    // The batch cap stays as a guard; one change never comes near it.
-    if (changes.length > PLEDGE_CLASS_ASSIGNMENTS_MAX) {
-      setFailure(
-        `Couldn't save ${entry.name}. ${PLEDGE_CLASS_SETTINGS_COPY.tooManyAtOnce(PLEDGE_CLASS_ASSIGNMENTS_MAX)}`,
-      );
-      return;
-    }
-    const before = rows;
-    setRows(next);
-    setSaving(true);
-    let ok = true;
-    try {
-      await assign.mutateAsync(changes);
-    } catch (error) {
-      ok = false;
-      setFailure(
-        `Couldn't save ${entry.name}. ${errorCopy(error, PLEDGE_CLASS_SETTINGS_COPY.saveFallback, { serverWritesForMembers: true })}`,
-      );
-    }
-    const fresh = await refetchMembers();
-    if (fresh) {
-      setMembers(fresh);
-      setRows(classRowsOf(fresh, entry.id, classes));
-    } else if (!ok) {
-      setRows(before);
-    }
-    setSaving(false);
-  }
-
   function takeOut(row: ClassEditorRow) {
     void commit(rows.filter((item) => item.memberId !== row.memberId));
   }
 
   function rowMenu(row: ClassEditorRow, at: number) {
-    if (!canManage || busy) return null;
+    if (!canManage) return null;
     const step = (by: -1 | 1) => () => {
       const moved = moveClassRow(rows, row.memberId, by);
       if (moved) void commit(moved);
@@ -404,7 +366,7 @@ function ClassPage({
             label={PLEDGE_CLASS_SETTINGS_COPY.addMember}
             leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
             action
-            disabled={busy || addable.length === 0}
+            disabled={addable.length === 0}
             description={
               addable.length === 0
                 ? PLEDGE_CLASS_SETTINGS_COPY.everyoneIn
@@ -438,7 +400,6 @@ function ClassPage({
                   canManage ? (
                     <IconButton
                       label={`Remove ${row.name} from ${entry.name}`}
-                      disabled={busy}
                       onPress={() => takeOut(row)}
                     >
                       <CloseGlyph color={tokens.color.text.mutedForeground} />

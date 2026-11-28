@@ -1054,6 +1054,29 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(pickSwitch(tree)[0]!.props.disabled).toBe(true);
   });
 
+  it("leaves the tiers out of a marked role's Tier sheet, and says how to move it in", () => {
+    h.roles = [
+      ...h.roles,
+      role({ id: "r-ims", name: "Intramurals", self_assignable: true }),
+    ];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
+    const tree = render(<RoleScreen />);
+    // The tier saves on its own, and the API refuses a marked role in one.
+    const tierSheet = tree.root.find(
+      (node) =>
+        node.props.title === "Tier" && Array.isArray(node.props.options),
+    );
+    expect(
+      tierSheet.props.options.map((option: { label: string }) => option.label),
+    ).toEqual(["Outside the tiers"]);
+    const tierRow = tree.root.find(
+      (node) => node.props.label === "Tier" && "description" in node.props,
+    );
+    expect(tierRow.props.description).toBe(
+      "Turn off Non-chapter business to move it into a tier.",
+    );
+  });
+
   it("has no switch on a built-in role", () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-pres" });
     expect(pickSwitch(render(<RoleScreen />))).toHaveLength(0);
@@ -1250,6 +1273,39 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
       in: false,
     });
     expect(byLabel(tree, "Pressable", "Save")).toHaveLength(0);
+  });
+
+  it("ignores a second pick of a member whose add is saving, and leaves them out of the sheet", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
+    let release!: (value: object) => void;
+    h.setGroupMembership.mockImplementationOnce(
+      () =>
+        new Promise<object>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const tree = render(<ChapterRolesScreen />);
+    const addSheet = () =>
+      tree.root.find(
+        (node) =>
+          node.props.title === "Add a member" &&
+          Array.isArray(node.props.options),
+      );
+    act(() => {
+      addSheet().props.onSelect("u4");
+    });
+    expect(
+      (addSheet().props.options as { value: string }[]).map(
+        (option) => option.value,
+      ),
+    ).not.toContain("u4");
+    // A pick the sheet still had (a double tap) sends nothing more.
+    act(() => {
+      addSheet().props.onSelect("u4");
+    });
+    expect(h.setGroupMembership).toHaveBeenCalledTimes(1);
+    await act(async () => release({}));
   });
 
   it("renames a group when its name field is left", async () => {

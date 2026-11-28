@@ -19,6 +19,7 @@ import { memberLabel } from "@repo/hooks/display-names";
 import {
   AUTO_GROUP_FOOTNOTE,
   deleteGroupConfirm,
+  deleteGroupFailed,
   GROUP_MEMBERS_MAX,
   GROUP_NAME_MAX_LENGTH,
   GROUPS_FOOTNOTE,
@@ -170,7 +171,7 @@ export function GroupsSection({
     } catch (error) {
       setFailure({
         groupId: group.id,
-        message: `Couldn't delete ${group.name}. ${errorCopy(error, "Retry in a moment.", { serverWritesForMembers: true })}`,
+        message: `${deleteGroupFailed(group.name)}. ${errorCopy(error, "Retry in a moment.", { serverWritesForMembers: true })}`,
       });
     }
   }
@@ -480,9 +481,14 @@ function GroupBody({
   const addable = useMemo(
     () =>
       members
-        .filter((member) => !pickedSet.has(member.user_id))
+        // Anyone whose add or removal is in flight is left out, as on web,
+        // so a second pick never sends it twice or races the removal.
+        .filter(
+          (member) =>
+            !pickedSet.has(member.user_id) && !moving.has(member.user_id),
+        )
         .sort((a, b) => rowName(a).localeCompare(rowName(b))),
-    [members, pickedSet],
+    [members, pickedSet, moving],
   );
   const rows = group.member_ids
     .map((userId) => ({
@@ -532,7 +538,7 @@ function GroupBody({
       // Said under the name, the page's first row, as the role page does.
       setFailure({
         key: "name",
-        words: `Couldn't delete ${group.name}. ${errorCopy(error, "Retry in a moment.", { serverWritesForMembers: true })}`,
+        words: `${deleteGroupFailed(group.name)}. ${errorCopy(error, "Retry in a moment.", { serverWritesForMembers: true })}`,
       });
     }
   }
@@ -608,9 +614,7 @@ function GroupBody({
       </SectionHeader>
       <ListSection
         footnote={
-          manual && canManage && full
-            ? `A group can hold at most ${GROUP_MEMBERS_MAX} members.`
-            : null
+          manual && canManage && full ? PEOPLE_SETTINGS_COPY.groupFull : null
         }
       >
         {rows.length === 0 ? (
@@ -664,7 +668,14 @@ function GroupBody({
           }))}
           selected={null}
           onSelect={(userId) => {
-            if (userId === null || pickedSet.has(userId) || full) return;
+            if (
+              userId === null ||
+              pickedSet.has(userId) ||
+              moving.has(userId) ||
+              full
+            ) {
+              return;
+            }
             void moveMember(userId, true);
           }}
         />

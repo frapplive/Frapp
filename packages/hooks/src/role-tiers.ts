@@ -3,6 +3,7 @@ import {
   PERMISSION_REGISTRY,
   permissionLabel,
   permissionsNotGivable,
+  selfAssignableRefusal,
 } from "@repo/validation";
 
 /*
@@ -383,8 +384,8 @@ export function permissionRows(
  * A role's permissions after a move to another tier (or out of the tiers,
  * `[]`): the tier's, plus its overrides that are on, minus those that are
  * off. The API's `effectivePermissions` rule, which the database applies on
- * the write; both apps' role pages judge Non-chapter business against it
- * before the move is saved (#6029).
+ * the write. {@link refusesTierMove} judges a marked role's move with it, so
+ * both apps' tier pickers hold a tier the API would refuse (#6033).
  */
 export function permissionsAfterMove(
   tierPermissions: readonly string[],
@@ -396,4 +397,29 @@ export function permissionsAfterMove(
     else result.delete(permission);
   }
   return [...result];
+}
+
+/**
+ * Whether the API would refuse moving `role` into `tier` while the role is
+ * marked Non-chapter business (`marked`, the switch as shown): the tier save
+ * sends `tier_id` alone, and `assertSelfAssignableSave` refuses a save that
+ * leaves a marked role unsafe to pick (#4958). Both apps' role pages hold
+ * such a tier in their Tier picker and say why under the row (#6033).
+ */
+export function refusesTierMove(
+  role: Pick<TieredRole, "system_key" | "permission_overrides">,
+  tier: Pick<TierRow, "id" | "permissions">,
+  marked: boolean,
+): boolean {
+  if (!marked) return false;
+  return (
+    selfAssignableRefusal({
+      system_key: role.system_key,
+      tier_id: tier.id,
+      permissions: permissionsAfterMove(
+        tier.permissions,
+        role.permission_overrides,
+      ),
+    }) !== null
+  );
 }

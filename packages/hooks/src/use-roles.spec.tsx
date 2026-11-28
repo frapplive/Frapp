@@ -316,3 +316,47 @@ describe("role edits refresh the roster's role colors", () => {
     });
   });
 });
+
+describe("useUpdateRole settles after the re-read (#6033)", () => {
+  it("resolves mutateAsync only once the roles have been read again", async () => {
+    const queryClient = createTestQueryClient();
+    const before = [{ id: "role-1", name: "Brothers", color: null }];
+    const after = [{ id: "role-1", name: "Brothers", color: "#5CC8F0" }];
+    let release!: () => void;
+    const mockGet = vi
+      .fn()
+      .mockResolvedValueOnce({ data: before, error: null })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve({ data: after, error: null });
+          }),
+      );
+    const mockPatch = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const { result } = renderHook(
+      () => ({ roles: useRoles(), update: useUpdateRole() }),
+      {
+        wrapper: createWrapper(queryClient, {
+          GET: mockGet,
+          PATCH: mockPatch,
+        }),
+      },
+    );
+    await waitFor(() => expect(result.current.roles.data).toEqual(before));
+
+    let settled = false;
+    const saving = result.current.update
+      .mutateAsync({ id: "role-1", body: { color: "#5CC8F0" } })
+      .then(() => {
+        settled = true;
+      });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    // The save landed, but the list isn't read back yet: still pending, so
+    // a setting that saves on its own keeps showing the pick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    release();
+    await saving;
+    expect(queryClient.getQueryData(ROLES_QUERY_KEY)).toEqual(after);
+  });
+});

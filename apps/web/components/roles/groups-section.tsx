@@ -21,6 +21,7 @@ import { memberLabel } from "@repo/hooks/display-names";
 import {
   AUTO_GROUP_FOOTNOTE,
   deleteGroupConfirm,
+  deleteGroupFailed,
   GROUP_MEMBERS_MAX,
   GROUP_NAME_MAX_LENGTH,
   groupDisplayName,
@@ -154,7 +155,7 @@ export function GroupsGroup({
       toast({ title: `${group.name} deleted` });
     } catch (error) {
       toast({
-        title: `Couldn't delete ${group.name}`,
+        title: deleteGroupFailed(group.name),
         description: getErrorMessage(error, "Retry in a moment."),
         variant: "destructive",
       });
@@ -475,6 +476,18 @@ function GroupBody({
     roleColorOrNull(group.color),
     useCallback((next) => saveGroup({ color: next }), [saveGroup]),
   );
+  // The picker's draft while it is open: a Custom drag picks on every move,
+  // so the color saves once, when the picker closes, as the phone's sheet
+  // does.
+  const [colorDraft, setColorDraft] = useState<string | null | undefined>(
+    undefined,
+  );
+  const shownColor = colorDraft === undefined ? color : colorDraft;
+  function commitColor() {
+    if (colorDraft === undefined) return;
+    setColorDraft(undefined);
+    if (colorDraft !== color) void changeColor(colorDraft);
+  }
   const [mentionable, changeMentionable] = usePendingSetting(
     group.mentionable,
     useCallback((next) => saveGroup({ mentionable: next }), [saveGroup]),
@@ -544,7 +557,7 @@ function GroupBody({
       onDone();
     } catch (error) {
       toast({
-        title: `Couldn't delete ${group.name}`,
+        title: deleteGroupFailed(group.name),
         description: getErrorMessage(error, "Retry in a moment."),
         variant: "destructive",
       });
@@ -604,7 +617,7 @@ function GroupBody({
           icon={Palette}
           label={PEOPLE_SETTINGS_COPY.color}
           control={
-            <Popover>
+            <Popover onOpenChange={(open) => (open ? null : commitColor())}>
               <PopoverTrigger
                 disabled={!editable || busy}
                 className={cn(
@@ -612,8 +625,8 @@ function GroupBody({
                   FOCUS_RING,
                 )}
               >
-                <ColorDot color={color} />
-                {roleColorLabel(color)}
+                <ColorDot color={shownColor} />
+                {roleColorLabel(shownColor)}
                 <ChevronDown className="h-4 w-4 opacity-50" aria-hidden />
               </PopoverTrigger>
               <PopoverContent
@@ -625,8 +638,8 @@ function GroupBody({
                 </span>
                 <RoleColorPicker
                   labelId="group-edit-color-label"
-                  value={color}
-                  onChange={(next) => void changeColor(next)}
+                  value={shownColor}
+                  onChange={setColorDraft}
                   disabled={busy}
                   previewName={draftName || group.name}
                   memberName={viewerName}
@@ -689,11 +702,10 @@ function GroupBody({
         ) : null}
         {manual && editable && full ? (
           <p role="alert" className="text-caption text-destructive-text">
-            A group can hold at most {GROUP_MEMBERS_MAX} members.
+            {PEOPLE_SETTINGS_COPY.groupFull}
           </p>
         ) : null}
       </div>
-
     </SettingsSubpage>
   );
 }

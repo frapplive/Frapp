@@ -13,6 +13,7 @@ import type {
   CustomFieldType,
   CustomFieldVisibility,
 } from "./chapter-config";
+import { GROUP_MEMBERS_MAX } from "./field-limits";
 
 /** "1 member", "14 members", "No members": a role's or group's value. */
 export function memberCountLabel(count: number): string {
@@ -73,7 +74,23 @@ export const PEOPLE_SETTINGS_COPY = {
   moveDown: "Move down",
   deleteRole: "Delete role",
   deleteGroup: "Delete group",
+  /** A group's member picker once the group is full. */
+  groupFull: `A group can hold at most ${GROUP_MEMBERS_MAX} members.`,
 } as const;
+
+/** A group's delete was refused: the toast's title, or the phone line's start. */
+export function deleteGroupFailed(name: string): string {
+  return `Couldn't delete ${name}`;
+}
+
+/**
+ * Under a role's tier row while the role is marked Non-chapter business: the
+ * API refuses a marked role in a tier (`selfAssignableRefusal`), so the tiers
+ * are held until it is turned off. `tier` is the chapter's word, lowercase.
+ */
+export function tierMoveNeedsUnmark(tier: string): string {
+  return `Turn off Non-chapter business to move it into a ${tier}.`;
+}
 
 /** Under the Groups group, on both apps. */
 export const GROUPS_FOOTNOTE =
@@ -214,7 +231,9 @@ export const PLEDGE_CLASS_SETTINGS_COPY = {
   /** A class's page whose class is no longer in the list. */
   gone: "It isn't in the list any more.",
   goneDetail: "Someone may have deleted it.",
-  /** A member change that saves on its own was refused (#6033). */
+  /** A member change that saves on its own was refused (#6033): the title. */
+  saveFailed: (name: string) => `Couldn't save ${name}`,
+  /** Why it was refused when the API gave no reason. */
   saveFallback: "Nothing was changed. Try again in a moment.",
   /** The batch cap, a guard: one change never comes near it. */
   tooManyAtOnce: (max: number) =>

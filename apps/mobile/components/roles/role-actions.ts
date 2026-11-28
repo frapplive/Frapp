@@ -31,7 +31,7 @@ const MOVE_FAILED = "The role stayed where it was. Try again in a moment.";
  * ⋯ and page ⋯ hold: Move up and Move down within its own list
  * (`planRoleStep`, shared with web), Move to another tier or out of the
  * tiers (the row's menu only, as on web; the page moves a role with its
- * Tier row and Save role), and Delete role, which asks first.
+ * Tier row, which saves on its own), and Delete role, which asks first.
  *
  * The phone's menu has no disabled row, so an entry the rank rules refuse
  * is left out rather than greyed (`@repo/hooks/role-tiers`). The API stays

@@ -1035,6 +1035,44 @@ describe("a role's page", () => {
     );
   });
 
+  it("holds every tier for a Non-chapter business role, and says how to move it in", async () => {
+    // The tier saves on its own, and the API refuses a marked role in a
+    // tier, so the picker offers only what would save.
+    const user = userEvent.setup();
+    h.roles = [...h.roles, pickable()];
+    rolePage("im");
+    expect(
+      screen.getByText("Turn off Non-chapter business to move it into a tier."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Tier" }));
+    for (const name of ["Exec board", "Officers and chairs", "Members"]) {
+      expect(screen.getByRole("option", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    }
+    await user.click(screen.getByRole("option", { name: "Members" }));
+    expect(h.updateRole).not.toHaveBeenCalled();
+  });
+
+  it("lets a role outside the tiers that isn't marked move into one, with no hold", async () => {
+    const user = userEvent.setup();
+    rolePage("alum");
+    expect(
+      screen.queryByText(
+        "Turn off Non-chapter business to move it into a tier.",
+      ),
+    ).toBeNull();
+    await user.click(screen.getByRole("combobox", { name: "Tier" }));
+    await user.click(screen.getByRole("option", { name: "Members" }));
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "alum",
+        body: { tier_id: "t3" },
+      }),
+    );
+  });
+
   it("explains why a role in a tier can't be Non-chapter business", () => {
     rolePage("brother");
     expect(
@@ -1116,15 +1154,15 @@ describe("a role's page", () => {
     ).toBeNull();
   });
 
-  it("saves a picked swatch at once, sending only its color", async () => {
+  it("saves a picked color once, when the picker closes", async () => {
     const user = userEvent.setup();
     rolePage("brother");
     await user.click(screen.getByRole("button", { name: "No color" }));
-    await user.click(
-      within(screen.getByRole("group", { name: "Color" })).getByRole("button", {
-        name: "Teal",
-      }),
-    );
+    const picker = within(screen.getByRole("group", { name: "Color" }));
+    await user.click(picker.getByRole("button", { name: "Teal" }));
+    // A Custom drag picks on every move, so nothing is sent while it is open.
+    expect(h.updateRole).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
     await waitFor(() =>
       expect(h.updateRole).toHaveBeenCalledWith({
         id: "brother",

@@ -114,35 +114,14 @@ export function useUpdateGroup() {
   });
 }
 
-/** A manual group's whole member list, replaced all or none. */
-export function useSetGroupMembers() {
-  const client = useFrappClient();
-  const invalidate = useInvalidateAfterGroupWrite();
-  return useMutation({
-    mutationKey: ["groups", "set-members"],
-    mutationFn: async ({
-      id,
-      memberIds,
-    }: {
-      id: string;
-      memberIds: string[];
-    }) => {
-      const { data, error } = await client.PUT("/v1/groups/{id}/members", {
-        params: { path: { id } },
-        body: { member_ids: memberIds },
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: invalidate,
-  });
-}
-
 /**
- * Put one member in a manual group, or take them out (`in: false`), from
- * their profile. Needs `groups:manage`, and `channels:manage` too when a
- * channel list names the group. The groups list is written from the answer
- * at once, so the chip lands without waiting for the re-read.
+ * Put one member in a manual group, or take them out (`in: false`): from
+ * their profile, and from the group's page on both apps, where each add and
+ * removal saves on its own (#6033). Needs `groups:manage`, and
+ * `channels:manage` too when a channel list names the group. The groups list
+ * is written from the answer at once, so the chip lands without waiting for
+ * the re-read. (`PUT /v1/groups/{id}/members`, the whole list, stays in the
+ * API for shipped phone builds; no client here sends it.)
  */
 export function useSetGroupMembership() {
   const client = useFrappClient();
