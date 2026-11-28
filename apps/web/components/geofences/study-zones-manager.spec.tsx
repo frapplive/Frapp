@@ -49,6 +49,8 @@ const ZONE = {
   created_at: "2026-08-01T00:00:00Z",
 };
 
+const zonePermissions = vi.hoisted(() => ({ list: ["geofences:manage"] }));
+
 // The open editor is the address's `zone=` (#6049).
 vi.mock("next/navigation", async () => ({
   useSearchParams: (await import("@/tests/address-search-params"))
@@ -61,7 +63,7 @@ vi.mock("@repo/hooks", () => ({
   // a second `<Can>`, so `can-fallback.spec.tsx`'s per-surface lookup still
   // finds this file's screen-level gate.
   useMyPermissions: () => ({
-    data: { permissions: ["geofences:manage"] },
+    data: { permissions: zonePermissions.list },
     isPending: false,
     isError: false,
   }),
@@ -298,6 +300,12 @@ describe("StudyZonesManager subscription gating", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
+    // The editor is closed by the address too (#6049): no zone= is left for
+    // Back to drop, and a renewal doesn't reopen it unasked.
+    await waitFor(() => expect(window.location.search).not.toContain("zone="));
+    chapter.active();
+    rerender(<StudyZonesManager />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("still opens the editor and toggles a zone on an active chapter", async () => {
@@ -742,6 +750,19 @@ describe("StudyZonesManager: the editor's address (#6049)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(go).not.toHaveBeenCalled();
     expect(here()).toBe(LIST);
+  });
+
+  it("drops a zone= the role can't manage, without calling the zone gone", () => {
+    zonePermissions.list = [];
+    try {
+      setAddress(`${LIST}&zone=gf-1`);
+      render(<StudyZonesManager />);
+      expect(here()).toBe(LIST);
+      expect(screen.queryByText(/isn.t here anymore/i)).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      zonePermissions.list = ["geofences:manage"];
+    }
   });
 
   it("says a zone the list lacks is gone, after one more read, and drops it from the address", async () => {

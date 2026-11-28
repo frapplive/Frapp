@@ -34,7 +34,7 @@ function sameRouteHref(anchor: HTMLAnchorElement): string | null {
 }
 
 /** The pane a full-width tool page scrolls in, back to its top. */
-function scrollToolPageToTop(): void {
+export function scrollToolPageToTop(): void {
   document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
 }
 

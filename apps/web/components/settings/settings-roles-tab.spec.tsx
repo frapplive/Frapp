@@ -1,3 +1,4 @@
+import { ADDRESS_FROM_KEY } from "@/lib/address/address";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -196,6 +197,18 @@ describe("SettingsRolesTab", () => {
     // Non-chapter business's Add role opens the new role's page.
     await user.click(screen.getByRole("button", { name: "open role" }));
     expect(here()).toBe("/settings?tab=roles&role=role-1");
+    // Pushed with the mark, so the role's back arrow goes Back (#6049).
+    expect(window.history.state).toMatchObject({
+      [ADDRESS_FROM_KEY]: ["/settings?tab=roles"],
+    });
+  });
+
+  it("opens no role or tier page for a member the roles are hidden from, and drops it", () => {
+    mockPermissions.mockReturnValue(["groups:manage"]);
+    at("tab=roles&role=role-3");
+    render(tab());
+    expect(screen.queryByTestId("role-page")).toBeNull();
+    expect(here()).toBe("/settings?tab=roles");
   });
 
   it("lists the groups under the roles, on the same page (2026-11-19)", async () => {

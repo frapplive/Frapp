@@ -49,6 +49,7 @@ import { InlineNote } from "@/components/shared/inline-note";
 import {
   useAddressParams,
   useDeadAddressParam,
+  useGoneAfterRecheck,
 } from "@/lib/address/use-address-params";
 import {
   StudyZoneEditor,
@@ -118,30 +119,21 @@ export function StudyZonesManager() {
   );
 
   /*
-    A zone the address names that the list in hand doesn't hold is read again
-    once (the list can be cached from before it was drawn); only a settled,
-    successful read without it calls it gone, and it is said and taken out of
-    the address. One the role can't manage is taken out too: the page already
-    says the role can't manage zones.
+    A zone the address names that the list doesn't hold, after one more read,
+    is said and taken out of the address. One the role can't manage is taken
+    out too: the page already says the role can't manage zones.
   */
-  const zoneMissing =
-    editingId !== null &&
-    geofencesQuery.data !== undefined &&
-    !geofencesQuery.isFetching &&
-    !geofencesQuery.isError &&
-    geofencesQuery.fetchStatus !== "paused" &&
-    editing === null;
-  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (!zoneMissing || recheckedFor === editingId) return;
-    void geofencesQuery.refetch().finally(() => setRecheckedFor(editingId));
-  }, [zoneMissing, recheckedFor, editingId, geofencesQuery]);
+  const zoneGone = useGoneAfterRecheck(
+    editingId,
+    geofencesQuery,
+    (data, id) => asArray<StudyZone>(data).some((zone) => zone.id === id),
+  );
   const zoneForbidden =
     zoneParam !== null && permissionsPayload !== undefined && !canManageZones;
   const deadZone = useDeadAddressParam(
     ZONE_PARAM,
     zoneParam,
-    zoneForbidden || (zoneMissing && recheckedFor === editingId),
+    zoneForbidden || zoneGone,
   );
 
   // The editor is shown while the address names a zone the officer may
@@ -157,6 +149,14 @@ export function StudyZonesManager() {
     if (!zoneShown && editorOpen) setEditorOpen(false);
   }, [zoneShown, editorOpen, setEditorOpen]);
   const shownOpen = editorOpen && zoneShown;
+  // A definite block (the subscription lapsed, not a pending or offline
+  // read) closes the editor by the address's rule, as a revoke closes the
+  // gated dialog, so Back has no invisible step and a renewal later doesn't
+  // reopen it unasked.
+  const writesBlocked = !gate.state.allowed;
+  useEffect(() => {
+    if (zoneParam !== null && writesBlocked) closeZone();
+  }, [zoneParam, writesBlocked, closeZone]);
 
   // The editor the page was left with open (#4593): reopened on its draft
   // once the officer may still open it and, for an edit, the zone is still
@@ -301,7 +301,9 @@ export function StudyZonesManager() {
         */}
         <div className="@container space-y-4">
           <SubscriptionNotice gate={gate} feature="managing study zones" />
-          {deadZone !== null && !zoneForbidden ? (
+          {/* A zone the role can't manage is dropped without a note: the
+              page says the role can't manage zones. */}
+          {deadZone !== null && canManageZones ? (
             <InlineNote>
               That study zone isn&apos;t here anymore. It may have been
               deleted.

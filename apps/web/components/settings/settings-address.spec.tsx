@@ -39,6 +39,12 @@ vi.mock("@/lib/hooks/use-toast", async () =>
   (await import("@/tests/settings-harness")).toastStub(),
 );
 
+// Roles and groups' own body has its own specs; here it only has to be the
+// row on screen.
+vi.mock("@/components/settings/settings-roles-tab", () => ({
+  SettingsRolesTab: () => <p>Roles and groups body</p>,
+}));
+
 const { SettingsPage } = await import("./settings-page");
 
 const chapter = chapterSubscription(mockCurrentChapter);
@@ -115,6 +121,48 @@ describe("Chapter settings' address", () => {
     const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
     expect(go).toHaveBeenCalledWith(-1);
+  });
+
+  it("writes the row into a bare /settings in place, so a page opened from it closes Back", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/settings");
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SettingsPage />);
+    await waitFor(() => expect(here()).toBe("/settings?tab=org"));
+    expect(push).not.toHaveBeenCalled();
+    await user.click(accentRow());
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    await user.click(backToChapter());
+    expect(go).toHaveBeenCalledWith(-1);
+  });
+
+  it("writes an old alias as its row in place (?tab=groups is Roles and groups)", async () => {
+    window.history.replaceState(null, "", "/settings?tab=groups");
+    render(<SettingsPage />);
+    await waitFor(() => expect(here()).toBe("/settings?tab=roles"));
+  });
+
+  it("closes a role's page when the lit Roles and groups row is clicked", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/settings?tab=roles&role=r1");
+    render(<SettingsPage />);
+    await user.click(screen.getByRole("tab", { name: /^roles and groups$/i }));
+    expect(here()).toBe("/settings?tab=roles");
+  });
+
+  it("pushes nothing while the arrow keys move along the rail; Enter picks a row", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    screen.getByRole("tab", { name: /^chapter$/i }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("tab", { name: /^chapter$/i }),
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(here()).toBe("/settings?tab=org");
+    await user.keyboard("{Enter}");
+    expect(push).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a modified click to the link, for a new tab", async () => {

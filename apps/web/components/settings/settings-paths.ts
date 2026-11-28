@@ -1,4 +1,4 @@
-import { WEB_ADDRESS_PARAMS } from "@repo/validation";
+import { ONE_SHOT_ADDRESS_PARAMS, WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * Where the officer tools live on web: inside Chapter settings, on the page
  * of the module each belongs to (#3837).
@@ -68,7 +68,7 @@ export function channelSettingsPath(
  * "Add a description" opens it (#6031), so the officer lands where it sent
  * them. Any other way in focuses nothing.
  */
-export const FOCUS_DESCRIPTION_PARAM = "focus";
+export const FOCUS_DESCRIPTION_PARAM = ONE_SHOT_ADDRESS_PARAMS.focus;
 export function channelDescriptionPath(channelId: string): string {
   return `${channelSettingsPath(channelId)}&${FOCUS_DESCRIPTION_PARAM}=description`;
 }

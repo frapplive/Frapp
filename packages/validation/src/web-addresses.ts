@@ -71,6 +71,9 @@ export const WEB_ADDRESS_PARAMS = {
     role: "role",
     group: "group",
     groups: "groups",
+    // Where a group's page was opened from (`from=automatic`), its back
+    // arrow's parent.
+    from: "from",
     class: "class",
     field: "field",
     zone: "zone",
@@ -94,6 +97,10 @@ export const ONE_SHOT_ADDRESS_PARAMS = {
   message: CHAT_LINK_MESSAGE_PARAM,
   excuse: "excuse",
   setting: "setting",
+  // Chapter settings: a module's switch focused (chat's setup nudge), and a
+  // channel's Description focused ("Add a description"), #6049.
+  module: "module",
+  focus: "focus",
 } as const;
 
 /** A phone route a web address opens: its pathname and parameter names. */
@@ -118,10 +125,13 @@ export interface WebAddressRow {
   params: readonly string[];
   /**
    * The phone screens this page's addresses open, most specific first: the
-   * first whose `when` parameters are all present wins, and an address none
-   * matches stays in the browser. `null` is a web-only page (Backwork,
-   * Plan and billing), which the phone
-   * doesn't claim, so its link stays in the browser.
+   * first whose `when` parameters are all present wins, and the last has no
+   * `when`. `phoneAddressFor` matches on those parameters alone; the phone's
+   * reader (`apps/mobile/lib/links/web-address-link.ts`) also keeps a link in
+   * the browser when the chosen screen would drop one of its parameters
+   * (`/settings?tab=chat` isn't Chapter settings' first screen). `null` is a
+   * web-only page (Backwork, Meeting minutes), which the phone doesn't
+   * claim, so its link stays in the browser.
    */
   phone: readonly (PhoneAddress & { when?: readonly string[] })[] | null;
 }

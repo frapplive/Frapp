@@ -167,6 +167,17 @@ describe("a page addressed in full (Chapter settings)", () => {
     expect(go).toHaveBeenLastCalledWith(-1);
   });
 
+  it("records and matches addresses without a fragment the skip link left", () => {
+    window.history.replaceState(null, "", "/settings?tab=org#main-content");
+    pushAddressHref("/settings?tab=org&page=accent");
+    expect(window.history.state).toEqual({
+      [ADDRESS_FROM_KEY]: ["/settings?tab=org"],
+    });
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeToAddress("/settings?tab=org");
+    expect(go).toHaveBeenCalledWith(-1);
+  });
+
   it("closing a page that arrived from a link replaces it with its parent", () => {
     window.history.replaceState(null, "", "/settings?tab=roles&role=r1");
     const go = vi.spyOn(window.history, "go");

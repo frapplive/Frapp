@@ -352,8 +352,17 @@ describe("ChannelSettingsPage — the name and description", () => {
     search.current = new URLSearchParams(
       "tab=chat&page=chat-admin&channel=ch-1&focus=description",
     );
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1&focus=description",
+    );
     render(page("ch-1"));
     expect(descriptionField()).toHaveFocus();
+    // A one-shot (#6049): off the address once acted on, the rest kept.
+    expect(`${window.location.pathname}${window.location.search}`).toBe(
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
+    );
   });
 
   it("focuses nothing when opened any other way", () => {

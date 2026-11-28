@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { closeToAddress, pushAddressHref } from "@/lib/address/address";
+import {
+  closeToAddress,
+  pushAddressHref,
+  replaceAddress,
+} from "@/lib/address/address";
 import { Search, UserPlus } from "lucide-react";
 import { defaultInviteRoleChoices } from "@repo/hooks/chapter-roles";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -129,7 +133,19 @@ export function SettingsRolesTab({
   // it, else a replace. A row opens its page with a marked push.
   const backToRoles = () => closeToAddress(BASE);
 
-  if (tierId) {
+  // A tier's or role's page is the roles part of this row, which the
+  // overview shows only to `roles:manage` or `chapter-config:view`. A
+  // `groups:manage` holder reaching the row for its groups gets neither
+  // page from a link: the address is put back to the row (#6049).
+  const rolesHidden = permissions !== undefined && !canSeeRoles;
+  const roleAddressed = tierId !== null || roleId !== null;
+  useEffect(() => {
+    if (rolesHidden && roleAddressed) {
+      replaceAddress({ tier: null, role: null });
+    }
+  }, [rolesHidden, roleAddressed]);
+
+  if (tierId && canSeeRoles) {
     return (
       <TierPermissionsPage
         tierId={tierId}
@@ -139,7 +155,7 @@ export function SettingsRolesTab({
       />
     );
   }
-  if (roleId) {
+  if (roleId && canSeeRoles) {
     return (
       <RolePage
         roleId={roleId}

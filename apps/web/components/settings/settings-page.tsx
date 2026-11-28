@@ -3,12 +3,12 @@
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  closeAddress,
-  pushAddress,
-  replaceAddress,
-} from "@/lib/address/address";
+import { replaceAddress } from "@/lib/address/address";
 import { pushSameRouteLink } from "@/lib/address/address-links";
+import {
+  SettingsTabAddress,
+  useSettingsRowsAddress,
+} from "@/components/settings/settings-rows-address";
 import {
   type OrgDues,
   useCurrentChapter,
@@ -97,7 +97,6 @@ import {
 } from "@/components/settings/settings-tool-views";
 import {
   CHAT_REPORTS_ANCHOR,
-  SETTINGS_SUBPAGE_PARAMS,
   chapterSettingsHref,
   isChapterSettingsPage,
   moduleSettingsHref,
@@ -290,28 +289,8 @@ function SettingsPageContent() {
     window.history.replaceState(null, "", url.toString());
   }, []);
   // Switching rows starts the panel at its top, not wherever the last one
-  // was scrolled to: the panel scrolls inside the shell's tool pane. A row is
-  // a step Back returns from (#6049), the way iOS Settings and Discord's
-  // server settings walk back through the rows visited: the row pushes its
-  // address, without the params that opened a page inside the last one, so
-  // Chat shows its own page when the officer comes back to it. Next keeps
-  // `useSearchParams` in step with the History API.
-  const changeTab = useCallback((next: string) => {
-    pushAddress({
-      tab: next,
-      ...Object.fromEntries(
-        SETTINGS_SUBPAGE_PARAMS.map((param) => [param, null]),
-      ),
-    });
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
-  }, []);
-  // The lit row closes a page opened inside it (a channel's settings,
-  // Discord import, the plan table) by the address's rule: Back when this
-  // tab opened the page, else a replace with the row's own page.
-  const closeSubpage = useCallback(() => {
-    closeAddress(SETTINGS_SUBPAGE_PARAMS);
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
-  }, []);
+  // was scrolled to: the panel scrolls inside the shell's tool pane.
+  const { changeTab, onRowClick } = useSettingsRowsAddress();
 
   /**
    * `?module=` lands an officer on that module's page with its switch
@@ -823,6 +802,11 @@ function SettingsPageContent() {
   // address's mark, so that page's back arrow goes Back to it (#6049).
   return (
     <div className="space-y-6" onClickCapture={pushSameRouteLink}>
+      <SettingsTabAddress
+        rawTab={rawTabParam}
+        resolvedTab={activeTab}
+        shownTab={shownTab}
+      />
       {/*
         Above the tabs, so switching tab never unmounts an open confirmation
         mid-flight — `ConfirmDialogHost` would settle it `null` and the
@@ -847,21 +831,12 @@ function SettingsPageContent() {
       <Tabs
         value={shownTab}
         onValueChange={changeTab}
+        activationMode="manual"
         className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
       >
         <SettingsRail
           visibleTabs={visibleTabs}
-          onRowClick={(value) => {
-            // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import, the plan table) and goes back to the
-            // row's own page.
-            if (
-              value === shownTab &&
-              (channelParam || toolParam || searchParams.get("page"))
-            ) {
-              closeSubpage();
-            }
-          }}
+          onRowClick={(value) => onRowClick(value, shownTab)}
         />
 
         <div className="w-full min-w-0 max-w-[960px] flex-1">

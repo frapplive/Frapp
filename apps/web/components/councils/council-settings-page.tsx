@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { closeAddress, pushAddress } from "@/lib/address/address";
 import { pushSameRouteLink } from "@/lib/address/address-links";
-import { SETTINGS_SUBPAGE_PARAMS } from "@/components/settings/settings-paths";
+import {
+  SettingsTabAddress,
+  useSettingsRowsAddress,
+} from "@/components/settings/settings-rows-address";
 import {
   useCouncil,
   useCurrentChapter,
@@ -101,18 +103,7 @@ export function CouncilSettingsPage() {
   // The row on screen is the address's, and a row is a step Back returns
   // from, as on Chapter settings (#6049).
   const activeTab = tabParam ?? "council";
-  const changeTab = useCallback((next: string) => {
-    pushAddress({
-      tab: next,
-      ...Object.fromEntries(
-        SETTINGS_SUBPAGE_PARAMS.map((param) => [param, null]),
-      ),
-    });
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
-  }, []);
-  const onSubpage = SETTINGS_SUBPAGE_PARAMS.some((param) =>
-    searchParams.has(param),
-  );
+  const { changeTab, onRowClick } = useSettingsRowsAddress();
 
   if (chapterQuery.isError && !chapterQuery.data) {
     return (
@@ -139,18 +130,19 @@ export function CouncilSettingsPage() {
     <Tabs
       value={shownTab}
       onValueChange={changeTab}
+      activationMode="manual"
       className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
     >
+      <SettingsTabAddress
+        rawTab={rawTab}
+        resolvedTab={activeTab}
+        shownTab={shownTab}
+      />
       <SettingsRail
         visibleTabs={visibleTabs}
         groupLabels={{ chapter: COPY.group }}
         search={false}
-        onRowClick={(value) => {
-          // The lit row closes a page opened inside it (a tier, a role).
-          if (value === shownTab && onSubpage) {
-            closeAddress(SETTINGS_SUBPAGE_PARAMS);
-          }
-        }}
+        onRowClick={(value) => onRowClick(value, shownTab)}
       />
       <div
         className="w-full min-w-0 max-w-[960px] flex-1"
