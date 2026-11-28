@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   chapterStore,
@@ -162,7 +163,12 @@ describe("Settings page spec harness", () => {
     expect(chapterStore().useChapterStore((s) => s.activeChapterId)).toBe(
       "chap-1",
     );
-    expect(navigation().useSearchParams().toString()).toBe("");
+    // A hook now (it follows the History API), so it is read inside one.
+    expect(
+      renderHook(() =>
+        navigation().useSearchParams(),
+      ).result.current.toString(),
+    ).toBe("");
     const toast = vi.fn();
     expect(toastStub(toast).useToast().toast).toBe(toast);
   });
