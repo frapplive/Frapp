@@ -17,7 +17,6 @@ import {
   CalendarDays,
   FileText,
   Link2,
-  MoreHorizontal,
   NotebookPen,
   Pencil,
   Plus,
@@ -115,9 +114,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ActionMenuButton,
+  type RowMenuEntry,
+} from "@/components/shared/row-menu";
 import { DueDateField } from "@/components/tasks/due-date-field";
 import { useToast } from "@/lib/hooks/use-toast";
 import { cn, getErrorMessage } from "@/lib/utils";
@@ -623,6 +625,7 @@ function Minutes({
     items: view.content.action_items,
     meetingStart: meeting.event_start_time,
     enabled: !isDraft && !editing && !posting,
+    marks: actionItemTasksQuery.isSuccess ? actionItemTasks : undefined,
   });
   const showsAttendance =
     !editing &&
@@ -683,6 +686,107 @@ function Minutes({
 
   const menu = MINUTES_READ_COPY.menu;
   const hasTranscript = !!meeting.transcript?.trim();
+
+  // The ⋯ menu (#5562): the same items in the same order as the phone's, so
+  // the two never feel like two systems (Paul, 2026-11-19). Drawn by the one
+  // action menu (#5739).
+  const menuEntries: RowMenuEntry[] = [
+    ...(meeting.can_edit && !posting
+      ? [
+          {
+            type: "item" as const,
+            key: "details",
+            label: menu.editDetails,
+            icon: SlidersHorizontal,
+            onSelect: () => setDetailsOpen(true),
+          },
+        ]
+      : []),
+    ...(meeting.can_edit && !editing && !posting
+      ? [
+          {
+            type: "item" as const,
+            key: "edit",
+            label: menu.editMinutes,
+            icon: Pencil,
+            onSelect: () => setEditing(true),
+          },
+        ]
+      : []),
+    ...(showNotes && hasContent && !drafting
+      ? [
+          {
+            type: "item" as const,
+            key: "notes",
+            label: MINUTES_FLOW_COPY.review.notes,
+            icon: NotebookPen,
+            onSelect: () => {
+              setNotesOpen(true);
+              document
+                .getElementById(`${ids}-notes-panel`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            },
+          },
+        ]
+      : []),
+    ...(canBackfill
+      ? [
+          {
+            type: "item" as const,
+            key: "attendance",
+            label: menu.attendance,
+            icon: UserCheck,
+            onSelect: () => setAttendanceOpen(true),
+          },
+        ]
+      : []),
+    {
+      type: "item",
+      key: "copy-link",
+      label: menu.copyLink,
+      icon: Link2,
+      onSelect: () => void copyLink(),
+    },
+    ...(meeting.event_id
+      ? [
+          {
+            type: "item" as const,
+            key: "event",
+            label: menu.openEvent,
+            icon: CalendarDays,
+            href: `/events?event=${meeting.event_id}`,
+          },
+        ]
+      : []),
+    // Its own tab: an hour of lines under the minutes buries them (Paul,
+    // 2026-11-18).
+    ...(hasTranscript && !editing
+      ? [
+          {
+            type: "item" as const,
+            key: "transcript",
+            label: menu.transcript,
+            icon: FileText,
+            href: `/meetings/${meeting.id}/transcript`,
+            external: true,
+          },
+        ]
+      : []),
+    ...(meeting.can_delete
+      ? [
+          { type: "separator" as const, key: "delete-separator" },
+          {
+            type: "item" as const,
+            key: "delete",
+            label: menu.delete,
+            icon: Trash2,
+            destructive: true,
+            disabled: remove.isPending,
+            onSelect: () => void handleDelete(),
+          },
+        ]
+      : []),
+  ];
 
   return (
     // A flex column, so the notes panel moves between the top and the foot
@@ -800,93 +904,11 @@ function Minutes({
                 <Link2 className="h-4 w-4" aria-hidden="true" />
               </IconButton>
             ) : null}
-            {/*
-              The ⋯ menu (#5562): the same items in the same order as the
-              phone's, so the two never feel like two systems (Paul,
-              2026-11-19).
-            */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label={menu.label} disabled={busy}>
-                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {meeting.can_edit && !posting ? (
-                  <DropdownMenuItem onSelect={() => setDetailsOpen(true)}>
-                    <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                    {menu.editDetails}
-                  </DropdownMenuItem>
-                ) : null}
-                {meeting.can_edit && !editing && !posting ? (
-                  <DropdownMenuItem onSelect={() => setEditing(true)}>
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                    {menu.editMinutes}
-                  </DropdownMenuItem>
-                ) : null}
-                {showNotes && hasContent && !drafting ? (
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      setNotesOpen(true);
-                      document
-                        .getElementById(`${ids}-notes-panel`)
-                        ?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                    }}
-                  >
-                    <NotebookPen className="h-4 w-4" aria-hidden="true" />
-                    {MINUTES_FLOW_COPY.review.notes}
-                  </DropdownMenuItem>
-                ) : null}
-                {canBackfill ? (
-                  <DropdownMenuItem onSelect={() => setAttendanceOpen(true)}>
-                    <UserCheck className="h-4 w-4" aria-hidden="true" />
-                    {menu.attendance}
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem onSelect={() => void copyLink()}>
-                  <Link2 className="h-4 w-4" aria-hidden="true" />
-                  {menu.copyLink}
-                </DropdownMenuItem>
-                {meeting.event_id ? (
-                  <DropdownMenuItem asChild>
-                    <Link href={`/events?event=${meeting.event_id}`}>
-                      <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                      {menu.openEvent}
-                    </Link>
-                  </DropdownMenuItem>
-                ) : null}
-                {hasTranscript && !editing ? (
-                  <DropdownMenuItem asChild>
-                    {/* Its own tab: an hour of lines under the minutes
-                        buries them (Paul, 2026-11-18). */}
-                    <Link
-                      href={`/meetings/${meeting.id}/transcript`}
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      <FileText className="h-4 w-4" aria-hidden="true" />
-                      {menu.transcript}
-                    </Link>
-                  </DropdownMenuItem>
-                ) : null}
-                {meeting.can_delete ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      disabled={remove.isPending}
-                      onSelect={() => void handleDelete()}
-                      className="text-destructive-text focus:bg-destructive-tint focus:text-destructive-text"
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      {menu.delete}
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ActionMenuButton
+              label={menu.label}
+              disabled={busy}
+              entries={menuEntries}
+            />
           </div>
         </div>
         <MinutesJumpBar
@@ -1045,10 +1067,7 @@ function Minutes({
                   at > 0 && "border-t border-border pt-6",
                 )}
               >
-                <h3
-                  id={`${ids}-${key}`}
-                  className={`${EYEBROW} text-muted-foreground`}
-                >
+                <h3 id={`${ids}-${key}`} className={`${EYEBROW} text-muted`}>
                   {sectionLabel(key)}
                 </h3>
                 {key === "tldr" ? (
@@ -1218,9 +1237,7 @@ function DraftingPlaceholders() {
     <div aria-hidden="true" className="space-y-8">
       {rows.map((row) => (
         <section key={row.key} className="space-y-3">
-          <h3 className={`${EYEBROW} text-muted-foreground`}>
-            {sectionLabel(row.key)}
-          </h3>
+          <h3 className={`${EYEBROW} text-muted`}>{sectionLabel(row.key)}</h3>
           {row.widths.map((width, at) => (
             <div
               key={at}
@@ -1506,7 +1523,7 @@ function TabledEditor({
               )}
               onClick={() => onChange([...items, tabledRowFromAgenda(item)])}
               className={cn(
-                "inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
+                "inline-flex min-h-control-row max-w-full items-center gap-1 rounded-full border border-border px-2.5 text-caption hover:bg-card-hover pointer-coarse:min-h-11",
                 FOCUS_RING_OFFSET,
               )}
             >

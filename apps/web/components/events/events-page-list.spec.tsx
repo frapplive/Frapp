@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { selectCalendarBirthdays } from "@repo/hooks/calendar-birthdays";
 import { selectCalendarTasks } from "@repo/hooks/calendar-tasks";
 import { CALENDAR_KIND_HUE } from "@repo/hooks/activity-agenda";
@@ -67,7 +67,14 @@ function weeklySeries(name: string, count = 13) {
   }));
 }
 
-const eventsQuery: { data: unknown; isError?: boolean } = { data: EVENTS };
+const eventsQuery: { data: unknown; isError?: boolean; isLoading?: boolean } =
+  { data: EVENTS };
+// The list this browser kept for the shell cache (#5049); none unless set.
+const keptEventsRef = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellCached: (part: string) =>
+    part === "events" ? keptEventsRef.current : null,
+}));
 type AttendanceFields = { is_mandatory?: boolean | null };
 // A viewer with no roles: the event's default decides.
 const byDefault = (fields: AttendanceFields) => fields.is_mandatory === true;
@@ -98,7 +105,7 @@ vi.mock("@repo/hooks", async () => {
     ...eventTypeHooks([]),
     useEvents: () => ({
       data: eventsQuery.data,
-      isLoading: false,
+      isLoading: eventsQuery.isLoading ?? false,
       isError: eventsQuery.isError ?? false,
       error: eventsQuery.isError ? new Error("boom") : null,
       refetch: vi.fn(),
@@ -158,7 +165,6 @@ vi.mock("@/lib/realtime/use-realtime-table", () => ({
 }));
 
 // The page's URL; no `?event=` unless a test sets one.
-const searchRef = vi.hoisted(() => ({ current: new URLSearchParams() }));
 // The agenda's birthday items (#4959), as `useCalendarBirthdays` serves them.
 const birthdaysRef = vi.hoisted(() => ({
   current: [] as import("@repo/hooks/calendar-birthdays").CalendarBirthday[],
@@ -175,11 +181,13 @@ const narrowRef = vi.hoisted(() => ({ current: null as boolean | null }));
 vi.mock("@/lib/use-is-narrow", () => ({
   useIsNarrow: () => [() => undefined, narrowRef.current],
 }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchRef.current,
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
 }));
 
 import { EventsPage } from "./events-page";
+import { setAddress } from "@/tests/address-search-params";
 
 const row = (name: RegExp) => {
   const button = screen.getByRole("button", { name });
@@ -212,8 +220,10 @@ beforeEach(() => {
   viewerRef.current = { userId: "user-1", isLoading: false };
   eventsQuery.data = EVENTS;
   eventsQuery.isError = false;
+  eventsQuery.isLoading = false;
+  keptEventsRef.current = null;
   permissionsRef.current = ["events:create", "events:update", "members:view"];
-  searchRef.current = new URLSearchParams();
+  setAddress("/events");
   birthdaysRef.current = [];
   tasksRef.current = { items: [] };
   narrowRef.current = null;
@@ -221,7 +231,7 @@ beforeEach(() => {
 
 describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
   it("opens that event's detail sheet", () => {
-    searchRef.current = new URLSearchParams({ event: "evt-2" });
+    setAddress("/events?event=evt-2");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
@@ -232,12 +242,100 @@ describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
     );
   });
 
-  it("opens nothing for an id the list does not hold", () => {
-    searchRef.current = new URLSearchParams({ event: "gone" });
+  it("opens nothing for an id the list does not hold, says so, and drops it (#6043)", async () => {
+    setAddress("/events?event=gone");
     render(<EventsPage />);
 
     expect(detailSheetProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ open: false }),
+    );
+    expect(
+      await screen.findByText(/That event isn't available/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("puts the event a row opens in the address, and its close goes Back (#6043)", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    const push = vi.spyOn(window.history, "pushState");
+    const go = vi.spyOn(window.history, "go");
+    try {
+      await user.click(row(/study night/i).querySelector("button")!);
+      expect(window.location.search).toBe("?event=evt-2");
+      expect(push).toHaveBeenCalledTimes(1);
+      const props = detailSheetProps.mock.lastCall![0] as {
+        onOpenChange: (open: boolean) => void;
+      };
+      act(() => props.onOpenChange(false));
+      expect(go).toHaveBeenCalledWith(-1);
+    } finally {
+      push.mockRestore();
+      go.mockRestore();
+    }
+  });
+
+  it("closes the sheet when Back takes the event out of the address (#6043)", async () => {
+    setAddress("/events?event=evt-2");
+    render(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(detailSheetProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      ),
+    );
+  });
+});
+
+describe("EventsPage from the kept list (#5049)", () => {
+  it("draws the kept list while the read is out", () => {
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    render(<EventsPage />);
+
+    expect(
+      screen.getByRole("button", { name: /study night/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the address's event only from the live list, never a kept row", () => {
+    setAddress("/events?event=evt-2");
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    const { rerender } = render(<EventsPage />);
+
+    expect(detailSheetProps).not.toHaveBeenCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+
+    eventsQuery.data = EVENTS;
+    eventsQuery.isLoading = false;
+    rerender(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        event: expect.objectContaining({ id: "evt-2" }),
+      }),
+    );
+  });
+});
+
+describe("EventsPage hour grid address (#6043)", () => {
+  it("pushes the hour grid, and Back closes it", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />);
+    await user.click(screen.getByRole("button", { name: "Hours for Today" }));
+    expect(window.location.search).toMatch(/^\?hours=\d{4}-\d{2}-\d{2}$/);
+    act(() => setAddress("/events"));
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole("button", { name: /^create event on/i }),
+      ).toHaveLength(0),
     );
   });
 });
@@ -849,6 +947,12 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       "user-1",
     );
     tasksRef.current = { items };
+    // Tasks start off on the Calendar (#5948): these cases are a member who
+    // turned the Tasks key on.
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
   }
 
   const today = () => localIsoDate(new Date());
@@ -882,7 +986,12 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     const event = screen.getByRole("button", { name: /^study night/i });
     const eventDay = dayOf(EVENTS[1]!.start_time);
     expect(markOf(event)).toBe(CALENDAR_KIND_HUE.events);
-    expect(dotHue(eventDay, "events")).toBe(CALENDAR_KIND_HUE.events);
+    // The rows sit three days out, which in a month's last days is next
+    // month: the grid draws dots for this month's days only, so the event's
+    // dot is checked when it is on the grid.
+    if (eventDay.slice(0, 7) === today().slice(0, 7)) {
+      expect(dotHue(eventDay, "events")).toBe(CALENDAR_KIND_HUE.events);
+    }
 
     const task = screen.getByRole("button", { name: /^dues form/i });
     expect(markOf(task)).toBe(CALENDAR_KIND_HUE.tasks);
@@ -922,6 +1031,38 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     );
   });
 
+  it("hides tasks until the member turns the Tasks key on, and remembers it (#5948)", async () => {
+    withTasksToday();
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const first = render(<EventsPage />);
+
+    const toggle = screen.getByRole("button", { name: /^tasks, \d/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /^dues form/i })).toBeNull();
+    expect(screen.queryByTestId(`events-dot-${today()}-tasks`)).toBeNull();
+    expect(
+      screen.getByRole("group", { name: "Show on Calendar" }),
+    ).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
+      ),
+    ).toEqual({ hidden: [] });
+
+    first.unmount();
+    render(<EventsPage />);
+    expect(
+      screen.getByRole("button", { name: /^dues form/i }),
+    ).toBeInTheDocument();
+  });
+
   it("switches a kind off from its key, hiding rows and dots, and remembers it", async () => {
     withBirthdayToday();
     const user = userEvent.setup();
@@ -941,7 +1082,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       JSON.parse(
         window.localStorage.getItem("frapp.events.hidden-kinds.user-1")!,
       ),
-    ).toEqual({ hidden: ["birthdays"] });
+    ).toEqual({ hidden: ["tasks", "birthdays"] });
 
     first.unmount();
     render(<EventsPage />);
@@ -1090,6 +1231,10 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
         "user-1",
       ),
     };
+    window.localStorage.setItem(
+      "frapp.events.hidden-kinds.user-1",
+      JSON.stringify({ hidden: [] }),
+    );
     render(<EventsPage />);
 
     const headings = screen.getAllByRole("heading", { level: 3 });
@@ -1212,7 +1357,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     expect(days[0]).toHaveAttribute("aria-current", "date");
     // The key sits under the strip, as one row.
     expect(
-      screen.getByRole("group", { name: "Show on Events" }),
+      screen.getByRole("group", { name: "Show on Calendar" }),
     ).toBeInTheDocument();
 
     await user.click(within(strip).getByRole("button", { name: "Next week" }));
@@ -1270,7 +1415,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
       screen.getByRole("button", { name: /^open chapter meeting/i }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Events" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
     expect(
       screen.getByRole("region", { name: "Upcoming" }),
     ).toBeInTheDocument();
@@ -1317,6 +1462,18 @@ describe("EventsPage keeps the editor's draft (#4593)", () => {
     expect(screen.queryByRole("region", { name: "New event" })).toBeNull();
     await user.click(screen.getByRole("button", { name: /^new event$/i }));
     expect(screen.getByLabelText("Event name")).toHaveValue("Formal");
+  });
+
+  it("keeps the form it reopens with no edit= in the address (#6043)", async () => {
+    const user = userEvent.setup();
+    const first = render(tree());
+    await startDraft(user);
+    first.unmount();
+    setAddress("/events");
+
+    render(tree());
+    const editor = await screen.findByRole("region", { name: "New event" });
+    expect(within(editor).getByLabelText("Event name")).toHaveValue("Formal");
   });
 
   it("doesn't reopen the editor for a viewer who can no longer create events", async () => {

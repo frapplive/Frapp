@@ -1,3 +1,4 @@
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * The links that open a task in the task panel (#5538). The Tasks page
  * folded into Activity (#5948), so they are Activity's:
@@ -5,18 +6,19 @@
  * panel is the one place on web that shows a group
  * (`spec/behavior/tasks.md` § Tasks for everyone), and
  * `/activity?task=<task id>` opens that task, or its group when it is a copy
- * of one. The board's parts read either param once their read holds the task
- * (`TasksBoard`'s `LinkedTaskParam`) and drop it from the address.
+ * of one. The board's parts open either once their read holds the task
+ * (`TasksBoard`'s `LinkedTaskParam`), and the param stays in the address
+ * while the panel is open (spec § Addresses, #6044).
  *
  * `/tasks` only redirects here, keeping either param
  * (`app/(dashboard)/tasks/page.tsx`), so an old link, bookmark or
  * notification still opens its task.
  */
-export const TASKS_GROUP_PARAM = "group";
-export const TASKS_TASK_PARAM = "task";
+export const TASKS_GROUP_PARAM = WEB_ADDRESS_PARAMS.activity.group;
+export const TASKS_TASK_PARAM = WEB_ADDRESS_PARAMS.activity.task;
 
 /** `?view=everyone`: Activity opens on Everyone's (`activity-page.tsx`). */
-export const ACTIVITY_VIEW_PARAM = "view";
+export const ACTIVITY_VIEW_PARAM = WEB_ADDRESS_PARAMS.activity.view;
 export const EVERYONES_VIEW = "everyone";
 
 /** `/activity?group=<id>`: that group open in the task panel. */

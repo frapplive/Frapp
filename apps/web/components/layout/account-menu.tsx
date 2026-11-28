@@ -41,6 +41,7 @@ import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { useChapterPresenceContext } from "@/lib/providers/chapter-presence-provider";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
 import { useNetwork } from "@/lib/providers/network-provider";
+import { useShellIdentity } from "@/lib/shell-cache/shell-cache-sync";
 import {
   DND_DURATIONS,
   MEMBER_STATUS_HINT,
@@ -142,9 +143,17 @@ export function AccountMenu({
   // A read that failed, can't run, or waits on a connection the browser
   // doesn't have shows the plain-words label instead, with a person glyph,
   // never initials made from it: offline is the connection pill's to say.
-  const identityLoading =
-    !data && !isError && fetchStatus !== "idle" && !isOffline;
-  const ownName = user.display_name?.trim() || null;
+  const reading = !data && !isError && fetchStatus !== "idle" && !isOffline;
+  // On a revisit the row paints the name and photo this browser last saw for
+  // this member and chapter (#5049), offline included, and the live answer
+  // replaces them. A failed read doesn't: that is the plain-words label.
+  const cached = useShellIdentity();
+  const fromCache = !data && !isError && !!cached?.display_name;
+  const identityLoading = reading && !fromCache;
+  const ownName =
+    user.display_name?.trim() || (fromCache ? cached.display_name : null);
+  const ownAvatar =
+    user.avatar_url ?? (fromCache ? cached.avatar_url : null) ?? null;
   const name = ownName ?? "Your account";
   const email = user.email ?? null;
 
@@ -208,7 +217,7 @@ export function AccountMenu({
             aria-label={identityLoading ? loadingLabel : accountLabel}
             title={identityLoading ? undefined : name}
             className={cn(
-              "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
+              "grid size-control-small pointer-coarse:size-11 shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
               FOCUS_RING_SHELL,
             )}
           >
@@ -217,9 +226,7 @@ export function AccountMenu({
                 <Skeleton className="h-[26px] w-[26px] rounded-full" />
               ) : (
                 <Avatar className="h-[26px] w-[26px] border border-border bg-popover">
-                  {user.avatar_url ? (
-                    <AvatarImage src={user.avatar_url} alt="" />
-                  ) : null}
+                  {ownAvatar ? <AvatarImage src={ownAvatar} alt="" /> : null}
                   <AvatarFallback
                     className="text-[10px] font-semibold"
                     tint={ownTint}
@@ -253,9 +260,7 @@ export function AccountMenu({
                 <Skeleton className="h-8 w-8 rounded-full" />
               ) : (
                 <Avatar className="h-8 w-8 border border-border bg-popover">
-                  {user.avatar_url ? (
-                    <AvatarImage src={user.avatar_url} alt="" />
-                  ) : null}
+                  {ownAvatar ? <AvatarImage src={ownAvatar} alt="" /> : null}
                   <AvatarFallback
                     className="text-xs font-semibold"
                     tint={ownTint}

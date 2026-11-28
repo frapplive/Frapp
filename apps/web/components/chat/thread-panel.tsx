@@ -110,6 +110,7 @@ export interface ThreadRowWrites {
 export interface ThreadPanelProps extends Pick<
   MessageTimelineProps,
   | "nameFor"
+  | "rosterLoading"
   | "avatarFor"
   | "roleColorFor"
   | "onUnblock"
@@ -242,6 +243,7 @@ export function ThreadPanel({
   rootId,
   viewerId,
   nameFor,
+  rosterLoading,
   typistLabelFor,
   avatarFor,
   roleColorFor,
@@ -572,6 +574,7 @@ export function ThreadPanel({
                 blockState={blockState}
                 showHeader
                 nameFor={nameFor}
+                rosterLoading={rosterLoading}
                 avatarUrl={
                   resolveAuthorAvatar(root, avatarFor, undefined) ?? undefined
                 }
@@ -710,6 +713,7 @@ export function ThreadPanel({
           maskedRefresh={maskedRefresh}
           viewerId={viewerId}
           nameFor={nameFor}
+          rosterLoading={rosterLoading}
           avatarFor={avatarFor}
           roleColorFor={roleColorFor}
           isLoading={thread.isLoading || !root}
@@ -778,7 +782,7 @@ export function ThreadPanel({
                 <Button
                   type="button"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
+                  className="h-control-row w-control-row shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
                   onClick={() => void submit()}
                   aria-label="Send reply"
                   title="Send (Enter)"

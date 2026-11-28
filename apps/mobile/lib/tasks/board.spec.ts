@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   rowIsSentBack,
   rowNeedsSignOff,
-  selectTaskRows,
+  selectEveryonesTasks,
   toTaskRow,
 } from "./board";
 
@@ -30,30 +30,6 @@ function task(overrides: Record<string, unknown> = {}) {
 
 const titles = (rows: { title: string }[]) => rows.map((row) => row.title);
 
-describe("selectTaskRows — identity", () => {
-  it("returns an empty board before the viewer id resolves", () => {
-    // Not "no tasks" — /v1/users/me has not answered. The screen renders this
-    // as still-loading, or every cold start flashes an empty state.
-    expect(selectTaskRows([task()], null, NOW)).toEqual({
-      groups: { overdue: [], today: [], week: [], later: [], none: [] },
-      total: 0,
-    });
-  });
-
-  it("keeps only the viewer's rows", () => {
-    // A tasks:manage holder is served the whole chapter set by the API.
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Mine" }),
-        task({ id: "b", title: "Theirs", assignee_id: "someone-else" }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
-    expect(titles(board.groups.week)).toEqual(["Mine"]);
-  });
-});
 
 describe("toTaskRow — photos, proof and send-back (#4635)", () => {
   it("carries the new fields off the wire", () => {
@@ -139,305 +115,80 @@ describe("toTaskRow — groups and Up for grabs (tasks.md § Up for grabs)", () 
   });
 });
 
-describe("selectTaskRows — narrowing", () => {
+describe("selectEveryonesTasks (#5948)", () => {
   it("survives a payload that is not a list", () => {
     for (const value of [null, undefined, {}, "rows", 7]) {
-      expect(selectTaskRows(value, ME, NOW).total).toBe(0);
+      expect(selectEveryonesTasks(value, NOW).total).toBe(0);
     }
   });
 
   it("drops rows that cannot be drawn honestly", () => {
-    const board = selectTaskRows(
+    const board = selectEveryonesTasks(
       [
         task({ id: "keep" }),
         task({ id: undefined, title: "No id" }),
         task({ id: "no-title", title: "" }),
       ],
-      ME,
       NOW,
     );
     expect(board.total).toBe(1);
   });
 
-  it("reads overdue off the row rather than recomputing it", () => {
-    // The server derives OVERDUE in UTC; a local recomputation would disagree
-    // with it every evening west of Greenwich.
-    const board = selectTaskRows(
+  it("lists every member's tasks, by the status the server shows", () => {
+    const board = selectEveryonesTasks(
       [
+        task({ id: "a", title: "Mine to do" }),
         task({
+          id: "b",
+          title: "Cole's, started",
+          assignee_id: "cole",
+          status: "IN_PROGRESS",
+          stored_status: "IN_PROGRESS",
+        }),
+        task({
+          id: "c",
+          title: "Late",
+          assignee_id: "sam",
           status: "OVERDUE",
           stored_status: "TODO",
           due_date: "2026-08-15",
         }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.groups.overdue[0]?.isOverdue).toBe(true);
-    expect(board.groups.overdue[0]?.storedStatus).toBe("TODO");
-  });
-});
-
-describe("selectTaskRows — grouping", () => {
-  it("puts today in TODAY and the next six days in THIS WEEK (#4295 step 5)", () => {
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Today", due_date: "2026-08-17" }),
-        task({ id: "b", title: "Tomorrow", due_date: "2026-08-18" }),
-        task({ id: "c", title: "Six", due_date: "2026-08-23" }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(titles(board.groups.today)).toEqual(["Today"]);
-    expect(titles(board.groups.week)).toEqual(["Tomorrow", "Six"]);
-    expect(board.groups.later).toEqual([]);
-  });
-
-  it("puts seven days out and beyond in LATER", () => {
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Seven", due_date: "2026-08-24" }),
-        task({ id: "b", title: "Far", due_date: "2026-09-30" }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.groups.today).toEqual([]);
-    expect(board.groups.week).toEqual([]);
-    expect(titles(board.groups.later)).toEqual(["Seven", "Far"]);
-  });
-
-  it("puts overdue rows in OVERDUE, most overdue first, and leaves TODAY to today (#5906)", () => {
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Today", due_date: "2026-08-17" }),
         task({
-          id: "b",
-          title: "Late",
-          due_date: "2026-08-16",
-          status: "OVERDUE",
-        }),
-        task({
-          id: "c",
-          title: "Latest",
-          due_date: "2026-07-20",
-          status: "OVERDUE",
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(titles(board.groups.overdue)).toEqual(["Latest", "Late"]);
-    expect(titles(board.groups.today)).toEqual(["Today"]);
-  });
-
-  it("keeps an unreadable row in LATER rather than dropping it", () => {
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Dated", due_date: "2026-09-01" }),
-        task({ id: "c", title: "Garbage", due_date: "not-a-date" }),
-      ],
-      ME,
-      NOW,
-    );
-    // Hiding a task the member owes is worse than an odd-looking row.
-    expect(titles(board.groups.later)).toEqual(["Dated", "Garbage"]);
-  });
-
-  it("puts a task with no due date in its own group, after Later (#5761)", () => {
-    const board = selectTaskRows(
-      [
-        task({ id: "a", title: "Later", due_date: "2026-09-30" }),
-        task({ id: "b", title: "Whenever", due_date: null, due_at: null }),
-        task({ id: "c", title: "Blank", due_date: "" }),
-        task({ id: "d", title: "Today", due_date: "2026-08-17" }),
-        task({
-          id: "e",
-          title: "Archive photos",
-          due_date: null,
+          id: "d",
+          title: "Waiting",
+          assignee_id: "sam",
           status: "COMPLETED",
           stored_status: "COMPLETED",
-          completed_at: "2026-08-16T10:00:00Z",
+          completed_at: "2026-08-16T12:00:00Z",
         }),
       ],
-      ME,
       NOW,
     );
-    expect(titles(board.groups.later)).toEqual(["Later"]);
-    expect(titles(board.groups.today)).toEqual(["Today"]);
-    // Open ones by title, then the finished one.
-    expect(titles(board.groups.none)).toEqual([
-      "Blank",
-      "Whenever",
-      "Archive photos",
-    ]);
-    expect(board.total).toBe(5);
-    const undated = board.groups.none.find((row) => row.id === "b")!;
-    expect(undated.dueDate).toBeNull();
-    expect(undated.dueDay).toBeNull();
-    expect(undated.isOverdue).toBe(false);
+    expect(titles(board.lanes.todo)).toEqual(["Mine to do"]);
+    expect(titles(board.lanes.in_progress)).toEqual(["Cole's, started"]);
+    expect(titles(board.lanes.overdue)).toEqual(["Late"]);
+    expect(titles(board.lanes.completed)).toEqual(["Waiting"]);
+    expect(board.total).toBe(4);
   });
 
-  it("orders same-day rows stably by title", () => {
-    const board = selectTaskRows(
+  it("keeps a confirmed task a week, then lets it go", () => {
+    const confirmed = (id: string, at: string) =>
+      task({
+        id,
+        title: id,
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        points_awarded: true,
+        completed_at: at,
+        confirmed_at: at,
+      });
+    const board = selectEveryonesTasks(
       [
-        task({ id: "a", title: "Beta", due_date: "2026-08-18" }),
-        task({ id: "b", title: "Alpha", due_date: "2026-08-18" }),
+        confirmed("recent", "2026-08-15T12:00:00Z"),
+        confirmed("old", "2026-08-01T12:00:00Z"),
       ],
-      ME,
       NOW,
     );
-    expect(titles(board.groups.week)).toEqual(["Alpha", "Beta"]);
-  });
-});
-
-describe("selectTaskRows — completed rows", () => {
-  const done = (overrides: Record<string, unknown>) =>
-    task({
-      status: "COMPLETED",
-      stored_status: "COMPLETED",
-      points_awarded: true,
-      ...overrides,
-    });
-
-  it("keeps a recently finished task and sorts it below open work", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Paid dues",
-          due_date: "2026-08-14",
-          completed_at: at(2026, 8, 15).toISOString(),
-        }),
-        task({ id: "b", title: "Open", due_date: "2026-08-17" }),
-      ],
-      ME,
-      NOW,
-    );
-    // A finished row stays where it was finished: this one late, so in
-    // OVERDUE; one finished on its day, since passed, in TODAY under open work.
-    expect(titles(board.groups.overdue)).toEqual(["Paid dues"]);
-    expect(board.groups.overdue[0]?.isDone).toBe(true);
-    expect(titles(board.groups.today)).toEqual(["Open"]);
-  });
-
-  it("keeps a row finished on its day in TODAY once that day passes", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Swept",
-          due_date: "2026-08-15",
-          completed_at: at(2026, 8, 15).toISOString(),
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(titles(board.groups.today)).toEqual(["Swept"]);
-    expect(board.groups.overdue).toEqual([]);
-  });
-
-  it("retires a task finished more than a week ago", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Ancient",
-          due_date: "2026-08-01",
-          completed_at: at(2026, 8, 2).toISOString(),
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(0);
-  });
-
-  it("keeps an old completion an officer hasn't confirmed, however old", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Still waiting",
-          due_date: "2026-08-01",
-          completed_at: at(2026, 8, 2).toISOString(),
-          points_awarded: false,
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
-  });
-
-  it("counts a confirmed task's week from its confirmation", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Confirmed late",
-          due_date: "2026-08-01",
-          completed_at: at(2026, 8, 2).toISOString(),
-          confirmed_at: at(2026, 8, 15).toISOString(),
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
-  });
-
-  it("keeps a long-overdue task that was only just completed", () => {
-    // Retention is measured from completion, not the deadline. Keying it on the
-    // due date drops the row in the same render as the tap that closed it — the
-    // checkbox never fills and the row vanishes, reading as a delete.
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Finally done",
-          due_date: "2026-08-01",
-          completed_at: NOW.toISOString(),
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
-  });
-
-  it("keeps a finished task whose completion time cannot be read", () => {
-    // Retiring on a timestamp this module never saw is the worse failure.
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Undated",
-          due_date: "2026-07-01",
-          completed_at: null,
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
-  });
-
-  it("keeps a completed task that is still within the window", () => {
-    const board = selectTaskRows(
-      [
-        done({
-          id: "a",
-          title: "Edge",
-          due_date: "2026-08-10",
-          completed_at: at(2026, 8, 12).toISOString(),
-        }),
-      ],
-      ME,
-      NOW,
-    );
-    expect(board.total).toBe(1);
+    expect(titles(board.lanes.confirmed)).toEqual(["recent"]);
   });
 });

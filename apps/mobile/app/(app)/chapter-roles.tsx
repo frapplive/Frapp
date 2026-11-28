@@ -1,20 +1,17 @@
 import { Fragment, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { StyleSheet, Text } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
-  groupFollowsLabel,
-  useChapterRoleColors,
+  useCreateRoleTier,
   useGroups,
   useIsPermissionHidden,
   usePermissionList,
-  useUpdateGroup,
-  useViewerDisplayName,
-  type ChapterGroup,
 } from "@repo/hooks";
-import { describeLoadFailure } from "@repo/hooks/error-copy";
+import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
+  addsTiers,
   byDisplayOrder,
   isWildcardRole,
   reachesOutside,
@@ -22,15 +19,22 @@ import {
   type TieredRole,
 } from "@repo/hooks/role-tiers";
 import {
+  addTierLabel,
+  can,
   canAny,
   groupDisplayName,
   isEveryoneRole,
-  NEW_PICKABLE_ROLE_COPY,
-  roleColorOrNull,
+  memberCountLabel,
+  outsideTiersFootnote,
+  outsideTiersHeading,
+  PEOPLE_SETTINGS_COPY,
+  permissionsOnLabel,
+  ROLE_TIER_NAME_MAX_LENGTH,
   SELF_ASSIGNABLE_SECTION_CAPTION,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
+import { ROLES_VIEW_PERMISSIONS } from "@/lib/roles/roles-visibility";
 import { BACK_TO_CHAPTER_SETTINGS } from "@/components/back-row";
 import {
   ListRow,
@@ -39,12 +43,27 @@ import {
   SectionHeader,
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
-import { NewRoleSheet } from "@/components/roles/new-role-sheet";
-import { usePendingColors } from "@/components/roles/role-color-row";
-import { RoleColorSheet } from "@/components/roles/role-color-sheet";
-import { describeError } from "@/lib/roles/save-error";
-import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { PlusGlyph } from "@/components/control-glyphs";
+import { ShieldGlyph } from "@/components/settings-glyphs";
+import {
+  itemMenuAccessibility,
+  longPressOf,
+  openItemMenu,
+  type ItemMenu,
+  type ItemMenuHandle,
+} from "@/components/item-actions-menu";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import { NameSheet } from "@/components/roles/name-sheet";
+import { useRoleActions } from "@/components/roles/role-actions";
+import {
+  AUTOMATIC_GROUPS,
+  AutomaticGroupsPage,
+  ColorDot,
+  GroupPage,
+  GroupsSection,
+} from "@/components/roles/groups-section";
+import { InvitesSection } from "@/components/roles/invites-section";
+import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { useRolesData } from "@/lib/roles/use-roles-data";
 import { newRolePlacements } from "@/lib/roles/new-role";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -52,41 +71,68 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 /** A list longer than this gets a search field, as web's does. */
 const SEARCH_FROM = 8;
 
+/** Where Add role puts the new role: a tier's id, outside, or pickable. */
+type AddTo = { tierId: string | null } | null;
+
+/** A menu the shared host draws, as a row's long press takes it. */
+function hosted(menu: ItemMenu | null): ItemMenuHandle | null {
+  if (!menu || menu.actions.length === 0) return null;
+  return {
+    ...menu,
+    open: (pageY, trigger) => openItemMenu(menu, { pageY, trigger }),
+  };
+}
+
+function firstParam(value: string | string[] | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return first ? first : null;
+}
+
 /**
- * Chapter settings → Roles and groups on the phone (#4074): the chapter's tiers in rank
- * order, each with its roles, then the roles outside the tiers. Web's Roles
- * tab (#3990) in the grouped-list shape iOS Settings and Discord mobile's
- * Server Settings → Roles use: one section per tier, a Permissions row first
- * (what every role in it can do), then a row per role with its color and how
- * many hold it.
+ * Chapter settings → Roles and groups on the phone (#4074; web's page in
+ * the same groups, order and words since #6029, Paul's 2026-11-25 call:
+ * "as drawn, on web and the phone"). The words are shared
+ * (`@repo/validation`'s `people-settings-copy.ts`), so the two can't drift.
  *
- * Built for a chapter with a hundred roles, not five: the tiers carry the
- * permissions, so an officer changes five tiers rather than a hundred roles,
- * and a search field narrows the list once it passes eight roles. Making
- * tiers, and reordering and deleting tiers and roles, stay on web, where a
- * chapter sets its structure up once; the phone changes what they can do, and
- * makes a role (Chapter settings → New role, #5296, and the Non-chapter
- * business Add role below).
+ * One group per tier in rank order (its Permissions row, its roles, Add
+ * role), Add tier, the roles outside the tiers, Non-chapter business,
+ * Groups, then Invites and presidency. A role's long press offers what web's
+ * row ⋯ does: Move up, Move down, Move to another tier, Delete role
+ * (`components/roles/role-actions.ts`). A tier's name, order and deletion
+ * live on its page, opened from its Permissions row, as on web.
  *
- * Roles members pick themselves (Non-chapter business, #4958) get their own
- * section after the roles outside the tiers, as on web, with its own Add
- * role (#5736): an intramurals team or a study group is made
- * during the season, not at setup, so its Add role opens a name sheet that
- * creates it already pickable, as web's does.
+ * Like web's `?tab=roles&group=…`, this route also draws a group's page
+ * (`?group=<id>`) and the groups Frapp keeps (`?groups=automatic`), pushed
+ * on the stack so each goes back by the gesture
+ * (`components/roles/groups-section.tsx`).
  *
- * Tier names, and the word for a tier, are the chapter's own
+ * The roles part shows to whoever web shows it to (`chapter-config:view` or
+ * `roles:manage`), so a `groups:manage` holder without either sees only the
+ * groups. Tier names, and the word for a tier, are the chapter's own
  * (`tierWords(vocab("tier"))`), never a constant.
- *
- * Groups follow the roles on the same screen (Paul, 2026-11-19: roles and
- * groups live in one place, as on web's Roles and groups tab): the chapter's
- * own groups, then the ones that follow each member's pledge class,
- * graduation year and major, each with how many are in it. A member is put in or taken
- * out of a group from their profile; making and renaming groups stays on web
- * with the rest of the structure. The roles part shows to whoever web shows
- * it to (`chapter-config:view` or `roles:manage`), so a `groups:manage`
- * holder without either sees only the groups.
  */
 export default function ChapterRolesScreen() {
+  const params = useLocalSearchParams<{
+    group?: string | string[];
+    groups?: string | string[];
+  }>();
+  const permissions = usePermissionList();
+  const groupId = firstParam(params.group);
+  if (groupId) {
+    return (
+      <GroupPage
+        groupId={groupId}
+        canManage={can("groups:manage", permissions)}
+      />
+    );
+  }
+  if (firstParam(params.groups) === AUTOMATIC_GROUPS) {
+    return <AutomaticGroupsPage />;
+  }
+  return <RolesAndGroups />;
+}
+
+function RolesAndGroups() {
   const router = useRouter();
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -101,91 +147,103 @@ export default function ChapterRolesScreen() {
     canManage,
     reach,
   } = data;
+  const actions = useRoleActions(data);
+  const createTier = useCreateRoleTier();
   const newPickableRef = useRef<BottomSheetModal>(null);
-  const canAddPickable = canManage && reach.known && reachesOutside(reach);
-  // Whether Chapter settings draws New role for this viewer (#5296), so the
-  // note below points there only when the row is there.
-  const canAddRole =
-    canManage && newRolePlacements(reach, tiers, words.plural).length > 0;
+  const newRoleRef = useRef<BottomSheetModal>(null);
+  const addTierRef = useRef<BottomSheetModal>(null);
+  const [addTo, setAddTo] = useState<AddTo>(null);
+  const placements = useMemo(
+    () => newRolePlacements(reach, tiers, outsideTiersHeading(words.plural)),
+    [reach, tiers, words.plural],
+  );
   const [query, setQuery] = useState("");
   const filtering = normalizeWords(query).length > 0;
   const permissions = usePermissionList();
   const isHidden = useIsPermissionHidden();
-  const canSeeRoles = canAny(
-    ["roles:manage", "chapter-config:view"],
-    permissions,
-  );
+  const canSeeRoles = canAny([...ROLES_VIEW_PERMISSIONS], permissions);
   const groupsQuery = useGroups({ enabled: true });
-  const groupColor = useGroupColor(
-    canAny(["groups:manage"], permissions),
-    groupsQuery.data,
-    groupsQuery.dataUpdatedAt,
-  );
-  const groups = useMemo(() => {
-    const all = groupsQuery.data ?? [];
-    const shown = filtering
-      ? all.filter((group) => matchesWordStarts(groupDisplayName(group), query))
-      : all;
-    return [
-      ...shown.filter((group) => group.kind === "manual"),
-      ...shown.filter((group) => group.kind !== "manual"),
-    ];
-  }, [groupsQuery.data, filtering, query]);
+  const groups = groupsQuery.data ?? [];
 
-  const sections = useMemo(() => {
+  const lists = useMemo(() => {
     const tierIds = new Set(tiers.map((tier) => tier.id));
-    const inTier = (tierId: string | null) =>
-      [...roles]
-        .filter((role) =>
-          tierId === null
-            ? !(role.tier_id && tierIds.has(role.tier_id))
-            : role.tier_id === tierId,
-        )
-        .filter((role) => !filtering || matchesWordStarts(role.name, query))
-        .sort(byDisplayOrder);
-    // Non-chapter business (#4958, Shawn 2026-11-14): the roles members pick
-    // themselves are outside the tiers by rule, and listed apart from the
-    // rest, as on web's Roles tab.
-    const outside = inTier(null);
-    return [
-      ...tiers.map((tier) => ({
-        key: tier.id,
-        tier,
-        pickable: false,
-        title: tier.name,
-        roles: inTier(tier.id),
-      })),
-      {
-        key: "outside",
-        tier: null,
-        pickable: false,
-        title: `Outside the ${words.plural}`,
-        roles: outside.filter((role) => !role.self_assignable),
-      },
-      {
-        key: "pickable",
-        tier: null,
-        pickable: true,
-        title: "Non-chapter business",
-        roles: outside.filter((role) => role.self_assignable),
-      },
-    ];
-  }, [roles, tiers, filtering, query, words.plural]);
+    const shown = [...roles]
+      .filter((role) => !filtering || matchesWordStarts(role.name, query))
+      .sort(byDisplayOrder);
+    // A role naming a tier this list doesn't have reads as outside, which is
+    // how the API ranks it too.
+    const outsideAll = shown.filter(
+      (role) => !(role.tier_id && tierIds.has(role.tier_id)),
+    );
+    return {
+      inTier: (tierId: string) =>
+        shown.filter((role) => role.tier_id === tierId),
+      outside: outsideAll.filter((role) => !role.self_assignable),
+      pickable: outsideAll.filter((role) => role.self_assignable),
+    };
+  }, [roles, tiers, filtering, query]);
 
   const loaded = rolesQuery.isSuccess && tiersQuery.isSuccess;
   const subtitle = loaded
     ? `${roles.length} ${roles.length === 1 ? "role" : "roles"} in ${tiers.length} ${tiers.length === 1 ? words.singular : words.plural}`
     : undefined;
 
-  const openRole = (role: TieredRole) =>
-    router.push({ pathname: "/role", params: { roleId: role.id } });
+  const openRole = (roleId: string) =>
+    router.push({ pathname: "/role", params: { roleId } });
+  const openAddRole = (tierId: string | null) => {
+    setAddTo({ tierId });
+    newRoleRef.current?.present();
+  };
 
-  let body: React.ReactNode;
-  if (
+  const roleRow = (role: TieredRole) => {
+    // 0 once the members read lands; nothing before it, so a row never
+    // claims "No members" for a role that may well have some.
+    const count = memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
+    const menu = hosted(actions.rowMenu(role));
+    const failed =
+      actions.failure?.roleId === role.id ? actions.failure.message : null;
+    return (
+      <ListRow
+        key={role.id}
+        label={role.name}
+        leading={<ColorDot color={role.color} />}
+        // The same notes web's list puts beside a name.
+        description={
+          failed ??
+          (isWildcardRole(role)
+            ? "Can do everything"
+            : isEveryoneRole(role)
+              ? "Pinged as @everyone"
+              : null)
+        }
+        descriptionTone={failed ? "destructive" : "default"}
+        value={count === null ? null : memberCountLabel(count)}
+        accessibilityHint="Opens what this role can do."
+        onPress={() => openRole(role.id)}
+        onLongPress={longPressOf(menu)}
+        {...itemMenuAccessibility(menu)}
+      />
+    );
+  };
+
+  const addRoleRow = (tierId: string | null) => (
+    <ListRow
+      label={PEOPLE_SETTINGS_COPY.addRole}
+      leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
+      action
+      accessibilityHint="Names a role, then opens it."
+      onPress={() => openAddRole(tierId)}
+    />
+  );
+
+  let roleSections: React.ReactNode = null;
+  if (!canSeeRoles) {
+    roleSections = null;
+  } else if (
     (rolesQuery.isError && rolesQuery.data === undefined) ||
     (tiersQuery.isError && tiersQuery.data === undefined)
   ) {
-    body = (
+    roleSections = (
       <ErrorState
         title="Couldn't load roles"
         body={describeLoadFailure(rolesQuery.error ?? tiersQuery.error)}
@@ -197,7 +255,7 @@ export default function ChapterRolesScreen() {
       />
     );
   } else if (!loaded) {
-    body = (
+    roleSections = (
       <SkeletonRegion label="Loading roles" style={styles.skeleton}>
         {[0, 1].map((section) => (
           <ListSection key={section}>
@@ -209,185 +267,113 @@ export default function ChapterRolesScreen() {
       </SkeletonRegion>
     );
   } else {
-    const shown = sections.filter(
-      (section) =>
-        section.roles.length > 0 ||
-        (!filtering &&
-          (section.tier !== null || (section.pickable && canManage))),
-    );
-    body = (
+    const canAddOutside = canManage && reach.known && reachesOutside(reach);
+    roleSections = (
       <>
-        {roles.length + (groupsQuery.data?.length ?? 0) > SEARCH_FROM ? (
-          <SearchField
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Find a role or group"
-            accessibilityLabel="Find a role or group"
-            searchGlyph
-          />
-        ) : null}
-        {filtering &&
-        (canSeeRoles ? shown.length : 0) === 0 &&
-        groups.length === 0 ? (
-          <Text style={styles.note}>Nothing matches “{query.trim()}”.</Text>
-        ) : null}
-        {(canSeeRoles ? shown : []).map((section) => (
-          <Fragment key={section.key}>
-            <SectionHeader count={section.roles.length}>
-              {section.title}
-            </SectionHeader>
-            <ListSection>
-              {section.tier && !filtering ? (
-                <ListRow
-                  label="Permissions"
-                  value={`${shownPermissionCount(section.tier.permissions, isHidden)} on`}
-                  accessibilityHint={`Opens what every role in ${section.tier.name} can do.`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/role-tier",
-                      params: { tierId: section.tier!.id },
-                    })
-                  }
-                />
-              ) : null}
-              {section.tier && !filtering && section.roles.length === 0 ? (
-                <ListRow
-                  label={`No roles in this ${words.singular} yet`}
-                  variant="detail"
-                />
-              ) : null}
-              {section.pickable && section.roles.length === 0 ? (
-                <ListRow
-                  label="None yet"
-                  description={SELF_ASSIGNABLE_SECTION_CAPTION}
-                  variant="detail"
-                />
-              ) : null}
-              {section.roles.map((role) => {
-                // 0 once the members read lands; nothing before it, so a row
-                // never claims "0" for a role that may well have members.
-                const count =
-                  memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
-                const color = roleColorOrNull(role.color);
-                return (
+        {tiers.map((tier) => {
+          const tierRoles = lists.inTier(tier.id);
+          if (filtering && tierRoles.length === 0) return null;
+          const canAdd =
+            !filtering &&
+            placements.some((placement) => placement.value === tier.id);
+          return (
+            <Fragment key={tier.id}>
+              <SectionHeader>{tier.name}</SectionHeader>
+              <ListSection>
+                {filtering ? null : (
                   <ListRow
-                    key={role.id}
-                    label={role.name}
+                    label={PEOPLE_SETTINGS_COPY.permissionsRow}
                     leading={
-                      <View
-                        style={[
-                          styles.dot,
-                          color ? { backgroundColor: color } : null,
-                        ]}
-                      />
+                      <ShieldGlyph color={tokens.color.text.mutedForeground} />
                     }
-                    // The same notes web's Roles list puts beside a name.
-                    description={
-                      isWildcardRole(role)
-                        ? "Can do everything"
-                        : isEveryoneRole(role)
-                          ? "Pinged as @everyone"
-                          : null
+                    value={permissionsOnLabel(
+                      shownPermissionCount(tier.permissions, isHidden),
+                    )}
+                    accessibilityHint={`Opens ${tier.name}: what every role in it can do.`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/role-tier",
+                        params: { tierId: tier.id },
+                      })
                     }
-                    value={count === null ? null : String(count)}
-                    accessibilityValue={
-                      count === null
-                        ? undefined
-                        : `${count} ${count === 1 ? "member" : "members"}`
-                    }
-                    accessibilityHint="Opens what this role can do."
-                    onPress={() => openRole(role)}
                   />
-                );
-              })}
-              {section.pickable && canAddPickable && !filtering ? (
+                )}
+                {tierRoles.map(roleRow)}
+                {canAdd ? addRoleRow(tier.id) : null}
+              </ListSection>
+            </Fragment>
+          );
+        })}
+
+        {canManage && addsTiers(reach) && !filtering ? (
+          <ListSection>
+            <ListRow
+              label={addTierLabel(words.singular)}
+              leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
+              action
+              accessibilityHint={`Names a ${words.singular}, added at the bottom.`}
+              onPress={() => addTierRef.current?.present()}
+            />
+          </ListSection>
+        ) : null}
+
+        {lists.outside.length > 0 || (canManage && !filtering) ? (
+          <>
+            <SectionHeader>{outsideTiersHeading(words.plural)}</SectionHeader>
+            <ListSection footnote={outsideTiersFootnote(words.singular)}>
+              {lists.outside.map(roleRow)}
+              {canAddOutside && !filtering ? addRoleRow(null) : null}
+            </ListSection>
+          </>
+        ) : null}
+
+        {lists.pickable.length > 0 || (canManage && !filtering) ? (
+          <>
+            <SectionHeader>Non-chapter business</SectionHeader>
+            <ListSection footnote={SELF_ASSIGNABLE_SECTION_CAPTION}>
+              {lists.pickable.length === 0 ? (
                 <ListRow
-                  label={NEW_PICKABLE_ROLE_COPY.add}
+                  label={PEOPLE_SETTINGS_COPY.noneYet}
+                  variant="detail"
+                />
+              ) : (
+                lists.pickable.map(roleRow)
+              )}
+              {canAddOutside && !filtering ? (
+                <ListRow
+                  label={PEOPLE_SETTINGS_COPY.addRole}
                   leading={
                     <PlusGlyph color={tokens.color.text.mutedForeground} />
                   }
+                  action
                   accessibilityHint="Adds a role members can join themselves."
                   onPress={() => newPickableRef.current?.present()}
                 />
               ) : null}
             </ListSection>
-          </Fragment>
-        ))}
-        {groupsQuery.data && (groups.length > 0 || !filtering) ? (
-          <>
-            <SectionHeader count={groups.length}>Groups</SectionHeader>
-            <ListSection>
-              {groups.length === 0 ? (
-                <ListRow
-                  label="No groups yet"
-                  description="Groups, such as In house or a committee, are for pinging and assigning. They give no permissions."
-                  variant="detail"
-                />
-              ) : (
-                groups.map((group) => {
-                  const color = groupColor.shown(group);
-                  const count = group.member_ids.length;
-                  return (
-                    <ListRow
-                      key={group.id}
-                      variant="detail"
-                      label={groupDisplayName(group)}
-                      leading={
-                        <View
-                          style={[
-                            styles.dot,
-                            color ? { backgroundColor: color } : null,
-                          ]}
-                        />
-                      }
-                      description={
-                        groupColor.failure?.groupId === group.id
-                          ? groupColor.failure.message
-                          : groupFollowsLabel(group)
-                      }
-                      descriptionTone={
-                        groupColor.failure?.groupId === group.id
-                          ? "destructive"
-                          : "default"
-                      }
-                      value={String(count)}
-                      accessibilityValue={`${count} ${count === 1 ? "member" : "members"}`}
-                      accessibilityHint={
-                        groupColor.canEdit ? "Opens its color." : undefined
-                      }
-                      onPress={
-                        groupColor.canEdit
-                          ? () => groupColor.open(group)
-                          : undefined
-                      }
-                    />
-                  );
-                })
-              )}
-            </ListSection>
           </>
         ) : null}
-        <Text style={styles.note}>
-          {canAddRole
-            ? `Add ${words.plural} and groups, and rename and reorder ${words.plural}, roles and groups, on the web dashboard. Add a role from Chapter settings → New role.`
-            : `Add, rename and reorder ${words.plural}, roles and groups on the web dashboard.`}{" "}
-          Put someone in a group from their profile.
-        </Text>
-        {groupColor.sheet}
-        <NewRoleSheet
-          ref={newPickableRef}
-          onCreated={(roleId) =>
-            router.push({ pathname: "/role", params: { roleId } })
-          }
-        />
       </>
     );
   }
 
+  const searchable =
+    (canSeeRoles ? roles.length : 0) + groups.length > SEARCH_FROM;
+  const nothingMatches =
+    filtering &&
+    !(
+      canSeeRoles && roles.some((role) => matchesWordStarts(role.name, query))
+    ) &&
+    !groups.some((group) => matchesWordStarts(groupDisplayName(group), query));
+  const addToTier =
+    addTo?.tierId != null
+      ? tiers.find((tier) => tier.id === addTo.tierId)
+      : undefined;
+
   return (
     <ScreenShell
       back={BACK_TO_CHAPTER_SETTINGS}
-      title="Roles and groups"
+      title={PEOPLE_SETTINGS_COPY.pageTitle}
       subtitle={canSeeRoles ? subtitle : undefined}
       refresh={() =>
         Promise.all([
@@ -397,90 +383,68 @@ export default function ChapterRolesScreen() {
         ])
       }
     >
-      {body}
+      {searchable || filtering ? (
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder={PEOPLE_SETTINGS_COPY.search}
+          accessibilityLabel={PEOPLE_SETTINGS_COPY.search}
+          searchGlyph
+        />
+      ) : null}
+      {nothingMatches ? (
+        <Text style={styles.note}>Nothing matches “{query.trim()}”.</Text>
+      ) : null}
+      {roleSections}
+      <GroupsSection
+        canManage={can("groups:manage", permissions)}
+        query={query}
+        filtering={filtering}
+      />
+      {filtering ? null : (
+        <InvitesSection
+          canViewConfig={can("chapter-config:view", permissions)}
+          canManageConfig={can("chapter-config:manage", permissions)}
+          isPresident={permissions.includes("*")}
+        />
+      )}
+
+      <NewRoleSheet
+        ref={newRoleRef}
+        chapterRole={{
+          placements: addToTier
+            ? [{ value: addToTier.id, label: addToTier.name }]
+            : [{ value: null, label: outsideTiersHeading(words.plural) }],
+          tierLabel: words.Singular,
+        }}
+        onCreated={openRole}
+      />
+      <NewRoleSheet ref={newPickableRef} onCreated={openRole} />
+      {canManage ? (
+        <NameSheet
+          ref={addTierRef}
+          title={addTierLabel(words.singular)}
+          submitLabel={addTierLabel(words.singular)}
+          placeholder="Committee chairs"
+          fieldLabel={`New ${words.singular} name`}
+          maxLength={ROLE_TIER_NAME_MAX_LENGTH}
+          onSubmit={async (name) => {
+            try {
+              await createTier.mutateAsync({ name, permissions: [] });
+              return null;
+            } catch (error) {
+              return `Couldn't add the ${words.singular}. ${errorCopy(error, "Check the name isn't already used, then try again.", { serverWritesForMembers: true })}`;
+            }
+          }}
+        />
+      ) : null}
     </ScreenShell>
   );
-}
-
-/**
- * A group's color on the phone (#5966, folding in #5791): a `groups:manage`
- * holder taps a group's row for the same picker as a role's, as web's group
- * editor offers it; a swatch saves on the tap and Custom when the sheet
- * closes. Naming, members and pinging stay where they are. The sheet reads
- * the group live from the groups read, so it follows a save that lands while
- * it's open.
- */
-function useGroupColor(
-  canEdit: boolean,
-  groups: readonly ChapterGroup[] | undefined,
-  groupsUpdatedAt: number,
-) {
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const updateGroup = useUpdateGroup();
-  const chapterColors = useChapterRoleColors({ enabled: canEdit });
-  const memberName = useViewerDisplayName();
-  const colors = usePendingColors(groupsUpdatedAt);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const editing = groups?.find((group) => group.id === editingId) ?? null;
-  const [failure, setFailure] = useState<{
-    groupId: string;
-    message: string;
-  } | null>(null);
-
-  const shown = (group: ChapterGroup) =>
-    colors.shown(group.id, roleColorOrNull(group.color));
-
-  async function save(group: ChapterGroup, color: string | null) {
-    setFailure((current) => (current?.groupId === group.id ? null : current));
-    const error = await colors.save(group.id, color, () =>
-      updateGroup.mutateAsync({ id: group.id, body: { color } }),
-    );
-    if (error) {
-      setFailure({
-        groupId: group.id,
-        message: describeError(
-          groupDisplayName(group),
-          error,
-          "The color was not changed. Try again in a moment.",
-        ),
-      });
-    }
-  }
-
-  return {
-    canEdit,
-    shown,
-    failure,
-    open: (group: ChapterGroup) => {
-      setEditingId(group.id);
-      sheetRef.current?.present();
-    },
-    sheet: canEdit ? (
-      <RoleColorSheet
-        ref={sheetRef}
-        value={editing ? shown(editing) : null}
-        subject={editing?.id ?? ""}
-        onChange={(next) => {
-          if (editing) void save(editing, next);
-        }}
-        previewName={editing ? groupDisplayName(editing) : ""}
-        memberName={memberName}
-        chapterColors={chapterColors}
-      />
-    ) : null,
-  };
 }
 
 function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     skeleton: { gap: tokens.spacing.lg },
-    dot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      borderWidth: 1,
-      borderColor: tokens.color.border.input,
-    },
     note: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.mutedForeground,

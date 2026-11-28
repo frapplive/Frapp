@@ -1,6 +1,6 @@
 # The owner's UI rulebook
 
-Every UI ruling Paul has given, from 2026-11-04 to 2026-11-24, as rules you follow without being told
+Every UI ruling Paul has given, from 2026-11-04 to 2026-11-26, as rules you follow without being told
 again. He has said most of these more than once, and the reason this file exists is his message of
 2026-11-19: "I'M SO SO TIRED OF TELLING YOU THE SAME STUFF EVERY FUCKING TIME AND ITERATING ON EVERY
 FUCKING UI CHANGE … it's like a never ending loop of fix one problem and find 4 more that you fix to a
@@ -248,8 +248,15 @@ These cause most of the iterations, so they come first.
 
 - **lint** **No emoji** in anything Frapp draws or writes, mockups and proposal pages included: lint checks
   every string in product source, specs aside. Members' own emoji are their content. (11-05)
-- **Compact controls** from the control size scale (Chip 24, Row 32, Small 36, Field 40; 44 for touch).
-  "All the bubbles just feel way too big." (11-05, foundations §9)
+- **Compact controls** from the control size scale (Chip 20, Row 28, Small 28, Field 32, List row 32,
+  Settings row 36 on a mouse; 44 for touch), through the `h-control-*` tokens, never a literal `h-9`.
+  "All the bubbles just feel way too big." (11-05, foundations §9) *Changed 11-26 by Paul: "buttons in
+  general have been too big for too long", so the mouse column moved one step denser after Claude,
+  Discord, Slack and Linear; labels stay 14 and touch stays 44 (#6115).*
+- **Section titles are small, muted and in sentence case**, with a fold chevron after the name: "Pinned ⌄",
+  as Claude and Discord draw them. Never bold capitals or letter-spacing. `EYEBROW` in `text-muted` on
+  web, `eyebrowStyle` in `muted` on the phone. "can we make the section titles smaller? more like claude
+  and discord." (11-26, #6115)
 - **No giant full-width buttons.** A button is sized to its label, from the control size scale, never
   stretched across a profile, card, panel or page body. A person's profile puts Message beside the other
   actions as a compact button (iMessage, Slack and Linear profiles), not a bar under the name. Web and phone
@@ -286,6 +293,10 @@ These cause most of the iterations, so they come first.
   allowing stuff like this to slip through?" (11-20). Checked on every route by
   `apps/web/components/layout/every-page-has-a-way-back.spec.ts` and
   `apps/mobile/lib/every-screen-has-a-way-back.spec.ts`: a new page fails there until it has both.
+- **Everything that draws its own back arrow or X has an address; Back does what that arrow does.** A folder, a
+  record, an editor, a Settings page or a named view is in the web address's query, so Back, a reload and a shared
+  link land on it (Paul, 2026-11-25, #6034; `spec/ui/web-dashboard/README.md` § Addresses). Every route and
+  its listed parameters are checked against the spec by `apps/web/components/layout/every-page-has-an-address.spec.ts`.
 - **Opening a notification doesn't stack the screen on itself.** (11-07)
 - **On a phone, the app is the only way in.** An invite link opened in a phone's browser leads to the app
   (open it, or get it), never to signing in on the web, so a new member signs in once and is asked each

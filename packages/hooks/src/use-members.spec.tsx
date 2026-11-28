@@ -1,7 +1,9 @@
+import type React from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CachedRosterProvider,
   useChapterRoster,
   useCorrectMemberProfile,
   useMemberDisplayNames,
@@ -198,6 +200,56 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     activeChapterId = CHAPTER_ID;
   });
 
+  it("names people from a kept roster while the live one is out, and never after it fails (#5049)", async () => {
+    const kept = [
+      {
+        user_id: "user-1",
+        display_name: "Kept Name",
+        avatar_url: null,
+        role_color: null,
+      },
+    ];
+    let answer: ((value: unknown) => void) | null = null;
+    stubClient = {
+      GET: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    };
+    const Base = createWrapper(queryClient);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <Base>
+        <CachedRosterProvider value={kept}>{children}</CachedRosterProvider>
+      </Base>
+    );
+    const { result } = renderHook(() => useMemberDisplayNames(), { wrapper });
+    await waitFor(() => expect(answer).not.toBeNull());
+    expect(result.current.nameFor("user-1")).toBe("Kept Name");
+    answer!({ data: roster, error: null });
+    await waitFor(() =>
+      expect(result.current.nameFor("user-1")).toBe("Marcus Reid"),
+    );
+
+    const failed = createTestQueryClient();
+    stubClient = {
+      GET: vi.fn().mockResolvedValue({ data: null, error: { status: 500 } }),
+    };
+    const FailedBase = createWrapper(failed);
+    const failedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <FailedBase>
+        <CachedRosterProvider value={kept}>{children}</CachedRosterProvider>
+      </FailedBase>
+    );
+    const { result: afterFailure } = renderHook(() => useMemberDisplayNames(), {
+      wrapper: failedWrapper,
+    });
+    await waitFor(() =>
+      expect(afterFailure.current.nameFor("user-1")).toBeNull(),
+    );
+  });
+
   it("reads the narrow roster endpoint, not the member list", async () => {
     const mockGet = vi.fn().mockResolvedValue({ data: roster, error: null });
     stubClient = {
@@ -255,6 +307,9 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     await waitFor(() => expect(result.current.nameFor("user-1")).toBeNull());
 
     expect(result.current.isPending).toBe(true);
+    // A disabled read never loads, so a row never holds a name placeholder
+    // for it (#6127): it draws the fallback label instead.
+    expect(result.current.rosterLoading).toBe(false);
     expect(mockGet).not.toHaveBeenCalled();
   });
 
@@ -366,7 +421,16 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
       wrapper: createWrapper(queryClient),
     });
 
+    // In flight: the rows draw name placeholders (#6127).
+    expect(result.current.rosterLoading).toBe(true);
     await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.rosterLoading).toBe(false);
+    // A background refetch with names in hand isn't loading: a departed
+    // member's permanent fallback never flashes to a placeholder.
+    mockGet.mockReturnValue(new Promise(() => {}));
+    result.current.refetch();
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+    expect(result.current.rosterLoading).toBe(false);
 
     expect(result.current.nameFor("user-1")).toBe("Marcus Reid");
     // display_name is NOT NULL DEFAULT '', so '' must not render as a name.
@@ -389,6 +453,14 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.nameFor("user-1")).toBeNull();
+    // A failed read stops the placeholders: rows fall back to the label.
+    expect(result.current.rosterLoading).toBe(false);
+
+    // A retry of the failed read doesn't bring them back (#6127 review).
+    mockGet.mockReturnValue(new Promise(() => {}));
+    result.current.refetch();
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+    expect(result.current.rosterLoading).toBe(false);
   });
 });
 
@@ -610,9 +682,7 @@ describe("membership writes refetch the alumni list", () => {
       params: { path: { id: "member-1" } },
       body: { display_name: "Ada" },
     });
-    expect(keys()).toEqual(
-      expect.arrayContaining([["members"], ["alumni"]]),
-    );
+    expect(keys()).toEqual(expect.arrayContaining([["members"], ["alumni"]]));
     expect(keys()).not.toContainEqual(["user", "me"]);
   });
 

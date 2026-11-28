@@ -434,7 +434,7 @@ function OlderHistoryRow({ context }: { context?: TimelineHeaderContext }) {
           <Button
             variant="secondary"
             size="sm"
-            className="h-8"
+            className="h-control-row"
             onClick={context.onRetryOlder}
           >
             Retry
@@ -501,6 +501,11 @@ export interface MessageTimelineProps {
   viewerId: string | null;
   /** Resolves `users.id` → display name; `null` when unresolvable. */
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight (`useMemberDisplayNames().rosterLoading`):
+   * rows draw a name placeholder for an author it hasn't named yet (#6127).
+   */
+  rosterLoading?: boolean;
   /**
    * Resolves `users.id` → the member's signed photo URL; `null` for initials.
    * From the same roster read as `nameFor` (#732).
@@ -658,6 +663,7 @@ export const MessageTimeline = forwardRef<
     maskedRefresh,
     viewerId,
     nameFor,
+    rosterLoading,
     avatarFor,
     roleColorFor,
     threadUnread,
@@ -1542,6 +1548,7 @@ export const MessageTimeline = forwardRef<
                 ) : (
                   <MessageItem
                     nameFor={nameFor}
+                    rosterLoading={rosterLoading}
                     message={entry.message}
                     authorColor={
                       entry.message.sender_id

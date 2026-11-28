@@ -567,7 +567,7 @@ export function ChannelMenu({
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className={cn(EYEBROW, "text-muted-foreground")}>
+              <span className={cn(EYEBROW, "text-muted")}>
                 {VIEW_TITLES[shownView]}
               </span>
             </div>

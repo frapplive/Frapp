@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, Eye, Loader2 } from "lucide-react";
+import { ChevronDown, Eye, Layers, Loader2, Palette } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useChapterRoleColors,
@@ -10,18 +10,30 @@ import {
   useViewerDisplayName,
 } from "@repo/hooks";
 import {
+  deleteRoleConfirm,
   isActiveRole,
   isEveryoneRole,
+  memberCountLabel,
+  outsideTiersHeading,
+  PEOPLE_SETTINGS_COPY,
   ROLE_NAME_MAX_LENGTH,
+  roleColorLabel,
   roleColorOrNull,
+  rolePermissionsFootnote,
   SELF_ASSIGNABLE_REFUSAL_COPY,
-  selfAssignableRefusal,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
+  selfAssignableRefusal,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import Link from "next/link";
+import { FOCUS_RING } from "@/components/ui/focus";
 import {
   Select,
   SelectContent,
@@ -30,17 +42,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ErrorState } from "@/components/shared/async-states";
-import { useConfirmDialog } from "@/components/shared/confirm-dialog";
-import { ProfileSection } from "@/components/profile/profile-section";
+import {
+  confirmWords,
+  useConfirmDialog,
+} from "@/components/shared/confirm-dialog";
+import {
+  ActionMenuButton,
+  type RowMenuEntry,
+} from "@/components/shared/row-menu";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SETTINGS_VALUE_TRIGGER,
+} from "@/components/shared/settings-row";
+import {
+  SettingsBackLink,
+  SettingsSubpage,
+} from "@/components/settings/settings-subpage";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
 import { RoleColorPicker } from "@/components/roles/role-color-picker";
 import { PermissionSwitchList } from "@/components/roles/permission-switch-list";
 import { RoleOverrideList } from "@/components/roles/role-override-list";
+import { ColorDot } from "@/components/roles/roles-overview";
+import { useStepRole } from "@/components/roles/use-step-role";
 import { useRolePermissionToggle } from "@/components/roles/use-role-permission-toggle";
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { CANT_GIVE, lockedReasonFor } from "@repo/hooks/use-roles-data";
 import { useToast } from "@/lib/hooks/use-toast";
-import { getErrorMessage, guardIntDraft, parseGuardedInt } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { useChapterStore } from "@/lib/stores/chapter-store";
 import { useRolePreviewStore } from "@/lib/stores/role-preview-store";
 import {
@@ -48,73 +77,53 @@ import {
   mayGrant,
   previewPermissions,
   reachesOutside,
+  permissionsAfterMove,
   reachesRole,
   reachesTier,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
 
-/**
- * A role's permissions after a move: the tier's, plus its overrides that are
- * on, minus those that are off. The API's `effectivePermissions` rule, which
- * the database applies on the write.
- */
-function permissionsAfterMove(
-  tierPermissions: readonly string[],
-  overrides: Readonly<Record<string, boolean>>,
-): string[] {
-  const result = new Set(tierPermissions);
-  for (const [permission, on] of Object.entries(overrides)) {
-    if (on) result.add(permission);
-    else result.delete(permission);
-  }
-  return [...result];
-}
-
 /** The Select's value for "outside the tiers"; Radix can't carry `""`. */
 const OUTSIDE = "__outside__";
 
 /**
- * One role's page (#3990): its name, color, tier and @mention switch, then
- * what it can do.
+ * One role's page (#3990; in the settings shape since #6029): its name on
+ * top, then the Role group (its tier, color, how many hold it, its @mention
+ * switch and, for a role the chapter made, Non-chapter business), saved
+ * together by Save role, then what it can do.
  *
- * A role in a tier shows two columns (#4072): what its tier sets, read-only,
- * and this role's own answer, Off, Same as tier or On
- * (`role-override-list.tsx`). A role outside the tiers, which has no tier to
- * follow, shows one column of live switches.
+ * A role in a tier lists each permission once, with what the role ends up
+ * with and a picker to set it apart from its tier (`role-override-list.tsx`);
+ * a role outside the tiers, which has no tier to follow, shows one column of
+ * live switches. Delete and its order (Move up, Move down) sit in the header's
+ * ⋯, never beside Save (rulebook § 2), the same on the phone.
  *
  * "View as" opens the dashboard as a member holding only this role sees it
- * (#4072), the way Discord's View Server As Role does.
+ * (#4072), the way Discord's View Server As Role does. The phone has no View
+ * as yet, so it stays on web.
  */
 export function RolePage({
   roleId,
-  onBack,
-  onOpenTier,
+  backHref,
+  tierHref,
+  onDeleted,
 }: {
   roleId: string;
-  onBack: () => void;
-  onOpenTier: (tierId: string) => void;
+  /** Roles and groups, where the back line and a deletion return. */
+  backHref: string;
+  /** The page of the role's tier, linked from its Tier row. */
+  tierHref?: (tierId: string) => string;
+  onDeleted: () => void;
 }) {
   const data = useRolesData();
   const { rolesQuery, tiersQuery, roles, words } = data;
   const role = roles.find((candidate) => candidate.id === roleId) ?? null;
-
-  const back = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={onBack}
-      className="-ml-3"
-    >
-      <ChevronLeft aria-hidden />
-      Roles
-    </Button>
-  );
+  const backLabel = PEOPLE_SETTINGS_COPY.pageTitle;
 
   if (rolesQuery.isPending || tiersQuery.isPending) {
     return (
       <div className="space-y-4">
-        {back}
+        <SettingsBackLink href={backHref} label={backLabel} />
         <SettingsListCardSkeleton label="Loading role" rows={6} />
       </div>
     );
@@ -122,15 +131,15 @@ export function RolePage({
   if (rolesQuery.isError || !role) {
     return (
       <div className="space-y-4">
-        {back}
+        <SettingsBackLink href={backHref} label={backLabel} />
         <ErrorState
           title={
             rolesQuery.isError ? "Couldn't load this role" : "This role is gone"
           }
           description={
             rolesQuery.isError
-              ? "Retry, or go back to Roles."
-              : `Someone may have deleted it. Go back to Roles to see the ${words.plural} as they are now.`
+              ? `Retry, or go back to ${backLabel}.`
+              : `Someone may have deleted it. Go back to ${backLabel} to see the ${words.plural} as they are now.`
           }
           onRetry={
             rolesQuery.isError ? () => void rolesQuery.refetch() : undefined
@@ -145,25 +154,34 @@ export function RolePage({
       key={role.id}
       role={role}
       data={data}
-      back={back}
-      onBack={onBack}
-      onOpenTier={onOpenTier}
+      backHref={backHref}
+      tierHref={tierHref}
+      onDeleted={onDeleted}
     />
+  );
+}
+
+/** A row's trailing value that opens nothing, in a row's value tone. */
+function PlainValue({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-sm tabular-nums text-muted-foreground">
+      {children}
+    </span>
   );
 }
 
 function RoleBody({
   role,
   data,
-  back,
-  onBack,
-  onOpenTier,
+  backHref,
+  tierHref,
+  onDeleted,
 }: {
   role: TieredRole;
   data: ReturnType<typeof useRolesData>;
-  back: React.ReactNode;
-  onBack: () => void;
-  onOpenTier: (tierId: string) => void;
+  backHref: string;
+  tierHref?: (tierId: string) => string;
+  onDeleted: () => void;
 }) {
   const { tiers, roles, reach, canManage, words, memberCounts } = data;
   const { toast } = useToast();
@@ -175,10 +193,24 @@ function RoleBody({
   const { confirm, confirmDialog } = useConfirmDialog();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
+  const stepper = useStepRole(
+    roles,
+    tiers,
+    // The President role is no one's to edit, but a wildcard caller
+    // may still move it past a neighbour (the API ranks it at the top).
+    (target) =>
+      canManage &&
+      (isWildcardRole(target)
+        ? reach.wildcard
+        : reachesRole(reach, target, tiers)),
+  );
   const holders = useMemo(() => [role], [role]);
   const { permissionsOf, toggle, pending } = useRolePermissionToggle(holders);
 
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
+  // A tier_id naming a tier this chapter doesn't have reads as outside the
+  // tiers, the way the overview lists it and the API ranks it.
+  const tierId = tier?.id ?? null;
   // The Everyone role (#4191): its permissions and @everyone switch are
   // edited here; its name and tier are fixed, as the API holds them.
   const everyone = isEveryoneRole(role);
@@ -199,7 +231,7 @@ function RoleBody({
   // Whether the officer picked a color: an unpaintable stored value shows as
   // "No color", so the draft alone can't tell "left alone" from "cleared".
   const [colorTouched, setColorTouched] = useState(false);
-  const [placement, setPlacement] = useState(role.tier_id ?? OUTSIDE);
+  const [placement, setPlacement] = useState(tierId ?? OUTSIDE);
   const [mentionable, setMentionable] = useState(role.mentionable);
   // "Non-chapter business" (#4958, Shawn 2026-11-14): members add and remove
   // the role themselves. Judged against the drafted placement, since a move
@@ -213,7 +245,7 @@ function RoleBody({
     // stored ones while it stays put, else the drafted tier's with its own
     // overrides on top (a role moved out of a tier drops that tier's).
     permissions:
-      draftTierId === (role.tier_id ?? null)
+      draftTierId === tierId
         ? role.permissions
         : permissionsAfterMove(
             tiers.find((candidate) => candidate.id === draftTierId)
@@ -221,7 +253,6 @@ function RoleBody({
             role.permission_overrides,
           ),
   });
-  const [order, setOrder] = useState(String(role.display_order));
 
   async function save() {
     const nextTier = placement === OUTSIDE ? null : placement;
@@ -235,14 +266,13 @@ function RoleBody({
           // audit row for it; `null` clears the color.
           color:
             colorTouched && color !== (role.color ?? null) ? color : undefined,
-          display_order: parseGuardedInt(order),
           mentionable:
             mentionable !== role.mentionable ? mentionable : undefined,
           self_assignable:
             pickable !== role.self_assignable ? pickable : undefined,
           tier_id: nextTier !== role.tier_id ? nextTier : undefined,
-          // **No `permissions` key.** The switches below save on their own;
-          // sending a list here would roll back a flip made since this page
+          // **No `permissions` key.** The rows below save on their own;
+          // sending a list here would roll back a pick made since this page
           // opened.
         },
       });
@@ -265,10 +295,7 @@ function RoleBody({
 
   async function remove() {
     const ok = await confirm({
-      title: `Delete ${role.name}?`,
-      description:
-        "Members holding this role lose what it gives them right away. This can't be undone.",
-      confirmLabel: "Delete role",
+      ...confirmWords(deleteRoleConfirm(role.name)),
       tone: "destructive",
     });
     if (!ok) return;
@@ -278,7 +305,7 @@ function RoleBody({
         title: "Role deleted",
         description: `${role.name} was removed.`,
       });
-      onBack();
+      onDeleted();
     } catch (error) {
       toast({
         title: "Couldn't delete role",
@@ -289,6 +316,19 @@ function RoleBody({
         variant: "destructive",
       });
     }
+  }
+
+  function moveBy(by: -1 | 1) {
+    void stepper.step(role, by).catch((error: unknown) =>
+      toast({
+        title: `Couldn't move ${role.name}`,
+        description: getErrorMessage(
+          error,
+          "The role stayed where it was. Try again in a moment.",
+        ),
+        variant: "destructive",
+      }),
+    );
   }
 
   function viewAs() {
@@ -312,20 +352,49 @@ function RoleBody({
     ? "This role can do everything. That only moves through Transfer presidency."
     : lockedReasonFor({ canManage, reach }, editable, "role");
 
+  const menuEntries: RowMenuEntry[] = [
+    {
+      type: "item",
+      key: "up",
+      label: PEOPLE_SETTINGS_COPY.moveUp,
+      disabled: !editable || !stepper.canStep(role, -1),
+      onSelect: () => moveBy(-1),
+    },
+    {
+      type: "item",
+      key: "down",
+      label: PEOPLE_SETTINGS_COPY.moveDown,
+      disabled: !editable || !stepper.canStep(role, 1),
+      onSelect: () => moveBy(1),
+    },
+    ...(role.is_system
+      ? []
+      : [
+          { type: "separator", key: "sep" } satisfies RowMenuEntry,
+          {
+            type: "item",
+            key: "delete",
+            label: PEOPLE_SETTINGS_COPY.deleteRole,
+            destructive: true,
+            disabled: !editable || deleteRole.isPending,
+            onSelect: () => void remove(),
+          } satisfies RowMenuEntry,
+        ]),
+  ];
+
+  const tierName =
+    placement === OUTSIDE
+      ? outsideTiersHeading(words.plural)
+      : (tiers.find((candidate) => candidate.id === placement)?.name ?? "");
+
   return (
-    <div className="space-y-10">
-      {confirmDialog}
-      <header className="space-y-3 border-b border-border pb-6">
-        {back}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span
-            aria-hidden
-            className="h-3 w-3 shrink-0 rounded-full border border-border"
-            style={{
-              backgroundColor: roleColorOrNull(role.color) ?? "transparent",
-            }}
-          />
-          <h2 className="text-title text-foreground">{role.name}</h2>
+    <SettingsSubpage
+      backHref={backHref}
+      backLabel={PEOPLE_SETTINGS_COPY.pageTitle}
+      title={role.name}
+      titleLeading={<ColorDot color={role.color} />}
+      actions={
+        <>
           {/*
             Anyone who can edit roles may look (#4072), at any role but the
             President's, which can do everything. Looking changes nothing,
@@ -337,174 +406,172 @@ function RoleBody({
               variant="secondary"
               size="sm"
               onClick={viewAs}
-              className="ml-auto"
             >
               <Eye aria-hidden />
               View as {role.name}
             </Button>
           ) : null}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {tier ? (
-            <>
-              In{" "}
-              <button
-                type="button"
-                onClick={() => onOpenTier(tier.id)}
-                className="font-medium text-foreground underline-offset-4 hover:underline"
-              >
-                {tier.name}
-              </button>
-            </>
-          ) : (
-            `Outside the ${words.plural}`
-          )}
-          {count === null
-            ? null
-            : ` · ${count} ${count === 1 ? "member" : "members"}`}
+          {editable && !everyone ? (
+            <ActionMenuButton
+              entries={menuEntries}
+              label={`More for ${role.name}`}
+            />
+          ) : null}
+        </>
+      }
+    >
+      {confirmDialog}
+      {everyone ? (
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Every member holds it, including someone who has just joined and has
+          no base role yet.
         </p>
-        {everyone ? (
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Every member holds it, including someone who has just joined and has
-            no base role yet. It isn&apos;t offered in any list, and its name
-            and {words.singular} stay as they are.
-          </p>
-        ) : null}
-      </header>
+      ) : null}
 
-      <ProfileSection id="role-details" title="Details">
-        <div className="grid max-w-2xl gap-4 md:grid-cols-2">
-          <div className="grid gap-1">
-            <Label htmlFor="role-name">Name</Label>
-            <Input
-              id="role-name"
-              value={name}
-              maxLength={ROLE_NAME_MAX_LENGTH}
-              disabled={!editable || everyone}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="role-tier">{words.Singular}</Label>
-            <Select
-              value={placement}
-              onValueChange={setPlacement}
-              disabled={!editable || tierFixed}
-            >
-              <SelectTrigger id="role-tier">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {tiers.map((candidate) => (
-                  <SelectItem
-                    key={candidate.id}
-                    value={candidate.id}
-                    disabled={
-                      candidate.id !== role.tier_id &&
-                      !reachesTier(reach, candidate)
-                    }
-                  >
-                    {candidate.name}
-                  </SelectItem>
-                ))}
-                <SelectItem
-                  value={OUTSIDE}
-                  disabled={role.tier_id !== null && !reachesOutside(reach)}
+      <div className="grid max-w-md gap-1.5">
+        <Label htmlFor="role-name">{PEOPLE_SETTINGS_COPY.name}</Label>
+        <Input
+          id="role-name"
+          value={name}
+          maxLength={ROLE_NAME_MAX_LENGTH}
+          disabled={!editable || everyone}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </div>
+
+      <div className="space-y-3">
+        <SettingsGroup heading={PEOPLE_SETTINGS_COPY.roleHeading}>
+          <SettingsRow
+            icon={Layers}
+            label={words.Singular}
+            description={
+              tier && tierHref ? (
+                // What the tier gives lives on its page: the way there.
+                <Link
+                  href={tierHref(tier.id)}
+                  className={cn("underline underline-offset-2", FOCUS_RING)}
                 >
-                  Outside the {words.plural}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1 md:col-span-2">
-            <Label id="role-color-label">Color</Label>
-            <RoleColorPicker
-              labelId="role-color-label"
-              value={color}
-              onChange={(next) => {
-                setColor(next);
-                setColorTouched(true);
-              }}
-              previewName={name}
-              memberName={viewerName}
-              chapterColors={chapterColors}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="role-display-order">Position in its list</Label>
-            <Input
-              id="role-display-order"
-              type="number"
-              min={0}
-              value={order}
-              disabled={!editable}
-              onChange={(event) => {
-                const next = guardIntDraft(event.target.value);
-                if (next !== undefined) setOrder(next);
-              }}
-            />
-          </div>
+                  Open {tier.name}
+                </Link>
+              ) : undefined
+            }
+            control={
+              <Select
+                value={placement}
+                onValueChange={setPlacement}
+                disabled={!editable || tierFixed}
+              >
+                <SelectTrigger
+                  aria-label={words.Singular}
+                  className={SETTINGS_VALUE_TRIGGER}
+                >
+                  <SelectValue>{tierName}</SelectValue>
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {tiers.map((candidate) => (
+                    <SelectItem
+                      key={candidate.id}
+                      value={candidate.id}
+                      disabled={
+                        candidate.id !== tierId &&
+                        !reachesTier(reach, candidate)
+                      }
+                    >
+                      {candidate.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem
+                    value={OUTSIDE}
+                    disabled={tierId !== null && !reachesOutside(reach)}
+                  >
+                    {outsideTiersHeading(words.plural)}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            }
+          />
+          <SettingsRow
+            icon={Palette}
+            label={PEOPLE_SETTINGS_COPY.color}
+            control={
+              <Popover>
+                <PopoverTrigger
+                  disabled={!editable}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition hover:bg-card-hover disabled:opacity-50",
+                    FOCUS_RING,
+                  )}
+                >
+                  <ColorDot color={color} />
+                  {roleColorLabel(color)}
+                  <ChevronDown className="h-4 w-4 opacity-50" aria-hidden />
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-auto max-w-[min(30rem,calc(100vw-2rem))]"
+                >
+                  <span id="role-color-label" className="sr-only">
+                    {PEOPLE_SETTINGS_COPY.color}
+                  </span>
+                  <RoleColorPicker
+                    labelId="role-color-label"
+                    value={color}
+                    onChange={(next) => {
+                      setColor(next);
+                      setColorTouched(true);
+                    }}
+                    previewName={name}
+                    memberName={viewerName}
+                    chapterColors={chapterColors}
+                  />
+                </PopoverContent>
+              </Popover>
+            }
+          />
+          <SettingsRow
+            label={PEOPLE_SETTINGS_COPY.members}
+            control={
+              <PlainValue>
+                {count === null ? "" : memberCountLabel(count)}
+              </PlainValue>
+            }
+          />
           {/*
             Owner, 2026-11-06: "anyone can ping any role by default. officers
             can change defaults." Off, only a member who can manage channels
             or roles can @ it (spec/behavior/chat/README.md § Role mentions).
           */}
-          <div className="flex items-start justify-between gap-4 md:col-span-2">
-            <div className="grid gap-1">
-              <Label htmlFor="role-mentionable">
-                {everyone
-                  ? "Anyone can use @everyone and @here"
-                  : "Anyone can @mention this role"}
-              </Label>
-              <p
-                id="role-mentionable-description"
-                className="text-sm text-muted-foreground"
-              >
-                {everyone
-                  ? "@everyone pings everyone in a channel, @here only those online. When off, only officers who manage channels or roles can use them."
-                  : "When off, only officers who manage channels or roles can ping everyone in it."}
-              </p>
-            </div>
-            <Switch
-              id="role-mentionable"
-              aria-describedby="role-mentionable-description"
-              checked={mentionable}
-              disabled={!editable}
-              onCheckedChange={setMentionable}
-            />
-          </div>
+          <SettingsRow
+            label={
+              everyone
+                ? "Anyone can use @everyone and @here"
+                : PEOPLE_SETTINGS_COPY.mentionRole
+            }
+            checked={mentionable}
+            disabled={!editable}
+            onCheckedChange={setMentionable}
+          />
           {/*
             Non-chapter business (#4958): interest roles members pick
             themselves. Built-in roles never are, so they don't show it.
             spec/behavior/rbac.md § Self-assignable roles.
           */}
           {role.system_key ? null : (
-            <div className="flex items-start justify-between gap-4 md:col-span-2">
-              <div className="grid gap-1">
-                <Label htmlFor="role-self-assignable">
-                  Non-chapter business
-                </Label>
-                <p
-                  id="role-self-assignable-description"
-                  className="text-sm text-muted-foreground"
-                >
-                  {pickRefusal
-                    ? SELF_ASSIGNABLE_REFUSAL_COPY[pickRefusal]
-                    : SELF_ASSIGNABLE_SWITCH_DESCRIPTION}
-                </p>
-              </div>
-              <Switch
-                id="role-self-assignable"
-                aria-describedby="role-self-assignable-description"
-                checked={pickable}
-                disabled={!editable || (!!pickRefusal && !pickable)}
-                onCheckedChange={setPickable}
-              />
-            </div>
+            <SettingsRow
+              label="Non-chapter business"
+              description={
+                pickRefusal
+                  ? SELF_ASSIGNABLE_REFUSAL_COPY[pickRefusal]
+                  : SELF_ASSIGNABLE_SWITCH_DESCRIPTION
+              }
+              checked={pickable}
+              disabled={!editable || (!!pickRefusal && !pickable)}
+              onCheckedChange={setPickable}
+            />
           )}
-        </div>
+        </SettingsGroup>
         {editable ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex justify-end">
             <Button
               type="button"
               onClick={() => void save()}
@@ -515,54 +582,37 @@ function RoleBody({
               ) : null}
               Save role
             </Button>
-            {role.is_system ? null : (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => void remove()}
-                disabled={deleteRole.isPending}
-              >
-                Delete role
-              </Button>
-            )}
           </div>
         ) : null}
-      </ProfileSection>
+      </div>
 
-      <ProfileSection
-        id="role-permissions"
-        title="Permissions"
-        hint={
-          tier
-            ? `Starts from ${tier.name}. Pick Off or On to set this role apart; Same as ${words.singular} follows ${tier.name}, even when it changes.`
-            : `This role is outside the ${words.plural}, so its permissions are its own.`
-        }
-      >
-        {tier && !wildcard ? (
-          <RoleOverrideList
-            role={role}
-            tier={tier}
-            tierWord={words.singular}
-            lockedReason={lockedReason}
-            mayGrant={(permission) => mayGrant(reach, permission)}
-          />
-        ) : (
-          <PermissionSwitchList
-            idPrefix={`role-${role.id}`}
-            holderName={role.name}
-            isOn={(permission) => wildcard || held.includes(permission)}
-            onToggle={(permission, on) => void toggle(role, permission, on)}
-            extraPermissions={wildcard ? [] : held}
-            lockedReason={lockedReason}
-            rowLockedReason={(permission, on) =>
-              !on && !mayGrant(reach, permission) ? CANT_GIVE : null
-            }
-            pendingPermission={
-              pending?.id === role.id ? pending.permission : null
-            }
-          />
-        )}
-      </ProfileSection>
-    </div>
+      {tier && !wildcard ? (
+        <RoleOverrideList
+          role={role}
+          tier={tier}
+          lockedReason={lockedReason}
+          mayGrant={(permission) => mayGrant(reach, permission)}
+          footnote={rolePermissionsFootnote(tier.name, words.plural)}
+        />
+      ) : (
+        <PermissionSwitchList
+          idPrefix={`role-${role.id}`}
+          holderName={role.name}
+          isOn={(permission) => wildcard || held.includes(permission)}
+          onToggle={(permission, on) => void toggle(role, permission, on)}
+          extraPermissions={wildcard ? [] : held}
+          lockedReason={lockedReason}
+          footnote={
+            wildcard ? undefined : rolePermissionsFootnote(null, words.plural)
+          }
+          rowLockedReason={(permission, on) =>
+            !on && !mayGrant(reach, permission) ? CANT_GIVE : null
+          }
+          pendingPermission={
+            pending?.id === role.id ? pending.permission : null
+          }
+        />
+      )}
+    </SettingsSubpage>
   );
 }

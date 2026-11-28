@@ -1,8 +1,13 @@
 "use client";
 
+import {
+  useAddressParams,
+  useDeadAddressParam,
+  useGoneAfterRecheck,
+} from "@/lib/address/use-address-params";
+
 import { localIsoDate } from "@repo/formatting";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useState } from "react";
 import {
   rushPipelineAccess,
   useMyPermissions,
@@ -19,6 +24,7 @@ import { vocab } from "@repo/org-archetypes";
 import {
   isRushFollowUpForViewer,
   rushFollowUpsDueCount,
+  WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { HeaderSearch } from "@/components/shared/header-search";
@@ -89,8 +95,10 @@ const VIEW_OPTIONS = [
   { value: "follow_up", label: "Follow up" },
 ] as const satisfies readonly { value: RushView; label: string }[];
 
-/** The notification's deep link: `/rush?prospect=<candidate id>`. */
-export const RUSH_PROSPECT_PARAM = "prospect";
+const R = WEB_ADDRESS_PARAMS.rush;
+/** `view=` values; no `view=` is the page's own first answer. */
+const FOLLOW_UP_PARAM_VALUE = "follow-up";
+const ALL_PARAM_VALUE = "all";
 
 /**
  * The recruitment page (#5924): every prospect the chapter is working, as a
@@ -116,6 +124,16 @@ export const RUSH_PROSPECT_PARAM = "prospect";
  * board and the list by name.
  */
 export function RushPage() {
+  // The open prospect and the view are read from the address, and
+  // `useSearchParams` needs a boundary of its own.
+  return (
+    <Suspense fallback={null}>
+      <AddressedRushPage />
+    </Suspense>
+  );
+}
+
+function AddressedRushPage() {
   const { isOffline } = useNetwork();
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
@@ -137,9 +155,37 @@ export function RushPage() {
     setSummary(next === "summary");
     if (next !== "summary") setListLayout(next);
   };
-  const [openId, setOpenId] = useState<string | null>(null);
+  /*
+    The address (#6047, spec § Addresses): `prospect=<id>` is the prospect
+    open in place of the board, pushed, its back arrow closing by the
+    address's rule; `view=all|follow-up` is the view the member picked,
+    pushed. With no `view=` the page opens as it always has (Follow up when
+    it holds anything). Search, the layout and Summary are not in it.
+  */
+  const address = useAddressParams([R.prospect, R.view]);
+  const openId = address.values[R.prospect];
+  const setOpenId = (id: string | null) =>
+    id === null
+      ? address.close([R.prospect])
+      : address.open({ [R.prospect]: id }, { replace: openId !== null });
   const [adding, setAdding] = useState(false);
-  const [viewPick, setViewPick] = useState<RushView | null>(null);
+  const viewParam = address.values[R.view];
+  const [firstPick, setFirstPick] = useState<RushView | null>(null);
+  const viewPick: RushView | null =
+    viewParam === FOLLOW_UP_PARAM_VALUE
+      ? "follow_up"
+      : viewParam === ALL_PARAM_VALUE
+        ? "all"
+        : firstPick;
+  // A pick of the view already shown pushes nothing (the folded menu calls
+  // back for the checked item too).
+  const setViewPick = (next: RushView) => {
+    if (next === viewPick) return;
+    address.open({
+      [R.view]: next === "follow_up" ? FOLLOW_UP_PARAM_VALUE : ALL_PARAM_VALUE,
+      [R.prospect]: null,
+    });
+  };
   const [query, setQuery] = useState("");
   // Below the floor's few hundred pixels the header can't hold both sets of
   // views beside the title, so they fold into one View menu among the
@@ -166,6 +212,24 @@ export function RushPage() {
   );
   const mover = useRushMove();
   const today = localIsoDate(new Date());
+
+  // A prospect the address names that the read doesn't hold (removed, or
+  // not this role's to see, #4084): said, and taken out of the address.
+  /*
+    A prospect the read in hand doesn't hold is read again once (it can be
+    cached from before they were added); only a settled, successful read
+    without them calls them gone (removed, or not this role's, #4084).
+  */
+  const prospectGone = useGoneAfterRecheck(openId, pipeline, (data, id) =>
+    data.candidates.some((c) => c.id === id),
+  );
+  const deadProspect = useDeadAddressParam(
+    R.prospect,
+    openId,
+    prospectGone,
+    // The note goes once the member moves on to another view.
+    viewParam ?? "",
+  );
 
   if (isOffline && anyReadUncached(permissionsQuery, pipeline)) {
     return (
@@ -240,7 +304,7 @@ export function RushPage() {
   const firstView: RushView = candidates.some(mine) ? "follow_up" : "all";
   // The opening view is kept once answered, so logging the last due contact
   // doesn't move the page under the viewer (Tasks does the same).
-  if (canSwitchView && viewPick === null) setViewPick(firstView);
+  if (canSwitchView && viewPick === null) setFirstPick(firstView);
   const pageView: RushView = canSwitchView ? (viewPick ?? firstView) : "all";
   const inView =
     pageView === "follow_up" ? candidates.filter(mine) : candidates;
@@ -373,13 +437,14 @@ export function RushPage() {
         ) : null}
       </PageActions>
       <SubscriptionNotice gate={gate} feature="working prospects" />
+      {deadProspect !== null ? (
+        // A prospect from the address who isn't here (§ Addresses).
+        <p role="status" className="text-sm text-muted-foreground">
+          That prospect isn&apos;t available. They may have been removed, or
+          your role may not see them.
+        </p>
+      ) : null}
       {body}
-      <Suspense fallback={null}>
-        <LinkedProspectParam
-          candidateIds={candidates.map((c) => c.id)}
-          onOpen={setOpenId}
-        />
-      </Suspense>
       {mover.dialog}
       {access.add ? (
         <AddProspectDialog open={adding} onOpenChange={setAdding} />
@@ -399,45 +464,6 @@ export function RushPage() {
       />
     </div>
   );
-}
-
-/**
- * Opens the prospect `/rush?prospect=<id>` names (a follow-up or stale push,
- * `notifications-popover.tsx`) once the pipeline holds them, then drops the
- * parameter so a refresh doesn't reopen it, as Tasks' and Events' links do.
- * An id the pipeline doesn't hold (deleted) opens nothing. Its own component
- * because `useSearchParams` needs a Suspense boundary of its own.
- */
-function LinkedProspectParam({
-  candidateIds,
-  onOpen,
-}: {
-  candidateIds: readonly string[];
-  onOpen: (id: string) => void;
-}) {
-  const searchParams = useSearchParams();
-  const linked = searchParams?.get(RUSH_PROSPECT_PARAM) ?? null;
-  const handled = useRef<string | null>(null);
-  const latest = useRef(onOpen);
-  useEffect(() => {
-    latest.current = onOpen;
-  });
-  const holds = linked !== null && candidateIds.includes(linked);
-  useEffect(() => {
-    if (!linked) {
-      handled.current = null;
-      return;
-    }
-    if (handled.current === linked) return;
-    handled.current = linked;
-    if (holds) latest.current(linked);
-    // Next keeps `useSearchParams` in step with the History API, so this
-    // clears the parameter without a navigation.
-    const url = new URL(window.location.href);
-    url.searchParams.delete(RUSH_PROSPECT_PARAM);
-    window.history.replaceState(window.history.state, "", url);
-  }, [linked, holds]);
-  return null;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { vi } from "vitest";
+import { useAddressSearchParams } from "@/tests/address-search-params";
 
 /**
  * Module stubs for the specs that render the whole Settings page
@@ -105,11 +106,20 @@ export function chapterStore(
   };
 }
 
-/** `next/navigation`, with the query string read on every render. */
+/**
+ * `next/navigation`, with the query string read on every render. The page
+ * re-renders when the address moves through the History API, as Next's
+ * `useSearchParams` follows it (a rail row pushes `?tab=`, #6049).
+ */
 export function navigation(
   searchParams: () => URLSearchParams = () => new URLSearchParams(),
 ) {
-  return { useSearchParams: () => searchParams() };
+  return {
+    useSearchParams: () => {
+      useAddressSearchParams();
+      return searchParams();
+    },
+  };
 }
 
 /**
@@ -117,7 +127,7 @@ export function navigation(
  * at its `href` and re-renders, so the page reads the new query string. Used
  * for the Chapter tab's rows, which open `?tab=org&page=<page>`, by a spec
  * whose `navigation` reads `window.location.search`, which the page's own tab
- * switch moves with `replaceState` (dropping `?page=` as it does live). Such a
+ * switch moves with `pushState` (dropping `?page=` as it does live). Such a
  * spec resets the address in `beforeEach`.
  */
 export function followLink(link: HTMLElement, rerender: () => void) {

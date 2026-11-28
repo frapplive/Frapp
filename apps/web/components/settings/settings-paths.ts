@@ -1,3 +1,4 @@
+import { ONE_SHOT_ADDRESS_PARAMS, WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * Where the officer tools live on web: inside Chapter settings, on the page
  * of the module each belongs to (#3837).
@@ -7,7 +8,7 @@
  * and brought chat back beside it (Paul, 2026-11-12: "I DO NOT WANT" that,
  * "phase those out"). Their old routes only redirect here now, so anything
  * that links to a tool links to one of these instead of bouncing through the
- * redirect, which would lose a `#reported-messages` anchor on the way.
+ * redirect.
  */
 
 /**
@@ -27,21 +28,78 @@ export function moduleSettingsHref(
 export const CHAT_MODULE_SETTINGS_PATH = moduleSettingsHref("chat");
 
 /**
- * Chat admin, opened from the Chat page's row: channels, categories,
- * background and the report queue.
+ * Chat admin, opened from the Chat page's row: channels and categories, the
+ * chat background and the report queue.
  */
 export const CHAT_SETTINGS_PATH = moduleSettingsHref("chat", "chat-admin");
 
-/** One channel's own settings, opened from Chat admin. */
-export function channelSettingsPath(channelId: string): string {
-  return `${CHAT_SETTINGS_PATH}&channel=${encodeURIComponent(channelId)}`;
+/**
+ * The pages a channel's rows open (#6031), each with a way back to the
+ * channel: one question of its access, its pins, the reports filed in it.
+ */
+export const CHANNEL_SETTINGS_PAGES = [
+  "see",
+  "post",
+  "pins",
+  "reports",
+] as const;
+export type ChannelSettingsPage = (typeof CHANNEL_SETTINGS_PAGES)[number];
+
+function isChannelSettingsPage(
+  value: string | null | undefined,
+): value is ChannelSettingsPage {
+  return (CHANNEL_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
 }
 
-/** The anchor the report queue scrolls to when a notification opens it. */
+/**
+ * One channel's own settings, opened from Chat admin, or one of its pages:
+ * `?page=` names the page, Chat admin's or the channel's, and `&channel=`
+ * the channel.
+ */
+export function channelSettingsPath(
+  channelId: string,
+  page: ChannelSettingsPage | null = null,
+): string {
+  return `${moduleSettingsHref("chat", page ?? "chat-admin")}&channel=${encodeURIComponent(channelId)}`;
+}
+
+/**
+ * A channel's settings with its Description field focused: a channel start's
+ * "Add a description" opens it (#6031), so the officer lands where it sent
+ * them. Any other way in focuses nothing.
+ */
+export const FOCUS_DESCRIPTION_PARAM = ONE_SHOT_ADDRESS_PARAMS.focus;
+export function channelDescriptionPath(channelId: string): string {
+  return `${channelSettingsPath(channelId)}&${FOCUS_DESCRIPTION_PARAM}=description`;
+}
+
+/**
+ * The pages Chat admin's own rows open (#6031): the chapter's chat
+ * background and the whole report queue.
+ */
+export const CHAT_SETTINGS_PAGES = ["background", "reports"] as const;
+export type ChatSettingsPage = (typeof CHAT_SETTINGS_PAGES)[number];
+
+function isChatSettingsPage(
+  value: string | null | undefined,
+): value is ChatSettingsPage {
+  return (CHAT_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
+}
+
+/** One of Chat admin's own pages. */
+export function chatSettingsPagePath(page: ChatSettingsPage): string {
+  return moduleSettingsHref("chat", page);
+}
+
+/**
+ * The anchor a new-report link carried before the queue had a page of its
+ * own (#6031). A Chat or Chat admin address with it still opens the queue's
+ * page.
+ */
 export const CHAT_REPORTS_ANCHOR = "reported-messages";
 
 /** The report queue, where a new-report notification lands. */
-export const CHAT_REPORTS_SETTINGS_PATH = `${CHAT_SETTINGS_PATH}#${CHAT_REPORTS_ANCHOR}`;
+export const CHAT_REPORTS_SETTINGS_PATH = chatSettingsPagePath("reports");
 
 /** `?tool=` value that opens Discord import in place of the Chat page. */
 const DISCORD_IMPORT_TOOL = "discord-import";
@@ -59,7 +117,7 @@ export const POINTS_SETTINGS_PATH = moduleSettingsHref(
 );
 
 /** `?member=` narrows the ledger to one member's transactions. */
-export const LEDGER_MEMBER_PARAM = "member";
+export const LEDGER_MEMBER_PARAM = WEB_ADDRESS_PARAMS.settings.member;
 
 /** The ledger on one member, from the Points row on their card. */
 export function pointsLedgerPath(userId: string): string {
@@ -94,6 +152,20 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "module",
   // A page opened from one of the Chapter tab's or a module page's rows.
   "page",
+  // Roles and groups' pages: a tier, a role, a group, the automatic groups,
+  // and where a group's page was opened from (#6029).
+  "tier",
+  "role",
+  "group",
+  "groups",
+  "from",
+  // A pledge class's page and a member field's page (#6029).
+  "class",
+  "field",
+  // The study-zone editor, docked in place of the zone list (#6049).
+  WEB_ADDRESS_PARAMS.settings.zone,
+  // A channel's Description focused, from "Add a description" (#6031).
+  FOCUS_DESCRIPTION_PARAM,
   // The points ledger's member, from a member's card.
   LEDGER_MEMBER_PARAM,
 ] as const;
@@ -144,25 +216,46 @@ export function settingsRedirectPath(
 
 /** A page drawn in place of a module page of Chapter settings. */
 export type SettingsSubpage =
-  { kind: "channel"; channelId: string } | { kind: "discord-import" };
+  | {
+      kind: "channel";
+      channelId: string;
+      /** One of the channel's own pages, or null for its settings. */
+      page: ChannelSettingsPage | null;
+    }
+  | { kind: "discord-import" }
+  | { kind: "chat-page"; page: ChatSettingsPage };
 
 /**
- * Which page, if any, `?channel=` or `?tool=` opens in place of module page
- * `moduleKey`. Only for a viewer who holds the tool behind it (`holdsTool`
- * takes a `SETTINGS_TOOLS` id): anyone else gets the module page, as a link
- * to a tool they lack never opened it either.
+ * Which page, if any, `?channel=`, `?tool=` or `?page=` opens in place of
+ * module page `moduleKey`. Only for a viewer who holds the tool behind it
+ * (`holdsTool` takes a `SETTINGS_TOOLS` id): anyone else gets the module
+ * page, as a link to a tool they lack never opened it either.
  */
 export function settingsSubpageFor(
   moduleKey: string,
-  params: { channel: string | null; tool: string | null },
+  params: {
+    channel: string | null;
+    tool: string | null;
+    page?: string | null;
+  },
   holdsTool: (toolId: string) => boolean,
 ): SettingsSubpage | null {
   if (moduleKey !== "chat") return null;
   if (params.channel && holdsTool("chat-admin")) {
-    return { kind: "channel", channelId: params.channel };
+    return {
+      kind: "channel",
+      channelId: params.channel,
+      page: isChannelSettingsPage(params.page) ? params.page : null,
+    };
   }
   if (params.tool === DISCORD_IMPORT_TOOL && holdsTool("discord-import")) {
     return { kind: "discord-import" };
+  }
+  // Each page gates itself as its section in Chat admin did: the
+  // background for whoever edits the chapter profile, the queue for report
+  // reviewers.
+  if (isChatSettingsPage(params.page) && holdsTool("chat-admin")) {
+    return { kind: "chat-page", page: params.page };
   }
   return null;
 }

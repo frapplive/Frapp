@@ -76,9 +76,27 @@ export function linkedStatusLabel(tone: LinkedAppTone): string {
 /** One way a member can sign in to Frapp. */
 export type SignInMethodKey = "email" | "google" | "apple";
 
-export interface SignInMethod extends LinkedAppState {
+/** The sign-in methods a member can link to, or unlink from, an account they're in (#2223). */
+export type LinkableSignInMethodKey = Exclude<SignInMethodKey, "email">;
+
+export interface SignInMethod<
+  I extends SignInIdentity = SignInIdentity,
+> extends LinkedAppState {
   key: SignInMethodKey;
   label: string;
+  /** The account's identity for this method, or null when it isn't set up. */
+  identity: I | null;
+  /**
+   * Google or Apple, not yet on the account: Link adds it (#2223). Email is
+   * the account's own address, so it is never linked or unlinked here.
+   */
+  canLink: boolean;
+  /**
+   * Google or Apple on an account that has another way in, so taking this one
+   * away can't lock the member out. GoTrue refuses the last identity too
+   * (`single_identity_not_deletable`); this keeps the control from offering it.
+   */
+  canUnlink: boolean;
 }
 
 /** The fields of a Supabase Auth identity a row reads. */
@@ -96,18 +114,41 @@ const SIGN_IN_METHODS: readonly { key: SignInMethodKey; label: string }[] = [
   { key: "apple", label: "Apple" },
 ];
 
+/** A method's name as every row, toast, alert and confirm says it. */
+export function signInMethodLabel(key: SignInMethodKey): string {
+  return SIGN_IN_METHODS.find((method) => method.key === key)?.label ?? key;
+}
+
+/** Whether a row's key is Google or Apple, the two a member links and unlinks. */
+export function isLinkableSignInMethod(
+  key: SignInMethodKey,
+): key is LinkableSignInMethodKey {
+  return key !== "email";
+}
+
 /**
  * The sign-in rows, from the account's Supabase Auth identities. Every method
  * Frapp offers is listed, so a member sees which they could also use; the
  * ones on the account carry a check and the address they sign in with.
  */
-export function signInMethodsFrom(
-  identities: readonly SignInIdentity[],
+export function signInMethodsFrom<I extends SignInIdentity>(
+  identities: readonly I[],
   accountEmail?: string | null,
-): SignInMethod[] {
+): SignInMethod<I>[] {
   return SIGN_IN_METHODS.map(({ key, label }) => {
-    const identity = identities.find((i) => i.provider === key);
-    if (!identity) return { key, label, tone: "off", detail: "Not set up" };
+    const identity = identities.find((i) => i.provider === key) ?? null;
+    const linkable = isLinkableSignInMethod(key);
+    if (!identity) {
+      return {
+        key,
+        label,
+        tone: "off",
+        detail: "Not set up",
+        identity: null,
+        canLink: linkable,
+        canUnlink: false,
+      };
+    }
     const email = identity.identity_data?.email;
     return {
       key,
@@ -115,6 +156,9 @@ export function signInMethodsFrom(
       tone: "connected",
       detail:
         typeof email === "string" && email ? email : (accountEmail ?? "Set up"),
+      identity,
+      canLink: false,
+      canUnlink: linkable && identities.length > 1,
     };
   });
 }
@@ -123,18 +167,18 @@ export function signInMethodsFrom(
 export const signInMethodsQueryKey = ["auth", "sign-in-methods"] as const;
 
 /** The two Supabase Auth reads the sign-in rows need (web's and the phone's client both have them). */
-export interface SignInMethodsAuth {
+export interface SignInMethodsAuth<I extends SignInIdentity = SignInIdentity> {
   getUserIdentities(): Promise<{
-    data: { identities: SignInIdentity[] } | null;
+    data: { identities: I[] } | null;
     error: unknown;
   }>;
   getUser(): Promise<{ data: { user: { email?: string | null } | null } }>;
 }
 
 /** Reads the account's identities and maps them to rows. Throws on a failed read. */
-export async function loadSignInMethods(
-  auth: SignInMethodsAuth,
-): Promise<SignInMethod[]> {
+export async function loadSignInMethods<I extends SignInIdentity>(
+  auth: SignInMethodsAuth<I>,
+): Promise<SignInMethod<I>[]> {
   const [{ data, error }, user] = await Promise.all([
     auth.getUserIdentities(),
     auth.getUser(),
@@ -145,3 +189,23 @@ export async function loadSignInMethods(
     user.data.user?.email ?? null,
   );
 }
+
+/**
+ * What linking or unlinking a sign-in method says (#2223), web and phone
+ * alike. Unlink asks first, the way Google's "Ways you sign in" and GitHub's
+ * sign-in methods confirm a removal; Link needs no confirm, since the
+ * provider's own page is the confirm.
+ */
+export const SIGN_IN_LINK_COPY = {
+  link: "Link",
+  unlink: "Unlink",
+  unlinkTitle: (label: string) => `Unlink ${label}?`,
+  unlinkBody: (label: string) =>
+    `You won't be able to sign in with ${label} anymore. You can link it again later.`,
+  unlinked: (label: string) => `${label} unlinked`,
+  linked: (label: string) => `${label} linked`,
+  linkFailedTitle: (label: string) => `Couldn't link ${label}`,
+  unlinkFailedTitle: (label: string) => `Couldn't unlink ${label}`,
+  /** The desktop app can't show Google's or Apple's page (they refuse embedded windows). */
+  desktopLinkReason: "Open Frapp in your browser to link this.",
+} as const;

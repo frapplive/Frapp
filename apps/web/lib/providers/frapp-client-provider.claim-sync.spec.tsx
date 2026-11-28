@@ -23,6 +23,7 @@ vi.mock("@repo/api-sdk", () => ({
 vi.mock("@repo/hooks", () => ({
   FrappClientProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   PermissionPreviewProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  CachedRosterProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/lib/supabase/client", () => ({

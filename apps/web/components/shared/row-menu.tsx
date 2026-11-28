@@ -77,7 +77,10 @@ export type RowMenuEntry =
            * the address is still loading, alongside `disabled`.
            */
           href: string | undefined;
-          /** Opens in a new tab, for a page outside Frapp. */
+          /**
+           * Opens in a new tab: a page outside Frapp, or a Frapp page meant
+           * to sit beside this one (a meeting's transcript).
+           */
           external?: boolean;
           onSelect?: never;
         }
@@ -97,14 +100,21 @@ export const ROW_REVEAL =
 const DESTRUCTIVE_ITEM_CLASS =
   "text-destructive-text focus:bg-destructive-tint focus:text-destructive-text";
 
-/** Where a right-click should fall through to the browser's own menu. */
+/**
+ * Where a right-click should fall through to the browser's own menu. A link
+ * that is the row itself (`data-row-link`, a settings row that opens a page)
+ * opens the row's menu instead, as Discord's channel list does; any other
+ * link keeps "Open in new tab".
+ */
 export function keepsBrowserMenu(
   target: EventTarget | null,
   row: Element,
 ): boolean {
   if (
     target instanceof Element &&
-    target.closest("a[href], input, textarea, select, [contenteditable='true']")
+    target.closest(
+      "a[href]:not([data-row-link]), input, textarea, select, [contenteditable='true']",
+    )
   ) {
     return true;
   }
@@ -296,6 +306,10 @@ function MoreButton({
               ? cn(headingControlClassName, "p-0")
               : compactControlClassName,
             "shrink-0",
+            // Disabled, it still takes the pointer, as IconButton does: the
+            // shared recipe's `pointer-events: none` would stop the hover
+            // that shows its tooltip and the not-allowed cursor.
+            "disabled:pointer-events-auto disabled:cursor-not-allowed",
             onRow && ROW_REVEAL,
           )}
         >

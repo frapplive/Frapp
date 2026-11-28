@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { eyebrowStyle } from "@/components/eyebrow";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
@@ -516,11 +517,8 @@ function createStyles(tokens: SignetTokens, accent: string) {
       minHeight: tokens.touch.minimum,
     },
     heading: {
-      ...typeRole(tokens.typography.role.caption),
+      ...eyebrowStyle(tokens),
       color: tokens.color.text.muted,
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
       paddingTop: tokens.spacing.md,
       paddingBottom: tokens.spacing.xs,
     },

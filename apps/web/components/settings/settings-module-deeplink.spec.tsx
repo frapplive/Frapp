@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
@@ -26,7 +26,9 @@ const { mockCurrentChapter } = vi.hoisted(() => ({
   mockCurrentChapter: vi.fn(),
 }));
 
-let searchParams = new URLSearchParams();
+// A test sets the query here, or leaves it null to read the address bar,
+// which the page itself moves (a rail row pushes `?tab=`, #6049).
+let searchParams: URLSearchParams | null = new URLSearchParams();
 
 // The AI read. By default a server with AI off: no AI row (#4308).
 const aiRead = vi.hoisted(() => ({
@@ -66,7 +68,9 @@ vi.mock("@/lib/stores/chapter-store", async () =>
 );
 
 vi.mock("next/navigation", async () =>
-  (await import("@/tests/settings-harness")).navigation(() => searchParams),
+  (await import("@/tests/settings-harness")).navigation(
+    () => searchParams ?? new URLSearchParams(window.location.search),
+  ),
 );
 
 vi.mock("@/components/shared/can", async () =>
@@ -110,6 +114,22 @@ describe("settings ?module= deep link", () => {
     );
   });
 
+  it("takes ?module= off the address once its switch has focus (one-shot)", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=modules&module=events",
+    );
+    searchParams = new URLSearchParams("tab=modules&module=events");
+    render(<SettingsPage />);
+
+    expect(eventsSwitch()).toHaveFocus();
+    // The old Modules link's tab becomes the module's own, in place.
+    expect(`${window.location.pathname}${window.location.search}`).toBe(
+      "/settings?tab=events",
+    );
+  });
+
   it("opens the same page from a link made for the old Modules list", () => {
     searchParams = new URLSearchParams("tab=modules&module=events");
     render(<SettingsPage />);
@@ -135,11 +155,11 @@ describe("settings ?module= deep link", () => {
   });
 
   /**
-   * The regression this latch exists for. `TabsContent` carries no `forceMount`,
-   * so Radix unmounts the inactive page, and the tab is driven by local state
-   * without rewriting the URL, so `?module=events` is still in `searchParams`
-   * on every later visit. Without the latch, an officer who follows the nudge,
-   * wanders elsewhere and comes back gets focus yanked to the switch forever.
+   * The regression the one-shot exists for. `TabsContent` carries no
+   * `forceMount`, so Radix unmounts the inactive page and remounts it on the
+   * way back. The switch that took focus takes `?module=` off the address
+   * (#6049), so neither coming back to the row nor Back onto the entry the
+   * nudge opened yanks focus to the switch again.
    */
   it("does not re-grab focus when the officer returns to the page", async () => {
     const user = userEvent.setup();
@@ -149,7 +169,8 @@ describe("settings ?module= deep link", () => {
     // trigger on click.
     Element.prototype.scrollIntoView = scrollSpy;
 
-    searchParams = new URLSearchParams("tab=events&module=events");
+    searchParams = null;
+    window.history.replaceState(null, "", "/settings?tab=events&module=events");
     render(<SettingsPage />);
 
     expect(eventsSwitch()).toHaveFocus();
@@ -157,6 +178,13 @@ describe("settings ?module= deep link", () => {
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
     await user.click(screen.getByRole("tab", { name: /^events/i }));
+    // And Back onto the entry the nudge opened, twice over.
+    window.history.back();
+    await waitFor(() => expect(window.location.search).toBe("?tab=org"));
+    window.history.back();
+    await waitFor(() => expect(window.location.search).not.toBe("?tab=org"));
+    expect(window.location.search).toBe("?tab=events");
+    expect(eventsSwitch()).toBeInTheDocument();
 
     expect(scrollSpy).toHaveBeenCalledTimes(1);
   });
@@ -235,5 +263,57 @@ describe("settings while the AI read is out", () => {
     };
     render(<SettingsPage />);
     expect(eventsSwitch()).toBeInTheDocument();
+  });
+});
+
+/**
+ * A new-report link from before the queue had a page of its own (#6031)
+ * carried `?tab=chat#reported-messages`; it now opens the queue's page.
+ */
+describe("the old report-queue anchor", () => {
+  beforeEach(() => {
+    mockCurrentChapter.mockReturnValue({
+      data: { id: "chap-1", name: "Test", subscription_status: "active" },
+      isPending: false,
+      isError: false,
+    });
+    searchParams = null;
+    activeChapterId = "chap-1";
+  });
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("turns #reported-messages on the Chat page into its page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(window.location.hash).toBe("");
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("turns #reported-messages on Chat admin into the queue's page", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&page=chat-admin#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).get("page")).toBe(
+      "reports",
+    );
+  });
+
+  it("leaves a channel's address alone", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?tab=chat&channel=c1#reported-messages",
+    );
+    render(<SettingsPage />);
+    expect(new URLSearchParams(window.location.search).has("page")).toBe(false);
   });
 });

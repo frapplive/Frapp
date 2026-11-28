@@ -66,6 +66,10 @@ function forward(
 function renderForward(
   msg: ReturnType<typeof forward>,
   state: BlockState = NOBODY_BLOCKED,
+  roster: {
+    nameFor?: (id: string) => string | null;
+    rosterLoading?: boolean;
+  } = {},
 ) {
   render(
     <div role="list">
@@ -74,7 +78,8 @@ function renderForward(
         message={msg}
         viewerId={VIEWER}
         showHeader
-        nameFor={nameFor}
+        nameFor={roster.nameFor ?? nameFor}
+        rosterLoading={roster.rosterLoading}
         onReact={vi.fn()}
         onUnreact={vi.fn()}
         isTapRevealed={false}
@@ -86,6 +91,15 @@ function renderForward(
 }
 
 describe("MessageItem forward card", () => {
+  it("draws a name placeholder for the original's author while the roster loads (#6127)", () => {
+    const card = renderForward(forward({ author_name: null }), NOBODY_BLOCKED, {
+      nameFor: () => null,
+      rosterLoading: true,
+    })!;
+    expect(within(card).queryByText(/^Member /)).not.toBeInTheDocument();
+    expect(card.querySelector('[data-slot="name-placeholder"]')).not.toBeNull();
+  });
+
   it("draws the label, the author, the time, the channel and the rendered text", () => {
     const card = renderForward(forward())!;
     expect(card).not.toBeNull();

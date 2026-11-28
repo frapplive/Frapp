@@ -1,6 +1,7 @@
 "use client";
 
 import { UNAVAILABLE_QUOTE } from "@repo/chat-core/reply-preview";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export {
@@ -21,7 +22,11 @@ interface QuotedMessageProps {
    * the indent and the type treatment — a fallback that drifts to a different
    * indent is exactly the branch nobody re-screenshots.
    */
-  author: string | null;
+  /**
+   * The parent's author label, or a node standing in for it while the roster
+   * loads (`NamePlaceholder`, #6127). `null` means the parent is unavailable.
+   */
+  author: ReactNode | null;
   preview: string | null;
   /**
    * The placeholder for a parent the viewer's block list hides

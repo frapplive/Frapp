@@ -8,12 +8,16 @@ import { ChatShell } from "./chat-shell";
 import { FormFillHost } from "./form-fill-dialog";
 import { FormResponsesHost } from "./form-responses-dialog";
 import { ChatRouteSkeleton } from "@/components/chat/chat-route-skeleton";
-import { CHAT_CHANNEL_PARAM, CHAT_MESSAGE_PARAM } from "@/lib/chat/chat-links";
+import {
+  CHAT_CHANNEL_PARAM,
+  CHAT_MESSAGE_PARAM,
+  CHAT_THREAD_PARAM,
+} from "@/lib/chat/chat-links";
 import type { ChatView } from "@/lib/chat/chat-links";
 import { NEW_INTENT_PARAM } from "@/components/layout/new-intent";
 
 /**
- * Reads `?channel=<id>&message=<id>` so a caller (the member directory's
+ * Reads `?channel=<id>&thread=<id>&message=<id>` so a caller (the member directory's
  * Message action, a notification, a command-palette search hit) can
  * navigate here with a channel — and optionally a specific message —
  * pre-selected. `useSearchParams` requires a Suspense boundary (matches
@@ -23,14 +27,14 @@ import { NEW_INTENT_PARAM } from "@/components/layout/new-intent";
  * every tool page, and a page's own `?channel=`
  * (`/settings?tab=chat&page=chat-admin&channel=` is the channel editor's) must not steer it. Off a chat URL the panel keeps the
  * target it last had, so going from a linked message to a tool page does not
- * read as the link being cleared.
+ * read as the link being cleared. On a chat URL the shell also writes the
+ * address as the conversation moves (`addressed`, #6041).
  */
 function ChatPageContent({
   defaultMembersHidden,
   toolBeside,
   onClose,
   view,
-  onViewChange,
   onPick,
   shown,
 }: {
@@ -38,7 +42,6 @@ function ChatPageContent({
   toolBeside: boolean;
   onClose?: () => void;
   view: ChatView;
-  onViewChange?: (view: ChatView) => void;
   onPick?: (kind: ChatView, channelId: string) => void;
   shown: boolean;
 }) {
@@ -46,18 +49,20 @@ function ChatPageContent({
   const onChatUrl = isChatRoute(usePathname());
   const liveChannel = searchParams.get(CHAT_CHANNEL_PARAM);
   const liveMessage = searchParams.get(CHAT_MESSAGE_PARAM);
+  const liveThread = searchParams.get(CHAT_THREAD_PARAM);
   const [target, setTarget] = useState({
     channel: onChatUrl ? liveChannel : null,
     message: onChatUrl ? liveMessage : null,
+    thread: onChatUrl ? liveThread : null,
   });
   if (
     onChatUrl &&
-    (target.channel !== liveChannel || target.message !== liveMessage)
+    (target.channel !== liveChannel ||
+      target.message !== liveMessage ||
+      target.thread !== liveThread)
   ) {
-    setTarget({ channel: liveChannel, message: liveMessage });
+    setTarget({ channel: liveChannel, message: liveMessage, thread: liveThread });
   }
-  const channelParam = target.channel;
-  const messageParam = target.message;
 
   return (
     <ChatProvider>
@@ -67,13 +72,14 @@ function ChatPageContent({
       <FormFillHost>
         <FormResponsesHost>
           <ChatShell
-            initialChannelId={channelParam}
-            initialMessageId={messageParam}
+            initialChannelId={target.channel}
+            initialMessageId={target.message}
+            initialThreadId={target.thread}
+            addressed={onChatUrl}
             defaultMembersHidden={defaultMembersHidden}
             toolBeside={toolBeside}
             onClose={onClose}
             view={view}
-            onViewChange={onViewChange}
             onPick={onPick}
             shown={shown}
             newMessageAsked={
@@ -101,7 +107,6 @@ export function ChatPage({
   toolBeside = false,
   onClose,
   view = "channels",
-  onViewChange,
   onPick,
   shown = true,
 }: {
@@ -113,8 +118,6 @@ export function ChatPage({
   onClose?: () => void;
   /** The conversation alone, or the Messages page (`ChatShell`'s prop). */
   view?: ChatView;
-  /** The open conversation is the other kind (`ChatShell`'s prop). */
-  onViewChange?: (view: ChatView) => void;
   /** A row was picked from a list (`ChatShell`'s prop of the same name). */
   onPick?: (kind: ChatView, channelId: string) => void;
   /** Whether the conversation is on screen (`ChatShell`'s prop). */
@@ -145,7 +148,6 @@ export function ChatPage({
         toolBeside={toolBeside}
         onClose={onClose}
         view={view}
-        onViewChange={onViewChange}
         onPick={onPick}
         shown={shown}
       />

@@ -7,6 +7,7 @@ import {
   type MeetingSectionKey,
   type MinutesNoteLine,
 } from "./meetings";
+import { aiSuggestionRefusalLine } from "./ai-suggestion-copy";
 import { meetingSectionLabel } from "./meeting-copy";
 import { TASK_AUDIENCE_COPY, taskGroupLabel } from "./task-audience";
 
@@ -20,6 +21,29 @@ import { TASK_AUDIENCE_COPY, taskGroupLabel } from "./task-audience";
  * layout, words and counts from here, so switching between them never
  * feels like two systems (Paul, 2026-11-19).
  */
+
+/**
+ * Why making an action item a task was refused (#6178), in words an officer
+ * can act on; null for a code this build has no words for. The route accepts
+ * a suggestion that turned up meanwhile in the item's place, so its refusals
+ * are worded as the card words them.
+ */
+export function actionItemTaskRefusalLine(
+  code: string | null | undefined,
+): string | null {
+  switch (code) {
+    case "meeting.action_item.already_task":
+      return "This action item is already a task.";
+    case "meeting.action_item.changed":
+      return "These minutes changed. Check the item and try again.";
+    case "meeting.action_item.not_posted":
+      return "Post the minutes first, then make their action items tasks.";
+    case "meeting.action_item.empty":
+      return "This action item has no words to make a task of.";
+    default:
+      return aiSuggestionRefusalLine(code);
+  }
+}
 
 /** The words of the read view and its ⋯ menu, the same on web and phone. */
 export const MINUTES_READ_COPY = {
@@ -368,6 +392,30 @@ export function minutesActionSuggestions<
     seen.add(key);
     const suggestion = byKey.get(key);
     if (suggestion) result.set(index, suggestion);
+  });
+  return result;
+}
+
+/**
+ * The action items an officer may make a task from the item itself (#6178),
+ * by their place in the list, once the minutes' marks are read: not one
+ * already a task (it has a mark), not a second item that reads the same as
+ * an earlier one (the server keys them as one item, so it is that item's
+ * task), and not one with no words to key. Before the marks are read
+ * (`marks` undefined) none is offered, since any item may already be a task.
+ */
+export function minutesActionMakeable(
+  items: readonly MeetingActionItem[],
+  marks: ReadonlyMap<number, unknown> | undefined,
+): ReadonlySet<number> {
+  const result = new Set<number>();
+  if (!marks) return result;
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    const key = minutesActionItemMatchKey(item.text);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    if (!marks.has(index)) result.add(index);
   });
   return result;
 }

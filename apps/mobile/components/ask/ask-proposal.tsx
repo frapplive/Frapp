@@ -14,10 +14,7 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  BottomSheetModal,
-  BottomSheetTextInput,
-} from "@gorhom/bottom-sheet";
+import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { codeOf } from "@repo/api-sdk";
 import {
   memberFallbackLabel,
@@ -154,7 +151,7 @@ export type ActLink = { href: string; label: string };
  */
 const RESULT_LINKS: Record<string, ActLink> = {
   points: { href: "/directory?sort=points", label: ACT_COPY.open_standings },
-  tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
+  tasks: { href: "/activity", label: ACT_COPY.open_activity },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
 
@@ -1732,7 +1729,7 @@ function createStyles(tokens: SignetTokens) {
     },
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     choice: {
       minHeight: tokens.touch.minimum,

@@ -2,7 +2,9 @@
 
 import { ChevronRight } from "lucide-react";
 import {
+  authorAwaitsRoster,
   authorInitialsFallback,
+  authorNameAwaitsRoster,
   memberAvatarHue,
   memberAvatarTint,
   resolveAuthorLabel,
@@ -18,6 +20,7 @@ import type { ThreadLastReply, ThreadSummary } from "@repo/chat-core/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn, initials } from "@/lib/utils";
+import { NamePlaceholder } from "./name-placeholder";
 
 /**
  * The thread card under a message that has thread replies (#3785, rebuilt as
@@ -45,6 +48,7 @@ import { cn, initials } from "@/lib/utils";
 export function ThreadChip({
   summary,
   nameFor,
+  rosterLoading = false,
   avatarFor,
   roleColorFor,
   unread = 0,
@@ -54,6 +58,11 @@ export function ThreadChip({
 }: {
   summary: ThreadSummary;
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight: a replier it hasn't named yet draws a
+   * name placeholder and a neutral disc, not `Member 2f4a1c` (#6127).
+   */
+  rosterLoading?: boolean;
   /** A replier's photo, when they have one; initials otherwise. */
   avatarFor?: (userId: string) => string | null;
   /** A replier's top role color, which picks their initials' tint (#3860). */
@@ -142,7 +151,7 @@ export function ThreadChip({
   // Named as the timeline names its author, by the rule the phone's card
   // shares: the roster's first name, "You", Frapp, or "Member 2f4a1c" for
   // someone who left.
-  const parts = preview
+  const namedParts = preview
     ? threadPreviewParts(preview, viewerId, {
         nameOf: (id) =>
           resolveAuthorName({ sender_id: id, author_name: null }, nameFor),
@@ -155,6 +164,22 @@ export function ThreadChip({
       })
     : null;
   const previewAuthor = { sender_id: previewSender, author_name: null };
+  // The viewer's own reply still reads "You"; only its disc waits (#6127).
+  const previewAwaits = authorAwaitsRoster(
+    previewAuthor,
+    nameFor,
+    rosterLoading,
+  );
+  // A name placeholder stands in for the fallback label until the roster
+  // lands, and the card's spoken label leaves the name out meanwhile.
+  const namePending = authorNameAwaitsRoster(
+    previewAuthor,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  );
+  const parts =
+    namedParts && namePending ? { ...namedParts, name: null } : namedParts;
   const previewSrc = previewSender
     ? (avatarFor?.(previewSender) ?? null)
     : null;
@@ -175,20 +200,28 @@ export function ThreadChip({
               {previewSrc ? <AvatarImage src={previewSrc} alt="" /> : null}
               <AvatarFallback
                 className="text-label"
-                tint={memberAvatarTint(
-                  memberAvatarHue(
-                    previewSender,
-                    roleColorFor?.(previewSender) ?? null,
-                  ),
-                )}
+                tint={
+                  previewAwaits
+                    ? null
+                    : memberAvatarTint(
+                        memberAvatarHue(
+                          previewSender,
+                          roleColorFor?.(previewSender) ?? null,
+                        ),
+                      )
+                }
               >
-                {parts?.fullName
-                  ? initials(parts.fullName)
-                  : authorInitialsFallback(previewAuthor)}
+                {previewAwaits
+                  ? null
+                  : parts?.fullName
+                    ? initials(parts.fullName)
+                    : authorInitialsFallback(previewAuthor)}
               </AvatarFallback>
             </Avatar>
           ) : null}
-          {parts?.name ? (
+          {namePending ? (
+            <NamePlaceholder className="h-auto" barClassName="h-[11px] w-14" />
+          ) : parts?.name ? (
             <span className="max-w-[40%] shrink-0 truncate font-semibold text-foreground">
               {parts.name}
             </span>

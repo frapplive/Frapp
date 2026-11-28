@@ -1006,11 +1006,11 @@ export function ChannelList({
             onKeyDown={drag ? railReorder.keyDownFor(drag) : undefined}
             aria-keyshortcuts={drag ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
             aria-current={isActive ? "page" : undefined}
-            // `1b` pin 6 and the `3a` geometry table: a channel row
-            // is 32px at radius 8, tighter than the 34px/r10 nav row
-            // above it, because a rail of channels is a longer list
-            // than a rail of sections. 14/600 type, and the accent
-            // tint still marks the active row the way the nav's does.
+            // foundations §9's Row step (28 on a mouse since #6115; the
+            // `1b` board drew 32 under a 34px nav row), the same step as
+            // the nav rows above it, at radius 8. 14/600 type, and the
+            // accent tint still marks the active row the way the nav's
+            // does.
             // Read is grey, unread is white and bold with a white pip at the
             // row's start, as Discord draws it (owner, 2026-11-08; mobile's
             // `ChannelRow` matches). A muted channel's plain unread stays
@@ -1020,7 +1020,8 @@ export function ChannelList({
               // Two lines in Direct messages: the name, then the last line.
               // A row in Hidden conversations has no line (the server keeps
               // no preview for it), so it stays one line.
-              twoLine ? "h-12" : "h-8",
+              // 44 to a finger: below `lg` the list is the /chat pane.
+              twoLine ? "h-12" : "h-control-row pointer-coarse:h-11",
               railRowTone({
                 active: isActive,
                 unread: looksUnread,
@@ -1257,7 +1258,7 @@ export function ChannelList({
       aria-hidden="true"
       className={DROP_SLOT}
       style={{
-        height: (lift?.height ?? 32) + draggedThreadRows * THREAD_ROW_PX,
+        height: (lift?.height ?? THREAD_ROW_PX) + draggedThreadRows * THREAD_ROW_PX,
       }}
     />
   );
@@ -1318,9 +1319,8 @@ export function ChannelList({
 
   /**
    * A category with no channel yet, drawn only for an officer who can fill it.
-   * Its heading lines up with the others: with the sidebar controls they carry
-   * a fold chevron, so this one keeps the chevron's room without drawing one,
-   * since there is nothing to fold.
+   * Its heading lines up with the others, whose fold chevron follows the name
+   * (#6115); this one draws none, since there is nothing to fold.
    */
   const renderEmptyCategory = (key: string, label: string) => {
     const categoryId = categoryIdOf(key);
@@ -1339,14 +1339,11 @@ export function ChannelList({
             onKeyDown={drag ? railReorder.keyDownFor(drag) : undefined}
             aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-1 pb-1 text-muted-foreground",
+              "flex min-w-0 flex-1 items-center gap-1 pb-1 text-muted",
               sidebar ? "px-2" : "px-3",
               EYEBROW,
             )}
           >
-            {sidebar ? (
-              <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            ) : null}
             <span className="truncate">{label}</span>
           </p>
           {createButtonFor(key, label)}
@@ -1426,13 +1423,13 @@ export function ChannelList({
               <div
                 className={cn("flex h-full items-center gap-1 px-2", EYEBROW)}
               >
+                <span className="truncate">{nameOfDrag(dragging)}</span>
                 {sidebar ? (
                   <ChevronRight
                     className="h-3.5 w-3.5 shrink-0"
                     aria-hidden="true"
                   />
                 ) : null}
-                <span className="truncate">{nameOfDrag(dragging)}</span>
               </div>
             )}
           </HeldCopy>,
@@ -1573,10 +1570,14 @@ export function ChannelList({
                   sidebar?.onSetCollapsed(section.key, !section.collapsed)
                 }
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
+                  "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted hover:text-foreground",
                   EYEBROW,
                 )}
               >
+                {/* The name, then its fold chevron, as Claude's "Pinned ⌄"
+                  and Discord's "Events ⌄" draw it and the phone's heading
+                  already did (#6115; it led the name until then). */}
+                <span className="truncate">{section.label}</span>
                 {section.collapsed ? (
                   <ChevronRight
                     className="h-3.5 w-3.5 shrink-0"
@@ -1588,7 +1589,6 @@ export function ChannelList({
                     aria-hidden="true"
                   />
                 )}
-                <span className="truncate">{section.label}</span>
               </button>
               {/* Gone while anything is held, as the + is, so the heading under
                 the pointer stays the whole drop target. */}
@@ -1649,7 +1649,7 @@ export function ChannelList({
                   id={headerId}
                   data-flip={`head:${section.key}`}
                   {...headerProps}
-                  className={cn("px-3 pb-1 text-muted-foreground", EYEBROW)}
+                  className={cn("px-3 pb-1 text-muted", EYEBROW)}
                 >
                   {section.label}
                 </p>
@@ -1684,11 +1684,18 @@ export function ChannelList({
               aria-expanded={showHidden}
               aria-controls="channel-section:hidden"
               className={cn(
-                "w-full px-3 pb-1 text-left text-muted-foreground hover:text-foreground",
+                "flex w-full items-center gap-1 px-3 pb-1 text-left text-muted hover:text-foreground",
                 EYEBROW,
               )}
             >
-              {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
+              <span>{`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}</span>
+              {/* Its fold chevron after the name, as every folding heading
+                draws one (#6115). */}
+              {showHidden ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              )}
             </button>
             {showHidden ? (
               <ul

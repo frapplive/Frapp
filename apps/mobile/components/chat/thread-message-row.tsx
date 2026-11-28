@@ -96,6 +96,8 @@ export interface ThreadMessageRowProps {
    */
   viewerId: string;
   nameFor: (userId: string) => string | null;
+  /** The first roster read is in flight; see `MessageItemProps` (#6127). */
+  rosterLoading?: boolean;
   /** `users.id` → role color for the author line (#3485); `null` keeps it plain. */
   roleColorFor?: (userId: string) => string | null;
   /** A row → its author's photo URL for the run's avatar; `null` draws initials. */
@@ -171,6 +173,7 @@ function ThreadMessageRowBody({
   endsRun,
   viewerId,
   nameFor,
+  rosterLoading = false,
   roleColorFor,
   avatarFor,
   replyParent,
@@ -308,6 +311,7 @@ function ThreadMessageRowBody({
         replyParent={quotedParent}
         hiddenText={replyParentHidden}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         viewerId={viewerId}
         onPress={onJumpToParent}
         onLongPress={openActions}
@@ -318,6 +322,7 @@ function ThreadMessageRowBody({
         message={message}
         viewerId={viewerId}
         nameFor={nameFor}
+        rosterLoading={rosterLoading}
         roleColorFor={roleColorFor}
         avatarFor={avatarFor}
         startsRun={startsRun}
@@ -334,6 +339,7 @@ function ThreadMessageRowBody({
           <ThreadChip
             summary={message.thread}
             nameFor={nameFor}
+            rosterLoading={rosterLoading}
             roleColorFor={roleColorFor}
             avatarFor={memberAvatarFor}
             // Under the viewer's own card on the right in Bubbles, as under
@@ -359,6 +365,7 @@ function ThreadMessageRowBody({
       message={message}
       viewerId={viewerId}
       nameFor={nameFor}
+      rosterLoading={rosterLoading}
       roleColorFor={roleColorFor}
       avatarFor={avatarFor}
       startsRun={startsRun}

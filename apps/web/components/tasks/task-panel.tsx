@@ -785,7 +785,7 @@ function FollowerRow({
               if (next !== value) void onSave(next);
             }}
             disabled={disabled}
-            className="h-8 w-fit min-w-[10rem]"
+            className="h-control-row w-fit min-w-[10rem]"
           />
           {value ? (
             <span className="text-caption text-muted-foreground">

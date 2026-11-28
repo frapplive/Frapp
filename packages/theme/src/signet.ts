@@ -153,6 +153,20 @@ export type SignetTokens = {
     "2xl": number;
     "3xl": number;
   };
+  /**
+   * The control size scale's pointer column (foundations.md §9): what a
+   * mouse gets on web. Every step's touch size is `touch.minimum`, so the
+   * phone never reads these; web reads them through the shared preset's
+   * `h-control-*` keys and gives `pointer-coarse` the 44 floor.
+   */
+  control: {
+    chip: number;
+    row: number;
+    small: number;
+    field: number;
+    listRow: number;
+    settingsRow: number;
+  };
   touch: {
     minimum: number;
     button: number;
@@ -247,6 +261,14 @@ const SIGNET_DARK: SignetTokens = {
     avatar: "50%",
   },
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, "2xl": 32, "3xl": 48 },
+  control: {
+    chip: 20,
+    row: 28,
+    small: 28,
+    field: 32,
+    listRow: 32,
+    settingsRow: 36,
+  },
   touch: { minimum: 44, button: 44, buttonLarge: 48, tabBar: 50 },
   focus: { ringWidth: 3, ringOpacity: 0.25 },
   scrollbar: {
@@ -368,6 +390,15 @@ export function getSignetCssVars(
     // steps of the control size scale.
     "--touch-min": `${t.touch.minimum}px`,
     "--touch-button": `${t.touch.button}px`,
+
+    // The control size scale's pointer column (foundations.md §9). A step's
+    // touch size is `--touch-min`, which web applies under `pointer-coarse:`.
+    "--control-chip": `${t.control.chip}px`,
+    "--control-row": `${t.control.row}px`,
+    "--control-small": `${t.control.small}px`,
+    "--control-field": `${t.control.field}px`,
+    "--control-list-row": `${t.control.listRow}px`,
+    "--control-settings-row": `${t.control.settingsRow}px`,
 
     // Scrollbars. See the `scrollbar` doc on `SignetTokens`.
     "--scrollbar-width": `${t.scrollbar.width}px`,

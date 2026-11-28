@@ -195,6 +195,36 @@ describe("GET /auth/callback", () => {
     });
   });
 
+  describe("linking Google or Apple from Settings → Account (intent=link, #2223)", () => {
+    const NEXT = encodeURIComponent("/preferences?section=account&linking=google");
+
+    it("exchanges the code and returns to the settings page", async () => {
+      exchangeCodeForSession.mockResolvedValue({ error: null });
+      const { url } = await callback(`code=abc&intent=link&next=${NEXT}`);
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("abc");
+      expect(url.pathname).toBe("/preferences");
+      expect(url.searchParams.get("linking")).toBe("google");
+      expect(url.searchParams.get("linkError")).toBeNull();
+    });
+
+    it("returns a refused link to the settings page with GoTrue's code, not to sign-in", async () => {
+      const { url } = await callback(
+        `error=server_error&error_code=identity_already_exists&intent=link&next=${NEXT}`,
+      );
+      expect(exchangeCodeForSession).not.toHaveBeenCalled();
+      expect(url.pathname).toBe("/preferences");
+      expect(url.searchParams.get("section")).toBe("account");
+      expect(url.searchParams.get("linkError")).toBe("identity_already_exists");
+    });
+
+    it("returns a code that won't exchange as exchange_failed", async () => {
+      exchangeCodeForSession.mockResolvedValue({ error: { message: "invalid code" } });
+      const { url } = await callback(`code=stale&intent=link&next=${NEXT}`);
+      expect(url.pathname).toBe("/preferences");
+      expect(url.searchParams.get("linkError")).toBe("exchange_failed");
+    });
+  });
+
   describe("reporting what failed (#3832)", () => {
     type Captured = [Error, { level: string; fingerprint: string[]; tags: Record<string, string> }];
     const only = (): Captured => {

@@ -137,6 +137,16 @@ type AuthSessionContextValue = {
    * auth session opens the provider and the returned URL is exchanged here.
    */
   signInWithOAuthProvider: (provider: OAuthProvider) => Promise<void>;
+  /**
+   * Links Google or Apple to the account already signed in (Settings →
+   * Account, #2223): Supabase's manual identity linking, through the same
+   * system auth sheet as the browser sign-in. While it waits, the app's link
+   * listener leaves the return to it. Resolves `"linked"`, or `"cancelled"`
+   * when the member closed the sheet. Throws GoTrue's error (its `code` says
+   * why: `identity_already_exists`, `manual_linking_disabled`) or a
+   * `MemberFacingError`.
+   */
+  linkOAuthProvider: (provider: OAuthProvider) => Promise<"linked" | "cancelled">;
   signOut: () => Promise<void>;
 };
 
@@ -219,6 +229,40 @@ function readAuthParams(url: string): {
 function appRedirectTo(): string {
   const redirectTo = Linking.createURL("/");
   return redirectTo.includes("?") ? redirectTo : `${redirectTo}?`;
+}
+
+/** Settings → Account's own address, where a link returns (#2223). */
+const ACCOUNT_SETTINGS_RETURN_PATH = "preferences?page=account";
+
+/**
+ * Finishes a link's return (#2223). The phone's client runs Supabase's
+ * implicit flow, so a link GoTrue made comes back with the session's new
+ * tokens in the fragment, as a sign-in does (`createSessionFromUrl`); a `code`
+ * is taken too, should the client move to PKCE. A refusal comes back as
+ * `error_code` and is thrown as `{ code }` for the caller's words.
+ */
+async function finishLinkReturn(
+  supabase: SupabaseClient,
+  url: string,
+): Promise<void> {
+  const { accessToken, refreshToken, code, errorCode, error } =
+    readAuthParams(url);
+  if (errorCode || error) throw { code: errorCode ?? error };
+  if (accessToken && refreshToken) {
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (sessionError) throw sessionError;
+    return;
+  }
+  if (code) {
+    const { error: exchangeError } =
+      await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) throw exchangeError;
+    return;
+  }
+  throw new MemberFacingError(FINISH_FAILED_COPY);
 }
 
 /**
@@ -332,6 +376,10 @@ export function AuthSessionProvider({
    * single-use `code` twice would set callbackError on the winner.
    */
   const lastHandledCallbackUrl = useRef<string | null>(null);
+  /** A Settings → Account link is waiting on its return (#2223). */
+  const linkInFlight = useRef(false);
+  /** A return the link listener saw while a link was in flight. */
+  const pendingLinkUrl = useRef<string | null>(null);
 
   const url = Linking.useURL();
   const accessToken = session?.access_token ?? null;
@@ -468,6 +516,13 @@ export function AuthSessionProvider({
   useEffect(() => {
     if (!supabase || !url) return;
     if (lastHandledCallbackUrl.current === url) return;
+    // A Settings link (#2223) owns its return: handled here it would read as
+    // a sign-in, its error shown only on the sign-in screen. Kept for the
+    // link in case the auth sheet reports a dismiss while the URL came here.
+    if (linkInFlight.current) {
+      pendingLinkUrl.current = url;
+      return;
+    }
 
     let cancelled = false;
     lastHandledCallbackUrl.current = url;
@@ -671,6 +726,49 @@ export function AuthSessionProvider({
     [supabase],
   );
 
+  const linkOAuthProvider = useCallback(
+    async (provider: OAuthProvider) => {
+      if (!supabase) throw new Error(NOT_CONFIGURED_MESSAGE);
+      // The browser flow for both providers, never the native sheets: one path,
+      // and it doesn't match addresses, so a Hide My Email Apple ID links too.
+      // It comes back to Settings → Account, where it started, so a return
+      // Android hands the router lands on the page, not Chat home (#6032).
+      const redirectTo = Linking.createURL(ACCOUNT_SETTINGS_RETURN_PATH);
+      const { data, error } = await supabase.auth.linkIdentity({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams:
+            provider === "google" ? { prompt: "select_account" } : undefined,
+        },
+      });
+      if (error) throw error;
+      if (!data.url) throw new MemberFacingError(START_FAILED_COPY);
+
+      linkInFlight.current = true;
+      pendingLinkUrl.current = null;
+      let returned: string | null;
+      try {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectTo,
+        );
+        returned =
+          result.type === "success" ? result.url : pendingLinkUrl.current;
+      } finally {
+        linkInFlight.current = false;
+        pendingLinkUrl.current = null;
+      }
+      if (!returned) return "cancelled";
+      // Claimed before any await, so the listener never handles it after us.
+      lastHandledCallbackUrl.current = returned;
+      await finishLinkReturn(supabase, returned);
+      return "linked";
+    },
+    [supabase],
+  );
+
   const signOut = useCallback(async () => {
     try {
       if (supabase) {
@@ -727,6 +825,7 @@ export function AuthSessionProvider({
       verifyEmailCode,
       resendConfirmation,
       signInWithOAuthProvider,
+      linkOAuthProvider,
       signOut,
     }),
     [
@@ -739,6 +838,7 @@ export function AuthSessionProvider({
       session?.user?.email,
       signInWithPassword,
       signInWithOAuthProvider,
+      linkOAuthProvider,
       signOut,
       status,
       userId,

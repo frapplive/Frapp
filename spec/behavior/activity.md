@@ -281,8 +281,11 @@ Calendar is the chapter's**. Paul: "we need to rethink the entire framework and 
 Activity/Events/Tasks because currently they all overlap and it's not really clear what each one
 brings to the table.")
 
-The Tasks page folded into Activity. On web this landed with #5948's first slice; the phone's
-board folds into its Activity tab in a later slice.
+The Tasks page folded into Activity: on web with #5948's first slice, and the phone's task board
+into its Activity tab with the third (2026-11-27). On the phone, Everyone's groups by status only,
+as a list or a grid, until By person and the Filters chip arrive
+([#6198](https://github.com/frapplive/Frapp/issues/6198)); its view is never stored (the tab opens
+on Mine), New task stays the tab bar's quick action, and the board's points line moved to You.
 
 - **Mine** is the page this spec describes: Now, the member's cards (To do, Running), Snoozed and
   the Archive. It also holds what only the Tasks page used to have for the member: **New task** in
@@ -296,9 +299,10 @@ board folds into its Activity tab in a later slice.
 - **Who sees the views.** They are plain words beside the title
   ([`components.md` § View labels](../ui/design-system/components.md)), offered to a `tasks:manage`
   holder and to a member who follows someone else's task (whose Everyone's is what their read
-  holds), while the chapter has Tasks on. Anyone else sees no labels. The page always opens on
-  Mine; `?view=everyone` opens Everyone's (a suggested-task notification with no minutes behind
-  it uses this), and the pick lasts the visit.
+  holds), while the chapter has Tasks on. Anyone else sees no labels. Mine is the bare address;
+  Everyone's is `?view=everyone`, pushed when picked, so Back returns to Mine and a reload or a
+  link lands on it (a suggested-task notification with no minutes behind it uses this; on web,
+  [`web-dashboard/README.md` § Addresses](../ui/web-dashboard/README.md#addresses), #6044).
 - **Task links.** `?task=<id>` and `?group=<id>` open that task or group in the task panel on
   whichever view is showing ([`tasks.md` § Tasks for everyone](tasks.md#tasks-for-everyone)).
   `/tasks` redirects here with either kept, so an old link, bookmark or notification still opens

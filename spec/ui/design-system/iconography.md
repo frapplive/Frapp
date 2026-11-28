@@ -90,6 +90,13 @@ Rules:
    colors. Size is 20px (§2 action-button size). They sit beside the
    "Continue with …" label and are decorative (`aria-hidden` /
    `accessible={false}`).
+   Google Drive's mark on Documents (#6055, 2026-11-25) is a trademark too: it
+   never takes the duotone recipe or the chapter accent, and is decorative
+   beside a name or an "Open in Google Drive" label. It is drawn at 14 to 18px
+   as Drive's three pieces in Drive's yellow, green and blue
+   (`DRIVE_MARK_PIECES`, `@repo/theme/nav-glyphs`), a simplification of
+   Google's artwork rather than the artwork itself, which has more tones;
+   swapping in Google's own artwork is open.
 
 ---
 
@@ -199,7 +206,7 @@ second, filled variant to swap to.
 | Activity tab | `activity`, `tray` | Tab 2 since #4610 (2026-11-12); the glyph web's Activity row draws. |
 | Messages tab | `direct`, `paper-plane-tilt` | Tab 3 since #5310, where the Calendar tab (`events`, `calendar-dots`; named Events until #4610) was. |
 | You tab | — | The member's own avatar, not a glyph (#3839, `components/you-tab-avatar.tsx`): their photo, else their initials in their member tint, never the accent; active, a 1.5pt accent ring with a gap ([`navigation.md` § Tab bar](../mobile/navigation.md#tab-bar--4-tabs-locked)). The More tab drew `more` (`squares-four`, a 2×2 grid) until then; nothing else drew it, so it left the nav set. |
-| Task board (pushed, and the task card) | `tasks`, `seal-check` | A tab until #4610; the glyph stays on the task card, Up next and the + panel. |
+| Task card (and the task board, until #5948) | `tasks`, `seal-check` | A tab until #4610, then a pushed screen until it folded into Activity (#5948); the glyph stays on the task card, Up next and the + panel. |
 
 Retired with the 4-tab collapse: the Home, Points, and Profile tabs. Home and
 Points no longer exist as screens; Profile moved into the More hub, which became the You tab (#3839).
@@ -570,7 +577,7 @@ points — and the events table drew its role-targeting and recurrence markers a
 ### 6.2.5 Resources & Reporting (Signet duotone)
 
 Since the #920 Resources & Reporting slice these families draw Signet
-glyphs (`/polls` was one until #3871 retired it), from the nav set (§1.1) except the stroke-recipe search glyph, `PinGlyph` (chat's, re-exported) and the drawn `StarGlyph` (both #3934, solid while on since #4289). The
+glyphs (`/polls` was one until #3871 retired it), from the nav set (§1.1) except Google Drive's trademark `DriveGlyph` (§1 rule 4, #6055), the stroke-recipe search glyph, `PinGlyph` (chat's, re-exported) and the drawn `StarGlyph` (both #3934, solid while on since #4289). The
 glyphs live in
 [`apps/web/components/documents/resources-glyphs.tsx`](../../../apps/web/components/documents/resources-glyphs.tsx),
 one file for three screens rather than three files, for the reason §6.2.4 gives:
@@ -586,10 +593,11 @@ button, and the PDF a report exports to.
 | Search, in the `/documents` and `/backwork` toolbars | `SearchGlyph` (re-export) |
 | A folder or file pinned for the whole chapter, and the Pin control (#3934), solid while pinned (#4289, §1 rule 1's exception) | `PinGlyph` (chat's pin shape, §6.2.2) |
 | A folder or file the member starred for themselves, and the Star control (#3934), solid while starred (#4289) | `StarGlyph` |
+| A file from the chapter's Google Drive (a folder copy or a file added by link), and Open in Google Drive (#6055), in Drive's colours, not a token: a trademark under §1 rule 4, not a Signet glyph (`DRIVE_MARK_PIECES`, `@repo/theme/nav-glyphs`; mobile's `DriveGlyph` in `document-glyphs.tsx` draws the same pieces) | `DriveGlyph` |
 
 **Backwork's copy markers are Lucide, on purpose (2026-11-05).** A backwork row marks which copy a file is with one icon per copy type, from one set and in the row's muted text tone (Paul: "with the copy, keep the icons consistent"): `FileCheck` a student copy, `File` a blank copy, `KeyRound` an answer key, and `Lock` beside any of them for a redacted file (`apps/web/components/backwork/backwork-row-parts.tsx`). They are small inline markers beside a text label, not domain glyphs that stand for a screen, so they stay in the control-furniture set rather than the duotone family; a later pass that draws them in the Signet set changes this paragraph and that file together.
 
-Three of the six are re-exports from
+Three of the seven are re-exports from
 [`apps/web/components/layout/nav-glyphs.tsx`](../../../apps/web/components/layout/nav-glyphs.tsx),
 which is §1 rule 1's rule and the two preceding families' practice, and a
 fourth, `PinGlyph`, re-exports chat's (#4292).

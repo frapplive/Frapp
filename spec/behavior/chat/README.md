@@ -272,7 +272,8 @@ A message thread (#3785) opened from the channel shows the same background behin
     The database enforces it (`chat_channels_dm_pair_key`, keyed on the two member ids rather than the channel's name, #2788).
     Two overlapping opens, such as a double tap or both members opening at once, return the same channel.
 - **Finding or starting one by name** ([#4668](https://github.com/pdcarlson/Frapp/issues/4668), asked by Shawn 2026-11-12).
-  Both clients' Direct messages lists have a people search (web's Direct messages list, the phone's Messages screen), and the New message pencil opens it rather than the Directory.
+  Both clients' Direct messages lists have a people search (web's Direct messages list, the phone's Messages screen), and web's New message pencil opens it rather than the Directory.
+  Changed in [#6190](https://github.com/pdcarlson/Frapp/issues/6190), 2026-11-27, for the phone: its pencil opens New message, a people picker that opens a DM with one person or starts a group DM with several ([`spec/ui/mobile/screens.md`](../../ui/mobile/screens.md), the Messages row).
   A name finds the member's existing conversations first (a 1:1 DM on the other member's name, a group DM on any member's name or its title), then the members they could start a 1:1 with: everyone on the roster with no 1:1 DM in the list, a hidden one included, since opening it again is what brings it back.
   Never the viewer or the system actor, never a member the viewer has blocked, and no member at all until the block list has been read, which the search says in words, because a list still loading or failed could be missing a block (the member sheet's Message rule, [`spec/ui/mobile/screens.md`](../../ui/mobile/screens.md) s13).
   Alumni are offered like anyone else, since they may post in direct conversations ([`alumni.md`](../alumni.md)).
@@ -281,6 +282,7 @@ A message thread (#3785) opened from the channel shows the same background behin
 - **Group DM:** User selects multiple members (up to 10).
   Creates a GROUP_DM-type channel.
   Chapter-scoped.
+  The phone starts one from New message on its Messages screen (#6190); web has no way to start one yet.
 - **Only with members of the chapter** (2026-11-17).
   A new DM or group DM is refused unless everyone in it is a member of the caller's chapter: one 404 for an id that is no one and for someone in another chapter, naming no one.
   `POST /v1/channels/group-dm` takes at most 9 others in `member_ids` (10 people with the creator) and is held to 10 a minute, since each call adds a conversation to every listed member's list.
@@ -506,7 +508,7 @@ The categories themselves stay the chapter's (§ Channels).
   Each channel row opens that channel's actions: on web a right-click on a rail row (or a long press, the menu key, or Shift+F10 with the row focused), and the row itself draws no hover controls; on mobile a long press on an s04 row, hidden conversations included, which taps and opens the app's own glass menu rather than a system alert.
   Which actions a row offers is `channelRowActions` in `@repo/hooks`, one rule for both clients, scoped to the member's permissions so nobody sees an action the server would refuse.
   Leaving Edit and Delete off DMs (below) matches the server, which enforces it: it refuses any edit or delete of a DM or group DM (§ [Direct Messages](#direct-messages)). Until 2026-11-21 the same held for `#chapter-audit` (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)).
-  In order: Mark as read (an unread row only), Pin to top or Unpin from top, Notifications (the three levels, the current one checked; locked while the level is unknown, and on mobile while offline), Display (mobile; this channel's display on this phone, § [Chat density](#chat-density), outside `channelRowActions` because it writes nothing to the server; web keeps it in the open channel's `⋯` menu), Copy link (web), and Hide conversation (a 1:1 DM); then, after a divider and only with `channels:manage`, Edit channel (on web it opens Chat settings on that channel; on mobile an Edit channel sheet with its name, description, category and who can see and post, #3838, #3702), Arrange channels (mobile; opens the Arrange channels screen above) and Delete channel (asks first, and Delete stays disabled until the channel's name is typed exactly, case and all: Paul, #3838, "deleting a channel should be harder"; Chat settings' Delete asks the same way).
+  In order: Mark as read (an unread row only), Pin to top or Unpin from top, Notifications (the three levels, the current one checked; locked while the level is unknown, and on mobile while offline), Display (mobile; this channel's display on this phone, § [Chat density](#chat-density), outside `channelRowActions` because it writes nothing to the server; web keeps it in the open channel's `⋯` menu), Copy link (web), and Hide conversation (a 1:1 DM); then, after a divider and only with `channels:manage`, Edit channel (it opens that channel's settings: on web Chat settings on that channel, on mobile its Channel settings screen, the same groups and words, #6031; a sheet with its name, description, category and who can see and post until then, #3838, #3702), Arrange channels (mobile; opens the Arrange channels screen above) and Delete channel (asks first, and Delete stays disabled until the channel's name is typed exactly, case and all: Paul, #3838, "deleting a channel should be harder"; Chat settings' Delete asks the same way).
   Mobile leaves out Copy link, since a phone has no address bar; it asks for the typed name in a sheet, since an Android alert can't hold a text field.
   Edit and Delete are never offered on a DM or a group DM.
   On web every action is also reachable without the menu: the open channel's `⋯` menu, opening the channel, the address bar, or Chat settings.
@@ -868,8 +870,8 @@ The #489 decision above, that a reply lands in the timeline, still holds for Rep
 **Message links** (#3723): a message's link is `https://app.frapp.live/chat?channel=<id>&message=<id>` (`packages/validation/src/message-link.ts`, on the build's dashboard origin).
 The phone's long-press sheet copies it with Copy message link, after Copy text, as Discord's does, on a channel message (never a thread reply, whose link would open on a timeline it isn't in).
 The web opens it on the message (the same `?channel=`/`?message=` link a notification or a search hit uses).
-The phone opens a `/chat` link on its own build's origin, or the web's channel-only Copy link, in place when it's tapped inside a message, replacing an open channel rather than stacking a second; a proof link on a task keeps opening in the browser.
-The app doesn't claim the https path as a universal or App Link yet, so a link opened from another app goes to the web on every phone (#4869); `frapp://chat?…` opens it in the app.
+The phone opens a link to its own build's dashboard in place when it's tapped inside a message, through the shared address table ([`../../ui/mobile/navigation.md` § Deep links](../../ui/mobile/navigation.md#deep-links), #6050): a `/chat` link or the web's channel-only Copy link opens its channel, replacing an open channel rather than stacking a second, and a thread link opens the thread over its channel. A proof link on a task keeps opening in the browser.
+The app doesn't claim the https path as a universal or App Link yet, so a link opened from another app goes to the web on every phone (#6185); `frapp://chat?…` opens it in the app.
 Reading the message still needs access to its channel.
 
 **Pinned messages (chapter-elevated):**
@@ -1184,7 +1186,7 @@ A From, Date or Has filter searches with no text ("everything Ryan posted this w
 Each row shows the day and time, since hits span days.
 Mobile has no chat search yet; #341 builds it with these filters.
 Picking a hit selects its channel if it is not already open and then jumps, reusing the same in-shell pending-target machinery a `/chat?channel=&message=` deep link resolves through.
-**It does not change the URL** — a search jump is not shareable, back-button-recoverable, or reload-surviving; only a real deep link is.
+On `/chat` and `/messages` a jump into another conversation is a step in the address that Back returns from, and a reload after it doesn't jump again; the history rules are in [`../../ui/web-dashboard/README.md` § Addresses](../../ui/web-dashboard/README.md#addresses) ([#6041](https://github.com/frapplive/Frapp/issues/6041)).
 
 **Three parts of the bullets above are aspirational, and the shipped surface says so rather than pretending otherwise:**
 

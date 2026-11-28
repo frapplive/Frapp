@@ -42,6 +42,8 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
   const onToggleStar = vi.fn();
   const onTogglePin = vi.fn();
   const onDelete = vi.fn();
+  const onOpenInDrive = vi.fn();
+  const onUploadVersion = vi.fn();
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
@@ -53,6 +55,8 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
           onToggleStar={onToggleStar}
           onTogglePin={onTogglePin}
           onDelete={onDelete}
+          onOpenInDrive={onOpenInDrive}
+          onUploadVersion={onUploadVersion}
         />
       </FrappThemeProvider>,
       {
@@ -63,7 +67,14 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
       },
     );
   });
-  return { tree, onToggleStar, onTogglePin, onDelete };
+  return {
+    tree,
+    onToggleStar,
+    onTogglePin,
+    onDelete,
+    onOpenInDrive,
+    onUploadVersion,
+  };
 }
 
 const rowLabels = (tree: ReactTestRenderer) =>
@@ -146,5 +157,40 @@ describe("DocumentActionsSheet (#3934)", () => {
     act(() => row(tree, "Delete document").props.onPress());
     finishClosing(tree);
     expect(onDelete).toHaveBeenCalledWith(FILE);
+  });
+
+  it("offers a Drive file Open in Google Drive, and opens its page (#6055)", () => {
+    const drive = {
+      ...FILE,
+      fromDrive: true,
+      driveUrl: "https://drive.google.com/file/d/abc/view",
+    };
+    const { tree, onOpenInDrive } = render(drive, false);
+    expect(rowLabels(tree)).toEqual(["Star", "Open in Google Drive"]);
+    act(() => row(tree, "Open in Google Drive").props.onPress());
+    finishClosing(tree);
+    expect(onOpenInDrive).toHaveBeenCalledWith(drive.driveUrl);
+    // An upload has no Drive page.
+    expect(rowLabels(render(FILE, false).tree)).toEqual(["Star"]);
+  });
+
+  // #6055: the screen decides who may (`mayUploadNewVersion`); the sheet
+  // offers the row only then, and runs it once it has closed.
+  it("offers Upload a new version only on a file the member may replace", () => {
+    const mine = { ...FILE, canUploadVersion: true };
+    const { tree, onUploadVersion } = render(mine, false);
+    expect(rowLabels(tree)).toEqual(["Star", "Upload a new version"]);
+
+    act(() => row(tree, "Upload a new version").props.onPress());
+    expect(onUploadVersion).not.toHaveBeenCalled();
+    finishClosing(tree);
+    expect(onUploadVersion).toHaveBeenCalledWith(mine);
+
+    expect(rowLabels(render(FILE, true).tree)).not.toContain(
+      "Upload a new version",
+    );
+    expect(
+      rowLabels(render({ ...FOLDER, canUploadVersion: true }, true).tree),
+    ).not.toContain("Upload a new version");
   });
 });

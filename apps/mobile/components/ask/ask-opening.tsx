@@ -18,7 +18,6 @@ import Svg, {
 } from "react-native-svg";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
-  ASK_COPY,
   ASK_STARTER,
   askDayLine,
   askGreeting,
@@ -94,7 +93,11 @@ export function AskOpening({
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={`${ASK_COPY.name}. ${starter ? ASK_STARTER.hello(displayName) : askGreeting(now, displayName)}`}
+        accessibilityLabel={
+          starter
+            ? ASK_STARTER.hello(displayName)
+            : askGreeting(now, displayName)
+        }
         style={[
           styles.hero,
           starter ? styles.heroStarter : null,

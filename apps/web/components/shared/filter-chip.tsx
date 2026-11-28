@@ -7,8 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
@@ -33,7 +31,7 @@ export const FILTER_CHIP_CLASS = "gap-1 rounded-full font-semibold";
 const CHIP = FILTER_CHIP_CLASS;
 /** A cmdk row drawn at the menu row's size, so both lists read as one menu. */
 const SEARCH_ROW =
-  "min-h-8 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base";
+  "min-h-control-row text-sm pointer-coarse:min-h-11 pointer-coarse:text-base";
 /** The "any" row's cmdk value; an option's own value can't collide with it. */
 const ANY = "\u0000any";
 
@@ -217,38 +215,20 @@ function SearchableOptions({
 
 /**
  * The order chip. Never tinted: an order is always set, so it isn't a filter.
- * Shared by `/documents` and the Directory.
- *
- * `detail` is a second pick that only some orders have: the period a
- * standings order counts over (Directory, #5950). It is listed under the
- * orders, in the same menu, and named on the chip beside the order ("Most
- * points · This semester"), so an order and its period are one control and
- * nothing is added to the row. Leave it out for an order that has none.
+ * `/documents` draws it inside its filter menu; a list on `FilterMenu` has a
+ * Sort row instead.
  */
 export function SortChip<T extends string>({
   options,
   value,
   onChange,
-  detail,
 }: {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
-  detail?: {
-    /** What the second pick is, as the menu's group label: "Period". */
-    label: string;
-    options: readonly { value: string; label: string }[];
-    value: string;
-    onChange: (value: string) => void;
-  };
 }) {
   const selected = options.find((option) => option.value === value);
-  const selectedDetail = detail?.options.find(
-    (option) => option.value === detail.value,
-  );
-  const name = [selected?.label ?? value, selectedDetail?.label]
-    .filter(Boolean)
-    .join(" · ");
+  const name = selected?.label ?? value;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -276,27 +256,6 @@ export function SortChip<T extends string>({
             {option.label}
           </DropdownMenuItem>
         ))}
-        {detail ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>{detail.label}</DropdownMenuLabel>
-            {detail.options.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onSelect={() => detail.onChange(option.value)}
-              >
-                <Check
-                  className={cn(
-                    "h-4 w-4",
-                    option.value !== detail.value && "invisible",
-                  )}
-                  aria-hidden="true"
-                />
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

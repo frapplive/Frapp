@@ -21,10 +21,11 @@ export const FRAPP_CREST_PATH =
 export const FRAPP_CREST_VIEW_BOX = "151 110 720 864";
 
 /**
- * Ask's send arrow, transcribed from `canvas-screens.dc.html` s17: on the
- * end of the Ask bar on both clients and on the phone conversation's send
- * button, so they are one mark (#5476 moved it here from the phone's
- * `ask-bar.tsx` when web's bar took it too). A stroke, not a fill.
+ * Frapp Intelligence's send arrow, transcribed from `canvas-screens.dc.html`
+ * s17: on the end of the phone's New field (`ask-entry.tsx`, #5983) and on
+ * the conversation's send button, so they are one mark (#5476 moved it here
+ * from the phone's `ask-bar.tsx`, since deleted, when web's bar took it too).
+ * A stroke, not a fill.
  */
 export const ASK_SEND_GLYPH = {
   viewBox: "0 0 17 17",

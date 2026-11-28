@@ -85,11 +85,11 @@ never reaches `main` and CI never ran.
 
 | Signal | Fires on | Misses |
 | ------ | -------- | ------ |
-| PR-activity webhook (`subscribe_pr_activity`) | CI **failure**, **successful check-suite rollups** (observed 2026-08-21 — see below), comments, reviews | cancelled, timed-out, merge-conflict — all silent |
+| PR-activity webhook (`subscribe_pr_activity`) | CI **failure**, **successful check-suite rollups** (observed 2026-08-21 — see below), comments, reviews, and the PR's **merge or close** (the subscription's own notice says so, read 2026-11-27; it also names merge-queue branches and a lost delivery as possible misses) | cancelled, timed-out, merge-conflict — all silent |
 | `CI wake` watchdog comment (`ci-wake.yml`) | exactly three things, and it is worth being precise because most of this list is *silent* on attempts 1-2: (a) a **deliberate** cancellation — a run cancelled after some job had started, or with the jobs/runs/annotations API down so it cannot be told from an infra one or a timeout; (b) a **job that ran to its `timeout-minutes`** (verdict `timed-out`, naming the job and its limit), which GitHub concludes `cancelled` and only the job's check-run annotation tells apart (#3162), never requeued because it is usually a hang a re-run meets again, even beside an infra failure that would otherwise be; (c) an **infra failure the auto-requeue did not absorb**, i.e. the re-queue call failed or the 3-attempt cap is spent. A run-level `timed_out`, `startup_failure`, `stale`, and a cancel where no job ever started all classify as infra-failure and are requeued first, so they say nothing until that runs out | outages that kill the watchdog run itself; a wake comment that fails to post (a `::warning::` on the run with GitHub's status and message); merge-conflict; review-state changes. **Deliberately silent:** success and real failures (the webhook carries both), any infra failure that WAS requeued (the fresh attempt's own completion is the wake), `skipped`/`neutral`/`action_required`, and superseded runs |
 | `PR base sync` wake comment (`pr-base-sync.yml`) | `main` moving while this PR is conflicted with it (since 2026-11-11, while `REQUIRE_UP_TO_DATE` is off, only that and the next case), or while its migrations no longer sort after `main`'s and the sweep can't renumber them itself (#4558), or behind it and un-updateable for a reason specific to this PR (a fork head, a one-off API error) — the comment says which and what to do | base moves while the sweep run itself dies; PRs past the sweep's 20-PR cap this round (logged; the sweep processes least-recently-updated first, so deferred PRs rotate to the front of a later sweep); unknown mergeability (skipped fail-safe, deliberately silent); an auto-merge PR held behind while another holds the update slot (deliberately silent, so its session doesn't merge `main` and restart the race; #3599); a conflict only in the shipped-builds registry, which the sweep merges itself (#3783: the merge commit is the signal, and the CI it starts wakes the session); a conflict where both sides only added lines, which it merges keep-both (2026-11-14, the same way); migrations that no longer sort after `main`'s on a clean PR, which the sweep renumbers itself (#4558, the same way); a wake comment that fails to post (a `::warning::` on the run with GitHub's status and message, and the run stays green; the next push to `main` retries it, #3019) |
 | `PR base sync` alert issue | a missing or rejected app token — the one cause that is repo-wide rather than per-PR | anything per-PR (those comment); a sweep where nothing was behind, which proves nothing either way and deliberately leaves an open alert open |
-| Retired — do not call `send_later` | — | Entire layer. Unusable unattended on the cloud surface (prompts the owner every call). Do not re-add it to `permissions.allow`. |
+| `send_later` (self-wake) | the time the session set | Anything while the owner hasn't answered its prompt (observed 2026-08-08), so every unattended run. See [§ `send_later`](#send_later). |
 
 Layered conclusion: the webhook is the fast path for CI outcomes and human comments, the watchdog
 comment covers the terminal states the webhook has no event for once a re-queue has stopped being an
@@ -141,33 +141,33 @@ One consequence to keep in mind when reading a thread: a wake comment that is *g
 nobody looked. Success and real failures both clear this workflow's wake, so an empty thread is the
 normal state of a healthy PR — check the checks UI, not the comment history, for what CI did. The self-wake would be the only *complete*
 net — it is the one layer that misses nothing — but it prompts the owner on every call, so on the
-cloud surface it is not usable unattended and is deliberately not armed (below). The coverage it
-would have added is a known, accepted gap, not an oversight.
+cloud surface it can't be counted on unattended, and it isn't part of the standard arming
+([§ `send_later`](#send_later)). The coverage it would add is a known, accepted gap, not an oversight.
 An awake session reads GitHub through the GitHub MCP only
 ([`agent-infra.md` § GitHub access policy](agent-infra.md#github-access-policy)). That is what is
 *readable*, not what is *polled*: nothing in this sandbox runs while the session is asleep, so
 background polling of GitHub still cannot be relied on and the coverage gap argument is unchanged.
 Treat GitHub as reachable only while awake, through the MCP tools.
 
-**Do not call `send_later` on the cloud surface, and do not try to fix it from the
-repo.** Directly observed (2026-08-08): it **still prompted the owner** through every allow-list
-spelling then present. Those 21 entries were later removed so they would stop being misread as
-permission. The likely mechanism is the ceiling rule
-([`agent-infra.md` → Applied permission allows](agent-infra.md#applied-permission-allows)) — the harness's `--allowed-tools` snapshot contains no
-`mcp__Claude_Code_Remote__*` entry at all — but that rule is a working hypothesis, and the
-practical conclusion does not depend on it: **more allow entries have already been tried and did
-not work.** Do not re-add them.
+### `send_later`
 
-Two earlier claims about this tool are corrected: on this surface the call does **not** dead-end in
-`-32003`, and approval is **not** converted to a denial — the owner approved and the call succeeded,
-returning a live trigger id. It simply *asks*, and asking is what disqualifies it from unattended
-runs — not failing. Owner's standing preference (2026-08-08): don't call it. The other three layers
-carried PR #743 unaided — three `CI wake` comments (CI, Docs checks, Links) plus the merge
-notification, none of which prompted. Anything genuinely needing a schedule is a scheduled task
-created with `create_trigger` and bound to a session, as the routines are ([`routines.md`](routines.md));
-that call doesn't ask the owner each time the way `send_later` does. If a session does call it and it prompts, say so once, never
-re-arm, and never ship a settings change to "fix" it — that would be the fourth attempt at a fix
-that has already failed three times.
+This is the one home for `send_later` policy; other docs link here.
+
+**Allowed again (Paul, 2026-11-27)** for a timed check-in no wake layer covers, such as waiting for
+another PR to merge before a chain's next step. It was retired on 2026-08-08 because it **prompted
+the owner** through every allow-list spelling then present; on approval it succeeded and returned a
+live trigger id. What that record means for a session now:
+
+- It may stop at the owner's prompt, so a run nobody is watching (a routine, an unattended `/next`)
+  shouldn't depend on it.
+- If it prompts and goes unanswered, say so once and don't re-arm it on every wake: each call asks
+  again.
+- Allow-list entries don't stop the prompt (three attempts; the likely mechanism is the ceiling rule
+  in [`agent-infra.md` → Applied permission allows](agent-infra.md#applied-permission-allows)), so
+  don't spend a PR on that.
+
+A recurring schedule is a scheduled task made with `create_trigger`, as the routines are
+([`routines.md`](routines.md)).
 
 ## What the watchdog does (`scripts/ci/ci-wake.mjs`)
 
@@ -218,8 +218,8 @@ that has already failed three times.
 - Runs with minimal action surface (checkout only, preinstalled runner Node, no `npm ci`) so the
   watchdog itself has the least possible exposure to the action-download infra failures it absorbs.
   It is best-effort by design. Nothing now covers the case where the watchdog run itself dies —
-  the self-wake that used to backstop it prompts and was retired (see "Wake coverage"), so that
-  gap is accepted and a human notices instead. Keeping this workflow's surface minimal is
+  the self-wake can't backstop it, because it waits on the owner's prompt ([§ `send_later`](#send_later)),
+  so that gap is accepted and a human notices instead. Keeping this workflow's surface minimal is
   therefore load-bearing, not just tidy.
 - Scope note vs. AI review: there is no CI-side AI reviewer at all any more — the advisory
   `codex-review.yml` was removed 2026-09-21 (see `ai-code-review-runbook.md`), so nothing posts

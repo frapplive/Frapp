@@ -7,10 +7,15 @@ import {
 } from "@repo/chat-core/forwarded";
 import type { ForwardedFrom } from "@repo/chat-core/types";
 import { formatRelativeDayTime } from "@repo/formatting";
-import { resolveAuthorLabel, useChannels } from "@repo/hooks";
+import {
+  authorNameAwaitsRoster,
+  resolveAuthorLabel,
+  useChannels,
+} from "@repo/hooks";
 import { isDirectChannel } from "@repo/validation";
 import { cn } from "@/lib/utils";
 import { MessageGifImage } from "./message-gif";
+import { NamePlaceholder } from "./name-placeholder";
 import { MessageMarkdown } from "./renderers/message-markdown";
 
 /** A forward's copy marks no `@` token: its mentions pinged nobody here. */
@@ -25,6 +30,11 @@ export interface ForwardedCardProps {
    */
   hidden: string | null;
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight: an original author it hasn't named
+   * yet draws a name placeholder, not `Member 2f4a1c` (#6127).
+   */
+  rosterLoading?: boolean;
   viewerId: string | null;
   className?: string;
 }
@@ -61,6 +71,7 @@ export function ForwardedCard({
   forwarded,
   hidden,
   nameFor,
+  rosterLoading = false,
   viewerId,
   className,
 }: ForwardedCardProps) {
@@ -68,7 +79,16 @@ export function ForwardedCard({
     hidden ? null : forwarded.channel_id,
   );
   const placeholder = forwarded.deleted ? FORWARDED_ORIGINAL_DELETED : hidden;
-  const author = resolveAuthorLabel(forwarded, nameFor, viewerId);
+  const author = authorNameAwaitsRoster(
+    forwarded,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  ) ? (
+    <NamePlaceholder />
+  ) : (
+    resolveAuthorLabel(forwarded, nameFor, viewerId)
+  );
   const when = formatRelativeDayTime(forwarded.created_at);
   const files = forwardedAttachmentLabel(forwarded.attachment_count);
   const text = forwarded.content.trim().length > 0 ? forwarded.content : null;

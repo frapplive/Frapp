@@ -159,7 +159,8 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
   const balance = typeof summary?.balance === "number" ? summary.balance : null;
   const failed = summaryQuery.isError && summaryQuery.data === undefined;
   const loading = summaryQuery.isPending;
-  const searching = search.trim() !== "" || category !== "all" || amount !== "all";
+  const searching =
+    search.trim() !== "" || category !== "all" || amount !== "all";
   const showSearch = transactions.length >= SEARCH_FROM || search !== "";
 
   // A render function, not a component: a component declared here would be
@@ -201,9 +202,9 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       actions={
         <div className="flex items-center gap-2">
-          {showSearch ? (
-            searchField("my-points-search", "hidden w-44 sm:block")
-          ) : null}
+          {showSearch
+            ? searchField("my-points-search", "hidden w-44 sm:block")
+            : null}
           <FilterMenu filters={filters} thing="your points" />
           {transactions.length > 0 ? (
             <ExportMenu
@@ -217,17 +218,13 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
       }
     >
       {/* Below `sm` the header has no room for it, so it leads the list. */}
-      {showSearch ? (
-        searchField("my-points-search-narrow", "sm:hidden")
-      ) : null}
+      {showSearch ? searchField("my-points-search-narrow", "sm:hidden") : null}
       <ActiveFilterChips filters={filters} />
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-4">
         <StandingStat
           label={periodLabel}
           value={balance === null ? "–" : balance.toLocaleString()}
-          detail={
-            balance === null ? null : balance === 1 ? "point" : "points"
-          }
+          detail={balance === null ? null : balance === 1 ? "point" : "points"}
         />
         {/* A place only once there is something to place: "#24 of 24" for a
             new member at zero says nothing they can act on. */}

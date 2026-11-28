@@ -1,6 +1,22 @@
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
-import { readMeetingContent } from '@repo/validation';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  type OnModuleInit,
+} from '@nestjs/common';
+import {
+  readMeetingContent,
+  TASK_TITLE_MAX_LENGTH,
+  taskTitleFrom,
+} from '@repo/validation';
+import type { AiSuggestion } from '#domain/entities/ai-suggestion.entity';
+import type { MeetingActionItemTaskLink } from '#domain/entities/meeting-action-item-task.entity';
 import type { Meeting } from '#domain/entities/meeting.entity';
+import {
+  MEETING_ACTION_ITEM_TASK_REPOSITORY,
+  type IMeetingActionItemTaskRepository,
+} from '#domain/repositories/meeting-action-item-task.repository.interface';
 import {
   AI_SUGGESTION_REPOSITORY,
   type IAiSuggestionRepository,
@@ -9,6 +25,7 @@ import { isAiEnabled } from '#domain/utils/ai-enabled';
 import {
   actionItemKey,
   actionItemsText,
+  descriptionFrom,
   taskProposalsFromMinutes,
 } from '#domain/utils/minutes-task-proposals';
 import { AiConsentService } from './ai/ai-consent.service';
@@ -17,7 +34,24 @@ import {
   type ReconcileAiSuggestionsResult,
 } from './ai-suggestion.service';
 import { MeetingService } from './meeting.service';
+import { assertModuleEnabled, type EnabledModules } from './module-gate';
 import { TaskService, type TaskDoneMark } from './task.service';
+
+/**
+ * How long a claim on an item may stand empty before another officer takes
+ * it over: far longer than making a task takes, so only a claim whose API
+ * died between the two writes, or whose single task was deleted, is.
+ */
+const CLAIM_STALE_MS = 2 * 60 * 1000;
+
+/** What an officer sends to make an action item a task (#6062). */
+export interface MakeActionItemTaskInput {
+  /** The item's text as the officer saw it. */
+  text: string;
+  assignee_ids: string[];
+  title?: string;
+  due_date?: string | null;
+}
 
 /**
  * Where an action item of posted minutes stands as a task: the minutes'
@@ -83,6 +117,8 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
     private readonly tasks: TaskService,
     @Inject(AI_SUGGESTION_REPOSITORY)
     private readonly suggestionRepo: IAiSuggestionRepository,
+    @Inject(MEETING_ACTION_ITEM_TASK_REPOSITORY)
+    private readonly itemTasks: IMeetingActionItemTaskRepository,
   ) {}
 
   /**
@@ -173,6 +209,282 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
     return result;
   }
 
+  /**
+   * Makes action item `index` of posted minutes a task when it has no
+   * suggestion waiting (#6062; Winston, 2026-11-25: "i want to be able to
+   * assign people to tasks from the minutes"). The row's Create task accepts
+   * an item's waiting suggestion (#6051); this is the same move for an item
+   * with none: one an officer dismissed, one whose suggestion expired, or
+   * minutes posted with suggestions off. One item has one task, however it
+   * got it:
+   *
+   * - **Already a task** (accepted through Suggested tasks, or made here
+   *   before): nothing is made, and its mark is returned. One accepted as a
+   *   task up for grabs, which has no task until it is claimed, or one being
+   *   accepted right now, is refused as already a task.
+   * - **A suggestion waiting for it:** that suggestion is accepted with these
+   *   people and words, as the row would, so it can't make a second task.
+   * - **Otherwise** the item is claimed, the task made, and the claim filled
+   *   in. Two officers at once: one makes it, the other is told it is one.
+   *
+   * The caller holds `tasks:manage` with Tasks on; Meetings must be on too,
+   * since these are its minutes. The minutes are read under the officer's
+   * own rule, and `text` must still be the item at `index`, so an edit to the
+   * minutes meanwhile is a conflict rather than the wrong task.
+   */
+  async makeTask(
+    chapterId: string,
+    userId: string,
+    meetingId: string,
+    index: number,
+    input: MakeActionItemTaskInput,
+    enabledModules: EnabledModules,
+  ): Promise<ActionItemTask> {
+    // The route's guard can name one module, Tasks; the minutes are
+    // Meetings', which a chapter that turned it off has frozen.
+    assertModuleEnabled(enabledModules, 'meetings');
+    const { meeting } = await this.meetings.get(chapterId, meetingId, userId);
+    if (meeting.status !== 'posted') {
+      throw new BadRequestException({
+        code: 'meeting.action_item.not_posted',
+        message: 'Only posted minutes’ action items can become tasks.',
+      });
+    }
+    const item = readMeetingContent(meeting.content).action_items[index];
+    const key = actionItemKey(input.text.trim());
+    if (!item || actionItemKey(item.text.trim()) !== key) {
+      throw new ConflictException({
+        code: 'meeting.action_item.changed',
+        message: 'These minutes changed. Reload them and try again.',
+      });
+    }
+    // An item of only punctuation names nothing to do, as Suggested tasks
+    // never proposes one; and every such item would share one key.
+    if (key === actionItemKey('')) {
+      throw new BadRequestException({
+        code: 'meeting.action_item.empty',
+        message: 'This action item has no words to make a task of.',
+      });
+    }
+
+    const [rows, links] = await this.linksOf(chapterId, meeting.id);
+    const existing = await this.markFor(chapterId, key, rows, links);
+    if (existing) return { ...existing, index };
+    const forItem = rows.filter((row) => row.dedupe_key === key);
+    // Accepted without a task to follow (one up for grabs, still open), or
+    // being accepted this moment: it is a task already, or about to be.
+    if (
+      forItem.some(
+        (row) => row.status === 'accepted' || row.status === 'accepting',
+      )
+    ) {
+      throw new ConflictException({
+        code: 'meeting.action_item.already_task',
+        message: 'This action item is already a task.',
+      });
+    }
+
+    // Worded as its suggested task would be: the item's words, cut to a
+    // title, and the whole item as the description when that cut them.
+    const itemText = item.text.trim();
+    const title = input.title?.trim()
+      ? input.title.trim().slice(0, TASK_TITLE_MAX_LENGTH)
+      : taskTitleFrom(itemText);
+    const description = descriptionFrom(itemText, title);
+    // A list, even of one, so every pick is held to the task form's rule
+    // that it is an active member.
+    const people = [...new Set(input.assignee_ids)];
+
+    // Waiting, and not yet expired (the hourly sweep may not have closed
+    // one past its day; accepting that would be refused).
+    const nowMs = Date.now();
+    const waiting = forItem.find(
+      (row) => row.status === 'pending' && Date.parse(row.expires_at) > nowMs,
+    );
+    if (waiting) {
+      await this.suggestions.accept(chapterId, userId, waiting.id, {
+        edits: {
+          kind: 'task',
+          fields: {
+            title,
+            description,
+            ...(people.length === 1
+              ? { assignee_id: people[0], assignee_ids: null }
+              : { assignee_id: null, assignee_ids: people }),
+            audience: null,
+            audience_role_id: null,
+            audience_group_id: null,
+            // Only a day the officer sent: the suggestion keeps its own day
+            // and time otherwise.
+            ...(input.due_date === undefined
+              ? {}
+              : { due_date: input.due_date }),
+          },
+        },
+        enabledModules,
+      });
+      return this.madeMark(chapterId, meeting.id, key, index);
+    }
+
+    const claimed = await this.itemTasks.claim(
+      {
+        meeting_id: meeting.id,
+        item_key: key,
+        chapter_id: chapterId,
+        created_by: userId,
+      },
+      new Date(nowMs - CLAIM_STALE_MS).toISOString(),
+    );
+    if (!claimed) {
+      throw new ConflictException({
+        code: 'meeting.action_item.already_task',
+        message: 'Someone just made this a task.',
+      });
+    }
+    let task: { id: string; group_id: string | null };
+    try {
+      task = await this.tasks.create({
+        chapter_id: chapterId,
+        title,
+        description,
+        assignee_id: null,
+        assignee_ids: people,
+        audience: null,
+        audience_role_id: null,
+        audience_group_id: null,
+        created_by: userId,
+        due_date: input.due_date === undefined ? item.due_date : input.due_date,
+        due_at: null,
+        subtasks: [],
+        point_reward: null,
+        meeting_id: meeting.id,
+      });
+    } catch (error) {
+      await this.releaseQuietly(chapterId, meeting.id, key);
+      throw error;
+    }
+    try {
+      await this.itemTasks.setTask(chapterId, meeting.id, key, task);
+    } catch (error) {
+      // Unlinked, the task would sit beside an item that reads as free. Take
+      // it back so the officer's retry makes it once.
+      await this.tasks
+        .delete(task.id, chapterId)
+        .catch(() => undefined)
+        .then(() => this.releaseQuietly(chapterId, meeting.id, key));
+      throw error;
+    }
+    const mark = (await this.tasks.doneMarks(chapterId, [task.id])).get(
+      task.id,
+    );
+    return mark
+      ? { index, ...this.toMark(task.id, mark) }
+      : this.madeMark(chapterId, meeting.id, key, index);
+  }
+
+  /** Gives a claim back without hiding the error that made it go. */
+  private async releaseQuietly(
+    chapterId: string,
+    meetingId: string,
+    key: string,
+  ): Promise<void> {
+    try {
+      await this.itemTasks.release(chapterId, meetingId, key);
+    } catch {
+      // Left empty, the claim is taken over once stale.
+    }
+  }
+
+  /** The mark of a task just made for an item, read afresh. */
+  private async madeMark(
+    chapterId: string,
+    meetingId: string,
+    key: string,
+    index: number,
+  ): Promise<ActionItemTask> {
+    const [rows, links] = await this.linksOf(chapterId, meetingId);
+    const mark = await this.markFor(chapterId, key, rows, links);
+    if (!mark) {
+      // Deleted in the moment between: the item is free again.
+      throw new ConflictException({
+        code: 'meeting.action_item.changed',
+        message: 'These minutes changed. Reload them and try again.',
+      });
+    }
+    return { ...mark, index };
+  }
+
+  /** The task one item key has, as a mark at no particular index. */
+  private async markFor(
+    chapterId: string,
+    key: string,
+    rows: AiSuggestion[],
+    links: MeetingActionItemTaskLink[],
+  ): Promise<Omit<ActionItemTask, 'index'> | null> {
+    const taskId = (await this.taskIdsByKey(chapterId, rows, links)).get(key);
+    if (!taskId) return null;
+    const mark = (await this.tasks.doneMarks(chapterId, [taskId])).get(taskId);
+    return mark ? this.toMark(taskId, mark) : null;
+  }
+
+  private toMark(
+    taskId: string,
+    mark: TaskDoneMark,
+  ): Omit<ActionItemTask, 'index'> {
+    return {
+      done: mark.done,
+      group: mark.group,
+      task: { id: taskId, who: mark.who },
+    };
+  }
+
+  /** Both links of one minutes: suggestions for tasks, and tasks made here. */
+  private async linksOf(
+    chapterId: string,
+    meetingId: string,
+  ): Promise<[AiSuggestion[], MeetingActionItemTaskLink[]]> {
+    return Promise.all([
+      this.suggestionRepo.listKeyedForSource(
+        chapterId,
+        { type: 'meeting', id: meetingId },
+        'task',
+      ),
+      this.itemTasks.listForMeeting(chapterId, meetingId),
+    ]);
+  }
+
+  /**
+   * Each item key's task, from both links: a suggestion accepted for it, and
+   * a task made from the minutes (#6062). An item has only one, so either
+   * will do. A link whose copy was deleted follows another copy of its group.
+   */
+  private async taskIdsByKey(
+    chapterId: string,
+    rows: AiSuggestion[],
+    links: MeetingActionItemTaskLink[],
+  ): Promise<Map<string, string>> {
+    const taskOf = new Map<string, string>();
+    for (const row of rows) {
+      if (row.status === 'accepted' && row.result_id && row.dedupe_key) {
+        taskOf.set(row.dedupe_key, row.result_id);
+      }
+    }
+    const orphaned = links.flatMap((link) =>
+      !link.task_id && link.task_group_id ? [link.task_group_id] : [],
+    );
+    const copyOf =
+      orphaned.length > 0
+        ? await this.tasks.copyOfGroups(chapterId, orphaned)
+        : new Map<string, string>();
+    for (const link of links) {
+      const taskId =
+        link.task_id ??
+        (link.task_group_id ? copyOf.get(link.task_group_id) : undefined);
+      if (taskId) taskOf.set(link.item_key, taskId);
+    }
+    return taskOf;
+  }
+
   /** `actionItemTasks` for minutes already read under the viewer's rule. */
   private async marksFor(
     chapterId: string,
@@ -181,17 +493,10 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
     if (meeting.status !== 'posted') return [];
     const items = readMeetingContent(meeting.content).action_items;
     if (items.length === 0) return [];
-    const rows = await this.suggestionRepo.listKeyedForSource(
+    const taskOf = await this.taskIdsByKey(
       chapterId,
-      { type: 'meeting', id: meeting.id },
-      'task',
+      ...(await this.linksOf(chapterId, meeting.id)),
     );
-    const taskOf = new Map<string, string>();
-    for (const row of rows) {
-      if (row.status === 'accepted' && row.result_id && row.dedupe_key) {
-        taskOf.set(row.dedupe_key, row.result_id);
-      }
-    }
     // Two items that read the same were one suggestion, so one task: it
     // follows the first of them.
     const seen = new Set<string>();
@@ -229,6 +534,23 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
     });
   }
 
+  /**
+   * The minutes' task proposals but the items an officer already made a
+   * task from the minutes (#6062), so none is suggested a second time.
+   */
+  private async unmadeProposals(
+    meeting: Meeting,
+  ): Promise<ReturnType<typeof taskProposalsFromMinutes>> {
+    const proposals = taskProposalsFromMinutes(meeting.content);
+    if (proposals.length === 0) return proposals;
+    const made = new Set(
+      (await this.itemTasks.listForMeeting(meeting.chapter_id, meeting.id)).map(
+        (row) => row.item_key,
+      ),
+    );
+    return proposals.filter((proposal) => !made.has(proposal.dedupeKey));
+  }
+
   async sync(
     meeting: Meeting,
     change: { reason: 'posted' | 'edited'; actorId: string },
@@ -251,7 +573,7 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
         text: actionItemsText(meeting.content),
       },
       kind: 'task',
-      proposals: on ? taskProposalsFromMinutes(meeting.content) : [],
+      proposals: on ? await this.unmadeProposals(meeting) : [],
       notify: on && change.reason === 'posted' ? [change.actorId] : [],
     });
   }

@@ -1,9 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ProfileSection } from "@/components/profile/profile-section";
-import { Label } from "@/components/ui/label";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  closeToAddress,
+  pushAddressHref,
+  replaceAddress,
+} from "@/lib/address/address";
+import { Search, UserPlus } from "lucide-react";
+import { defaultInviteRoleChoices } from "@repo/hooks/chapter-roles";
+import { parseChapterRoles } from "@repo/hooks/chapter-roles";
+import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
+import {
+  useGroups,
+  useInvitableRoleIds,
+  useMyPermissions,
+  useRoles,
+} from "@repo/hooks";
+import {
+  can,
+  canAny,
+  groupDisplayName,
+  INVITES_FOOTNOTE,
+  PEOPLE_SETTINGS_COPY,
+} from "@repo/validation";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -11,17 +32,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { parseChapterRoles } from "@repo/hooks/chapter-roles";
-import { useInvitableRoleIds, useMyPermissions, useRoles } from "@repo/hooks";
-import { can, canAny } from "@repo/validation";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SETTINGS_VALUE_TRIGGER,
+} from "@/components/shared/settings-row";
 import {
   PresidencyClaimBanner,
-  TransferPresidencySection,
+  TransferPresidencyRow,
 } from "@/components/roles/presidency";
 import { RolesOverview } from "@/components/roles/roles-overview";
 import { TierPermissionsPage } from "@/components/roles/tier-permissions-page";
 import { RolePage } from "@/components/roles/role-page";
-import { GroupsSection } from "@/components/roles/groups-section";
+import {
+  AutomaticGroupsPage,
+  GroupPage,
+  GroupsGroup,
+} from "@/components/roles/groups-section";
+import { useRolesData } from "@/components/roles/use-roles-data";
 
 type Props = {
   /** Whether the caller holds `chapter-config:manage`. */
@@ -34,29 +62,38 @@ type Props = {
   isSavingConfig?: boolean;
   /**
    * The chapter-config read failed or was refused. The roles pages do not
-   * need it, so only the default-invite-role control hides.
+   * need it, so only the default-invite-role row hides.
    */
   configUnavailable?: boolean;
 };
 
+const BASE = "/settings?tab=roles";
+const AUTOMATIC = "automatic";
+
 /**
- * Chapter settings → Roles and groups (#3990; groups joined it 2026-11-19).
+ * Chapter settings → Roles and groups (#3990; groups joined it 2026-11-19;
+ * in the settings shape since #6029, Paul's Discord channel-settings ruling).
  *
- * Three pages in one tab, addressed by the URL so Back and a shared link work:
+ * One page, as Paul ruled: a group per tier (its Permissions row, its roles,
+ * Add role), Add tier, the roles outside the tiers, Non-chapter business,
+ * Groups, then Invites and presidency. Every form of its own opens as a page
+ * addressed by the URL, so Back and a shared link work, with the
+ * `SettingsSubpage` back line to this page:
  *
  * | URL | Page |
  * | --- | ---- |
- * | `?tab=roles` | The tiers in order with their roles, then roles outside the tiers (`RolesOverview`), then the chapter's groups (`GroupsSection`) |
- * | `?tab=roles&tier=<id>` | One tier's permissions, a page of switches by module (`TierPermissionsPage`) |
- * | `?tab=roles&role=<id>` | One role: details, tier, and its own switches (`RolePage`) |
+ * | `?tab=roles` | This page |
+ * | `?tab=roles&tier=<id>` | A tier: its name, @mention switch, roles and switches (`TierPermissionsPage`) |
+ * | `?tab=roles&role=<id>` | A role: name, the Role group, its permissions (`RolePage`) |
+ * | `?tab=roles&group=<id>` | A group: name, color, @mention switch, members (`GroupPage`) |
+ * | `?tab=roles&groups=automatic` | The groups Frapp keeps from member details (`AutomaticGroupsPage`) |
  *
- * The roles × permissions matrix that used to sit here is gone (#3990, which
- * also makes its keyboard grid #2173 and #2836 moot): Paul asked for "toggles,
- * not the matrix", set per tier. `/roles` still redirects here.
+ * The phone draws the same page (`apps/mobile/app/(app)/chapter-roles.tsx`)
+ * with the same rows, order and words (`@repo/validation`'s
+ * `people-settings-copy.ts`). `/roles` still redirects here.
  *
  * Nothing here waits on the chapter-config read, which needs
- * `chapter-config:view`; only the default-invite-role control hides without
- * it.
+ * `chapter-config:view`; only the Default invite role row hides without it.
  */
 export function SettingsRolesTab({
   canManage,
@@ -66,64 +103,202 @@ export function SettingsRolesTab({
   isSavingConfig,
 }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { data: permissionsPayload } = useMyPermissions();
   const permissions = permissionsPayload?.permissions;
+  const [query, setQuery] = useState("");
   // A `groups:manage` holder without `roles:manage` or config access reaches
   // this tab for its groups only (`settings-access.ts`).
   const canSeeRoles = canAny(
     ["roles:manage", "chapter-config:view"],
     permissions,
   );
+  const canManageGroups = can("groups:manage", permissions);
+  const isPresident = permissions?.includes("*") ?? false;
   const tierId = searchParams.get("tier");
   const roleId = searchParams.get("role");
+  const groupId = searchParams.get("group");
+  const groupsPage = searchParams.get("groups");
+  const fromAutomatic = searchParams.get("from") === AUTOMATIC;
 
-  const goTo = (query: string) => router.push(`/settings?tab=roles${query}`);
-  const openTier = (id: string) => goTo(`&tier=${encodeURIComponent(id)}`);
-  const openRole = (id: string) => goTo(`&role=${encodeURIComponent(id)}`);
-  const backToRoles = () => goTo("");
+  const links = useMemo(
+    () => ({
+      tier: (id: string) => `${BASE}&tier=${encodeURIComponent(id)}`,
+      role: (id: string) => `${BASE}&role=${encodeURIComponent(id)}`,
+      group: (id: string) => `${BASE}&group=${encodeURIComponent(id)}`,
+      automatic: `${BASE}&groups=${AUTOMATIC}`,
+    }),
+    [],
+  );
+  // A page closes by the address's rule (#6049): Back when this tab opened
+  // it, else a replace. A row opens its page with a marked push.
+  const backToRoles = () => closeToAddress(BASE);
 
-  if (tierId) {
+  // A tier's or role's page is the roles part of this row, which the
+  // overview shows only to `roles:manage` or `chapter-config:view`. A
+  // `groups:manage` holder reaching the row for its groups gets neither
+  // page from a link: the address is put back to the row (#6049).
+  const rolesHidden = permissions !== undefined && !canSeeRoles;
+  const roleAddressed = tierId !== null || roleId !== null;
+  useEffect(() => {
+    if (rolesHidden && roleAddressed) {
+      replaceAddress({ tier: null, role: null });
+    }
+  }, [rolesHidden, roleAddressed]);
+
+  if (tierId && canSeeRoles) {
     return (
       <TierPermissionsPage
         tierId={tierId}
-        onBack={backToRoles}
-        onOpenRole={openRole}
+        backHref={BASE}
+        roleHref={links.role}
+        onDeleted={backToRoles}
       />
     );
   }
-  if (roleId) {
+  if (roleId && canSeeRoles) {
     return (
-      <RolePage roleId={roleId} onBack={backToRoles} onOpenTier={openTier} />
+      <RolePage
+        roleId={roleId}
+        backHref={BASE}
+        tierHref={links.tier}
+        onDeleted={backToRoles}
+      />
+    );
+  }
+  if (groupId) {
+    const backHref = fromAutomatic ? links.automatic : BASE;
+    return (
+      <GroupPage
+        groupId={groupId}
+        canManage={canManageGroups}
+        backHref={backHref}
+        backLabel={
+          fromAutomatic
+            ? PEOPLE_SETTINGS_COPY.autoGroupsRow
+            : PEOPLE_SETTINGS_COPY.pageTitle
+        }
+        onDone={() => closeToAddress(backHref)}
+      />
+    );
+  }
+  if (groupsPage === AUTOMATIC) {
+    return (
+      <AutomaticGroupsPage
+        backHref={BASE}
+        groupHref={(id) => `${links.group(id)}&from=${AUTOMATIC}`}
+      />
     );
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {/*
         Outside any `roles:manage` check: the member who can claim a vacant
         presidency is by definition not the President, the role that holds
         `roles:manage` by default.
       */}
       <PresidencyClaimBanner />
+      <PageHead canSeeRoles={canSeeRoles} query={query} onQuery={setQuery} />
       {canSeeRoles ? (
-        <RolesOverview onOpenTier={openTier} onOpenRole={openRole} />
+        <RolesOverview
+          query={query}
+          links={links}
+          onOpenRole={(id) => pushAddressHref(links.role(id))}
+        />
       ) : null}
       {/*
         Groups on the same page as the roles (Paul, 2026-11-19): one place
         for who is what, roles for what someone can do, groups for who they
         belong with.
       */}
-      <GroupsSection canManage={can("groups:manage", permissions)} />
-      {permissions?.includes("*") ? <TransferPresidencySection /> : null}
-      {configUnavailable ? null : (
-        <DefaultInviteRoleCard
-          canManage={canManage}
-          defaultInviteRoleId={defaultInviteRoleId}
-          onSave={onSaveDefaultInviteRole}
-          isSaving={isSavingConfig}
-        />
-      )}
+      <GroupsGroup
+        canManage={canManageGroups}
+        query={query}
+        links={links}
+        onCreated={(id) => pushAddressHref(links.group(id))}
+      />
+      {normalizeWords(query).length === 0 &&
+      (!configUnavailable || isPresident) ? (
+        <SettingsGroup
+          heading={PEOPLE_SETTINGS_COPY.invitesHeading}
+          footnote={INVITES_FOOTNOTE}
+        >
+          {configUnavailable ? null : (
+            <DefaultInviteRoleRow
+              canManage={canManage}
+              defaultInviteRoleId={defaultInviteRoleId}
+              onSave={onSaveDefaultInviteRole}
+              isSaving={isSavingConfig}
+            />
+          )}
+          {isPresident ? <TransferPresidencyRow /> : null}
+        </SettingsGroup>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The page's title, how many roles it holds, and its search: past 8 roles and
+ * groups, as Discord's role list gains a search at a hundred roles. The
+ * search reaches roles and groups alike, the same on the phone.
+ */
+function PageHead({
+  canSeeRoles,
+  query,
+  onQuery,
+}: {
+  canSeeRoles: boolean;
+  query: string;
+  onQuery: (next: string) => void;
+}) {
+  const { rolesQuery, tiersQuery, roles, tiers, words } = useRolesData();
+  const groupsQuery = useGroups();
+  const groups = groupsQuery.data ?? [];
+  const searchable = (canSeeRoles ? roles.length : 0) + groups.length > 8;
+  const filtering = normalizeWords(query).length > 0;
+  const nothingMatches =
+    filtering &&
+    !(
+      canSeeRoles && roles.some((role) => matchesWordStarts(role.name, query))
+    ) &&
+    !groups.some((group) => matchesWordStarts(groupDisplayName(group), query));
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-0.5">
+        <h2 className="text-title text-foreground">
+          {PEOPLE_SETTINGS_COPY.pageTitle}
+        </h2>
+        {canSeeRoles && rolesQuery.isSuccess && tiersQuery.isSuccess ? (
+          <p className="text-sm text-muted-foreground">
+            {`${roles.length} ${roles.length === 1 ? "role" : "roles"} in ${tiers.length} ${tiers.length === 1 ? words.singular : words.plural}`}
+          </p>
+        ) : null}
+      </div>
+      {searchable || filtering ? (
+        <label className="relative block w-full max-w-sm">
+          <span className="sr-only">{PEOPLE_SETTINGS_COPY.search}</span>
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onQuery("");
+            }}
+            placeholder={PEOPLE_SETTINGS_COPY.search}
+            className="pl-9"
+          />
+        </label>
+      ) : null}
+      {nothingMatches ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Nothing matches &ldquo;{query.trim()}&rdquo;.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -135,23 +310,16 @@ export function SettingsRolesTab({
  * `null` the API clears the setting with.
  */
 const NO_DEFAULT_INVITE_ROLE = "__no-default__";
-const NO_DEFAULT_INVITE_ROLE_LABEL = "No role";
 
 /**
- * Settings → Roles → Default invite role (#422).
- *
- * Its own section rather than part of the tier list: it is a chapter-level
- * setting about roles, not a view of the roles.
- *
- * The picker carries an explicit "No default" option because clearing is a
- * real operation: it writes `null` and returns invites to the seeded Member
- * fallback.
- *
- * Saves on change rather than behind a Save button, matching the Privacy
- * tab's switch: it is one scalar, the write is audit-logged, and there is no
- * draft state worth protecting.
+ * Default invite role (#422), a row of Invites and presidency (#6029; a
+ * section of its own until then): the role an invite grants when it picks
+ * none. Its value opens the role list and saves on the pick, as a settings
+ * pick does. "No role" is a real choice: it writes `null`, and a new member
+ * then holds only what Everyone gets. The choices are the phone's too
+ * (`defaultInviteRoleChoices`).
  */
-function DefaultInviteRoleCard({
+function DefaultInviteRoleRow({
   canManage,
   defaultInviteRoleId: configuredDefaultId,
   onSave,
@@ -164,74 +332,45 @@ function DefaultInviteRoleCard({
 }) {
   const rolesQuery = useRoles();
   const invitableQuery = useInvitableRoleIds({ enabled: canManage });
-
   const roles = useMemo(
     () => parseChapterRoles(rolesQuery.data),
     [rolesQuery.data],
   );
-  // A role holding `*` is no default: an invite can't grant it (the API
-  // answers 400). Nor is one the officer couldn't invite into themselves,
-  // ranked at or above them (#1830; the API answers 403), once
-  // `GET /v1/invites/roles` says which those are. One already configured
-  // stays listed, so the card names it rather than calling it gone, and the
-  // officer can pick another.
-  const invitableIds = invitableQuery.data;
-  const roleOptions = useMemo(() => {
-    const invitable = invitableIds ? new Set(invitableIds) : undefined;
-    return roles
-      .filter(
-        (role) =>
-          !role.everyone &&
-          (role.id === configuredDefaultId ||
-            (!role.locked && (invitable?.has(role.id) ?? true))),
-      )
-      .map(({ id, name }) => ({ id, name }))
-      .sort((first, second) => first.name.localeCompare(second.name));
-  }, [roles, configuredDefaultId, invitableIds]);
-
-  // The Everyone role (#4191) is what an invite with no default grants, so a
-  // chapter whose default names it reads as having none.
-  const everyoneId = roles.find((role) => role.everyone)?.id;
-  const defaultInviteRoleId =
-    configuredDefaultId !== null && configuredDefaultId === everyoneId
-      ? null
-      : configuredDefaultId;
-
-  // A configured role that is no longer in the catalog would render as "No
-  // default" and silently rewrite the setting on the next save. The API's
-  // `on delete set null` makes this rare, but a role renamed away between the
-  // two queries is enough — say so rather than paper over it.
-  const isDangling =
-    defaultInviteRoleId !== null &&
-    roleOptions.length > 0 &&
-    !roleOptions.some((role) => role.id === defaultInviteRoleId);
-
+  const { options, selectedId, dangling } = defaultInviteRoleChoices(
+    roles,
+    configuredDefaultId,
+    invitableQuery.data,
+  );
+  const selectedName =
+    selectedId === null
+      ? PEOPLE_SETTINGS_COPY.noDefaultInviteRole
+      : (options.find((role) => role.id === selectedId)?.name ?? "");
   // A configured role with no matching item (roles still loading, failed to
-  // load, or the role is gone) gets the empty value, so the trigger shows the
-  // placeholder. Handing Radix an id it has no item for draws an empty box.
-  const hasConfiguredItem =
-    defaultInviteRoleId !== null &&
-    roleOptions.some((role) => role.id === defaultInviteRoleId);
+  // load, or the role is gone) gets the empty value, so Radix never holds an
+  // id it has no item for.
   const pickerValue =
-    defaultInviteRoleId === null
+    selectedId === null
       ? NO_DEFAULT_INVITE_ROLE
-      : hasConfiguredItem
-        ? defaultInviteRoleId
+      : options.some((role) => role.id === selectedId)
+        ? selectedId
         : "";
-  const pickerPlaceholder = rolesQuery.isPending
-    ? "Loading roles…"
-    : rolesQuery.isError
-      ? "Roles could not load"
-      : "Pick a role";
 
   return (
-    <ProfileSection
-      id="settings-default-invite-role"
-      title="Default invite role"
-      hint="Used when an invite doesn't pick a role. With none, new members join with no role and get what Everyone gets. Changes are written to the chapter audit log."
-    >
-      <div className="space-y-2">
-        <Label htmlFor="default-invite-role">Role</Label>
+    <SettingsRow
+      // Settings search lands here (`settings-search.ts`).
+      id="default-invite-role"
+      icon={UserPlus}
+      label={PEOPLE_SETTINGS_COPY.defaultInviteRole}
+      description={
+        dangling ? (
+          <span className="text-warning">That role is gone. Pick another.</span>
+        ) : rolesQuery.isError ? (
+          <span className="text-destructive-text">
+            Roles could not load, so this can&apos;t change right now.
+          </span>
+        ) : undefined
+      }
+      control={
         <Select
           value={pickerValue}
           disabled={
@@ -241,32 +380,30 @@ function DefaultInviteRoleCard({
             void onSave(next === NO_DEFAULT_INVITE_ROLE ? null : next);
           }}
         >
-          <SelectTrigger id="default-invite-role" className="max-w-sm">
-            <SelectValue placeholder={pickerPlaceholder} />
+          <SelectTrigger
+            aria-label={PEOPLE_SETTINGS_COPY.defaultInviteRole}
+            className={SETTINGS_VALUE_TRIGGER}
+          >
+            <SelectValue
+              placeholder={
+                rolesQuery.isPending ? "Loading roles…" : "Pick a role"
+              }
+            >
+              {pickerValue === "" ? undefined : selectedName}
+            </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="end">
             <SelectItem value={NO_DEFAULT_INVITE_ROLE}>
-              {NO_DEFAULT_INVITE_ROLE_LABEL}
+              {PEOPLE_SETTINGS_COPY.noDefaultInviteRole}
             </SelectItem>
-            {roleOptions.map((role) => (
+            {options.map((role) => (
               <SelectItem key={role.id} value={role.id}>
                 {role.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {isDangling ? (
-          <p className="text-caption text-warning">
-            The configured default role no longer exists. Pick another, or leave
-            it. New invites join with no role until then.
-          </p>
-        ) : null}
-        {rolesQuery.isError ? (
-          <p className="text-caption text-destructive">
-            Roles could not load, so the default cannot be changed right now.
-          </p>
-        ) : null}
-      </div>
-    </ProfileSection>
+      }
+    />
   );
 }

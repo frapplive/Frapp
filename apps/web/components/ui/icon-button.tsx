@@ -34,8 +34,8 @@ import { cn } from "@/lib/utils";
  * accent goes"): a row action sits in the muted text tone and lights up on
  * hover, so a column of them never outshines the row.
  *
- * Size is the Small step of `foundations.md` §9's control size scale, 36 to a
- * mouse and 44 to a finger, wherever the control sits. It is set here rather
+ * Size is the Small step of `foundations.md` §9's control size scale, 28 to a
+ * mouse (36 until #6115) and 44 to a finger, wherever the control sits. It is set here rather
  * than inherited from Button's `icon` size so the step holds whichever way
  * that size moves.
  */
@@ -47,8 +47,9 @@ interface IconButtonProps extends Omit<
   label: string;
 }
 
-/** foundations.md §9's Small step: 36 to a mouse, 44 to a finger. */
-const SMALL_SQUARE = "h-9 w-9 pointer-coarse:h-11 pointer-coarse:w-11";
+/** foundations.md §9's Small step: 28 to a mouse, 44 to a finger. */
+const SMALL_SQUARE =
+  "h-control-small w-control-small pointer-coarse:h-11 pointer-coarse:w-11";
 
 const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   ({ label, title, variant = "ghost", className, ...props }, ref) => (

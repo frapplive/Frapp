@@ -212,6 +212,7 @@ export function MessageThreadScreen({
     roleColorFor,
     avatarFor: memberAvatarFor,
     refetch: refetchRoster,
+    rosterLoading,
   } = roster;
 
   const channelQuery = useChannel(channelId);
@@ -809,6 +810,7 @@ export function MessageThreadScreen({
             startsDay={placement.startsDay}
             viewerId={viewerId}
             nameFor={nameFor}
+            rosterLoading={rosterLoading}
             roleColorFor={roleColorFor}
             avatarFor={avatarFor}
             replyParent={replyParent}
@@ -835,6 +837,7 @@ export function MessageThreadScreen({
       byId,
       rootQuoted,
       nameFor,
+      rosterLoading,
       roleColorFor,
       avatarFor,
       blockState,

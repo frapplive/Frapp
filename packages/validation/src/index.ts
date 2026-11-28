@@ -47,6 +47,8 @@ export * from "./beta-off-modules";
 // A member's birthday (#4959): its rules, its words, and where it falls.
 export * from "./birthday";
 export * from "./channel-access-lists";
+// A channel's settings on both apps (#6031).
+export * from "./channel-settings-copy";
 export * from "./chapter-branding";
 export * from "./chapter-config";
 export * from "./chapter-goals";
@@ -83,6 +85,7 @@ export * from "./council";
 // Affiliations and PNM records (#5974): link states, offers, codes, copy.
 export * from "./council-chapters";
 // A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-key";
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
@@ -168,6 +171,8 @@ export * from "./meeting-recording";
 export * from "./meeting-start";
 // ── Meeting minutes (#4312) ──────────────────────────────────────────────────
 export * from "./meetings";
+// Both apps' Member fields rules: picker order, a new field's checks and body (#6029).
+export * from "./member-field-rules";
 // Member nudges (#4781): the one card on Activity the AI writes for a member.
 export * from "./member-nudge";
 // ── `@`-mention resolution (C1 of #937) ──────────────────────────────────────
@@ -223,6 +228,8 @@ export * from "./ops-nudges";
 export * from "./order-number";
 // s02's "Already in a chapter?" line, shared by web `/join` and the phone.
 export * from "./other-account";
+// The People settings pages' words, web and the phone (#6029).
+export * from "./people-settings-copy";
 // What each system permission is called and which module it belongs to. The
 // API serves it at `GET /v1/roles/permissions-catalog`; web and mobile read
 // the same list from here (#4069).
@@ -341,6 +348,7 @@ export {
   normalizeExtension,
   type UploadKind,
 } from "./upload-allowlists";
+export * from "./web-addresses";
 export * from "./week-start";
 export * from "./welcome-card";
 // Point-in-polygon, shared by the API's geofence check and the phone's s10 screen.

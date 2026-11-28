@@ -1,7 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { pushSameRouteLink } from "@/lib/address/address-links";
+import {
+  SettingsTabAddress,
+  useSettingsRowsAddress,
+} from "@/components/settings/settings-rows-address";
 import {
   useCouncil,
   useCurrentChapter,
@@ -95,19 +100,10 @@ export function CouncilSettingsPage() {
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
   const tabParam = rawTab ? (TAB_ALIASES[rawTab] ?? rawTab) : null;
-  const [activeTab, setActiveTab] = useState(tabParam ?? "council");
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- follow `?tab=` deep links, as Chapter settings does
-    if (tabParam) setActiveTab(tabParam);
-  }, [tabParam]);
-  const changeTab = useCallback((next: string) => {
-    setActiveTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    url.searchParams.delete("tier");
-    url.searchParams.delete("role");
-    window.history.replaceState(null, "", url.toString());
-  }, []);
+  // The row on screen is the address's, and a row is a step Back returns
+  // from, as on Chapter settings (#6049).
+  const activeTab = tabParam ?? "council";
+  const { changeTab, onRowClick } = useSettingsRowsAddress();
 
   if (chapterQuery.isError && !chapterQuery.data) {
     return (
@@ -134,14 +130,24 @@ export function CouncilSettingsPage() {
     <Tabs
       value={shownTab}
       onValueChange={changeTab}
+      activationMode="manual"
       className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10"
     >
+      <SettingsTabAddress
+        rawTab={rawTab}
+        resolvedTab={activeTab}
+        shownTab={shownTab}
+      />
       <SettingsRail
         visibleTabs={visibleTabs}
         groupLabels={{ chapter: COPY.group }}
         search={false}
+        onRowClick={(value) => onRowClick(value, shownTab)}
       />
-      <div className="w-full min-w-0 max-w-[960px] flex-1">
+      <div
+        className="w-full min-w-0 max-w-[960px] flex-1"
+        onClickCapture={pushSameRouteLink}
+      >
         <TabsContent value="council" className="mt-0">
           <CouncilProfileTab />
         </TabsContent>

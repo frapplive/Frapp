@@ -184,12 +184,7 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
   return (
     <Card className={cn(MESSAGE_CARD)}>
       <div className="flex items-center justify-between gap-2">
-        <div
-          className={cn(
-            EYEBROW,
-            "flex items-center gap-1.5 text-muted-foreground",
-          )}
-        >
+        <div className={cn(EYEBROW, "flex items-center gap-1.5 text-muted")}>
           <EventsGlyph className="h-4 w-4" /> Event
         </div>
         {eventCardRequiresViewer(payload, requiredOf) ? (

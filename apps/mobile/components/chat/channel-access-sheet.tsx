@@ -69,11 +69,17 @@ export interface ChannelAccessSheetProps {
   locked?: readonly string[];
   /** Who passes every list, said under the switch; the President by default. */
   alwaysLine?: string;
+  /**
+   * The sheet closed, however it closed: a channel's own settings screen
+   * saves the answer then (#6031), where the New channel form saves with
+   * its own button.
+   */
+  onDismiss?: () => void;
 }
 
 /**
  * Who can see a channel, or who can post in it (#3702), on the phone: a tall
- * step stacked over the Edit channel or New channel sheet, as Who's coming
+ * step stacked over Channel settings or the New channel sheet, as Who's coming
  * stacks over New event. Same two answers as web's Chat settings
  * (`channel-access-field.tsx`): Everyone, or chosen tiers and roles.
  *
@@ -104,6 +110,7 @@ export const ChannelAccessSheet = forwardRef<
       backgroundStyle={backgroundStyle}
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
+      onDismiss={props.onDismiss}
     >
       <SheetBackToClose onClose={close} />
       {/* gorhom mounts a modal's children only while it is presented, so the

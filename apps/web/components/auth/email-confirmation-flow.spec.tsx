@@ -317,3 +317,15 @@ describe("other sign-in refusals", () => {
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
   });
 });
+
+describe("the sign-in page and the shell cache (#5049)", () => {
+  it("clears every member's kept shell when it opens", () => {
+    const key = "frapp.shell.v1|auth-a|chapter-1|roster";
+    localStorage.setItem(key, "{}");
+    localStorage.setItem("frapp.nav.collapsed", "1");
+    render(<SignInScreen />);
+    expect(localStorage.getItem(key)).toBe(null);
+    expect(localStorage.getItem("frapp.nav.collapsed")).toBe("1");
+    localStorage.clear();
+  });
+});

@@ -119,7 +119,7 @@ export function FormCard({
     <Card
       className={cn(MESSAGE_CARD, "w-full min-w-[min(20rem,100%)] max-w-md")}
     >
-      <p className={cn(EYEBROW, "text-muted-foreground")}>Form</p>
+      <p className={cn(EYEBROW, "text-muted")}>Form</p>
       <div className="mt-2 text-base font-bold">{payload.title}</div>
       {payload.description ? (
         <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-caption text-muted-foreground">

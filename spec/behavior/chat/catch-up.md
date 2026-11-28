@@ -238,7 +238,7 @@ into paid ops modules" this artifact exists to create:
 | Section | CTA | Destination |
 | --- | --- | --- |
 | Events this week | View schedule | `/events` |
-| Overdue tasks | Open tasks | `/activity` on web (the Tasks page folded into Activity in #5948); the phone's task board |
+| Overdue tasks | Open tasks | `/activity` on web and the phone (the Tasks page and the phone's task board folded into Activity in #5948) |
 | Awaiting approval | Review queue | `/activity` (the one place hours are reviewed; `/service` until #5950 made it a redirect to the member's own log) |
 | Overdue dues | Review invoices | `/billing` |
 | New members | View directory | `/members` |

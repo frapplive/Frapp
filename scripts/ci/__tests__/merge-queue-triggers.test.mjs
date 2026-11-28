@@ -169,4 +169,16 @@ describe("queue runs take the path and diff arms", () => {
     assert.match(order.body, /ORDER_BASE: \$\{\{ steps\.base\.outputs\.ref \}\}/);
     assert.match(order.body, /RANGE="\$ORDER_BASE\.\.\$HEAD_SHA"/);
   });
+
+  it("migration-order is handed the commit the queue built the entry on", () => {
+    // Without it the queue clause never runs: the gate measures only against
+    // main's tip, where the entries ahead read as introduced and are never
+    // compared with this PR's migrations. That let #5925 and #5923 merge in
+    // the wrong order on 2026-11-24 (#4795).
+    const [step] = workflowSteps(join(WORKFLOW_DIR, "migration-drift-gate.yml")).filter(
+      (s) => s.jobId === "migration-order" && s.name === "Check migration ordering",
+    );
+    assert.ok(step, "migration-order has a Check migration ordering step");
+    assert.match(step.body, /ORDER_GATE_QUEUE_BASE_REF: \$\{\{ github\.event\.merge_group\.base_sha \}\}/);
+  });
 });

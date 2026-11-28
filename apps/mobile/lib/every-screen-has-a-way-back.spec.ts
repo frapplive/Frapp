@@ -20,11 +20,9 @@ const BACK_CONTROL =
 /** Routes that draw no screen of their own, and why. */
 const NO_SCREEN: Readonly<Record<string, string>> = {
   ask: "opens the Ask sheet over Chat home and dismisses back to it",
-  // Until its screen lands (#6031): registered ahead of it, since the stack
-  // layout is frozen. The screen's PR takes this line out.
-  "channel-settings": "pops down to Chat home and draws nothing yet",
   chat: "forwards to Chat home or a thread and draws nothing",
   minutes: "forwards to Documents on the Minutes file type and draws nothing",
+  tasks: "redirects to the Activity tab, where tasks live (#5948), and draws nothing",
 };
 
 function importedComponents(source: string): string[] {

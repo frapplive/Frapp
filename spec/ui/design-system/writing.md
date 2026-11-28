@@ -426,8 +426,10 @@ It is drawn only for `points:view_all`, so it has no denied or permission-check 
 | Permission denied | — | `Your role can't manage roles. Ask your chapter president for access.` |
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage roles.` |
 | Offline | `Roles unavailable offline` | `Reconnect to load the chapter's roles and edit their permissions.` |
-| Delete role confirmation | `Delete <name>?` | `Members assigned this role lose its permissions immediately. This cannot be undone.` · confirm `Delete role` |
-| Transfer presidency confirmation | `Transfer presidency?` | `The President role moves to the selected member immediately and is removed from you. Only the current president can undo it.` · confirm `Transfer presidency` |
+| Delete role confirmation | `Delete <name>?` | `Members holding this role lose what it gives them right away. This can't be undone.` · confirm `Delete role` (on web and the phone, `deleteRoleConfirm`) |
+| Delete tier confirmation | `Delete <name>?` | `It has no roles left, so nobody loses anything. The other tiers keep their order.` · confirm `Delete tier`, in the chapter's word for a tier (`deleteTierConfirm`) |
+| Delete group confirmation | `Delete <name>?` | `Its members stay in the chapter. A channel that lists it stops letting them in through it.` · confirm `Delete <name>` (`deleteGroupConfirm`) |
+| Transfer presidency confirmation | `Transfer presidency to Jordan Reyes?` | `You lose the President role when they get it. Only the new President can move it again.` · confirm `Transfer presidency` (#6029: it names who gets it, on web and the phone, `transferPresidencyConfirm`) |
 
 The confirmation rows below and under Roles & Permissions are what is left of the five `window.confirm` strings the Settings & Roles slice converted (the custom-role delete went with #4075) to [`confirm-dialog.tsx`](../../../apps/web/components/shared/confirm-dialog.tsx).
 A browser dialog's text was never in this table because it was never the product's; an in-product one is, and `writing.md` §2's verb-plus-object CTA rule governs the button.
@@ -441,7 +443,7 @@ The rollover is the one that is **not** destructive-toned — it archives rather
 | Error | `Couldn't load chapter settings` | the load-failure line (§ copy rules), then `Changes you make here update every surface in the dashboard.` |
 | No chapter | `Chapter settings` | `Select an active chapter to edit its branding, semester state, or billing configuration.` |
 | Semester empty | — | `No archived semesters yet. Each rollover adds one.` (one line) |
-| Custom fields empty | — | `No custom fields yet.` (one line; the add form sits right under it) |
+| Custom fields empty | — | `No fields yet. Members fill these in under More details.` (one line, in the list's group; "Add a field" is the row under it) |
 | Nothing for this role (the settings rail) | — | `Nothing in Settings for your role. Officer tools come with an officer role; ask your chapter president if you need one.` (one line) |
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can start a new semester.` |
 | Accent hex needed | — | `Enter a hex code like #5AA9E6 to save an accent color.` (muted on an empty field, warning once something unsavable is typed) |
@@ -721,16 +723,15 @@ Channel seeding happens at chapter onboarding and has no billing prerequisite; [
 
 ### Chat Admin — channels and categories (dashboard)
 
-The channel structure in Settings → Chat → Chat admin (`/settings?tab=chat&page=chat-admin`), above the report queue.
-Its states stand where both of its sections would be, so they name channels, not the page: the report queue below them reads and fails on its own.
+The Channels group in Settings → Chat → Chat admin (`/settings?tab=chat&page=chat-admin`), and one channel's page and its pins page (`&channel=<id>`, `&page=pins`; #6031).
+Its states stand where the group would be, so they name channels, not the page: the Look and Moderation rows under it, and the report queue's own page, read and fail on their own.
 
 | State | Title | Description |
 |---|---|---|
 | Loading | — | `Loading channels...` |
-| Empty (channels) | — | `No channels yet. Create the first one above.` (one line) |
-| Empty (categories) | — | `No categories yet. Channels without one are listed under Uncategorized.` (one line) |
+| Empty (channels) | — | `No channels yet.` (one line, under the group, whose last row is `New category`) |
 | Empty (a category opened out) | — | `No channels in this category.` (one line, under the category's row) |
-| Nothing selected (edit pane) | — | `Pick a channel to edit it.` (one line) |
+| Channel gone | — | `This channel isn't here anymore. It may have been deleted.` · `Chat` (a channel's page whose channel is not in the list) |
 | Loading (pins) | — | `Loading pins...` |
 | Empty (pins) | — | `Nothing pinned. Pin a message from the channel.` (one line) |
 | Stale (pins) | — | `Couldn't refresh the pins. These are the last ones that loaded.` · `Try again` (a background refresh failed; the loaded pins stay) |
@@ -739,15 +740,15 @@ Its states stand where both of its sections would be, so they name channels, not
 | Loading (permission grid) | — | `Loading permissions…` |
 | Unavailable (permission grid) | — | `Couldn't load the permission list, which needs a role that can see the full directory. Your current selections are unaffected.` (nothing loaded; a failed refresh keeps the loaded grid) |
 | Offline (permission grid) | — | `Can't load the permission list while offline. Existing selections are unaffected; reconnect to change them.` |
-| Error | `Couldn't load channels` | the load-failure line (§ copy rules) |
+| Error | `Couldn't load channels` (the Chat page) / `Couldn't load the channel` (a channel's page) | the load-failure line (§ copy rules) |
 | Stale | — | `Couldn't refresh the channels. These are the last ones that loaded.` · `Try again` (a background refresh failed; the loaded channels and categories stay) |
-| Offline | `Channels unavailable offline` | `Reconnect to manage channels, categories and pins.` |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage chat channels.` |
+| Offline | `Channels unavailable offline` | `Reconnect to manage channels and categories.` (the Chat page); `Reconnect to change this channel's settings.` (a channel's page) |
+| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage chat channels.` (the Chat page); `Reconnect to check whether you can change this channel's settings.` (a channel's page) |
 | Permission denied | — | `Your role can't manage channels. Ask your chapter president for access.` |
 
 The permission grid is the role-gated channel's, shared with the import wizard's channel step, which shows the same three lines.
 
-Implementation: inline in `apps/web/components/chat-admin/chat-admin-page.tsx`; the permission grid's in `apps/web/components/shared/permission-checkbox-grid.tsx`.
+Implementation: inline in `apps/web/components/chat-admin/chat-admin-page.tsx` (the Chat page) and `channel-settings-page.tsx` (a channel's page and its pins); the permission grid's in `apps/web/components/shared/permission-checkbox-grid.tsx`.
 
 ### Chat Admin — reported messages (dashboard)
 
@@ -1108,7 +1109,8 @@ The filter note below is web's alone and lives in `apps/web/components/chat/chan
 | Save failed | `Couldn't save your channel list` | `Nothing changed. Check your connection and try again.` A mobile alert; a toast on web | `SIDEBAR_SAVE_FAILED_TITLE`, `SIDEBAR_SAVE_FAILED_BODY` |
 | Chapter order (web, `channels:manage`, #4178) | — | An empty category's heading carries `Drag channels here`; a drag or an Alt+Arrow move is announced as `<name> moved to <n> of <total> in <section>`; a failed save toasts `Couldn't save the channel order` with `Nothing changed. Check your connection and try again.` and the rows go back | `EMPTY_CATEGORY_HINT`, `REORDER_SAVE_FAILED_TITLE`, `REORDER_SAVE_FAILED_BODY` in `apps/web/components/chat/channel-list.tsx` |
 | New channel from the list (web, `channels:manage`, #3838) | — | The + beside a heading is named `New channel` on the Channels heading and `New channel in <category>` on a category's; it opens `Create a channel` | `newChannelLabel` in `apps/web/components/chat/channel-list.tsx` |
-| Channel sheets (mobile, `channels:manage`, #3838) | — | The + on an s04 heading is named as on web. The sheet is titled `New channel` or `Edit channel`, with `Name`, `Description` (`What it's for`), `Category` (`No category` first) and, when new, `Private channel` with `Only people you add can see it, starting with you. This can't be changed later.`; then `Who can see and post` (#3702) with two rows, `Who can see` and `Who can post`, each valued as web's summaries read (`Everyone`, `Everyone who can see it`, or the names); under them `Matches <category>. Changes to it reach this channel too.` (edit), `Same as <category>.` (new), or `Custom. <category> is set differently.` with `Match <category>`; a private channel instead reads `Private. Only the people added to it can see it and post.`; an empty chosen list refuses Save with `Add a tier or role to each chosen list, or pick Everyone.` (as web); the button is `Create channel` or `Save`. Each row opens a step titled `Who can see` or `Who can post`, closed with `Done`: `Everyone` / `Chosen roles`, a line (`Everyone in the chapter can see it.`, `Everyone who can see it can post.`, `Pick a tier or role. Until you do, only the President can see it.`, or `Reaches 14 people. The President can always see it.`), `Find a tier or role`, and `Tiers` and `Roles` rows each with `N people`. `Arrange channels` is titled so, under `Drag a channel by its handle. Everyone in the chapter sees this order.`; a category heading's arrows are `Move <category> up` and `Move <category> down` (#4478). Failed saves read `Couldn't save the channel order. Nothing changed. Check your connection and try again.` and `Couldn't move the category. Nothing changed. Check your connection and try again.` | `apps/mobile/components/chat/channel-form-sheet.tsx`, `apps/mobile/components/chat/channel-access-sheet.tsx`, `apps/mobile/app/(app)/arrange-channels.tsx` |
+| Channel sheets (mobile, `channels:manage`, #3838) | — | The + on an s04 heading is named as on web. The sheet is titled `New channel`, with `Name`, `Description` (`What it's for`), a `Category` row opening the option sheet (`No category` first; filter chips until #6031) and `Private channel` with `Only people you add can see it, starting with you. This can't be changed later.`; then `Who can see and post` (#3702) with two rows, `Who can see` and `Who can post`, each valued as web's summaries read (`Everyone`, `Everyone who can see it`, or the names); under them `Same as <category>.`; a private one instead reads `You can add people once it's created.`; an empty chosen list refuses Create with `Add a tier, role or group to each chosen list, or pick Everyone.` (as web); the button is `Create channel`. Editing a channel is its own screen since #6031, in the words below (Channel settings). Each row opens a step titled `Who can see` or `Who can post`, closed with `Done`: `Everyone` / `Chosen roles`, a line (`Everyone in the chapter can see it.`, `Everyone who can see it can post.`, `Pick a tier or role. Until you do, only the President can see it.`, or `Reaches 14 people. The President can always see it.`), `Find a tier or role`, and `Tiers` and `Roles` rows each with `N people`. `Arrange channels` is titled so, under `Drag a channel by its handle. Everyone in the chapter sees this order.`; a category heading's arrows are `Move <category> up` and `Move <category> down` (#4478). Failed saves read `Couldn't save the channel order. Nothing changed. Check your connection and try again.` and `Couldn't move the category. Nothing changed. Check your connection and try again.` | `apps/mobile/components/chat/channel-form-sheet.tsx`, `apps/mobile/components/chat/channel-access-sheet.tsx`, `apps/mobile/app/(app)/arrange-channels.tsx` |
+| Channel settings (both apps, `channels:manage`, #6031) | `#<name>` | `Name`, `Description`, `Save channel` (only the typed fields; `Revert changes` beside it on web while one has changed). `Access`: `Category` (`No category`), `Who can see`, `Who can post`, `Match <category>`, footnote `Matches <category>. Changes to it reach this channel too.` or `Set differently from <category>.`; a private channel reads `Only people added` and `Everyone in it`. `Defaults`: `Default notifications` (`Standard (<level>)`, `Every message`, `Only @mentions`, `Mute`), `Chapter default channel` with `Chat opens here when a member has no last channel.`, `Leave out of Activity` with `Its sign-up links stay off Activity.`, footnote `A member's own notification level always wins.` `Moderation`: `Pinned messages`, `Reports` (web; `None open` or `<n> open`). Then `Delete channel`. A save that fails reads `Couldn't save the channel.` | `CHANNEL_SETTINGS_COPY` in `packages/validation/src/channel-settings-copy.ts` |
 
 **"Pin to top", never a bare "Pin".**
 The channel menu already has a `Pinned` panel for pinned *messages*, which the chapter shares.

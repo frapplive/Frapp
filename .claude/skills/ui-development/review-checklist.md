@@ -42,8 +42,7 @@ The rule Paul wrote this for: never fix only the screen he named.
 2. Find every instance on both apps. Grep for the component or class that draws it, list the routes in
    `apps/web/app/` and `apps/mobile/app/`, and look at the screens that do the same job (every list
    page, every create form, every record page).
-3. Fix every instance this PR's screens own. For one held by another open PR (one open PR per screen,
-   `AGENTS.md`), message that thread or note it on its PR. For the rest, file one issue per pattern
+3. Fix every instance this PR's screens own. For one another open PR is changing, message that thread or note it on its PR. For the rest, file one issue per pattern
    ([`file-follow-up`](../file-follow-up/SKILL.md)) listing every file.
 4. Put the table in the PR body: pattern, every place found, and fixed here / held by #N / filed as #N.
 

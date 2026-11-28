@@ -343,8 +343,8 @@ export function UpNextStrip({
             onCard
             accessibilityRole="button"
             accessibilityLabel={`${task.title}, ${taskDue}`}
-            accessibilityHint="Open the task board."
-            onPress={() => router.navigate("/tasks")}
+            accessibilityHint="Opens Activity, where your tasks are."
+            onPress={() => router.navigate("/activity")}
             style={styles.row}
           >
             <LeadTile size="lead" on="card" testID="up-next-task-tile">
@@ -386,7 +386,7 @@ function createStyles(tokens: SignetTokens) {
     // The shared eyebrow, as Chat home's section headings draw it.
     eyebrow: {
       ...eyebrowStyle(tokens),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     // The Activity row's frame inside a card: lead tile, two lines, chevron.
     row: {

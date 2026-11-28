@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { isEmptyChannelAccessChoice } from "@repo/hooks/channel-access";
+import { CHANNEL_SETTINGS_COPY } from "@repo/validation";
 import { useKeptFormDraft } from "@repo/hooks/kept-drafts";
 import {
   useCategories,
@@ -229,8 +230,7 @@ export function CreateChannelSheet({
     if (accessIncomplete) {
       toast({
         variant: "destructive",
-        description:
-          "Add a tier, role or group to each chosen list, or pick Everyone.",
+        description: CHANNEL_SETTINGS_COPY.accessIncomplete,
       });
       return;
     }
@@ -310,7 +310,9 @@ export function CreateChannelSheet({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_CATEGORY}>Uncategorized</SelectItem>
+                  <SelectItem value={NO_CATEGORY}>
+                    {CHANNEL_SETTINGS_COPY.noCategory}
+                  </SelectItem>
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.name}

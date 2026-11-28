@@ -4,7 +4,7 @@ import {
   CHAT_LINK_MESSAGE_PARAM,
   CHAT_LINK_PATH,
 } from "./message-link";
-import { appLinkParams } from "./native-app";
+import { appLinkParams, isOnOneOfOrigins } from "./native-app";
 import {
   LINK_NOT_WORKING_CAPTION,
   normalizeProofLink,
@@ -408,15 +408,6 @@ export function frappLinkWebHref(link: FrappLink): string {
   }
 }
 
-function sameOrigin(url: URL, origins: readonly string[]): boolean {
-  return origins.some((origin) => {
-    try {
-      return new URL(origin).origin === url.origin;
-    } catch {
-      return false;
-    }
-  });
-}
 
 /**
  * The record a pasted Frapp address names, or `null` for any other address
@@ -452,7 +443,7 @@ export function parseFrappAppLink(
   } catch {
     return null;
   }
-  if (!sameOrigin(url, all)) return null;
+  if (!isOnOneOfOrigins(url, all)) return null;
   const minutes = /^\/meetings\/([^/]+)\/?$/.exec(url.pathname);
   if (minutes?.[1]) {
     let meetingId: string;

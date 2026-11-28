@@ -238,15 +238,11 @@ describe("app stack", () => {
     const pushed = stack()
       .screens.map((screen) => screen.props.name as string)
       // `ask` only redirects to Chat home, `chat` (a message's link,
-      // #3723) only hands off to the thread, and `minutes` only forwards to
-      // Documents on the Minutes file type (#5949), and `channel-settings`
-      // pops down to Chat home until its screen lands (#6031): none draws a
-      // screen.
+      // #3723) only hands off to the thread, `tasks` only redirects to
+      // Activity (#5948), and `minutes` only forwards to Documents on the
+      // Minutes file type (#5949): none draws a screen.
       .filter(
-        (name) =>
-          !["(tabs)", "ask", "chat", "minutes", "channel-settings"].includes(
-            name,
-          ),
+        (name) => !["(tabs)", "ask", "chat", "minutes", "tasks"].includes(name),
       );
 
     // A route that only re-exports a screen kept outside `app/` (so its

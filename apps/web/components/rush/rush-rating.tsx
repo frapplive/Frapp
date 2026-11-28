@@ -46,7 +46,7 @@ export function RushRatingControl({
             aria-label={`${step} of ${RUSH_RATING_MAX}`}
             onClick={() => onRate(step)}
             className={cn(
-              "grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-card-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
+              "grid h-control-row w-control-row place-items-center rounded-md text-muted-foreground hover:bg-card-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:w-11",
               lit && "text-foreground",
               FOCUS_RING,
             )}

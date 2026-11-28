@@ -21,6 +21,8 @@ import {
 import { useClaimChapterSync } from "@/lib/auth/use-claim-chapter-sync";
 import { wipeFirstChunkCache } from "@/lib/chat/first-chunk-wipe";
 import { clearCachedAccent } from "@/lib/theme/accent-cache";
+import { clearShellCache } from "@/lib/shell-cache/shell-cache-clear";
+import { ShellCacheSync } from "@/lib/shell-cache/shell-cache-sync";
 import { endBulkSessions } from "@/lib/backwork-bulk/session";
 import {
   handleRejectedSession,
@@ -60,6 +62,12 @@ import {
  *
  * Kept form drafts (`@repo/hooks/kept-drafts`) are dropped here too.
  *
+ * So is the shell cache (`lib/shell-cache/`, #5049): the last roster,
+ * permissions, chapter head, events list and the member's own name and photo,
+ * kept per auth uid and chapter so a revisit paints them first (Activity is
+ * not kept: #6131). Like the first chunk, keying is the boundary
+ * and this clear is hygiene; unlike it, the clear is synchronous.
+ *
  * Bulk backwork upload batches (`lib/backwork-bulk/session.ts`) live outside
  * React for the life of the tab. They end themselves the moment the chapter
  * store moves; the uid effect below ends the ones another account left.
@@ -76,6 +84,7 @@ function dropCacheWhenIdentityChanges(
   queryClient.clear();
   void wipeFirstChunkCache();
   clearCachedAccent();
+  clearShellCache();
   // Kept form drafts carry the chapter in their keys already; this drops
   // another account's or chapter's from memory too (#4593).
   dropAllKeptDrafts();
@@ -98,20 +107,21 @@ export function FrappProvider({ children }: { children: React.ReactNode }) {
 
   const client = useMemo(() => {
     const created = createFrappClient({
-        // Bare origin — the generated SDK paths already carry `/v1`.
-        baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
-        // A refresh that can't reach Auth fails the read as a dropped
-        // connection instead of sending it with no token (FRAPP-API-E).
-        getAuthToken: () => readRequestToken(createSupabaseBrowserClient()),
-        getChapterId: () => activeChapterId,
-        // A 401 means the API no longer accepts this session (an account
-        // deleted elsewhere, most often). One sign-out owns that outcome for
-        // every screen: `lib/auth/rejected-session.ts`.
-        onUnauthorized: () => void handleRejectedSession(),
-        // An open or a return to the tab fires its reads at once; the ones
-        // `GET /v1/bootstrap` covers go out as one request (#4709, #3728).
-        batchFirstScreenReads: true,
-      });
+      // Bare origin — the generated SDK paths already carry `/v1`.
+      baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
+      // A refresh that can't reach Auth fails the read as a dropped
+      // connection instead of sending it with no token (FRAPP-API-E).
+      getAuthToken: () => readRequestToken(createSupabaseBrowserClient()),
+      getChapterId: () => activeChapterId,
+      // A 401 means the API no longer accepts this session (an account
+      // deleted elsewhere, most often). One sign-out owns that outcome for
+      // every screen: `lib/auth/rejected-session.ts`.
+      onUnauthorized: () => void handleRejectedSession(),
+      // An open or a return to the tab fires its reads at once; the ones
+      // `GET /v1/bootstrap` covers go out together, the shell's and the page's
+      // as two calls at once (#4709, #3728, #5049).
+      batchFirstScreenReads: true,
+    });
     // "View as a role" (#4072) is for looking: while it runs, a write the
     // officer starts is answered here with a refusal the error map words
     // ("Exit the preview to make changes"), and never reaches the API. Read
@@ -129,7 +139,8 @@ export function FrappProvider({ children }: { children: React.ReactNode }) {
           JSON.stringify({
             statusCode: 403,
             code: ROLE_PREVIEW_REFUSAL_CODE,
-            message: "Viewing as a role; writes are off until the preview ends.",
+            message:
+              "Viewing as a role; writes are off until the preview ends.",
           }),
           { status: 403, headers: { "content-type": "application/json" } },
         );
@@ -221,7 +232,12 @@ export function FrappProvider({ children }: { children: React.ReactNode }) {
       userId={authUserId ?? null}
     >
       <PermissionPreviewProvider permissions={preview?.permissions ?? null}>
-        {children}
+        <ShellCacheSync
+          authUserId={authUserId ?? null}
+          chapterId={activeChapterId}
+        >
+          {children}
+        </ShellCacheSync>
       </PermissionPreviewProvider>
     </FrappClientProvider>
   );

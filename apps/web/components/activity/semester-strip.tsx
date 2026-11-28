@@ -11,8 +11,12 @@ import { Skeleton } from "@/components/shared/async-states";
 import { ProgressRing } from "@/components/shared/progress-ring";
 import { SectionLabel } from "@/components/shared/section-label";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { standingHref } from "@/components/standing/standing-doors";
+import {
+  standingHref,
+  type StandingDoor,
+} from "@/components/standing/standing-doors";
 import { cn } from "@/lib/utils";
+import { openStandingDoor } from "@/components/standing/open-standing-door";
 
 /**
  * What each number opens: the member's own panel for it on their Profile
@@ -80,6 +84,11 @@ export function SemesterStrip({
             <Link
               href={HREF[gauge.id]}
               scroll={false}
+              onClick={
+                gauge.id === "required_events"
+                  ? undefined
+                  : (event) => openStandingDoor(event, gauge.id as StandingDoor)
+              }
               aria-label={gauge.spokenLabel}
               data-testid={`activity-standing-${gauge.id}`}
               className={cn(

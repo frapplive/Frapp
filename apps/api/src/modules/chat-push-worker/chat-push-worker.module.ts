@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ChatPushWorkerService } from '../../application/workers/chat-push-worker.service';
+import { ApiWakeTargetService } from '../../application/workers/api-wake-target.service';
+import { SupabaseApiWakeRepository } from '../../infrastructure/supabase/repositories/supabase-api-wake.repository';
+import { API_WAKE_REPOSITORY } from '#domain/repositories/api-wake.repository.interface';
 import { SupabaseChatNotificationPreferenceRepository } from '../../infrastructure/supabase/repositories/supabase-chat-notification-preference.repository';
 import { SupabaseChatPushDispatchRepository } from '../../infrastructure/supabase/repositories/supabase-chat-push-dispatch.repository';
 import { SupabaseChatChannelRepository } from '../../infrastructure/supabase/repositories/supabase-chat-channel.repository';
@@ -50,6 +53,10 @@ import { ProfilePhotoModule } from '../profile-photo/profile-photo.module';
   ],
   providers: [
     ChatPushWorkerService,
+    // Records this API's address so a message sent while it sleeps wakes it
+    // (#6123); the push worker then catches up on boot.
+    ApiWakeTargetService,
+    { provide: API_WAKE_REPOSITORY, useClass: SupabaseApiWakeRepository },
     {
       provide: CHAT_NOTIFICATION_PREFERENCE_REPOSITORY,
       useClass: SupabaseChatNotificationPreferenceRepository,

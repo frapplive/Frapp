@@ -792,7 +792,7 @@ describe("AskProposal", () => {
     expect(screen.queryByRole("button", { name: CONFIRM })).toBeNull();
     expect(
       screen
-        .getByRole("link", { name: ACT_COPY.open_tasks })
+        .getByRole("link", { name: ACT_COPY.open_activity })
         .getAttribute("href"),
     ).toBe("/activity");
   });

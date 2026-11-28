@@ -165,6 +165,40 @@ export function CakeGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   );
 }
 
+/*
+ * A channel's settings (#6031): Lucide's `Folder`, `Eye` and `Pin`, with
+ * `MessageSquare` and `Bell` below, the icons web's channel page draws on the
+ * same rows.
+ */
+
+export function FolderGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+export function EyeGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+        {...detail}
+      />
+      <Circle cx={12} cy={12} r={3} {...detail} />
+    </Frame>
+  );
+}
+
 /** Lucide's `Bell`. */
 export function BellGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
   const { detail } = paint({ color });
@@ -173,6 +207,20 @@ export function BellGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
       <Path d="M10.268 21a2 2 0 0 0 3.464 0" {...detail} />
       <Path
         d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+/** Lucide's `Pin`. */
+export function PinGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M12 17v5" {...detail} />
+      <Path
+        d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"
         {...detail}
       />
     </Frame>
@@ -414,6 +462,69 @@ export function HashGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
       <Path d="M4 15h16" {...detail} />
       <Path d="M10 3 8 21" {...detail} />
       <Path d="M16 3l-2 18" {...detail} />
+    </Frame>
+  );
+}
+
+/** Chapter settings → Member fields (#6029): Lucide's `IdCard`. */
+export function IdCardGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M16 10h2" {...detail} />
+      <Path d="M16 14h2" {...detail} />
+      <Path d="M6.17 15a3 3 0 0 1 5.66 0" {...detail} />
+      <Circle cx={9} cy={11} r={2} {...detail} />
+      <Rect x={2} y={5} width={20} height={14} rx={2} {...detail} />
+    </Frame>
+  );
+}
+
+/*
+ * A member field's type, at the start of its row (#6029), web's `TYPE_ICON`
+ * (`settings-fields-tab.tsx`): Text is `Type`, Number and Decimal are
+ * `Hash`, and these three are Lucide's `Phone`, `List` (Pick one) and
+ * `ToggleLeft` (Yes or no).
+ */
+
+export function PhoneGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path
+        d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
+        {...detail}
+      />
+    </Frame>
+  );
+}
+
+export function ListGlyph({ color, size = DEFAULT_SIZE }: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Path d="M3 5h.01" {...detail} />
+      <Path d="M3 12h.01" {...detail} />
+      <Path d="M3 19h.01" {...detail} />
+      <Path d="M8 5h13" {...detail} />
+      <Path d="M8 12h13" {...detail} />
+      <Path d="M8 19h13" {...detail} />
+    </Frame>
+  );
+}
+
+export function ToggleLeftGlyph({
+  color,
+  size = DEFAULT_SIZE,
+}: SettingsGlyphProps) {
+  const { detail } = paint({ color });
+  return (
+    <Frame size={size}>
+      <Circle cx={9} cy={12} r={3} {...detail} />
+      <Rect x={2} y={5} width={20} height={14} rx={7} {...detail} />
     </Frame>
   );
 }

@@ -175,10 +175,10 @@ describe("PointsCard", () => {
     );
     const glyph = tree.root.findByType(PointsGlyph);
     expect(glyph.props.focused).toBe(false);
-    expect(glyph.props.muted).toBe(tokens.color.text.mutedForeground);
+    expect(glyph.props.muted).toBe(tokens.color.text.muted);
     expect(glyph.props.accent).not.toBe("#C49A3A");
     expect(flatStyle(textNode(tree, "Points").props.style).color).toBe(
-      tokens.color.text.mutedForeground,
+      tokens.color.text.muted,
     );
   });
 

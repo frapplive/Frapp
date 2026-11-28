@@ -137,7 +137,7 @@ const activity = vi.hoisted(() => ({
 }));
 
 /**
- * The chapter read: its module switches, which hide the Task board door,
+ * The chapter read: its module switches, which hide Mine / Everyone's,
  * and its plan, which decides whether rows carry Confirm and Approve (#4437).
  */
 const chapter = vi.hoisted(() => ({
@@ -226,6 +226,15 @@ vi.mock("@/components/ask/ask-sheet", () => ({ AskSheet: () => null }));
 
 /** Members the roster holds besides the officer, for a group's faces. */
 const roster = vi.hoisted(() => ({ members: [] as string[] }));
+
+/** Up for grabs and Everyone's (#5948): what Mine's card and the views read. */
+const tasksFold = vi.hoisted(() => ({
+  postings: [] as Record<string, unknown>[],
+  claim: vi.fn(),
+  release: vi.fn(),
+  everyoneOffered: false,
+  chapterTasks: [] as Record<string, unknown>[],
+}));
 
 /** The reads and writes behind a row's long-press menu (#5492). */
 const menuReads = vi.hoisted(() => ({
@@ -324,14 +333,34 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useViewerUserId: () => "me",
   useActiveChapterId: () => activeChapter.id,
   useActivityUnread: () => ({ markRead: links.markRead }),
+  useOpenTasks: () => ({
+    data: tasksFold.postings,
+    dataUpdatedAt: 1,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useClaimOpenTask: () => ({ mutate: tasksFold.claim }),
+  useReleaseTask: () => ({ mutate: tasksFold.release }),
+  useEveryoneOffered: (tasksOn: boolean) =>
+    tasksOn && tasksFold.everyoneOffered,
+  useMemberDisplayNames: () => ({ byId: {} }),
+  // Everyone's suggestions row (#4313): none waiting.
+  useAiSuggestions: () => ({ data: { items: [] } }),
   // Read for the chapter's accent, its modules and its plan.
   useCurrentChapter: () => ({
     data: chapter.data,
     isPending: chapter.isPending,
+    isSuccess: !chapter.isPending,
   }),
   // What a row's long press reads (#5492): the viewer's tasks and the
   // chapter's events, as the board and the Calendar read them.
-  useTasks: () => ({ data: menuReads.tasks, isSuccess: true }),
+  useTasks: () => ({
+    data: [...menuReads.tasks, ...tasksFold.chapterTasks],
+    isSuccess: true,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useEvents: () => ({ data: menuReads.events, isSuccess: true }),
   usePermissionList: () => links.permissions,
   // A real mutation under the hook's own key, so the screen sees it settle.
@@ -420,6 +449,11 @@ import {
   pickItemMenuAction,
 } from "@/components/item-actions-menu";
 import { UndoBar } from "@/components/tasks/undo-bar";
+import { EveryonesTasks } from "@/components/tasks/everyones-tasks";
+import { UpForGrabs } from "@/components/tasks/up-for-grabs";
+import { OpenTaskRow } from "@/components/tasks/open-task-row";
+import { TaskRow } from "@/components/tasks/task-row";
+import { ViewLabels } from "@/components/view-labels";
 import { ProgressRing } from "@/components/activity/progress-ring";
 import { ReviewCard } from "@/components/activity/review-card";
 import { WeekRing, WeekRingSkeleton } from "@/components/activity/week-ring";
@@ -538,6 +572,11 @@ describe("Activity screen (#3897)", () => {
     // next one rendering as an officer.
     links.permissions = [];
     roster.members = [];
+    tasksFold.postings = [];
+    tasksFold.claim.mockReset();
+    tasksFold.release.mockReset();
+    tasksFold.everyoneOffered = false;
+    tasksFold.chapterTasks = [];
     menuReads.tasks = [];
     menuReads.events = [];
     menuReads.updateStatus.mockClear();
@@ -603,27 +642,146 @@ describe("Activity screen (#3897)", () => {
     expect(tree.root.findAllByType(ActivityListRow)).toHaveLength(0);
   });
 
-  it("opens the task board from its title row (#4610)", () => {
-    const push = vi.mocked(useRouter().push);
-    push.mockClear();
-    const [link] = render().root.findAll(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        node.props.accessibilityLabel === "Task board",
-    );
-    expect(link!.props.accessibilityRole).toBe("button");
-    act(() => link!.props.onPress());
-    expect(push).toHaveBeenCalledWith("/tasks");
-  });
+  describe("the Tasks screen folded in (#5948 slice 3)", () => {
+    const viewLabels = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === ViewLabels &&
+          node.props.accessibilityLabel === "Whose tasks",
+      );
 
-  it("draws no Task board while the chapter has Tasks off", () => {
-    chapter.data = { enabled_modules: { tasks: false } };
-    const links = render().root.findAll(
-      (node) =>
-        (node.type as unknown) === "Pressable" &&
-        node.props.accessibilityLabel === "Task board",
-    );
-    expect(links).toHaveLength(0);
+    it("draws no task board door and no views for a member with only their own", () => {
+      const tree = render();
+      expect(
+        tree.root.findAll(
+          (node) =>
+            (node.type as unknown) === "Pressable" &&
+            node.props.accessibilityLabel === "Task board",
+        ),
+      ).toHaveLength(0);
+      expect(viewLabels(tree)).toHaveLength(0);
+    });
+
+    it("offers Mine and Everyone's, and Everyone's lists the chapter's tasks by status", () => {
+      tasksFold.everyoneOffered = true;
+      tasksFold.chapterTasks = [
+        {
+          id: "t-cole",
+          title: "Book the bus",
+          status: "IN_PROGRESS",
+          assignee_id: "cole",
+          due_date: "2099-01-01",
+          point_reward: 0,
+          points_awarded: false,
+        },
+      ];
+      const tree = render();
+      const [labels] = viewLabels(tree);
+      expect(labels!.props.value).toBe("mine");
+      act(() => labels!.props.onChange("everyone"));
+      expect(tree.root.findAllByType(EveryonesTasks)).toHaveLength(1);
+      expect(
+        tree.root
+          .findAllByType(TaskRow)
+          .map((node) => node.props.row.title),
+      ).toEqual(["Book the bus"]);
+      expect(hasSection(tree, "In progress")).toBe(true);
+    });
+
+    it("draws no views while the chapter has Tasks off", () => {
+      tasksFold.everyoneOffered = true;
+      chapter.data = { enabled_modules: { tasks: false } };
+      expect(viewLabels(render())).toHaveLength(0);
+    });
+
+    it("leads Mine with Up for grabs, and claims from it", () => {
+      tasksFold.postings = [
+        {
+          id: "o1",
+          title: "Run the grill",
+          status: "open",
+          viewer_can_claim: true,
+          point_reward: 5,
+        },
+      ];
+      const tree = render();
+      expect(
+        tree.root.findAll(
+          (node) => node.props.testID === "activity-up-for-grabs",
+        ).length,
+      ).toBeGreaterThan(0);
+      const [posting] = tree.root.findAllByType(OpenTaskRow);
+      act(() => posting!.props.onClaim());
+      expect(tasksFold.claim).toHaveBeenCalledWith("o1", expect.anything());
+    });
+
+    it("draws no Up for grabs, and reads none, while Tasks is off or the chapter is unread", () => {
+      tasksFold.postings = [
+        { id: "o1", title: "Run the grill", status: "open", viewer_can_claim: true },
+      ];
+      chapter.data = { enabled_modules: { tasks: false } };
+      expect(render().root.findAllByType(UpForGrabs)).toHaveLength(0);
+      chapter.data = undefined;
+      chapter.isPending = true;
+      expect(render().root.findAllByType(UpForGrabs)).toHaveLength(0);
+    });
+
+    it("draws no views over the Archive", () => {
+      tasksFold.everyoneOffered = true;
+      const tree = render();
+      expect(viewLabels(tree)).toHaveLength(1);
+      act(() => {
+        tree.root
+          .findAll(
+            (node) =>
+              (node.type as unknown) === "Pressable" &&
+              node.props.accessibilityRole === "button" &&
+              drawnText(node) === "Archive",
+          )[0]!
+          .props.onPress();
+      });
+      expect(viewLabels(tree)).toHaveLength(0);
+    });
+
+    it("comes back to Mine for a push that lands on it, as a request for more time", () => {
+      tasksFold.everyoneOffered = true;
+      const tree = render();
+      act(() => viewLabels(tree)[0]!.props.onChange("everyone"));
+      expect(tree.root.findAllByType(EveryonesTasks)).toHaveLength(1);
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+        released: "1",
+      });
+      try {
+        act(() => tree.update(screen()));
+        expect(tree.root.findAllByType(EveryonesTasks)).toHaveLength(0);
+        expect(viewLabels(tree)[0]!.props.value).toBe("mine");
+      } finally {
+        vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+      }
+    });
+
+    it("opens a task link's screen over the tab, and drops the link", () => {
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+        task: "t9",
+      });
+      const router = vi.mocked(useRouter)() as unknown as {
+        setParams?: (params: unknown) => void;
+      };
+      const setParams = vi.fn();
+      router.setParams = setParams;
+      const push = vi.mocked(useRouter().push);
+      push.mockClear();
+      try {
+        render();
+        expect(push).toHaveBeenCalledWith({
+          pathname: "/task-details",
+          params: { id: "t9" },
+        });
+        expect(setParams).toHaveBeenCalledWith({ task: undefined });
+      } finally {
+        vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+      }
+    });
   });
 
   describe("the week ring (#5779)", () => {
@@ -655,11 +813,10 @@ describe("Activity screen (#3897)", () => {
       expect(pill(tree).props.accessibilityLabel).toBe(
         "1 of 3 things done this week. 2 left this week.",
       );
-      // On the title row beside the task board's door, not a card.
+      // On the title row, alone since the task board's door left (#5948),
+      // not a card.
       const action = tree.root.findByType(ScreenShell).props.headerAction;
-      const [first, second] = React.Children.toArray(action.props.children);
-      expect((first as React.ReactElement).type).toBe(WeekRing);
-      expect(second).toBeTruthy();
+      expect((action as React.ReactElement).type).toBe(WeekRing);
       expect(
         tree.root.findAll((node) => node.props.testID === "activity-week-card"),
       ).toHaveLength(0);
@@ -1414,7 +1571,7 @@ describe("Activity screen (#3897)", () => {
       expect(screenText(tree)).toContain("Review oldest");
     });
 
-    it("goes to the task board for a task the page does not hold", () => {
+    it("opens the task's own screen for a task the page does not hold", () => {
       nudge.data = {
         card: {
           ...CARD,
@@ -1432,7 +1589,10 @@ describe("Activity screen (#3897)", () => {
       act(() => {
         pressable(tree, "activity-nudge-open").props.onPress();
       });
-      expect(push).toHaveBeenCalledWith("/tasks");
+      expect(push).toHaveBeenCalledWith({
+        pathname: "/task-details",
+        params: { id: "no-such-task" },
+      });
     });
 
     it("closes a word of thanks with its one button", () => {

@@ -55,6 +55,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The hub's own reads, answered empty: `you-screen.spec.tsx` owns them.
   useListChapters: () => ({ isSuccess: true, data: [{ id: "chapter-1" }] }),
   useMyPermissions: () => ({ data: { permissions } }),
+  useMyPoints: () => ({ data: undefined }),
+  useLeaderboard: () => ({ data: undefined }),
   useHiddenUnsetFeatures: () => new Set<string>(),
   useNotifications: () => ({ data: [] }),
   useEvents: () => ({ data: [] }),

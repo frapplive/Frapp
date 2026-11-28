@@ -1,3 +1,4 @@
+import { WEB_ADDRESS_PARAMS } from "@repo/validation";
 /**
  * The web events deep-link contract: `/events?event=<id>` opens that event's
  * detail sheet on the Events page, where an officer can edit it. The Events
@@ -6,13 +7,13 @@
  * (`apps/api/src/application/services/calendar-feed/calendar-feed.service.ts`,
  * #3322), so a change here changes that link too.
  */
-export const EVENT_PARAM = "event";
+export const EVENT_PARAM = WEB_ADDRESS_PARAMS.events.event;
 
 /**
  * `&excuse=1` also opens the sheet's Can't make it line: the chat event
  * card's button (#4660). Only the Events page reads it.
  */
-export const EXCUSE_PARAM = "excuse";
+export const EXCUSE_PARAM = WEB_ADDRESS_PARAMS.events.excuse;
 
 export function eventDeepLink(
   eventId: string,

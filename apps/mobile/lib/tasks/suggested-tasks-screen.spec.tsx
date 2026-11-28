@@ -523,15 +523,15 @@ describe("Suggested tasks", () => {
     expect(menuAction(render(), "Book the hall", "report")).toBeUndefined();
   });
 
-  it("goes to Tasks, and asks the server nothing, where AI is off", () => {
+  it("goes down to Activity, and asks the server nothing, where AI is off", () => {
     ai.available = false;
     state.source = "untouched";
-    const tree = render();
+    const router = vi.mocked(expoRouter.useRouter)();
+    vi.mocked(router.dismissTo).mockClear();
+    render();
     ai.available = true;
-    expect(
-      tree.root.findAll((node) => (node.type as unknown) === "Redirect")[0]
-        .props.href,
-    ).toBe("/tasks");
+    // A tab: popped down to, never a `<Redirect>` that stacks a second.
+    expect(router.dismissTo).toHaveBeenCalledWith("/activity");
     expect(state.source).toBe("untouched");
   });
 

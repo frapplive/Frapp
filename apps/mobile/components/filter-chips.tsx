@@ -420,8 +420,7 @@ export function SearchField({
   /** Leads the field with a magnifier, for a search rather than a filter
    * value (#4137): web's search fields and iOS's search bar draw one. */
   searchGlyph?: boolean;
-  /** For a screen that focuses the field from elsewhere, as Messages' pencil
-   * does (#4668). */
+  /** For a screen that focuses the field itself, as Search does on open. */
   inputRef?: Ref<TextInput>;
 }) {
   const { tokens } = useFrappTheme();

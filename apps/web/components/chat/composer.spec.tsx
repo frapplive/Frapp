@@ -319,10 +319,11 @@ describe("Composer slash palette (#396)", () => {
     // `findBy`, not `getBy`: the palette is a `next/dynamic` boundary now
     // (`cmdk` and a Radix Dialog are `chat-extras` under the board's `1s`
     // split), so the first open resolves a module before the dialog exists.
-    expect(await screen.findByRole("dialog")).toHaveAttribute(
-      "aria-modal",
-      "true",
-    );
+    // A cold import on a loaded CI runner can take longer than `findBy`'s
+    // default second, so it gets room.
+    expect(
+      await screen.findByRole("dialog", {}, { timeout: 5000 }),
+    ).toHaveAttribute("aria-modal", "true");
   });
 });
 
@@ -1492,11 +1493,11 @@ describe("Composer help and controls (#2142)", () => {
     expect(help).toHaveTextContent("/ for commands. @ to mention.");
   });
 
-  it("sends from a round 32px arrow, mobile's send (principles.md P6.5)", () => {
+  it("sends from a round Row-step arrow, mobile's send (principles.md P6.5)", () => {
     render(<Composer {...baseProps()} />);
 
     const send = screen.getByRole("button", { name: "Send message" });
-    expect(send.className).toContain("h-8");
+    expect(send.className).toContain("h-control-row");
     expect(send.className).toContain("rounded-full");
     expect(send.querySelector("svg")).not.toBeNull();
     expect(send).not.toHaveTextContent("Send");

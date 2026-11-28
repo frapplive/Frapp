@@ -223,6 +223,7 @@ const createChannelState = vi.hoisted(() => ({
 }));
 const mockSetRailLevel = vi.fn();
 const mockRouterPush = vi.fn();
+const mockRouterReplace = vi.fn();
 const railRowActions = vi.hoisted(() => ({
   value: undefined as
     import("./channel-row-menu").ChannelRowActions | undefined,
@@ -851,6 +852,7 @@ vi.mock("@repo/hooks", async () => ({
     refetch: vi.fn(),
   }),
   resolveAuthorLabel: () => "",
+  authorNameAwaitsRoster: () => false,
   // Bookmarks (#462). The shell renders the panel unconditionally, so these
   // have to exist here even though this file's assertions are about deep links,
   // the composer remount and delete wiring. `mockBookmarks` lets the bookmark
@@ -933,7 +935,7 @@ vi.mock("@repo/hooks", async () => ({
 // Captured so the hide failure (#2303) is observable; no other case here
 // asserts on a toast.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
 }));
 
 vi.mock("@/lib/hooks/use-toast", () => ({
@@ -5282,10 +5284,10 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
       .getByRole("button", { name: "Show members" })
       .closest("header") as HTMLElement;
     const close = within(header).getByRole("button", { name: "Close chat" });
-    // The tool page header's X, the same 36px control. No pull into the
+    // The tool page header's X, the same Small-step control. No pull into the
     // gutter: against this header's 16px it sits 16px from the panel's edge,
     // where the page's sits against its 24px gutter.
-    expect(close).toHaveClass("h-9", "w-9");
+    expect(close).toHaveClass("h-control-small", "w-control-small");
     expect(close).not.toHaveClass("-mr-2");
     expect(header).toHaveClass("px-4");
     expect(header.lastElementChild?.lastElementChild).toBe(close);
@@ -7159,48 +7161,55 @@ describe("ChatShell's two lists (#3774)", () => {
       "chan-dm",
     );
     channelsQueryState.value = { data: [...CHANNELS, DM] };
-    const onViewChange = vi.fn();
+    window.history.replaceState({}, "", "/chat?channel=chan-random");
+    mockRouterReplace.mockReset();
+    mockRouterPush.mockReset();
     const { rerender } = render(
-      <ChatShell initialChannelId="chan-random" onViewChange={onViewChange} />,
+      <ChatShell initialChannelId="chan-random" addressed />,
     );
     await waitFor(() => {
       expect(screen.getByTestId("composer")).toHaveTextContent("chan-random");
     });
-    rerender(
-      <ChatShell
-        initialChannelId="chan-random"
-        view="direct"
-        onViewChange={onViewChange}
-      />,
-    );
+    // The nav moved to the bare Messages page.
+    window.history.pushState({}, "", "/messages");
+    rerender(<ChatShell initialChannelId={null} view="direct" addressed />);
     await waitFor(() => {
       expect(screen.getByTestId("composer")).toHaveTextContent("chan-dm");
     });
-    // The switch came from the nav, so the panel asks for nothing back.
-    expect(onViewChange).not.toHaveBeenCalledWith("channels");
+    // The switch came from the nav: the landing is written in place, and
+    // nothing sends the member back to Chat.
+    await waitFor(() => {
+      expect(window.location.search).toBe("?channel=chan-dm");
+    });
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
-  it("asks the shell for Direct messages when a link opens a DM on channels, and for Chat the other way", async () => {
+  it("moves a link that opens a DM on Chat to Messages, and a channel on Messages to Chat, in place", async () => {
     channelsQueryState.value = { data: [...CHANNELS, DM] };
-    const onViewChange = vi.fn();
+    mockRouterReplace.mockReset();
+    window.history.replaceState({}, "", "/chat?channel=chan-dm&message=m1");
     const { unmount } = render(
-      <ChatShell initialChannelId="chan-dm" onViewChange={onViewChange} />,
+      <ChatShell initialChannelId="chan-dm" initialMessageId="m1" addressed />,
     );
     await waitFor(() => {
-      expect(onViewChange).toHaveBeenCalledWith("direct");
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/messages?channel=chan-dm&message=m1",
+        { scroll: false },
+      );
     });
     unmount();
 
-    onViewChange.mockClear();
+    mockRouterReplace.mockReset();
+    window.history.replaceState({}, "", "/messages?channel=chan-general");
     render(
-      <ChatShell
-        initialChannelId="chan-general"
-        view="direct"
-        onViewChange={onViewChange}
-      />,
+      <ChatShell initialChannelId="chan-general" view="direct" addressed />,
     );
     await waitFor(() => {
-      expect(onViewChange).toHaveBeenCalledWith("channels");
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/chat?channel=chan-general",
+        { scroll: false },
+      );
     });
   });
 
@@ -7536,5 +7545,304 @@ describe("ChatShell Now card (#5777)", () => {
     const now = screen.getByRole("region", { name: "On now" });
     expect(now).toHaveTextContent("Recruitment Meetings");
     expect(now).toHaveTextContent("Check-in is open");
+  });
+});
+
+/**
+ * On `/chat` and `/messages` the address follows the conversation and thread
+ * (#6041, `spec/ui/web-dashboard/README.md` § Addresses). The router is not
+ * here, so each test hands the panel the address's new props itself, as
+ * `ChatPage` does once Next's `useSearchParams` follows a History API call.
+ */
+describe("ChatShell's address (#6041)", () => {
+  // The window's default width here is below `lg`, where the panel draws its
+  // own channel list, so a pick also takes the pane's step (#3824): the
+  // address moves that same entry rather than pushing a second.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  const here = () => `${window.location.pathname}${window.location.search}`;
+  const params = () => new URL(window.location.href).searchParams;
+  /** The props `ChatPage` reads off the current address. */
+  const fromAddress = () => ({
+    initialChannelId: params().get("channel"),
+    initialThreadId: params().get("thread"),
+    initialMessageId: params().get("message"),
+  });
+
+  it("pushes a picked channel, and follows the address back on Back", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const push = vi.spyOn(window.history, "pushState");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    expect(push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("pick-random"));
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-random"));
+    expect(push).toHaveBeenCalledTimes(1);
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    // Back: the address moves first, then the router hands it over.
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-general"),
+    );
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(here()).toBe("/chat?channel=chan-general");
+  });
+
+  it("writes the landing conversation into a bare /chat in place", async () => {
+    window.history.replaceState({}, "", "/chat");
+    const push = vi.spyOn(window.history, "pushState");
+    render(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() => expect(params().get("channel")).not.toBeNull());
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing beside another page (#5575)", async () => {
+    window.history.replaceState({}, "", "/events?day=2026-11-30");
+    render(<ChatShell initialChannelId="chan-general" toolBeside addressed />);
+    fireEvent.click(screen.getByTestId("pick-random"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-random"),
+    );
+    expect(here()).toBe("/events?day=2026-11-30");
+  });
+
+  it("pushes an opened thread, and its close goes Back to the conversation", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
+    await waitFor(() =>
+      expect(here()).toBe("/chat?channel=chan-general&thread=msg-1"),
+    );
+    rerender(<ChatShell {...fromAddress()} addressed />);
+
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    fireEvent.click(screen.getByRole("button", { name: "Back to channel" }));
+    await waitFor(() => expect(go).toHaveBeenCalledWith(-1));
+  });
+
+  it("opens the address's thread on a reload, and its close replaces the address", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/chat?channel=chan-general&thread=msg-1",
+    );
+    render(<ChatShell {...fromAddress()} addressed />);
+    expect(screen.getByTestId("thread-root")).toHaveTextContent("msg-1");
+    const go = vi.spyOn(window.history, "go");
+    fireEvent.click(screen.getByRole("button", { name: "Back to channel" }));
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-general"));
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  it("closes the thread when Back lands on the entry without it", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/chat?channel=chan-general&thread=msg-1",
+    );
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() =>
+      expect(screen.queryByTestId("thread-panel")).toBeNull(),
+    );
+    expect(here()).toBe("/chat?channel=chan-general");
+  });
+
+  it("pushes a search jump into another channel, then takes message= off once it lands", async () => {
+    mockUseChatChannel.mockImplementation((channelId: string | null) =>
+      chatChannelResult({
+        messages:
+          channelId === "chan-random"
+            ? [
+                {
+                  id: "only-in-random",
+                  content: "hi",
+                  created_at: "2026-01-01T00:02:00Z",
+                },
+              ]
+            : MESSAGES,
+      }),
+    );
+    searchHit.mockReturnValue({
+      message: { id: "only-in-random" },
+      channelId: "chan-random",
+    });
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const push = vi.spyOn(window.history, "pushState");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(screen.getByTestId("search-jump"));
+    expect(here()).toBe("/chat?channel=chan-random&message=only-in-random");
+    expect(push).toHaveBeenCalledTimes(1);
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() =>
+      expect(mockScrollToMessage).toHaveBeenCalledWith("only-in-random"),
+    );
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-random"));
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("composer")).toHaveTextContent("chan-random");
+  });
+
+  /** Whether the panel's channel list pane is the one on screen below `lg`. */
+  const listShown = () =>
+    !screen
+      .getByRole("region", { name: "Channels" })
+      .className.includes("max-lg:hidden");
+
+  it("returns to the list on Back from a channel picked off it, below lg", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(screen.getByRole("button", { name: "Back to channels" }));
+    fireEvent.click(screen.getByTestId("pick-random"));
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-random"));
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(listShown()).toBe(false);
+
+    window.history.back();
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-general"));
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() => expect(listShown()).toBe(true));
+  });
+
+  it("lands on the conversation, not the list, when a thread opened on a landing closes below lg", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
+    await waitFor(() =>
+      expect(here()).toBe("/chat?channel=chan-general&thread=msg-1"),
+    );
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(screen.getByRole("button", { name: "Back to channel" }));
+    await waitFor(() => expect(here()).toBe("/chat?channel=chan-general"));
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(screen.queryByTestId("thread-panel")).toBeNull();
+    expect(listShown()).toBe(false);
+  });
+
+  it("pushes a thread opened in a conversation that landed without a pick", async () => {
+    window.history.replaceState({}, "", "/chat");
+    const push = vi.spyOn(window.history, "pushState");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() => expect(params().get("channel")).not.toBeNull());
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
+    await waitFor(() => expect(params().get("thread")).toBe("msg-1"));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens a thread when Forward lands on its entry", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    expect(screen.queryByTestId("thread-panel")).toBeNull();
+    window.history.replaceState(
+      {},
+      "",
+      "/chat?channel=chan-general&thread=msg-1",
+    );
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(screen.getByTestId("thread-root")).toHaveTextContent("msg-1");
+  });
+
+  it("pushes /chat when a channel is picked on Messages", async () => {
+    channelsQueryState.value = {
+      data: [
+        ...CHANNELS,
+        {
+          id: "chan-dm",
+          name: "dm-viewer-other",
+          type: "DM",
+          member_ids: ["viewer-1", "other-1"],
+        },
+      ],
+    };
+    mockRouterPush.mockReset();
+    mockRouterReplace.mockReset();
+    window.history.replaceState({}, "", "/messages?channel=chan-dm");
+    render(<ChatShell {...fromAddress()} view="direct" addressed />);
+    fireEvent.click(screen.getByTestId("pick-random"));
+    await waitFor(() =>
+      expect(mockRouterPush).toHaveBeenCalledWith("/chat?channel=chan-random", {
+        scroll: false,
+      }),
+    );
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
+
+  it("moves no address for a search jump in the open conversation", () => {
+    searchHit.mockReturnValue({
+      message: { id: "msg-1" },
+      channelId: "chan-general",
+    });
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const push = vi.spyOn(window.history, "pushState");
+    render(<ChatShell {...fromAddress()} addressed />);
+    fireEvent.click(screen.getByTestId("search-jump"));
+    expect(push).not.toHaveBeenCalled();
+    expect(here()).toBe("/chat?channel=chan-general");
+  });
+
+  it("takes a channel the member can't reach off the address and keeps its note", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-gone&thread=t1");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() => expect(here()).toBe("/chat"));
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    expect(
+      screen.getByText(/That link points to a channel you can't reach/),
+    ).toBeInTheDocument();
+  });
+
+  it("follows the address back onto /chat after a pick in the docked panel", async () => {
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const { rerender } = render(<ChatShell {...fromAddress()} addressed />);
+    // To a page: chat docks, and ChatPage keeps the target it had.
+    window.history.pushState({}, "", "/events");
+    rerender(<ChatShell initialChannelId="chan-general" toolBeside />);
+    fireEvent.click(screen.getByTestId("pick-random"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-random"),
+    );
+    // Back onto `/chat?channel=chan-general`.
+    window.history.replaceState({}, "", "/chat?channel=chan-general");
+    const push = vi.spyOn(window.history, "pushState");
+    rerender(<ChatShell {...fromAddress()} addressed />);
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-general"),
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("takes the address's channel when Back moves from Messages to /chat, not the remembered one", async () => {
+    // Found by the browser walk: after a reload on `/messages`, the list
+    // switch dropped the adopted channel and the landing overwrote the entry.
+    channelsQueryState.value = {
+      data: [
+        ...CHANNELS,
+        {
+          id: "chan-dm",
+          name: "dm-viewer-other",
+          type: "DM",
+          member_ids: ["viewer-1", "other-1"],
+        },
+      ],
+    };
+    window.history.replaceState({}, "", "/messages?channel=chan-dm");
+    const { rerender } = render(
+      <ChatShell {...fromAddress()} view="direct" addressed />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-dm"),
+    );
+    // The landing would be #general; the address names #random.
+    window.history.replaceState({}, "", "/chat?channel=chan-random");
+    rerender(<ChatShell {...fromAddress()} view="channels" addressed />);
+    await waitFor(() =>
+      expect(screen.getByTestId("composer")).toHaveTextContent("chan-random"),
+    );
+    expect(here()).toBe("/chat?channel=chan-random");
   });
 });

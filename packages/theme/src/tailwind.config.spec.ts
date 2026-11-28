@@ -14,6 +14,7 @@ import {
   readConfigCode,
   WEB_TAILWIND,
 } from "./config-sources";
+import { signetDarkTokens } from "./signet";
 import config from "./tailwind.config";
 
 /**
@@ -689,5 +690,66 @@ describe("the surface-specific keys stay out of the shared preset (#2371)", () =
       landing,
       "a colour key here needs `colorVar` so signet.css.spec.ts can see it",
     ).not.toMatch(/^\s*colors\s*:/m);
+  });
+});
+
+describe("the control size scale compiles (#6115)", () => {
+  /**
+   * The steps are names, so a key missing from the preset compiles to nothing
+   * and a component that names it loses its height with no warning. This asks
+   * Tailwind, the way the opacity probes above do.
+   */
+  const compile = async (candidates: string): Promise<string> => {
+    const { default: postcss } = await import("postcss");
+    const { default: tailwind } = await import("@tailwindcss/postcss");
+    const result = await postcss([tailwind()]).process(
+      `@import "tailwindcss" source(none);\n` +
+        `@config "./tailwind.config.ts";\n` +
+        `@source inline("${candidates}");\n`,
+      { from: fileURLToPath(new URL("./probe.css", import.meta.url)) },
+    );
+    return result.css;
+  };
+
+  const steps = Object.keys(signetDarkTokens.control).map((step) =>
+    step.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
+  );
+
+  it("binds every step signet.ts defines", () => {
+    expect(steps).toEqual(
+      expect.arrayContaining(["row", "small", "field", "list-row"]),
+    );
+    for (const key of ["height", "minHeight", "width", "minWidth", "size"]) {
+      const map = (
+        config.theme?.extend as Record<string, object> | undefined
+      )?.[key];
+      for (const step of steps) {
+        expect(map, `${key} binds control-${step}`).toHaveProperty(
+          `control-${step}`,
+          `var(--control-${step})`,
+        );
+      }
+    }
+  });
+
+  it("emits a rule for each step's h-, min-h- and size- utility", async () => {
+    const css = await compile(
+      steps
+        .map((s) => `h-control-${s} min-h-control-${s} size-control-${s}`)
+        .join(" "),
+    );
+    for (const step of steps) {
+      expect(css).toMatch(
+        new RegExp(
+          `\\.h-control-${step}\\s*\\{\\s*height:\\s*var\\(--control-${step}\\)`,
+        ),
+      );
+      expect(css).toMatch(
+        new RegExp(
+          `\\.min-h-control-${step}\\s*\\{\\s*min-height:\\s*var\\(--control-${step}\\)`,
+        ),
+      );
+      expect(css).toContain(`.size-control-${step}`);
+    }
   });
 });

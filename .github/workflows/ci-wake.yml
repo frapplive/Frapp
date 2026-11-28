@@ -17,8 +17,8 @@ name: CI wake
 # Node, no npm ci — every extra action download is exposure to the same
 # "Failed to resolve action download info" infra failure this watchdog exists
 # to absorb. Best-effort by design: if this workflow is itself killed by an
-# outage, the babysitting agent's scheduled self-wake (send_later) is the
-# durable fallback.
+# outage, nothing automatic backstops it (send_later waits on the owner's
+# prompt; docs/ci-cd/pr-babysitting.md § send_later), so a human notices.
 
 on:
   workflow_run:
