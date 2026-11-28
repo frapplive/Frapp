@@ -20,14 +20,25 @@ function fullDate(at: Date | null): string {
     : "";
 }
 
-/** An instant (an event's start), as the reader's own calendar day. */
-export function lastYearDay(instant: string | null | undefined): string {
-  return fullDate(parseInstant(instant));
-}
-
 /** A stored `YYYY-MM-DD` (a task's due date), in every time zone that day. */
 export function lastYearBareDay(day: string | null | undefined): string {
   return fullDate(day ? parseBareDateLocalNoon(day) : null);
+}
+
+/**
+ * The day last year's event was held, for a suggestion's row (#6148). A
+ * dated (all-day or time-TBD) event carries its own zone-free first day,
+ * read the same everywhere; its `last_year_at` is only the saver's local
+ * midnight, the day before west of them. A timed event, and a suggestion
+ * stored before the day was carried, reads its start in the reader's zone.
+ */
+export function lastYearEventDay(event: {
+  last_year_at: string | null;
+  last_year_date?: string | null;
+}): string {
+  return event.last_year_date
+    ? lastYearBareDay(event.last_year_date)
+    : fullDate(parseInstant(event.last_year_at));
 }
 
 /**

@@ -61,8 +61,15 @@ import {
 import { readNewEventPayload } from '../../application/services/ai-suggestion-new-event-kind';
 
 function eventOf(row: AiSuggestion): EventSuggestionDto {
-  const { name, last_year_at, times } = readEventPayload(row.payload);
-  return { name, last_year_at, times };
+  const { name, last_year_at, last_year_date, times } = readEventPayload(
+    row.payload,
+  );
+  return {
+    name,
+    last_year_at,
+    ...(last_year_date ? { last_year_date } : {}),
+    times,
+  };
 }
 
 export class ListAiSuggestionsQueryDto {
@@ -494,6 +501,14 @@ export class EventSuggestionDto {
     description: 'When the source event started, last year.',
   })
   last_year_at: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    description:
+      "Last year's all-day or time-TBD event's first day, with no time zone: read it instead of `last_year_at`, which for such an event is only the saver's local midnight. Absent for a timed event, and on suggestions stored before it was added, so its absence doesn't mean the event was timed.",
+  })
+  last_year_date?: string;
 
   @ApiProperty({
     description: 'How many times it was held around then (a weekly series).',

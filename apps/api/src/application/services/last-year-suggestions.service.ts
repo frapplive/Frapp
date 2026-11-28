@@ -388,6 +388,9 @@ export class LastYearSuggestionsService implements AiRunHandler, OnModuleInit {
                 ? {
                     name: thing.name,
                     last_year_at: thing.lastYearAt,
+                    ...(thing.lastYearDate
+                      ? { last_year_date: thing.lastYearDate }
+                      : {}),
                     times: thing.times,
                   }
                 : {

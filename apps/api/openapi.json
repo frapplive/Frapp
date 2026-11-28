@@ -38083,6 +38083,11 @@
             "format": "date-time",
             "description": "When the source event started, last year."
           },
+          "last_year_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Last year's all-day or time-TBD event's first day, with no time zone: read it instead of `last_year_at`, which for such an event is only the saver's local midnight. Absent for a timed event, and on suggestions stored before it was added, so its absence doesn't mean the event was timed."
+          },
           "times": {
             "type": "number",
             "description": "How many times it was held around then (a weekly series)."
