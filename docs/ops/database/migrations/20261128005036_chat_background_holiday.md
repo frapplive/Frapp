@@ -1,4 +1,4 @@
-# 20261126233937_chat_background_holiday.sql
+# 20261128005036_chat_background_holiday.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
