@@ -267,6 +267,8 @@ function MoveDocumentDialog({
               defaultValue={picked ?? NO_FOLDER.key}
               emptyText="The chapter has no folders yet"
               itemClassName="text-sm"
+              // As wide as the field it opens from, as a Select's list is.
+              widthClassName="min-w-[var(--radix-popover-trigger-width)] max-w-[min(22rem,calc(100vw-2rem))]"
               renderItem={(choice) => (
                 <span className="truncate">
                   {choice.name ?? NO_FOLDER_LABEL}
