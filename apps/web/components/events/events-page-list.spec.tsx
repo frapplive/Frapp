@@ -67,7 +67,14 @@ function weeklySeries(name: string, count = 13) {
   }));
 }
 
-const eventsQuery: { data: unknown; isError?: boolean } = { data: EVENTS };
+const eventsQuery: { data: unknown; isError?: boolean; isLoading?: boolean } =
+  { data: EVENTS };
+// The list this browser kept for the shell cache (#5049); none unless set.
+const keptEventsRef = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellCached: (part: string) =>
+    part === "events" ? keptEventsRef.current : null,
+}));
 type AttendanceFields = { is_mandatory?: boolean | null };
 // A viewer with no roles: the event's default decides.
 const byDefault = (fields: AttendanceFields) => fields.is_mandatory === true;
@@ -98,7 +105,7 @@ vi.mock("@repo/hooks", async () => {
     ...eventTypeHooks([]),
     useEvents: () => ({
       data: eventsQuery.data,
-      isLoading: false,
+      isLoading: eventsQuery.isLoading ?? false,
       isError: eventsQuery.isError ?? false,
       error: eventsQuery.isError ? new Error("boom") : null,
       refetch: vi.fn(),
@@ -213,6 +220,8 @@ beforeEach(() => {
   viewerRef.current = { userId: "user-1", isLoading: false };
   eventsQuery.data = EVENTS;
   eventsQuery.isError = false;
+  eventsQuery.isLoading = false;
+  keptEventsRef.current = null;
   permissionsRef.current = ["events:create", "events:update", "members:view"];
   setAddress("/events");
   birthdaysRef.current = [];
@@ -277,6 +286,41 @@ describe("EventsPage ?event=<id> (Activity's Open in Events, #3897)", () => {
       expect(detailSheetProps).toHaveBeenLastCalledWith(
         expect.objectContaining({ open: false }),
       ),
+    );
+  });
+});
+
+describe("EventsPage from the kept list (#5049)", () => {
+  it("draws the kept list while the read is out", () => {
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    render(<EventsPage />);
+
+    expect(
+      screen.getByRole("button", { name: /study night/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the address's event only from the live list, never a kept row", () => {
+    setAddress("/events?event=evt-2");
+    eventsQuery.data = undefined;
+    eventsQuery.isLoading = true;
+    keptEventsRef.current = EVENTS;
+    const { rerender } = render(<EventsPage />);
+
+    expect(detailSheetProps).not.toHaveBeenCalledWith(
+      expect.objectContaining({ open: true }),
+    );
+
+    eventsQuery.data = EVENTS;
+    eventsQuery.isLoading = false;
+    rerender(<EventsPage />);
+    expect(detailSheetProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        event: expect.objectContaining({ id: "evt-2" }),
+      }),
     );
   });
 });
