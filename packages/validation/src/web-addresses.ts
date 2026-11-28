@@ -40,7 +40,9 @@ export const WEB_ADDRESS_PARAMS = {
     document: DOCUMENT_LINK_PARAM,
     access: "access",
     type: DOCUMENTS_TYPE_PARAM,
+    panel: "panel",
   },
+  backwork: { panel: "panel" },
   events: {
     day: "day",
     event: "event",
@@ -79,6 +81,16 @@ export const WEB_ADDRESS_PARAMS = {
     zone: "zone",
     member: "member",
   },
+} as const;
+
+/**
+ * `panel=`: the docked create panel open in place of the page (#6157,
+ * Paul's option A on #6172). Opening one pushes it, so Back closes it; New's
+ * `?new=1` is replaced by it once acted on, and a reload reopens it empty.
+ */
+export const DOCKED_PANELS = {
+  documents: { upload: "upload", import: "import" },
+  backwork: { upload: "upload", cleanup: "cleanup" },
 } as const;
 
 /**
@@ -304,7 +316,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
   { path: "/meetings/[id]", params: [], phone: null },
   { path: "/meetings/[id]/notes", params: [], phone: null },
   { path: "/meetings/[id]/transcript", params: [], phone: null },
-  { path: "/backwork", params: [], phone: null },
+  { path: "/backwork", params: Object.values(P.backwork), phone: null },
   { path: "/backwork/upload", params: [], phone: null },
   { path: "/affiliations", params: [], phone: null },
   { path: "/chapters", params: [], phone: null },

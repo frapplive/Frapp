@@ -35,10 +35,11 @@ import {
   UploadField,
   UploadFileField,
 } from "@/components/shared/upload-sheet";
+import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import {
-  useGatedDialog,
-  type SubscriptionGate,
-} from "@/components/shared/subscription-gate";
+  useAddressArrival,
+  useAddressedDialog,
+} from "@/lib/address/use-addressed-dialog";
 import { DocumentTypeField } from "@/components/documents/document-type-field";
 import { ChannelAccessField } from "@/components/chat-admin/channel-access-field";
 import {
@@ -59,7 +60,12 @@ import {
   useKeptPanel,
 } from "@repo/hooks/kept-drafts";
 import { KeptDraftNote } from "@/components/shared/kept-draft-note";
-import { MAX_UPLOAD_LABEL, acceptAttribute } from "@repo/validation";
+import {
+  DOCKED_PANELS,
+  MAX_UPLOAD_LABEL,
+  WEB_ADDRESS_PARAMS,
+  acceptAttribute,
+} from "@repo/validation";
 import {
   inspectDocumentFile,
   putDocumentFile,
@@ -164,7 +170,13 @@ export function useDocumentUpload(
   const { toast } = useToast();
   const requestUpload = useRequestDocumentUploadUrl();
   const confirmUpload = useConfirmDocumentUpload();
-  const uploadDialog = useGatedDialog(gate);
+  // `?panel=upload` (#6157): Back closes the panel, Forward and a reload
+  // reopen it. Arriving that way does what the toolbar button does first.
+  const uploadDialog = useAddressedDialog(
+    gate,
+    WEB_ADDRESS_PARAMS.documents.panel,
+    DOCKED_PANELS.documents.upload,
+  );
   const keptKeys = useKeptDraftKeys();
   /*
     Kept when the officer goes back or leaves the page mid-upload (#4593),
@@ -245,7 +257,7 @@ export function useDocumentUpload(
     folder on screen, and a spent rejection from the last attempt is cleared.
     A folder picked by hand is kept, like the rest of the draft.
   */
-  const openPanel = useCallback(
+  const preparePanel = useCallback(
     (file?: File) => {
       setUploadError(null);
       // What the officer left here, said so in the footer (#4593).
@@ -259,10 +271,19 @@ export function useDocumentUpload(
           : { ...prev, folder: activeFolder || "", autoFolder: !activeFolder };
       });
       if (file) chooseFile(file);
-      uploadDialog.setOpen(true);
     },
-    [activeFolder, chooseFile, uploadDialog, kept],
+    [activeFolder, chooseFile, kept],
   );
+  const openPanel = useCallback(
+    (file?: File, options?: { replace?: boolean }) => {
+      // Already open (Back or a reload landed on it): nothing to prepare.
+      if (panelOpen) return;
+      preparePanel(file);
+      uploadDialog.setOpen(true, options);
+    },
+    [panelOpen, preparePanel, uploadDialog],
+  );
+  useAddressArrival(uploadDialog, () => preparePanel());
   // Back to the panel the page was left with open, through the same door as
   // the toolbar button, so it says the draft was restored.
   const reopenPanel = useCallback(
@@ -270,7 +291,11 @@ export function useDocumentUpload(
     [openPanel, uploadDialog],
   );
   // New's "Upload" (`new-intent.ts`): the panel this page's button opens.
-  useNewIntent(() => openPanel(), gate.allowed && canUpload);
+  // It takes `?new=1`'s place in the address, so Back leaves for New.
+  useNewIntent(
+    () => openPanel(undefined, { replace: true }),
+    gate.allowed && canUpload,
+  );
   useKeptPanel({
     page: "documents",
     form: UPLOAD_DRAFT,

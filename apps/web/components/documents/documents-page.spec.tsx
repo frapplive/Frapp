@@ -329,6 +329,17 @@ async function filterButton(
   return screen.findByRole("button", { name });
 }
 
+/** Documents in the tool column, where its panels dock. */
+function docked() {
+  return (
+    <div data-tool-column="">
+      <div data-tool-page="">
+        <DocumentsPage />
+      </div>
+    </div>
+  );
+}
+
 describe("DocumentsPage subscription gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -635,6 +646,45 @@ describe("DocumentsPage subscription gating", () => {
     await waitFor(() => expect(uploadTrigger()).toHaveFocus());
   });
 
+  it("addresses Upload as ?panel=upload: Back closes it and a reload reopens it empty (#6157)", async () => {
+    chapter.active();
+    const first = render(docked());
+    await userEvent.click(uploadTrigger());
+    expect(window.location.search).toBe("?panel=upload");
+    window.history.back();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Upload document" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(window.location.search).toBe("");
+    first.unmount();
+
+    // A reload on the panel's address opens it.
+    window.history.replaceState(null, "", "/documents?panel=upload");
+    render(docked());
+    expect(
+      screen.getByRole("region", { name: "Upload document" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens New's Upload and leaves ?panel=upload, not ?new=1, in the address (#6157)", async () => {
+    chapter.active();
+    window.history.replaceState(null, "", "/documents?new=1");
+    render(docked());
+    expect(
+      await screen.findByRole("region", { name: "Upload document" }),
+    ).toBeInTheDocument();
+    expect(window.location.search).toBe("?panel=upload");
+  });
+
+  it("drops a ?panel= the member can't open (#6157)", async () => {
+    chapter.active();
+    window.history.replaceState(null, "", "/documents?panel=nonsense");
+    render(<DocumentsPage />);
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
   it("reopens Upload on its draft when the page was left mid-form (#4593)", async () => {
     chapter.active();
     const tree = () => (
@@ -697,6 +747,9 @@ describe("DocumentsPage subscription gating", () => {
     const first = render(tree());
     await userEvent.click(uploadTrigger());
     first.unmount();
+    // Back on Documents from its sidebar row: `?panel=upload` stays on the
+    // entry the page was left from (#6157).
+    window.history.pushState(null, "", "/documents");
     render(tree());
     expect(
       screen.queryByRole("region", { name: "Upload document" }),

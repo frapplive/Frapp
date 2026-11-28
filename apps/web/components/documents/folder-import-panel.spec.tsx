@@ -17,6 +17,14 @@ const { mockMint, mockConfirm, mockInvalidate } = vi.hoisted(() => ({
   mockInvalidate: vi.fn(),
 }));
 
+// `?panel=import` is the panel's open state (#6157): the router's search
+// params follow the History API, as Next's do.
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
+}));
+beforeEach(() => window.history.replaceState(null, "", "/documents"));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useRequestDocumentUploadUrls: () => ({ mutateAsync: mockMint }),

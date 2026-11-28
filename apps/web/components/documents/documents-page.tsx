@@ -28,6 +28,7 @@ import {
   can,
   DOCUMENTS_NO_FOLDER_PARAM_VALUE,
   MINUTES_TYPE_PARAM_VALUE,
+  DOCKED_PANELS,
   WEB_ADDRESS_PARAMS,
 } from "@repo/validation";
 import {
@@ -333,6 +334,24 @@ function ChapterDocumentsPage() {
     "chapter_docs:upload",
     permissionsPayload?.permissions ?? [],
   );
+  // `?panel=upload` and `?panel=import` open their docked panels (#6157,
+  // `upload-menu.tsx`). One the member can't open, or no panel at all, comes
+  // off the address once their permissions are known, as a forbidden id does.
+  const panelAddress = useAddressParams([DOC.panel]);
+  const panelParam = panelAddress.values[DOC.panel];
+  const panelUnavailable =
+    panelParam !== null &&
+    permissionsPayload !== undefined &&
+    !(
+      canUpload &&
+      (Object.values(DOCKED_PANELS.documents) as string[]).includes(panelParam)
+    );
+  const { open: openPanelAddress } = panelAddress;
+  useEffect(() => {
+    if (panelUnavailable) {
+      openPanelAddress({ [DOC.panel]: null }, { replace: true });
+    }
+  }, [panelUnavailable, openPanelAddress]);
   // New minutes, for whoever records them while the module is on (#5949).
   const isModuleEnabled = useChapterModuleGate();
   const canStartMinutes =

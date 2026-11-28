@@ -181,10 +181,16 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 vi.mock("@/lib/providers/network-provider", () => networkMock(mockOffline));
 
-vi.mock("next/navigation", () => ({
+// The router's search params follow the History API, as Next's do, so the
+// docked panels' `?panel=` moves as it would (#6157).
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
   useRouter: () => ({ push: mockPush }),
   usePathname: () => "/backwork",
 }));
+// Every test opens on the bare library; the address carries no state over.
+beforeEach(() => window.history.replaceState(null, "", "/backwork"));
 
 const { BackworkPage } = await import("./backwork-page");
 const { takeStagedBulkUpload } = await import("@/lib/backwork-bulk/handoff");
@@ -1800,6 +1806,28 @@ describe("BackworkPage library (2026-11-05 redesign)", () => {
 
     expect(
       await screen.findByText(/manage departments & professors/i),
+    ).toBeInTheDocument();
+    // Its address (#6157): Back closes it.
+    expect(window.location.search).toBe("?panel=cleanup");
+    window.history.back();
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/manage departments & professors/i),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("reopens the clean-up drawer and Upload from their addresses (#6157)", async () => {
+    window.history.replaceState(null, "", "/backwork?panel=cleanup");
+    const first = render(<BackworkPage />);
+    expect(
+      await screen.findByText(/manage departments & professors/i),
+    ).toBeInTheDocument();
+    first.unmount();
+    window.history.replaceState(null, "", "/backwork?panel=upload");
+    render(<BackworkPage />);
+    expect(
+      await screen.findByRole("heading", { name: "Upload backwork" }),
     ).toBeInTheDocument();
   });
 

@@ -23,7 +23,12 @@ import {
   writeKeptPanel,
 } from "@repo/hooks/kept-drafts";
 import { KeptDraftNote } from "@/components/shared/kept-draft-note";
-import { MAX_UPLOAD_LABEL, acceptAttribute } from "@repo/validation";
+import {
+  DOCKED_PANELS,
+  MAX_UPLOAD_LABEL,
+  WEB_ADDRESS_PARAMS,
+  acceptAttribute,
+} from "@repo/validation";
 import {
   BulkDropZone,
   type DropZoneCopy,
@@ -46,10 +51,11 @@ import {
   PanelFooter,
   PanelHeader,
 } from "@/components/shared/panel";
+import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import {
-  useGatedDialog,
-  type SubscriptionGate,
-} from "@/components/shared/subscription-gate";
+  useAddressArrival,
+  useAddressedDialog,
+} from "@/lib/address/use-addressed-dialog";
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
@@ -113,7 +119,13 @@ export function FolderImportPanel({
    */
   openerRef?: RefObject<(() => void) | null>;
 }) {
-  const dialog = useGatedDialog(gate);
+  // `?panel=import` (#6157): Back closes the panel, Forward and a reload
+  // reopen it, saying so when it comes back to a review.
+  const dialog = useAddressedDialog(
+    gate,
+    WEB_ADDRESS_PARAMS.documents.panel,
+    DOCKED_PANELS.documents.import,
+  );
   const requestUrls = useRequestDocumentUploadUrls();
   const confirmUploads = useConfirmDocumentUploads();
   const invalidate = useInvalidateDocuments();
@@ -187,8 +199,10 @@ export function FolderImportPanel({
     run !== null &&
     !view.applied &&
     (view.rows.length > 0 || view.leftOut.length > 0);
+  useAddressArrival(dialog, () => setRestored(reviewing));
 
   function open() {
+    if (dialog.open) return;
     setRestored(reviewing);
     dialog.setOpen(true);
   }
@@ -225,7 +239,7 @@ export function FolderImportPanel({
     if (!leftOpen || !gate.allowed) return;
     /* eslint-disable react-hooks/set-state-in-effect -- reopen, once, the review the page was left with */
     setLeftOpen(false);
-    if (reviewing) {
+    if (reviewing && !dialog.open) {
       setRestored(true);
       dialog.setOpen(true);
     }
