@@ -3,6 +3,7 @@
 import { EYEBROW } from "@/components/ui/typography";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import {
+  Suspense,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -32,7 +33,17 @@ import {
   useMyPermissions,
   useProfessors,
 } from "@repo/hooks";
-import { MAX_BACKWORK_ZIP_LABEL, can } from "@repo/validation";
+import {
+  DOCKED_PANELS,
+  MAX_BACKWORK_ZIP_LABEL,
+  WEB_ADDRESS_PARAMS,
+  can,
+} from "@repo/validation";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { useAddressedDialog } from "@/lib/address/use-addressed-dialog";
 import { formatDay } from "@repo/formatting";
 import { Button } from "@/components/ui/button";
 import { PageActions } from "@/components/layout/page-actions";
@@ -159,6 +170,19 @@ function courseHits(row: LibraryRow, hits: readonly string[]): readonly string[]
 }
 
 export function BackworkPage() {
+  return (
+    // `useSearchParams` (the docked panels' `?panel=`) needs a boundary.
+    <Suspense fallback={<BackworkRowsSkeleton />}>
+      <BackworkPageBody />
+    </Suspense>
+  );
+}
+
+/** `/backwork?panel=`: its docked panels (#6157). */
+const PANEL = WEB_ADDRESS_PARAMS.backwork.panel;
+const CLEANUP = DOCKED_PANELS.backwork.cleanup;
+
+function BackworkPageBody() {
   const { toast } = useToast();
   // `POST /v1/backwork/upload-url` and `POST /v1/backwork` carry no `@FreeTier`,
   // so the upload flow is paid-ops and its trigger has to mirror the
@@ -180,7 +204,11 @@ export function BackworkPage() {
   // priority than the keystroke that asked for it.
   const deferredQuery = useDeferredValue(query);
   const [filters, setFilters] = useState<LibraryFilters>(NO_FILTERS);
-  const [cleanupOpen, setCleanupOpen] = useState(false);
+  // `?panel=cleanup`: the cleanup drawer pushes, so Back closes it, and
+  // Forward and a reload reopen it (#6157). Through the gate, as its menu
+  // item is: never open onto writes a lapsed chapter refuses.
+  const panelAddress = useAddressParams([PANEL]);
+  const cleanupDialog = useAddressedDialog(gate, PANEL, CLEANUP);
   // A set, not one slot: two downloads in flight must not clear each other's
   // spinner.
   const [downloading, setDownloading] = useState<ReadonlySet<string>>(
@@ -210,6 +238,19 @@ export function BackworkPage() {
   const { data: permissionsPayload } = useMyPermissions();
   const isAdmin = can("backwork:admin", permissionsPayload?.permissions);
   const canUpload = can("backwork:upload", permissionsPayload?.permissions);
+  // A panel the member can't open (or no panel at all) comes off the
+  // address once their permissions are known, as a forbidden id does.
+  const panelParam = panelAddress.values[PANEL];
+  useDeadAddressParam(
+    PANEL,
+    panelParam,
+    panelParam !== null &&
+      permissionsPayload !== undefined &&
+      !(
+        (panelParam === CLEANUP && isAdmin) ||
+        (panelParam === DOCKED_PANELS.backwork.upload && canUpload)
+      ),
+  );
   const taxonomy = useBackworkTaxonomyActions(gate);
   const courseDialog = useBackworkCourseDialog(gate, isAdmin);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -700,7 +741,7 @@ export function BackworkPage() {
                       icon: Pencil,
                       disabled: !gate.allowed,
                       describedBy: gate.controlProps()["aria-describedby"],
-                      onSelect: () => setCleanupOpen(true),
+                      onSelect: () => cleanupDialog.setOpen(true),
                     },
                   ]
                 : []),
@@ -710,8 +751,7 @@ export function BackworkPage() {
         <Can permission="backwork:admin">
           {/* Portaled, so it can live beside the menu that opens it. */}
           <BackworkTaxonomyDrawer
-            open={cleanupOpen}
-            onOpenChange={setCleanupOpen}
+            {...cleanupDialog.dialogProps}
             gate={gate}
           />
         </Can>

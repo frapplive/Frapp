@@ -17,6 +17,14 @@ const { mockMint, mockConfirm, mockInvalidate } = vi.hoisted(() => ({
   mockInvalidate: vi.fn(),
 }));
 
+// `?panel=import` is the panel's open state (#6157): the router's search
+// params follow the History API, as Next's do.
+vi.mock("next/navigation", async () => ({
+  useSearchParams: (await import("@/tests/address-search-params"))
+    .useAddressSearchParams,
+}));
+beforeEach(() => window.history.replaceState(null, "", "/documents"));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useRequestDocumentUploadUrls: () => ({ mutateAsync: mockMint }),
@@ -80,6 +88,22 @@ async function openAndPick(files: File[]) {
   });
   return dialog;
 }
+
+describe("FolderImportPanel's address (#6157)", () => {
+  it("opens as ?panel=import, and Back closes it", async () => {
+    render(<FolderImportPanel gate={GATE} context={CONTEXT} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /import a folder/i }),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(window.location.search).toBe("?panel=import");
+    window.history.back();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(window.location.search).toBe("");
+  });
+});
 
 describe("FolderImportPanel (#2242)", () => {
   beforeEach(() => {

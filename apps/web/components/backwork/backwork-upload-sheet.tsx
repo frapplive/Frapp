@@ -41,10 +41,11 @@ import {
   PanelFooter,
   PanelHeader,
 } from "@/components/shared/panel";
+import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import {
-  useGatedDialog,
-  type SubscriptionGate,
-} from "@/components/shared/subscription-gate";
+  useAddressArrival,
+  useAddressedDialog,
+} from "@/lib/address/use-addressed-dialog";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
   asArray,
@@ -62,7 +63,9 @@ import {
   DOCUMENT_VARIANTS,
   MAX_BACKWORK_UPLOAD_BYTES,
   MAX_BACKWORK_UPLOAD_LABEL,
+  DOCKED_PANELS,
   MAX_COURSE_NAME_LENGTH,
+  WEB_ADDRESS_PARAMS,
   acceptAttribute,
   findDepartmentByCode,
   inspectUploadFile,
@@ -154,7 +157,13 @@ export function BackworkUploadSheet({
 }) {
   const { toast } = useToast();
   const router = useRouter();
-  const uploadDialog = useGatedDialog(gate);
+  // `/backwork?panel=upload` (#6157): Back closes the panel, Forward and a
+  // reload reopen it. Arriving that way does what Upload does first.
+  const uploadDialog = useAddressedDialog(
+    gate,
+    WEB_ADDRESS_PARAMS.backwork.panel,
+    DOCKED_PANELS.backwork.upload,
+  );
   const keptKeys = useKeptDraftKeys();
   /*
     Kept when the member goes back or leaves the page mid-upload (#4593), file
@@ -256,7 +265,8 @@ export function BackworkUploadSheet({
       });
       // Bulk upload has it now.
       kept.drop();
-      uploadDialog.setOpen(false);
+      // Onward without closing: closing goes Back, and Next drops a push
+      // that a Back overtakes. Back from bulk upload returns to this panel.
       router.push("/backwork/upload");
       return;
     }
@@ -333,7 +343,7 @@ export function BackworkUploadSheet({
     }
   }
 
-  const openPanel = useCallback(() => {
+  const preparePanel = useCallback(() => {
     setUploadError(null);
     // What the member left here, said so in the footer (#4593).
     const restored = kept.take();
@@ -341,8 +351,14 @@ export function BackworkUploadSheet({
       setUploadDraft(restored.fields);
       setCourseName(restored.courseName);
     }
+  }, [kept]);
+  const openPanel = useCallback(() => {
+    // Already open (Back or a reload landed on it): nothing to prepare.
+    if (panelOpen) return;
+    preparePanel();
     uploadDialog.setOpen(true);
-  }, [kept, uploadDialog]);
+  }, [panelOpen, preparePanel, uploadDialog]);
+  useAddressArrival(uploadDialog, preparePanel);
 
   // Back to the panel the page was left with open, through the same door as
   // Upload, so it says the draft was restored.

@@ -179,8 +179,18 @@ export type GatedDialog = {
  * must not set `revokedRef` (must not slam the dialog), so that close needs
  * its own preempt: focus goes to `ConnectionPill`, already on screen.
  */
-export function useGatedDialog(gate: SubscriptionGate): GatedDialog {
-  const [open, setOpenState] = useState(false);
+export function useGatedDialog(
+  gate: SubscriptionGate,
+  /**
+   * Open state held elsewhere (a docked panel's address,
+   * `useAddressedDialog`): the gate still refuses an open while blocked and
+   * closes it when revoked, through `setOpen`, which must be stable.
+   */
+  controlled?: { open: boolean; setOpen: (next: boolean) => void },
+): GatedDialog {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled ? controlled.open : ownOpen;
+  const setOpenState = controlled ? controlled.setOpen : setOwnOpen;
   const { allowed, isOffline, noticeRef } = gate;
   const revokedRef = useRef(false);
 
@@ -200,9 +210,8 @@ export function useGatedDialog(gate: SubscriptionGate): GatedDialog {
   useEffect(() => {
     if (!open || !blocked) return;
     revokedRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- close the dialog when a definite entitlement block lands mid-open
     setOpenState(false);
-  }, [open, blocked]);
+  }, [open, blocked, setOpenState]);
 
   // Clear the flag once the block lifts. It is normally consumed by
   // `onCloseAutoFocus`, but that needs a mounted `DialogContent` — and a
@@ -220,7 +229,7 @@ export function useGatedDialog(gate: SubscriptionGate): GatedDialog {
       if (next && !allowed) return;
       setOpenState(next);
     },
-    [allowed],
+    [allowed, setOpenState],
   );
 
   const onCloseAutoFocus = useCallback(
