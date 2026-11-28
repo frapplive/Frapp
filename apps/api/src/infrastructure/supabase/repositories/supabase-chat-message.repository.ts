@@ -7,16 +7,14 @@ import type {
   TablesInsert,
   TablesUpdate,
 } from '../database.types';
-import type {
-  ChatCardKind,
-  IChatMessageRepository,
-} from '#domain/repositories/chat.repository.interface';
+import type { IChatMessageRepository } from '#domain/repositories/chat.repository.interface';
 import {
   ChatMessageCursorNotFoundError,
   ChatMessageDuplicateError,
 } from '#domain/repositories/chat.repository.interface';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import {
+  ActivityCardReads,
   ChannelLatestMessage,
   ChatMessage,
 } from '#domain/entities/chat.entity';
@@ -85,7 +83,10 @@ function effectivePollListLimit(requested?: number): number {
  * exactly the archive import this column was added for.
  *
  * Adding a column to `chat_messages` means adding it here too. That is the
- * trade for not shipping the index payload to every reader.
+ * trade for not shipping the index payload to every reader. The same list is
+ * copied into `activity_card_reads` (`chapter_cards`, #6061), which serves
+ * Activity's cards: a column added here reaches those cards only through a
+ * migration that re-creates that function with it.
  *
  * `external_message_id` is the deliberate exception, for the same reason
  * `content_search` is: no client reads it. It is a Discord snowflake used by the
@@ -296,35 +297,21 @@ export class SupabaseChatMessageRepository implements IChatMessageRepository {
     return data || [];
   }
 
-  async findCardsByChapter(
+  async readActivityCards(
     chapterId: string,
-    options: { kind: ChatCardKind; senderId?: string; limit: number },
-  ): Promise<ChatMessage[]> {
-    // Chapter scope through the channel join, as `findPollsByChapter` does:
-    // `chat_messages` carries no `chapter_id` of its own.
-    let query = this.supabase
-      .from('chat_messages')
-      .select(
-        `${CHAT_MESSAGE_COLUMNS}, chat_channels!chat_messages_channel_id_fkey!inner(chapter_id)`,
-      )
-      .eq('kind', options.kind)
-      .eq('is_deleted', false)
-      .eq('chat_channels.chapter_id', chapterId)
-      .order('created_at', { ascending: false });
-
-    if (options.senderId) {
-      query = query.eq('sender_id', options.senderId);
-    }
-
-    const { data, error } = await query.limit(options.limit);
-    if (error) throw new SupabaseQueryError(error);
-    // The joined channel is only the chapter filter. It is dropped here so a
-    // caller that serves the row serves a chat message and nothing else.
-    return (data || []).map((row) => {
-      const message: ChatMessage & { chat_channels?: unknown } = { ...row };
-      delete message.chat_channels;
-      return message;
+    userId: string,
+    options: { limit: number; polls: boolean; cards: boolean },
+  ): Promise<ActivityCardReads> {
+    const { data, error } = await this.supabase.rpc('activity_card_reads', {
+      p_chapter_id: chapterId,
+      p_user_id: userId,
+      p_limit: options.limit,
+      p_polls: options.polls,
+      p_cards: options.cards,
     });
+    if (error) throw new SupabaseQueryError(error);
+    if (!data) throw new Error('activity_card_reads returned nothing');
+    return data;
   }
 
   async findByClientMessageId(

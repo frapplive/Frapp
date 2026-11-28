@@ -2,7 +2,11 @@ import { BadRequestException } from '@nestjs/common';
 import * as caughtFailure from '../../infrastructure/observability/report-caught-failure';
 import { ActivityService } from './activity.service';
 import type { ActivityLink } from './activity-link.service';
-import type { AssignedTaskItem, TaskRowListOptions } from './task.service';
+import type {
+  ActivityTaskLists,
+  AssignedTaskItem,
+  TaskListOptions,
+} from './task.service';
 import { TaskStatus } from '#domain/entities/task.entity';
 import type { TaskView } from '#domain/entities/task.entity';
 import type { ChatMessage } from '#domain/entities/chat.entity';
@@ -97,7 +101,7 @@ const event = (overrides: Partial<Event>): Event =>
 
 function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const taskService = {
-    listRows: jest.fn().mockResolvedValue({ tasks: [], total: 0 }),
+    listRows: jest.fn().mockResolvedValue([]),
     // As `TaskService.withGroupSummaries` gives them: a fixture's group, or
     // null for a one-person task.
     withGroupSummaries: jest.fn((_chapterId: string, tasks: TaskView[]) =>
@@ -105,7 +109,9 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
         tasks.map((row) => ({ ...row, group: row.group ?? null })),
       ),
     ),
-    listAssignedItems: jest.fn().mockResolvedValue([]),
+    // As `activity_task_reads` answers, from the fixtures `serveTasks` and
+    // `serveItems` hold: none until a spec serves some.
+    activityLists: jest.fn(activityListsFrom({ own: [], all: [], items: [] })),
     waitingExtensions: jest.fn().mockResolvedValue([]),
   };
   const serviceEntryService = {
@@ -150,12 +156,84 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     // so (`asAlumnus`).
     getAlumniRoleId: jest.fn().mockResolvedValue('role-alumni'),
   };
-  const messageRepo = {
-    findCardsByChapter: jest.fn().mockResolvedValue([]),
-  };
+  // `activity_card_reads` (#6061) is one call; this fake answers it from
+  // fixtures named for the reads it replaced, so a test serves the chapter's
+  // cards of one kind (`findCardsByChapter`), the caller's actions
+  // (`findActionsOnMessages`), every member's claims
+  // (`findAllActionsOnMessages`) or the caller's form answers (`findAnswered`)
+  // as before. Like the function, it reads the actions and answers on every
+  // card it scanned.
   const actionRepo = {
     findActionsOnMessages: jest.fn().mockResolvedValue([]),
     findAllActionsOnMessages: jest.fn().mockResolvedValue([]),
+  };
+  const formResponseRepo = {
+    findAnswered: jest.fn().mockResolvedValue([]),
+  };
+  const findCardsByChapter = jest.fn().mockResolvedValue([]);
+  const messageRepo = {
+    findCardsByChapter,
+    readActivityCards: jest.fn(
+      async (
+        chapterId: string,
+        userId: string,
+        {
+          limit,
+          polls: withPolls,
+          cards: withCards,
+        }: { limit: number; polls: boolean; cards: boolean },
+      ) => {
+        const scan = async (
+          kind: string,
+          senderId?: string,
+        ): Promise<ChatMessage[]> =>
+          !(kind === 'poll' ? withPolls : withCards)
+            ? []
+            : (findCardsByChapter(chapterId, {
+                kind,
+                limit,
+                ...(senderId ? { senderId } : {}),
+              }) as Promise<ChatMessage[]>);
+        const [polls, own_polls, signups, forms] = await Promise.all([
+          scan('poll'),
+          scan('poll', userId),
+          scan('signup'),
+          scan('form'),
+        ]);
+        // As the function does: no claim on a sheet the caller posted.
+        const othersSignups = signups.filter(
+          (message) => message.sender_id !== userId,
+        );
+        const idsOf = (messages: ChatMessage[]) => [
+          ...new Set(messages.map((message) => message.id)),
+        ];
+        const [votes, signup_claims, form_answers] = await Promise.all([
+          withPolls
+            ? actionRepo.findActionsOnMessages(
+                idsOf([...polls, ...own_polls]),
+                userId,
+                'vote',
+              )
+            : [],
+          withCards
+            ? actionRepo.findAllActionsOnMessages(
+                idsOf(othersSignups),
+                'signup',
+              )
+            : [],
+          withCards ? formResponseRepo.findAnswered(idsOf(forms), userId) : [],
+        ]);
+        return {
+          polls,
+          own_polls,
+          signups,
+          forms,
+          votes,
+          signup_claims,
+          form_answers,
+        };
+      },
+    ),
   };
   const linkService = { listFor: jest.fn().mockResolvedValue([]) };
   const reminderService = { listFor: jest.fn().mockResolvedValue([]) };
@@ -174,9 +252,6 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const attendanceRepo = {
     findByEventAndUser: jest.fn().mockResolvedValue(null),
     findByUserForEvents: jest.fn().mockResolvedValue([]),
-  };
-  const formResponseRepo = {
-    findAnswered: jest.fn().mockResolvedValue([]),
   };
   const readRepo = {
     // No client has begun this member's dots: every row is read.
@@ -210,7 +285,6 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     memberRepo as never,
     attendanceRepo as never,
     readRepo,
-    formResponseRepo as never,
     channelAccess as never,
     minutesService as never,
   );
@@ -311,16 +385,94 @@ const formCard = (
     ...overrides,
   }) as ChatMessage;
 
+interface TaskFixtures {
+  /** The caller's own tasks. */
+  own: TaskView[];
+  /** The chapter's tasks, as a `tasks:manage` holder reads them. */
+  all: TaskView[];
+  /** What the caller assigned, a task for everyone once (#5492). */
+  items: AssignedTaskItem[];
+}
+
 /**
- * `TaskService.list` answers the caller's own tasks and the chapter-wide list
- * separately, each narrowed as the repository narrows it in SQL (#4037).
+ * `TaskService.activityLists` over fixtures, each list narrowed, ordered and
+ * capped as `activity_task_reads` does it in SQL (#6061), and every list but
+ * the caller's own empty without `tasks:manage`. A row keeps a fixture's
+ * group, or none.
+ */
+function activityListsFrom(fixtures: TaskFixtures) {
+  return (
+    _chapterId: string,
+    userId: string,
+    canManage: boolean,
+    { weekStart, limit }: { weekStart: Date; limit: number },
+  ): Promise<ActivityTaskLists> => {
+    const since = weekStart.toISOString();
+    const withGroup = (row: TaskView) => ({ ...row, group: row.group ?? null });
+    const waiting = canManage
+      ? fixtures.all
+          .filter(
+            (row) =>
+              row.stored_status === TaskStatus.COMPLETED &&
+              row.confirmed_at === null &&
+              row.assignee_id !== userId,
+          )
+          .sort((a, b) =>
+            (a.completed_at ?? '').localeCompare(b.completed_at ?? ''),
+          )
+      : [];
+    return Promise.resolve({
+      own: fixtures.own
+        .filter(
+          (row) =>
+            row.confirmed_at === null ||
+            (row.completed_at !== null && row.completed_at >= since),
+        )
+        .map(withGroup),
+      waiting: waiting.slice(0, limit).map(withGroup),
+      waitingTotal: waiting.length,
+      made: canManage
+        ? fixtures.all
+            .filter((row) => row.created_by === userId)
+            .slice(0, limit)
+            .map(withGroup)
+        : [],
+      items: canManage ? fixtures.items.slice(0, limit) : [],
+    });
+  };
+}
+
+/** The fixtures each spec's task service serves, by its mock. */
+const taskFixtures = new WeakMap<jest.Mock, TaskFixtures>();
+
+function serveFixtures(
+  taskService: { activityLists: jest.Mock },
+  change: Partial<TaskFixtures>,
+) {
+  const fixtures = {
+    ...(taskFixtures.get(taskService.activityLists) ?? {
+      own: [],
+      all: [],
+      items: [],
+    }),
+    ...change,
+  };
+  taskFixtures.set(taskService.activityLists, fixtures);
+  taskService.activityLists.mockImplementation(activityListsFrom(fixtures));
+}
+
+/**
+ * The caller's own tasks and the chapter's, for Activity
+ * (`TaskService.activityLists`) and for the Archive (`TaskService.listRows`),
+ * each narrowed as the repository narrows it in SQL (#4037).
  */
 function serveTasks(
-  taskService: { listRows: jest.Mock },
+  taskService: { listRows: jest.Mock; activityLists: jest.Mock },
   own: TaskView[],
   all: TaskView[] = [],
 ) {
-  const matching = (isAdmin: boolean, options: TaskRowListOptions) =>
+  serveFixtures(taskService, { own, all });
+  const matching = (isAdmin: boolean, options: TaskListOptions) =>
     (isAdmin ? all : own).filter(
       (row) =>
         (options.status === undefined ||
@@ -329,33 +481,19 @@ function serveTasks(
           (row.confirmed_at !== null) === options.confirmed) &&
         (options.createdBy === undefined ||
           row.created_by === options.createdBy) &&
-        (options.notAssigneeId === undefined ||
-          row.assignee_id !== options.notAssigneeId) &&
         (options.completedSince === undefined ||
           (row.completed_at !== null &&
-            row.completed_at >= options.completedSince)) &&
-        (options.unconfirmedOrCompletedSince === undefined ||
-          row.confirmed_at === null ||
-          (row.completed_at !== null &&
-            row.completed_at >= options.unconfirmedOrCompletedSince)),
+            row.completed_at >= options.completedSince)),
     );
   taskService.listRows.mockImplementation(
     (
       _chapterId: string,
       _userId: string,
       isAdmin: boolean,
-      options: TaskRowListOptions = {},
+      options: TaskListOptions = {},
     ) => {
       const rows = matching(isAdmin, options);
-      if (options.order === 'longest_waiting') {
-        rows.sort((a, b) =>
-          (a.completed_at ?? '').localeCompare(b.completed_at ?? ''),
-        );
-      }
-      return Promise.resolve({
-        tasks: rows.slice(0, options.limit ?? rows.length),
-        total: rows.length,
-      });
+      return Promise.resolve(rows.slice(0, options.limit ?? rows.length));
     },
   );
 }
@@ -415,9 +553,10 @@ describe('ActivityService', () => {
       expect(view.needs_you.polls).toEqual([]);
       expect(view.made_by_you.polls).toEqual([]);
       expect(view.needs_you_count).toBe(0);
-      // Nothing about the hidden polls is even asked of the vote table.
+      // `activity_card_reads` reads the caller's own votes on every poll it
+      // scanned (#6061); a vote on a hidden poll still draws nothing.
       expect(actionRepo.findActionsOnMessages).toHaveBeenCalledWith(
-        [],
+        ['poll-hidden', 'poll-mine-hidden'],
         ME,
         'vote',
       );
@@ -555,8 +694,13 @@ describe('ActivityService', () => {
       );
 
       try {
-        await service.getActivity(CHAPTER, ME, null);
-        expect(reported).toHaveBeenCalledTimes(1);
+        const view = await service.getActivity(CHAPTER, ME, null);
+        // One read serves the polls and the cards (#6061), so both sections
+        // fail with it, and each is reported.
+        expect(view.unavailable).toEqual(
+          expect.arrayContaining(['polls', 'cards']),
+        );
+        expect(reported).toHaveBeenCalledTimes(2);
         expect(reported).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
@@ -691,16 +835,34 @@ describe('ActivityService', () => {
       });
     });
 
-    it('reads no polls while the Polls module is off', async () => {
-      const { service, messageRepo, chatService } = build();
-      servePolls(messageRepo, [pollCard({ id: 'poll-1' })]);
+    it('lists no polls while the Polls module is off', async () => {
+      const { service, messageRepo, actionRepo } = build();
+      servePolls(
+        messageRepo,
+        [pollCard({ id: 'poll-1' })],
+        [pollCard({ id: 'poll-mine', sender_id: ME })],
+      );
 
       const view = await service.getActivity(CHAPTER, ME, { polls: false });
 
-      expect(view.needs_you.polls).toEqual([]);
+      // The cards' one read still runs for sign-ups and forms, which have no
+      // module switch (#6061), but without its poll half: no poll is
+      // scanned, and no poll row, count or progress is drawn.
+      expect(messageRepo.readActivityCards).toHaveBeenCalledWith(CHAPTER, ME, {
+        limit: 100,
+        polls: false,
+        cards: true,
+      });
       expect(messageRepo.findCardsByChapter).not.toHaveBeenCalledWith(
         CHAPTER,
         expect.objectContaining({ kind: 'poll' }),
+      );
+      expect(view.needs_you.polls).toEqual([]);
+      expect(view.made_by_you.polls).toEqual([]);
+      expect(view.week.polls).toBeNull();
+      expect(actionRepo.findAllActionsOnMessages).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'vote',
       );
     });
   });
@@ -894,7 +1056,33 @@ describe('ActivityService', () => {
       const view = await service.getActivity(CHAPTER, ME, null);
 
       expect(view.needs_you.cards).toEqual([]);
-      expect(view.unavailable).toContain('cards');
+      // The answers come in the same call as the polls (#6061), so the polls
+      // are served empty and named with them.
+      expect(view.unavailable).toEqual(
+        expect.arrayContaining(['cards', 'polls']),
+      );
+    });
+
+    it('counts no answer on a form the caller can’t read, posted, or whose sender they blocked', async () => {
+      const { service, messageRepo, formResponseRepo, chatBlocks } = build();
+      chatBlocks.listBlockedUserIds.mockResolvedValue(['user-blocked']);
+      serveCards(messageRepo, [
+        formCard({ id: 'readable' }),
+        formCard({ id: 'hidden', channel_id: UNREADABLE }),
+        formCard({ id: 'own', sender_id: ME }),
+        formCard({ id: 'blocked', sender_id: 'user-blocked' }),
+      ]);
+      // The function reads the caller's answers on every form it scanned.
+      formResponseRepo.findAnswered.mockResolvedValue(
+        ['readable', 'hidden', 'own', 'blocked'].map((id) => ({
+          message_id: id,
+          created_at: iso(-HOUR),
+        })),
+      );
+
+      const view = await service.getActivity(CHAPTER, ME, null);
+
+      expect(view.week.cards).toEqual({ done: 1, total: 1 });
     });
 
     it('dots a card the caller has not opened, under its own read kind', async () => {
@@ -953,11 +1141,20 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      // One read: their tasks not yet confirmed, with this week's done ones.
-      expect(taskService.listRows).toHaveBeenCalledTimes(1);
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        unconfirmedOrCompletedSince: WEEK_START,
-      });
+      // One read: their tasks not yet confirmed, with this week's done ones,
+      // and nothing of anyone else's.
+      expect(taskService.activityLists).toHaveBeenCalledTimes(1);
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        false,
+        {
+          weekStart: new Date(WEEK_START),
+          limit: 25,
+          now: expect.any(Date),
+        },
+      );
+      expect(taskService.listRows).not.toHaveBeenCalled();
       expect(view.needs_you.tasks.map((row) => row.id)).toEqual([
         'sooner',
         'later',
@@ -1036,24 +1233,19 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      // Two filtered reads, never the chapter's whole history (#4037); the
-      // waiting ones counted by the same read (#5746).
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
-        status: TaskStatus.COMPLETED,
-        confirmed: false,
-        notAssigneeId: ME,
-        order: 'longest_waiting',
-        limit: 25,
-        withTotal: true,
-      });
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, true, {
-        createdBy: ME,
-        limit: 25,
-      });
-      // Every chapter-wide read is narrowed and capped.
-      for (const [, , isAdmin, options] of taskService.listRows.mock.calls) {
-        if (isAdmin) expect(options).toHaveProperty('limit', 25);
-      }
+      // One read for every list, each narrowed and capped in SQL, never the
+      // chapter's whole history (#4037, #6061).
+      expect(taskService.activityLists).toHaveBeenCalledTimes(1);
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        true,
+        {
+          weekStart: new Date(WEEK_START),
+          limit: 25,
+          now: expect.any(Date),
+        },
+      );
       expect(view.needs_you.task_confirmations.map((row) => row.id)).toEqual([
         'to-confirm',
       ]);
@@ -1159,8 +1351,7 @@ describe('ActivityService', () => {
 
       const view = await service.getActivity(CHAPTER, ME, { tasks: false });
 
-      expect(taskService.listRows).not.toHaveBeenCalled();
-      expect(taskService.listAssignedItems).not.toHaveBeenCalled();
+      expect(taskService.activityLists).not.toHaveBeenCalled();
       expect(view.made_by_you.task_items).toEqual([]);
     });
 
@@ -1202,14 +1393,14 @@ describe('ActivityService', () => {
         kind: 'group',
         group: { ...summary, total: copies.length },
         copies,
-        // As `TaskService.listAssignedItems` picks it: a copy not confirmed.
+        // As `TaskService.activityLists` picks it: a copy not confirmed.
         shared: copies.find((one) => !one.points_awarded) ?? copies[0],
         created_at: iso(-HOUR),
       });
       const serveItems = (
-        taskService: { listAssignedItems: jest.Mock },
+        taskService: { activityLists: jest.Mock },
         items: AssignedTaskItem[],
-      ) => taskService.listAssignedItems.mockResolvedValue(items);
+      ) => serveFixtures(taskService, { items });
       const onlyGroup = async (copies: [TaskView, ...TaskView[]]) => {
         const { service, taskService } = build(MANAGER);
         serveItems(taskService, [groupItem(copies)]);
@@ -1233,11 +1424,11 @@ describe('ActivityService', () => {
           now: NOW,
         });
 
-        expect(taskService.listAssignedItems).toHaveBeenCalledWith(
+        expect(taskService.activityLists).toHaveBeenCalledWith(
           CHAPTER,
           ME,
-          25,
-          NOW,
+          true,
+          { weekStart: new Date(WEEK_START), limit: 25, now: NOW },
         );
         expect(view.made_by_you.task_items).toEqual([
           {
@@ -1347,7 +1538,12 @@ describe('ActivityService', () => {
 
         const view = await service.getActivity(CHAPTER, ME, null);
 
-        expect(taskService.listAssignedItems).not.toHaveBeenCalled();
+        expect(taskService.activityLists).toHaveBeenCalledWith(
+          CHAPTER,
+          ME,
+          false,
+          expect.anything(),
+        );
         expect(view.made_by_you.task_items).toEqual([]);
       });
 
@@ -1365,7 +1561,7 @@ describe('ActivityService', () => {
 
       it('serves the tasks section unavailable, not a partial list, when the read fails', async () => {
         const { service, taskService } = build(MANAGER);
-        taskService.listAssignedItems.mockRejectedValue(new Error('db down'));
+        taskService.activityLists.mockRejectedValue(new Error('db down'));
         jest
           .spyOn(caughtFailure, 'reportCaughtFailure')
           .mockImplementation(() => undefined);
@@ -2472,7 +2668,7 @@ describe('ActivityService', () => {
 
   it('serves the other sections when one fails, and names the one that did', async () => {
     const { service, taskService, messageRepo } = build();
-    taskService.listRows.mockRejectedValue(new Error('db down'));
+    taskService.activityLists.mockRejectedValue(new Error('db down'));
     servePolls(messageRepo, [pollCard({ id: 'poll-1' })]);
 
     const view = await service.getActivity(CHAPTER, ME, null);
@@ -2511,12 +2707,10 @@ describe('ActivityService', () => {
 
   it('caps each list at 25 rows and counts what waits before the cap', async () => {
     const { service, taskService } = build();
-    taskService.listRows.mockResolvedValue({
-      tasks: Array.from({ length: 30 }, (_, index) =>
-        task({ id: `task-${index}` }),
-      ),
-      total: 30,
-    });
+    serveTasks(
+      taskService,
+      Array.from({ length: 30 }, (_, index) => task({ id: `task-${index}` })),
+    );
 
     const view = await service.getActivity(CHAPTER, ME, null);
 
@@ -2561,9 +2755,14 @@ describe('ActivityService', () => {
 
       expect(named.week.start).toBe('2026-11-08T05:00:00.000Z');
       expect(named.week.end).toBe('2026-11-15T05:00:00.000Z');
-      expect(taskService.listRows).toHaveBeenCalledWith(CHAPTER, ME, false, {
-        unconfirmedOrCompletedSince: '2026-11-08T05:00:00.000Z',
-      });
+      expect(taskService.activityLists).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        false,
+        expect.objectContaining({
+          weekStart: new Date('2026-11-08T05:00:00.000Z'),
+        }),
+      );
       expect(wide.week.start).toBe(WEEK_START);
     });
 
@@ -2706,16 +2905,23 @@ describe('ActivityService', () => {
           payload: { slot_ids: ['fri'] },
           created_at: iso(-HOUR),
         },
-      ]);
-      actionRepo.findActionsOnMessages.mockResolvedValue([
         {
           message_id: 'closed-sheet',
+          user_id: ME,
+          payload: { slot_ids: ['sat'] },
+          created_at: iso(-2 * HOUR),
+        },
+        // Nor on a sheet that has closed since.
+        {
+          message_id: 'closed-sheet',
+          user_id: OTHER,
           payload: { slot_ids: ['sat'] },
           created_at: iso(-2 * HOUR),
         },
         // Gave every slot back before the sheet closed: not an answer.
         {
           message_id: 'gave-up-sheet',
+          user_id: ME,
           payload: { slot_ids: [] },
           created_at: iso(-2 * HOUR),
         },
@@ -2731,12 +2937,8 @@ describe('ActivityService', () => {
         'open-sheet',
         'open-form',
       ]);
-      // The closed sheet's claims are read for the caller alone.
-      expect(actionRepo.findActionsOnMessages).toHaveBeenCalledWith(
-        ['closed-sheet', 'gave-up-sheet'],
-        ME,
-        'signup',
-      );
+      // Every claim on every sheet is one read (#6061); the closed sheets
+      // count only the caller's own.
       expect(view.week.cards).toEqual({ done: 3, total: 5 });
     });
 
@@ -2882,7 +3084,7 @@ describe('ActivityService', () => {
 
     it('serves a part that failed null and names it, so it never reads as zero', async () => {
       const { service, taskService, eventService, attendanceRepo } = build();
-      taskService.listRows.mockRejectedValue(new Error('boom'));
+      taskService.activityLists.mockRejectedValue(new Error('boom'));
       eventService.findByChapter.mockResolvedValue([
         event({ id: 'e', start_time: iso(HOUR), end_time: iso(2 * HOUR) }),
       ]);
@@ -3740,6 +3942,12 @@ describe('ActivityService', () => {
         'voted-closed',
         'mine-closed',
       ]);
+      // The poll half of the cards' read only: no sign-up or form.
+      expect(messageRepo.readActivityCards).toHaveBeenCalledWith(CHAPTER, ME, {
+        limit: 100,
+        polls: true,
+        cards: false,
+      });
       expect(archive.polls.every((row) => row.is_closed)).toBe(true);
     });
 

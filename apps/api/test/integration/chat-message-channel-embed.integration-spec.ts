@@ -7,7 +7,7 @@
 // repository unit specs, which run against a fake client that ignores the
 // select projection, all stayed green. The fix names the FK
 // (`chat_channels!chat_messages_channel_id_fkey!inner(chapter_id)`); this file
-// runs each of the four reads that use it, through the real repository
+// runs each of the reads that use it, through the real repository
 // methods, so a select PostgREST refuses fails here.
 //
 // It also points one channel's `background_message_id` at the *other*
@@ -166,16 +166,6 @@ describeIntegration(
       const repo = new SupabaseChatMessageRepository(supabase);
       const rows = await repo.findPollsByChapter(chapterId);
       expect(rows.map((row) => row.id)).toEqual([pollId]);
-    });
-
-    it('findCardsByChapter returns only the chapter’s own polls, without the join', async () => {
-      const repo = new SupabaseChatMessageRepository(supabase);
-      const rows = await repo.findCardsByChapter(chapterId, {
-        kind: 'poll',
-        limit: 10,
-      });
-      expect(rows.map((row) => row.id)).toEqual([pollId]);
-      expect(rows[0]).not.toHaveProperty('chat_channels');
     });
 
     it('findExpiredPollsPendingNotice reads each poll’s chapter through channel_id', async () => {

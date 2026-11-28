@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeToAddress, replaceAddress } from "@/lib/address/address";
 import {
   Eye,
   Hash,
@@ -128,7 +129,6 @@ const TYPE_ICON: Record<CustomFieldType, LucideIcon> = {
  */
 export function SettingsFieldsTab({ canManage }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const fieldId = searchParams.get("field");
   const fieldsQuery = useCustomFields();
   const updateField = useUpdateCustomField();
@@ -263,7 +263,8 @@ export function SettingsFieldsTab({ canManage }: Props) {
     body = (
       <NewFieldPage
         existingKeys={saved.map((field) => field.key)}
-        onCreated={(id) => router.replace(fieldHref(id))}
+        // The new field's page takes the New page's entry, keeping its mark.
+        onCreated={(id) => replaceAddress({ field: id })}
       />
     );
   } else if (fieldId) {
@@ -279,7 +280,7 @@ export function SettingsFieldsTab({ canManage }: Props) {
         onMove={(by) => move(field, by)}
         onDelete={() =>
           void remove(field).then((gone) => {
-            if (gone) router.push(BASE);
+            if (gone) closeToAddress(BASE);
           })
         }
       />

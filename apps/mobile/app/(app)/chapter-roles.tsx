@@ -34,6 +34,7 @@ import {
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
+import { ROLES_VIEW_PERMISSIONS } from "@/lib/roles/roles-visibility";
 import { BACK_TO_CHAPTER_SETTINGS } from "@/components/back-row";
 import {
   ListRow,
@@ -160,10 +161,7 @@ function RolesAndGroups() {
   const filtering = normalizeWords(query).length > 0;
   const permissions = usePermissionList();
   const isHidden = useIsPermissionHidden();
-  const canSeeRoles = canAny(
-    ["roles:manage", "chapter-config:view"],
-    permissions,
-  );
+  const canSeeRoles = canAny([...ROLES_VIEW_PERMISSIONS], permissions);
   const groupsQuery = useGroups({ enabled: true });
   const groups = groupsQuery.data ?? [];
 

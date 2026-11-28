@@ -95,11 +95,8 @@ import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
 import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { anyReadUncached } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
@@ -168,8 +165,12 @@ import {
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { EventsPageSkeleton } from "@/components/events/events-skeleton";
+import { useShellCached } from "@/lib/shell-cache/shell-cache-sync";
 
 type EventRow = Record<string, unknown>;
+
+/** One empty list, so the address opener sees no change while the kept list draws. */
+const NO_EVENTS: readonly EventRow[] = [];
 type Entry = EventListEntry<EventRow>;
 
 type TimeFilter = "upcoming" | "past" | "all";
@@ -410,9 +411,15 @@ function AddressedEventsPage() {
     enabled: Boolean(activeChapterId),
   });
 
+  // The list this browser last saw for this member and chapter, drawn while
+  // the read is out (#5049). Only the list reads it: the address's event and
+  // its `edit=1` / `excuse=1` (`OpenLinkedEvent`), the reopen and New intent
+  // below all wait on the live answer, so nothing acts on a kept copy.
+  const keptEvents = useShellCached<EventRow[]>("events");
+  const fromKept = eventsQuery.isLoading && Array.isArray(keptEvents);
   const events = useMemo<EventRow[]>(
-    () => eventsQuery.data ?? [],
-    [eventsQuery.data],
+    () => eventsQuery.data ?? (fromKept ? (keptEvents ?? []) : []),
+    [eventsQuery.data, fromKept, keptEvents],
   );
 
   // Reopen the editor the page was left with (#4593), once this viewer could
@@ -1049,7 +1056,7 @@ function AddressedEventsPage() {
     );
   }
 
-  if (eventsQuery.isLoading) {
+  if (eventsQuery.isLoading && !fromKept) {
     return <EventsPageSkeleton />;
   }
 
@@ -1079,7 +1086,7 @@ function AddressedEventsPage() {
 
   // The Filter menu's rows, also drawn as the chips of the filters that are
   // on. Upcoming is Time's resting value, so it counts as no filter.
-  const eventFilters: FilterMenuFilter[] = [
+  const eventFilters: FilterRow[] = [
     {
       key: "time",
       label: "Time",
@@ -1732,7 +1739,7 @@ function AddressedEventsPage() {
           a link, Back, Forward or a reload. */}
       <Suspense fallback={null}>
         <OpenLinkedEvent
-          events={events}
+          events={fromKept ? NO_EVENTS : events}
           idOf={eventIdOf}
           onOpen={(event, linked) =>
             openDetails(event, { ...linked, fromAddress: true })

@@ -131,7 +131,7 @@ describe('ChannelAccessService', () => {
       findLatestPerChannel: jest.fn(),
       countPinnedByChannel: jest.fn(),
       findPollsByChapter: jest.fn(),
-      findCardsByChapter: jest.fn(),
+      readActivityCards: jest.fn(),
       findByClientMessageId: jest.fn(),
       findAuthorAvatarPaths: jest.fn(),
       insertIdempotent: jest.fn(),

@@ -1540,3 +1540,19 @@ describe("Roles and groups' structure on the phone (#6029)", () => {
     expect(h.deleteGroup).toHaveBeenCalledWith("g-house");
   });
 });
+
+describe("A role or tier opened from a web link (#6049)", () => {
+  it("draws neither for a member Roles and groups hides the roles from", () => {
+    h.permissions = ["groups:manage", "members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-bro" });
+    const role = render(<RoleScreen />);
+    expect(screenText(role)).toContain("Your role can't see roles");
+    expect(screenText(role)).not.toContain("Create events");
+    role.unmount();
+
+    vi.mocked(useLocalSearchParams).mockReturnValue({ tierId: "t-bro" });
+    const tier = render(<RoleTierScreen />);
+    expect(screenText(tier)).toContain("Your role can't see roles");
+    expect(screenText(tier)).not.toContain("Create events");
+  });
+});

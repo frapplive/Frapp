@@ -1,14 +1,13 @@
 /**
  * The Directory's Actives filters (#3971): role, group, graduation year,
- * pledge class and status, the ones web's Directory toolbar carries
- * (`apps/web/components/members/members-directory.tsx`), applied to the same
- * `GET /v1/members` rows by the same rules, so a filter reads the same on
- * both.
+ * pledge class, status and phone reach, the rows web's Directory Filter menu
+ * lists (`@repo/hooks/directory-filter-rows` builds them for both apps),
+ * applied to the same `GET /v1/members` rows by the same rules, so a filter
+ * reads the same on both.
  *
  * Client-side, as web's are: the Actives tab already holds the whole list, and
  * `GET /v1/members` takes no filter params.
  */
-import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import type { ChapterRole } from "@repo/hooks/chapter-roles";
 import { matchesRoleFilter } from "@repo/hooks/member-assignments";
 import {
@@ -30,7 +29,7 @@ export interface ActivesFilter {
   status: ActivesStatus | null;
   /**
    * Whether Frapp's notifications reach the member's phone (web's "Phone app"
-   * chip). Offered only to officers the server sends the whole chapter's
+   * filter). Offered only to officers the server sends the whole chapter's
    * reach to.
    */
   phoneReach: PhoneReachFilter | null;
@@ -44,15 +43,6 @@ export const NO_ACTIVES_FILTER: ActivesFilter = {
   status: null,
   phoneReach: null,
 };
-
-/** Web's Status options and words: onboarding finished, or not yet. */
-export const STATUS_OPTIONS: readonly {
-  value: ActivesStatus;
-  label: string;
-}[] = [
-  { value: "active", label: "Active" },
-  { value: "pending", label: "Pending" },
-];
 
 export type FilterRole = Pick<ChapterRole, "id" | "name" | "color">;
 
@@ -69,26 +59,6 @@ export function activesFilterRoles(
   return roles
     .filter((role) => role.system_key !== "ALUMNI" && !role.everyone)
     .map(({ id, name, color }) => ({ id, name, color }));
-}
-
-/**
- * The role list for a typed query, matched by `matchesWordStarts`, the rule
- * web's searchable role chip uses: every word typed starts a word of the name,
- * case and accents ignored, so "rec" finds "Rush/Recruitment Chair".
- */
-export function searchFilterRoles(
-  roles: readonly FilterRole[],
-  query: string,
-): FilterRole[] {
-  return roles.filter((role) => matchesWordStarts(role.name, query));
-}
-
-/**
- * Whether a typed role query narrows anything. Punctuation alone doesn't (the
- * matcher drops it), so "(" on the way to "(Exec)" still shows Any role.
- */
-export function hasRoleQuery(query: string): boolean {
-  return normalizeWords(query).length > 0;
 }
 
 /** The actives' graduation years, newest first, as web lists them. */
@@ -142,11 +112,6 @@ export function effectiveActivesFilter(
     status: filter.status,
     phoneReach: known.phoneReach ? filter.phoneReach : null,
   };
-}
-
-/** How many filters are set, for the Filters chip's count. */
-export function countActivesFilters(filter: ActivesFilter): number {
-  return Object.values(filter).filter((value) => value !== null).length;
 }
 
 /** The actives that pass every set filter. */

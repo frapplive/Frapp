@@ -25,11 +25,8 @@ import {
 } from "@repo/validation";
 import { PointsAdjustmentDialog } from "@/components/points/points-adjustment-dialog";
 import { ExportMenu } from "@/components/shared/export-menu";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { NestedError, NestedLoading } from "@/components/shared/nested-states";
 import { SectionLabel } from "@/components/shared/section-label";
 import {
@@ -193,7 +190,7 @@ export function PointsLedger({
       ? (nameFor(String(row.user_id)) ?? String(row.user_id))
       : "Unknown member";
 
-  const filters: FilterMenuFilter[] = [
+  const filters: FilterRow[] = [
     {
       key: "category",
       label: "Category",

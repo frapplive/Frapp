@@ -1,9 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import {
+  clearFilters,
+  filterValueLabel,
+  filtersOn,
+  hasFilterQuery,
+  isFilterSearchable,
+  searchFilterOptions,
+  type FilterRow,
+} from "@repo/hooks/filter-rows";
 import { ListFilter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { FILTER_SEARCH_THRESHOLD } from "@/components/shared/filter-chip";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -39,31 +47,22 @@ import {
  * A list that splits into two or three named sets people switch between all
  * day (Actives / Alumni, All / Unread) is a view, not a filter: plain words
  * beside the title (`ViewLabels` in `PageViews`, #5947).
+ *
+ * The rows are `FilterRow`s (`@repo/hooks/filter-rows`), built with
+ * `anyFilterRow` where a filter's state is `null` for "any".
  */
-export type FilterMenuFilter = {
-  key: string;
-  label: string;
-  options: readonly { value: string; label: string }[];
-  value: string;
-  /** The option that means "no filter" (All, Any). Not counted as on. */
-  anyValue: string;
-  onChange: (value: string) => void;
-  /** A sort row is listed with the filters but never counted or cleared. */
-  isSort?: boolean;
-};
-
 export function FilterMenu({
   filters,
   thing,
   narrow = false,
 }: {
-  filters: readonly FilterMenuFilter[];
+  filters: readonly FilterRow[];
   /** What the list holds, for the button's name: "Filter members". */
   thing: string;
   /** Draws the button as an icon only, for a pane too narrow for its word. */
   narrow?: boolean;
 }) {
-  const on = filters.filter((f) => !f.isSort && f.value !== f.anyValue);
+  const on = filtersOn(filters);
   const name =
     on.length > 0 ? `Filter ${thing}, ${on.length} on` : `Filter ${thing}`;
   const count =
@@ -83,8 +82,10 @@ export function FilterMenu({
       </Badge>
     ) : null;
 
+  const [open, setOpen] = useState(false);
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         {narrow ? (
           <IconButton
@@ -115,16 +116,16 @@ export function FilterMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-60">
         {filters.map((filter) => (
-          <FilterSubmenu key={filter.key} filter={filter} />
+          <FilterSubmenu
+            key={filter.key}
+            filter={filter}
+            close={() => setOpen(false)}
+          />
         ))}
         {on.length > 0 ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                for (const filter of on) filter.onChange(filter.anyValue);
-              }}
-            >
+            <DropdownMenuItem onSelect={() => clearFilters(filters)}>
               Clear all
             </DropdownMenuItem>
           </>
@@ -136,24 +137,40 @@ export function FilterMenu({
 
 /**
  * One filter's row and its options. Past `FILTER_SEARCH_THRESHOLD` options
- * the list gets a type-to-filter field (#3970: a chapter imported from
- * Discord can carry 100+ roles, and scrolling for one is slow).
+ * (the "any" row not counted) the list gets a type-to-filter field (#3970: a
+ * chapter imported from Discord can carry 100+ roles, and scrolling for one
+ * is slow). It searches as the phone's `FilterSheet` does, by the shared
+ * `searchFilterOptions`: word starts, and the "any" row steps aside while a
+ * query is typed. Enter picks the first match; Escape clears a query before
+ * it closes.
  */
-function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
+function FilterSubmenu({
+  filter,
+  close,
+}: {
+  filter: FilterRow;
+  close: () => void;
+}) {
   const [query, setQuery] = useState("");
-  const current = filter.options.find((o) => o.value === filter.value);
-  const searchable = filter.options.length > FILTER_SEARCH_THRESHOLD;
-  const needle = query.trim().toLowerCase();
-  const shown = needle
-    ? filter.options.filter((o) => o.label.toLowerCase().includes(needle))
-    : filter.options;
+  const searchable = isFilterSearchable(filter);
+  const typed = hasFilterQuery(query);
+  const shown = searchFilterOptions(filter, query);
   return (
     <DropdownMenuSub onOpenChange={(open) => !open && setQuery("")}>
       <DropdownMenuSubTrigger className="gap-6">
         <span className="flex-1">{filter.label}</span>
-        <span className="text-muted-foreground">{current?.label}</span>
+        <span className="text-muted-foreground">
+          {filterValueLabel(filter)}
+        </span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
+      <DropdownMenuSubContent
+        className="max-h-80 overflow-y-auto"
+        onEscapeKeyDown={(event) => {
+          if (!query) return;
+          event.preventDefault();
+          setQuery("");
+        }}
+      >
         {searchable ? (
           <Input
             value={query}
@@ -161,6 +178,14 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
             // The menu's typeahead would take these keys; arrows and Escape
             // still reach it.
             onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const first = shown[0];
+                if (typed && first) {
+                  filter.onChange(first.value);
+                  close();
+                }
+              }
               if (
                 !["ArrowDown", "ArrowUp", "Escape", "Tab"].includes(event.key)
               ) {
@@ -201,9 +226,9 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
 export function ActiveFilterChips({
   filters,
 }: {
-  filters: readonly FilterMenuFilter[];
+  filters: readonly FilterRow[];
 }) {
-  const on = filters.filter((f) => !f.isSort && f.value !== f.anyValue);
+  const on = filtersOn(filters);
   if (on.length === 0) return null;
   // The pressed chip unmounts, so focus moves to the next chip, else the
   // Filter button, instead of falling to the top of the page.
@@ -228,7 +253,7 @@ export function ActiveFilterChips({
       aria-label="Filters on"
     >
       {on.map((filter) => {
-        const current = filter.options.find((o) => o.value === filter.value);
+        const current = filterValueLabel(filter);
         return (
           <button
             key={filter.key}
@@ -238,14 +263,14 @@ export function ActiveFilterChips({
               keepFocus(event.currentTarget, false);
               filter.onChange(filter.anyValue);
             }}
-            aria-label={`Remove filter ${filter.label}: ${current?.label ?? ""}`}
+            aria-label={`Remove filter ${filter.label}: ${current}`}
             className={cn(
               "inline-flex h-control-chip items-center gap-1 rounded-full border border-border bg-card px-2.5 text-caption text-foreground transition hover:bg-card-hover",
               FOCUS_RING,
             )}
           >
             <span className="text-muted-foreground">{filter.label}</span>
-            {current?.label}
+            {current}
             <X className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
         );
@@ -255,7 +280,7 @@ export function ActiveFilterChips({
           type="button"
           onClick={(event) => {
             keepFocus(event.currentTarget, true);
-            for (const filter of on) filter.onChange(filter.anyValue);
+            clearFilters(filters);
           }}
           className={cn(
             "h-control-chip rounded-full px-2 text-caption text-muted-foreground hover:text-foreground",

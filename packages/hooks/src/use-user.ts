@@ -12,6 +12,11 @@ import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { displayNameOrNull } from "./display-names";
 import { usePermissionPreview } from "./permission-preview";
 
+/** The key `useMyPermissions` reads, for writers and the web's shell cache. */
+export function myPermissionsQueryKey(chapterId: string | null | undefined) {
+  return ["user", "me", "permissions", chapterId] as const;
+}
+
 /**
  * `enabled: false` keeps an observer from fetching, for a caller mounted where
  * nobody may be signed in yet (mobile's app-wide runtimes sit above the auth
@@ -276,7 +281,7 @@ export function useMyPermissions(options?: { enabled?: boolean }) {
     [preview],
   );
   return useQuery({
-    queryKey: ["user", "me", "permissions", chapterId],
+    queryKey: myPermissionsQueryKey(chapterId),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/users/me/permissions", {
         signal,

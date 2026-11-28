@@ -14,7 +14,11 @@ import {
 /**
  * How many reads one Activity load makes (#5746). The task section runs the
  * real `TaskService` over the real Supabase repositories on the tenant-scope
- * fake, so every PostgREST request it would send is counted. The other
+ * fake, so every PostgREST request and RPC it would send is counted. Its
+ * lists come from one function, `activity_task_reads` (#6061), whose answer
+ * the fake can't work out: each spec serves what the function returns for
+ * this seed, row for row, and `task-groups.integration-spec.ts` checks the
+ * function itself against Postgres. The other
  * sections' services and repositories are stubs, each call counted as one
  * read: what they cost is theirs to measure, and this spec only holds the
  * line on the count as a whole.
@@ -162,10 +166,134 @@ const seed = () => ({
   ],
 });
 
+/** Chapter A's seeded task, by its id without the chapter prefix. */
+const seeded = (id: string): Row => {
+  const row = seed().tasks.find((task) => task.id === `a${id}`);
+  if (!row) throw new Error(`no seeded task a${id}`);
+  return row;
+};
+
+/**
+ * What `activity_task_reads` returns for ME in chapter A this week, limit
+ * 25, worked out by hand from the seed: every row was made at the same
+ * instant, so each list's newest-first order is by id, highest first.
+ */
+const functionReads = (canManage: boolean) => ({
+  // Not confirmed, or done since Sunday: not `-done-old`.
+  own: [
+    '-open',
+    '-done-waiting',
+    '-done-confirmed',
+    '-copy-mine-done-early',
+    '-copy-mine',
+  ].map(seeded),
+  waiting: canManage ? [seeded('-theirs-waiting')] : [],
+  waiting_total: canManage ? 1 : 0,
+  made: canManage
+    ? [
+        '-theirs-waiting',
+        '-copy-theirs',
+        '-copy-mine-done-early',
+        '-copy-mine',
+      ].map(seeded)
+    : [],
+  singles: canManage ? [seeded('-theirs-waiting')] : [],
+  made_groups: canManage
+    ? seed().task_groups.filter((group) => group.id === `a${GROUP}`)
+    : [],
+  row_groups: seed().task_groups.filter((group) => group.id === `a${GROUP}`),
+  copy_states: ['-copy-mine', '-copy-mine-done-early', '-copy-theirs']
+    .map(seeded)
+    .map(
+      ({
+        id,
+        group_id,
+        assignee_id,
+        status,
+        points_awarded,
+        due_date,
+        due_at,
+      }) => ({
+        id,
+        group_id,
+        assignee_id,
+        status,
+        points_awarded,
+        due_date,
+        due_at,
+      }),
+    ),
+  shared: canManage ? [seeded('-copy-mine')] : [],
+});
+
+/** An open card of `kind` from OTHER in the readable channel. */
+const card = (id: string, kind: string, payload: Row): Row => ({
+  id,
+  channel_id: 'channel-1',
+  sender_id: OTHER,
+  content: kind,
+  kind,
+  payload: { closes_at: '2026-11-20T00:00:00.000Z', ...payload },
+  is_deleted: false,
+  created_at: '2026-11-09T00:00:00.000Z',
+});
+
+const CARD_READS = {
+  polls: [
+    card('poll-1', 'poll', {
+      question: 'Formal venue?',
+      options: [
+        { id: 'a', label: 'Downtown' },
+        { id: 'b', label: 'Campus' },
+      ],
+    }),
+  ],
+  own_polls: [],
+  signups: [
+    card('signup-1', 'signup', {
+      title: 'Sober drivers',
+      slots: [{ id: 'fri', label: 'Friday', capacity: 2 }],
+    }),
+  ],
+  forms: [
+    card('form-1', 'form', {
+      title: 'Room picks',
+      questions: [
+        { id: 'q1', type: 'short_answer', title: 'Your name', required: true },
+      ],
+    }),
+  ],
+  votes: [
+    {
+      message_id: 'poll-1',
+      payload: { option_id: ['a'] },
+      created_at: '2026-11-09T12:00:00.000Z',
+    },
+  ],
+  signup_claims: [
+    {
+      message_id: 'signup-1',
+      user_id: ME,
+      payload: { slot_ids: ['fri'] },
+      created_at: '2026-11-09T12:00:00.000Z',
+    },
+  ],
+  form_answers: [
+    { message_id: 'form-1', created_at: '2026-11-09T12:00:00.000Z' },
+  ],
+};
+
 function load(permissions: string[]) {
   const harness = createTenantHarness({
     tables: seed(),
     collisionExempt: { tasks: ['group_id'] },
+    rpc: {
+      activity_task_reads: {
+        data: functionReads(
+          permissions.includes(SystemPermissions.TASKS_MANAGE),
+        ),
+      },
+    },
   });
   const taskRepo = new SupabaseTaskRepository(harness.client);
   const openTaskRepo = new SupabaseOpenTaskRepository(harness.client);
@@ -201,15 +329,17 @@ function load(permissions: string[]) {
     listBlockedUserIds: stub([]),
     getEffectivePermissions: stub(permissions),
     getAlumniRoleId: stub('role-alumni'),
-    findCardsByChapter: stub([]),
-    findActionsOnMessages: stub([]),
+    // The polls, sign-ups and forms with the caller's votes, every claim
+    // and the caller's form answers: one function call (#6061). One open
+    // card of each kind from another member, each voted, claimed or
+    // answered, so a read per card would be counted here.
+    readActivityCards: stub(CARD_READS),
     findAllActionsOnMessages: stub([]),
     linksListFor: stub([]),
     remindersListFor: stub([]),
     membersByChapter: stub([]),
     findByUserAndChapter: stub({ user_id: ME, role_ids: ['role-member'] }),
     findByUserForEvents: stub([]),
-    findAnswered: stub([]),
     findUnreadStart: stub(null),
     findReads: stub([]),
     findSnoozes: stub([]),
@@ -230,11 +360,8 @@ function load(permissions: string[]) {
     } as never,
     { listFor: reads.linksListFor } as never,
     { listFor: reads.remindersListFor } as never,
-    { findCardsByChapter: reads.findCardsByChapter } as never,
-    {
-      findActionsOnMessages: reads.findActionsOnMessages,
-      findAllActionsOnMessages: reads.findAllActionsOnMessages,
-    } as never,
+    { readActivityCards: reads.readActivityCards } as never,
+    { findAllActionsOnMessages: reads.findAllActionsOnMessages } as never,
     userRepo as never,
     {
       findByChapter: reads.membersByChapter,
@@ -246,7 +373,6 @@ function load(permissions: string[]) {
       findReads: reads.findReads,
       findSnoozes: reads.findSnoozes,
     } as never,
-    { findAnswered: reads.findAnswered } as never,
     { readersOf: jest.fn() } as never,
     // Meetings rows (#5949) are their own service's reads, not counted here.
     {
@@ -266,7 +392,7 @@ function load(permissions: string[]) {
     archive: () => service.getArchive(CHAPTER_A, ME, enabled, { now: NOW }),
     run: () => service.getActivity(CHAPTER_A, ME, enabled, { now: NOW }),
     get taskRequests() {
-      return harness.ops.length;
+      return harness.ops.length + harness.rpcCalls.length;
     },
     get otherReads() {
       return [...Object.values(reads), userRepo.findDisplayIdentitiesByIds]
@@ -282,8 +408,13 @@ describe('ActivityService reads per load (#5746)', () => {
   // and 9 for this member (43 and 23 for the page, counting the other
   // sections' 14): every list read its
   // subtasks, photos, series, groups and open tasks, and ended on an empty
-  // page, and two counts went on their own.
-  it('an officer with tasks:manage: the task section in 13 requests', async () => {
+  // page, and two counts went on their own. #5746 brought it to 13 and 4;
+  // #6061 to one function call for both. #6061 step 2 read the four card
+  // scans (the chapter's polls, the caller's own, sign-ups and forms) and the
+  // votes, claims and form answers on them in one call too: 15 for the page
+  // in this seed became 12, with a voted poll, a claimed sheet and an
+  // answered form in it (which before cost up to 3 reads more).
+  it('an officer with tasks:manage: the task section in 1 request', async () => {
     const page = load([
       SystemPermissions.MEMBERS_VIEW,
       SystemPermissions.TASKS_MANAGE,
@@ -292,14 +423,21 @@ describe('ActivityService reads per load (#5746)', () => {
       page.run(),
     );
 
-    // One request each for its own tasks (uncapped, counted) and the
-    // confirmations with their count; what it assigned (2: capped, so not
-    // counted, and a short page reads on to an empty one); their groups once
-    // (3: the groups, and the copies' paged read, which still ends on an
-    // empty page); what it assigned as items (6: one-person tasks (2),
-    // groups, copies (2), and one copy whole).
-    expect(page.taskRequests).toBe(13);
-    expect(page.taskRequests + page.otherReads).toBe(27);
+    // Every list, the groups and their copies come from one call, and no
+    // table is read besides it.
+    expect(page.taskRequests).toBe(1);
+    expect(page.harness.ops).toHaveLength(0);
+    expect(page.harness.rpcCalls[0]).toEqual({
+      fn: 'activity_task_reads',
+      args: {
+        p_chapter_id: CHAPTER_A,
+        p_user_id: ME,
+        p_can_manage: true,
+        p_week_start: '2026-11-08T00:00:00.000Z',
+        p_limit: 25,
+      },
+    });
+    expect(page.taskRequests + page.otherReads).toBe(12);
     // What the page shows is what it showed before.
     expect(
       view.needs_you.tasks.map((task) => [task.title, task.group?.total]),
@@ -325,20 +463,24 @@ describe('ActivityService reads per load (#5746)', () => {
       'task',
     ]);
     expect(view.unavailable).toEqual([]);
+    // Every card was answered this week, out of the one call: no read per
+    // card.
+    expect(view.week.polls).toEqual({ done: 1, total: 1 });
+    expect(view.week.cards).toEqual({ done: 2, total: 2 });
   });
 
-  it('a member: the task section in 4 requests, only their own tasks', async () => {
+  it('a member: the task section in 1 request, only their own tasks', async () => {
     const page = load([SystemPermissions.MEMBERS_VIEW]);
     const view = await page.harness.expectTenantScoped(CHAPTER_A, () =>
       page.run(),
     );
 
-    // Their tasks with this week's done ones, in one read, and the group.
-    expect(page.taskRequests).toBe(4);
-    expect(page.taskRequests + page.otherReads).toBe(18);
-    const [ownRead] = page.harness.ops;
-    expect(ownRead.filters).toContainEqual(
-      expect.objectContaining({ column: 'assignee_id', value: ME }),
+    // Their tasks with this week's done ones, and the group, in one call
+    // that reads nothing of anyone else's.
+    expect(page.taskRequests).toBe(1);
+    expect(page.taskRequests + page.otherReads).toBe(12);
+    expect(page.harness.rpcCalls[0].args).toEqual(
+      expect.objectContaining({ p_user_id: ME, p_can_manage: false }),
     );
     expect(view.needs_you.tasks.map((task) => task.title)).toEqual([
       'Open task',

@@ -152,6 +152,38 @@ export type TaskGroupCopyState = Pick<
   | 'due_at'
 >;
 
+/**
+ * Every task list Activity draws, from one read (`activity_task_reads`,
+ * #6061): each filtered, ordered and capped in SQL as its own read was. The
+ * lists only a `tasks:manage` holder sees are empty for anyone else.
+ */
+export interface ActivityTaskReads {
+  /**
+   * The caller's tasks not yet confirmed, and those they marked done since
+   * the week began, confirmed or not; newest first, uncapped.
+   */
+  own: Task[];
+  /**
+   * Finished, unconfirmed tasks assigned to someone else, the `limit` waiting
+   * longest, oldest completion first.
+   */
+  waiting: Task[];
+  /** How many such tasks wait in all, past `limit`. */
+  waiting_total: number;
+  /** The `limit` newest tasks the caller made. */
+  made: Task[];
+  /** The `limit` newest one-person tasks the caller made, not confirmed. */
+  singles: Task[];
+  /** The `limit` newest groups the caller made with a copy not confirmed. */
+  made_groups: TaskGroup[];
+  /** The groups of every task in `own`, `waiting` and `made`. */
+  row_groups: TaskGroup[];
+  /** Every copy of `row_groups` and `made_groups`, by id. */
+  copy_states: TaskGroupCopyState[];
+  /** For each of `made_groups`, its unconfirmed copy with the lowest id, whole. */
+  shared: Task[];
+}
+
 /** What a task read says about its group (#4295 step 3). */
 export interface TaskGroupSummary extends TaskGroupProgress {
   id: string;

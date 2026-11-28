@@ -1,7 +1,9 @@
+import type React from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CachedRosterProvider,
   useChapterRoster,
   useCorrectMemberProfile,
   useMemberDisplayNames,
@@ -196,6 +198,56 @@ describe("useChapterRoster / useMemberDisplayNames", () => {
     queryClient = createTestQueryClient();
     vi.clearAllMocks();
     activeChapterId = CHAPTER_ID;
+  });
+
+  it("names people from a kept roster while the live one is out, and never after it fails (#5049)", async () => {
+    const kept = [
+      {
+        user_id: "user-1",
+        display_name: "Kept Name",
+        avatar_url: null,
+        role_color: null,
+      },
+    ];
+    let answer: ((value: unknown) => void) | null = null;
+    stubClient = {
+      GET: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    };
+    const Base = createWrapper(queryClient);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <Base>
+        <CachedRosterProvider value={kept}>{children}</CachedRosterProvider>
+      </Base>
+    );
+    const { result } = renderHook(() => useMemberDisplayNames(), { wrapper });
+    await waitFor(() => expect(answer).not.toBeNull());
+    expect(result.current.nameFor("user-1")).toBe("Kept Name");
+    answer!({ data: roster, error: null });
+    await waitFor(() =>
+      expect(result.current.nameFor("user-1")).toBe("Marcus Reid"),
+    );
+
+    const failed = createTestQueryClient();
+    stubClient = {
+      GET: vi.fn().mockResolvedValue({ data: null, error: { status: 500 } }),
+    };
+    const FailedBase = createWrapper(failed);
+    const failedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <FailedBase>
+        <CachedRosterProvider value={kept}>{children}</CachedRosterProvider>
+      </FailedBase>
+    );
+    const { result: afterFailure } = renderHook(() => useMemberDisplayNames(), {
+      wrapper: failedWrapper,
+    });
+    await waitFor(() =>
+      expect(afterFailure.current.nameFor("user-1")).toBeNull(),
+    );
   });
 
   it("reads the narrow roster endpoint, not the member list", async () => {

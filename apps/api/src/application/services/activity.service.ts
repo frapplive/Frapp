@@ -24,13 +24,10 @@ import type {
   ActivityItemKind,
   ActivityItemSnooze,
 } from '#domain/entities/activity-item-read.entity';
-import { CHAT_FORM_RESPONSE_REPOSITORY } from '#domain/repositories/chat-form-response.repository.interface';
-import type { IChatFormResponseRepository } from '#domain/repositories/chat-form-response.repository.interface';
 import { isCardClosed } from '#domain/utils/card-closing';
 import { formQuestions } from '#domain/utils/form-card-rules';
 import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import {
-  SIGNUP_ACTION_TYPE,
   isHeadcountCard,
   signupClaimSlotIds,
 } from '#domain/utils/signup-card-rules';
@@ -49,6 +46,7 @@ import type {
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type {
+  ActivityCardReads,
   ChannelType,
   ChatChannelView,
   ChatMessage,
@@ -622,9 +620,10 @@ function minutesWaiting(minutes: ActivityMinutes): number {
 }
 /** Members a task-for-everyone row names for its faces. */
 const GROUP_FACES = 5;
-/** How many of the chapter's newest poll cards are checked for "open and unvoted". */
-const POLL_SCAN_LIMIT = 100;
-/** The same, for each of sign-up and form cards. */
+/**
+ * How many of the chapter's newest cards of each kind (polls, sign-ups,
+ * forms) are checked for "open and unanswered", and of the caller's own polls.
+ */
 const CARD_SCAN_LIMIT = 100;
 /** How far ahead "coming up" looks. */
 const COMING_UP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -752,6 +751,24 @@ function pollCardClosed(card: PollCardFields, now: Date): boolean {
 /** The Activity read kind a card's id is recorded under. */
 function cardReadKind(card: Pick<ActivityCard, 'kind'>): ActivityItemKind {
   return card.kind === 'form' ? 'form' : 'signup';
+}
+
+/**
+ * The caller's votes, of those `activity_card_reads` read, on `messages`. A
+ * vote row with no picks is a cleared vote, not a vote: a member who clears
+ * every pick on a multi-choice card keeps the row with an empty list (#3793),
+ * and the poll goes back to needing them.
+ */
+function votesOn(
+  votes: ActivityCardReads['votes'],
+  messages: ChatMessage[],
+): ActivityCardReads['votes'] {
+  const ids = new Set(messages.map((message) => message.id));
+  return votes.filter(
+    (row) =>
+      ids.has(row.message_id) &&
+      cardVoteSelection(row.payload ?? undefined).length > 0,
+  );
 }
 
 /**
@@ -915,7 +932,7 @@ function activityTaskGroup(
   const ranked = [...item.copies].sort((a, b) => rank(a) - rank(b));
   const opened =
     ranked.find((copy) => copy.assignee_id === userId) ?? ranked[0];
-  // A copy not yet confirmed, read whole (`TaskService.listAssignedItems`).
+  // A copy not yet confirmed, read whole (`TaskService.activityLists`).
   const source = item.shared;
   return {
     ...item.group,
@@ -1025,8 +1042,6 @@ export class ActivityService {
     private readonly attendanceRepo: IAttendanceRepository,
     @Inject(ACTIVITY_ITEM_READ_REPOSITORY)
     private readonly readRepo: IActivityItemReadRepository,
-    @Inject(CHAT_FORM_RESPONSE_REPOSITORY)
-    private readonly formResponseRepo: IChatFormResponseRepository,
     private readonly channelAccess: ChannelAccessService,
     private readonly minutesService: ActivityMinutesService,
   ) {}
@@ -1099,6 +1114,19 @@ export class ActivityService {
         ).toISOString(),
       }));
 
+    // The chat cards and what the caller did on them, one function call
+    // (#6061) shared by the polls and cards sections. The cards section has
+    // no module switch, so it always runs; the poll half is read only while
+    // Polls is on. One read means one failure: when it fails, both sections
+    // are served empty and named `unavailable`.
+    let cardRead: Promise<ActivityCardReads> | null = null;
+    const cardReads = () =>
+      (cardRead ??= this.messageRepo.readActivityCards(chapterId, userId, {
+        limit: CARD_SCAN_LIMIT,
+        polls: on('polls'),
+        cards: true,
+      }));
+
     // The member's snoozes, read beside the sections. A failure serves
     // nothing as snoozed rather than failing the page.
     const snoozesRead = this.readSnoozes(chapterId, userId, now);
@@ -1147,6 +1175,7 @@ export class ActivityService {
               userId,
               now,
               chatReads,
+              cardReads,
               weekStart,
               chapter,
             )
@@ -1155,7 +1184,7 @@ export class ActivityService {
       // Sign-ups and forms are chat cards with no module switch, as a
       // message has none (#3926).
       this.settle('cards', chapterId, () =>
-        this.readCards(chapterId, userId, now, chatReads, weekStart),
+        this.readCards(chapterId, userId, now, chatReads, cardReads, weekStart),
       ),
       this.settle('coming_up', chapterId, () =>
         on('events')
@@ -1910,7 +1939,7 @@ export class ActivityService {
       userId,
     );
     const completedSince = new Date(since).toISOString();
-    const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
+    const none = Promise.resolve([] as TaskView[]);
     const [own, assigned] = await Promise.all([
       // Each read capped, newest made first, so a busy month never reads
       // hundreds of rows to keep 25. The task's own columns only, as the
@@ -1932,7 +1961,7 @@ export class ActivityService {
         : none,
     ]);
     const byId = new Map<string, TaskView>();
-    for (const task of [...own.tasks, ...assigned.tasks]) {
+    for (const task of [...own, ...assigned]) {
       byId.set(task.id, task);
     }
     // When it last finished: confirmed, or marked done.
@@ -1965,11 +1994,18 @@ export class ActivityService {
     now: number,
   ): Promise<ActivityPoll[]> {
     const nowDate = new Date(now);
-    const [channels, blockedUserIds, [recent, own]] = await Promise.all([
+    const [channels, blockedUserIds, cards] = await Promise.all([
       this.chatService.getChannels(chapterId, userId),
       this.chatBlocks.listBlockedUserIds(chapterId, userId),
-      this.pollScans(chapterId, userId),
+      // The poll half only: the Archive lists no sign-ups or forms.
+      this.messageRepo.readActivityCards(chapterId, userId, {
+        limit: CARD_SCAN_LIMIT,
+        polls: true,
+        cards: false,
+      }),
     ]);
+    const recent = cards.polls;
+    const own = cards.own_polls;
     const channelById = new Map(
       channels.map((channel) => [channel.id, channel]),
     );
@@ -1985,9 +2021,7 @@ export class ActivityService {
       closed,
     );
     const voted = new Set(
-      (await this.votesOn([...mine, ...others], userId)).map(
-        (row) => row.message_id,
-      ),
+      votesOn(cards.votes, [...mine, ...others]).map((row) => row.message_id),
     );
     return pollRowsOf(
       [...mine, ...others.filter((message) => voted.has(message.id))],
@@ -2026,44 +2060,6 @@ export class ActivityService {
     }
   }
 
-  /**
-   * The poll cards Activity reads: the chapter's 100 newest, and the caller's
-   * own 100 newest, so the caller's own are found however busy the chapter.
-   */
-  private pollScans(
-    chapterId: string,
-    userId: string,
-  ): Promise<[ChatMessage[], ChatMessage[]]> {
-    return Promise.all([
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'poll',
-        limit: POLL_SCAN_LIMIT,
-      }),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'poll',
-        senderId: userId,
-        limit: POLL_SCAN_LIMIT,
-      }),
-    ]);
-  }
-
-  /**
-   * The caller's votes on `messages`. A vote row with no picks is a cleared
-   * vote, not a vote: a member who clears every pick on a multi-choice card
-   * keeps the row with an empty list (#3793), and the poll goes back to
-   * needing them.
-   */
-  private async votesOn(messages: ChatMessage[], userId: string) {
-    const rows = await this.actionRepo.findActionsOnMessages(
-      messages.map((message) => message.id),
-      userId,
-      CARD_VOTE_ACTION_TYPE,
-    );
-    return rows.filter(
-      (row) => cardVoteSelection(row.payload ?? undefined).length > 0,
-    );
-  }
-
   private async readTasks(
     chapterId: string,
     userId: string,
@@ -2088,47 +2084,28 @@ export class ActivityService {
     extensions: ActivityTaskExtension[];
   }> {
     const canManage = can(SystemPermissions.TASKS_MANAGE, permissions);
-    // Each list is its own read, filtered in SQL, so none depends on reading
-    // the chapter's whole task history (#4037). Each reads the task's own
-    // columns only (`TaskService.listRows`): a row draws no subtask, photo or
-    // series, so the page doesn't read them (#5746).
-    // Finished tasks waiting on a confirm: the 25 waiting longest, and how
-    // many wait in all, for `needs_you_count`, counted by the same request.
-    // Confirming your own completion is refused
-    // (`TaskService.confirmCompletion`, the no-self-award rule), so yours are
-    // not offered as waiting on you.
-    const none = Promise.resolve({ tasks: [] as TaskView[], total: 0 });
-    const [own, waiting, made, madeItems, extensions] = await Promise.all([
-      // The caller's tasks not yet confirmed and, in the same read, those
-      // they marked done since the week began, confirmed or not: marking it
-      // done was the member's part. One sent back since is open again and is
-      // not counted as done.
-      this.taskService.listRows(chapterId, userId, false, {
-        unconfirmedOrCompletedSince: new Date(weekStart).toISOString(),
+    // Every list in one request (`activity_task_reads`, #6061), each filtered,
+    // ordered and capped in SQL, so none depends on reading the chapter's
+    // whole task history (#4037). A row draws the task's own columns and its
+    // group's progress only, no subtask, photo or series (#5746).
+    // - own: the caller's tasks not yet confirmed and, in the same list,
+    //   those they marked done since the week began, confirmed or not:
+    //   marking it done was the member's part. One sent back since is open
+    //   again and is not counted as done.
+    // - waiting: finished tasks waiting on a confirm, the 25 waiting longest,
+    //   and how many wait in all, for `needs_you_count`. Confirming your own
+    //   completion is refused (`TaskService.confirmCompletion`, the
+    //   no-self-award rule), so yours are not offered as waiting on you.
+    // - made and items: only while the caller can still read tasks they don't
+    //   hold. A creator who has lost `tasks:manage` gets a 403 from
+    //   `GET /v1/tasks/:id`, and a row that opens to a refusal is worse than
+    //   no row. Items count a task for everyone once (#5492).
+    const [lists, extensions] = await Promise.all([
+      this.taskService.activityLists(chapterId, userId, canManage, {
+        weekStart: new Date(weekStart),
+        limit: LIST_LIMIT,
+        now,
       }),
-      canManage
-        ? this.taskService.listRows(chapterId, userId, true, {
-            status: TaskStatus.COMPLETED,
-            confirmed: false,
-            notAssigneeId: userId,
-            order: 'longest_waiting',
-            limit: LIST_LIMIT,
-            withTotal: true,
-          })
-        : none,
-      // Only while the caller can still read tasks they don't hold: a creator
-      // who has lost `tasks:manage` gets a 403 from `GET /v1/tasks/:id`, and a
-      // row that opens to a refusal is worse than no row.
-      canManage
-        ? this.taskService.listRows(chapterId, userId, true, {
-            createdBy: userId,
-            limit: LIST_LIMIT,
-          })
-        : none,
-      // The same, a task for everyone once (#5492), under the same rule.
-      canManage
-        ? this.taskService.listAssignedItems(chapterId, userId, LIST_LIMIT, now)
-        : Promise.resolve([]),
       // Requests for more time (#6096), for every officer as confirmations
       // are; the push goes to the task's creator and the group it is from.
       // A failed read of them costs this list alone, not the task section.
@@ -2146,13 +2123,13 @@ export class ActivityService {
             })
         : Promise.resolve([]),
     ]);
-    const doneThisWeek = own.tasks.filter(
+    const doneThisWeek = lists.own.filter(
       (task) =>
         task.stored_status === TaskStatus.COMPLETED &&
         task.completed_at !== null &&
         since(task.completed_at, weekStart),
     ).length;
-    const open = own.tasks
+    const mine = lists.own
       .filter(
         (task) =>
           task.confirmed_at === null &&
@@ -2166,22 +2143,10 @@ export class ActivityService {
           ascendingNullsLast(a.due_date, b.due_date) ||
           ascendingNullsLast(a.due_at, b.due_at),
       );
-
-    // The groups of every row drawn, in one read, then each list as it was.
-    const grouped = await this.taskService.withGroupSummaries(chapterId, [
-      ...open,
-      ...waiting.tasks,
-      ...made.tasks,
-    ]);
-    const mine = grouped.slice(0, open.length);
     // Already oldest first from the database.
-    const confirmations = grouped.slice(
-      open.length,
-      open.length + waiting.tasks.length,
-    );
-    const assigned = grouped
-      .slice(open.length + waiting.tasks.length)
-      .sort(byNewest);
+    const confirmations = lists.waiting;
+    const assigned = [...lists.made].sort(byNewest);
+    const madeItems = lists.items;
 
     const singles = madeItems.flatMap((item) =>
       item.kind === 'task' ? [item.task] : [],
@@ -2199,8 +2164,8 @@ export class ActivityService {
     return {
       mine: mine.map(toRow),
       confirmations: confirmations.map(toRow),
-      // Counted with the read whenever it ran (`withTotal`).
-      confirmationsWaiting: waiting.total ?? waiting.tasks.length,
+      // Counted in the same read, past the 25 it returns.
+      confirmationsWaiting: lists.waitingTotal,
       assigned: assigned.map(toRow),
       assignedItems: madeItems.map((item): ActivityTaskItem =>
         item.kind === 'task'
@@ -2261,6 +2226,7 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<PollChatReads>,
+    cardReads: () => Promise<ActivityCardReads>,
     weekStart: number,
     chapter: ChapterReads,
   ): Promise<{
@@ -2278,10 +2244,12 @@ export class ActivityService {
     // that cannot be read is not an empty block list", so a failure fails the
     // section (served empty and named `unavailable`) rather than listing a
     // blocked member's question.
-    const [{ channels, blockedUserIds }, [recent, own]] = await Promise.all([
+    const [{ channels, blockedUserIds }, cards] = await Promise.all([
       chatReads(),
-      this.pollScans(chapterId, userId),
+      cardReads(),
     ]);
+    const recent = cards.polls;
+    const own = cards.own_polls;
     const nowDate = new Date(now);
     // No deadline sorts last: it is the least pressing.
     const closesAtMs = (row: ActivityPoll) =>
@@ -2302,10 +2270,7 @@ export class ActivityService {
     });
     const mine = own.filter(readable);
 
-    // A vote row with no picks is a cleared vote, not a vote: a member who
-    // clears every pick on a multi-choice card keeps the row with an empty
-    // list (#3793), and the poll goes back to needing them.
-    const voteRows = await this.votesOn([...others, ...mine], userId);
+    const voteRows = votesOn(cards.votes, [...others, ...mine]);
     const votedIds = new Set(voteRows.map((row) => row.message_id));
     // By the vote row's `created_at`, which is when the member last voted:
     // changing a vote rewrites it (`updateForVote`, ADR-07). So a vote counts
@@ -2442,23 +2407,18 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<ChatReads>,
+    cardReads: () => Promise<ActivityCardReads>,
     weekStart: number,
   ): Promise<{
     open: ActivityCard[];
     /** Other members' cards the caller first answered since the week began. */
     answeredThisWeek: number;
   }> {
-    const [{ channels, blockedUserIds }, signups, forms] = await Promise.all([
+    const [{ channels, blockedUserIds }, cards] = await Promise.all([
       chatReads(),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'signup',
-        limit: CARD_SCAN_LIMIT,
-      }),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'form',
-        limit: CARD_SCAN_LIMIT,
-      }),
+      cardReads(),
     ]);
+    const { signups, forms } = cards;
     const channelById = new Map(
       channels.map((channel) => [channel.id, channel]),
     );
@@ -2481,21 +2441,22 @@ export class ActivityService {
     // slot is at its limit can't be signed up for, so it no longer waits on
     // anyone who doesn't hold a slot. Claims are channel-readable (the card
     // names each holder), so reading them all reveals nothing.
-    const [claims, closedClaims, answeredForms] = await Promise.all([
-      this.actionRepo.findAllActionsOnMessages(
-        openSignups.map((message) => message.id),
-        SIGNUP_ACTION_TYPE,
-      ),
-      this.actionRepo.findActionsOnMessages(
-        closedSignups.map((message) => message.id),
-        userId,
-        SIGNUP_ACTION_TYPE,
-      ),
-      this.formResponseRepo.findAnswered(
-        forms.filter(fromOthers).map((message) => message.id),
-        userId,
-      ),
-    ]);
+    // The function read every claim on every sign-up it scanned and every
+    // answer on every form; only the cards kept here count.
+    const idsOf = (messages: ChatMessage[]) =>
+      new Set(messages.map((message) => message.id));
+    const openIds = idsOf(openSignups);
+    const closedIds = idsOf(closedSignups);
+    const formIds = idsOf(forms.filter(fromOthers));
+    const claims = cards.signup_claims.filter((row) =>
+      openIds.has(row.message_id),
+    );
+    const closedClaims = cards.signup_claims.filter(
+      (row) => row.user_id === userId && closedIds.has(row.message_id),
+    );
+    const answeredForms = cards.form_answers.filter((row) =>
+      formIds.has(row.message_id),
+    );
     const heldBySlot = new Map<string, number>();
     const answered = new Set<string>(
       answeredForms.map((row) => row.message_id),

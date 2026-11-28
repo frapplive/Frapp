@@ -258,6 +258,22 @@ export function normalizeTaskWho(who: TaskWho): TaskWho | null {
 }
 
 /**
+ * The members a {@link TaskWho} names one by one, for a route that takes
+ * members only (an action item's task, #6178): one person, or several each
+ * getting a copy. Null for anything else (a role, a group, a tier, everyone,
+ * or up for grabs), which such a route can't make.
+ */
+export function taskWhoPeopleIds(who: TaskWho | null): string[] | null {
+  const picked = who ? normalizeTaskWho(who) : null;
+  if (!picked) return null;
+  if (picked.kind === "person") return [picked.userId];
+  if (picked.kind === "each" && picked.target.kind === "people") {
+    return picked.target.userIds;
+  }
+  return null;
+}
+
+/**
  * The create to send for a {@link TaskWho}: `POST /v1/tasks` for one person
  * or a copy each, `POST /v1/open-tasks` for one task up for grabs. Spread
  * `fields` into the body beside the task's own fields. Null when nobody is

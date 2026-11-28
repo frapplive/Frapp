@@ -191,7 +191,8 @@ export type BootstrapSections = {
  * and GoTrue calls behind PostgREST's 10-connection pool and stalled every
  * other client for seconds. Here the guard chain runs once and the sections
  * share its per-request reads. The guards are not cached across requests
- * (#3752); this only makes an open one request.
+ * (#3752); this only makes an open one request, or two when web splits it
+ * into the shell's sections and the page's (#5049, `first-screen-batch.ts`).
  *
  * The sections are independent and read at once: one that fails is `null`
  * and reported, and the rest still answer, because failing the whole open
