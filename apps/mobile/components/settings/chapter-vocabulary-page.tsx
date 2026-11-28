@@ -4,36 +4,29 @@ import { useLocalSearchParams } from "expo-router";
 import {
   CHAPTER_TAB_COPY,
   CHAPTER_VOCABULARY_FIELDS,
-  chapterVocabularyChanged,
   chapterVocabularyDraftOf,
-  chapterVocabularyPatch,
-  type ChapterVocabularyDraft,
+  chapterVocabularyFieldPatch,
 } from "@repo/hooks/chapter-tab";
 import { BACK_TO_CHAPTER_SETTINGS } from "@/components/back-row";
 import { ScreenShell } from "@/components/screen-shell";
-import {
-  ChapterTextField,
-  FormCommitRow,
-  FormFields,
-  FormHint,
-  useFormSaveStatus,
-} from "@/components/settings/chapter-form";
+import { FormFields, FormHint } from "@/components/settings/chapter-form";
 import { ChapterPageState } from "@/components/settings/chapter-page-state";
+import { SavedTextField } from "@/components/settings/saved-text-field";
 import {
   SettingAnchor,
   SettingJumpProvider,
   useSettingJumpState,
 } from "@/components/settings/setting-anchor";
-import { useChapterFormDraft, useChapterTab } from "@/lib/settings/chapter-tab";
+import { saveSetting, useChapterTab } from "@/lib/settings/chapter-tab";
 
 /**
  * Chapter settings → Vocabulary on the phone (#6027), web's page in its order
  * and words (`CHAPTER_VOCABULARY_FIELDS`): Recruitment process, New member
  * term, Cohort label, Member order number, Role tier. Each field's
  * placeholder is the organization type's word, which a blank field falls back
- * to; Save vocabulary sends every word, a cleared one as empty
- * (`chapterVocabularyPatch`, #3939), through the audited config PATCH
- * (`chapter-config:manage`).
+ * to. Each word saves on its own on Done or leaving the field (#6033), a
+ * cleared one as empty (`chapterVocabularyFieldPatch`, #3939), through the
+ * audited config PATCH (`chapter-config:manage`).
  */
 export function ChapterVocabularyPage() {
   const scrollRef = useRef<ScrollView>(null);
@@ -41,21 +34,7 @@ export function ChapterVocabularyPage() {
   const jump = useSettingJumpState(setting);
   const tab = useChapterTab();
   const { archetype, vocabulary, canManage } = tab;
-  const stored = tab.orgConfig.data
-    ? chapterVocabularyDraftOf(vocabulary)
-    : undefined;
-  const { draft, setDraft, save, saving } =
-    useChapterFormDraft<ChapterVocabularyDraft>("chapter-vocabulary", stored);
-  const status = useFormSaveStatus();
-
-  const submit = async () => {
-    if (!draft) return;
-    const patch = chapterVocabularyPatch(draft);
-    const result = await save(() => tab.patchConfig.mutateAsync(patch));
-    if (result.ok) status.saved();
-    else
-      status.failed(result.error, "Couldn't save the vocabulary. Try again.");
-  };
+  const stored = chapterVocabularyDraftOf(vocabulary);
 
   return (
     <ScreenShell
@@ -64,19 +43,6 @@ export function ChapterVocabularyPage() {
       scrollRef={scrollRef}
       keyboardShouldPersistTaps="handled"
       avoidKeyboard
-      footer={
-        draft ? (
-          <FormCommitRow
-            label="Save vocabulary"
-            canSave={canManage}
-            readOnlyLine={CHAPTER_TAB_COPY.readOnly}
-            disabled={!chapterVocabularyChanged(draft, vocabulary)}
-            busy={saving}
-            status={status.status}
-            onPress={() => void submit()}
-          />
-        ) : undefined
-      }
     >
       <SettingJumpProvider
         anchor={jump.anchor}
@@ -84,24 +50,38 @@ export function ChapterVocabularyPage() {
         scrollRef={scrollRef}
       >
         <ChapterPageState query={tab.orgConfig}>
-          {draft ? (
+          {tab.orgConfig.data ? (
             <FormFields>
               {CHAPTER_VOCABULARY_FIELDS.map((field) => (
                 <SettingAnchor key={field.key} id={`vocab-${field.key}`}>
-                  <ChapterTextField
+                  <SavedTextField
                     label={field.label}
-                    value={draft[field.key]}
-                    onChangeText={(text) => {
-                      status.clear();
-                      setDraft({ ...draft, [field.key]: text });
-                    }}
-                    editable={canManage && !saving}
+                    value={stored[field.key]}
+                    editable={canManage}
                     placeholder={field.placeholder(archetype)}
                     autoCapitalize="words"
+                    allowBlank
+                    onSave={(next) =>
+                      saveSetting(
+                        () =>
+                          tab.patchConfig.mutateAsync(
+                            chapterVocabularyFieldPatch(
+                              vocabulary,
+                              field.key,
+                              next,
+                            ),
+                          ),
+                        "Couldn't save the vocabulary. Try again.",
+                      )
+                    }
                   />
                 </SettingAnchor>
               ))}
-              <FormHint>{CHAPTER_TAB_COPY.vocabularyHint(archetype)}</FormHint>
+              <FormHint>
+                {canManage
+                  ? CHAPTER_TAB_COPY.vocabularyHint(archetype)
+                  : `${CHAPTER_TAB_COPY.vocabularyHint(archetype)} ${CHAPTER_TAB_COPY.readOnly}`}
+              </FormHint>
             </FormFields>
           ) : null}
         </ChapterPageState>

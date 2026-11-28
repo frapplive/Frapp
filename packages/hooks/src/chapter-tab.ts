@@ -26,7 +26,11 @@ import {
   resolveChapterMark,
   type PatchChapterConfig,
 } from "@repo/validation";
-import { parseFoundedYear } from "./chapter-identity";
+import {
+  FOUNDED_YEAR_MIN,
+  latestFoundedYear,
+  parseFoundedYear,
+} from "./chapter-identity";
 
 /** The `branding` keys the Chapter tab reads and writes. */
 export type ChapterTabBranding = {
@@ -111,16 +115,17 @@ export function chapterProfileSaveBody(
   return body;
 }
 
-/** Whether any profile field differs from what is stored: Save waits on it. */
-export function chapterProfileChanged(
+/**
+ * One profile field's save, typed in place and saved on its own (#6033): the
+ * body `chapterProfileSaveBody` builds when only that field changed, so it
+ * sends nothing for a field typed back to what is stored.
+ */
+export function chapterProfileFieldBody(
   stored: ChapterProfileFields,
-  draft: ChapterProfileFields,
-): boolean {
-  return (
-    draft.name !== stored.name ||
-    draft.university !== stored.university ||
-    draft.donation_url !== stored.donation_url
-  );
+  field: keyof ChapterProfileFields,
+  next: string,
+): ChapterProfileSaveBody {
+  return chapterProfileSaveBody(stored, { ...stored, [field]: next });
 }
 
 // ── Chapter mark ────────────────────────────────────────────────────────
@@ -137,20 +142,9 @@ export function chapterMarkDraftOf(
   };
 }
 
-/** Whether the mark page holds an edit: the phone's Save waits on it. */
-export function chapterMarkChanged(
-  draft: ChapterMarkDraft,
-  branding: ChapterTabBranding,
-): boolean {
-  const stored = chapterMarkDraftOf(branding);
-  return (
-    draft.shortName.trim() !== stored.shortName.trim() ||
-    draft.showLetters !== stored.showLetters
-  );
-}
-
 /**
- * What the mark's Save sends: the letters switch, always, and the short name
+ * What a save of the mark sends, the short name or the switch (each saves on
+ * its own since #6033, the other passed as stored): the letters switch, always, and the short name
  * when there is one to keep or to clear. The config PATCH deep-merges, so a
  * left-out key keeps its stored value and an empty string is how a cleared
  * field is removed. A chapter whose organization hides its letters writes
@@ -259,15 +253,33 @@ export function chapterIdentityBrandingDiff(
   return diff;
 }
 
-/** Whether Identity & founding holds an edit: the phone's Save waits on it. */
-export function chapterIdentityChanged(
-  draft: ChapterIdentityDraft,
-  branding: ChapterTabBranding,
-): boolean {
-  const stored = chapterIdentityDraftOf(branding);
-  return (Object.keys(stored) as (keyof ChapterIdentityDraft)[]).some(
-    (key) => draft[key].trim() !== stored[key].trim(),
+/**
+ * One Identity & founding field's save (#6033): the diff
+ * `chapterIdentityBrandingDiff` builds with every other field as stored.
+ * Call only once `foundedYearProblem` has nothing to say.
+ */
+export function chapterIdentityFieldDiff(
+  stored: ChapterTabBranding,
+  field: keyof ChapterIdentityDraft,
+  next: string,
+): ChapterTabBranding {
+  return chapterIdentityBrandingDiff(
+    { ...chapterIdentityDraftOf(stored), [field]: next },
+    stored,
   );
+}
+
+/**
+ * What the founded year field says under itself when `checkFoundedYear`
+ * refuses what was typed, or `null` when it can be saved. Both apps' words.
+ */
+export function foundedYearProblem(
+  draft: string,
+  stored: number | undefined,
+): string | null {
+  const { valid, cleared } = checkFoundedYear(draft, stored);
+  if (valid) return null;
+  return `${cleared ? "A founded year can't be removed once saved. " : ""}Enter a year between ${FOUNDED_YEAR_MIN} and ${latestFoundedYear()}.`;
 }
 
 /** The Identity & founding row's value: the first fact the chapter filled in. */
@@ -368,15 +380,19 @@ export function chapterVocabularyPatch(
   };
 }
 
-/** Whether Vocabulary holds an edit: the phone's Save waits on it. */
-export function chapterVocabularyChanged(
-  draft: ChapterVocabularyDraft,
+/**
+ * One word's save (#6033): `chapterVocabularyPatch` with every other word as
+ * stored, so a cleared word still goes as "" and the type's word comes back.
+ */
+export function chapterVocabularyFieldPatch(
   vocabulary: Readonly<Record<string, string | undefined>>,
-): boolean {
-  const stored = chapterVocabularyDraftOf(vocabulary);
-  return CHAPTER_VOCABULARY_FIELDS.some(
-    ({ key }) => draft[key].trim() !== stored[key].trim(),
-  );
+  key: ChapterVocabularyKey,
+  next: string,
+): PatchChapterConfig {
+  return chapterVocabularyPatch({
+    ...chapterVocabularyDraftOf(vocabulary),
+    [key]: next,
+  });
 }
 
 /** The Vocabulary row's value: "Custom" once any word differs from the type's. */

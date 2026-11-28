@@ -1,33 +1,32 @@
 import { useUpdateChapter } from "@repo/hooks";
 import {
   CHAPTER_TAB_COPY,
-  chapterProfileChanged,
-  chapterProfileSaveBody,
+  chapterProfileFieldBody,
   type ChapterProfileFields,
 } from "@repo/hooks/chapter-tab";
 import {
   CHAPTER_NAME_MAX_LENGTH,
   CHAPTER_UNIVERSITY_MAX_LENGTH,
 } from "@repo/validation";
-import {
-  ChapterTextField,
-  FormCommitRow,
-  FormFields,
-  useFormSaveStatus,
-} from "@/components/settings/chapter-form";
+import { FormFields, FormHint } from "@/components/settings/chapter-form";
+import { SavedTextField } from "@/components/settings/saved-text-field";
 import { SettingAnchor } from "@/components/settings/setting-anchor";
-import { useChapterFormDraft } from "@/lib/settings/chapter-tab";
+import { saveSetting } from "@/lib/settings/chapter-tab";
 
 /**
  * The chapter's profile on top of Chapter settings (#6027): Chapter name,
- * University and Donation link, then Save profile, as web's Chapter tab opens
- * (Paul, 2026-11-20: a page leads with the few fields a member types into,
- * then its groups of rows, as Discord's channel settings and iOS Settings
- * do). Save waits for an edit, and sends only what changed, trimmed
- * (`chapterProfileSaveBody`, web's rule), through `PATCH /v1/chapters/current`.
+ * University and Donation link, as web's Chapter tab opens (Paul,
+ * 2026-11-20: a page leads with the few fields a member types into, then its
+ * groups of rows, as Discord's channel settings and iOS Settings do).
+ *
+ * Each field saves on its own on Done or leaving it, with a quiet "Saved"
+ * (#6033), sending only that field, trimmed (`chapterProfileFieldBody`,
+ * web's rule), through `PATCH /v1/chapters/current`. A blank name or
+ * university puts the saved one back; so does a blank donation link, which
+ * the API has no way to clear.
  *
  * A viewer without `CHAPTER_PROFILE_PERMISSIONS` reads the three values in
- * place, muted, with the line web's form shows under it.
+ * place, muted, with the line web's page shows under them.
  *
  * Draws nothing until the chapter is read, so a field never opens empty and
  * fills under the officer's thumb.
@@ -39,79 +38,52 @@ export function ChapterProfileForm({
   stored: ChapterProfileFields | undefined;
   canEdit: boolean;
 }) {
-  const { draft, setDraft, reset, save, saving } = useChapterFormDraft(
-    "chapter-profile",
-    stored,
-  );
   const update = useUpdateChapter();
-  const status = useFormSaveStatus();
-  if (!stored || !draft) return null;
+  if (!stored) return null;
 
-  const edit = (field: keyof ChapterProfileFields) => (text: string) => {
-    status.clear();
-    setDraft({ ...draft, [field]: text });
-  };
-  const editable = canEdit && !saving;
-
-  const submit = async () => {
-    const body = chapterProfileSaveBody(stored, draft);
-    if (Object.keys(body).length === 0) {
-      // Only spaces changed: nothing to send, and nothing left to keep.
-      reset();
-      status.saved();
-      return;
-    }
-    const result = await save(() => update.mutateAsync(body));
-    if (result.ok) status.saved();
-    else
-      status.failed(
-        result.error,
-        "Couldn't save the chapter profile. Try again.",
-      );
+  const save = (field: keyof ChapterProfileFields) => (next: string) => {
+    const body = chapterProfileFieldBody(stored, field, next);
+    if (Object.keys(body).length === 0) return Promise.resolve(true as const);
+    return saveSetting(
+      () => update.mutateAsync(body),
+      "Couldn't save the chapter profile. Try again.",
+    );
   };
 
   return (
     <FormFields>
       <SettingAnchor id="chapter-name">
-        <ChapterTextField
+        <SavedTextField
           label="Chapter name"
-          value={draft.name}
-          onChangeText={edit("name")}
-          editable={editable}
+          value={stored.name}
+          editable={canEdit}
           maxLength={CHAPTER_NAME_MAX_LENGTH}
           autoCapitalize="words"
+          onSave={save("name")}
         />
       </SettingAnchor>
       <SettingAnchor id="university">
-        <ChapterTextField
+        <SavedTextField
           label="University"
-          value={draft.university}
-          onChangeText={edit("university")}
-          editable={editable}
+          value={stored.university}
+          editable={canEdit}
           maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
           autoCapitalize="words"
+          onSave={save("university")}
         />
       </SettingAnchor>
       <SettingAnchor id="donation-link">
-        <ChapterTextField
+        <SavedTextField
           label="Donation link (optional)"
-          value={draft.donation_url}
-          onChangeText={edit("donation_url")}
-          editable={editable}
+          value={stored.donation_url}
+          editable={canEdit}
           placeholder="https://give.youruniversity.edu/..."
           keyboardType="url"
           autoCapitalize="none"
+          onSave={save("donation_url")}
         />
       </SettingAnchor>
-      <FormCommitRow
-        label="Save profile"
-        canSave={canEdit}
-        readOnlyLine={CHAPTER_TAB_COPY.readOnly}
-        disabled={!chapterProfileChanged(stored, draft)}
-        busy={saving}
-        status={status.status}
-        onPress={() => void submit()}
-      />
+      {canEdit ? null : <FormHint>{CHAPTER_TAB_COPY.readOnly}</FormHint>}
     </FormFields>
   );
 }

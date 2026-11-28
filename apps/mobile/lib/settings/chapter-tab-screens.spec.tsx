@@ -174,6 +174,21 @@ const field = (tree: ReactTestRenderer, label: string) =>
   );
 const type = (tree: ReactTestRenderer, label: string, text: string) =>
   act(() => field(tree, label).props.onChangeText(text));
+/** Leaving the field, which saves it (#6033). */
+const leave = (tree: ReactTestRenderer, label: string) =>
+  act(async () => field(tree, label).props.onBlur());
+/** Types into the field and leaves it. */
+const enter = async (tree: ReactTestRenderer, label: string, text: string) => {
+  type(tree, label, text);
+  await leave(tree, label);
+};
+/** No Save button is left on the screen (#6033). */
+const hasSave = (tree: ReactTestRenderer) =>
+  tree.root.findAll(
+    (node) =>
+      (node.type as unknown) === "Pressable" &&
+      /^Save/.test(String(node.props.accessibilityLabel ?? "")),
+  ).length > 0;
 
 /** The text's position in the screen, failing when it isn't there. */
 const at = (text: string, needle: string) => {
@@ -268,21 +283,36 @@ describe("Chapter settings → Chapter (#6027)", () => {
     }
   });
 
-  it("waits for an edit, then saves only the changed field, trimmed", () => {
+  it("saves a profile field on its own when it's left, only that field, trimmed (#6033)", async () => {
     const tree = render(<ChapterSettingsScreen />);
-    expect(pressable(tree, "Save profile").props.disabled).toBe(true);
-    type(tree, "University", " Rensselaer ");
-    const save = pressable(tree, "Save profile");
-    expect(save.props.disabled).toBe(false);
-    act(() => save.props.onPress());
+    expect(hasSave(tree)).toBe(false);
+    await leave(tree, "University");
+    expect(h.updateChapter).not.toHaveBeenCalled();
+    await enter(tree, "University", " Rensselaer ");
+    expect(h.updateChapter).toHaveBeenCalledTimes(1);
     expect(h.updateChapter).toHaveBeenCalledWith({ university: "Rensselaer" });
   });
 
-  it("says Saved once the profile lands", async () => {
+  it("says Saved once the profile lands, and why when it doesn't", async () => {
     const tree = render(<ChapterSettingsScreen />);
-    type(tree, "Chapter name", "Sigma Phi Epsilon Cal Eta");
-    await act(async () => pressable(tree, "Save profile").props.onPress());
+    await enter(tree, "Chapter name", "Sigma Phi Epsilon Cal Eta");
     expect(screenText(tree)).toContain("Saved");
+    h.updateChapter.mockRejectedValueOnce(new Error("offline"));
+    await enter(tree, "University", "Rensselaer");
+    expect(screenText(tree)).toContain(
+      "Couldn't save the chapter profile. Try again.",
+    );
+    // The typed text stays for another try.
+    expect(field(tree, "University").props.value).toBe("Rensselaer");
+  });
+
+  it("puts the saved name back when it's left blank", async () => {
+    const tree = render(<ChapterSettingsScreen />);
+    await enter(tree, "Chapter name", "  ");
+    expect(h.updateChapter).not.toHaveBeenCalled();
+    expect(field(tree, "Chapter name").props.value).toBe(
+      "Sigma Phi Epsilon California Eta",
+    );
   });
 
   it("shows a member who can't edit every value, and opens no sheet for them", () => {
@@ -294,7 +324,7 @@ describe("Chapter settings → Chapter (#6027)", () => {
       "Sigma Phi Epsilon California Eta",
     );
     expect(text).toContain(CHAPTER_TAB_COPY.readOnly);
-    expect(hasPressable(tree, "Save profile")).toBe(false);
+    expect(hasSave(tree)).toBe(false);
     expect(text).toContain(
       `Birthday posts\n${CHAPTER_TAB_COPY.rowReadOnly}\n#general`,
     );
@@ -331,11 +361,10 @@ describe("Chapter settings → Chapter (#6027)", () => {
 });
 
 describe("Chapter settings → Identity & founding (#6027)", () => {
-  it("saves the four fields once one changes", () => {
+  it("saves a field on its own when it's left, the others as stored (#6033)", async () => {
     const tree = render(<ChapterIdentityScreen />);
-    expect(pressable(tree, "Save identity").props.disabled).toBe(true);
-    type(tree, "School (short)", "UCLA");
-    act(() => pressable(tree, "Save identity").props.onPress());
+    expect(hasSave(tree)).toBe(false);
+    await enter(tree, "School (short)", "UCLA");
     expect(h.patchConfig).toHaveBeenCalledWith({
       branding: {
         greek_letters: "ΣΦΕ",
@@ -346,14 +375,24 @@ describe("Chapter settings → Identity & founding (#6027)", () => {
     });
   });
 
-  it("won't remove a saved founded year, and says why", () => {
+  it("won't remove a saved founded year, and says why", async () => {
     const tree = render(<ChapterIdentityScreen />);
-    type(tree, "Founded year", "");
-    act(() => pressable(tree, "Save identity").props.onPress());
+    await enter(tree, "Founded year", "");
     expect(h.patchConfig).not.toHaveBeenCalled();
     expect(screenText(tree)).toContain(
       "A founded year can't be removed once saved.",
     );
+  });
+
+  it("sends nothing for a year out of range, and saves one in range", async () => {
+    const tree = render(<ChapterIdentityScreen />);
+    await enter(tree, "Founded year", "19");
+    expect(h.patchConfig).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain("Enter a year between 1776 and");
+    await enter(tree, "Founded year", "1903");
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      branding: expect.objectContaining({ founded_at: 1903 }),
+    });
   });
 
   it("never draws FIJI's letters", () => {
@@ -367,7 +406,7 @@ describe("Chapter settings → Identity & founding (#6027)", () => {
     h.permissions = READER;
     const tree = render(<ChapterIdentityScreen />);
     expect(field(tree, "Chapter designation").props.editable).toBe(false);
-    expect(hasPressable(tree, "Save identity")).toBe(false);
+    expect(hasSave(tree)).toBe(false);
     expect(screenText(tree)).toContain(CHAPTER_TAB_COPY.readOnly);
   });
 });
@@ -414,11 +453,11 @@ describe("Chapter settings → Organization type (#6027)", () => {
 });
 
 describe("Chapter settings → Vocabulary (#6027)", () => {
-  it("shows the type's word where a word is blank, and saves every word", () => {
+  it("shows the type's word where a word is blank, and saves a word on its own", async () => {
     const tree = render(<ChapterVocabularyScreen />);
+    expect(hasSave(tree)).toBe(false);
     expect(field(tree, "New member term").props.placeholder).toBe("New member");
-    type(tree, "Role tier", " Board ");
-    act(() => pressable(tree, "Save vocabulary").props.onPress());
+    await enter(tree, "Role tier", " Board ");
     expect(h.patchConfig).toHaveBeenCalledWith({
       vocabulary: {
         recruitment: "",
@@ -430,25 +469,57 @@ describe("Chapter settings → Vocabulary (#6027)", () => {
     });
   });
 
-  it("keeps an unsaved word when the officer goes back and returns", () => {
+  it("saves a word typed and not left when the officer goes back", () => {
     const first = render(<ChapterVocabularyScreen />);
     type(first, "Cohort label", "Line");
     act(() => first.unmount());
     mounted.splice(mounted.indexOf(first), 1);
-    const again = render(<ChapterVocabularyScreen />);
-    expect(field(again, "Cohort label").props.value).toBe("Line");
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      vocabulary: {
+        recruitment: "",
+        pledge: "",
+        class: "Line",
+        order: "",
+        tier: "",
+      },
+    });
+  });
+
+  it("sends a cleared word as empty, so the type's word comes back", async () => {
+    h.config = { ...h.config, vocabulary: { pledge: "Associate" } };
+    const tree = render(<ChapterVocabularyScreen />);
+    await enter(tree, "New member term", "");
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      vocabulary: expect.objectContaining({ pledge: "" }),
+    });
   });
 });
 
 describe("Chapter settings → Chapter mark (#6027)", () => {
-  it("saves the short name and the letters switch together", () => {
+  it("saves the short name on its own, with the switch as stored (#6033)", async () => {
     const tree = render(<ChapterMarkScreen />);
-    expect(pressable(tree, "Save mark").props.disabled).toBe(true);
-    type(tree, "Short name", "SigEp");
-    act(() => pressable(tree, "Save mark").props.onPress());
+    expect(hasSave(tree)).toBe(false);
+    await enter(tree, "Short name", "SigEp");
     expect(h.patchConfig).toHaveBeenCalledWith({
       branding: { show_greek_letters: true, short_name: "SigEp" },
     });
+  });
+
+  it("saves the letters switch the moment it's flipped, and says why it didn't", async () => {
+    const tree = render(<ChapterMarkScreen />);
+    const toggle = () =>
+      tree.root.find(
+        (node) =>
+          node.props.accessibilityLabel === "Show Greek letters" &&
+          typeof node.props.onValueChange === "function",
+      );
+    await act(async () => toggle().props.onValueChange(false));
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      branding: { show_greek_letters: false, short_name: "Sig Ep" },
+    });
+    h.patchConfig.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => toggle().props.onValueChange(false));
+    expect(screenText(tree)).toContain("Couldn't save the mark. Try again.");
   });
 
   it("gives FIJI no letters switch", () => {
@@ -476,11 +547,11 @@ describe("Chapter settings → Chapter mark (#6027)", () => {
   });
 });
 
-describe("Chapter settings drafts (#6027)", () => {
+describe("Chapter settings fields that save on their own (#6033)", () => {
   const rerender = (tree: ReactTestRenderer, element: React.ReactElement) =>
     act(() => tree.update(<FrappThemeProvider>{element}</FrappThemeProvider>));
 
-  it("keeps the edit when a save fails, through the optimistic write and its rollback", async () => {
+  it("keeps the typed text when a save fails, through the optimistic write and its rollback", async () => {
     const tree = render(<ChapterIdentityScreen />);
     type(tree, "School (short)", "UCLA");
     h.patchConfig.mockImplementation(async (diff) => {
@@ -499,59 +570,25 @@ describe("Chapter settings drafts (#6027)", () => {
       rerender(tree, <ChapterIdentityScreen />);
       throw new Error("offline");
     });
-    await act(async () => pressable(tree, "Save identity").props.onPress());
+    await leave(tree, "School (short)");
     expect(field(tree, "School (short)").props.value).toBe("UCLA");
-    expect(pressable(tree, "Save identity").props.disabled).toBe(false);
+    expect(screenText(tree)).toContain("Couldn't save the identity. Try again.");
   });
 
-  it("keeps the edit when the save fails after the officer has left", async () => {
-    let fail!: (error: Error) => void;
-    h.patchConfig.mockImplementation(
-      () => new Promise((_resolve, reject) => (fail = reject)),
-    );
-    const first = render(<ChapterVocabularyScreen />);
-    type(first, "Cohort label", "Line");
-    act(() => pressable(first, "Save vocabulary").props.onPress());
-    act(() => first.unmount());
-    mounted.splice(mounted.indexOf(first), 1);
-    await act(async () => fail(new Error("offline")));
-    const again = render(<ChapterVocabularyScreen />);
-    expect(field(again, "Cohort label").props.value).toBe("Line");
-  });
-
-  it("keeps a draft made before the settings load, once they arrive", () => {
-    const first = render(<ChapterVocabularyScreen />);
-    type(first, "Cohort label", "Line");
-    act(() => first.unmount());
-    mounted.splice(mounted.indexOf(first), 1);
-    const config = h.config;
-    h.config = undefined as unknown as Record<string, unknown>;
-    const again = render(<ChapterVocabularyScreen />);
-    h.config = config;
-    rerender(again, <ChapterVocabularyScreen />);
-    expect(field(again, "Cohort label").props.value).toBe("Line");
-  });
-
-  it("lays a kept draft over another officer's later save, never reverting it", () => {
-    const first = render(<ChapterVocabularyScreen />);
-    type(first, "New member term", "Associate");
-    act(() => first.unmount());
-    mounted.splice(mounted.indexOf(first), 1);
-    // Another officer sets the tier word on web meanwhile.
+  it("takes another officer's save into a field that isn't being edited", () => {
+    const tree = render(<ChapterVocabularyScreen />);
     h.config = { ...h.config, vocabulary: { tier: "Council" } };
-    const again = render(<ChapterVocabularyScreen />);
-    expect(field(again, "New member term").props.value).toBe("Associate");
-    expect(field(again, "Role tier").props.value).toBe("Council");
-    act(() => pressable(again, "Save vocabulary").props.onPress());
-    expect(h.patchConfig).toHaveBeenCalledWith({
-      vocabulary: {
-        recruitment: "",
-        pledge: "Associate",
-        class: "",
-        order: "",
-        tier: "Council",
-      },
-    });
+    rerender(tree, <ChapterVocabularyScreen />);
+    expect(field(tree, "Role tier").props.value).toBe("Council");
+  });
+
+  it("keeps what's being typed when another officer's save arrives", () => {
+    const tree = render(<ChapterVocabularyScreen />);
+    type(tree, "New member term", "Associate");
+    h.config = { ...h.config, vocabulary: { tier: "Council" } };
+    rerender(tree, <ChapterVocabularyScreen />);
+    expect(field(tree, "New member term").props.value).toBe("Associate");
+    expect(field(tree, "Role tier").props.value).toBe("Council");
   });
 });
 

@@ -10,7 +10,6 @@ import {
 import {
   CHAPTER_TAB_COPY,
   chapterMarkBrandingDiff,
-  chapterMarkChanged,
   chapterMarkDraftOf,
 } from "@repo/hooks/chapter-tab";
 import { errorCopy } from "@repo/hooks/error-copy";
@@ -22,13 +21,8 @@ import { BACK_TO_CHAPTER_SETTINGS } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import { ChapterMarkTile } from "@/components/onboarding/chapter-mark-tile";
 import { ScreenShell } from "@/components/screen-shell";
-import {
-  ChapterTextField,
-  FormCommitRow,
-  FormFields,
-  FormHint,
-  useFormSaveStatus,
-} from "@/components/settings/chapter-form";
+import { FormFields, FormHint } from "@/components/settings/chapter-form";
+import { SavedTextField } from "@/components/settings/saved-text-field";
 import {
   SettingAnchor,
   SettingJumpProvider,
@@ -39,7 +33,7 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import { pickAndSetChapterLogo } from "@/lib/onboarding/chapter-wizard/chapter-logo";
 import { ChapterPageState } from "@/components/settings/chapter-page-state";
-import { useChapterFormDraft, useChapterTab } from "@/lib/settings/chapter-tab";
+import { saveSetting, useChapterTab } from "@/lib/settings/chapter-tab";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const PREVIEW_SIZE = 56;
@@ -49,14 +43,15 @@ const PREVIEW_SIZE = 56;
  * chapter on Chat home's title and in web's nav, as web's Chapter mark page
  * (`settings-chapter-mark-card.tsx`) sets it, in its order and words.
  *
- * - The preview: the tile, fed the draft, beside the chapter's name.
+ * - The preview: the tile, fed the saved mark (it follows each save), beside the chapter's name.
  * - **Logo**, from the photo library, square-cropped, uploaded the moment it
  *   is picked (the chapter setup's flow, `pickAndSetChapterLogo`), and
  *   Remove logo. The logo routes take `CHAPTER_PROFILE_PERMISSIONS`.
- * - **Short name** and **Show Greek letters**, saved together by Save mark
- *   through the audited config PATCH (`chapter-config:manage`). An
- *   organization that never shows its letters (FIJI) gets no switch, and the
- *   save writes them off.
+ * - **Short name** (on Done or leaving the field) and **Show Greek letters**
+ *   (when flipped), each saved on its own (#6033) through the audited config
+ *   PATCH (`chapter-config:manage`), the other sent as stored. An
+ *   organization that never shows its letters (FIJI) gets no switch, and
+ *   every save writes them off.
  *
  * A viewer who can't change a part reads its value, and the line says an
  * officer sets it.
@@ -70,12 +65,9 @@ export function ChapterMarkPage() {
   const jump = useSettingJumpState(setting);
   const tab = useChapterTab();
   const { branding, lettersHidden, name, logoUrl, canManage } = tab;
-  const stored = tab.orgConfig.data ? chapterMarkDraftOf(branding) : undefined;
-  const { draft, setDraft, save, saving } = useChapterFormDraft(
-    "chapter-mark",
-    stored,
-  );
-  const status = useFormSaveStatus();
+  const stored = chapterMarkDraftOf(branding);
+  const [lettersFailure, setLettersFailure] = useState<string | null>(null);
+  const [lettersSaving, setLettersSaving] = useState(false);
 
   const requestLogoUrl = useRequestChapterLogoUploadUrl();
   const confirmLogo = useConfirmChapterLogo();
@@ -83,13 +75,12 @@ export function ChapterMarkPage() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoNote, setLogoNote] = useState<string | null>(null);
 
-  const shown = draft ?? chapterMarkDraftOf(branding);
   const mark = resolveChapterMark({
     logoUrl,
     branding: {
-      short_name: shown.shortName,
+      short_name: stored.shortName,
       greek_letters: branding.greek_letters,
-      show_greek_letters: shown.showLetters && !lettersHidden,
+      show_greek_letters: stored.showLetters && !lettersHidden,
     },
     name,
   });
@@ -123,20 +114,29 @@ export function ChapterMarkPage() {
     });
   }
 
-  const saveMark = async () => {
-    if (!draft) return;
-    const diff = chapterMarkBrandingDiff({
-      shortName: draft.shortName,
-      showLetters: draft.showLetters,
-      lettersHidden,
-      stored: branding,
-    });
-    const result = await save(() =>
-      tab.patchConfig.mutateAsync({ branding: diff }),
+  // The switch always goes with a save; the short name only to keep or
+  // clear one (`chapterMarkBrandingDiff`).
+  const saveMark = (shortName: string, showLetters: boolean) =>
+    saveSetting(
+      () =>
+        tab.patchConfig.mutateAsync({
+          branding: chapterMarkBrandingDiff({
+            shortName,
+            showLetters,
+            lettersHidden,
+            stored: branding,
+          }),
+        }),
+      "Couldn't save the mark. Try again.",
     );
-    if (result.ok) status.saved();
-    else status.failed(result.error, "Couldn't save the mark. Try again.");
-  };
+
+  async function flipLetters(next: boolean) {
+    setLettersFailure(null);
+    setLettersSaving(true);
+    const result = await saveMark(stored.shortName, next);
+    setLettersSaving(false);
+    if (result !== true) setLettersFailure(result);
+  }
 
   const logoWorking = logoBusy || removeLogo.isPending;
 
@@ -147,19 +147,6 @@ export function ChapterMarkPage() {
       scrollRef={scrollRef}
       keyboardShouldPersistTaps="handled"
       avoidKeyboard
-      footer={
-        draft ? (
-          <FormCommitRow
-            label="Save mark"
-            canSave={canManage}
-            readOnlyLine={CHAPTER_TAB_COPY.readOnly}
-            disabled={!chapterMarkChanged(draft, branding)}
-            busy={saving}
-            status={status.status}
-            onPress={() => void saveMark()}
-          />
-        ) : undefined
-      }
     >
       <SettingJumpProvider
         anchor={jump.anchor}
@@ -216,39 +203,40 @@ export function ChapterMarkPage() {
         </SettingAnchor>
 
         <ChapterPageState query={tab.orgConfig}>
-          {draft ? (
+          {tab.orgConfig.data ? (
             <FormFields>
               <SettingAnchor id="short-name">
-                <ChapterTextField
+                <SavedTextField
                   label="Short name"
-                  value={draft.shortName}
-                  onChangeText={(text) => {
-                    status.clear();
-                    setDraft({ ...draft, shortName: text });
-                  }}
-                  editable={canManage && !saving}
+                  value={stored.shortName}
+                  editable={canManage}
                   maxLength={CHAPTER_SHORT_NAME_MAX_LENGTH}
                   placeholder="FIJI"
+                  allowBlank
+                  onSave={(next) => saveMark(next, stored.showLetters)}
                 />
               </SettingAnchor>
               {lettersHidden ? null : (
                 <ListSection>
                   <ListRow
                     label="Show Greek letters"
-                    description={CHAPTER_TAB_COPY.showLettersLine}
+                    description={
+                      lettersFailure ?? CHAPTER_TAB_COPY.showLettersLine
+                    }
+                    descriptionTone={lettersFailure ? "destructive" : "default"}
                     trailing={
                       <Toggle
-                        value={draft.showLetters}
-                        disabled={!canManage || saving}
+                        value={stored.showLetters}
+                        disabled={!canManage || lettersSaving}
                         accessibilityLabel="Show Greek letters"
-                        onValueChange={(next) => {
-                          status.clear();
-                          setDraft({ ...draft, showLetters: next });
-                        }}
+                        onValueChange={(next) => void flipLetters(next)}
                       />
                     }
                   />
                 </ListSection>
+              )}
+              {canManage ? null : (
+                <FormHint>{CHAPTER_TAB_COPY.readOnly}</FormHint>
               )}
             </FormFields>
           ) : null}

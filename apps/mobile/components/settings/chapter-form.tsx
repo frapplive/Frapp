@@ -15,13 +15,12 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { MONO_FONT_FAMILY, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * The pieces Chapter settings' forms share on the phone (#6027): the profile
- * on top of Chapter settings, and the Chapter mark, Identity & founding and
- * Vocabulary pages its rows push. Web's forms are `Label` over `Input` with a
- * Save button under them (`settings-org-tab.tsx`); these are the same parts
- * in the phone's controls: the sheet field (`sheetFieldStyles`), and the
- * commit pill the task screen's bar draws (`TaskBarPill`), sized to its
- * label rather than stretched across the page (rulebook § 7).
+ * The pieces Chapter settings' pages share on the phone (#6027): the labelled
+ * field (`sheetFieldStyles`) that `SavedTextField` saves on its own (#6033),
+ * as web's `SettingsTextField` does, and the hint line under a group. The
+ * commit pill (`FormCommitRow`, the task screen's `TaskBarPill`, sized to its
+ * label rather than stretched across the page, rulebook § 7) is left only on
+ * the role and group pages, until the rest of #6033 reaches them.
  */
 
 /** A labelled text field. Read-only, its text muted, for a viewer who can't save it. */

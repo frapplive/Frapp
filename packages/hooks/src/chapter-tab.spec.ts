@@ -4,20 +4,20 @@ import {
   birthdayPostChoices,
   chapterArchetypeSwitchPatch,
   chapterIdentityBrandingDiff,
-  chapterIdentityChanged,
+  chapterIdentityFieldDiff,
   chapterIdentityDraftOf,
   chapterIdentityValue,
   chapterMarkBrandingDiff,
-  chapterMarkChanged,
   chapterMarkDraftOf,
   chapterMarkValue,
-  chapterProfileChanged,
+  chapterProfileFieldBody,
   chapterProfileSaveBody,
-  chapterVocabularyChanged,
+  chapterVocabularyFieldPatch,
   chapterVocabularyDraftOf,
   chapterVocabularyPatch,
   chapterVocabularyValue,
   checkFoundedYear,
+  foundedYearProblem,
   offersBirthdayPosts,
   readChapterBranding,
 } from "./chapter-tab";
@@ -70,12 +70,12 @@ describe("chapterProfileSaveBody", () => {
   });
 });
 
-describe("chapterProfileChanged", () => {
-  it("waits for an edit", () => {
-    expect(chapterProfileChanged(STORED, { ...STORED })).toBe(false);
-    expect(
-      chapterProfileChanged(STORED, { ...STORED, university: "Rensselaer" }),
-    ).toBe(true);
+describe("chapterProfileFieldBody", () => {
+  it("sends the one field typed, and nothing for one typed back", () => {
+    expect(chapterProfileFieldBody(STORED, "university", " Rensselaer ")).toEqual(
+      { university: "Rensselaer" },
+    );
+    expect(chapterProfileFieldBody(STORED, "name", STORED.name)).toEqual({});
   });
 });
 
@@ -134,14 +134,11 @@ describe("Chapter mark", () => {
     ).toEqual({ show_greek_letters: false, short_name: "FIJI" });
   });
 
-  it("knows when the page holds an edit", () => {
-    const branding = { short_name: "Sig Ep" };
-    const draft = chapterMarkDraftOf(branding);
-    expect(draft).toEqual({ shortName: "Sig Ep", showLetters: true });
-    expect(chapterMarkChanged(draft, branding)).toBe(false);
-    expect(chapterMarkChanged({ ...draft, showLetters: false }, branding)).toBe(
-      true,
-    );
+  it("reads the stored mark as the page's two fields", () => {
+    expect(chapterMarkDraftOf({ short_name: "Sig Ep" })).toEqual({
+      shortName: "Sig Ep",
+      showLetters: true,
+    });
   });
 
   it("names what the mark draws", () => {
@@ -221,14 +218,28 @@ describe("Identity & founding", () => {
     ).toEqual({ greek_letters: "ΣΦΕ", designation: "", founded_at: 1901 });
   });
 
-  it("knows when the page holds an edit", () => {
+  it("saves one field with the others as stored", () => {
     const branding = { designation: "California Eta", founded_at: 1901 };
-    const draft = chapterIdentityDraftOf(branding);
-    expect(draft.foundedYear).toBe("1901");
-    expect(chapterIdentityChanged(draft, branding)).toBe(false);
-    expect(
-      chapterIdentityChanged({ ...draft, schoolShort: "UCLA" }, branding),
-    ).toBe(true);
+    expect(chapterIdentityFieldDiff(branding, "schoolShort", " UCLA ")).toEqual({
+      designation: "California Eta",
+      school_short: "UCLA",
+      founded_at: 1901,
+    });
+    expect(chapterIdentityFieldDiff(branding, "designation", "")).toEqual({
+      designation: "",
+      founded_at: 1901,
+    });
+  });
+
+  it("says what's wrong with a founded year, or nothing", () => {
+    expect(foundedYearProblem("1901", undefined)).toBeNull();
+    expect(foundedYearProblem("", undefined)).toBeNull();
+    expect(foundedYearProblem("19", undefined)).toMatch(
+      /^Enter a year between 1776 and \d{4}\.$/,
+    );
+    expect(foundedYearProblem("", 1901)).toMatch(
+      /^A founded year can't be removed once saved\. Enter a year/,
+    );
   });
 
   it("shows the first fact filled in", () => {
@@ -273,13 +284,18 @@ describe("Vocabulary", () => {
     });
   });
 
-  it("knows when the page holds an edit", () => {
-    const stored = { recruitment: "Rush" };
-    const draft = chapterVocabularyDraftOf(stored);
-    expect(chapterVocabularyChanged(draft, stored)).toBe(false);
-    expect(chapterVocabularyChanged({ ...draft, tier: "Board" }, stored)).toBe(
-      true,
-    );
+  it("saves one word with the others as stored", () => {
+    expect(
+      chapterVocabularyFieldPatch({ recruitment: "Rush" }, "tier", " Board "),
+    ).toEqual({
+      vocabulary: {
+        recruitment: "Rush",
+        pledge: "",
+        class: "",
+        order: "",
+        tier: "Board",
+      },
+    });
   });
 
   it("reads Custom once a word differs from the type's", () => {

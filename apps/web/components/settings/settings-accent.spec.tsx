@@ -174,7 +174,7 @@ describe("the preview warnings say what the preview does", () => {
   it("renders the hex-needed hint its writing.md row states", () => {
     // The row's body cell carries a styling note after the copy.
     expect(writingRow("Accent hex needed")).toBe(
-      "Enter a hex code like #5AA9E6 to save an accent color.",
+      "Enter a hex code like #5AA9E6 to use it as the accent.",
     );
     expect(warning("accentDraftUnsavable")).toBe(
       writingRow("Accent hex needed"),
@@ -203,14 +203,11 @@ describe("the preview warnings say what the preview does", () => {
     );
   });
 
-  it("the saved toast lists no surface it could drift from", () => {
-    const toastAt = settingsPage.indexOf('title: "Accent color saved"');
-    expect(toastAt).toBeGreaterThan(-1);
-    const toastCall = settingsPage.slice(
-      toastAt,
-      settingsPage.indexOf("});", toastAt),
-    );
-    expect(toastCall).not.toMatch(/description:/);
+  it("says Saved in place, with no success toast to drift from (#6033)", () => {
+    // The accent saves on its own, so its success is the quiet line under it,
+    // not a toast that once listed surfaces and could drift from them.
+    expect(settingsPage).not.toMatch(/title: "Accent color saved"/);
+    expect(settingsPage).toMatch(/\? "Saved" : ""/);
   });
 });
 

@@ -42,6 +42,13 @@ export type AccentPickerProps = {
   /** Called with a normalized `#RRGGBB` whenever a swatch or a valid hex is chosen. */
   onChange: (hex: string) => void;
   /**
+   * Called with the colour once the member is done choosing it: a swatch the
+   * moment it is tapped, a typed hex when the field is left or submitted and
+   * holds a colour. A caller that saves on its own (Settings' accent sheet,
+   * #6033) saves here rather than on every keystroke's `onChange`.
+   */
+  onCommit?: (hex: string) => void;
+  /**
    * Called with `false` while the custom field holds text that is not a color
    * yet, and `true` once it is again (or a swatch is tapped). `onChange` keeps
    * the last valid color meanwhile, so a caller that saves refuses to save on
@@ -90,6 +97,7 @@ function sameHex(a: string, b: string): boolean {
 export function AccentPicker({
   value,
   onChange,
+  onCommit,
   onValidityChange,
   label = "Accent color",
   orgColors = [],
@@ -139,7 +147,14 @@ export function AccentPicker({
     if (disabled) return;
     setDraft("");
     onValidityChange?.(true);
-    onChange(normalizeAccentInput(hex));
+    const next = normalizeAccentInput(hex);
+    onChange(next);
+    onCommit?.(next);
+  }
+
+  function commitTyped() {
+    const parsed = parseTypedHex(draft);
+    if (parsed) onCommit?.(parsed);
   }
 
   function typeHex(text: string) {
@@ -242,7 +257,9 @@ export function AccentPicker({
               onBlur={() => {
                 setHexFocused(false);
                 reveal.blur("hex");
+                commitTyped();
               }}
+              onSubmitEditing={commitTyped}
               style={[
                 styles.input,
                 styles.inputFlex,

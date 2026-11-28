@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { type useUpdateChapter } from "@repo/hooks";
 import { normalizeHex } from "@repo/color";
 import { signetDarkTokens } from "@repo/theme/signet";
@@ -10,7 +9,6 @@ import {
   formatFailingRatio,
   previewInkFor,
 } from "@/components/settings/accent-preview-ink";
-import { Button } from "@/components/ui/button";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { Input } from "@/components/ui/input";
 import { AccentSwatches } from "@/components/settings/accent-swatches";
@@ -100,7 +98,14 @@ export function useAccentDraft(
     setContrastWarning(null);
   }
 
-  return { value, update, contrastWarning, setContrastWarning };
+  return {
+    value,
+    update,
+    contrastWarning,
+    setContrastWarning,
+    /** The accent as stored, so a save of the same colour sends nothing. */
+    saved: chapter?.accent_color ?? "",
+  };
 }
 
 export function SettingsAccentTab({
@@ -173,17 +178,39 @@ export function SettingsAccentTab({
   const preview = previewInkFor(accent.resolvedAccent);
   const previewInk = preview?.ink ?? signetDarkTokens.color.gold.onHouse;
 
-  async function saveAccent(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!accentDraftHex) return;
+  const [saved, setSaved] = useState(false);
+  const savedColor = normalizeHex(draft.saved);
+  // The colour last saved from here, until the chapter refetch brings it
+  // back as `savedColor`: Enter then leaving the field would otherwise send
+  // it twice.
+  const sentColor = useRef<string | null>(null);
+  useEffect(() => {
+    sentColor.current = null;
+  }, [savedColor]);
+
+  /*
+    The accent saves on its own (#6033): a swatch the moment it is picked,
+    a typed hex or the colour picker on Enter or leaving the field, once it
+    is a hex. "Saved" shows under it; a failure toasts and leaves the draft
+    for another try.
+  */
+  async function saveAccent(value: string) {
+    const hex = normalizeHex(value);
+    if (
+      !hex ||
+      hex === savedColor ||
+      hex === sentColor.current ||
+      updateChapter.isPending
+    )
+      return;
+    setSaved(false);
     try {
       const result = await updateChapter.mutateAsync({
-        accent_color: accentDraftHex,
+        accent_color: hex,
       });
+      sentColor.current = hex;
       draft.setContrastWarning(result?.failedContrastChecks ?? null);
-      toast({
-        title: "Accent color saved",
-      });
+      setSaved(true);
     } catch (error) {
       toast({
         title: "Couldn't save accent color",
@@ -255,13 +282,16 @@ export function SettingsAccentTab({
       title="Accent color"
       hint="Paints primary buttons, your own name in chat and the active nav item. The Frapp mark keeps its own color."
     >
-      <form onSubmit={saveAccent}>
+      <div>
         <div className="space-y-4">
           <AccentSwatches
             value={accentDraftHex}
             orgName={orgName}
-            onPick={draft.update}
-            disabled={!canEditProfile}
+            onPick={(hex) => {
+              draft.update(hex);
+              void saveAccent(hex);
+            }}
+            disabled={!canEditProfile || updateChapter.isPending}
           />
           <p className={`${EYEBROW} text-muted`}>Custom color</p>
           <div className="flex flex-wrap items-center gap-4">
@@ -269,13 +299,35 @@ export function SettingsAccentTab({
               type="color"
               aria-label="Accent color picker"
               value={accentDraftHex || accent.resolvedAccent}
-              onChange={(event) => draft.update(event.target.value)}
+              disabled={!canEditProfile}
+              onChange={(event) => {
+                setSaved(false);
+                draft.update(event.target.value);
+              }}
+              onBlur={() => void saveAccent(accentDraft)}
               className="h-control-field w-24 p-1 pointer-coarse:h-11"
             />
             <Input
               aria-label="Accent color hex value"
               value={accentDraft}
-              onChange={(event) => draft.update(event.target.value)}
+              disabled={!canEditProfile}
+              aria-describedby={
+                accentDraftUnsavable ? accentHexHintId : undefined
+              }
+              onChange={(event) => {
+                setSaved(false);
+                draft.update(event.target.value);
+              }}
+              onBlur={() => void saveAccent(accentDraft)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void saveAccent(accentDraft);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  draft.update(draft.saved);
+                }
+              }}
               placeholder={signetDarkTokens.color.gold.seed}
               className="max-w-xs font-mono"
             />
@@ -323,14 +375,14 @@ export function SettingsAccentTab({
                   : "text-xs text-warning"
               }
             >
-              Enter a hex code like #5AA9E6 to save an accent color.
+              Enter a hex code like #5AA9E6 to use it as the accent.
             </p>
           ) : null}
           {accentPreviewFallsBack ? (
             <p className="text-xs text-warning">
               This color is hard to read on menus and dialogs, so the preview
-              shows {accent.resolvedAccent} instead. Saving stores the color you
-              entered, and the palette is derived from it.
+              shows {accent.resolvedAccent} instead. The color you entered is
+              the one saved, and the palette is derived from it.
             </p>
           ) : null}
           {/*
@@ -345,27 +397,18 @@ export function SettingsAccentTab({
           {accentContrastWarning && accentContrastWarning.length > 0 ? (
             <p className="text-xs text-warning">
               {accentContrastWarning.map(describeFailedContrastCheck).join(" ")}{" "}
-              Try a lighter or darker shade of this hue and save again.
+              Try a lighter or darker shade of this hue.
             </p>
           ) : null}
         </div>
-        <div className="mt-4 flex justify-end">
-          <Button
-            type="submit"
-            disabled={
-              !canEditProfile || updateChapter.isPending || accentDraftUnsavable
-            }
-            aria-describedby={
-              accentDraftUnsavable ? accentHexHintId : undefined
-            }
-          >
-            {updateChapter.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            Save accent color
-          </Button>
-        </div>
-      </form>
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3 min-h-4 text-caption text-muted-foreground"
+        >
+          {saved && !accentContrastWarning?.length ? "Saved" : ""}
+        </p>
+      </div>
     </ProfileSection>
   );
 }

@@ -246,9 +246,10 @@ export function useUpdateChapter() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      void invalidate();
-    },
+    // Returned, so `mutateAsync` settles once the chapter is read again: a
+    // field that saves on its own (#6033) shows the saved value at once,
+    // never the old one between the save and the re-read.
+    onSuccess: () => invalidate(),
   });
 }
 
