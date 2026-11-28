@@ -10671,7 +10671,7 @@ export interface components {
              * @description What to draw behind the messages column.
              * @enum {string}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             /**
              * @description Where it came from: the channel's own setting, the chapter default, or `none` for a DM (always plain).
              * @enum {string}
@@ -10687,7 +10687,7 @@ export interface components {
              * @description A built-in key, `photo` (with `storage_path`), or null to follow the chapter's default.
              * @enum {string|null}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo" | null;
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo" | null;
             /** @description Required with `photo`: the path the photo-url call returned. */
             storage_path?: string;
         };
@@ -10705,7 +10705,7 @@ export interface components {
         };
         ChapterChatBackgroundResponseDto: {
             /** @enum {string} */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             photo_url: string | null;
             /** @description Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key. */
             holiday_season: boolean;
@@ -10715,7 +10715,7 @@ export interface components {
              * @description A built-in key, or `photo` (with `storage_path`).
              * @enum {string}
              */
-            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "photo";
+            background: "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday" | "photo";
             /** @description Required with `photo`: the path the photo-url call returned. */
             storage_path?: string;
         };

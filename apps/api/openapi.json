@@ -33631,6 +33631,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "description": "What to draw behind the messages column."
@@ -33672,6 +33673,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "nullable": true,
@@ -33731,6 +33733,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ]
           },
@@ -33760,6 +33763,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "description": "A built-in key, or `photo` (with `storage_path`)."
