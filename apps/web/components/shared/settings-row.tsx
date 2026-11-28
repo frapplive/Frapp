@@ -11,6 +11,14 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
 /**
+ * The group's frame: radius, hairline, fill and the rule between rows. A
+ * skeleton of a settings page draws its rows in it, so the page loads in its
+ * own shape.
+ */
+export const SETTINGS_GROUP_FRAME =
+  "divide-y divide-border rounded-[14px] border border-border bg-card";
+
+/**
  * The one settings row on web, and the group that holds it (rulebook § 9,
  * `spec/ui/design-system/components.md` § Settings rows). The phone draws the
  * same shape with `ListSection` and `ListRow` (`apps/mobile/components/list-section.tsx`).
@@ -63,7 +71,7 @@ export function SettingsGroup({
       aria-label={heading ? undefined : label}
       aria-labelledby={heading ? headingId : undefined}
       className={cn(
-        "divide-y divide-border rounded-[14px] border border-border bg-card",
+        SETTINGS_GROUP_FRAME,
         heading || footnote ? undefined : className,
       )}
     >
@@ -130,10 +138,17 @@ export const SETTINGS_VALUE_TRIGGER =
 
 /**
  * foundations §9's Settings row step: 36 to a mouse (44 until #6115), 44 to a
- * finger. A row with its muted line grows past it.
+ * finger. A row with its muted line grows past it. Exported for a list drawn
+ * in a group's frame without `SettingsRow` (Discord import's arrival rows)
+ * and for the settings-group skeleton, so their rows stand as tall.
  */
-const ROW =
-  "flex min-h-control-settings-row items-center gap-4 px-4 py-1.5 pointer-coarse:min-h-11 group-first:rounded-t-[13px] group-last:rounded-b-[13px]";
+export const SETTINGS_ROW_HEIGHT =
+  "min-h-control-settings-row py-1.5 pointer-coarse:min-h-11";
+
+const ROW = cn(
+  "flex items-center gap-4 px-4 group-first:rounded-t-[13px] group-last:rounded-b-[13px]",
+  SETTINGS_ROW_HEIGHT,
+);
 
 export function SettingsRow(
   props: {
@@ -171,6 +186,16 @@ export function SettingsRow(
      * actions lines up with its neighbours that have them.
      */
     menu?: { entries: readonly RowMenuEntry[]; label: string };
+    /**
+     * What explains a disabled button row, such as a subscription gate's
+     * notice (`gate.controlProps()["aria-describedby"]`).
+     */
+    describedBy?: string;
+    /**
+     * A disabled button row's tooltip, the gate's own short reason
+     * (`gate.controlProps().title`), as every other gated control carries.
+     */
+    title?: string;
   } & Trailing,
 ) {
   const {
@@ -280,6 +305,8 @@ export function SettingsRow(
         type="button"
         onClick={props.onClick}
         disabled={props.disabled}
+        aria-describedby={props.describedBy}
+        title={props.title}
         className={cn(
           row,
           props.menu ? "min-w-0 flex-1" : "w-full",
@@ -357,7 +384,8 @@ export function SettingsReorderRow({
     <Link
       href={href}
       className={cn(
-        "flex min-h-control-settings-row min-w-0 flex-1 items-center gap-4 rounded-md py-1.5 pl-2 pr-4 pointer-coarse:min-h-11 transition hover:bg-card-hover",
+        "flex min-w-0 flex-1 items-center gap-4 rounded-md pl-2 pr-4 transition hover:bg-card-hover",
+        SETTINGS_ROW_HEIGHT,
         FOCUS_RING,
       )}
     >

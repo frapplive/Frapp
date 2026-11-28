@@ -1,5 +1,6 @@
 "use client";
 
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 import { useState } from "react";
 import {
   usePickableRoles,
@@ -62,7 +63,7 @@ export function PickRolesList({ roles }: { roles: readonly PickableRole[] }) {
   }
 
   return (
-    <ul className="divide-y divide-border rounded-[14px] border border-border bg-card">
+    <ul className={SETTINGS_GROUP_FRAME}>
       {roles.map((role) => (
         <li
           key={role.id}

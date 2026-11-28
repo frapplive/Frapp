@@ -27,7 +27,6 @@ import {
   ServiceGlyph,
   SettingsGlyph,
   StudyGlyph,
-  StudyZonesGlyph,
   TasksGlyph,
 } from "./nav-glyphs";
 
@@ -54,7 +53,6 @@ const SHAPES: ReadonlyArray<[string, DuotoneGlyphComponent, NavGlyphName]> = [
   ["Chapters", ChaptersGlyph, "chapter"],
   ["Settings", SettingsGlyph, "settings"],
   ["Roles", RolesGlyph, "roles"],
-  ["Study zones", StudyZonesGlyph, "studyZones"],
   ["Reports", ReportsGlyph, "reports"],
   ["Folder", FolderGlyph, "folder"],
   ["Schedule", ScheduleGlyph, "schedule"],

@@ -11,14 +11,21 @@ import {
 } from "./study-zone-shape";
 
 /** Ray casting, the same test the API runs (`domain/utils/geofence.ts`). */
-function inside(lat: number, lng: number, poly: { lat: number; lng: number }[]) {
+function inside(
+  lat: number,
+  lng: number,
+  poly: { lat: number; lng: number }[],
+) {
   let hit = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const xi = poly[i].lng;
     const yi = poly[i].lat;
     const xj = poly[j].lng;
     const yj = poly[j].lat;
-    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+    if (
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    ) {
       hit = !hit;
     }
   }
@@ -97,7 +104,7 @@ describe("studyZoneRulesLine", () => {
         minutes_per_point: 30,
         min_session_minutes: 15,
       }),
-    ).toBe("1 point every 30 min · 15 min minimum");
+    ).toBe("1 point every 30 minutes · 15 minute minimum");
   });
 
   it("reads an hourly rate as an hour, and leaves out a zero minimum", () => {
@@ -117,6 +124,6 @@ describe("studyZoneRulesLine", () => {
         minutes_per_point: null,
         min_session_minutes: 15,
       }),
-    ).toBe("15 min minimum");
+    ).toBe("15 minute minimum");
   });
 });

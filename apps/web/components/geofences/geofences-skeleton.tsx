@@ -1,18 +1,14 @@
 import {
   SectionSkeleton,
-  SkeletonRows,
+  SkeletonSettingsGroup,
 } from "@/components/shared/page-skeletons";
 
-/** Zone rows: pin glyph, name and rule line, status badge, three actions. */
+/**
+ * Zone rows in their settings group (#6031): the map-pin glyph, the name over
+ * what it earns, the chevron.
+ */
 function ZoneRows() {
-  return (
-    <SkeletonRows
-      rows={3}
-      lead="glyph"
-      trailing={["w-14", "w-12", "w-20", "w-20"]}
-      rowClassName="min-h-11 py-2.5"
-    />
-  );
+  return <SkeletonSettingsGroup rows={3} lead="glyph" trailing={["w-4"]} />;
 }
 
 /** The zone list on Chapter settings' Study zones page while it loads. */

@@ -41,9 +41,15 @@ import { currentImport, importStage } from "./current-import";
 import {
   ImportDeleting,
   ImportFinished,
+  ImportIssues,
   ImportLanding,
   ImportRunning,
 } from "./import-states";
+import {
+  DiscordImportFrame,
+  DiscordImportNotice,
+} from "./discord-import-frame";
+import type { DiscordImportPage as DiscordImportSubpage } from "@/components/settings/settings-paths";
 import { useBotUsable } from "./use-bot-usable";
 import { DiscordImportSkeleton } from "./discord-import-skeleton";
 
@@ -69,8 +75,15 @@ const FIRST_STEP: Record<ImportSource, WizardStep> = {
  *
  * Drawn inside Chapter settings, in place of the Chat page (#3837,
  * `?tab=chat&tool=discord-import`); `/discord-import` only redirects there.
+ * Each state draws the page's frame (`DiscordImportFrame`), so its header
+ * line can say the import's state (#6031). `page="issues"` is what didn't
+ * come over, opened from a finished import's row.
  */
-export function DiscordImportPage() {
+export function DiscordImportPage({
+  page = null,
+}: {
+  page?: DiscordImportSubpage | null;
+}) {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
@@ -154,12 +167,18 @@ export function DiscordImportPage() {
       */}
       <Can
         permission="channels:manage"
-        fallback={<DiscordImportSkeleton />}
+        fallback={
+          <DiscordImportFrame>
+            <DiscordImportSkeleton />
+          </DiscordImportFrame>
+        }
         deniedFallback={
-          <p className="text-sm text-muted-foreground">
-            Your role can&apos;t import Discord history. Ask your chapter
-            president for access.
-          </p>
+          <DiscordImportFrame>
+            <p className="text-sm text-muted-foreground">
+              Your role can&apos;t import Discord history. Ask your chapter
+              president for access.
+            </p>
+          </DiscordImportFrame>
         }
         // A paused permission read is not a denial (`writing.md` §7,
         // "Permission check offline"). Without this the screen-level gate fell
@@ -167,13 +186,16 @@ export function DiscordImportPage() {
         // page. The card it draws instead is the same screen-level fallback
         // every flushed route's gate draws (`/reports`, `/chat-admin`).
         offlineFallback={(retry) => (
-          <PermissionsOfflineSurface
-            description="Reconnect to check whether you can import Discord history."
-            onRetry={retry}
-          />
+          <DiscordImportFrame>
+            <PermissionsOfflineSurface
+              description="Reconnect to check whether you can import Discord history."
+              onRetry={retry}
+            />
+          </DiscordImportFrame>
         )}
       >
         <DiscordImportBody
+          page={page}
           wizard={wizard}
           openWizard={setWizard}
           closeWizard={closeWizard}
@@ -185,6 +207,7 @@ export function DiscordImportPage() {
 }
 
 type BodyProps = {
+  page: DiscordImportSubpage | null;
   wizard: WizardStart | null;
   openWizard: (start: WizardStart) => void;
   /** Closes the wizard and spends any `?wizard=bot` resume it opened with. */
@@ -215,6 +238,7 @@ function DiscordImportBody(props: BodyProps) {
 }
 
 function DiscordImportView({
+  page,
   wizard,
   openWizard,
   closeWizard,
@@ -243,18 +267,20 @@ function DiscordImportView({
   // centred 672px column with its own step heading and footer rule.
   if (wizard) {
     return (
-      <ImportWizard
-        initialSource={wizard.source}
-        initialStep={wizard.step}
-        handshake={handshake}
-        onCancel={closeWizard}
-        onStarted={() => {
-          closeWizard();
-          // The new import is on the page once the list reads it; the start
-          // mutation refreshes the list.
-          setChannelsOpen(false);
-        }}
-      />
+      <DiscordImportFrame>
+        <ImportWizard
+          initialSource={wizard.source}
+          initialStep={wizard.step}
+          handshake={handshake}
+          onCancel={closeWizard}
+          onStarted={() => {
+            closeWizard();
+            // The new import is on the page once the list reads it; the start
+            // mutation refreshes the list.
+            setChannelsOpen(false);
+          }}
+        />
+      </DiscordImportFrame>
     );
   }
 
@@ -263,16 +289,22 @@ function DiscordImportView({
   // these is the page's only async state.
   if (isOffline && anyReadUncached(imports)) {
     return (
-      <NestedOffline
-        sole
-        title="Import unavailable offline"
-        description="Reconnect to load your chapter's Discord import."
-        onRetry={() => void imports.refetch()}
-      />
+      <DiscordImportFrame>
+        <NestedOffline
+          sole
+          title="Import unavailable offline"
+          description="Reconnect to load your chapter's Discord import."
+          onRetry={() => void imports.refetch()}
+        />
+      </DiscordImportFrame>
     );
   }
   if (imports.isLoading || paused) {
-    return <DiscordImportSkeleton />;
+    return (
+      <DiscordImportFrame>
+        <DiscordImportSkeleton />
+      </DiscordImportFrame>
+    );
   }
   // `data === undefined`, not `isError` alone: a failed background read keeps
   // what TanStack already holds, and while a deletion is being polled an admin
@@ -280,12 +312,14 @@ function DiscordImportView({
   // that will likely succeed on the next poll, hid the meter and the controls.
   if (imports.isError && imports.data === undefined) {
     return (
-      <NestedError
-        sole
-        title="Couldn't load the import"
-        description={describeLoadFailure(imports.error)}
-        onRetry={() => void imports.refetch()}
-      />
+      <DiscordImportFrame>
+        <NestedError
+          sole
+          title="Couldn't load the import"
+          description={describeLoadFailure(imports.error)}
+          onRetry={() => void imports.refetch()}
+        />
+      </DiscordImportFrame>
     );
   }
 
@@ -384,19 +418,27 @@ function DiscordImportView({
 
   const stage = current ? importStage(current) : null;
 
+  // What didn't come over, for a finished import. An address naming it for
+  // an import that isn't finished (or none) shows the import instead.
+  const issues = page === "issues" && current !== null && stage === "finished";
+
   return (
-    <div className="space-y-4">
-      {/*
-        What a failed refresh leaves on screen is the last good read, so say
-        so: a meter that stopped moving otherwise reads as stuck rather than
-        stale.
-      */}
-      <StaleReadNotice
-        stale={imports.isError}
-        message="Couldn't refresh the import. This is the last update that loaded."
-        onRetry={() => void imports.refetch()}
-      />
-      {current === null ? (
+    // What a failed refresh leaves on screen is the last good read, so say
+    // so: a meter that stopped moving otherwise reads as stuck rather than
+    // stale. The frame draws it under its header, so it sits on the page it
+    // speaks about rather than above the way back.
+    <DiscordImportNotice.Provider
+      value={
+        <StaleReadNotice
+          stale={imports.isError}
+          message="Couldn't refresh the import. This is the last update that loaded."
+          onRetry={() => void imports.refetch()}
+        />
+      }
+    >
+      {issues ? (
+        <ImportIssues row={current} />
+      ) : current === null ? (
         <ImportLanding
           botAvailable={botAvailable}
           onPick={(source) => openWizard({ source, step: FIRST_STEP[source] })}
@@ -425,6 +467,6 @@ function DiscordImportView({
           channels={channels(current, false)}
         />
       )}
-    </div>
+    </DiscordImportNotice.Provider>
   );
 }

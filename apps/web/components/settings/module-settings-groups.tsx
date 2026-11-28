@@ -15,6 +15,7 @@ import {
   ANNOUNCEMENTS_CHANNEL_COPY,
   isAnnouncementChannel,
 } from "@repo/validation";
+import { DiscordImportRowValue } from "@/components/discord-import/import-row-value";
 import { type SettingsTool } from "@/components/settings/settings-access";
 import { channelSettingsPath } from "@/components/settings/settings-paths";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
@@ -44,6 +45,8 @@ export function ModuleToolsGroup({
   /** Where a tool's row goes: its page on this module page, or its own. */
   hrefOf: (tool: SettingsTool) => string;
 }) {
+  // Discord import's row says the import's state at its end (#6031), as an
+  // iOS Settings row shows its value before the chevron.
   if (tools.length === 0) return null;
   return (
     <SettingsGroup heading="Tools">
@@ -53,6 +56,9 @@ export function ModuleToolsGroup({
           id={`module-row-${tool.id}`}
           icon={TOOL_ICONS[tool.id]}
           label={tool.rowLabel ?? tool.label}
+          value={
+            tool.id === "discord-import" ? <DiscordImportRowValue /> : undefined
+          }
           href={hrefOf(tool)}
         />
       ))}

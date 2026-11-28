@@ -51,7 +51,11 @@ import { NewButton } from "@/components/ui/new-button";
 import { Input } from "@/components/ui/input";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { SectionLabel } from "@/components/shared/section-label";
-import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import {
+  SETTINGS_GROUP_FRAME,
+  SettingsGroup,
+  SettingsRow,
+} from "@/components/shared/settings-row";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import {
   anyReadUncached,
@@ -527,7 +531,7 @@ function ChannelsGroup() {
         />
         <ul
           aria-labelledby="ca-channels-label"
-          className="divide-y divide-border rounded-[14px] border border-border bg-card"
+          className={SETTINGS_GROUP_FRAME}
         >
           {channelTree.uncategorized.length > 0 ? (
             <ChannelGroup

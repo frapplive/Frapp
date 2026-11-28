@@ -5,7 +5,6 @@ import {
 } from "@/components/events/attendance-status";
 import { serviceStatusKind } from "@/components/service/service-status";
 import { studySessionStatusKind } from "@/components/study/study-status";
-import { geofenceStatusKind } from "@/components/geofences/geofence-status";
 import { taskStatusKind } from "@/components/tasks/task-status";
 import {
   invoiceStatusKind,
@@ -63,17 +62,6 @@ const MAPPERS = {
   },
 } as const;
 
-/**
- * Mappers whose input is a derived boolean rather than a server status
- * token, so they cannot join the table above. They are held to the same two
- * invariants that can apply — never the accent, never Neutral. The third
- * (an unmapped status falls back to Hairline) has no meaning for a boolean:
- * there is no unmapped third value for the server to add.
- */
-const BOOLEAN_MAPPERS: Record<string, (value: boolean) => string> = {
-  geofence: geofenceStatusKind,
-};
-
 describe("a cancelled invoice is not a failure", () => {
   // VOID is a cancelled invoice, not a failed payment: quiet Hairline, as
   // DRAFT is, and as mobile draws it.
@@ -84,7 +72,7 @@ describe("a cancelled invoice is not a failure", () => {
 });
 
 describe("status colour is never the chapter accent", () => {
-  it("would have caught PRESENT, APPROVED, COMPLETED and Active painted in it", () => {
+  it("would have caught PRESENT, APPROVED and COMPLETED painted in it", () => {
     for (const [family, { fn, inputs }] of Object.entries(MAPPERS)) {
       for (const status of inputs) {
         expect(
@@ -92,10 +80,6 @@ describe("status colour is never the chapter accent", () => {
           `${family}: ${status}`,
         ).not.toBe("default");
       }
-    }
-    for (const [family, fn] of Object.entries(BOOLEAN_MAPPERS)) {
-      expect(fn(true), `${family}: true`).not.toBe("default");
-      expect(fn(false), `${family}: false`).not.toBe("default");
     }
   });
 
@@ -121,10 +105,6 @@ describe("status colour is never the chapter accent", () => {
           `${family}: ${status}`,
         ).not.toBe("secondary");
       }
-    }
-    for (const [family, fn] of Object.entries(BOOLEAN_MAPPERS)) {
-      expect(fn(true), `${family}: true`).not.toBe("secondary");
-      expect(fn(false), `${family}: false`).not.toBe("secondary");
     }
   });
 });
@@ -161,11 +141,6 @@ describe("the mappings themselves", () => {
     expect(serviceStatusKind("APPROVED")).toBe(invoiceStatusKind("PAID"));
     expect(serviceStatusKind("PENDING")).toBe(invoiceStatusKind("OPEN"));
     expect(serviceStatusKind("REJECTED")).toBe("destructive");
-  });
-
-  it("treats a disabled study zone as the absence of a status, not a failure", () => {
-    expect(geofenceStatusKind(true)).toBe("success");
-    expect(geofenceStatusKind(false)).toBe("outline");
   });
 
   it("keeps a module's price tag out of the status channel entirely", () => {

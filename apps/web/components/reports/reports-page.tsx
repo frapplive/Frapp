@@ -12,6 +12,7 @@ import {
   usePointsReport,
   useRosterReport,
   useServiceReport,
+  useServiceSemesterStart,
   type ReportFormat,
   type ReportResponse,
   type ReportTruncation,
@@ -20,7 +21,13 @@ import type { MemberProfile } from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
 import { formatDayTime, formatEventDayTime } from "@repo/formatting";
 import { formatEventWhenOr } from "@repo/formatting";
-import { can } from "@repo/validation";
+import {
+  can,
+  POINTS_PERIODS,
+  REPORTS_COPY,
+  reportPreviewHeading,
+  type ReportKindKey,
+} from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,7 +45,6 @@ import {
   ReportsGlyph,
 } from "@/components/documents/resources-glyphs";
 import { DateField } from "@/components/ui/date-field";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -56,26 +62,30 @@ import { asArray, getErrorMessage, type ExportFormat } from "@/lib/utils";
 import { ExportMenu } from "@/components/shared/export-menu";
 import { ReportsFormSkeleton } from "@/components/reports/reports-skeleton";
 import { InlineNote } from "@/components/shared/inline-note";
+import { SectionLabel } from "@/components/shared/section-label";
+import {
+  SETTINGS_VALUE_TRIGGER,
+  SettingsGroup,
+  SettingsRow,
+} from "@/components/shared/settings-row";
 
-type ReportKind = "attendance" | "points" | "roster" | "service";
+type ReportKind = ReportKindKey;
 
-const reportLabel: Record<ReportKind, string> = {
-  attendance: "Attendance",
-  points: "Points",
-  roster: "Member roster",
-  service: "Service hours",
-};
+const reportLabel: Record<ReportKind, string> = REPORTS_COPY.kinds;
 
-const reportDescription: Record<ReportKind, string> = {
-  attendance:
-    "Attendance status and check-in time per member, scoped by event or date range.",
-  points:
-    "Totals by category (ATTENDANCE, STUDY, SERVICE, MANUAL, FINE) for a window, optionally filtered to one member.",
-  roster:
-    "Current chapter roster with roles, join dates, and balances. Useful for exec transitions.",
-  service:
-    "Approved and pending service entries, filtered by member or date range.",
-};
+const REPORT_KINDS: readonly ReportKind[] = [
+  "attendance",
+  "points",
+  "roster",
+  "service",
+];
+
+/**
+ * The Dates row's one menu (#6031): this semester (from the chapter's last
+ * rollover, the way the service standings count it), all time, or two dates
+ * of the officer's own.
+ */
+type DatesChoice = "semester" | "all" | "custom";
 
 type ReportRow = Record<string, unknown>;
 
@@ -144,30 +154,32 @@ type PickerFieldQuery = {
   refetch: () => void;
 };
 
-type PickerFieldProps = {
-  idPrefix: string;
+type PickerRowProps = {
+  id: string;
   label: string;
   value: string;
   onValueChange: (value: string) => void;
   options: PickerOption[];
   query: PickerFieldQuery;
-  /** e.g. "Chapter-wide (all events)" */
+  /** The row's value for a chapter-wide report: "All events". */
   allLabel: string;
   /** Plural noun used in the empty/error copy, e.g. "events". */
   noun: string;
+  disabled?: boolean;
 };
 
 /**
- * A named-entity filter: the app's Select backed by a live list. Blank is a
- * chapter-wide report (`ALL_VALUE` in the picker, since a Radix item can't
- * carry an empty value). There is no typed-id fallback: an officer picks a
- * name, never an id (principles.md P2.2).
+ * A named-entity filter: a settings row whose value opens the app's Select,
+ * backed by a live list. "All" is a chapter-wide report (`ALL_VALUE` in the
+ * picker, since a Radix item can't carry an empty value). There is no
+ * typed-id fallback: an officer picks a name, never an id (principles.md
+ * P2.2). A list that failed or is empty says so in the row's one line.
  */
 /** The picker's "everyone" row; the field's value stays `""` for it. */
 const ALL_VALUE = "__all__";
 
-function PickerField({
-  idPrefix,
+function PickerRow({
+  id,
   label,
   value,
   onValueChange,
@@ -175,48 +187,54 @@ function PickerField({
   query,
   allLabel,
   noun,
-}: PickerFieldProps) {
-  const selectId = `${idPrefix}-select`;
-
+  disabled = false,
+}: PickerRowProps) {
+  const labelId = `${id}-label`;
   return (
-    <div className="grid gap-1">
-      <Label htmlFor={selectId}>{label}</Label>
-      <Select
-        value={value === "" ? ALL_VALUE : value}
-        onValueChange={(next) => onValueChange(next === ALL_VALUE ? "" : next)}
-        disabled={query.isPending}
-      >
-        <SelectTrigger id={selectId}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_VALUE}>{allLabel}</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {query.isError ? (
-        <p className="text-xs text-destructive">
-          Couldn&apos;t load {noun}. Leave it blank for a chapter-wide report,
-          or{" "}
-          <button
-            type="button"
-            onClick={() => query.refetch()}
-            className="underline underline-offset-2"
+    <SettingsRow
+      label={<span id={labelId}>{label}</span>}
+      description={
+        query.isError ? (
+          <span className="text-destructive">
+            Couldn&apos;t load {noun}.{" "}
+            <button
+              type="button"
+              onClick={() => query.refetch()}
+              className="underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </span>
+        ) : !query.isPending && options.length === 0 ? (
+          `No ${noun} yet, so the report is chapter-wide.`
+        ) : undefined
+      }
+      control={
+        <Select
+          value={value === "" ? ALL_VALUE : value}
+          onValueChange={(next) =>
+            onValueChange(next === ALL_VALUE ? "" : next)
+          }
+          disabled={disabled || query.isPending}
+        >
+          <SelectTrigger
+            id={id}
+            aria-labelledby={labelId}
+            className={SETTINGS_VALUE_TRIGGER}
           >
-            retry
-          </button>
-          .
-        </p>
-      ) : !query.isPending && options.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No {noun} yet. Every report will be chapter-wide.
-        </p>
-      ) : null}
-    </div>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_VALUE}>{allLabel}</SelectItem>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      }
+    />
   );
 }
 
@@ -281,6 +299,42 @@ function truncationSummary(truncation: ReportTruncation): string {
 }
 
 export function ReportsPage() {
+  return (
+    <>
+      {/*
+        No heading of its own: it is the body of Chapter settings' Reports
+        page (#3837), whose header names it.
+      */}
+      <Can
+        permission="reports:export"
+        offlineFallback={(retry) => (
+          <PermissionsOfflineSurface
+            description="Reconnect to check whether you can export chapter data."
+            onRetry={retry}
+          />
+        )}
+        fallback={<ReportsFormSkeleton />}
+        deniedFallback={
+          <p className="text-sm text-muted-foreground">
+            Your role can&apos;t export chapter data. Ask your chapter president
+            for access.
+          </p>
+        }
+      >
+        <ReportsForm />
+      </Can>
+    </>
+  );
+}
+
+/**
+ * The export form in the settings-rows shape (#6031): one group whose every
+ * row is a picker, the two buttons that ask the API, then the Preview group
+ * with Export in its heading, acting on what was generated. Inside the
+ * gate, so a visitor without `reports:export` never reads the event, member
+ * or semester lists behind its pickers.
+ */
+function ReportsForm() {
   const { toast } = useToast();
   // All four report routes are POSTs on `ReportController`, which carries no
   // `@FreeTier`, so generating one is a paid-op even though it reads like a
@@ -314,31 +368,86 @@ export function ReportsPage() {
   );
 
   const [kind, setKind] = useState<ReportKind>("attendance");
+  const [dates, setDates] = useState<DatesChoice>("semester");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // This semester starts the day after the last rollover's end, read from
+  // the chapter's semester archives as the service standings read it: a
+  // `YYYY-MM-DD`, null for a chapter that never rolled over (this semester
+  // is all time), undefined while unread. A viewer the archives refuse
+  // can't have This semester, so the menu offers it dimmed and the row
+  // falls back to All time.
+  const semester = useServiceSemesterStart();
+  const semesterUnavailable = semester.start === undefined && semester.isError;
+  const semesterPending = semester.start === undefined && !semester.isError;
+  const shownDates: DatesChoice =
+    dates === "semester" && semesterUnavailable ? "all" : dates;
+  const range: { start_date?: string; end_date?: string } =
+    shownDates === "custom"
+      ? { start_date: startDate || undefined, end_date: endDate || undefined }
+      : shownDates === "semester" && semester.start
+        ? { start_date: semester.start }
+        : {};
   const [memberId, setMemberId] = useState("");
   const [eventId, setEventId] = useState("");
+  // One event's attendance is that event: the API ANDs `event_id` with the
+  // date range, so a default This semester would hide last semester's
+  // meeting. Once an event is picked the Dates row goes and no dates are
+  // sent (#6031).
+  const usesDates =
+    kind === "service" || (kind === "attendance" && eventId === "");
+  // A semester report waits for the semester's start rather than running
+  // as all time and saying it was this semester.
+  const waitingForDates =
+    usesDates && shownDates === "semester" && semesterPending;
+  // Custom with neither date would run as all time under a row that says
+  // Custom, so the buttons wait for one date and the row says so.
+  const customNeedsDate =
+    usesDates && shownDates === "custom" && !startDate && !endDate;
+  const datesBlocked = waitingForDates || customNeedsDate;
   const [pointsWindow, setPointsWindow] = useState<
     "all" | "semester" | "month"
   >("all");
-  const [preview, setPreview] = useState<ReportRow[] | null>(null);
-  /** Truncation reported alongside the current preview, if any. */
-  const [truncation, setTruncation] = useState<ReportTruncation | null>(null);
   /*
-    A failed run used to be a toast and nothing else: `setPreview` was
+    What a run asks the API for, as one string. A preview belongs to the
+    request it was generated from: the effective range can change without a
+    filter edit (the semester's start arrives, fails, or moves), and a
+    preview from the old range beside a Dates row naming the new one would
+    export rows the PDF button no longer asks for. A preview whose request
+    isn't the current one is treated as cleared (#6031).
+  */
+  const requestKey = JSON.stringify([
+    kind,
+    kind === "attendance" ? eventId : "",
+    kind === "points" || kind === "service" ? memberId : "",
+    kind === "points" ? pointsWindow : "",
+    usesDates ? range : null,
+  ]);
+  const [result, setResult] = useState<{
+    key: string;
+    preview: ReportRow[] | null;
+    /** Truncation reported alongside the preview, if any. */
+    truncation: ReportTruncation | null;
+    error: string | null;
+  } | null>(null);
+  const current = result !== null && result.key === requestKey ? result : null;
+  const preview = current?.preview ?? null;
+  const truncation = current?.truncation ?? null;
+  /*
+    A failed run used to be a toast and nothing else: the preview was
     never reached, so `preview` stayed `null` and the panel fell through to
     "Generate a report to see a preview here." — a failure rendering as the
     initial state, with no retry. README §4 requires an error state with a
     retry path on every async view, and `writing.md` §7's Reports table had
     no Error row for it, which is why nothing caught it.
   */
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewError = current?.error ?? null;
   /*
     Which run the preview belongs to.
 
     `onFilterChange` clears the preview the moment a filter is edited, but it
     cannot cancel a request already in flight — so a generate started under the
-    old filters would resolve afterwards and call `setPreview` with rows that no
+    old filters would resolve afterwards and write the preview with rows that no
     longer match what the form says. The member sees a table scoped to nobody
     beside a Member ID field naming somebody, and "Export" — which gates
     only on `preview` being non-empty — exports those rows under that
@@ -361,10 +470,12 @@ export function ReportsPage() {
     return (value: T) => {
       setter(value);
       runToken.current += 1;
-      setPreview(null);
-      setTruncation(null);
-      setPreviewError(null);
+      setResult(null);
     };
+  }
+  function clearPreview() {
+    runToken.current += 1;
+    setResult(null);
   }
   // Tracked separately from the mutation's own isPending: the PDF export reuses
   // the same mutation, so without this the preview panel would flip to its
@@ -409,8 +520,7 @@ export function ReportsPage() {
         format,
         body: {
           event_id: eventId || undefined,
-          start_date: startDate || undefined,
-          end_date: endDate || undefined,
+          ...(usesDates ? range : {}),
         },
       });
     }
@@ -430,8 +540,7 @@ export function ReportsPage() {
       format,
       body: {
         user_id: memberId || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
+        ...range,
       },
     });
   }
@@ -439,19 +548,21 @@ export function ReportsPage() {
   async function runReport() {
     runToken.current += 1;
     const token = runToken.current;
+    const key = requestKey;
     // The previous run's verdict is not this run's. Without this the header
     // keeps its "Incomplete report" badge for the whole time a fresh request
     // is in flight, describing a result nobody has seen yet.
-    setTruncation(null);
-    setPreviewError(null);
+    setResult((last) =>
+      last && last.key === key
+        ? { ...last, truncation: null, error: null }
+        : null,
+    );
     try {
       const { payload, truncation } = await invokeReport("json");
       if (token !== runToken.current) return;
 
       const rows = extractRows(payload);
-      setPreview(rows);
-      setTruncation(truncation);
-      setPreviewError(null);
+      setResult({ key, preview: rows, truncation, error: null });
 
       if (rows.length === 0) {
         toast({
@@ -476,7 +587,7 @@ export function ReportsPage() {
 
       toast({
         title: `${reportLabel[kind]} report ready`,
-        description: `${rows.length} row${rows.length === 1 ? "" : "s"} previewed. Export to share.`,
+        description: `${rows.length} row${rows.length === 1 ? "" : "s"} previewed.`,
       });
     } catch (error) {
       if (token !== runToken.current) return;
@@ -486,9 +597,7 @@ export function ReportsPage() {
       // Both, deliberately: the toast reports the moment, and the panel keeps
       // saying so after the toast dismisses. A failed run that leaves the idle
       // copy on screen is a failure reported as "nothing has happened yet".
-      setPreview(null);
-      setTruncation(null);
-      setPreviewError(description);
+      setResult({ key, preview: null, truncation: null, error: description });
       toast({
         title: `Couldn't generate ${reportLabel[kind].toLowerCase()} report`,
         description,
@@ -575,362 +684,307 @@ export function ReportsPage() {
     }
   }
 
+  const busy = pdfPending || activeMutation.isPending;
+  const total = preview === null ? null : preview.length;
+
   return (
-    <>
+    // A container (#4033): beside chat (#3779) the page is narrow while the
+    // window is wide.
+    <div className="@container space-y-8">
       {/*
-        No heading of its own: it is the body of Chapter settings' Reports
-        page (#3837), whose header names it. The two
-        `<CardTitle>Reports & Export</CardTitle>` copies and the body's `<h2>`
-        that used to sit here were the same title said again.
+        Disable, don't hide (§5 rule 4): the filters and any preview already
+        on screen stay usable while the subscription is lapsed — only the
+        buttons that POST are blocked.
       */}
-      <Can
-        permission="reports:export"
-        offlineFallback={(retry) => (
-          <PermissionsOfflineSurface
-            description="Reconnect to check whether you can export chapter data."
-            onRetry={retry}
+      <SubscriptionNotice gate={gate} feature="generating reports" />
+
+      <section className="space-y-4">
+        <SettingsGroup
+          label="What to export"
+          footnote={REPORTS_COPY.holds[kind]}
+        >
+          <SettingsRow
+            label={<span id="report-kind-label">{REPORTS_COPY.report}</span>}
+            control={
+              <Select
+                value={kind}
+                // Also locked during a plain "Generate report": the run in
+                // flight resolves into the preview regardless of what the
+                // select says by then, so switching mid-run would label one
+                // report's rows as another's — and the export names the file
+                // from the *new* kind.
+                disabled={busy}
+                onValueChange={(value) => {
+                  setKind(value as ReportKind);
+                  clearPreview();
+                }}
+              >
+                <SelectTrigger
+                  id="report-kind"
+                  aria-labelledby="report-kind-label"
+                  className={SETTINGS_VALUE_TRIGGER}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_KINDS.map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {reportLabel[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
           />
-        )}
-        fallback={<ReportsFormSkeleton />}
-        deniedFallback={
-          <p className="text-sm text-muted-foreground">
-            Your role can&apos;t export chapter data. Ask your chapter president
-            for access.
-          </p>
-        }
-      >
-        {/*
-          A container (#4033): beside chat (#3779) the page is narrow while the
-          window is wide, so the field grids count the page's own width.
-        */}
-        <div className="@container space-y-6">
-          {/*
-            No description paragraph: the top bar already names the route, and
-            the report picker below says what it generates.
-          */}
 
-          {/*
-            Disable, don't hide (§5 rule 4): the filters and any preview already
-            on screen stay usable while the subscription is lapsed — only the two
-            buttons that POST are blocked.
-          */}
-          <SubscriptionNotice gate={gate} feature="generating reports" />
+          {kind === "attendance" ? (
+            <PickerRow
+              id="report-event"
+              label={REPORTS_COPY.event}
+              value={eventId}
+              onValueChange={onFilterChange(setEventId)}
+              options={eventOptions}
+              query={eventsQuery}
+              allLabel={REPORTS_COPY.allEvents}
+              noun="events"
+            />
+          ) : null}
 
-          <section className="space-y-4">
-            {/*
-              No card title and no card description. "Choose a report" named
-              the control immediately under it, and "Each report respects the
-              same chapter + permission scoping as the rest of the dashboard"
-              reassured the officer about something no other route stops to
-              mention. `1t` lists exactly this pair — "filter card, card title"
-              — as gone one route over.
-            */}
-            <div className="space-y-4">
-              <div className="grid gap-3 @2xl:grid-cols-2">
-                <div className="grid gap-1">
-                  <Label htmlFor="report-kind">Report</Label>
-                  <Select
-                    value={kind}
-                    // Also locked during a plain "Generate report": the run in
-                    // flight resolves into setPreview regardless of what the
-                    // select says by then, so switching mid-run would label one
-                    // report's rows as another's — and the CSV download names
-                    // the file from the *new* kind.
-                    disabled={pdfPending || activeMutation.isPending}
-                    onValueChange={(value) => {
-                      setKind(value as ReportKind);
-                      runToken.current += 1;
-                      setPreview(null);
-                      setTruncation(null);
-                      setPreviewError(null);
-                    }}
+          {kind === "points" || kind === "service" ? (
+            <PickerRow
+              id="report-member"
+              label={REPORTS_COPY.member}
+              value={memberId}
+              onValueChange={onFilterChange(setMemberId)}
+              options={memberOptions}
+              query={membersQuery}
+              allLabel={REPORTS_COPY.allMembers}
+              noun="members"
+            />
+          ) : null}
+
+          {kind === "points" ? (
+            <SettingsRow
+              label={
+                <span id="report-window-label">{REPORTS_COPY.timeWindow}</span>
+              }
+              control={
+                <Select
+                  value={pointsWindow}
+                  onValueChange={(value) =>
+                    onFilterChange(setPointsWindow)(
+                      value as typeof pointsWindow,
+                    )
+                  }
+                >
+                  <SelectTrigger
+                    id="report-window"
+                    aria-labelledby="report-window-label"
+                    className={SETTINGS_VALUE_TRIGGER}
                   >
-                    <SelectTrigger id="report-kind">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="attendance">
-                        {reportLabel.attendance}
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/*
+                      The leaderboard's periods and names: the same
+                      semester the Dates row calls This semester.
+                    */}
+                    {POINTS_PERIODS.map((period) => (
+                      <SelectItem key={period.value} value={period.value}>
+                        {period.label}
                       </SelectItem>
-                      <SelectItem value="points">
-                        {reportLabel.points}
-                      </SelectItem>
-                      <SelectItem value="roster">
-                        {reportLabel.roster}
-                      </SelectItem>
-                      <SelectItem value="service">
-                        {reportLabel.service}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {reportDescription[kind]}
-                  </p>
-                </div>
-              </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
+          ) : null}
 
-              {kind === "attendance" ? (
-                <div className="grid gap-3 @2xl:grid-cols-3">
-                  <PickerField
-                    idPrefix="report-event"
-                    label="Event (optional)"
-                    value={eventId}
-                    onValueChange={onFilterChange(setEventId)}
-                    options={eventOptions}
-                    query={eventsQuery}
-                    allLabel="Chapter-wide (all events)"
-                    noun="events"
-                  />
-                  <div className="grid gap-1">
-                    <Label htmlFor="report-start">Start date</Label>
-                    <DateField
-                      id="report-start"
-                      lean="back"
-                      value={startDate}
-                      onChange={onFilterChange(setStartDate)}
-                    />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor="report-end">End date</Label>
-                    <DateField
-                      id="report-end"
-                      lean="back"
-                      value={endDate}
-                      onChange={onFilterChange(setEndDate)}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              {kind === "points" ? (
-                <div className="grid gap-3 @2xl:grid-cols-2">
-                  <PickerField
-                    idPrefix="report-member"
-                    label="Member (optional)"
-                    value={memberId}
-                    onValueChange={onFilterChange(setMemberId)}
-                    options={memberOptions}
-                    query={membersQuery}
-                    allLabel="Chapter-wide (all members)"
-                    noun="members"
-                  />
-                  <div className="grid gap-1">
-                    <Label htmlFor="report-window">Time window</Label>
-                    <Select
-                      value={pointsWindow}
-                      onValueChange={(value) =>
-                        onFilterChange(setPointsWindow)(
-                          value as typeof pointsWindow,
-                        )
-                      }
-                    >
-                      <SelectTrigger id="report-window">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All time</SelectItem>
-                        <SelectItem value="semester">
-                          Current semester
-                        </SelectItem>
-                        <SelectItem value="month">Rolling month</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              ) : null}
-
-              {kind === "service" ? (
-                <div className="grid gap-3 @2xl:grid-cols-3">
-                  <PickerField
-                    idPrefix="service-report-member"
-                    label="Member (optional)"
-                    value={memberId}
-                    onValueChange={onFilterChange(setMemberId)}
-                    options={memberOptions}
-                    query={membersQuery}
-                    allLabel="Chapter-wide (all members)"
-                    noun="members"
-                  />
-                  <div className="grid gap-1">
-                    <Label htmlFor="service-report-start">Start date</Label>
-                    <DateField
-                      id="service-report-start"
-                      lean="back"
-                      value={startDate}
-                      onChange={onFilterChange(setStartDate)}
-                    />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor="service-report-end">End date</Label>
-                    <DateField
-                      id="service-report-end"
-                      lean="back"
-                      value={endDate}
-                      onChange={onFilterChange(setEndDate)}
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                A PDF download link works for one hour.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {/*
-                  Not subscription-gated: this serializes the preview already in
-                  memory and never reaches the API, so it is a read of data the
-                  chapter has already been served. The rows behind it came from a
-                  generate that was itself gated.
-                */}
-                <ExportMenu
-                  label="Export"
-                  icon={<Download className="h-4 w-4" />}
-                  filenamePrefix={kind}
-                  getRows={() => (preview ? buildRows(preview) : [])}
-                  onExported={onRowsExported}
-                  disabled={!preview || preview.length === 0}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={exportPdf}
-                  // Gate on pdfPending too: activeMutation swaps when the report
-                  // kind changes, so keying only off it would re-enable this
-                  // button mid-export and let a second render be queued.
-                  {...gate.controlProps(pdfPending || activeMutation.isPending)}
+          {usesDates ? (
+            <SettingsRow
+              label={<span id="report-dates-label">{REPORTS_COPY.dates}</span>}
+              description={
+                customNeedsDate ? REPORTS_COPY.customNeedsDate : undefined
+              }
+              control={
+                <Select
+                  value={shownDates}
+                  onValueChange={(value) =>
+                    onFilterChange(setDates)(value as DatesChoice)
+                  }
                 >
-                  {pdfPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <DocumentsGlyph className="h-4 w-4" />
-                  )}
-                  {pdfPending ? "Preparing PDF..." : "Download PDF"}
-                </Button>
-                <Button
-                  onClick={runReport}
-                  {...gate.controlProps(pdfPending || activeMutation.isPending)}
-                >
-                  {activeMutation.isPending && !pdfPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ReportsGlyph className="h-4 w-4" />
-                  )}
-                  Generate report
-                </Button>
-              </div>
-            </div>
-          </section>
+                  <SelectTrigger
+                    id="report-dates"
+                    aria-labelledby="report-dates-label"
+                    className={SETTINGS_VALUE_TRIGGER}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="semester" disabled={semesterUnavailable}>
+                      {REPORTS_COPY.thisSemester}
+                    </SelectItem>
+                    <SelectItem value="all">{REPORTS_COPY.allTime}</SelectItem>
+                    <SelectItem value="custom">
+                      {REPORTS_COPY.custom}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              }
+            />
+          ) : null}
 
-          <section className="space-y-3">
-            <header className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-bold">Preview</h2>
-              {/*
-                `spec/behavior/reports.md` caps a report at 5,000 rows and
-                says truncation is never silent — but the only signal was a
-                toast, so once it dismissed a partial table sat on screen
-                claiming to be the whole report, and the export built from it
-                carries the same claim into a file. §5's Semantic warning
-                kind, which needs no §1 lift on its own tint (5.57–7.15:1).
-              */}
-              {truncation?.truncated ? (
-                <Badge variant="warning">Incomplete report</Badge>
-              ) : null}
-            </header>
+          {usesDates && shownDates === "custom" ? (
+            <>
+              <SettingsRow
+                nested
+                label={<span id="report-start-label">{REPORTS_COPY.from}</span>}
+                control={
+                  <DateField
+                    id="report-start"
+                    aria-labelledby="report-start-label"
+                    lean="back"
+                    value={startDate}
+                    onChange={onFilterChange(setStartDate)}
+                  />
+                }
+              />
+              <SettingsRow
+                nested
+                label={<span id="report-end-label">{REPORTS_COPY.to}</span>}
+                control={
+                  <DateField
+                    id="report-end"
+                    aria-labelledby="report-end-label"
+                    lean="back"
+                    value={endDate}
+                    onChange={onFilterChange(setEndDate)}
+                  />
+                }
+              />
+            </>
+          ) : null}
+        </SettingsGroup>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={exportPdf}
+            // Gate on pdfPending too: activeMutation swaps when the report
+            // kind changes, so keying only off it would re-enable this
+            // button mid-export and let a second render be queued.
+            {...gate.controlProps(busy || datesBlocked)}
+          >
+            {pdfPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <DocumentsGlyph className="h-4 w-4" />
+            )}
+            {pdfPending ? "Preparing PDF..." : REPORTS_COPY.downloadPdf}
+          </Button>
+          <Button
+            onClick={runReport}
+            {...gate.controlProps(busy || datesBlocked)}
+          >
+            {activeMutation.isPending && !pdfPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ReportsGlyph className="h-4 w-4" />
+            )}
+            {REPORTS_COPY.generate}
+          </Button>
+        </div>
+      </section>
+
+      <section aria-labelledby="report-preview-label" className="space-y-2">
+        <header className="flex min-h-control-small flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <SectionLabel id="report-preview-label">
+              {reportPreviewHeading(total)}
+            </SectionLabel>
             {/*
-              Kept, and it is not narration: it reports the row count actually
-              returned and whether the export is partial. `1t` deletes a card's
-              *description of itself*, not a line of state.
+              `spec/behavior/reports.md` caps a report at 5,000 rows and says
+              truncation is never silent: once the toast dismisses, this is
+              what keeps a partial table from claiming to be the whole
+              report.
             */}
-            <p className="text-sm text-muted-foreground">
-              {truncation?.truncated
-                ? `${truncationSummary(truncation)} This preview and any export built from it are not a complete record of the chapter.`
-                : "First 25 rows of the generated report. An export has every row."}
-            </p>
-            <div>
-              {/*
-                The nested state variants: this renders inside a
-                `<CardContent>`, where a `bg-card` state on a `bg-card` card is
-                exactly 1.00:1 and the region disappears (`components.md` §10).
-                This panel previously rendered no state-family component at all —
-                bare paragraphs and a hand-rolled spinner row — so it was the one
-                surface in the family whose states did not match the other three.
-              */}
-              {activeMutation.isPending && !pdfPending ? (
-                <NestedLoading message="Generating report..." sole />
-              ) : previewError ? (
-                <NestedError
-                  sole
-                  title={`Couldn't generate ${reportLabel[kind].toLowerCase()} report`}
-                  description={previewError}
-                  onRetry={() => void runReport()}
-                  /*
-                    `gate.controlProps`, not a hand-built `{ disabled }`. Retry
-                    re-enters `runReport` — the same paid-ops POST the two footer
-                    buttons carry the gate on — so it is a third trigger for a
-                    gated write and README §5's "gate the trigger" reaches it
-                    too. Building the object by hand disabled it only while busy,
-                    so a chapter that lapsed between the failed run and the click
-                    would have fired the doomed request the standard exists to
-                    prevent. The busy flags go *into* `controlProps`, which ORs
-                    them with the verdict rather than replacing it — and this is
-                    the shape `actionProps`/`retryProps` were built to take.
-
-                    The busy half matters on its own: the loading branch above is
-                    `activeMutation.isPending && !pdfPending`, so during a PDF
-                    export it is false and this branch renders its stale error
-                    with Retry wired to the same mutation the export is using.
-                  */
-                  retryProps={gate.controlProps(
-                    pdfPending || activeMutation.isPending,
-                  )}
-                />
-              ) : preview === null ? (
-                <InlineNote>Generate a report to preview it here.</InlineNote>
-              ) : preview.length === 0 ? (
-                <InlineNote>
-                  Nothing in this chapter matches these filters.
-                </InlineNote>
-              ) : (
-                /*
-                  The shared primitive rather than a hand-rolled `<table>`. It
-                  brings the `overflow-auto` wrapper that keeps a wide report off
-                  the 375px floor, the undiluted `--border` hairline, and the row
-                  recipe `components/shared/table-contrast.spec.ts` already pins.
-                  The hand-rolled one carried three defects at once: a
-                  `bg-secondary/40` header that is 1.000:1 on a card, a
-                  `border-border/70` row rule at the diluted alpha §2 forbids,
-                  and `text-xs` cells under foundations §7's 16px body floor.
-                */
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+            {truncation?.truncated ? (
+              <Badge variant="warning">Incomplete report</Badge>
+            ) : null}
+          </div>
+          {/*
+            Export acts on what was generated, so it sits on the preview's
+            heading rather than beside the buttons that ask the API (#6031).
+            Not subscription-gated: it serializes the preview already in
+            memory and never reaches the API.
+          */}
+          <ExportMenu
+            label={REPORTS_COPY.export}
+            icon={<Download className="h-4 w-4" />}
+            filenamePrefix={kind}
+            getRows={() => (preview ? buildRows(preview) : [])}
+            onExported={onRowsExported}
+            disabled={!preview || preview.length === 0}
+          />
+        </header>
+        {truncation?.truncated ? (
+          <p className="text-sm text-muted-foreground">
+            {`${truncationSummary(truncation)} This preview and any export built from it are not a complete record of the chapter.`}
+          </p>
+        ) : null}
+        <div>
+          {/*
+            The nested state variants, so the states match the rest of the
+            family and keep their contrast on the page.
+          */}
+          {activeMutation.isPending && !pdfPending ? (
+            <NestedLoading message="Generating report..." sole />
+          ) : previewError ? (
+            <NestedError
+              sole
+              title={`Couldn't generate ${reportLabel[kind].toLowerCase()} report`}
+              description={previewError}
+              onRetry={() => void runReport()}
+              // `gate.controlProps`: Retry re-enters `runReport`, the same
+              // paid-ops POST the buttons carry the gate on, and the busy
+              // flags go into it so a retry can't race a PDF export.
+              retryProps={gate.controlProps(busy)}
+            />
+          ) : preview === null ? (
+            <InlineNote>Generate a report to preview it here.</InlineNote>
+          ) : preview.length === 0 ? (
+            <InlineNote>
+              Nothing in this chapter matches these filters.
+            </InlineNote>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {previewColumnKeys.map((key) => (
+                    <TableHead key={key} className="whitespace-nowrap">
+                      {key}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preview.slice(0, 25).map((row, index) => {
+                  const flat = flattenRecord(row);
+                  return (
+                    <TableRow key={index}>
                       {previewColumnKeys.map((key) => (
-                        <TableHead key={key} className="whitespace-nowrap">
-                          {key}
-                        </TableHead>
+                        <TableCell key={key} className="whitespace-nowrap">
+                          {flat[key] ?? ""}
+                        </TableCell>
                       ))}
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {preview.slice(0, 25).map((row, index) => {
-                      const flat = flattenRecord(row);
-                      return (
-                        <TableRow key={index}>
-                          {previewColumnKeys.map((key) => (
-                            <TableCell key={key} className="whitespace-nowrap">
-                              {flat[key] ?? ""}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          </section>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
-      </Can>
-    </>
+      </section>
+    </div>
   );
 }

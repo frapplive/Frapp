@@ -213,6 +213,8 @@ export * from "./notification-categories";
 // The inbox's first page, which the API bootstrap, the SDK batch and
 // `useNotifications` must agree on (#4962).
 export * from "./notification-inbox";
+// Discord import, Reports and Study zones in the settings-rows shape (#6031).
+export * from "./officer-tools-copy";
 // The "You" screen after joining, web and phone (#5627).
 export * from "./onboarding-about";
 export * from "./onboarding-you";

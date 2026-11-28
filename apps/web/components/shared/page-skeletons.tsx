@@ -1,5 +1,9 @@
 import { PageActions } from "@/components/layout/page-actions";
 import { Skeleton } from "@/components/shared/async-states";
+import {
+  SETTINGS_GROUP_FRAME,
+  SETTINGS_ROW_HEIGHT,
+} from "@/components/shared/settings-row";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { cn } from "@/lib/utils";
 
@@ -176,7 +180,13 @@ export function SkeletonRows({
   trailingHeight = "h-8",
   rowClassName = "min-h-11 py-2",
   bare = false,
+  listClassName,
 }: {
+  /**
+   * The list's own frame in place of the dense list's hairlines; only
+   * `SkeletonSettingsGroup` passes one.
+   */
+  listClassName?: string;
   rows?: number;
   lines?: 1 | 2 | 3;
   /** One lead block, or several in order (a checkbox, then an avatar). */
@@ -190,7 +200,10 @@ export function SkeletonRows({
 }) {
   const count = clampCount(rows);
   return (
-    <ul aria-hidden="true" className={bare ? undefined : denseListClassName}>
+    <ul
+      aria-hidden="true"
+      className={listClassName ?? (bare ? undefined : denseListClassName)}
+    >
       {Array.from({ length: count }, (_, index) => (
         <li key={index} className={cn("flex items-center gap-3", rowClassName)}>
           {(Array.isArray(lead) ? lead : [lead]).map((block, slot) => (
@@ -249,6 +262,48 @@ function RowLeadBlock({ lead }: { lead: RowLead }) {
     default:
       return null;
   }
+}
+
+/**
+ * A settings group while its page loads (#6031): `SettingsGroup`'s frame,
+ * rows as tall as `SettingsRow`'s (36 to a mouse, 44 to a finger), and its
+ * footnote when the loaded group has one. Every page in the settings-rows
+ * shape draws its loading rows with this, so none drifts from the row.
+ */
+export function SkeletonSettingsGroup({
+  rows = 3,
+  lines = 2,
+  lead = "none",
+  trailing = [],
+  trailingHeight = "h-4",
+  footnote,
+}: {
+  rows?: number;
+  lines?: 1 | 2 | 3;
+  lead?: RowLead | RowLead[];
+  trailing?: string[];
+  trailingHeight?: string;
+  /** The footnote line's width class, when the loaded group has one. */
+  footnote?: string;
+}) {
+  const group = (
+    <SkeletonRows
+      rows={rows}
+      lines={lines}
+      lead={lead}
+      trailing={trailing}
+      trailingHeight={trailingHeight}
+      rowClassName={cn("gap-4 px-4", SETTINGS_ROW_HEIGHT)}
+      listClassName={SETTINGS_GROUP_FRAME}
+    />
+  );
+  if (!footnote) return group;
+  return (
+    <div aria-hidden="true" className="space-y-2">
+      {group}
+      <Skeleton className={cn("ml-1 h-[11px]", footnote)} />
+    </div>
+  );
 }
 
 /**
