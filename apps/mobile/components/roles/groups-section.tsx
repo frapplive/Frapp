@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
@@ -7,10 +7,11 @@ import {
   useDeleteGroup,
   useGroups,
   useMembers,
-  useSetGroupMembers,
+  useSetGroupMembership,
   useUpdateGroup,
   type ChapterGroup,
   type MemberProfile,
+  type UpdateChapterGroupBody,
 } from "@repo/hooks";
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { matchesWordStarts } from "@repo/hooks/fuzzy-match";
@@ -52,12 +53,9 @@ import { OptionSheet } from "@/components/option-sheet";
 import { Toggle } from "@/components/toggle";
 import { NameSheet } from "@/components/roles/name-sheet";
 import { RoleColorRow } from "@/components/roles/role-color-row";
-import {
-  ChapterTextField,
-  FormCommitRow,
-  FormFields,
-  useFormSaveStatus,
-} from "@/components/settings/chapter-form";
+import { SavedTextField } from "@/components/settings/saved-text-field";
+import { usePendingSetting } from "@repo/hooks/use-pending-setting";
+import { saveSetting } from "@/lib/settings/chapter-tab";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import { useFrappTheme } from "@/lib/theme";
 
@@ -333,12 +331,12 @@ function rowName(member: MemberProfile): string {
 
 /**
  * One group's page on the phone (#6029), web's `GroupPage`: its name on
- * top, its color and ping switch, then its members, and nothing written
- * until Save (#6033 makes it save on its own, on both apps at once). A
- * manual group's members are replaced whole, so a member another officer
- * removed meanwhile fails the save rather than half of it. An automatic
- * group's name and members follow member details and read-only here.
- * Delete group sits in the header's ⋯, never beside Save (rulebook § 2).
+ * top, its color and ping switch, then its members. Each saves on its own
+ * the moment it changes (#6033), as on web: a manual group's members are
+ * added and taken out one at a time, as Discord's role members are, and a
+ * refusal is said on the row that made it (the phone has no toast). An
+ * automatic group's name and members follow member details and read-only
+ * here. Delete group sits in the header's ⋯ (rulebook § 2).
  */
 export function GroupPage({
   groupId,
@@ -395,7 +393,7 @@ export function GroupPage({
       </ScreenShell>
     );
   }
-  // Keyed by group, so a draft never carries over to the next one.
+  // Keyed by group, so a pending change never carries over to the next one.
   return (
     <GroupBody
       key={group.id}
@@ -418,28 +416,67 @@ function GroupBody({
   const router = useRouter();
   const { tokens } = useFrappTheme();
   const update = useUpdateGroup();
-  const setMembers = useSetGroupMembers();
+  const membership = useSetGroupMembership();
   const remove = useDeleteGroup();
-  const status = useFormSaveStatus();
   const addSheetRef = useRef<BottomSheetModal>(null);
   const manual = group.kind === "manual";
   // The roster as it stood when the page opened, so rows don't shift under
   // the officer when a background read lands.
   const [members] = useState(liveMembers);
-  const [name, setName] = useState(group.name);
-  const [color, setColor] = useState<string | null>(
-    roleColorOrNull(group.color),
+  const busy = remove.isPending;
+
+  // Each setting saves on its own the moment it changes (#6033), sending
+  // only its own key. A refusal is said on the row that made it: `name`
+  // under the field, a member's on their row, `add` on Add member.
+  const [failure, setFailure] = useState<{
+    key: string;
+    words: string;
+  } | null>(null);
+  const failureOf = (key: string) =>
+    failure?.key === key ? failure.words : null;
+  const saveGroup = useCallback(
+    async (body: UpdateChapterGroupBody): Promise<true | string> => {
+      const key = Object.keys(body)[0] ?? "";
+      setFailure(null);
+      const result = await saveSetting(
+        () => update.mutateAsync({ id: group.id, body }),
+        PEOPLE_SETTINGS_COPY.saveFallback,
+      );
+      if (result === true) return true;
+      const words = `${PEOPLE_SETTINGS_COPY.saveGroupFailed}. ${result}`;
+      setFailure({ key, words });
+      return words;
+    },
+    [update, group.id],
   );
-  const [mentionable, setMentionable] = useState(group.mentionable);
-  const [picked, setPicked] = useState<string[]>(group.member_ids);
-  const [saving, setSaving] = useState(false);
-  const busy = saving || remove.isPending;
+  // A stored value that may not paint reads as none, as every client paints it.
+  const [color, changeColor] = usePendingSetting<string | null>(
+    roleColorOrNull(group.color),
+    useCallback(
+      async (next) => (await saveGroup({ color: next })) === true,
+      [saveGroup],
+    ),
+  );
+  const [mentionable, changeMentionable] = usePendingSetting(
+    group.mentionable,
+    useCallback(
+      async (next) => (await saveGroup({ mentionable: next })) === true,
+      [saveGroup],
+    ),
+  );
+  // Members are added and taken out one at a time, each saving at once:
+  // one member's change never re-sends the whole list from a page another
+  // officer has changed since. A row is held while its change is out.
+  const [moving, setMoving] = useState<ReadonlySet<string>>(new Set());
 
   const byUser = useMemo(
     () => new Map(members.map((member) => [member.user_id, member])),
     [members],
   );
-  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  const pickedSet = useMemo(
+    () => new Set(group.member_ids),
+    [group.member_ids],
+  );
   const addable = useMemo(
     () =>
       members
@@ -447,7 +484,7 @@ function GroupBody({
         .sort((a, b) => rowName(a).localeCompare(rowName(b))),
     [members, pickedSet],
   );
-  const rows = picked
+  const rows = group.member_ids
     .map((userId) => ({
       userId,
       name: byUser.has(userId)
@@ -455,51 +492,27 @@ function GroupBody({
         : "A former member",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  // The cap stays as a guard: a full group takes no one else.
+  const full = group.member_ids.length >= GROUP_MEMBERS_MAX;
 
-  const trimmed = name.trim();
-  const nameChanged = manual && trimmed !== group.name;
-  const colorChanged = color !== roleColorOrNull(group.color);
-  const pingChanged = mentionable !== group.mentionable;
-  const membersChanged =
-    manual &&
-    (picked.length !== group.member_ids.length ||
-      picked.some((userId) => !group.member_ids.includes(userId)));
-  const tooMany = picked.length > GROUP_MEMBERS_MAX;
-  const dirty = nameChanged || colorChanged || pingChanged || membersChanged;
-
-  const edited =
-    <T,>(set: (next: T) => void) =>
-    (next: T) => {
-      status.clear();
-      set(next);
-    };
-
-  async function handleSave() {
-    if (!dirty || tooMany || (manual && !trimmed)) return;
-    setSaving(true);
-    try {
-      if (nameChanged || colorChanged || pingChanged) {
-        await update.mutateAsync({
-          id: group.id,
-          body: {
-            name: nameChanged ? trimmed : undefined,
-            color: colorChanged ? color : undefined,
-            mentionable: pingChanged ? mentionable : undefined,
-          },
-        });
-      }
-      if (membersChanged) {
-        await setMembers.mutateAsync({ id: group.id, memberIds: picked });
-      }
-      status.saved();
-    } catch (error) {
-      status.failed(
-        error,
-        "Nothing more was changed. Go back and try again in a moment.",
-      );
-    } finally {
-      setSaving(false);
+  async function moveMember(userId: string, into: boolean) {
+    setFailure(null);
+    setMoving((previous) => new Set(previous).add(userId));
+    const result = await saveSetting(
+      () => membership.mutateAsync({ groupId: group.id, userId, in: into }),
+      PEOPLE_SETTINGS_COPY.saveFallback,
+    );
+    if (result !== true) {
+      setFailure({
+        key: into ? "add" : `member:${userId}`,
+        words: `${PEOPLE_SETTINGS_COPY.saveGroupFailed}. ${result}`,
+      });
     }
+    setMoving((previous) => {
+      const next = new Set(previous);
+      next.delete(userId);
+      return next;
+    });
   }
 
   async function handleDelete() {
@@ -511,11 +524,16 @@ function GroupBody({
       destructive: true,
     });
     if (!ok) return;
+    setFailure(null);
     try {
       await remove.mutateAsync(group.id);
       router.back();
     } catch (error) {
-      status.failed(error, "Retry in a moment.");
+      // Said under the name, the page's first row, as the role page does.
+      setFailure({
+        key: "name",
+        words: `Couldn't delete ${group.name}. ${errorCopy(error, "Retry in a moment.", { serverWritesForMembers: true })}`,
+      });
     }
   }
 
@@ -547,15 +565,14 @@ function GroupBody({
         ) : undefined
       }
     >
-      <FormFields>
-        <ChapterTextField
-          label={PEOPLE_SETTINGS_COPY.name}
-          value={name}
-          onChangeText={edited(setName)}
-          editable={manual && canManage && !busy}
-          maxLength={GROUP_NAME_MAX_LENGTH}
-        />
-      </FormFields>
+      <SavedTextField
+        label={PEOPLE_SETTINGS_COPY.name}
+        value={group.name}
+        editable={manual && canManage && !busy}
+        maxLength={GROUP_NAME_MAX_LENGTH}
+        failure={failureOf("name")}
+        onSave={(next) => saveGroup({ name: next })}
+      />
 
       <ListSection
         footnote={
@@ -566,17 +583,20 @@ function GroupBody({
           label={PEOPLE_SETTINGS_COPY.color}
           value={color}
           subject={group.id}
-          name={trimmed || group.name}
-          onChange={edited(setColor)}
+          name={group.name}
+          onChange={(next) => void changeColor(next)}
+          failure={failureOf("color")}
           disabled={!canManage || busy}
         />
         <ListRow
           label={PEOPLE_SETTINGS_COPY.mentionGroup}
+          description={failureOf("mentionable")}
+          descriptionTone="destructive"
           trailing={
             <Toggle
               value={mentionable}
               disabled={!canManage || busy}
-              onValueChange={edited(setMentionable)}
+              onValueChange={(next) => void changeMentionable(next)}
               accessibilityLabel={PEOPLE_SETTINGS_COPY.mentionGroup}
             />
           }
@@ -588,7 +608,7 @@ function GroupBody({
       </SectionHeader>
       <ListSection
         footnote={
-          tooMany
+          manual && canManage && full
             ? `A group can hold at most ${GROUP_MEMBERS_MAX} members.`
             : null
         }
@@ -600,17 +620,15 @@ function GroupBody({
             <ListRow
               key={row.userId}
               label={row.name}
+              disabled={moving.has(row.userId)}
+              description={failureOf(`member:${row.userId}`)}
+              descriptionTone="destructive"
               trailing={
                 manual && canManage ? (
                   <IconButton
                     label={`Remove ${row.name} from ${group.name}`}
-                    disabled={busy}
-                    onPress={() => {
-                      status.clear();
-                      setPicked((previous) =>
-                        previous.filter((userId) => userId !== row.userId),
-                      );
-                    }}
+                    disabled={busy || moving.has(row.userId)}
+                    onPress={() => void moveMember(row.userId, false)}
                   >
                     <CloseGlyph color={tokens.color.text.mutedForeground} />
                   </IconButton>
@@ -624,26 +642,16 @@ function GroupBody({
             label={PEOPLE_SETTINGS_COPY.addMember}
             leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
             action
-            disabled={busy || addable.length === 0}
+            disabled={busy || full || addable.length === 0}
             description={
-              addable.length === 0 ? "Everyone is already in it." : null
+              failureOf("add") ??
+              (addable.length === 0 ? "Everyone is already in it." : null)
             }
+            descriptionTone={failureOf("add") ? "destructive" : "default"}
             onPress={() => addSheetRef.current?.present()}
           />
         ) : null}
       </ListSection>
-
-      {canManage ? (
-        <FormCommitRow
-          label="Save"
-          canSave
-          readOnlyLine=""
-          disabled={!dirty || tooMany || (manual && !trimmed) || busy}
-          busy={saving}
-          status={status.status}
-          onPress={() => void handleSave()}
-        />
-      ) : null}
 
       {manual && canManage ? (
         <OptionSheet
@@ -656,11 +664,8 @@ function GroupBody({
           }))}
           selected={null}
           onSelect={(userId) => {
-            if (userId === null) return;
-            status.clear();
-            setPicked((previous) =>
-              previous.includes(userId) ? previous : [...previous, userId],
-            );
+            if (userId === null || pickedSet.has(userId) || full) return;
+            void moveMember(userId, true);
           }}
         />
       ) : null}

@@ -6,7 +6,7 @@ const mockGroups = vi.fn();
 const mockMembers = vi.fn();
 const mockCreate = vi.fn();
 const mockUpdate = vi.fn();
-const mockSetMembers = vi.fn();
+const mockMembership = vi.fn();
 const mockDelete = vi.fn();
 const mockToast = vi.fn();
 
@@ -16,7 +16,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useMembers: () => mockMembers(),
   useCreateGroup: () => ({ mutateAsync: mockCreate, isPending: false }),
   useUpdateGroup: () => ({ mutateAsync: mockUpdate, isPending: false }),
-  useSetGroupMembers: () => ({ mutateAsync: mockSetMembers, isPending: false }),
+  useSetGroupMembership: () => ({
+    mutateAsync: mockMembership,
+    isPending: false,
+  }),
   useDeleteGroup: () => ({ mutateAsync: mockDelete, isPending: false }),
   useChapterRoleColors: () => [],
   useViewerDisplayName: () => "Me",
@@ -30,6 +33,7 @@ vi.mock("@/lib/providers/network-provider", () => ({
   useNetwork: () => ({ isOffline: false }),
 }));
 
+import { GROUP_MEMBERS_MAX } from "@repo/validation";
 import { AutomaticGroupsPage, GroupPage, GroupsGroup } from "./groups-section";
 
 const LINKS = {
@@ -248,11 +252,11 @@ describe("a group's page", () => {
     mockGroups.mockReturnValue(loaded(GROUPS));
     mockMembers.mockReturnValue(loaded(MEMBERS));
     mockUpdate.mockResolvedValue(undefined);
-    mockSetMembers.mockResolvedValue(undefined);
+    mockMembership.mockResolvedValue(undefined);
     mockDelete.mockResolvedValue(undefined);
   });
 
-  it("saves a manual group's new members as one whole list, then goes back", async () => {
+  it("adds and takes out a manual group's members one at a time, staying on the page", async () => {
     const user = userEvent.setup();
     const { onDone } = page("g-floor");
     expect(
@@ -260,30 +264,81 @@ describe("a group's page", () => {
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Add a member"), "ben");
     await user.click(screen.getByRole("option", { name: "Ben Park" }));
+    await waitFor(() =>
+      expect(mockMembership).toHaveBeenCalledWith({
+        groupId: "g-floor",
+        userId: "u2",
+        in: true,
+      }),
+    );
     await user.click(
       screen.getByRole("button", { name: "Remove Ann Lee from Third floor" }),
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockMembership).toHaveBeenLastCalledWith({
+        groupId: "g-floor",
+        userId: "u1",
+        in: false,
+      }),
+    );
+    // One request per member, never the whole list, and nothing else.
+    expect(mockMembership).toHaveBeenCalledTimes(2);
     expect(mockUpdate).not.toHaveBeenCalled();
-    expect(mockSetMembers).toHaveBeenCalledWith({
-      id: "g-floor",
-      memberIds: ["u2"],
-    });
-    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
-  it("renames a manual group on Save", async () => {
+  it("says a refused member change failed", async () => {
+    const user = userEvent.setup();
+    mockMembership.mockRejectedValueOnce(new Error("Not a member any more"));
+    page("g-floor");
+    await user.click(
+      screen.getByRole("button", { name: "Remove Ann Lee from Third floor" }),
+    );
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Couldn't save group",
+          variant: "destructive",
+        }),
+      ),
+    );
+  });
+
+  it("takes no one else into a full group", async () => {
+    mockGroups.mockReturnValue(
+      loaded([
+        group(
+          "g-floor",
+          "Third floor",
+          "manual",
+          Array.from({ length: GROUP_MEMBERS_MAX }, (_, index) => `x${index}`),
+        ),
+      ]),
+    );
+    page("g-floor");
+    expect(screen.getByLabelText("Add a member")).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      `A group can hold at most ${GROUP_MEMBERS_MAX} members.`,
+    );
+  });
+
+  it("renames a manual group on leaving the field, sending only its name", async () => {
     const user = userEvent.setup();
     page("g-floor");
     const name = screen.getByLabelText("Name");
     await user.clear(name);
     await user.type(name, "Fourth floor");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(mockUpdate).toHaveBeenCalledWith({
-      id: "g-floor",
-      body: { name: "Fourth floor", color: undefined, mentionable: undefined },
-    });
-    expect(mockSetMembers).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+    await user.tab();
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith({
+        id: "g-floor",
+        body: { name: "Fourth floor" },
+      }),
+    );
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockMembership).not.toHaveBeenCalled();
   });
 
   it("lists everyone who can be added as soon as the search is clicked (#5738)", async () => {
@@ -307,15 +362,16 @@ describe("a group's page", () => {
     ).toBeInTheDocument();
     // An automatic group is never deleted by hand.
     expect(screen.queryByRole("button", { name: "More for Alpha" })).toBeNull();
-    await user.click(
-      screen.getByRole("switch", { name: "Anyone can @mention this group" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    const ping = screen.getByRole("switch", {
+      name: "Anyone can @mention this group",
+    });
+    await user.click(ping);
+    // Saved the moment it flips, sending only its own key.
     expect(mockUpdate).toHaveBeenCalledWith({
       id: "g-alpha",
-      body: { name: undefined, color: undefined, mentionable: true },
+      body: { mentionable: true },
     });
-    expect(mockSetMembers).not.toHaveBeenCalled();
+    expect(mockMembership).not.toHaveBeenCalled();
   });
 
   it("is read-only without groups:manage", () => {

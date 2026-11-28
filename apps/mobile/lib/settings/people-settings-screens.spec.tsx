@@ -16,7 +16,8 @@ import { screenText } from "@/test/screen-text";
 /**
  * Chapter settings → People's Pledge class and Member fields pages on the
  * phone (#6029), rendered: the rows' council gate, the member field page's
- * saves, a new field's Add, the class list's long press and a class's Save.
+ * saves, a new field's Add, the class list's long press and a class's
+ * member changes, each saved at once (#6033).
  * The screens live under `app/`, so their spec lives here
  * (`lib/routes.spec.ts`).
  */
@@ -177,10 +178,6 @@ function render(element: React.ReactElement): ReactTestRenderer {
   });
   mounted.push(tree);
   return tree;
-}
-function unmount(tree: ReactTestRenderer) {
-  act(() => tree.unmount());
-  mounted.splice(mounted.indexOf(tree), 1);
 }
 
 const byLabel = (tree: ReactTestRenderer, kind: string, label: string) =>
@@ -441,27 +438,58 @@ describe("a pledge class's page (#6029)", () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ id: "c-alpha" });
   });
 
-  it("keeps the draft on leaving, then Save sends it and drops it", async () => {
-    let tree = render(<PledgeClassScreen />);
-    act(() => pressable(tree, "Remove Bo Diaz from Alpha").props.onPress());
-    unmount(tree);
-
-    // Kept: the page opens on the edit, with Save offered.
-    tree = render(<PledgeClassScreen />);
-    expect(
-      byLabel(tree, "Pressable", "Remove Bo Diaz from Alpha"),
-    ).toHaveLength(0);
-    await act(async () => pressable(tree, "Save").props.onPress());
+  it("sends a removal at once, only that member, then shows the roster as read", async () => {
+    // The re-read after the save: Bo is out of Alpha now.
+    h.assignClasses.mockImplementation(async () => {
+      const bo = h.members.find((member) => member.id === "m-bo")!;
+      bo.pledge_class_id = null;
+      return {};
+    });
+    const tree = render(<PledgeClassScreen />);
+    await act(async () =>
+      pressable(tree, "Remove Bo Diaz from Alpha").props.onPress(),
+    );
+    expect(h.assignClasses).toHaveBeenCalledTimes(1);
     expect(h.assignClasses).toHaveBeenCalledWith([
       expect.objectContaining({ member_id: "m-bo", pledge_class_id: null }),
     ]);
-    unmount(tree);
+    expect(
+      byLabel(tree, "Pressable", "Remove Bo Diaz from Alpha"),
+    ).toHaveLength(0);
+    // No Save to press: the change is in.
+    expect(byLabel(tree, "Pressable", "Save")).toHaveLength(0);
+  });
 
-    // Dropped: the page opens on the roster as read.
-    tree = render(<PledgeClassScreen />);
+  it("adds a member from the roster sheet at once", async () => {
+    h.members.push({
+      id: "m-cy",
+      user_id: "u-cy",
+      display_name: "Cy Park",
+      pledge_class_id: null,
+      order_number: null,
+    });
+    render(<PledgeClassScreen />);
+    const sheet = h.sheets.get(PLEDGE_CLASS_SETTINGS_COPY.addMember)!;
+    await act(async () => sheet.onSelect("m-cy"));
+    expect(h.assignClasses).toHaveBeenCalledWith([
+      expect.objectContaining({
+        member_id: "m-cy",
+        pledge_class_id: "c-alpha",
+      }),
+    ]);
+  });
+
+  it("puts a refused member change back and says it under the members", async () => {
+    h.assignClasses.mockRejectedValue(new Error("nope"));
+    const tree = render(<PledgeClassScreen />);
+    await act(async () =>
+      pressable(tree, "Remove Bo Diaz from Alpha").props.onPress(),
+    );
     expect(
       byLabel(tree, "Pressable", "Remove Bo Diaz from Alpha"),
     ).toHaveLength(1);
+    expect(screenText(tree)).toContain("Couldn't save Alpha");
+    expect(field(tree, "Name").props.error).toBeFalsy();
   });
 
   it("says a failed rename under the name and a failed move once, below", async () => {

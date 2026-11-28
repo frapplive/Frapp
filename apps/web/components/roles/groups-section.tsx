@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown, Loader2, Palette, Users, X } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { ChevronDown, Palette, Users, X } from "lucide-react";
 import {
   groupFollowsLabel,
   useCreateGroup,
@@ -9,10 +9,11 @@ import {
   useGroups,
   useMembers,
   useChapterRoleColors,
-  useSetGroupMembers,
+  useSetGroupMembership,
   useUpdateGroup,
   useViewerDisplayName,
   type ChapterGroup,
+  type UpdateChapterGroupBody,
   type MemberProfile,
 } from "@repo/hooks";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
@@ -30,10 +31,7 @@ import {
   roleColorLabel,
   roleColorOrNull,
 } from "@repo/validation";
-import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { FOCUS_RING } from "@/components/ui/focus";
 import {
   Popover,
@@ -60,6 +58,8 @@ import {
 } from "@/components/shared/row-menu";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
+import { SettingsTextField } from "@/components/settings/settings-name-field";
+import { usePendingSetting } from "@repo/hooks/use-pending-setting";
 import {
   SettingsBackLink,
   SettingsSubpage,
@@ -337,12 +337,10 @@ function rowName(member: MemberProfile): string {
 
 /**
  * One group's page (#6029; the docked editor until then): its name on top,
- * its color and ping switch, then its members. Nothing is written until Save
- * (#6033 makes it save on its own, with every settings page at once). A
- * manual group's members are replaced whole, all or none, so a member another
- * officer removed from the chapter meanwhile fails the save rather than half
- * of it. An automatic group's name and members follow member details and
- * read-only here.
+ * its color and ping switch, then its members. Each saves on its own the
+ * moment it changes (#6033): a manual group's members are added and taken
+ * out one at a time, as Discord's role members are. An automatic group's
+ * name and members follow member details and read-only here.
  */
 export function GroupPage({
   groupId,
@@ -355,7 +353,7 @@ export function GroupPage({
   canManage: boolean;
   backHref: string;
   backLabel: string;
-  /** Back to where the page was opened from, after Save, Cancel or Delete. */
+  /** Back to where the page was opened from, after Delete. */
   onDone: () => void;
 }) {
   const groupsQuery = useGroups();
@@ -451,36 +449,65 @@ function GroupBody({
 }) {
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
+  const run = useToastedRun();
   const update = useUpdateGroup();
-  const setMembers = useSetGroupMembers();
+  const membership = useSetGroupMembership();
   const remove = useDeleteGroup();
   const manual = group.kind === "manual";
   // The roster as it stood when the page opened, so the rows don't shift
   // under the officer when a background read lands.
   const [members] = useState(liveMembers);
-  const [name, setName] = useState(group.name);
   const chapterColors = useChapterRoleColors();
   const viewerName = useViewerDisplayName();
-  const [color, setColor] = useState<string | null>(
-    roleColorOrNull(group.color),
+  const editable = canManage;
+  // Each setting saves on its own the moment it changes (#6033), sending
+  // only its own key.
+  const saveGroup = useCallback(
+    (body: UpdateChapterGroupBody) =>
+      run(
+        () => update.mutateAsync({ id: group.id, body }),
+        PEOPLE_SETTINGS_COPY.saveGroupFailed,
+        PEOPLE_SETTINGS_COPY.saveFallback,
+      ),
+    [run, update, group.id],
   );
-  const [mentionable, setMentionable] = useState(group.mentionable);
-  const [picked, setPicked] = useState<string[]>(group.member_ids);
-  const busy = update.isPending || setMembers.isPending || remove.isPending;
+  const [color, changeColor] = usePendingSetting<string | null>(
+    roleColorOrNull(group.color),
+    useCallback((next) => saveGroup({ color: next }), [saveGroup]),
+  );
+  const [mentionable, changeMentionable] = usePendingSetting(
+    group.mentionable,
+    useCallback((next) => saveGroup({ mentionable: next }), [saveGroup]),
+  );
+  // What the name field holds, for the color picker's preview.
+  const [draftName, setDraftName] = useState(group.name);
+  // Members are added and taken out one at a time, each saving at once, the
+  // way Discord's role members do: one member's change never re-sends the
+  // whole list from a page another officer has changed since.
+  const [moving, setMoving] = useState<ReadonlySet<string>>(new Set());
+  const busy = remove.isPending;
 
   const byUser = useMemo(
     () => new Map(members.map((member) => [member.user_id, member])),
     [members],
   );
-  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  const pickedSet = useMemo(
+    () => new Set(group.member_ids),
+    [group.member_ids],
+  );
   const addable = useMemo(
     () =>
       members
-        .filter((member) => !pickedSet.has(member.user_id))
+        // Anyone whose add is in flight is left out, so a second click
+        // never sends it twice.
+        .filter(
+          (member) =>
+            !pickedSet.has(member.user_id) && !moving.has(member.user_id),
+        )
         .sort((a, b) => rowName(a).localeCompare(rowName(b))),
-    [members, pickedSet],
+    [members, pickedSet, moving],
   );
-  const rows = picked
+  const rows = group.member_ids
     .map((userId) => ({
       userId,
       name: byUser.has(userId)
@@ -488,47 +515,21 @@ function GroupBody({
         : "A former member",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  // The cap stays as a guard: a full group takes no one else.
+  const full = group.member_ids.length >= GROUP_MEMBERS_MAX;
 
-  const trimmed = name.trim();
-  const nameChanged = manual && trimmed !== group.name;
-  const colorChanged = color !== roleColorOrNull(group.color);
-  const pingChanged = mentionable !== group.mentionable;
-  const membersChanged =
-    manual &&
-    (picked.length !== group.member_ids.length ||
-      picked.some((userId) => !group.member_ids.includes(userId)));
-  const tooMany = picked.length > GROUP_MEMBERS_MAX;
-  const dirty = nameChanged || colorChanged || pingChanged || membersChanged;
-  const editable = canManage;
-
-  async function handleSave() {
-    if (!dirty || tooMany || (manual && !trimmed)) return;
-    try {
-      if (nameChanged || colorChanged || pingChanged) {
-        await update.mutateAsync({
-          id: group.id,
-          body: {
-            name: nameChanged ? trimmed : undefined,
-            color: colorChanged ? color : undefined,
-            mentionable: pingChanged ? mentionable : undefined,
-          },
-        });
-      }
-      if (membersChanged) {
-        await setMembers.mutateAsync({ id: group.id, memberIds: picked });
-      }
-      toast({ title: `${trimmed || group.name} saved` });
-      onDone();
-    } catch (error) {
-      toast({
-        title: `Couldn't save ${group.name}`,
-        description: getErrorMessage(
-          error,
-          "Nothing more was changed. Reload the page and try again.",
-        ),
-        variant: "destructive",
-      });
-    }
+  async function moveMember(userId: string, into: boolean) {
+    setMoving((previous) => new Set(previous).add(userId));
+    await run(
+      () => membership.mutateAsync({ groupId: group.id, userId, in: into }),
+      PEOPLE_SETTINGS_COPY.saveGroupFailed,
+      PEOPLE_SETTINGS_COPY.saveFallback,
+    );
+    setMoving((previous) => {
+      const next = new Set(previous);
+      next.delete(userId);
+      return next;
+    });
   }
 
   async function handleDelete() {
@@ -586,14 +587,15 @@ function GroupBody({
       }
     >
       {confirmDialog}
-      <div className="grid max-w-md gap-1.5">
-        <Label htmlFor="group-edit-name">{PEOPLE_SETTINGS_COPY.name}</Label>
-        <Input
+      <div className="max-w-md">
+        <SettingsTextField
           id="group-edit-name"
-          value={name}
+          label={PEOPLE_SETTINGS_COPY.name}
+          value={group.name}
           maxLength={GROUP_NAME_MAX_LENGTH}
-          onChange={(event) => setName(event.target.value)}
           disabled={!manual || !editable || busy}
+          onTextChange={setDraftName}
+          onSave={(next) => saveGroup({ name: next })}
         />
       </div>
 
@@ -624,9 +626,9 @@ function GroupBody({
                 <RoleColorPicker
                   labelId="group-edit-color-label"
                   value={color}
-                  onChange={setColor}
+                  onChange={(next) => void changeColor(next)}
                   disabled={busy}
-                  previewName={name}
+                  previewName={draftName || group.name}
                   memberName={viewerName}
                   chapterColors={chapterColors}
                 />
@@ -638,7 +640,7 @@ function GroupBody({
           label={PEOPLE_SETTINGS_COPY.mentionGroup}
           checked={mentionable}
           disabled={!editable || busy}
-          onCheckedChange={setMentionable}
+          onCheckedChange={(next) => void changeMentionable(next)}
         />
       </SettingsGroup>
 
@@ -662,12 +664,8 @@ function GroupBody({
                 {manual && editable ? (
                   <IconButton
                     label={`Remove ${row.name} from ${group.name}`}
-                    disabled={busy}
-                    onClick={() =>
-                      setPicked((previous) =>
-                        previous.filter((userId) => userId !== row.userId),
-                      )
-                    }
+                    disabled={busy || moving.has(row.userId)}
+                    onClick={() => void moveMember(row.userId, false)}
                   >
                     <X className="h-4 w-4" />
                   </IconButton>
@@ -683,35 +681,19 @@ function GroupBody({
               items={addable}
               nameOf={rowName}
               keyOf={(member) => member.user_id}
-              onAdd={(member) =>
-                setPicked((previous) => [...previous, member.user_id])
-              }
+              onAdd={(member) => void moveMember(member.user_id, true)}
               emptyText="Everyone is already in it."
-              disabled={busy}
+              disabled={busy || full}
             />
           </div>
         ) : null}
-        {tooMany ? (
+        {manual && editable && full ? (
           <p role="alert" className="text-caption text-destructive-text">
             A group can hold at most {GROUP_MEMBERS_MAX} members.
           </p>
         ) : null}
       </div>
 
-      {editable ? (
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onDone} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => void handleSave()}
-            disabled={!dirty || tooMany || (manual && !trimmed) || busy}
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Save
-          </Button>
-        </div>
-      ) : null}
     </SettingsSubpage>
   );
 }

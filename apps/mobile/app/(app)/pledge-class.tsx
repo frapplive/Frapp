@@ -30,12 +30,7 @@ import {
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { HeaderButton } from "@/components/header-button";
-import {
-  CheckGlyph,
-  CloseGlyph,
-  MoreGlyph,
-  PlusGlyph,
-} from "@/components/control-glyphs";
+import { CloseGlyph, MoreGlyph, PlusGlyph } from "@/components/control-glyphs";
 import { IconButton } from "@/components/icon-button";
 import {
   itemMenuAccessibility,
@@ -53,15 +48,7 @@ import {
 import { OptionSheet } from "@/components/option-sheet";
 import { SavedTextField } from "@/components/settings/saved-text-field";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
-import {
-  TaskActionBar,
-  TaskActionBarSpacer,
-  TaskBarIcon,
-  TaskBarPill,
-} from "@/components/tasks/task-action-bar";
-import { useChapterBranding } from "@/lib/chapter-branding";
 import { usePledgeClassTerms } from "@/lib/directory/pledge-class";
-import { useKeptSheetDraft, useKeptSheetOpening } from "@/lib/kept-sheet-draft";
 import { confirmAlert } from "@/lib/minutes/meetings-on";
 import {
   addableClassMembers,
@@ -85,11 +72,11 @@ function firstParam(value: string | string[] | undefined): string {
  * Members are an editor, as on web: "Add a member" opens the roster (members
  * in no class first, then the others, "Moves from Alpha"), each row's number
  * follows its place (`renumberRows`), and a row's long press moves it or
- * takes it out, as its X does. Nothing is written until Save, in the floating
- * glass bar (rulebook § 9), which sends every change in one request the API
- * applies whole or not at all (`classAssignments`). Going back keeps the
- * draft (`useKeptSheetDraft`, the same name web's editor keeps it under);
- * the bar's X gives it up.
+ * takes it out, as its X does. Each add, removal and move saves on its own
+ * at once (rulebook § 9, #6033), as on web: it sends only the members it
+ * changes, in one request the API applies whole or not at all
+ * (`classAssignments`), then reads the roster again. A refused change puts
+ * the rows back and is said under the members (the phone has no toast).
  *
  * Every write needs `roles:manage`; the list opens this page only for it.
  */
@@ -148,7 +135,7 @@ export default function PledgeClassScreen() {
   }
   return (
     <ClassPage
-      // Keyed by class, so a draft never carries over to the next one.
+      // Keyed by class, so its rows never carry over to the next one.
       key={entry.id}
       entry={entry}
       classes={classes}
@@ -173,12 +160,6 @@ function PledgeClassSkeleton() {
   );
 }
 
-/** What the member editor keeps: the rows, and the roster they were read from. */
-type ClassDraft = {
-  members: readonly MemberProfile[];
-  rows: ClassEditorRow[];
-};
-
 function ClassPage({
   entry,
   classes,
@@ -196,7 +177,6 @@ function ClassPage({
 }) {
   const router = useRouter();
   const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
   const styles = createStyles(tokens);
   const rename = useRenamePledgeClass();
   const reorder = useReorderPledgeClasses();
@@ -204,23 +184,16 @@ function ClassPage({
   const assign = useAssignPledgeClasses();
   const itemMenu = useItemMenu();
   const addRef = useRef<BottomSheetModal>(null);
-  const draftName = canManage ? `pledge-class:${entry.id}` : null;
-  const opening = useKeptSheetOpening<ClassDraft>(draftName);
-  // The roster as it stood when the page opened. The rows are built from it
-  // once, so Save is worked out against the same snapshot: a member another
-  // officer adds meanwhile must not read as "taken out" (`classAssignments`).
-  const [members, setMembers] = useState(() => opening?.members ?? liveMembers);
-  const [rows, setRows] = useState<ClassEditorRow[]>(
-    () => opening?.rows ?? classRowsOf(liveMembers, entry.id, classes),
-  );
-  const kept = useKeptSheetDraft<ClassDraft>(
-    draftName,
-    { members, rows },
-    JSON.stringify(rows),
-    opening,
+  // The roster as last read. The rows are built from it, so each change is
+  // worked out against the same snapshot: a member another officer adds
+  // meanwhile must not read as "taken out" (`classAssignments`). Every save
+  // reads it again.
+  const [members, setMembers] = useState(liveMembers);
+  const [rows, setRows] = useState<ClassEditorRow[]>(() =>
+    classRowsOf(liveMembers, entry.id, classes),
   );
   // A failed rename is the name field's own line; a failed Move, Delete or
-  // Save is the page's one line, under the members, said once.
+  // member change is the page's one line, under the members, said once.
   const [renameFailure, setRenameFailure] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -238,11 +211,10 @@ function ClassPage({
       ),
     [members, rows, classNames],
   );
-  const assignments = classAssignments(entry.id, rows, members);
-  const tooMany =
-    assignments !== null && assignments.length > PLEDGE_CLASS_ASSIGNMENTS_MAX;
-  const dirty = assignments === null || assignments.length > 0;
-  const busy = assign.isPending;
+  // Held through the roster's re-read too, so the next change is never
+  // worked out against the snapshot the last one changed.
+  const [saving, setSaving] = useState(false);
+  const busy = saving;
 
   async function run(
     action: () => Promise<unknown>,
@@ -290,52 +262,63 @@ function ClassPage({
     if (
       await run(() => remove.mutateAsync(entry.id), "Try again in a moment.")
     ) {
-      kept.clear();
       router.back();
     }
   }
 
-  /** The bar's X: start over from the roster as it is now. */
-  function discard() {
-    kept.clear();
+  /**
+   * Each add, removal and move saves at once (#6033), the way Discord's role
+   * members do: only the members it changes are sent, then the roster is
+   * read again, so the next change is worked out against it. A refused
+   * change puts the rows back as they were.
+   */
+  async function commit(next: ClassEditorRow[]) {
+    const changes = classAssignments(entry.id, next, members);
+    if (changes === null) return;
     setFailure(null);
-    setMembers(liveMembers);
-    setRows(classRowsOf(liveMembers, entry.id, classes));
-  }
-
-  async function save() {
-    if (!assignments || assignments.length === 0 || tooMany) return;
-    setFailure(null);
-    kept.hold();
-    try {
-      await assign.mutateAsync(assignments);
-      kept.clear();
-      // A fresh snapshot, so the next edit is worked out against the
-      // roster as saved.
-      const fresh = (await refetchMembers()) ?? liveMembers;
-      setMembers(fresh);
-      setRows(classRowsOf(fresh, entry.id, classes));
-    } catch (error) {
-      kept.release();
+    if (changes.length === 0) {
+      setRows(next);
+      return;
+    }
+    // The batch cap stays as a guard; one change never comes near it.
+    if (changes.length > PLEDGE_CLASS_ASSIGNMENTS_MAX) {
       setFailure(
-        `Couldn't save ${entry.name}. ${errorCopy(error, "Nothing was changed. Try again in a moment.", { serverWritesForMembers: true })}`,
+        `Couldn't save ${entry.name}. ${PLEDGE_CLASS_SETTINGS_COPY.tooManyAtOnce(PLEDGE_CLASS_ASSIGNMENTS_MAX)}`,
+      );
+      return;
+    }
+    const before = rows;
+    setRows(next);
+    setSaving(true);
+    let ok = true;
+    try {
+      await assign.mutateAsync(changes);
+    } catch (error) {
+      ok = false;
+      setFailure(
+        `Couldn't save ${entry.name}. ${errorCopy(error, PLEDGE_CLASS_SETTINGS_COPY.saveFallback, { serverWritesForMembers: true })}`,
       );
     }
+    const fresh = await refetchMembers();
+    if (fresh) {
+      setMembers(fresh);
+      setRows(classRowsOf(fresh, entry.id, classes));
+    } else if (!ok) {
+      setRows(before);
+    }
+    setSaving(false);
   }
 
   function takeOut(row: ClassEditorRow) {
-    setFailure(null);
-    setRows((previous) =>
-      previous.filter((item) => item.memberId !== row.memberId),
-    );
+    void commit(rows.filter((item) => item.memberId !== row.memberId));
   }
 
   function rowMenu(row: ClassEditorRow, at: number) {
     if (!canManage || busy) return null;
-    const step = (by: -1 | 1) => () =>
-      setRows(
-        (previous) => moveClassRow(previous, row.memberId, by) ?? previous,
-      );
+    const step = (by: -1 | 1) => () => {
+      const moved = moveClassRow(rows, row.memberId, by);
+      if (moved) void commit(moved);
+    };
     const actions: ItemMenuAction[] = [
       ...(at > 0
         ? [{ key: "up", label: PEOPLE_SETTINGS_COPY.moveUp, run: step(-1) }]
@@ -380,157 +363,125 @@ function ClassPage({
     },
   ];
 
-  const barShown = canManage && (dirty || busy);
-
   return (
-    <>
-      <ScreenShell
-        back={back}
-        title={entry.name}
-        headerAction={
-          canManage ? (
-            <HeaderButton
-              label={`More for ${entry.name}`}
-              onPress={() =>
-                openItemMenu({ title: entry.name, actions: headerActions })
-              }
-            >
-              <MoreGlyph color={tokens.color.text.foreground} />
-            </HeaderButton>
-          ) : undefined
-        }
-      >
-        <SavedTextField
-          label={PEOPLE_SETTINGS_COPY.name}
-          value={entry.name}
-          editable={canManage}
-          failure={renameFailure}
-          maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
-          onSave={(name) =>
-            run(
-              () => rename.mutateAsync({ id: entry.id, name }),
-              "Check that no other one has this name, then try again.",
-              setRenameFailure,
-            )
-          }
-        />
-
-        <SectionHeader count={memberCountLabel(rows.length)}>
-          {PLEDGE_CLASS_SETTINGS_COPY.members}
-        </SectionHeader>
-        <ListSection
-          footnote={
-            tooMany
-              ? `That is more than ${PLEDGE_CLASS_ASSIGNMENTS_MAX} changes at once. Save a smaller set first.`
-              : null
-          }
-        >
-          {canManage ? (
-            <ListRow
-              label={PLEDGE_CLASS_SETTINGS_COPY.addMember}
-              leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
-              action
-              disabled={busy || addable.length === 0}
-              description={
-                addable.length === 0
-                  ? PLEDGE_CLASS_SETTINGS_COPY.everyoneIn
-                  : null
-              }
-              accessibilityHint="Opens the chapter's members."
-              onPress={() => addRef.current?.present()}
-            />
-          ) : null}
-          {rows.length === 0 ? (
-            <ListRow
-              label={PLEDGE_CLASS_SETTINGS_COPY.nobodyYet}
-              variant="detail"
-            />
-          ) : (
-            rows.map((row, at) => {
-              const menu = rowMenu(row, at);
-              return (
-                <ListRow
-                  key={row.memberId}
-                  label={row.name}
-                  // The number follows the row's place, not a field.
-                  leading={
-                    <View style={styles.numberSlot}>
-                      <Text style={styles.number}>{row.number}</Text>
-                    </View>
-                  }
-                  onLongPress={longPressOf(menu)}
-                  {...itemMenuAccessibility(menu)}
-                  trailing={
-                    canManage ? (
-                      <IconButton
-                        label={`Remove ${row.name} from ${entry.name}`}
-                        disabled={busy}
-                        onPress={() => takeOut(row)}
-                      >
-                        <CloseGlyph color={tokens.color.text.mutedForeground} />
-                      </IconButton>
-                    ) : undefined
-                  }
-                />
-              );
-            })
-          )}
-        </ListSection>
-        {failure ? (
-          <Text accessibilityLiveRegion="polite" style={styles.failure}>
-            {failure}
-          </Text>
-        ) : null}
-        {barShown ? <TaskActionBarSpacer /> : null}
-        {itemMenu.element}
-        {canManage ? (
-          <OptionSheet
-            ref={addRef}
-            title={PLEDGE_CLASS_SETTINGS_COPY.addMember}
-            searchPlaceholder="Find a member"
-            options={addable.map((candidate) => ({
-              value: candidate.member.id,
-              label: candidate.name,
-              detail: candidate.movesFrom
-                ? movesFromLabel(candidate.movesFrom)
-                : undefined,
-            }))}
-            selected={null}
-            onSelect={(memberId) => {
-              const picked = members.find((member) => member.id === memberId);
-              if (!picked) return;
-              setFailure(null);
-              setRows((previous) =>
-                addRow(previous, {
-                  memberId: picked.id,
-                  name: classMemberName(picked),
-                }),
-              );
-            }}
-          />
-        ) : null}
-      </ScreenShell>
-      {barShown ? (
-        <TaskActionBar>
-          <TaskBarIcon
-            label="Discard changes"
-            disabled={busy}
-            onPress={discard}
+    <ScreenShell
+      back={back}
+      title={entry.name}
+      headerAction={
+        canManage ? (
+          <HeaderButton
+            label={`More for ${entry.name}`}
+            onPress={() =>
+              openItemMenu({ title: entry.name, actions: headerActions })
+            }
           >
-            <CloseGlyph color={tokens.color.text.foreground} />
-          </TaskBarIcon>
-          <TaskBarPill
-            label="Save"
-            glyph={(ink) => <CheckGlyph color={ink} />}
-            fill={accent}
-            ink={tokens.color.gold.onHouse}
-            disabled={assignments === null || tooMany}
-            busy={busy}
-            onPress={() => void save()}
+            <MoreGlyph color={tokens.color.text.foreground} />
+          </HeaderButton>
+        ) : undefined
+      }
+    >
+      <SavedTextField
+        label={PEOPLE_SETTINGS_COPY.name}
+        value={entry.name}
+        editable={canManage}
+        failure={renameFailure}
+        maxLength={PLEDGE_CLASS_NAME_MAX_LENGTH}
+        onSave={(name) =>
+          run(
+            () => rename.mutateAsync({ id: entry.id, name }),
+            "Check that no other one has this name, then try again.",
+            setRenameFailure,
+          )
+        }
+      />
+
+      <SectionHeader count={memberCountLabel(rows.length)}>
+        {PLEDGE_CLASS_SETTINGS_COPY.members}
+      </SectionHeader>
+      <ListSection>
+        {canManage ? (
+          <ListRow
+            label={PLEDGE_CLASS_SETTINGS_COPY.addMember}
+            leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
+            action
+            disabled={busy || addable.length === 0}
+            description={
+              addable.length === 0
+                ? PLEDGE_CLASS_SETTINGS_COPY.everyoneIn
+                : null
+            }
+            accessibilityHint="Opens the chapter's members."
+            onPress={() => addRef.current?.present()}
           />
-        </TaskActionBar>
+        ) : null}
+        {rows.length === 0 ? (
+          <ListRow
+            label={PLEDGE_CLASS_SETTINGS_COPY.nobodyYet}
+            variant="detail"
+          />
+        ) : (
+          rows.map((row, at) => {
+            const menu = rowMenu(row, at);
+            return (
+              <ListRow
+                key={row.memberId}
+                label={row.name}
+                // The number follows the row's place, not a field.
+                leading={
+                  <View style={styles.numberSlot}>
+                    <Text style={styles.number}>{row.number}</Text>
+                  </View>
+                }
+                onLongPress={longPressOf(menu)}
+                {...itemMenuAccessibility(menu)}
+                trailing={
+                  canManage ? (
+                    <IconButton
+                      label={`Remove ${row.name} from ${entry.name}`}
+                      disabled={busy}
+                      onPress={() => takeOut(row)}
+                    >
+                      <CloseGlyph color={tokens.color.text.mutedForeground} />
+                    </IconButton>
+                  ) : undefined
+                }
+              />
+            );
+          })
+        )}
+      </ListSection>
+      {failure ? (
+        <Text accessibilityLiveRegion="polite" style={styles.failure}>
+          {failure}
+        </Text>
       ) : null}
-    </>
+      {itemMenu.element}
+      {canManage ? (
+        <OptionSheet
+          ref={addRef}
+          title={PLEDGE_CLASS_SETTINGS_COPY.addMember}
+          searchPlaceholder="Find a member"
+          options={addable.map((candidate) => ({
+            value: candidate.member.id,
+            label: candidate.name,
+            detail: candidate.movesFrom
+              ? movesFromLabel(candidate.movesFrom)
+              : undefined,
+          }))}
+          selected={null}
+          onSelect={(memberId) => {
+            const picked = members.find((member) => member.id === memberId);
+            if (!picked) return;
+            void commit(
+              addRow(rows, {
+                memberId: picked.id,
+                name: classMemberName(picked),
+              }),
+            );
+          }}
+        />
+      ) : null}
+    </ScreenShell>
   );
 }
 

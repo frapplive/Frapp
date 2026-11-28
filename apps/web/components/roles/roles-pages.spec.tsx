@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   deleteTier: vi.fn(),
   reorderTiers: vi.fn(),
   push: vi.fn(),
+  toast: vi.fn(),
 }));
 
 const ok = (data: unknown) => ({
@@ -82,7 +83,7 @@ vi.mock("@/lib/hooks/use-chapter-vocabulary", () => ({
   useChapterVocabulary: () => h.vocabulary,
 }));
 vi.mock("@/lib/hooks/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: h.toast }),
 }));
 
 import { RolesOverview } from "@/components/roles/roles-overview";
@@ -925,40 +926,99 @@ describe("a role's page", () => {
     }
   });
 
-  it("saves details without a permissions key, and moves the role between tiers", async () => {
+  it("saves each detail the moment it changes, sending only its own key and never permissions", async () => {
     const user = userEvent.setup();
     rolePage("brother");
     expect(group("Role")).toHaveTextContent("2 members");
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
     await user.click(screen.getByRole("combobox", { name: "Tier" }));
     await user.click(
       screen.getByRole("option", { name: "Officers and chairs" }),
     );
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "brother",
+        body: { tier_id: "t2" },
+      }),
+    );
     await user.click(
       screen.getByRole("switch", { name: /anyone can @mention/i }),
     );
-    await user.click(screen.getByRole("button", { name: "Save role" }));
-    expect(h.updateRole).toHaveBeenCalledWith({
-      id: "brother",
-      body: {
-        name: undefined,
-        color: undefined,
-        mentionable: false,
-        self_assignable: undefined,
-        tier_id: "t2",
-      },
-    });
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenLastCalledWith({
+        id: "brother",
+        body: { mentionable: false },
+      }),
+    );
+    expect(h.updateRole).toHaveBeenCalledTimes(2);
   });
 
-  it("renames the role on Save role", async () => {
+  it("shows a switch's pick while it saves, then what is stored", async () => {
+    let finish: (value: unknown) => void = () => {};
+    h.updateRole.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    rolePage("brother");
+    const ping = screen.getByRole("switch", { name: /anyone can @mention/i });
+    expect(ping).toBeChecked();
+    await user.click(ping);
+    expect(ping).not.toBeChecked();
+    // The stored role (the mock's list) never changed, so once the save
+    // settles the switch reads what is stored again.
+    finish({});
+    await waitFor(() => expect(ping).toBeChecked());
+  });
+
+  it("says a refused change failed and puts the stored value back", async () => {
+    h.updateRole.mockRejectedValueOnce(new Error("Nope"));
+    const user = userEvent.setup();
+    rolePage("brother");
+    const ping = screen.getByRole("switch", { name: /anyone can @mention/i });
+    await user.click(ping);
+    await waitFor(() =>
+      expect(h.toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Couldn't save role",
+          variant: "destructive",
+        }),
+      ),
+    );
+    expect(ping).toBeChecked();
+  });
+
+  it("renames the role on leaving the field, sending only its name", async () => {
     const user = userEvent.setup();
     rolePage("brother");
     const name = screen.getByLabelText("Name");
     await user.clear(name);
     await user.type(name, "  Actives ");
-    await user.click(screen.getByRole("button", { name: "Save role" }));
-    expect(h.updateRole.mock.calls[0]![0].body).toMatchObject({
-      name: "Actives",
-    });
+    expect(h.updateRole).not.toHaveBeenCalled();
+    await user.tab();
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "brother",
+        body: { name: "Actives" },
+      }),
+    );
+    expect(h.updateRole).toHaveBeenCalledTimes(1);
+  });
+
+  it("renames the role on Enter, and says Saved", async () => {
+    const user = userEvent.setup();
+    rolePage("brother");
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Actives{Enter}");
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "brother",
+        body: { name: "Actives" },
+      }),
+    );
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
   it("marks a role outside the tiers as Non-chapter business (#4958)", async () => {
@@ -967,10 +1027,12 @@ describe("a role's page", () => {
     await user.click(
       screen.getByRole("switch", { name: "Non-chapter business" }),
     );
-    await user.click(screen.getByRole("button", { name: "Save role" }));
-    expect(h.updateRole.mock.calls[0]![0].body).toMatchObject({
-      self_assignable: true,
-    });
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "alum",
+        body: { self_assignable: true },
+      }),
+    );
   });
 
   it("explains why a role in a tier can't be Non-chapter business", () => {
@@ -983,21 +1045,32 @@ describe("a role's page", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets a tiered role moved out of its tier be marked in the same save", async () => {
-    // The switch judges the permissions the save leaves: Brothers carries
-    // only its tier's, so outside the tiers it holds none.
+  it("judges Non-chapter business against the role as stored, since the tier saves at once", async () => {
+    // Moving Brothers out of its tier saves right away; until the stored
+    // role reads back outside the tiers, the switch stays refused.
     const user = userEvent.setup();
     rolePage("brother");
     await user.click(screen.getByRole("combobox", { name: "Tier" }));
     await user.click(screen.getByRole("option", { name: "Outside the tiers" }));
-    const pick = screen.getByRole("switch", { name: "Non-chapter business" });
-    expect(pick).toBeEnabled();
-    await user.click(pick);
-    await user.click(screen.getByRole("button", { name: "Save role" }));
-    expect(h.updateRole.mock.calls[0]![0].body).toMatchObject({
-      tier_id: null,
-      self_assignable: true,
-    });
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "brother",
+        body: { tier_id: null },
+      }),
+    );
+    expect(
+      screen.getByRole("switch", { name: "Non-chapter business" }),
+    ).toBeDisabled();
+  });
+
+  it("lets a stored role outside the tiers, holding nothing, be marked", () => {
+    h.roles = h.roles.map((r) =>
+      r.id === "brother" ? { ...r, tier_id: null, permissions: [] } : r,
+    );
+    rolePage("brother");
+    expect(
+      screen.getByRole("switch", { name: "Non-chapter business" }),
+    ).toBeEnabled();
   });
 
   it("refuses to mark a role outside the tiers that carries a permission", () => {
@@ -1016,20 +1089,21 @@ describe("a role's page", () => {
     ).toBeInTheDocument();
   });
 
-  it("judges a drafted move into a tier, and still lets a marked role be turned off", async () => {
-    h.roles = [...h.roles, pickable()];
+  it("still lets a marked role stored in a tier be turned off, and says why it can't come back", async () => {
+    h.roles = [...h.roles, { ...pickable(), tier_id: "t3" }];
     const user = userEvent.setup();
     rolePage("im");
-    await user.click(screen.getByRole("combobox", { name: "Tier" }));
-    await user.click(screen.getByRole("option", { name: "Members" }));
     expect(
       screen.getByText(/Roles members pick themselves sit outside the tiers/),
     ).toBeInTheDocument();
     const pick = screen.getByRole("switch", { name: "Non-chapter business" });
+    expect(pick).toBeChecked();
     expect(pick).toBeEnabled();
     await user.click(pick);
-    expect(pick).not.toBeChecked();
-    expect(pick).toBeDisabled();
+    expect(h.updateRole).toHaveBeenCalledWith({
+      id: "im",
+      body: { self_assignable: false },
+    });
   });
 
   it("offers no Non-chapter business switch on a built-in role", () => {
@@ -1042,7 +1116,7 @@ describe("a role's page", () => {
     ).toBeNull();
   });
 
-  it("saves a picked swatch, and leaves an untouched color out", async () => {
+  it("saves a picked swatch at once, sending only its color", async () => {
     const user = userEvent.setup();
     rolePage("brother");
     await user.click(screen.getByRole("button", { name: "No color" }));
@@ -1051,11 +1125,13 @@ describe("a role's page", () => {
         name: "Teal",
       }),
     );
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Save role" }));
-    const body = h.updateRole.mock.calls[0]![0].body;
-    expect(body.color).toBe("#3DD6C4");
-    expect(body).not.toHaveProperty("permissions", expect.anything());
+    await waitFor(() =>
+      expect(h.updateRole).toHaveBeenCalledWith({
+        id: "brother",
+        body: { color: "#3DD6C4" },
+      }),
+    );
+    expect(h.updateRole).toHaveBeenCalledTimes(1);
   });
 
   // Move up and Move down in the header's ⋯ replaced the "Position in its

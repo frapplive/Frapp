@@ -86,7 +86,6 @@ export function useUpdateRole() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["roles", chapterId] });
       // The roster's `role_color` is computed from role colors and order
       // (#3485), so a role edit or delete repaints chat names now, not after
       // the roster's 60s staleTime.
@@ -98,6 +97,10 @@ export function useUpdateRole() {
       queryClient.invalidateQueries({
         queryKey: ["members", chapterId, "channel"],
       });
+      // Returned, so `mutateAsync` resolves once the list holds the change: a
+      // setting that saves on its own (#6033) shows the stored value again
+      // then, with no flash of the old one.
+      return queryClient.invalidateQueries({ queryKey: ["roles", chapterId] });
     },
   });
 }

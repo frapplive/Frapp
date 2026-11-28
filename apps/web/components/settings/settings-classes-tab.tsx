@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
   addableClassMembers,
   addRow,
@@ -24,11 +24,6 @@ import {
   type PledgeClass,
 } from "@repo/hooks";
 import {
-  readKeptDraft,
-  useKeptDraftKeys,
-  useKeptFormDraft,
-} from "@repo/hooks/kept-drafts";
-import {
   addPledgeClassLabel,
   deletePledgeClassConfirm,
   memberCountLabel,
@@ -39,8 +34,6 @@ import {
   PLEDGE_CLASS_SETTINGS_COPY,
   PLEDGE_CLASSES_MAX,
 } from "@repo/validation";
-import { KeptDraftNote } from "@/components/shared/kept-draft-note";
-import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
   ErrorState,
@@ -87,17 +80,6 @@ const BASE = "/settings?tab=classes";
 function classHref(id: string): string {
   return `${BASE}&class=${encodeURIComponent(id)}`;
 }
-
-/** One class's kept member draft (`@repo/hooks/kept-drafts`, #4593). */
-function classDraftName(classId: string): string {
-  return `pledge-class:${classId}`;
-}
-
-/** What the member editor keeps: the rows, and the roster they were read from. */
-type ClassDraft = {
-  members: readonly MemberProfile[];
-  rows: ClassEditorRow[];
-};
 
 /**
  * Settings → the chapter's pledge classes (#3939; in the settings shape since
@@ -394,14 +376,9 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
  * The members' order is set by dragging a row, or by its grip's arrow keys
  * (#5738): the numbers follow the list (`renumberRows` says how), and there
  * is no number to type here. A chapter-wide roll's first number is set once
- * on a member's profile, and the class keeps counting from it. Nothing is
- * written until Save, which sends every change in one request the API
- * applies whole or not at all (Save stays until #6033 makes the settings
- * pages save on their own).
- *
- * Going back or leaving the page keeps the draft (#4593), with the roster it
- * was worked out against, so Save still sends only what the officer changed.
- * Cancel and Save give it up.
+ * on a member's profile, and the class keeps counting from it. Each add,
+ * removal and drag saves on its own at once (#6033), sending only the
+ * members it changes, in one request the API applies whole or not at all.
  */
 function ClassPage({
   pledgeClass,
@@ -521,44 +498,60 @@ function ClassMembers({
   orderTerm: string;
 }) {
   const { toast } = useToast();
+  const run = useToastedRun();
   const assign = useAssignPledgeClasses();
-  const keptKeys = useKeptDraftKeys();
-  // A viewer who can't change the class (one who lost `roles:manage` since
-  // leaving a draft) reads the roster, never their own unsaved draft.
-  const [opening] = useState(() =>
-    canManage
-      ? readKeptDraft<ClassDraft>(
-          keptKeys.draft(classDraftName(pledgeClass.id)),
-        )
-      : undefined,
+  // The roster as last read. The rows are built from it, so each change is
+  // worked out against the same snapshot: a background re-read that brings in
+  // a member another officer just added to this class must not read as "the
+  // officer took them out". Every save reads it again.
+  const [members, setMembers] = useState(liveMembers);
+  const [rows, setRows] = useState<ClassEditorRow[]>(() =>
+    classRowsOf(liveMembers, pledgeClass.id, classes),
   );
-  // The roster as it stood when the page opened. The rows are built from it
-  // once, so the save is worked out against the same snapshot: a background
-  // re-read that brings in a member another officer just added to this class
-  // must not read as "the officer took them out". A kept draft brings its own.
-  const [members, setMembers] = useState(() => opening?.members ?? liveMembers);
-  const [rows, setRows] = useState<ClassEditorRow[]>(
-    () => opening?.rows ?? classRowsOf(liveMembers, pledgeClass.id, classes),
-  );
+  const [saving, setSaving] = useState(false);
 
-  const assignments = classAssignments(pledgeClass.id, rows, members);
-  const invalid = assignments === null;
-  const tooMany =
-    assignments !== null && assignments.length > PLEDGE_CLASS_ASSIGNMENTS_MAX;
-  const dirty = assignments === null || assignments.length > 0;
-
-  const kept = useKeptFormDraft<ClassDraft>(
-    classDraftName(pledgeClass.id),
-    true,
-    { members, rows },
-    { signature: JSON.stringify(rows), restoredAtMount: opening !== undefined },
-  );
-
-  /** Start over from the roster as it is now. */
-  function reset() {
-    kept.discard();
-    setMembers(liveMembers);
-    setRows(classRowsOf(liveMembers, pledgeClass.id, classes));
+  /**
+   * Each add, removal and drag saves at once (#6033), the way Discord's role
+   * members do: only the members it changes are sent, then the roster is read
+   * again, so the next change is worked out against it. A refused change
+   * puts the rows back as they were.
+   */
+  async function commit(next: ClassEditorRow[]) {
+    const changes = classAssignments(pledgeClass.id, next, members);
+    if (changes === null) return;
+    if (changes.length === 0) {
+      setRows(next);
+      return;
+    }
+    // The batch cap stays as a guard; one change never comes near it.
+    if (changes.length > PLEDGE_CLASS_ASSIGNMENTS_MAX) {
+      toast({
+        title: `Couldn't save ${pledgeClass.name}`,
+        description: PLEDGE_CLASS_SETTINGS_COPY.tooManyAtOnce(
+          PLEDGE_CLASS_ASSIGNMENTS_MAX,
+        ),
+        variant: "destructive",
+      });
+      return;
+    }
+    const before = rows;
+    setRows(next);
+    // Held until the roster is read again, so the next change is worked out
+    // against it and never re-sends this one.
+    setSaving(true);
+    const ok = await run(
+      () => assign.mutateAsync(changes),
+      `Couldn't save ${pledgeClass.name}`,
+      PLEDGE_CLASS_SETTINGS_COPY.saveFallback,
+    );
+    const fresh = await refetchMembers();
+    if (fresh) {
+      setMembers(fresh);
+      setRows(classRowsOf(fresh, pledgeClass.id, classes));
+    } else if (!ok) {
+      setRows(before);
+    }
+    setSaving(false);
   }
 
   const classNameById = useMemo(
@@ -577,38 +570,7 @@ function ClassMembers({
   );
 
   function addMember(entry: AddableMember) {
-    setRows((previous) =>
-      addRow(previous, { memberId: entry.member.id, name: entry.name }),
-    );
-  }
-
-  async function handleSave() {
-    if (!assignments || assignments.length === 0 || tooMany) return;
-    kept.hold();
-    try {
-      await assign.mutateAsync(assignments);
-      kept.drop();
-      // The page stays open, so the next edit is worked out against the
-      // roster as saved, not the one this page opened on: without it a
-      // second Save re-sends the first, and taking out a member just added
-      // writes nothing. The phone does the same.
-      const fresh = await refetchMembers();
-      if (fresh) {
-        setMembers(fresh);
-        setRows(classRowsOf(fresh, pledgeClass.id, classes));
-      }
-      toast({ title: `${pledgeClass.name} saved` });
-    } catch (error) {
-      kept.release();
-      toast({
-        title: `Couldn't save ${pledgeClass.name}`,
-        description: getErrorMessage(
-          error,
-          "Nothing was changed. Reload the page and try again.",
-        ),
-        variant: "destructive",
-      });
-    }
+    void commit(addRow(rows, { memberId: entry.member.id, name: entry.name }));
   }
 
   return (
@@ -625,7 +587,7 @@ function ClassMembers({
             }
             onAdd={addMember}
             emptyText={PLEDGE_CLASS_SETTINGS_COPY.everyoneIn}
-            disabled={assign.isPending}
+            disabled={saving}
           />
         </div>
       ) : null}
@@ -647,8 +609,8 @@ function ClassMembers({
             items={rows}
             getId={(row) => row.memberId}
             getLabel={(row) => row.name}
-            onReorder={(next) => setRows(renumberRows(next))}
-            disabled={!canManage || assign.isPending}
+            onReorder={(next) => void commit(renumberRows(next))}
+            disabled={!canManage || saving}
             renderItem={(row) => (
               <div className="flex min-h-control-settings-row items-center gap-3 px-2 py-1 pointer-coarse:min-h-11">
                 {/* The number follows the row's place, not a field. */}
@@ -659,12 +621,10 @@ function ClassMembers({
                 {canManage ? (
                   <IconButton
                     label={`Remove ${row.name} from ${pledgeClass.name}`}
-                    disabled={assign.isPending}
+                    disabled={saving}
                     onClick={() =>
-                      setRows((previous) =>
-                        previous.filter(
-                          (entry) => entry.memberId !== row.memberId,
-                        ),
+                      void commit(
+                        rows.filter((entry) => entry.memberId !== row.memberId),
                       )
                     }
                   >
@@ -675,35 +635,8 @@ function ClassMembers({
             )}
           />
         )}
-        {tooMany ? (
-          <p role="alert" className="text-caption text-destructive-text">
-            That is more than {PLEDGE_CLASS_ASSIGNMENTS_MAX} changes at once.
-            Save a smaller set first.
-          </p>
-        ) : null}
       </div>
 
-      {canManage && (dirty || kept.restored) ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {kept.restored ? <KeptDraftNote onDiscard={reset} /> : null}
-          <Button
-            variant="secondary"
-            onClick={reset}
-            disabled={assign.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => void handleSave()}
-            disabled={!dirty || invalid || tooMany || assign.isPending}
-          >
-            {assign.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            Save
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -11,9 +11,8 @@ import { useFrappTheme } from "@/lib/theme";
 /**
  * A "Color" list row that opens {@link RoleColorSheet} (#5966): its value is
  * the color's name with its dot, as web's role page shows the picker beside
- * the name. The role and group pages hold each `onChange` in their draft,
- * saved with the page's Save as on web (#6029); a failure line from the host
- * shows under the label. New role draws its own row in its framed group
+ * the name. On the role and group pages each `onChange` saves at once, as
+ * on web (#6033); a refusal from the host shows under the label. New role draws its own row in its framed group
  * with the same {@link RoleColorDot} and sheet.
  */
 export function RoleColorRow({

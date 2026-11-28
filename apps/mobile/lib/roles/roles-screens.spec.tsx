@@ -9,6 +9,7 @@ import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
 import { memberViewVocabulary, vocab } from "@repo/org-archetypes";
 import {
+  GROUP_MEMBERS_MAX,
   GROUPS_FOOTNOTE,
   SELF_ASSIGNABLE_SECTION_CAPTION,
 } from "@repo/validation";
@@ -57,7 +58,9 @@ const h = vi.hoisted(() => ({
     id: "g-new",
   })),
   deleteGroup: vi.fn<(id: unknown) => Promise<object>>(async () => ({})),
-  setGroupMembers: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  setGroupMembership: vi.fn<(input: unknown) => Promise<object>>(
+    async () => ({}),
+  ),
   transfer: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   accentPresent: vi.fn(),
   backgroundPresent: vi.fn(),
@@ -125,8 +128,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useDeleteRole: () => ({ mutateAsync: h.deleteRole, isPending: false }),
     useCreateGroup: () => ({ mutateAsync: h.createGroup, isPending: false }),
     useDeleteGroup: () => ({ mutateAsync: h.deleteGroup, isPending: false }),
-    useSetGroupMembers: () => ({
-      mutateAsync: h.setGroupMembers,
+    useSetGroupMembership: () => ({
+      mutateAsync: h.setGroupMembership,
       isPending: false,
     }),
     useInvitableRoleIds: () => ok(undefined),
@@ -274,6 +277,23 @@ const pressable = (tree: ReactTestRenderer, label: string) =>
       node.props.accessibilityLabel === label,
   );
 
+const byLabel = (tree: ReactTestRenderer, kind: string, label: string) =>
+  tree.root.findAll(
+    (node) =>
+      (node.type as unknown) === kind &&
+      node.props.accessibilityLabel === label,
+  );
+
+const toggleFor = (tree: ReactTestRenderer, label: string) =>
+  byLabel(tree, "Switch", label)[0]!;
+
+/** Names u2, so a group's member row reads as a person. */
+function nameU2() {
+  h.members = (h.members as { user_id: string }[]).map((member) =>
+    member.user_id === "u2" ? { ...member, display_name: "Ari Shah" } : member,
+  );
+}
+
 beforeEach(() => {
   h.permissions = ["*"];
   h.vocabulary = {};
@@ -321,6 +341,7 @@ beforeEach(() => {
   h.updateRole.mockClear().mockResolvedValue({});
   h.updateTier.mockClear().mockResolvedValue({});
   h.updateGroup.mockClear().mockResolvedValue({});
+  h.setGroupMembership.mockClear().mockResolvedValue({});
   h.aiConsent = null;
   h.rolesUpdatedAt = 0;
   h.groups = [
@@ -960,23 +981,19 @@ describe("Non-chapter business on the phone (#4958)", () => {
         ),
     );
 
-  it("marks a safe role with Save role, as web's page does", async () => {
+  it("marks a safe role the moment its switch turns on (#6033)", async () => {
     h.roles = [...h.roles, role({ id: "r-ims", name: "Intramurals" })];
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const tree = render(<RoleScreen />);
     const [toggle] = pickSwitch(tree);
     expect(toggle!.props.disabled).toBe(false);
-    act(() => toggle!.props.onValueChange(true));
-    expect(h.updateRole).not.toHaveBeenCalled();
-    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
-    await act(async () => {
-      pressable(tree, "Save role").props.onPress();
-    });
+    await act(async () => toggle!.props.onValueChange(true));
+    // Only its own key: no Save role to wait for.
     expect(h.updateRole).toHaveBeenCalledWith({
       id: "r-ims",
       body: { self_assignable: true },
     });
-    expect(screenText(tree)).toContain("Saved");
+    expect(byLabel(tree, "Pressable", "Save role")).toHaveLength(0);
   });
 
   it("says why a role in a tier or with permissions can't be, and offers only off", () => {
@@ -1011,7 +1028,7 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(toggle!.props.disabled).toBe(false);
   });
 
-  it("judges it against the drafted tier, and moves the role with Save role", async () => {
+  it("moves the role the moment a tier is picked, and judges the switch by the role as stored", async () => {
     h.roles = [
       ...h.roles,
       role({ id: "r-ims", name: "Intramurals", tier_id: "t-bro" }),
@@ -1027,16 +1044,14 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(
       tierSheet.props.options.map((option: { label: string }) => option.label),
     ).toEqual(["Officers", "Brothers", "Outside the tiers"]);
-    act(() => tierSheet.props.onSelect("__outside__"));
-    expect(pickSwitch(tree)[0]!.props.disabled).toBe(false);
-    act(() => pickSwitch(tree)[0]!.props.onValueChange(true));
-    await act(async () => {
-      pressable(tree, "Save role").props.onPress();
-    });
+    await act(async () => tierSheet.props.onSelect("__outside__"));
     expect(h.updateRole).toHaveBeenCalledWith({
       id: "r-ims",
-      body: { tier_id: null, self_assignable: true },
+      body: { tier_id: null },
     });
+    // Still in a tier as stored (the re-read hasn't moved it here), so the
+    // switch stays held.
+    expect(pickSwitch(tree)[0]!.props.disabled).toBe(true);
   });
 
   it("has no switch on a built-in role", () => {
@@ -1044,17 +1059,14 @@ describe("Non-chapter business on the phone (#4958)", () => {
     expect(pickSwitch(render(<RoleScreen />))).toHaveLength(0);
   });
 
-  it("says a failed Save role beside the button, and keeps the draft", async () => {
+  it("says a refused switch on its row, and falls back to the stored value", async () => {
     h.roles = [...h.roles, role({ id: "r-ims", name: "Intramurals" })];
     h.updateRole.mockRejectedValueOnce(new Error("boom"));
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-ims" });
     const tree = render(<RoleScreen />);
-    act(() => pickSwitch(tree)[0]!.props.onValueChange(true));
-    await act(async () => {
-      pressable(tree, "Save role").props.onPress();
-    });
+    await act(async () => pickSwitch(tree)[0]!.props.onValueChange(true));
     expect(screenText(tree)).toContain("Your change wasn't saved.");
-    expect(pickSwitch(tree)[0]!.props.value).toBe(true);
+    expect(pickSwitch(tree)[0]!.props.value).toBe(false);
   });
 
   it("lists marked roles apart on the Roles screen", () => {
@@ -1155,16 +1167,11 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
         typeof node.props.onChange === "function",
     );
 
-  it("drafts a role's color on its page and saves it with Save role", async () => {
+  it("saves a role's color the moment it is picked", async () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
     const tree = render(<RoleScreen />);
     expect(screenText(tree)).toContain("No color");
-    act(() => colorSheet(tree).props.onChange("#00B2E0"));
-    expect(screenText(tree)).toContain("Bright sky");
-    expect(h.updateRole).not.toHaveBeenCalled();
-    await act(async () => {
-      pressable(tree, "Save role").props.onPress();
-    });
+    await act(async () => colorSheet(tree).props.onChange("#00B2E0"));
     expect(h.updateRole).toHaveBeenLastCalledWith({
       id: "r-tres",
       body: { color: "#00B2E0" },
@@ -1197,47 +1204,121 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
     expect(colorRow("r-bro").props.onPress).toBeTypeOf("function");
   });
 
-  it("drafts a group's color, ping switch and members on its page, saved together", async () => {
+  it("saves a group's color and each member change the moment they're made (#6033)", async () => {
     h.permissions = ["groups:manage", "members:view"];
     h.members = [
       ...h.members,
       { id: "m4", user_id: "u4", display_name: "Dana Ortiz", role_ids: [] },
     ];
+    nameU2();
     vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
     const tree = render(<ChapterRolesScreen />);
     expect(screenText(tree)).toContain("Anyone can @mention this group");
     expect(colorSheet(tree).props.previewName).toBe("In house");
-    act(() => colorSheet(tree).props.onChange("#3DD6C4"));
+    await act(async () => colorSheet(tree).props.onChange("#3DD6C4"));
+    // Only its own key.
+    expect(h.updateGroup).toHaveBeenLastCalledWith({
+      id: "g-house",
+      body: { color: "#3DD6C4" },
+    });
+    await act(async () => {
+      toggleFor(tree, "Anyone can @mention this group").props.onValueChange(
+        false,
+      );
+    });
+    expect(h.updateGroup).toHaveBeenLastCalledWith({
+      id: "g-house",
+      body: { mentionable: false },
+    });
     const addSheet = tree.root.find(
       (node) =>
         node.props.title === "Add a member" &&
         Array.isArray(node.props.options),
     );
-    act(() => addSheet.props.onSelect("u4"));
-    expect(h.updateGroup).not.toHaveBeenCalled();
+    await act(async () => addSheet.props.onSelect("u4"));
+    expect(h.setGroupMembership).toHaveBeenCalledWith({
+      groupId: "g-house",
+      userId: "u4",
+      in: true,
+    });
     await act(async () => {
-      pressable(tree, "Save").props.onPress();
+      pressable(tree, "Remove Ari Shah from In house").props.onPress();
     });
-    expect(h.updateGroup).toHaveBeenLastCalledWith({
-      id: "g-house",
-      body: { color: "#3DD6C4" },
+    expect(h.setGroupMembership).toHaveBeenLastCalledWith({
+      groupId: "g-house",
+      userId: "u2",
+      in: false,
     });
-    expect(h.setGroupMembers).toHaveBeenCalledWith({
+    expect(byLabel(tree, "Pressable", "Save")).toHaveLength(0);
+  });
+
+  it("renames a group when its name field is left", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
+    const tree = render(<ChapterRolesScreen />);
+    const name = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "TextInput" &&
+        node.props.value === "In house",
+    );
+    act(() => name.props.onChangeText("Upstairs"));
+    await act(async () => name.props.onBlur());
+    expect(h.updateGroup).toHaveBeenCalledWith({
       id: "g-house",
-      memberIds: ["me", "u2", "u4"],
+      body: { name: "Upstairs" },
     });
   });
 
-  it("says a failed group save beside Save", async () => {
+  it("says a refused group change on the row that made it", async () => {
     h.permissions = ["groups:manage", "members:view"];
     h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    h.setGroupMembership.mockRejectedValueOnce(new Error("boom"));
+    nameU2();
     vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
     const tree = render(<ChapterRolesScreen />);
-    act(() => colorSheet(tree).props.onChange("#3DD6C4"));
+    await act(async () => colorSheet(tree).props.onChange("#3DD6C4"));
+    const colorRow = tree.root.find(
+      (node) =>
+        node.props.label === "Color" && typeof node.props.failure === "string",
+    );
+    expect(colorRow.props.failure).toContain("Couldn't save group");
+    // Back to the stored color: nothing to undo.
+    expect(screenText(tree)).toContain("No color");
     await act(async () => {
-      pressable(tree, "Save").props.onPress();
+      pressable(tree, "Remove Ari Shah from In house").props.onPress();
     });
-    expect(screenText(tree)).toContain("Nothing more was changed.");
+    const memberRow = tree.root.find(
+      (node) =>
+        node.props.label === "Ari Shah" &&
+        node.props.descriptionTone === "destructive" &&
+        typeof node.props.description === "string",
+    );
+    expect(memberRow.props.description).toContain("Couldn't save group");
+  });
+
+  it("takes no one else into a full group, and says why", () => {
+    h.permissions = ["groups:manage", "members:view"];
+    h.groups = [
+      {
+        id: "g-house",
+        name: "In house",
+        kind: "manual",
+        color: null,
+        member_ids: Array.from(
+          { length: GROUP_MEMBERS_MAX },
+          (_, at) => `u-${at}`,
+        ),
+      },
+    ];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ group: "g-house" });
+    const tree = render(<ChapterRolesScreen />);
+    const add = tree.root.find(
+      (node) => node.props.label === "Add a member" && node.props.action,
+    );
+    expect(add.props.disabled).toBe(true);
+    expect(screenText(tree)).toContain(
+      `A group can hold at most ${GROUP_MEMBERS_MAX} members.`,
+    );
   });
 
   it("gives no color control or Save on a group to someone without groups:manage", () => {
@@ -1488,7 +1569,7 @@ describe("Roles and groups' structure on the phone (#6029)", () => {
     expect(screenText(tree)).toContain("Roles in it");
   });
 
-  it("renames a role with Save role, and moves it from the page's ⋯", async () => {
+  it("renames a role when its name field is left, and moves it from the page's ⋯", async () => {
     h.roles = [
       ...h.roles,
       role({
@@ -1509,9 +1590,7 @@ describe("Roles and groups' structure on the phone (#6029)", () => {
         node.props.value === "Secretary",
     );
     act(() => name.props.onChangeText("Scribe"));
-    await act(async () => {
-      pressable(tree, "Save role").props.onPress();
-    });
+    await act(async () => name.props.onBlur());
     expect(h.updateRole).toHaveBeenCalledWith({
       id: "r-sec",
       body: { name: "Scribe" },

@@ -130,8 +130,32 @@ async function pick(menu: string, item: string) {
   await userEvent.click(screen.getByRole("menuitem", { name: item }));
 }
 
+type Member = ReturnType<typeof member>;
+type Assignment = {
+  member_id: string;
+  pledge_class_id: string | null;
+  order_number: number | null;
+};
+
+/** What the server holds: the assign mock writes it, a re-read returns it. */
+let server: Member[] = MEMBERS;
+
+function applyAssignments(changes: Assignment[]) {
+  server = server.map((row) => {
+    const change = changes.find((entry) => entry.member_id === row.id);
+    return change
+      ? {
+          ...row,
+          pledge_class_id: change.pledge_class_id,
+          order_number: change.order_number,
+        }
+      : row;
+  });
+}
+
 function resetMocks() {
   vi.clearAllMocks();
+  server = MEMBERS;
   h.params = "tab=classes";
   mockClasses.mockReturnValue({
     data: CLASSES,
@@ -144,10 +168,12 @@ function resetMocks() {
   mockMembers.mockReturnValue({
     data: MEMBERS,
     isError: false,
-    refetch: vi.fn().mockResolvedValue({ data: MEMBERS }),
+    refetch: vi.fn(async () => ({ data: server })),
   });
   mockReorder.mockResolvedValue(undefined);
-  mockAssign.mockResolvedValue(undefined);
+  mockAssign.mockImplementation(async (changes: Assignment[]) => {
+    applyAssignments(changes);
+  });
   mockRename.mockResolvedValue(undefined);
   mockCreate.mockResolvedValue(undefined);
   mockDelete.mockResolvedValue(undefined);
@@ -539,67 +565,134 @@ describe("SettingsClassesTab", () => {
       expect(within(list).queryByRole("textbox")).toBeNull();
     });
 
-    it("has nothing to save until something changes", () => {
+    it("has no Save or Cancel: each change saves on its own", () => {
       openAlpha();
       expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     });
 
-    it("renumbers on a move and saves only what changed, in one request", async () => {
+    it("renumbers on a move and saves only what changed at once, in one request", async () => {
       openAlpha();
       fireEvent.keyDown(screen.getByRole("button", { name: "Reorder Ben" }), {
         key: "ArrowDown",
       });
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(mockAssign).toHaveBeenCalledWith([
-        { member_id: "m1", pledge_class_id: "alpha", order_number: 1 },
-        { member_id: "m2", pledge_class_id: "alpha", order_number: 2 },
-      ]);
       await waitFor(() =>
-        expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" }),
+        expect(mockAssign).toHaveBeenCalledWith([
+          { member_id: "m1", pledge_class_id: "alpha", order_number: 1 },
+          { member_id: "m2", pledge_class_id: "alpha", order_number: 2 },
+        ]),
+      );
+      expect(mockAssign).toHaveBeenCalledTimes(1);
+      // Saving says nothing when it works (rulebook § 9).
+      expect(mockToast).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole("list", { name: "Members of Alpha" }))
+            .getAllByRole("listitem")
+            .map((item) => item.textContent),
+        ).toEqual([
+          expect.stringMatching(/^1Ada/),
+          expect.stringMatching(/^2Ben/),
+        ]),
       );
     });
 
-    it("works the next change out against the roster as saved", async () => {
-      // What the server holds after the first Save: Ada out of Alpha.
-      const saved = MEMBERS.map((member) =>
-        member.id === "m1"
-          ? { ...member, pledge_class_id: null, order_number: null }
-          : member,
+    it("works the next change out against the roster as re-read", async () => {
+      openAlpha();
+      await userEvent.type(screen.getByLabelText("Add a member"), "de");
+      await userEvent.keyboard("{Enter}");
+      await waitFor(() =>
+        expect(mockAssign).toHaveBeenCalledWith([
+          { member_id: "m4", pledge_class_id: "alpha", order_number: 3 },
+        ]),
       );
-      mockMembers.mockReturnValue({
-        data: MEMBERS,
-        isError: false,
-        refetch: vi.fn().mockResolvedValue({ data: saved }),
-      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Remove Dee from Alpha" }),
+        ).toBeEnabled(),
+      );
+      // Taking out the member just added writes their removal, and only it:
+      // nothing of the first change is sent again.
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove Dee from Alpha" }),
+      );
+      await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(2));
+      expect(mockAssign).toHaveBeenLastCalledWith([
+        { member_id: "m4", pledge_class_id: null, order_number: 3 },
+      ]);
+    });
+
+    it("reads the roster again after each save and shows what the server holds", async () => {
       openAlpha();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() =>
-        expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" }),
-      );
-      // Nothing left to save: the page now reads the saved roster.
-      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+      const refetch = mockMembers.mock.results.at(-1)!.value.refetch;
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(
+        within(screen.getByRole("list", { name: "Members of Alpha" }))
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([expect.stringMatching(/^1Ben/)]);
     });
 
-    it("says the save failed and keeps the change on screen", async () => {
+    it("says a refused change failed and puts the rows back", async () => {
       mockAssign.mockRejectedValue(new Error("nope"));
       openAlpha();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: "Couldn't save Alpha",
+            description: "Nothing was changed. Try again in a moment.",
+            variant: "destructive",
+          }),
+        ),
+      );
+      expect(
+        await screen.findByRole("button", { name: "Remove Ada from Alpha" }),
+      ).toBeInTheDocument();
+    });
+
+    it("puts the rows back on a refusal even when the roster can't be read again", async () => {
+      mockAssign.mockRejectedValue(new Error("nope"));
+      mockMembers.mockReturnValue({
+        data: MEMBERS,
+        isError: false,
+        refetch: vi.fn().mockResolvedValue({ data: undefined }),
+      });
+      openAlpha();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove Ada from Alpha" }),
+      );
       await waitFor(() =>
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({ title: "Couldn't save Alpha" }),
         ),
       );
       expect(
+        await screen.findByRole("button", { name: "Remove Ada from Alpha" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps a saved change on screen when the roster can't be read again", async () => {
+      mockMembers.mockReturnValue({
+        data: MEMBERS,
+        isError: false,
+        refetch: vi.fn().mockResolvedValue({ data: undefined }),
+      });
+      openAlpha();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove Ada from Alpha" }),
+      );
+      await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+      expect(
         screen.queryByRole("button", { name: "Remove Ada from Alpha" }),
       ).toBeNull();
-      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+      expect(mockToast).not.toHaveBeenCalled();
     });
 
     it("lists everyone who can be added as soon as the search is clicked (#5738)", async () => {
@@ -652,64 +745,59 @@ describe("SettingsClassesTab", () => {
       await userEvent.type(screen.getByLabelText("Add a member"), "ca");
       expect(screen.getByText("Moves from Beta")).toBeInTheDocument();
       await userEvent.click(screen.getByRole("option", { name: /Cal/ }));
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(mockAssign).toHaveBeenCalledWith([
-        { member_id: "m3", pledge_class_id: "alpha", order_number: 3 },
-      ]);
+      await waitFor(() =>
+        expect(mockAssign).toHaveBeenCalledWith([
+          { member_id: "m3", pledge_class_id: "alpha", order_number: 3 },
+        ]),
+      );
     });
 
-    it("takes a member out of the class and keeps their number", async () => {
+    it("takes a member out of the class at once and keeps their number", async () => {
       openAlpha();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(mockAssign).toHaveBeenCalledWith([
-        { member_id: "m1", pledge_class_id: null, order_number: 2 },
-      ]);
-    });
-
-    it("puts the roster back on Cancel, and stays on the page", async () => {
-      openAlpha();
-      await userEvent.click(
-        screen.getByRole("button", { name: "Remove Ada from Alpha" }),
+      await waitFor(() =>
+        expect(mockAssign).toHaveBeenCalledWith([
+          { member_id: "m1", pledge_class_id: null, order_number: 2 },
+        ]),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(
-        screen.getByRole("button", { name: "Remove Ada from Alpha" }),
-      ).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-      expect(screen.getByRole("list", { name: "Members of Alpha" }));
       expect(h.push).not.toHaveBeenCalled();
-      expect(mockAssign).not.toHaveBeenCalled();
     });
 
     it("leaves alone a member another officer added while the page was open", async () => {
       const view = renderClassPage("alpha");
       // A background re-read brings in Dee, now in Alpha.
+      server = [...MEMBERS.slice(0, 3), member("m4", "Dee", "alpha", 3)];
       mockMembers.mockReturnValue({
-        data: [...MEMBERS.slice(0, 3), member("m4", "Dee", "alpha", 3)],
+        data: server,
         isError: false,
+        refetch: vi.fn(async () => ({ data: server })),
       });
       view.rerender(tab());
-      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      expect(mockAssign).not.toHaveBeenCalled();
       await userEvent.click(
         screen.getByRole("button", { name: "Remove Ada from Alpha" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(mockAssign).toHaveBeenCalledWith([
-        { member_id: "m1", pledge_class_id: null, order_number: 2 },
-      ]);
+      await waitFor(() =>
+        expect(mockAssign).toHaveBeenCalledWith([
+          { member_id: "m1", pledge_class_id: null, order_number: 2 },
+        ]),
+      );
+      // The re-read after the save brings Dee onto the page.
+      expect(
+        await screen.findByRole("button", { name: "Remove Dee from Alpha" }),
+      ).toBeInTheDocument();
     });
   });
 });
 
 /**
- * Leaving a class's page keeps its member draft (#4593): no "are you sure",
- * and the page opens on it next time, from the list or from the address.
- * Cancel and Save give it up.
+ * Each member change saves the moment it is made (#6033), so there is no
+ * draft to keep (#4593's kept drafts are gone): leaving the page and coming
+ * back shows the roster as the server holds it.
  */
-describe("SettingsClassesTab keeps a class page's draft (#4593)", () => {
+describe("SettingsClassesTab saves member changes on their own (#6033)", () => {
   beforeEach(resetMocks);
 
   const removeAda = () =>
@@ -717,101 +805,60 @@ describe("SettingsClassesTab keeps a class page's draft (#4593)", () => {
       screen.getByRole("button", { name: "Remove Ada from Alpha" }),
     );
 
-  it("opens on the draft after going back to the list, and says so", async () => {
+  it("opens on the roster as saved after going back to the list, with no draft note", async () => {
     const view = renderClassPage("alpha");
-    expect(screen.queryByText("Draft restored")).toBeNull();
     await removeAda();
+    await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+    // The list re-reads the roster the save wrote.
+    mockMembers.mockReturnValue({
+      data: server,
+      isError: false,
+      refetch: vi.fn(async () => ({ data: server })),
+    });
     go(view, "tab=classes");
     expect(screen.queryByRole("list", { name: "Members of Alpha" })).toBeNull();
     go(view, "tab=classes&class=alpha");
-
     expect(
       screen.queryByRole("button", { name: "Remove Ada from Alpha" }),
     ).toBeNull();
-    expect(screen.getByText("Draft restored")).toBeInTheDocument();
-    // Still worked out against the roster it opened on.
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(mockAssign).toHaveBeenCalledWith([
-      { member_id: "m1", pledge_class_id: null, order_number: 2 },
-    ]);
+    expect(screen.queryByText("Draft restored")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
   });
 
-  it("opens the class page on its draft from ?class= after Settings was left", async () => {
+  it("keeps nothing for a change the server refused", async () => {
+    mockAssign.mockRejectedValue(new Error("nope"));
     const first = renderClassPage("alpha");
     await removeAda();
+    await waitFor(() => expect(mockToast).toHaveBeenCalled());
     first.unmount();
 
     renderClassPage("alpha");
-    expect(await screen.findByText("Draft restored")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Remove Ada from Alpha" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Remove Ada from Alpha" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Draft restored")).toBeNull();
   });
 
-  it("keeps each class's draft apart", async () => {
+  it("keeps each class's roster apart", async () => {
     const view = renderClassPage("alpha");
     await removeAda();
+    await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
     go(view, "tab=classes&class=beta");
-    expect(screen.queryByText("Draft restored")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Remove Cal from Beta" }),
     ).toBeInTheDocument();
   });
 
-  it("offers no draft to an officer who can no longer manage classes", async () => {
-    const first = renderClassPage("alpha");
-    await removeAda();
-    first.unmount();
-
+  it("shows a viewer without roles:manage the class as saved, with nothing to change", () => {
     renderClassPage("alpha", false);
-    expect(screen.queryByText("Draft restored")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    // They see the class as saved, not another officer's unsaved draft.
+    expect(screen.queryByLabelText("Add a member")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Remove Ada from Alpha" }),
+    ).toBeNull();
     expect(
       within(screen.getByRole("list", { name: "Members of Alpha" }))
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual(["1Ben", "2Ada"]);
-  });
-
-  it("keeps nothing on Cancel, or for a page left untouched", async () => {
-    const view = renderClassPage("alpha");
-    go(view, "tab=classes");
-    go(view, "tab=classes&class=alpha");
-    expect(screen.queryByText("Draft restored")).toBeNull();
-
-    await removeAda();
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    go(view, "tab=classes");
-    go(view, "tab=classes&class=alpha");
-    expect(
-      screen.getByRole("button", { name: "Remove Ada from Alpha" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Draft restored")).toBeNull();
-  });
-
-  it("keeps nothing once saved", async () => {
-    const view = renderClassPage("alpha");
-    await removeAda();
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(mockToast).toHaveBeenCalledWith({ title: "Alpha saved" }),
-    );
-    go(view, "tab=classes");
-    go(view, "tab=classes&class=alpha");
-    expect(screen.queryByText("Draft restored")).toBeNull();
-  });
-
-  it("starts over from the roster on Discard", async () => {
-    const view = renderClassPage("alpha");
-    await removeAda();
-    go(view, "tab=classes");
-    go(view, "tab=classes&class=alpha");
-    await userEvent.click(screen.getByRole("button", { name: "Discard" }));
-
-    expect(
-      screen.getByRole("button", { name: "Remove Ada from Alpha" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Draft restored")).toBeNull();
   });
 });

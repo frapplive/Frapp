@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -12,7 +12,6 @@ import {
   isWildcardRole,
   mayGrant,
   permissionRows,
-  permissionsAfterMove,
   reachesOutside,
   reachesRole,
   reachesTier,
@@ -59,13 +58,11 @@ import {
 import { RoleColorRow } from "@/components/roles/role-color-row";
 import { useRoleActions } from "@/components/roles/role-actions";
 import { Toggle } from "@/components/toggle";
-import {
-  ChapterTextField,
-  FormCommitRow,
-  FormFields,
-  FormHint,
-  useFormSaveStatus,
-} from "@/components/settings/chapter-form";
+import { FormFields, FormHint } from "@/components/settings/chapter-form";
+import { SavedTextField } from "@/components/settings/saved-text-field";
+import { saveSetting } from "@/lib/settings/chapter-tab";
+import { usePendingSetting } from "@repo/hooks/use-pending-setting";
+import type { UpdateRoleBody } from "@repo/hooks/use-roles";
 import { describeError } from "@/lib/roles/save-error";
 import {
   CANT_GIVE,
@@ -84,9 +81,9 @@ const OUTSIDE = "__outside__";
  * One role's page on the phone (#4074; web's in the same rows and words
  * since #6029): its name on top, then the Role group (its tier, color, how
  * many hold it, its @mention switch and, for a role the chapter made,
- * Non-chapter business), saved together by Save role, as on web until #6033;
- * then what it can do. Move up, Move down and Delete role sit in the
- * header's ⋯, never beside Save (rulebook § 2), as on web.
+ * Non-chapter business), each saving on its own the moment it changes
+ * (#6033), as on web; then what it can do. Move up, Move down and Delete
+ * role sit in the header's ⋯ (rulebook § 2), as on web.
  *
  * - **In a tier**, each permission row shows what the role ends up with (On
  *   or Off), and a row set apart from the tier says so on its second line
@@ -162,7 +159,6 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const { tiers, reach, canManage, words, memberCounts } = data;
   const updateRole = useUpdateRole();
   const actions = useRoleActions(data);
-  const status = useFormSaveStatus();
   const tierSheetRef = useRef<BottomSheetModal>(null);
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
   // A tier_id naming a missing tier reads as outside, as the list shows it.
@@ -179,65 +175,62 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
     ? "This role can do everything. That only moves through Transfer presidency."
     : lockedReasonFor(data, editable, "role");
 
-  const [name, setName] = useState(role.name);
-  // A stored value that may not paint reads as none, as every client paints it.
-  const [color, setColor] = useState<string | null>(
-    roleColorOrNull(role.color),
+  // Each setting saves on its own the moment it changes (#6033), sending
+  // only its own key, so a stale page never undoes another officer's edit.
+  // **Never a `permissions` key**: the rows below save on their own. A
+  // refusal is said on the row that made it; the phone has no toast.
+  const [failure, setFailure] = useState<{
+    key: keyof UpdateRoleBody;
+    words: string;
+  } | null>(null);
+  const saveRole = useCallback(
+    async (body: UpdateRoleBody): Promise<boolean | string> => {
+      const key = Object.keys(body)[0] as keyof UpdateRoleBody;
+      setFailure(null);
+      const result = await saveSetting(
+        () => updateRole.mutateAsync({ id: role.id, body }),
+        PEOPLE_SETTINGS_COPY.saveFallback,
+      );
+      if (result !== true) setFailure({ key, words: result });
+      return result;
+    },
+    [updateRole, role.id],
   );
-  const [colorTouched, setColorTouched] = useState(false);
-  const [placement, setPlacement] = useState(tierId ?? OUTSIDE);
-  const [mentionable, setMentionable] = useState(role.mentionable);
-  const [pickable, setPickable] = useState(role.self_assignable);
-  const [saving, setSaving] = useState(false);
-  const draftTierId = placement === OUTSIDE ? null : placement;
-  // Non-chapter business (#4958) is judged against the drafted placement,
-  // since a move into a tier is what most often rules it out.
-  const pickRefusal = selfAssignableRefusal({
-    system_key: role.system_key,
-    tier_id: draftTierId,
-    permissions:
-      draftTierId === tierId
-        ? role.permissions
-        : permissionsAfterMove(
-            tiers.find((candidate) => candidate.id === draftTierId)
-              ?.permissions ?? [],
-            role.permission_overrides,
-          ),
-  });
-
-  const trimmed = name.trim();
-  const changes = {
-    name: trimmed && trimmed !== role.name ? trimmed : undefined,
-    // `null` clears the color; sent only when the officer picked one.
-    color: colorTouched && color !== (role.color ?? null) ? color : undefined,
-    mentionable: mentionable !== role.mentionable ? mentionable : undefined,
-    self_assignable: pickable !== role.self_assignable ? pickable : undefined,
-    tier_id: draftTierId !== role.tier_id ? draftTierId : undefined,
-  };
-  const dirty = Object.values(changes).some((value) => value !== undefined);
-
-  function edited<T>(set: (next: T) => void) {
-    return (next: T) => {
-      status.clear();
-      set(next);
-    };
-  }
-
-  async function save() {
-    if (!dirty) return;
-    setSaving(true);
-    try {
-      // **No `permissions` key.** The rows below save on their own; sending
-      // a list here would roll back a pick made since this page opened.
-      await updateRole.mutateAsync({ id: role.id, body: changes });
-      setColorTouched(false);
-      status.saved();
-    } catch (error) {
-      status.failed(error, "Your change wasn't saved. Try again in a moment.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const failureOf = (key: keyof UpdateRoleBody) =>
+    failure?.key === key ? failure.words : null;
+  // A stored value that may not paint reads as none, as every client paints it.
+  const [color, changeColor] = usePendingSetting<string | null>(
+    roleColorOrNull(role.color),
+    useCallback(
+      async (next) => (await saveRole({ color: next })) === true,
+      [saveRole],
+    ),
+  );
+  const [placement, changePlacement] = usePendingSetting(
+    tierId ?? OUTSIDE,
+    useCallback(
+      async (next) =>
+        (await saveRole({ tier_id: next === OUTSIDE ? null : next })) === true,
+      [saveRole],
+    ),
+  );
+  const [mentionable, changeMentionable] = usePendingSetting(
+    role.mentionable,
+    useCallback(
+      async (next) => (await saveRole({ mentionable: next })) === true,
+      [saveRole],
+    ),
+  );
+  // Non-chapter business (#4958). The tier saves at once, so it is judged
+  // against the role as stored.
+  const [pickable, changePickable] = usePendingSetting(
+    role.self_assignable,
+    useCallback(
+      async (next) => (await saveRole({ self_assignable: next })) === true,
+      [saveRole],
+    ),
+  );
+  const pickRefusal = selfAssignableRefusal(role);
 
   const placementName =
     placement === OUTSIDE
@@ -283,13 +276,13 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
       ) : null}
 
       <FormFields>
-        <ChapterTextField
+        <SavedTextField
           label={PEOPLE_SETTINGS_COPY.name}
-          value={name}
-          onChangeText={edited(setName)}
-          editable={editable && !everyone && !saving}
+          value={role.name}
+          editable={editable && !everyone}
           maxLength={ROLE_NAME_MAX_LENGTH}
-          error={actions.failure?.message ?? null}
+          failure={actions.failure?.message ?? null}
+          onSave={(next) => saveRole({ name: next })}
         />
       </FormFields>
 
@@ -299,6 +292,8 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           label={words.Singular}
           value={placementName}
           disabled={!editable || tierFixed}
+          description={failureOf("tier_id")}
+          descriptionTone="destructive"
           onPress={
             editable && !tierFixed
               ? () => tierSheetRef.current?.present()
@@ -324,12 +319,9 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           label={PEOPLE_SETTINGS_COPY.color}
           value={color}
           subject={role.id}
-          name={trimmed || role.name}
-          onChange={(next) => {
-            status.clear();
-            setColor(next);
-            setColorTouched(true);
-          }}
+          name={role.name}
+          onChange={(next) => void changeColor(next)}
+          failure={failureOf("color")}
           disabled={!editable}
         />
         <ListRow
@@ -347,11 +339,13 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
               ? "Anyone can use @everyone and @here"
               : PEOPLE_SETTINGS_COPY.mentionRole
           }
+          description={failureOf("mentionable")}
+          descriptionTone="destructive"
           trailing={
             <Toggle
               value={mentionable}
-              disabled={!editable || saving}
-              onValueChange={edited(setMentionable)}
+              disabled={!editable}
+              onValueChange={(next) => void changeMentionable(next)}
               accessibilityLabel={`@mention for ${role.name}`}
             />
           }
@@ -365,35 +359,25 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           <ListRow
             label="Non-chapter business"
             description={
-              pickRefusal
+              failureOf("self_assignable") ??
+              (pickRefusal
                 ? SELF_ASSIGNABLE_REFUSAL_COPY[pickRefusal]
-                : SELF_ASSIGNABLE_SWITCH_DESCRIPTION
+                : SELF_ASSIGNABLE_SWITCH_DESCRIPTION)
+            }
+            descriptionTone={
+              failureOf("self_assignable") ? "destructive" : "default"
             }
             trailing={
               <Toggle
                 value={pickable}
-                disabled={
-                  !editable || saving || (pickRefusal !== null && !pickable)
-                }
-                onValueChange={edited(setPickable)}
+                disabled={!editable || (pickRefusal !== null && !pickable)}
+                onValueChange={(next) => void changePickable(next)}
                 accessibilityLabel={`Non-chapter business for ${role.name}`}
               />
             }
           />
         )}
       </ListSection>
-      {editable ? (
-        <FormCommitRow
-          label="Save role"
-          canSave
-          readOnlyLine=""
-          disabled={!dirty || saving}
-          busy={saving}
-          status={status.status}
-          onPress={() => void save()}
-        />
-      ) : null}
-
       {tier && !wildcard ? (
         <OverrideList
           role={role}
@@ -420,10 +404,7 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           title={words.Singular}
           options={tierOptions}
           selected={placement}
-          onSelect={(value) => {
-            status.clear();
-            setPlacement(value ?? OUTSIDE);
-          }}
+          onSelect={(value) => void changePlacement(value ?? OUTSIDE)}
         />
       ) : null}
     </ScreenShell>

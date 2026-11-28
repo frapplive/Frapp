@@ -56,6 +56,12 @@ export const PEOPLE_SETTINGS_COPY = {
   transferPresidency: "Transfer presidency",
   rolesInTierHeading: "Roles in it",
   roleHeading: "Role",
+  /** A role setting that saves on its own was refused (#6033). */
+  saveRoleFailed: "Couldn't save role",
+  /** A group setting that saves on its own was refused (#6033). */
+  saveGroupFailed: "Couldn't save group",
+  /** Why a save failed when the API gave no reason. */
+  saveFallback: "Your change wasn't saved. Try again in a moment.",
   name: "Name",
   color: "Color",
   members: "Members",
@@ -208,6 +214,11 @@ export const PLEDGE_CLASS_SETTINGS_COPY = {
   /** A class's page whose class is no longer in the list. */
   gone: "It isn't in the list any more.",
   goneDetail: "Someone may have deleted it.",
+  /** A member change that saves on its own was refused (#6033). */
+  saveFallback: "Nothing was changed. Try again in a moment.",
+  /** The batch cap, a guard: one change never comes near it. */
+  tooManyAtOnce: (max: number) =>
+    `That is more than ${max} changes at once. Try a smaller change.`,
 } as const;
 
 /** The last row of the pledge class list, in the chapter's own word as typed. */

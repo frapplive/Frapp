@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown, Eye, Layers, Loader2, Palette } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { ChevronDown, Eye, Layers, Palette } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useChapterRoleColors,
@@ -25,8 +25,6 @@ import {
   selfAssignableRefusal,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -60,6 +58,7 @@ import {
   SettingsSubpage,
 } from "@/components/settings/settings-subpage";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
+import { SettingsTextField } from "@/components/settings/settings-name-field";
 import { RoleColorPicker } from "@/components/roles/role-color-picker";
 import { PermissionSwitchList } from "@/components/roles/permission-switch-list";
 import { RoleOverrideList } from "@/components/roles/role-override-list";
@@ -69,6 +68,9 @@ import { useRolePermissionToggle } from "@/components/roles/use-role-permission-
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { CANT_GIVE, lockedReasonFor } from "@repo/hooks/use-roles-data";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useToastedRun } from "@/lib/hooks/use-toasted-run";
+import { usePendingSetting } from "@repo/hooks/use-pending-setting";
+import type { UpdateRoleBody } from "@repo/hooks/use-roles";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { useChapterStore } from "@/lib/stores/chapter-store";
 import { useRolePreviewStore } from "@/lib/stores/role-preview-store";
@@ -77,7 +79,6 @@ import {
   mayGrant,
   previewPermissions,
   reachesOutside,
-  permissionsAfterMove,
   reachesRole,
   reachesTier,
   type TieredRole,
@@ -89,14 +90,14 @@ const OUTSIDE = "__outside__";
 /**
  * One role's page (#3990; in the settings shape since #6029): its name on
  * top, then the Role group (its tier, color, how many hold it, its @mention
- * switch and, for a role the chapter made, Non-chapter business), saved
- * together by Save role, then what it can do.
+ * switch and, for a role the chapter made, Non-chapter business), each
+ * saving on its own the moment it changes (#6033), then what it can do.
  *
  * A role in a tier lists each permission once, with what the role ends up
  * with and a picker to set it apart from its tier (`role-override-list.tsx`);
  * a role outside the tiers, which has no tier to follow, shows one column of
  * live switches. Delete and its order (Move up, Move down) sit in the header's
- * ⋯, never beside Save (rulebook § 2), the same on the phone.
+ * ⋯ (rulebook § 2), the same on the phone.
  *
  * "View as" opens the dashboard as a member holding only this role sees it
  * (#4072), the way Discord's View Server As Role does. The phone has no View
@@ -219,79 +220,49 @@ function RoleBody({
   const wildcard = isWildcardRole(role);
   const editable = canManage && reachesRole(reach, role, tiers);
 
-  const [name, setName] = useState(role.name);
   const chapterColors = useChapterRoleColors();
   const viewerName = useViewerDisplayName();
+  const run = useToastedRun();
+  // Each setting saves on its own the moment it changes (#6033), sending
+  // only its own key, so a stale page never undoes another officer's edit.
+  // **Never a `permissions` key**: the rows below save on their own.
+  const saveRole = useCallback(
+    (body: UpdateRoleBody) =>
+      run(
+        () => updateRole.mutateAsync({ id: role.id, body }),
+        PEOPLE_SETTINGS_COPY.saveRoleFailed,
+        PEOPLE_SETTINGS_COPY.saveFallback,
+      ),
+    [run, updateRole, role.id],
+  );
   // A stored value that may not paint (a pre-#3485 seed in red or gold, or
   // one too dark to read) reads as none, which is also how every client
   // paints it.
-  const [color, setColor] = useState<string | null>(
+  const [color, changeColor] = usePendingSetting<string | null>(
     roleColorOrNull(role.color),
+    useCallback((next) => saveRole({ color: next }), [saveRole]),
   );
-  // Whether the officer picked a color: an unpaintable stored value shows as
-  // "No color", so the draft alone can't tell "left alone" from "cleared".
-  const [colorTouched, setColorTouched] = useState(false);
-  const [placement, setPlacement] = useState(tierId ?? OUTSIDE);
-  const [mentionable, setMentionable] = useState(role.mentionable);
+  const [placement, changePlacement] = usePendingSetting(
+    tierId ?? OUTSIDE,
+    useCallback(
+      (next) => saveRole({ tier_id: next === OUTSIDE ? null : next }),
+      [saveRole],
+    ),
+  );
+  const [mentionable, changeMentionable] = usePendingSetting(
+    role.mentionable,
+    useCallback((next) => saveRole({ mentionable: next }), [saveRole]),
+  );
   // "Non-chapter business" (#4958, Shawn 2026-11-14): members add and remove
-  // the role themselves. Judged against the drafted placement, since a move
-  // into a tier is what most often rules it out.
-  const [pickable, setPickable] = useState(role.self_assignable);
-  const draftTierId = placement === OUTSIDE ? null : placement;
-  const pickRefusal = selfAssignableRefusal({
-    system_key: role.system_key,
-    tier_id: draftTierId,
-    // The permissions the save leaves it with, as the API judges them: its
-    // stored ones while it stays put, else the drafted tier's with its own
-    // overrides on top (a role moved out of a tier drops that tier's).
-    permissions:
-      draftTierId === tierId
-        ? role.permissions
-        : permissionsAfterMove(
-            tiers.find((candidate) => candidate.id === draftTierId)
-              ?.permissions ?? [],
-            role.permission_overrides,
-          ),
-  });
-
-  async function save() {
-    const nextTier = placement === OUTSIDE ? null : placement;
-    try {
-      await updateRole.mutateAsync({
-        id: role.id,
-        body: {
-          name:
-            name.trim() && name.trim() !== role.name ? name.trim() : undefined,
-          // Sent only when changed, so re-saving an untouched role writes no
-          // audit row for it; `null` clears the color.
-          color:
-            colorTouched && color !== (role.color ?? null) ? color : undefined,
-          mentionable:
-            mentionable !== role.mentionable ? mentionable : undefined,
-          self_assignable:
-            pickable !== role.self_assignable ? pickable : undefined,
-          tier_id: nextTier !== role.tier_id ? nextTier : undefined,
-          // **No `permissions` key.** The rows below save on their own;
-          // sending a list here would roll back a pick made since this page
-          // opened.
-        },
-      });
-      setColorTouched(false);
-      toast({
-        title: "Role saved",
-        description: `${name.trim() || role.name} is up to date.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Couldn't save role",
-        description: getErrorMessage(
-          error,
-          "Your change wasn't saved. Try again in a moment.",
-        ),
-        variant: "destructive",
-      });
-    }
-  }
+  // the role themselves. The tier saves at once, so it is judged against the
+  // role as stored.
+  const [pickable, changePickable] = usePendingSetting(
+    role.self_assignable,
+    useCallback((next) => saveRole({ self_assignable: next }), [saveRole]),
+  );
+  const pickRefusal = selfAssignableRefusal(role);
+  // What the name field holds, for the color picker's preview.
+  const [draftName, setDraftName] = useState(role.name);
 
   async function remove() {
     const ok = await confirm({
@@ -428,14 +399,15 @@ function RoleBody({
         </p>
       ) : null}
 
-      <div className="grid max-w-md gap-1.5">
-        <Label htmlFor="role-name">{PEOPLE_SETTINGS_COPY.name}</Label>
-        <Input
+      <div className="max-w-md">
+        <SettingsTextField
           id="role-name"
-          value={name}
+          label={PEOPLE_SETTINGS_COPY.name}
+          value={role.name}
           maxLength={ROLE_NAME_MAX_LENGTH}
           disabled={!editable || everyone}
-          onChange={(event) => setName(event.target.value)}
+          onTextChange={setDraftName}
+          onSave={(next) => saveRole({ name: next })}
         />
       </div>
 
@@ -458,7 +430,7 @@ function RoleBody({
             control={
               <Select
                 value={placement}
-                onValueChange={setPlacement}
+                onValueChange={(next) => void changePlacement(next)}
                 disabled={!editable || tierFixed}
               >
                 <SelectTrigger
@@ -516,11 +488,8 @@ function RoleBody({
                   <RoleColorPicker
                     labelId="role-color-label"
                     value={color}
-                    onChange={(next) => {
-                      setColor(next);
-                      setColorTouched(true);
-                    }}
-                    previewName={name}
+                    onChange={(next) => void changeColor(next)}
+                    previewName={draftName || role.name}
                     memberName={viewerName}
                     chapterColors={chapterColors}
                   />
@@ -549,7 +518,7 @@ function RoleBody({
             }
             checked={mentionable}
             disabled={!editable}
-            onCheckedChange={setMentionable}
+            onCheckedChange={(next) => void changeMentionable(next)}
           />
           {/*
             Non-chapter business (#4958): interest roles members pick
@@ -566,24 +535,10 @@ function RoleBody({
               }
               checked={pickable}
               disabled={!editable || (!!pickRefusal && !pickable)}
-              onCheckedChange={setPickable}
+              onCheckedChange={(next) => void changePickable(next)}
             />
           )}
         </SettingsGroup>
-        {editable ? (
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void save()}
-              disabled={updateRole.isPending}
-            >
-              {updateRole.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Save role
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       {tier && !wildcard ? (

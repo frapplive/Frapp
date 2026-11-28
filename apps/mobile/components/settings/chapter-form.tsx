@@ -7,20 +7,16 @@ import {
   type TextInputProps,
 } from "react-native";
 import type { SignetTokens } from "@repo/theme/signet";
-import { errorCopy } from "@repo/hooks/error-copy";
 import { FormTextInput } from "@/components/form-text-input";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
-import { TaskBarPill } from "@/components/tasks/task-action-bar";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { MONO_FONT_FAMILY, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
  * The pieces Chapter settings' pages share on the phone (#6027): the labelled
  * field (`sheetFieldStyles`) that `SavedTextField` saves on its own (#6033),
- * as web's `SettingsTextField` does, and the hint line under a group. The
- * commit pill (`FormCommitRow`, the task screen's `TaskBarPill`, sized to its
- * label rather than stretched across the page, rulebook § 7) is left only on
- * the role and group pages, until the rest of #6033 reaches them.
+ * as web's `SettingsTextField` does, and the hint line under a group. Every
+ * page saves on its own (#6033), so none ends in a Save button.
  */
 
 /** A labelled text field. Read-only, its text muted, for a viewer who can't save it. */
@@ -93,90 +89,6 @@ export function ChapterTextField({
   );
 }
 
-/** What a form's last save came to, for {@link FormStatusLine}. */
-export type FormSaveStatus =
-  { kind: "idle" } | { kind: "saved" } | { kind: "failed"; message: string };
-
-/**
- * A form's save status: "Saved" once a save lands, the reason once one
- * fails, and nothing again as soon as the officer edits. The phone has no
- * toast, so the outcome is a line beside the button (navigation.md §
- * Chapter settings).
- */
-export function useFormSaveStatus() {
-  const [status, setStatus] = useState<FormSaveStatus>({ kind: "idle" });
-  return {
-    status,
-    saved: () => setStatus({ kind: "saved" }),
-    failed: (error: unknown, fallback: string) =>
-      setStatus({ kind: "failed", message: errorCopy(error, fallback) }),
-    clear: () =>
-      setStatus((prev) => (prev.kind === "idle" ? prev : { kind: "idle" })),
-  };
-}
-
-/**
- * A form's commit row: the status (or the line saying the role can't save
- * here) on the left, the labelled pill on the right, as web's forms end in
- * the hint and the button. A viewer who can't save gets the line alone.
- */
-export function FormCommitRow({
-  label,
-  onPress,
-  disabled,
-  busy,
-  status,
-  readOnlyLine,
-  canSave,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled: boolean;
-  busy: boolean;
-  status: FormSaveStatus;
-  /** Why the viewer can't save, in place of the pill. */
-  readOnlyLine: string;
-  canSave: boolean;
-}) {
-  const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
-  const styles = createStyles(tokens, accent);
-  let line: ReactNode = null;
-  if (!canSave) {
-    line = <Text style={styles.status}>{readOnlyLine}</Text>;
-  } else if (status.kind === "saved") {
-    line = (
-      <Text accessibilityLiveRegion="polite" style={styles.status}>
-        Saved
-      </Text>
-    );
-  } else if (status.kind === "failed") {
-    line = (
-      <Text
-        accessibilityLiveRegion="polite"
-        style={[styles.status, styles.statusFailed]}
-      >
-        {status.message}
-      </Text>
-    );
-  }
-  return (
-    <View style={styles.commitRow}>
-      <View style={styles.commitLine}>{line}</View>
-      {canSave ? (
-        <TaskBarPill
-          label={label}
-          fill={accent}
-          ink={tokens.color.gold.onHouse}
-          disabled={disabled}
-          busy={busy}
-          onPress={onPress}
-        />
-      ) : null}
-    </View>
-  );
-}
-
 /** A muted line under a group, for a page's hint (web's section hint). */
 export function FormHint({ children }: { children: ReactNode }) {
   const { tokens } = useFrappTheme();
@@ -220,22 +132,6 @@ function createStyles(tokens: SignetTokens, accent: string) {
     },
     error: {
       ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.semantic.destructiveText,
-    },
-    commitRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: tokens.spacing.md,
-    },
-    commitLine: {
-      flex: 1,
-    },
-    status: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
-    },
-    statusFailed: {
       color: tokens.color.semantic.destructiveText,
     },
     hint: {
