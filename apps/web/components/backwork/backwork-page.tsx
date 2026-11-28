@@ -4,7 +4,6 @@ import { EYEBROW } from "@/components/ui/typography";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import {
   Suspense,
-  useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -40,7 +39,11 @@ import {
   WEB_ADDRESS_PARAMS,
   can,
 } from "@repo/validation";
-import { useAddressParams } from "@/lib/address/use-address-params";
+import {
+  useAddressParams,
+  useDeadAddressParam,
+} from "@/lib/address/use-address-params";
+import { useAddressedDialog } from "@/lib/address/use-addressed-dialog";
 import { formatDay } from "@repo/formatting";
 import { Button } from "@/components/ui/button";
 import { PageActions } from "@/components/layout/page-actions";
@@ -202,15 +205,10 @@ function BackworkPageBody() {
   const deferredQuery = useDeferredValue(query);
   const [filters, setFilters] = useState<LibraryFilters>(NO_FILTERS);
   // `?panel=cleanup`: the cleanup drawer pushes, so Back closes it, and
-  // Forward and a reload reopen it (#6157).
+  // Forward and a reload reopen it (#6157). Through the gate, as its menu
+  // item is: never open onto writes a lapsed chapter refuses.
   const panelAddress = useAddressParams([PANEL]);
-  const cleanupOpen = panelAddress.values[PANEL] === CLEANUP;
-  const { open: openPanelAddress, close: closePanelAddress } = panelAddress;
-  const setCleanupOpen = useCallback(
-    (next: boolean) =>
-      next ? openPanelAddress({ [PANEL]: CLEANUP }) : closePanelAddress(),
-    [openPanelAddress, closePanelAddress],
-  );
+  const cleanupDialog = useAddressedDialog(gate, PANEL, CLEANUP);
   // A set, not one slot: two downloads in flight must not clear each other's
   // spinner.
   const [downloading, setDownloading] = useState<ReadonlySet<string>>(
@@ -243,16 +241,16 @@ function BackworkPageBody() {
   // A panel the member can't open (or no panel at all) comes off the
   // address once their permissions are known, as a forbidden id does.
   const panelParam = panelAddress.values[PANEL];
-  const panelUnavailable =
+  useDeadAddressParam(
+    PANEL,
+    panelParam,
     panelParam !== null &&
-    permissionsPayload !== undefined &&
-    !(
-      (panelParam === CLEANUP && isAdmin) ||
-      (panelParam === DOCKED_PANELS.backwork.upload && canUpload)
-    );
-  useEffect(() => {
-    if (panelUnavailable) openPanelAddress({ [PANEL]: null }, { replace: true });
-  }, [panelUnavailable, openPanelAddress]);
+      permissionsPayload !== undefined &&
+      !(
+        (panelParam === CLEANUP && isAdmin) ||
+        (panelParam === DOCKED_PANELS.backwork.upload && canUpload)
+      ),
+  );
   const taxonomy = useBackworkTaxonomyActions(gate);
   const courseDialog = useBackworkCourseDialog(gate, isAdmin);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -743,7 +741,7 @@ function BackworkPageBody() {
                       icon: Pencil,
                       disabled: !gate.allowed,
                       describedBy: gate.controlProps()["aria-describedby"],
-                      onSelect: () => setCleanupOpen(true),
+                      onSelect: () => cleanupDialog.setOpen(true),
                     },
                   ]
                 : []),
@@ -753,8 +751,7 @@ function BackworkPageBody() {
         <Can permission="backwork:admin">
           {/* Portaled, so it can live beside the menu that opens it. */}
           <BackworkTaxonomyDrawer
-            open={cleanupOpen}
-            onOpenChange={setCleanupOpen}
+            {...cleanupDialog.dialogProps}
             gate={gate}
           />
         </Can>

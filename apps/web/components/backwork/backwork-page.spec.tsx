@@ -1831,6 +1831,41 @@ describe("BackworkPage library (2026-11-05 redesign)", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the clean-up drawer shut on a lapsed chapter, and drops its address (#6157)", async () => {
+    chapter.pastDue();
+    window.history.replaceState(null, "", "/backwork?panel=cleanup");
+    render(<BackworkPage />);
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(
+      screen.queryByText(/manage departments & professors/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drops ?panel=cleanup for a member who isn't an admin (#6157)", async () => {
+    mockPermissions.value = ["backwork:upload"];
+    window.history.replaceState(null, "", "/backwork?panel=cleanup");
+    render(<BackworkPage />);
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("addresses Upload as ?panel=upload: Back closes it, Forward reopens it (#6157)", async () => {
+    render(<BackworkPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^upload$/i }),
+    );
+    expect(window.location.search).toBe("?panel=upload");
+    window.history.back();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Upload backwork" }),
+      ).not.toBeInTheDocument(),
+    );
+    window.history.forward();
+    expect(
+      await screen.findByRole("heading", { name: "Upload backwork" }),
+    ).toBeInTheDocument();
+  });
+
   it("renames a row's professor from its menu", async () => {
     const user = userEvent.setup();
     render(<BackworkPage />);
@@ -1934,15 +1969,23 @@ describe("BackworkPage hand-off to bulk upload", () => {
     expect(takeStagedBulkUpload()).toBeNull();
   });
 
-  it("closes the sheet when it hands a Student Copy on", async () => {
+  it("hands a Student Copy on without stepping Back first (#6157)", async () => {
     render(<BackworkPage />);
     await userEvent.click(uploadTrigger());
     const dialog = screen.getByRole("dialog");
     const file = new File(["%PDF-1.7"], "midterm.pdf", { type: "application/pdf" });
     fireEvent.change(within(dialog).getByLabelText(/^file$/i), { target: { files: [file] } });
     await chooseVariant(dialog, "Student Copy");
+    const go = vi.spyOn(window.history, "go");
+    const back = vi.spyOn(window.history, "back");
     await userEvent.click(within(dialog).getByRole("button", { name: "Redact and upload" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Leaving the route closes it. A Back step here would overtake the push,
+    // and Next drops a push a Back overtakes.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/backwork/upload"));
+    expect(go).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
+    go.mockRestore();
+    back.mockRestore();
   });
 
   it("won't upload with the variant left blank, since that could be an unmarked Student Copy", async () => {

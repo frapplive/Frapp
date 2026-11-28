@@ -671,11 +671,27 @@ describe("DocumentsPage subscription gating", () => {
   it("opens New's Upload and leaves ?panel=upload, not ?new=1, in the address (#6157)", async () => {
     chapter.active();
     window.history.replaceState(null, "", "/documents?new=1");
+    const push = vi.spyOn(window.history, "pushState");
     render(docked());
     expect(
       await screen.findByRole("region", { name: "Upload document" }),
     ).toBeInTheDocument();
     expect(window.location.search).toBe("?panel=upload");
+    // In place of `?new=1`, so Back from it leaves for New (#6172 option A).
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
+  });
+
+  it("drops ?panel=upload for a member who can't upload (#6157)", async () => {
+    chapter.active();
+    canGate.granted = false;
+    try {
+      window.history.replaceState(null, "", "/documents?panel=upload");
+      render(docked());
+      await waitFor(() => expect(window.location.search).toBe(""));
+    } finally {
+      canGate.granted = true;
+    }
   });
 
   it("drops a ?panel= the member can't open (#6157)", async () => {
@@ -1370,6 +1386,19 @@ describe("DocumentsPage upload metadata", () => {
       "Chapter budget",
     );
     expectType(dialog, "Budget");
+  });
+
+  it("takes a file dropped beside the open panel as its file (#6157)", async () => {
+    render(<DocumentsPage />);
+    await userEvent.click(uploadTrigger());
+    const dialog = screen.getByRole("dialog");
+    const file = new File(["%PDF-1.4"], "chapter-budget.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.drop(window, { dataTransfer: { types: ["Files"], files: [file] } });
+    expect(
+      await within(dialog).findByText("chapter-budget.pdf"),
+    ).toBeInTheDocument();
   });
 
   const uploadPdf = async (name: string) => {

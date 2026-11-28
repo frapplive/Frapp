@@ -63,6 +63,9 @@ export function useAddressedDialog(
         open({ [name]: value }, { replace });
       } else {
         replaceNext.current = false;
+        // Only its own: an upload that lands after the member went Back and
+        // opened another panel mustn't close that one.
+        if (!shownNow.current) return;
         close([name]);
       }
     },

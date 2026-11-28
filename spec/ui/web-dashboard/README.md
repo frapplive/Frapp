@@ -1268,6 +1268,7 @@ Comparables: Slack web and Discord web keep the open channel and thread in the a
 - **A dead or forbidden id** opens the page with a short inline note in place of the record, and its parameter is replaced away.
 
 The web reads and moves these through one hook, [`use-address-params.ts`](../../../apps/web/lib/address/use-address-params.ts) over [`address.ts`](../../../apps/web/lib/address/address.ts): open pushes, close goes Back or replaces, replace mode is for days and sorts, `consumeAddressParam` takes a one-shot mark off, and `useDeadAddressParam` drops a dead id and keeps its note.
+A docked panel addressed as `panel=` (Resources' Upload, Import a folder and clean-up, #6157) opens through [`use-addressed-dialog.ts`](../../../apps/web/lib/address/use-addressed-dialog.ts), which keeps the subscription gate's refusal and revoke, and whose `useAddressArrival` runs the panel's own opening steps when the address opens it.
 The parameter names live in [`@repo/validation` `web-addresses.ts`](../../../packages/validation/src/web-addresses.ts): the web's own names (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from it, and the phone reads it ([#6050](https://github.com/frapplive/Frapp/issues/6050); [`../mobile/navigation.md` § Deep links](../mobile/navigation.md#deep-links)).
 
 ### The table

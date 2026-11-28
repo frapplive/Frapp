@@ -78,6 +78,19 @@ describe("useAddressedDialog (#6157)", () => {
     expect(onArrive).not.toHaveBeenCalled();
   });
 
+  it("closes only its own panel", () => {
+    const { result } = render();
+    act(() => result.current.setOpen(true));
+    // Back, then another panel opened over the page.
+    act(() => {
+      window.history.replaceState(null, "", "/documents?panel=import");
+    });
+    const go = vi.spyOn(window.history, "go");
+    act(() => result.current.setOpen(false));
+    expect(go).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?panel=import");
+  });
+
   it("refuses to open while the gate blocks, and closes one the address opened", () => {
     const { result } = render(false);
     act(() => result.current.setOpen(true));

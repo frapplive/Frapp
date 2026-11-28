@@ -114,7 +114,11 @@ function DocumentsPageForLink() {
   const shownChapter = useRef(chapterId);
   useEffect(() => {
     if (shownChapter.current === chapterId) return;
+    const from = shownChapter.current;
     shownChapter.current = chapterId;
+    // The store filling in on a reload (no chapter, then this one) isn't a
+    // switch: the address is the one the member reloaded (#6157).
+    if (from === null) return;
     replaceAddress(
       Object.fromEntries(DOCUMENT_ADDRESS.map((name) => [name, null])),
     );
@@ -126,8 +130,10 @@ function DocumentsPageForLink() {
  * What the address holds on `/documents` (spec § Addresses, #6042): the
  * folder open (`folder=`, its name, or a space for No folder), the file in the
  * viewer (`document=`), the file whose Who can see is open (`access=`) and
- * the Minutes view (`type=minutes`). Back walks the folders and files the
- * member opened, the way Finder and Google Drive do.
+ * the Minutes view (`type=minutes`), and the docked Upload or Import a
+ * folder panel (`panel=`, #6157, opened by `upload-menu.tsx`'s panels). Back
+ * walks the folders and files the member opened, the way Finder and Google
+ * Drive do.
  */
 const DOC = WEB_ADDRESS_PARAMS.documents;
 const DOCUMENT_ADDRESS = [
@@ -135,6 +141,7 @@ const DOCUMENT_ADDRESS = [
   DOC.document,
   DOC.access,
   DOC.type,
+  DOC.panel,
 ] as const;
 
 function folderFromParam(value: string | null): string | null {
@@ -337,21 +344,19 @@ function ChapterDocumentsPage() {
   // `?panel=upload` and `?panel=import` open their docked panels (#6157,
   // `upload-menu.tsx`). One the member can't open, or no panel at all, comes
   // off the address once their permissions are known, as a forbidden id does.
-  const panelAddress = useAddressParams([DOC.panel]);
-  const panelParam = panelAddress.values[DOC.panel];
-  const panelUnavailable =
+  const panelParam = address.values[DOC.panel];
+  useDeadAddressParam(
+    DOC.panel,
+    panelParam,
     panelParam !== null &&
-    permissionsPayload !== undefined &&
-    !(
-      canUpload &&
-      (Object.values(DOCKED_PANELS.documents) as string[]).includes(panelParam)
-    );
-  const { open: openPanelAddress } = panelAddress;
-  useEffect(() => {
-    if (panelUnavailable) {
-      openPanelAddress({ [DOC.panel]: null }, { replace: true });
-    }
-  }, [panelUnavailable, openPanelAddress]);
+      permissionsPayload !== undefined &&
+      !(
+        canUpload &&
+        (Object.values(DOCKED_PANELS.documents) as string[]).includes(
+          panelParam,
+        )
+      ),
+  );
   // New minutes, for whoever records them while the module is on (#5949).
   const isModuleEnabled = useChapterModuleGate();
   const canStartMinutes =

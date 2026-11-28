@@ -265,7 +265,8 @@ export function BackworkUploadSheet({
       });
       // Bulk upload has it now.
       kept.drop();
-      uploadDialog.setOpen(false);
+      // Onward without closing: closing goes Back, and Next drops a push
+      // that a Back overtakes. Back from bulk upload returns to this panel.
       router.push("/backwork/upload");
       return;
     }

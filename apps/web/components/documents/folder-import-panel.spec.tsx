@@ -89,6 +89,22 @@ async function openAndPick(files: File[]) {
   return dialog;
 }
 
+describe("FolderImportPanel's address (#6157)", () => {
+  it("opens as ?panel=import, and Back closes it", async () => {
+    render(<FolderImportPanel gate={GATE} context={CONTEXT} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /import a folder/i }),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(window.location.search).toBe("?panel=import");
+    window.history.back();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(window.location.search).toBe("");
+  });
+});
+
 describe("FolderImportPanel (#2242)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

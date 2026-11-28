@@ -276,12 +276,16 @@ export function useDocumentUpload(
   );
   const openPanel = useCallback(
     (file?: File, options?: { replace?: boolean }) => {
-      // Already open (Back or a reload landed on it): nothing to prepare.
-      if (panelOpen) return;
+      // Already open (Back or a reload landed on it, or a file dropped on
+      // the page around it): nothing to prepare but the dropped file.
+      if (panelOpen) {
+        if (file) chooseFile(file);
+        return;
+      }
       preparePanel(file);
       uploadDialog.setOpen(true, options);
     },
-    [panelOpen, preparePanel, uploadDialog],
+    [panelOpen, chooseFile, preparePanel, uploadDialog],
   );
   useAddressArrival(uploadDialog, () => preparePanel());
   // Back to the panel the page was left with open, through the same door as

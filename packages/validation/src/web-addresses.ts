@@ -84,9 +84,10 @@ export const WEB_ADDRESS_PARAMS = {
 } as const;
 
 /**
- * `panel=`: the docked create panel open in place of the page (#6157,
- * Paul's option A on #6172). Opening one pushes it, so Back closes it; New's
- * `?new=1` is replaced by it once acted on, and a reload reopens it empty.
+ * `panel=`: the docked panel open in place of the page, a create panel or a
+ * tool like Backwork's clean-up (#6157, Paul's option A on #6172). Opening
+ * one pushes it, so Back closes it; New's `?new=1` is replaced by it once
+ * acted on, and a reload reopens it empty.
  */
 export const DOCKED_PANELS = {
   documents: { upload: "upload", import: "import" },
