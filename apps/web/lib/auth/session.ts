@@ -2,6 +2,10 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { resetObservabilityOnLogout } from "@/lib/observability/reset";
+import {
+  closeShellCache,
+  reopenShellCache,
+} from "@/lib/shell-cache/shell-cache-clear";
 
 /**
  * When this tab last started signing itself out. A global sign-out revokes
@@ -25,7 +29,22 @@ export async function signOutCurrentSession(
   options: { scope?: "global" | "local" } = {},
 ) {
   ownSignOutStartedAt = Date.now();
-  const supabase = createSupabaseBrowserClient();
-  await supabase.auth.signOut(options.scope ? { scope: options.scope } : undefined);
+  // Before the sign-out, so the shell cache is gone even when the navigation
+  // that follows outruns the identity-change effect, and closed, so an answer
+  // landing during the round trip isn't written back (#5049).
+  closeShellCache();
+  try {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut(
+      options.scope ? { scope: options.scope } : undefined,
+    );
+  } catch (error) {
+    // A sign-out that threw leaves the member signed in on this page, with no
+    // identity change to reopen the store: reopen it, or nothing is kept for
+    // the rest of the tab. The rows are already gone and come back from the
+    // next answers.
+    reopenShellCache();
+    throw error;
+  }
   resetObservabilityOnLogout();
 }

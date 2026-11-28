@@ -21,6 +21,9 @@ vi.mock("@repo/hooks", () => ({
   PermissionPreviewProvider: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
+  CachedRosterProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
   FrappClientProvider: ({
     children,
     chapterId,
@@ -121,6 +124,29 @@ describe("FrappProvider chapter-change cache drop", () => {
 
     expect(qc.getQueryData(["members", "chap-1"])).toBeUndefined();
     expect(qc.getQueryData(["channels"])).toBeUndefined();
+  });
+
+  it("deletes the kept shell rows when the active chapter changes (#5049)", async () => {
+    activeChapterId = "chap-1";
+    const qc = makeClient();
+    const { rerender } = setup(qc);
+    localStorage.setItem("frapp.shell.v1|auth-x|chap-1|roster", "{}");
+    localStorage.setItem("frapp.nav.collapsed", "1");
+
+    activeChapterId = "chap-2";
+    await act(async () => {
+      rerender(
+        <QueryClientProvider client={qc}>
+          <FrappProvider>
+            <div />
+          </FrappProvider>
+        </QueryClientProvider>,
+      );
+    });
+
+    expect(localStorage.getItem("frapp.shell.v1|auth-x|chap-1|roster")).toBeNull();
+    expect(localStorage.getItem("frapp.nav.collapsed")).toBe("1");
+    localStorage.clear();
   });
 
   it("has already published the new chapter id before it drops the cache", async () => {

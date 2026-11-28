@@ -4,16 +4,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   chapterId: "chap-1" as string | null,
   offline: false,
+  kept: null as { permissions?: unknown } | null,
+  preview: false,
   read: {
-    data: undefined as { permissions: string[] } | undefined,
+    data: undefined,
     isPending: true,
-    fetchStatus: "fetching" as "fetching" | "paused" | "idle",
+    fetchStatus: "fetching",
     isError: false,
+  } as {
+    data: { permissions: string[] } | undefined;
+    isPending: boolean;
+    fetchStatus: "fetching" | "paused" | "idle";
+    isError: boolean;
+    isLoading?: boolean;
   },
 }));
 
 vi.mock("@repo/hooks", () => ({
   useMyPermissions: () => state.read,
+}));
+vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
+  useShellCached: () => state.kept,
+}));
+vi.mock("@/lib/stores/role-preview-store", () => ({
+  activePreview: (preview: unknown) => preview,
+  useRolePreviewStore: (selector: (s: { preview: unknown }) => unknown) =>
+    selector({ preview: state.preview ? { roleId: "r-1" } : null }),
 }));
 vi.mock("@/lib/providers/network-provider", () => ({
   useNetwork: () => ({ isOffline: state.offline }),
@@ -29,6 +45,8 @@ describe("useNavPermissions (#3854)", () => {
   beforeEach(() => {
     state.chapterId = "chap-1";
     state.offline = false;
+    state.kept = null;
+    state.preview = false;
     state.read = { data: undefined, isPending: true, fetchStatus: "fetching", isError: false };
   });
 
@@ -66,5 +84,43 @@ describe("useNavPermissions (#3854)", () => {
     state.chapterId = null;
     state.offline = true;
     expect(renderHook(() => useNavPermissions()).result.current).toBeUndefined();
+  });
+
+  describe("fromShellCache (#5049)", () => {
+    const loading = () => ({ ...state.read, isLoading: true });
+
+    it("draws the kept permissions while the read is in flight", () => {
+      state.kept = { permissions: ["members:view"] };
+      state.read = loading();
+      expect(
+        renderHook(() => useNavPermissions({ fromShellCache: true })).result
+          .current,
+      ).toEqual(["members:view"]);
+    });
+
+    it("never stands in without the option", () => {
+      state.kept = { permissions: ["members:view"] };
+      state.read = loading();
+      expect(renderHook(() => useNavPermissions()).result.current).toBeUndefined();
+    });
+
+    it("never stands in during a role preview", () => {
+      state.kept = { permissions: ["members:view"] };
+      state.preview = true;
+      state.read = loading();
+      expect(
+        renderHook(() => useNavPermissions({ fromShellCache: true })).result
+          .current,
+      ).toBeUndefined();
+    });
+
+    it("never stands in once the read has failed", () => {
+      state.kept = { permissions: ["members:view"] };
+      state.read = { data: undefined, isPending: false, fetchStatus: "idle", isError: true };
+      expect(
+        renderHook(() => useNavPermissions({ fromShellCache: true })).result
+          .current,
+      ).toBeUndefined();
+    });
   });
 });

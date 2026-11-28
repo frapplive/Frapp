@@ -7,6 +7,7 @@ import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { invalidatePointReads } from "./use-points";
 import { openTaskKeys } from "./use-open-tasks";
 import { taskKeys } from "./use-tasks";
+import { eventsQueryKey } from "./use-events";
 
 /**
  * AI suggestions (#4309, #4313, `spec/behavior/ai.md` § Suggestions): the
@@ -126,7 +127,9 @@ function useDropFromLists() {
       void queryClient.invalidateQueries({ queryKey: openTaskKeys.all });
       // An accepted points change or event (#718) lands on those pages.
       void invalidatePointReads(queryClient);
-      void queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      void queryClient.invalidateQueries({
+        queryKey: eventsQueryKey(chapterId),
+      });
     }
   };
 }
@@ -283,7 +286,9 @@ export function useSendAiSuggestionToNextAgenda() {
     },
     onSuccess: (_outcome, id) => {
       drop([id], false);
-      void queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      void queryClient.invalidateQueries({
+        queryKey: eventsQueryKey(chapterId),
+      });
       void queryClient.invalidateQueries({
         queryKey: ["agenda-suggestions", chapterId],
       });
@@ -316,7 +321,9 @@ export function useUndoAiSuggestionNextAgenda() {
       void queryClient.invalidateQueries({
         queryKey: aiSuggestionKeys.all(chapterId),
       });
-      void queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      void queryClient.invalidateQueries({
+        queryKey: eventsQueryKey(chapterId),
+      });
       void queryClient.invalidateQueries({
         queryKey: ["agenda-suggestions", chapterId],
       });

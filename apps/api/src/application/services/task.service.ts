@@ -10,13 +10,13 @@ import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface'
 import type {
   ITaskRepository,
   TaskListCursor,
-  TaskListFilter,
 } from '#domain/repositories/task.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type {
+  ActivityTaskReads,
   Task,
   TaskGroup,
   TaskGroupCopyState,
@@ -180,31 +180,13 @@ export interface TaskListOptions {
   status?: TaskStatus;
   /** Only tasks this member created. */
   createdBy?: string;
-  /** Leave out tasks assigned to this member. */
-  notAssigneeId?: string;
   /** Only tasks marked done at or after this instant. */
   completedSince?: string;
-  /** `newest` (default) or `longest_waiting`, as the repository orders them. */
-  order?: 'newest' | 'longest_waiting';
   /** Resume after this row (the last of the page before). */
   after?: TaskListCursor;
   /** At most this many rows. */
   limit?: number;
 }
-
-/**
- * {@link TaskListOptions} for {@link TaskService.listRows}, which can also read
- * a member's unconfirmed tasks together with what they finished since
- * (`TaskListFilter.unconfirmedOrCompletedSince`, #5746).
- */
-export type TaskRowListOptions = TaskListOptions &
-  Pick<TaskListFilter, 'unconfirmedOrCompletedSince'> & {
-    /**
-     * `true`: also count every matching row past `limit`, in the same request
-     * (`total`). Otherwise `total` is null unless the read is uncapped.
-     */
-    withTotal?: boolean;
-  };
 
 /**
  * Whether a task is done, for the minutes' checkbox (`doneMarks`), and who
@@ -230,7 +212,7 @@ export type TaskGroupCopyView = TaskGroupCopyState & {
 };
 
 /**
- * One thing a member assigned, as {@link TaskService.listAssignedItems} reads
+ * One thing a member assigned, as {@link TaskService.activityLists} reads
  * it (#5492): a one-person task, or a task for everyone once, with its
  * group's progress, every copy's state and one copy whole.
  */
@@ -250,6 +232,96 @@ export type AssignedTaskItem =
       /** When the group was made. */
       created_at: string;
     };
+
+/** Every task list Activity draws, as {@link TaskService.activityLists} reads them. */
+export interface ActivityTaskLists {
+  /**
+   * The caller's tasks not yet confirmed, and those they marked done since
+   * the week began, confirmed or not; newest first.
+   */
+  own: TaskView[];
+  /** Finished tasks waiting on a confirm, someone else's, longest waiting first. */
+  waiting: TaskView[];
+  /** How many wait in all, past the limit. */
+  waitingTotal: number;
+  /** The newest tasks the caller made, a copy of a group each its own row. */
+  made: TaskView[];
+  /** What the caller assigned that isn't finished, a group counted once. */
+  items: AssignedTaskItem[];
+}
+
+/**
+ * What a member assigned that isn't finished, newest first, at most `limit`,
+ * a task for everyone counted once however many copies it has (#5492): their
+ * one-person tasks not yet confirmed and their groups with a copy not yet
+ * confirmed, each read newest first and capped in SQL, then merged and cut.
+ * A group draws every copy's state and one unconfirmed copy, whole, for what
+ * the copies share (`activity_task_reads`).
+ */
+function assignedItems(
+  reads: Pick<
+    ActivityTaskReads,
+    'singles' | 'made_groups' | 'copy_states' | 'shared'
+  >,
+  summaries: Map<string, TaskGroupSummary>,
+  limit: number,
+  now: Date,
+): AssignedTaskItem[] {
+  type Entry = { kind: 'task'; row: Task } | { kind: 'group'; row: TaskGroup };
+  // Newest first, then the higher id, the order each list was read in.
+  const newest = (a: Entry, b: Entry) =>
+    Date.parse(b.row.created_at) - Date.parse(a.row.created_at) ||
+    b.row.id.localeCompare(a.row.id);
+  const kept = [
+    ...reads.singles.map((row): Entry => ({ kind: 'task', row })),
+    ...reads.made_groups.map((row): Entry => ({ kind: 'group', row })),
+  ]
+    .sort(newest)
+    .slice(0, limit);
+
+  const copiesOf = new Map<string, TaskGroupCopyView[]>();
+  for (const state of reads.copy_states) {
+    if (!state.group_id) continue;
+    const list = copiesOf.get(state.group_id) ?? [];
+    list.push({
+      ...state,
+      status: displayStatusOf(state, now),
+      stored_status: state.status,
+    });
+    copiesOf.set(state.group_id, list);
+  }
+  const sharedOf = new Map(
+    reads.shared.flatMap((row) => (row.group_id ? [[row.group_id, row]] : [])),
+  );
+
+  return kept.flatMap((entry): AssignedTaskItem[] => {
+    if (entry.kind === 'task') {
+      return [
+        {
+          kind: 'task',
+          task: { ...toDisplayStatus(entry.row, now), group: null },
+        },
+      ];
+    }
+    const summary = summaries.get(entry.row.id);
+    const [first, ...rest] = copiesOf.get(entry.row.id) ?? [];
+    const shared = sharedOf.get(entry.row.id);
+    // Read together, so a group with a copy not confirmed has all three; the
+    // guard keeps the item's type honest, and a finished group out.
+    if (!summary || !first || !shared || summary.confirmed >= summary.total) {
+      return [];
+    }
+    return [
+      {
+        kind: 'group',
+        group: summary,
+        copies: [first, ...rest],
+        shared,
+        created_at: entry.row.created_at,
+      },
+    ];
+  });
+}
 
 export interface CreateTaskInput {
   chapter_id: string;
@@ -1157,32 +1229,26 @@ export class TaskService {
   }
 
   /**
-   * {@link list}'s tasks as bare rows, with how many match before `limit`
-   * (#5746): one request for a list that fits a page, where `list` makes an
-   * empty one after it and reads each task's subtasks, photos, series, group
-   * and the open task it was claimed from. For a reader that draws only the
-   * task's own columns, such as Activity; add {@link withGroupSummaries} for
-   * `group`. The same rule as `list`: without `tasks:manage`, only the
-   * caller's own tasks.
+   * {@link list}'s tasks as bare rows (#5746), where `list` also reads each
+   * task's subtasks, photos, series, group and the open task it was claimed
+   * from. For a reader that draws
+   * only the task's own columns, such as the Archive; add
+   * {@link withGroupSummaries} for `group`. The same rule as `list`: without
+   * `tasks:manage`, only the caller's own tasks.
    */
   async listRows(
     chapterId: string,
     userId: string,
     isAdmin: boolean,
-    options: TaskRowListOptions = {},
-  ): Promise<{ tasks: TaskView[]; total: number | null }> {
-    const { withTotal, ...query } = options;
+    query: TaskListOptions = {},
+  ): Promise<TaskView[]> {
     instantOrThrow('before', query.after?.created_at);
-    const { tasks, total } = await this.taskRepo.findByChapterCounted(
-      chapterId,
-      {
-        ...query,
-        // Last, so no option widens a member's read past their own tasks.
-        ...(isAdmin ? {} : { assigneeId: userId }),
-      },
-      { withTotal },
-    );
-    return { tasks: toDisplayStatusList(tasks), total };
+    const tasks = await this.taskRepo.findByChapter(chapterId, {
+      ...query,
+      // Last, so no option widens a member's read past their own tasks.
+      ...(isAdmin ? {} : { assigneeId: userId }),
+    });
+    return toDisplayStatusList(tasks);
   }
 
   /**
@@ -1208,7 +1274,7 @@ export class TaskService {
     isAdmin: boolean,
     options: Pick<
       TaskListOptions,
-      'confirmed' | 'status' | 'createdBy' | 'notAssigneeId' | 'completedSince'
+      'confirmed' | 'status' | 'createdBy' | 'completedSince'
     > = {},
   ): Promise<number> {
     return this.taskRepo.countByChapter(chapterId, {
@@ -1218,108 +1284,52 @@ export class TaskService {
   }
 
   /**
-   * What `createdBy` assigned that isn't finished, newest first, at most
-   * `limit`, a task for everyone counted once however many copies it has
-   * (#5492): their one-person tasks not yet confirmed and their groups with a
-   * copy not yet confirmed, each read newest first and capped in SQL, then
-   * merged and cut. For the groups that made the cut it reads every copy's
-   * state (a few columns each, batched by group and paged, so a group of any
-   * size is read whole), then one unconfirmed copy of each, whole, for what
-   * the copies share; `summarize` adds a read of role and chapter-group names
-   * when a group went to one. No read is made per group. Only for a
-   * `tasks:manage` holder: it reads tasks the caller doesn't hold.
+   * Every task list Activity draws for `userId`, from one request
+   * (`ITaskRepository.readActivityTasks`, #6061), each with its group's
+   * progress as `group`, as {@link list} gives it; `summarize` adds a read of
+   * role and chapter-group names only when a group went to one. `canManage`
+   * is the caller's `tasks:manage`: without it, every list but their own is
+   * empty, since the others hold tasks they don't.
    */
-  async listAssignedItems(
+  async activityLists(
     chapterId: string,
-    createdBy: string,
-    limit: number,
-    now: Date = new Date(),
-  ): Promise<AssignedTaskItem[]> {
-    const [singles, groups] = await Promise.all([
-      this.taskRepo.findByChapter(chapterId, {
-        createdBy,
-        groupless: true,
-        confirmed: false,
-        limit,
-      }),
-      this.taskRepo.findUnfinishedGroupsByCreator(chapterId, createdBy, limit),
-    ]);
-    type Entry =
-      { kind: 'task'; row: Task } | { kind: 'group'; row: TaskGroup };
-    // Newest first, then the higher id, the order each list was read in.
-    const newest = (a: Entry, b: Entry) =>
-      Date.parse(b.row.created_at) - Date.parse(a.row.created_at) ||
-      b.row.id.localeCompare(a.row.id);
-    const kept = [
-      ...singles.map((row): Entry => ({ kind: 'task', row })),
-      ...groups.map((row): Entry => ({ kind: 'group', row })),
-    ]
-      .sort(newest)
-      .slice(0, limit);
-
-    const keptGroups = kept.flatMap((entry) =>
-      entry.kind === 'group' ? [entry.row] : [],
-    );
-    const states =
-      keptGroups.length > 0
-        ? await this.taskRepo.findGroupCopyStates(
-            chapterId,
-            keptGroups.map((group) => group.id),
-          )
-        : [];
-    const copiesOf = new Map<string, TaskGroupCopyView[]>();
-    for (const state of states) {
-      if (!state.group_id) continue;
-      const list = copiesOf.get(state.group_id) ?? [];
-      list.push({
-        ...state,
-        status: displayStatusOf(state, now),
-        stored_status: state.status,
-      });
-      copiesOf.set(state.group_id, list);
+    userId: string,
+    canManage: boolean,
+    options: {
+      /** The instant the week began: `own` also holds what was done since. */
+      weekStart: Date;
+      /** At most this many rows in each list but `own`. */
+      limit: number;
+      now?: Date;
+    },
+  ): Promise<ActivityTaskLists> {
+    const { weekStart, limit, now = new Date() } = options;
+    const reads = await this.taskRepo.readActivityTasks(chapterId, {
+      userId,
+      canManage,
+      weekStart: weekStart.toISOString(),
+      limit,
+    });
+    const groups = new Map<string, TaskGroup>();
+    for (const group of [...reads.row_groups, ...reads.made_groups]) {
+      groups.set(group.id, group);
     }
-    // One copy not yet confirmed per group, read whole for what they share.
-    const sharedIds = [...copiesOf.values()].flatMap((copies) => {
-      const open = copies.find((copy) => !copy.points_awarded);
-      return open ? [open.id] : [];
-    });
-    const [summaries, sharedRows] = await Promise.all([
-      this.summarize(chapterId, keptGroups, states),
-      sharedIds.length > 0
-        ? this.taskRepo.findByIds(chapterId, sharedIds)
-        : Promise.resolve([]),
-    ]);
-    const sharedOf = new Map(
-      sharedRows.flatMap((row) => (row.group_id ? [[row.group_id, row]] : [])),
+    const summaries = await this.summarize(
+      chapterId,
+      [...groups.values()],
+      reads.copy_states,
     );
-
-    return kept.flatMap((entry): AssignedTaskItem[] => {
-      if (entry.kind === 'task') {
-        return [
-          {
-            kind: 'task',
-            task: { ...toDisplayStatus(entry.row, now), group: null },
-          },
-        ];
-      }
-      const summary = summaries.get(entry.row.id);
-      const [first, ...rest] = copiesOf.get(entry.row.id) ?? [];
-      const shared = sharedOf.get(entry.row.id);
-      // Its last open copy confirmed (or deleted) between the reads: it is
-      // finished now, as the SQL filter would have found.
-      if (!summary || !first || !shared || summary.confirmed >= summary.total) {
-        return [];
-      }
-      return [
-        {
-          kind: 'group',
-          group: summary,
-          copies: [first, ...rest],
-          shared,
-          created_at: entry.row.created_at,
-        },
-      ];
+    const withGroup = (task: Task): TaskView => ({
+      ...toDisplayStatus(task, now),
+      group: task.group_id ? (summaries.get(task.group_id) ?? null) : null,
     });
+    return {
+      own: reads.own.map(withGroup),
+      waiting: reads.waiting.map(withGroup),
+      waitingTotal: reads.waiting_total,
+      made: reads.made.map(withGroup),
+      items: assignedItems(reads, summaries, limit, now),
+    };
   }
 
   async create(input: CreateTaskInput): Promise<CreateTaskResult> {

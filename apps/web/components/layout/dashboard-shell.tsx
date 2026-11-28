@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
+import { useShellCached } from "@/lib/shell-cache/shell-cache-sync";
+import { isModuleEnabled as moduleIsOn } from "@repo/validation";
 import {
   Sheet,
   SheetContent,
@@ -319,12 +321,25 @@ function Shell({
   const chatMounted = onChatRoute || desktop !== false;
   // `undefined` hides gated rows until the read answers; `null` means the
   // offline dashboard can't ask, and shows them (`useNavPermissions`, #3854).
-  const permissions = useNavPermissions();
+  // Drawn from the last answer while the read is out (#5049): nav rows and
+  // the page title only, never a decision.
+  const permissions = useNavPermissions({ fromShellCache: true });
   // Module gating: items tied to a disabled module hide once the chapter read
   // resolves. Undefined while loading means "do not gate", so nothing flashes
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
-  const isModuleEnabled = useChapterModuleGate();
+  // While that read is out, the modules this browser last saw stand in, so
+  // a row drawn from kept permissions isn't one a switched-off module then
+  // takes back (#5049).
+  const liveModuleGate = useChapterModuleGate();
+  const keptModules = useShellCached<{ enabled_modules?: unknown }>("chapter")
+    ?.enabled_modules;
+  const keptModuleGate = useMemo(() => {
+    if (!keptModules || typeof keptModules !== "object") return undefined;
+    const modules = keptModules as Record<string, boolean>;
+    return (moduleKey: string) => moduleIsOn(modules, moduleKey);
+  }, [keptModules]);
+  const isModuleEnabled = liveModuleGate ?? keptModuleGate;
   // A council's rows and titles (#5933).
   const tenantKind = useTenantKind();
   // A title named in the chapter's own word (Recruitment's Rush / Intake).

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { eventsQueryKey } from "./use-events";
 
 /** One of the chapter's event types, as `GET /v1/event-types` serves it. */
 export type EventType = components["schemas"]["EventTypeDto"];
@@ -103,7 +104,7 @@ export function useDeleteEventType() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: eventTypesKey(chapterId) }),
-        queryClient.invalidateQueries({ queryKey: ["events", chapterId] }),
+        queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) }),
       ]),
   });
 }
