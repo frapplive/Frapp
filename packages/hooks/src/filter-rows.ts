@@ -4,8 +4,9 @@ import { matchesWordStarts, normalizeWords } from "./fuzzy-match";
  * One filter of a list, as both apps draw it (rulebook § 9,
  * `spec/ui/design-system/components.md` § 13 Filter bar): web's `FilterMenu`
  * gives each a menu row that opens its options, and the phone's `FilterSheet`
- * gives each a sheet row that opens them in place. A screen builds its rows
- * once, in one order, and either app draws them.
+ * gives each a sheet row that opens them in place. A screen on both apps
+ * builds its rows in one shared function (the Directory's is
+ * `directoryFilterRows`), so either app draws the same rows in one order.
  */
 export type FilterRow = {
   key: string;

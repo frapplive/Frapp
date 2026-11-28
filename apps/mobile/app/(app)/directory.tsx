@@ -73,7 +73,8 @@ import {
   FilterSheet,
   type FilterSheetFilter,
 } from "@/components/filter-sheet";
-import { anyFilterRow, filtersOn } from "@repo/hooks/filter-rows";
+import { filtersOn } from "@repo/hooks/filter-rows";
+import { directoryFilterRows } from "@repo/hooks/directory-filter-rows";
 import {
   PHONE_REACH_FILTER_OPTIONS,
   PHONE_REACH_LABEL,
@@ -91,7 +92,6 @@ import {
   graduationYearOptions,
   NO_ACTIVES_FILTER,
   activesFilterRoles,
-  STATUS_OPTIONS,
   type ActivesFilter,
   type ActivesStatus,
 } from "@/lib/directory/actives-filter";
@@ -354,20 +354,18 @@ export default function DirectoryScreen() {
     [groupsQuery.data],
   );
   // A pick that no longer exists reads as unpicked (see `effectiveActivesFilter`).
-  const activesFilter = useMemo(
-    () =>
-      effectiveActivesFilter(activesFilterPicks, {
-        roleIds: new Set([
-          ...filterRoles.map((role) => role.id),
-          ...(offersNoBaseRole ? [NO_BASE_ROLE_FILTER] : []),
-        ]),
-        groupIds: new Set(filterGroups.map((group) => group.id)),
-        years: yearOptions,
-        classIds: new Set(classNames.keys()),
-        phoneReach: showsPhoneReach,
-      }),
+  const knownPicks = useMemo(
+    () => ({
+      roleIds: new Set([
+        ...filterRoles.map((role) => role.id),
+        ...(offersNoBaseRole ? [NO_BASE_ROLE_FILTER] : []),
+      ]),
+      groupIds: new Set(filterGroups.map((group) => group.id)),
+      years: yearOptions,
+      classIds: new Set(classNames.keys()),
+      phoneReach: showsPhoneReach,
+    }),
     [
-      activesFilterPicks,
       filterRoles,
       filterGroups,
       yearOptions,
@@ -375,6 +373,10 @@ export default function DirectoryScreen() {
       showsPhoneReach,
       offersNoBaseRole,
     ],
+  );
+  const activesFilter = useMemo(
+    () => effectiveActivesFilter(activesFilterPicks, knownPicks),
+    [activesFilterPicks, knownPicks],
   );
   const groupMemberIds = useMemo(() => {
     const group = (groupsQuery.data ?? []).find(
@@ -450,18 +452,20 @@ export default function DirectoryScreen() {
     "";
   const standingTotalOf = standings.totalOf;
 
-  // The Filters sheet's rows, in the order web's Directory menu lists them
-  // (#5739): Role, Group, Graduation year, pledge class, Status, Phone app,
-  // then Sort and a standing's Period. A filter with nothing to offer is left
-  // out, as on web.
+  // The Filters sheet's rows, the ones web's Directory menu lists, built once
+  // for both apps (`@repo/hooks/directory-filter-rows`, #5739).
+  // A write lands on the filter as it reads now, so a pick hidden as stale
+  // (a group that emptied, a role deleted) goes with any change or Clear all
+  // instead of coming back when its option does. Functional, so Clear all's
+  // writes, one per row, compose.
   const setFilter = (patch: Partial<ActivesFilter>) =>
-    setActivesFilterPicks((picks) => ({ ...picks, ...patch }));
+    setActivesFilterPicks((picks) => ({
+      ...effectiveActivesFilter(picks, knownPicks),
+      ...patch,
+    }));
   const rolesReady = rolesQuery.data !== undefined;
-  const roleRow: FilterSheetFilter = {
-    ...anyFilterRow({
-      key: "role",
-      label: "Role",
-      anyLabel: "Any role",
+  const activesFilters: FilterSheetFilter[] = directoryFilterRows({
+    role: {
       options: [
         // "No base role" (#5802) carries no colour, so it takes no dot.
         ...(offersNoBaseRole
@@ -475,115 +479,78 @@ export default function DirectoryScreen() {
       ],
       value: activesFilter.roleId,
       onChange: (roleId) => setFilter({ roleId }),
-    }),
-    // Data first: a failed refresh keeps the list it already read.
-    optionsNote: rolesReady
-      ? undefined
-      : rolesQuery.isError
-        ? {
-            text: "Couldn't load roles.",
-            onRetry: () => void rolesQuery.refetch(),
-          }
-        : { text: "Loading roles…" },
-    emptyNote: "This chapter has no roles yet.",
-  };
-  const activesFilters: FilterSheetFilter[] = [
-    roleRow,
-    ...(filterGroups.length > 0
-      ? [
-          anyFilterRow({
-            key: "group",
-            label: "Group",
-            anyLabel: "Any group",
-            options: filterGroups.map((g) => ({ value: g.id, label: g.name })),
-            value: activesFilter.groupId,
-            onChange: (groupId) => setFilter({ groupId }),
-          }),
-        ]
-      : []),
-    ...(yearOptions.length > 0
-      ? [
-          anyFilterRow({
-            key: "year",
-            label: "Graduation year",
-            anyLabel: "Any year",
-            options: yearOptions.map((year) => ({
-              value: String(year),
-              label: String(year),
-            })),
-            value:
-              activesFilter.graduationYear === null
-                ? null
-                : String(activesFilter.graduationYear),
-            onChange: (year) =>
-              setFilter({
-                graduationYear: year === null ? null : Number(year),
-              }),
-          }),
-        ]
-      : []),
-    ...(pledgeClasses && pledgeClasses.length > 0
-      ? [
-          anyFilterRow({
-            key: "class",
-            label: classTerm,
-            anyLabel: "Any",
-            options: pledgeClasses.map((c) => ({ value: c.id, label: c.name })),
-            value: activesFilter.pledgeClassId,
-            onChange: (pledgeClassId) => setFilter({ pledgeClassId }),
-          }),
-        ]
-      : []),
-    anyFilterRow({
-      key: "status",
-      label: "Status",
-      anyLabel: "Any status",
-      options: STATUS_OPTIONS,
+    },
+    group: {
+      options: filterGroups.map((g) => ({ value: g.id, label: g.name })),
+      value: activesFilter.groupId,
+      onChange: (groupId) => setFilter({ groupId }),
+    },
+    year: {
+      options: yearOptions.map((year) => ({
+        value: String(year),
+        label: String(year),
+      })),
+      value:
+        activesFilter.graduationYear === null
+          ? null
+          : String(activesFilter.graduationYear),
+      onChange: (year) =>
+        setFilter({ graduationYear: year === null ? null : Number(year) }),
+    },
+    pledgeClass: {
+      label: classTerm,
+      options: (pledgeClasses ?? []).map((c) => ({
+        value: c.id,
+        label: c.name,
+      })),
+      value: activesFilter.pledgeClassId,
+      onChange: (pledgeClassId) => setFilter({ pledgeClassId }),
+    },
+    status: {
       value: activesFilter.status,
       onChange: (status) =>
         setFilter({ status: status as ActivesStatus | null }),
-    }),
-    ...(showsPhoneReach
-      ? [
-          anyFilterRow({
-            key: "phone-reach",
-            label: PHONE_REACH_LABEL,
-            anyLabel: "Any",
-            options: PHONE_REACH_FILTER_OPTIONS,
-            value: activesFilter.phoneReach,
-            onChange: (phoneReach) =>
-              setFilter({ phoneReach: phoneReach as PhoneReachFilter | null }),
-          }),
-        ]
-      : []),
-    ...(sortOptions.length > 1
-      ? [
-          {
-            key: "sort",
-            label: "Sort",
-            options: sortOptions,
-            value: effectiveSort,
-            anyValue: "name",
-            onChange: (value: string) => setSort(value as DirectorySort),
-            isSort: true,
-          },
-        ]
-      : []),
-    // A standing ranks over a period (#5950), picked under Sort.
-    ...(standingsMetric
-      ? [
-          {
-            key: "period",
-            label: "Period",
-            options: standings.windowOptions,
-            value: standings.window,
-            anyValue: standings.window,
-            onChange: setStandingsWindow,
-            isSort: true,
-          },
-        ]
-      : []),
-  ];
+    },
+    phoneReach: showsPhoneReach
+      ? {
+          label: PHONE_REACH_LABEL,
+          options: PHONE_REACH_FILTER_OPTIONS,
+          value: activesFilter.phoneReach,
+          onChange: (phoneReach) =>
+            setFilter({ phoneReach: phoneReach as PhoneReachFilter | null }),
+        }
+      : null,
+    sort: {
+      options: sortOptions,
+      value: effectiveSort,
+      defaultValue: "name",
+      onChange: (value) => setSort(value as DirectorySort),
+    },
+    period: standingsMetric
+      ? {
+          options: standings.windowOptions,
+          value: standings.window,
+          onChange: setStandingsWindow,
+        }
+      : null,
+  }).map((row) =>
+    // Until `GET /v1/roles` answers, the Role list is empty for want of a
+    // read, so its options say so instead of listing only "Any role".
+    row.key === "role"
+      ? {
+          ...row,
+          optionsNote: rolesReady
+            ? undefined
+            : rolesQuery.isError
+              ? {
+                  text: "Couldn't load roles.",
+                  onRetry: () => void rolesQuery.refetch(),
+                }
+              : { text: "Loading roles…" },
+          emptyNote: "This chapter has no roles yet.",
+        }
+      : row,
+  );
   const activesFilterCount = filtersOn(activesFilters).length;
   // A standing and its period stay in sight with the sheet closed, as web's
   // count line names them.

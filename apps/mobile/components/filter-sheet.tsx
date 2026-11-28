@@ -54,7 +54,7 @@ export type FilterSheetFilter = FilterRow & {
    * "Any".
    */
   optionsNote?: { text: string; onRetry?: () => void };
-  /** The one line its options show when the list is truly empty. */
+  /** The one line under its "any" row when it has no other options. */
   emptyNote?: string;
 };
 
@@ -97,12 +97,16 @@ export const FilterSheet = forwardRef<
   const [query, setQuery] = useState("");
 
   // A row that went away while open (a standing's Period once the sort
-  // changes) drops back to the rows.
+  // changes, a Group whose groups emptied) drops back to the rows, its typed
+  // search with it, so the next row opens whole and the same key coming back
+  // doesn't reopen it.
   const open = filters.find((f) => f.key === openKey) ?? null;
   const back = () => {
     setOpenKey(null);
     setQuery("");
   };
+  // Adjusted while rendering, React's pattern for state that follows props.
+  if (openKey !== null && open === null) back();
   // Back and VoiceOver's escape step out of a row's options to the rows, and
   // out of the rows close the sheet.
   const backOrClose = open ? back : closeSheet;
@@ -284,7 +288,7 @@ function FilterOptions({
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
-              // Return picks the one match left, as web's Enter picks the first.
+              // Return picks the first match, as web's Enter does.
               onSubmitEditing={() => {
                 const first = shown[0];
                 if (hasFilterQuery(query) && first) onPick(first.value);
@@ -294,6 +298,12 @@ function FilterOptions({
           ) : null}
         </View>
       }
+      ListFooterComponent={
+        // A list with nothing but its "any" row says why in one line.
+        !pending && choices.length === 0 && filter.emptyNote ? (
+          <Text style={styles.empty}>{filter.emptyNote}</Text>
+        ) : null
+      }
       ListEmptyComponent={
         note?.onRetry ? (
           <InlineNote action={{ label: "Retry", onPress: note.onRetry }}>
@@ -301,11 +311,7 @@ function FilterOptions({
           </InlineNote>
         ) : (
           <Text style={styles.empty}>
-            {note
-              ? note.text
-              : choices.length === 0 && filter.emptyNote
-                ? filter.emptyNote
-                : `No matches for "${query.trim()}".`}
+            {note ? note.text : `No matches for "${query.trim()}".`}
           </Text>
         )
       }

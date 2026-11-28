@@ -96,6 +96,10 @@ const state = vi.hoisted(() => ({
   // `GET /v1/roles`, for the Actives filters (#3971).
   roles: [] as unknown[],
   rolesError: false,
+  // `GET /v1/roles` not answered yet, while the rest has.
+  rolesPending: false,
+  // `GET /v1/groups`, for the Group filter.
+  groups: [] as { id: string; name: string; member_ids: string[] }[],
   // `GET /v1/members` failing with nothing cached (#4135).
   membersError: false,
   // The Non-chapter business roles the viewer can pick (#4958).
@@ -140,8 +144,17 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
           isFetching: false,
           refetch: refetches.roles,
         }
-      : read(state.roles, refetches.roles),
-  useGroups: () => ({ data: [] }),
+      : state.rolesPending
+        ? {
+            data: undefined,
+            isPending: true,
+            isError: false,
+            isSuccess: false,
+            isFetching: true,
+            refetch: refetches.roles,
+          }
+        : read(state.roles, refetches.roles),
+  useGroups: () => ({ data: state.groups }),
   useMembers: () =>
     state.membersError
       ? {
@@ -438,6 +451,8 @@ beforeEach(() => {
   state.vocabulary = undefined;
   state.roles = [];
   state.rolesError = false;
+  state.rolesPending = false;
+  state.groups = [];
   state.modules = { points: false, hours: false };
   state.boards = {};
   state.standingsError = false;
@@ -765,6 +780,79 @@ describe("s13's Actives filters (#3971)", () => {
     expect(filterSheet(tree).showLabel).toBe("Show 2 members");
     pick(tree, { roleId: "r-rush" });
     expect(filterSheet(tree).showLabel).toBe("Show 1 member");
+  });
+
+  it("says the role list is still loading in the Role row's options", () => {
+    state.rolesPending = true;
+    const note = sheetRow(render(), "role")!.optionsNote!;
+    expect(note).toEqual({ text: "Loading roles…" });
+  });
+
+  it("lists every row in web's order when each has something to offer", () => {
+    state.classes = [{ id: "pc-alpha", name: "Alpha" }];
+    state.groups = [{ id: "g-house", name: "In house", member_ids: ["u-2"] }];
+    state.modules = { points: true, hours: false };
+    state.phoneReach = { scope: "chapter", byUserId: new Map() };
+    const tree = render();
+    expect(filterSheet(tree).filters.map((row) => row.label)).toEqual([
+      "Role",
+      "Group",
+      "Graduation year",
+      "Pledge class",
+      "Status",
+      "Phone app",
+      "Sort",
+    ]);
+  });
+
+  it("narrows by group, offering only groups with members", () => {
+    state.groups = [
+      { id: "g-house", name: "In house", member_ids: ["u-2"] },
+      { id: "g-empty", name: "Empty", member_ids: [] },
+    ];
+    const tree = render();
+    expect(sheet(tree).filter.groupId).toBeNull();
+    expect(
+      sheetRow(tree, "group")!
+        .options.filter((o) => o.value !== ANY_FILTER)
+        .map((o) => o.label),
+    ).toEqual(["In house"]);
+    pick(tree, { groupId: "g-house" });
+    expect(listed(tree)).toEqual(["Andre Silva"]);
+  });
+
+  it("drops a stale pick for good on Clear all, so it can't come back with its option", () => {
+    state.groups = [{ id: "g-house", name: "In house", member_ids: ["u-2"] }];
+    const tree = render();
+    pick(tree, { groupId: "g-house", status: "active" });
+    // The group empties: its pick reads as unpicked.
+    state.groups = [{ id: "g-house", name: "In house", member_ids: [] }];
+    act(() =>
+      tree.update(
+        <FrappThemeProvider>
+          <DirectoryScreen />
+        </FrappThemeProvider>,
+      ),
+    );
+    expect(sheet(tree).filter.groupId).toBeNull();
+    // Clear all, through the rows that are on.
+    act(() => {
+      for (const row of filterSheet(tree).filters) {
+        if (!row.isSort && row.value !== row.anyValue)
+          row.onChange(row.anyValue);
+      }
+    });
+    // The group gains its member back: the cleared filter stays cleared.
+    state.groups = [{ id: "g-house", name: "In house", member_ids: ["u-2"] }];
+    act(() =>
+      tree.update(
+        <FrappThemeProvider>
+          <DirectoryScreen />
+        </FrappThemeProvider>,
+      ),
+    );
+    expect(sheet(tree).filter.groupId).toBeNull();
+    expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
   });
 
   it("says the role list hasn't answered in the Role row's options", () => {

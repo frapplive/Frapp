@@ -188,6 +188,21 @@ describe("FilterMenu", () => {
     expect(shownRoles()).not.toContain("Any");
   });
 
+  // Punctuation alone, on the way to "(Exec)", is no query yet: the list stays
+  // whole with Any first, and Enter picks nothing (#5739, the phone's rule).
+  it("treats punctuation alone as no query", async () => {
+    const user = userEvent.setup();
+    render(<Harness roleList={LONG_ROLES} />);
+    const field = await openRoleSearch(user);
+    await user.type(field, "(");
+    expect(shownRoles()[0]).toBe("Any");
+    expect(shownRoles()).toHaveLength(LONG_ROLES.length + 1);
+    await user.keyboard("{Enter}");
+    expect(
+      screen.queryByRole("button", { name: /^Remove filter Role/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("counts only real options toward the search threshold", async () => {
     const user = userEvent.setup();
     // Eight roles plus Any is still a short list.

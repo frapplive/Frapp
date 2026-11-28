@@ -28,6 +28,10 @@ import {
 } from "./filter-sheet";
 import { ListRow } from "./list-section";
 import { Chip } from "./filter-chips";
+import { SheetBackToClose } from "./sheet-scaffold";
+
+/** The sheet's own `dismiss`, as gorhom's modal would hand its ref. */
+const dismiss = vi.fn();
 
 const ROLES = [
   { value: "r-member", label: "Member", color: null },
@@ -45,6 +49,7 @@ function Harness({
   roleNote?: FilterSheetFilter["optionsNote"];
   onState?: (state: Record<string, string | null>) => void;
 }) {
+  const sheetRef = React.useRef(null);
   const [role, setRole] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState("name");
@@ -89,6 +94,7 @@ function Harness({
   return (
     <>
       <FilterSheet
+        ref={sheetRef}
         title="Filter actives"
         filters={filters}
         showLabel="Show 2 members"
@@ -105,6 +111,7 @@ function render(props: React.ComponentProps<typeof Harness> = {}) {
       <FrappThemeProvider>
         <Harness {...props} />
       </FrappThemeProvider>,
+      { createNodeMock: () => ({ dismiss }) },
     );
   });
   return tree;
@@ -283,7 +290,100 @@ describe("FilterSheet (#5739)", () => {
     expect(state).toEqual({ role: null, status: null, sort: "points" });
   });
 
-  it("ends in one pill that names what the list holds", () => {
+  it("lists Clear all last, after the sort, once a filter is on", () => {
+    const tree = render();
+    open(tree, "Status");
+    act(() => option(tree, "active").props.onPress());
+    expect(rows(tree).map((r) => r.label)).toEqual([
+      "Role",
+      "Status",
+      "Sort",
+      "Clear all",
+    ]);
+  });
+
+  it("steps Android's back out of a row's options to the rows, and closes from the rows", () => {
+    dismiss.mockClear();
+    const tree = render();
+    const back = () =>
+      tree.root.findByType(SheetBackToClose).props.onClose as () => void;
+    open(tree, "Status");
+    act(() => back()());
+    expect(rows(tree).map((r) => r.label)).toContain("Status");
+    expect(dismiss).not.toHaveBeenCalled();
+    act(() => back()());
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops back to the rows, its search cleared, when the open row goes away", () => {
+    const many = (prefix: string) =>
+      Array.from({ length: 10 }, (_, i) => ({
+        value: `${prefix}-${i}`,
+        label: `${prefix} ${i}`,
+      }));
+    const rowFor = (key: string, label: string) =>
+      anyFilterRow({
+        key,
+        label,
+        anyLabel: `Any ${key}`,
+        options: many(label),
+        value: null,
+        onChange: () => {},
+      });
+    function Host({ groupShown }: { groupShown: boolean }) {
+      return (
+        <FilterSheet
+          title="Filter actives"
+          showLabel="Show 2 members"
+          filters={[
+            ...(groupShown ? [rowFor("group", "Group")] : []),
+            rowFor("role", "Role"),
+          ]}
+        />
+      );
+    }
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <Host groupShown />
+        </FrappThemeProvider>,
+      );
+    });
+    open(tree, "Group");
+    const field = inHeader(
+      tree,
+      (p) => p.accessibilityLabel === "Search group",
+    )!;
+    act(() => (field.onChangeText as (t: string) => void)("group 3"));
+    expect(shown(tree)).toEqual(["Group-3"]);
+
+    // The groups empty while it's open: back to the rows.
+    act(() =>
+      tree.update(
+        <FrappThemeProvider>
+          <Host groupShown={false} />
+        </FrappThemeProvider>,
+      ),
+    );
+    expect(rows(tree).map((r) => r.label)).toEqual(["Role"]);
+    // The next row opens whole, Any first, not narrowed by "group 3".
+    open(tree, "Role");
+    expect(shown(tree)[0]).toBe("any");
+    expect(shown(tree)).toHaveLength(11);
+  });
+
+  it("lists a no-options note under the any row", () => {
+    const tree = render({ roles: [] });
+    open(tree, "Role");
+    expect(shown(tree)).toEqual(["any"]);
+    const footer = optionsList(tree).props
+      .ListFooterComponent as React.ReactElement<{ children: string }>;
+    expect(footer.props.children).toBe("This chapter has no roles yet.");
+  });
+
+  it("ends in one pill that names what the list holds, and closes the sheet", () => {
+    dismiss.mockClear();
     const tree = render();
     const modal = tree.root.find(
       (node) => (node.type as unknown) === "BottomSheetModal",
@@ -293,9 +393,13 @@ describe("FilterSheet (#5739)", () => {
         children: React.ReactElement<{ label: string }>;
       }>;
     }>;
-    expect(footer.props.children.props.children.props.label).toBe(
-      "Show 2 members",
-    );
+    const pill = footer.props.children.props.children as React.ReactElement<{
+      label: string;
+      onPress: () => void;
+    }>;
+    expect(pill.props.label).toBe("Show 2 members");
+    act(() => pill.props.onPress());
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });
 

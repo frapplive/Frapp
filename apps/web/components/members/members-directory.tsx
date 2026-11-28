@@ -42,7 +42,8 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilterChip } from "@/components/shared/filter-chip";
-import { anyFilterRow, type FilterRow } from "@repo/hooks/filter-rows";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { directoryFilterRows } from "@repo/hooks/directory-filter-rows";
 import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { Badge } from "@/components/ui/badge";
 import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
@@ -201,11 +202,6 @@ const SORT_FROM_PARAM: Readonly<Record<string, SortValue>> = {
 
 const DEFAULT_SORT: SortValue = "name:asc";
 
-const STATUS_OPTIONS = [
-  { value: "active", label: "Active" },
-  { value: "pending", label: "Pending" },
-] as const;
-
 function parseSort(value: SortValue): { key: SortKey; dir: SortDir } {
   const [key, dir] = value.split(":");
   return { key: key as SortKey, dir: dir as SortDir };
@@ -284,7 +280,7 @@ export function MembersDirectory() {
   // List or Grid (#4175), picked in the Directory's tab row.
   const [layout] = useListLayout("directory");
   const [query, setQuery] = useState("");
-  // `null` is "any" (`anyFilterRow` below draws it as the menu's first row).
+  // `null` is "any" (`directoryFilterRows` draws it as the menu's first row).
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [cohortFilter, setCohortFilter] = useState<string | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(null);
@@ -646,100 +642,58 @@ export function MembersDirectory() {
     standings.windowOptions.find((o) => o.value === standings.window)?.label ??
     "";
 
-  // The toolbar's filters, in the order the chips stood (#5739): Role, Group,
-  // Graduation year, pledge class, Status, phone reach, then Sort and a
-  // standing's Period. A filter with nothing to offer is left out, as its
-  // chip was.
-  const filters: FilterRow[] = [
-    anyFilterRow({
-      key: "role",
-      label: "Role",
-      anyLabel: "Any role",
+  // The Filter menu's rows, the ones the phone's Filters sheet lists, built
+  // once for both apps (`@repo/hooks/directory-filter-rows`, #5739).
+  const filters: FilterRow[] = directoryFilterRows({
+    role: {
       options: filterRoleChipOptions,
       value: effectiveRoleFilter,
       onChange: setRoleFilter,
-    }),
-    ...(groupChipOptions.length > 0
-      ? [
-          anyFilterRow({
-            key: "group",
-            label: "Group",
-            anyLabel: "Any group",
-            options: groupChipOptions,
-            value: effectiveGroupFilter,
-            onChange: setGroupFilter,
-          }),
-        ]
-      : []),
-    anyFilterRow({
-      key: "cohort",
-      label: "Graduation year",
-      anyLabel: "Any year",
+    },
+    group: {
+      options: groupChipOptions,
+      value: effectiveGroupFilter,
+      onChange: setGroupFilter,
+    },
+    year: {
       options: cohortChipOptions,
       value: effectiveCohortFilter,
       onChange: setCohortFilter,
-    }),
-    // Separate from graduation year: one pledge class can span several
-    // (#3939, #3941). The chapter's own word, in its own order, and absent
-    // for a chapter that keeps no classes.
-    ...(classChipOptions.length > 0
-      ? [
-          anyFilterRow({
-            key: "class",
-            label: vocab("class", chapterWords),
-            anyLabel: "Any",
-            options: classChipOptions,
-            value: effectiveClassFilter,
-            onChange: setClassFilter,
-          }),
-        ]
-      : []),
-    anyFilterRow({
-      key: "status",
-      label: "Status",
-      anyLabel: "Any status",
-      options: STATUS_OPTIONS,
+    },
+    pledgeClass: {
+      label: vocab("class", chapterWords),
+      options: classChipOptions,
+      value: effectiveClassFilter,
+      onChange: setClassFilter,
+    },
+    status: {
       value: statusFilter,
       onChange: (value) =>
         setStatusFilter(value as "active" | "pending" | null),
-    }),
-    ...(showsPhoneReach
-      ? [
-          anyFilterRow({
-            key: "phone-reach",
-            label: PHONE_REACH_LABEL,
-            anyLabel: "Any",
-            options: PHONE_REACH_FILTER_OPTIONS,
-            value: effectivePhoneReachFilter,
-            onChange: (value) =>
-              setPhoneReachFilter(value as PhoneReachFilter | null),
-          }),
-        ]
-      : []),
-    {
-      key: "sort",
-      label: "Sort",
+    },
+    phoneReach: showsPhoneReach
+      ? {
+          label: PHONE_REACH_LABEL,
+          options: PHONE_REACH_FILTER_OPTIONS,
+          value: effectivePhoneReachFilter,
+          onChange: (value) =>
+            setPhoneReachFilter(value as PhoneReachFilter | null),
+        }
+      : null,
+    sort: {
       options: sortOptions,
       value: effectiveSort,
-      anyValue: DEFAULT_SORT,
+      defaultValue: DEFAULT_SORT,
       onChange: (value) => setSort(value as SortValue),
-      isSort: true,
     },
-    // A standing ranks over a period (#5950), picked under Sort.
-    ...(standingsMetric
-      ? [
-          {
-            key: "period",
-            label: "Period",
-            options: standings.windowOptions,
-            value: standings.window,
-            anyValue: standings.window,
-            onChange: setStandingsWindow,
-            isSort: true,
-          },
-        ]
-      : []),
-  ];
+    period: standingsMetric
+      ? {
+          options: standings.windowOptions,
+          value: standings.window,
+          onChange: setStandingsWindow,
+        }
+      : null,
+  });
 
   // A standing and its period stay in sight with the Filter menu closed, on
   // the count line, as the sort chip named them until #5739.
