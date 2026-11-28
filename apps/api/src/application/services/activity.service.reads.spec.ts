@@ -272,19 +272,30 @@ function load(permissions: string[]) {
     listBlockedUserIds: stub([]),
     getEffectivePermissions: stub(permissions),
     getAlumniRoleId: stub('role-alumni'),
+    // The page read (`activity_page_reads`): the chat cards, the caller's
+    // reminders, snoozes and unread start, in one request (#6061 step 2).
+    readPage: stub({
+      polls: [],
+      own_polls: [],
+      signups: [],
+      forms: [],
+      reminders: [],
+      snoozes: [],
+      unread_since: null,
+    }),
+    // The Archive's poll scans.
     findCardsByChapter: stub([]),
     findActionsOnMessages: stub([]),
     findAllActionsOnMessages: stub([]),
     linksListFor: stub([]),
-    remindersListFor: stub([]),
     membersByChapter: stub([]),
     findByUserAndChapter: stub({ user_id: ME, role_ids: ['role-member'] }),
     findByUserForEvents: stub([]),
     findAnswered: stub([]),
-    findUnreadStart: stub(null),
     findReads: stub([]),
-    findSnoozes: stub([]),
   };
+  // Presents the rows the page read returned: no read of its own.
+  const remindersListFor = stub([]);
   const service = new ActivityService(
     taskService,
     { findByChapterFiltered: reads.findByChapterFiltered } as never,
@@ -300,7 +311,7 @@ function load(permissions: string[]) {
       getAlumniRoleId: reads.getAlumniRoleId,
     } as never,
     { listFor: reads.linksListFor } as never,
-    { listFor: reads.remindersListFor } as never,
+    { listFor: remindersListFor } as never,
     { findCardsByChapter: reads.findCardsByChapter } as never,
     {
       findActionsOnMessages: reads.findActionsOnMessages,
@@ -313,9 +324,8 @@ function load(permissions: string[]) {
     } as never,
     { findByUserForEvents: reads.findByUserForEvents } as never,
     {
-      findUnreadStart: reads.findUnreadStart,
+      readPage: reads.readPage,
       findReads: reads.findReads,
-      findSnoozes: reads.findSnoozes,
     } as never,
     { findAnswered: reads.findAnswered } as never,
     { readersOf: jest.fn() } as never,
@@ -336,6 +346,7 @@ function load(permissions: string[]) {
     harness,
     archive: () => service.getArchive(CHAPTER_A, ME, enabled, { now: NOW }),
     run: () => service.getActivity(CHAPTER_A, ME, enabled, { now: NOW }),
+    readPage: reads.readPage,
     get taskRequests() {
       return harness.ops.length + harness.rpcCalls.length;
     },
@@ -378,7 +389,10 @@ describe('ActivityService reads per load (#5746)', () => {
         p_limit: 25,
       },
     });
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    // 15 before #6061 step 2: the four card scans, the reminders, the
+    // snoozes and the unread start are one page read now.
+    expect(page.taskRequests + page.otherReads).toBe(9);
+    expect(page.readPage).toHaveBeenCalledTimes(1);
     // What the page shows is what it showed before.
     expect(
       view.needs_you.tasks.map((task) => [task.title, task.group?.total]),
@@ -415,7 +429,7 @@ describe('ActivityService reads per load (#5746)', () => {
     // Their tasks with this week's done ones, and the group, in one call
     // that reads nothing of anyone else's.
     expect(page.taskRequests).toBe(1);
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    expect(page.taskRequests + page.otherReads).toBe(9);
     expect(page.harness.rpcCalls[0].args).toEqual(
       expect.objectContaining({ p_user_id: ME, p_can_manage: false }),
     );

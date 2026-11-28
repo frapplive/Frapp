@@ -163,21 +163,67 @@ describe('SupabaseActivityItemReadRepository — tenant scope', () => {
     });
   });
 
-  describe('findSnoozes', () => {
-    it('reads only the member’s own snoozes in the chapter that end after the cut', async () => {
-      const rows = await harness.expectTenantScoped(CHAPTER_A, () =>
-        repo.findSnoozes(CHAPTER_A, USER_SHARED, '2026-11-01T00:00:00.000Z'),
-      );
+  describe('readPage', () => {
+    const query = {
+      now: '2026-11-12T12:00:00.000Z',
+      snoozesEndedAfter: '2026-11-01T00:00:00.000Z',
+      polls: true,
+      pollLimit: 100,
+      cardLimit: 100,
+      reminderLimit: 50,
+    };
+    const page = {
+      polls: [],
+      own_polls: [],
+      signups: [],
+      forms: [],
+      reminders: [],
+      snoozes: [snooze()],
+      unread_since: STARTED,
+    };
 
-      expect(rows).toEqual([
-        expect.objectContaining({
-          chapter_id: CHAPTER_A,
-          user_id: USER_SHARED,
-          kind: 'task',
-          item_id: ITEM,
-          until: UNTIL,
-        }),
+    it('reads the page in one call to activity_page_reads, inside the chapter', async () => {
+      harness = createTenantHarness({
+        tables: seed(),
+        rpc: { activity_page_reads: { data: page } },
+      });
+      repo = new SupabaseActivityItemReadRepository(harness.client);
+
+      await expect(
+        harness.expectTenantScoped(CHAPTER_A, () =>
+          repo.readPage(CHAPTER_A, USER_SHARED, query),
+        ),
+      ).resolves.toEqual(page);
+      expect(harness.ops).toHaveLength(0);
+      expect(harness.rpcCalls).toEqual([
+        {
+          fn: 'activity_page_reads',
+          args: {
+            p_chapter_id: CHAPTER_A,
+            p_user_id: USER_SHARED,
+            p_now: query.now,
+            p_snoozes_ended_after: query.snoozesEndedAfter,
+            p_polls: true,
+            p_poll_limit: 100,
+            p_card_limit: 100,
+            p_reminder_limit: 50,
+          },
+        },
       ]);
+    });
+
+    it('throws when the function fails, so the page can say what is unavailable', async () => {
+      harness = createTenantHarness({
+        tables: seed(),
+        rpc: {
+          activity_page_reads: { error: { message: 'boom', code: 'XX000' } },
+        },
+      });
+      repo = new SupabaseActivityItemReadRepository(harness.client);
+
+      await expect(
+        repo.readPage(CHAPTER_A, USER_SHARED, query),
+      ).rejects.toThrow();
     });
   });
 
@@ -223,17 +269,6 @@ describe('SupabaseActivityItemReadRepository — tenant scope', () => {
         'snooze-b-old',
         'snooze-b-other',
       ]);
-    });
-  });
-
-  describe('findUnreadStart', () => {
-    it('reads only the member’s own start in the chapter', async () => {
-      await expect(
-        harness.expectTenantScoped(CHAPTER_A, () =>
-          repo.findUnreadStart(CHAPTER_A, USER_SHARED),
-        ),
-      ).resolves.toBe(STARTED);
-      await expect(repo.findUnreadStart(CHAPTER_A, USER_A)).resolves.toBeNull();
     });
   });
 

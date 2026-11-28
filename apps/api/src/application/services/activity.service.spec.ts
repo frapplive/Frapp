@@ -10,6 +10,7 @@ import type {
 import { TaskStatus } from '#domain/entities/task.entity';
 import type { TaskView } from '#domain/entities/task.entity';
 import type { ChatMessage } from '#domain/entities/chat.entity';
+import type { ActivityPageReads } from '#domain/repositories/activity-item-read.repository.interface';
 import type { Event } from '#domain/entities/event.entity';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -184,14 +185,58 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const formResponseRepo = {
     findAnswered: jest.fn().mockResolvedValue([]),
   };
-  const readRepo = {
+  // What `activity_page_reads` returns besides the cards, each its own mock
+  // so a test can serve or fail one part. The cards come from
+  // `messageRepo.findCardsByChapter`, the Archive's read, so a test serves
+  // the page's cards and the Archive's polls the same way.
+  const pageReads = {
     // No client has begun this member's dots: every row is read.
-    findUnreadStart: jest.fn().mockResolvedValue(null),
+    unreadSince: jest.fn().mockResolvedValue(null),
+    // Nothing snoozed.
+    snoozes: jest.fn().mockResolvedValue([]),
+    reminders: jest.fn().mockResolvedValue([]),
+  };
+  const readRepo = {
+    readPage: jest.fn(
+      async (
+        chapterId: string,
+        userId: string,
+        query: {
+          polls: boolean;
+          pollLimit: number;
+          cardLimit: number;
+        },
+      ): Promise<ActivityPageReads> => {
+        const cards = (kind: string, limit: number, senderId?: string) =>
+          messageRepo.findCardsByChapter(chapterId, {
+            kind,
+            limit,
+            ...(senderId ? { senderId } : {}),
+          }) as Promise<ChatMessage[]>;
+        const [polls, ownPolls, signups, forms, reminders, snoozes, since] =
+          await Promise.all([
+            query.polls ? cards('poll', query.pollLimit) : [],
+            query.polls ? cards('poll', query.pollLimit, userId) : [],
+            cards('signup', query.cardLimit),
+            cards('form', query.cardLimit),
+            pageReads.reminders(),
+            pageReads.snoozes(),
+            pageReads.unreadSince(),
+          ]);
+        return {
+          polls,
+          own_polls: ownPolls,
+          signups,
+          forms,
+          reminders,
+          snoozes,
+          unread_since: since,
+        };
+      },
+    ),
     startUnread: jest.fn().mockResolvedValue(undefined),
     findReads: jest.fn().mockResolvedValue([]),
     markRead: jest.fn().mockResolvedValue(undefined),
-    // Nothing snoozed.
-    findSnoozes: jest.fn().mockResolvedValue([]),
     snooze: jest.fn().mockResolvedValue(undefined),
     unsnooze: jest.fn().mockResolvedValue(undefined),
   };
@@ -225,6 +270,7 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     minutesService,
     channelAccess,
     readRepo,
+    pageReads,
     formResponseRepo,
     taskService,
     serviceEntryService,
@@ -563,16 +609,24 @@ describe('ActivityService', () => {
     });
 
     it('serves the caller’s reminders and counts the due ones in needs_you_count (#4957)', async () => {
-      const { service, reminderService, chatService } = build();
+      const { service, reminderService, chatService, pageReads, readRepo } =
+        build();
       const waiting = { id: 'rem-1', message_id: 'msg-1', due: false };
       const due = { id: 'rem-2', message_id: 'msg-2', due: true };
+      // The rows the page read returned, which the service presents.
+      const rows = [{ id: 'stored-1' }];
+      pageReads.reminders.mockResolvedValue(rows);
       reminderService.listFor.mockResolvedValue([due, waiting]);
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
-      expect(reminderService.listFor).toHaveBeenCalledWith(
+      expect(readRepo.readPage).toHaveBeenCalledWith(
         CHAPTER,
         ME,
+        expect.objectContaining({ reminderLimit: 50 }),
+      );
+      expect(reminderService.listFor).toHaveBeenCalledWith(
+        rows,
         expect.any(Number),
         {
           channels: [{ id: READABLE, name: 'general', type: 'PUBLIC' }],
@@ -616,13 +670,8 @@ describe('ActivityService', () => {
 
     it('reports a failed section to Sentry at error level, not only the log (#4096)', async () => {
       const reported = jest.spyOn(caughtFailure, 'reportCaughtFailure');
-      const { service, messageRepo } = build();
-      messageRepo.findCardsByChapter.mockImplementation(
-        (_chapterId: string, options: { kind: string }) =>
-          options.kind === 'poll'
-            ? Promise.reject(new Error('db down'))
-            : Promise.resolve([]),
-      );
+      const { service, linkService } = build();
+      linkService.listFor.mockRejectedValue(new Error('db down'));
 
       try {
         await service.getActivity(CHAPTER, ME, null);
@@ -631,10 +680,40 @@ describe('ActivityService', () => {
           expect.anything(),
           expect.objectContaining({
             level: 'error',
-            site: 'activity-section:polls',
+            site: 'activity-section:links',
             error: expect.any(Error),
           }),
         );
+      } finally {
+        reported.mockRestore();
+      }
+    });
+
+    it('fails the chat sections together, and only those, when the page read fails (#6061)', async () => {
+      const reported = jest
+        .spyOn(caughtFailure, 'reportCaughtFailure')
+        .mockImplementation(() => undefined);
+      const { service, pageReads } = build();
+      pageReads.reminders.mockRejectedValue(new Error('db down'));
+
+      try {
+        const view = await service.getActivity(CHAPTER, ME, null);
+        // Polls, sign-ups and forms, and reminders, share one read
+        // (`activity_page_reads`); the other sections read on their own.
+        expect(view.unavailable).toEqual(['polls', 'cards', 'reminders']);
+        expect(
+          reported.mock.calls
+            .map(([, failure]) => [failure.level, failure.site])
+            .sort(),
+        ).toEqual([
+          ['error', 'activity-section:cards'],
+          ['error', 'activity-section:polls'],
+          ['error', 'activity-section:reminders'],
+          // The snoozes and the dots are hints: left out, reported, and
+          // never a section.
+          ['warning', 'activity-snooze'],
+          ['warning', 'activity-unread'],
+        ]);
       } finally {
         reported.mockRestore();
       }
@@ -968,8 +1047,8 @@ describe('ActivityService', () => {
     });
 
     it('dots a card the caller has not opened, under its own read kind', async () => {
-      const { service, messageRepo, readRepo } = build();
-      readRepo.findUnreadStart.mockResolvedValue(iso(-10 * HOUR));
+      const { pageReads, service, messageRepo, readRepo } = build();
+      pageReads.unreadSince.mockResolvedValue(iso(-10 * HOUR));
       readRepo.findReads.mockResolvedValue([
         { kind: 'signup', item_id: 'sheet', read_at: iso(-HOUR) },
         // A read under the wrong kind is not this card's.
@@ -2069,7 +2148,7 @@ describe('ActivityService', () => {
     /** `build`, with the caller's dots begun at `STARTED`. */
     function buildStarted(permissions?: string[]) {
       const built = build(permissions);
-      built.readRepo.findUnreadStart.mockResolvedValue(STARTED);
+      built.pageReads.unreadSince.mockResolvedValue(STARTED);
       return built;
     }
 
@@ -2188,9 +2267,9 @@ describe('ActivityService', () => {
       });
 
       it('serves a snoozed row with its time and leaves it out of the count', async () => {
-        const { service, readRepo } = buildEverySection();
+        const { pageReads, service, readRepo } = buildEverySection();
         const before = await service.getActivity(CHAPTER, ME, null);
-        readRepo.findSnoozes.mockResolvedValue([
+        pageReads.snoozes.mockResolvedValue([
           snooze('task', 'mine', at(3 * HOUR)),
           snooze('task', 'to-confirm', at(3 * HOUR)),
           snooze('poll', 'poll-1', at(3 * HOUR)),
@@ -2209,21 +2288,22 @@ describe('ActivityService', () => {
         // Three fewer waiting: the task, the confirmation and the poll. A
         // link was never counted.
         expect(view.needs_you_count).toBe(before.needs_you_count - 3);
-        expect(readRepo.findSnoozes).toHaveBeenCalledWith(
+        // Those still holding, and those that ended in the last 30 days.
+        expect(readRepo.readPage).toHaveBeenCalledWith(
           CHAPTER,
           ME,
-          at(-30 * 24 * HOUR),
+          expect.objectContaining({ snoozesEndedAfter: at(-30 * 24 * HOUR) }),
         );
       });
 
       it('brings a row back unread when its snooze ended after the caller last opened it', async () => {
-        const { service, readRepo } = buildEverySection();
+        const { pageReads, service, readRepo } = buildEverySection();
         // Opened, then snoozed until ten minutes ago.
         readRepo.findReads.mockResolvedValue([
           { kind: 'poll', item_id: 'poll-1', read_at: at(-30 * 60 * 1000) },
           { kind: 'link', item_id: 'link-1', read_at: at(-30 * 60 * 1000) },
         ]);
-        readRepo.findSnoozes.mockResolvedValue([
+        pageReads.snoozes.mockResolvedValue([
           snooze('poll', 'poll-1', at(-10 * 60 * 1000)),
           // Ended before the last open: read.
           snooze('link', 'link-1', at(-40 * 60 * 1000)),
@@ -2242,7 +2322,7 @@ describe('ActivityService', () => {
       });
 
       it('leaves a snoozed hours entry, card and open check-in out of the count', async () => {
-        const { service, readRepo, messageRepo, eventService } =
+        const { service, pageReads, messageRepo, eventService } =
           buildEverySection();
         serveCards(messageRepo, [
           signupCard(
@@ -2260,7 +2340,7 @@ describe('ActivityService', () => {
         const before = await service.getActivity(CHAPTER, ME, null);
         expect(before.needs_you.cards).toHaveLength(1);
         expect(before.coming_up[0].check_in_open).toBe(true);
-        readRepo.findSnoozes.mockResolvedValue([
+        pageReads.snoozes.mockResolvedValue([
           snooze('hours_entry', 'entry-1', at(3 * HOUR)),
           snooze('signup', 'sheet', at(3 * HOUR)),
           snooze('event', 'event-1', at(3 * HOUR)),
@@ -2277,13 +2357,13 @@ describe('ActivityService', () => {
       });
 
       it('serves a snoozed row after every row still waiting, so it never pushes one out', async () => {
-        const { service, readRepo, taskService } = buildStarted();
+        const { pageReads, service, readRepo, taskService } = buildStarted();
         serveTasks(taskService, [
           task({ id: 'first', due_date: '2026-11-14' }),
           task({ id: 'second', due_date: '2026-11-15' }),
           task({ id: 'third', due_date: '2026-11-16' }),
         ]);
-        readRepo.findSnoozes.mockResolvedValue([
+        pageReads.snoozes.mockResolvedValue([
           snooze('task', 'first', at(3 * HOUR)),
         ]);
 
@@ -2297,15 +2377,22 @@ describe('ActivityService', () => {
       });
 
       it('serves nothing as snoozed when the snoozes cannot be read', async () => {
-        const { service, readRepo } = buildEverySection();
+        const { pageReads, service } = buildEverySection();
+        pageReads.snoozes.mockResolvedValue([
+          snooze('task', 'mine', at(3 * HOUR)),
+        ]);
         const before = await service.getActivity(CHAPTER, ME, null);
-        readRepo.findSnoozes.mockRejectedValue(new Error('db down'));
+        expect(before.needs_you.tasks[0].snoozed_until).toBe(at(3 * HOUR));
+        // The snoozes come in the page read, so its failure takes the chat
+        // sections with it (named in `unavailable`); the rest still serve,
+        // with nothing snoozed.
+        pageReads.snoozes.mockRejectedValue(new Error('db down'));
 
         const view = await service.getActivity(CHAPTER, ME, null);
 
         expect(view.needs_you.tasks[0].snoozed_until).toBeNull();
-        expect(view.needs_you_count).toBe(before.needs_you_count);
-        expect(view.unavailable).toEqual([]);
+        expect(view.needs_you.task_confirmations).toHaveLength(1);
+        expect(view.unavailable).toEqual(['polls', 'cards', 'reminders']);
       });
 
       it('stores a snooze in the future and refuses one in the past or too far ahead', async () => {
@@ -2358,7 +2445,8 @@ describe('ActivityService', () => {
     });
 
     it('dots nothing, and reads no opens, before a client begins the caller’s dots', async () => {
-      const { service, readRepo, taskService, linkService } = build();
+      const { pageReads, service, readRepo, taskService, linkService } =
+        build();
       serveTasks(taskService, [task({ id: 'mine', created_at: at(-HOUR) })]);
       linkService.listFor.mockResolvedValue([link({})]);
 
@@ -2367,7 +2455,11 @@ describe('ActivityService', () => {
       expect(view.unread_since).toBeNull();
       expect(view.needs_you.tasks[0].unread).toBe(false);
       expect(view.links[0].unread).toBe(false);
-      expect(readRepo.findUnreadStart).toHaveBeenCalledWith(CHAPTER, ME);
+      expect(readRepo.readPage).toHaveBeenCalledWith(
+        CHAPTER,
+        ME,
+        expect.anything(),
+      );
       expect(readRepo.findReads).not.toHaveBeenCalled();
     });
 
@@ -2500,13 +2592,14 @@ describe('ActivityService', () => {
       const report = jest
         .spyOn(caughtFailure, 'reportCaughtFailure')
         .mockImplementation(() => undefined);
-      const { service, readRepo } = buildEverySection();
-      readRepo.findUnreadStart.mockRejectedValue(new Error('db down'));
+      const { pageReads, service, readRepo } = buildEverySection();
+      pageReads.unreadSince.mockRejectedValue(new Error('db down'));
 
       const view = await service.getActivity(CHAPTER, ME, null);
 
       expect(view.unread_since).toBeNull();
-      expect(view.needs_you.polls[0].unread).toBe(false);
+      expect(view.needs_you.tasks[0].unread).toBe(false);
+      expect(view.needs_you.task_confirmations[0].unread).toBe(false);
       expect(readRepo.findReads).not.toHaveBeenCalled();
       expect(report).toHaveBeenCalledWith(
         expect.anything(),

@@ -1,5 +1,6 @@
 // Reminder queries (#4957) against a real PostgREST, for what the unit specs
-// can't see: that the message embed resolves with a bookmark's column list,
+// can't see: that Activity's read (`activity_page_reads`, #6061) returns each
+// reminder's message in a bookmark's column list,
 // that the (user_id, message_id) upsert moves a reminder and clears its
 // fired_at against the live constraint, and that the sweep's claim is a real
 // compare-and-set: it wins once, and loses when the time moved after the read.
@@ -9,12 +10,26 @@
 
 import { randomUUID } from 'node:crypto';
 import { SupabaseChatMessageReminderRepository } from '../../src/infrastructure/supabase/repositories/supabase-chat-message-reminder.repository';
+import { SupabaseActivityItemReadRepository } from '../../src/infrastructure/supabase/repositories/supabase-activity-item-read.repository';
 import type { FrappSupabaseClient } from '../../src/infrastructure/supabase/database.types';
 import { createServiceRoleClient, describeIntegration } from './stack';
 
 describeIntegration('Reminder queries against live PostgREST', () => {
   let supabase: FrappSupabaseClient;
   let repo: SupabaseChatMessageReminderRepository;
+  let pages: SupabaseActivityItemReadRepository;
+  /** A member's reminders as Activity reads them (`activity_page_reads`). */
+  const remindersOf = async (user: string) =>
+    (
+      await pages.readPage(chapterId, user, {
+        now: new Date().toISOString(),
+        snoozesEndedAfter: new Date().toISOString(),
+        polls: false,
+        pollLimit: 100,
+        cardLimit: 100,
+        reminderLimit: 50,
+      })
+    ).reminders;
 
   const chapterId = randomUUID();
   const userId = randomUUID();
@@ -95,6 +110,7 @@ describeIntegration('Reminder queries against live PostgREST', () => {
       ).error,
     );
     repo = new SupabaseChatMessageReminderRepository(supabase);
+    pages = new SupabaseActivityItemReadRepository(supabase);
   });
 
   afterAll(async () => {
@@ -137,12 +153,7 @@ describeIntegration('Reminder queries against live PostgREST', () => {
     // Someone else's reminder on the same message is never in the caller's list.
     await repo.upsert(otherUserId, messageId, chapterId, minutesFromNow(5));
 
-    const rows = await repo.findByUserAndChapter(
-      userId,
-      chapterId,
-      new Date().toISOString(),
-      50,
-    );
+    const rows = await remindersOf(userId);
 
     expect(rows.map((row) => row.message_id)).toEqual([
       messageId,
@@ -188,18 +199,8 @@ describeIntegration('Reminder queries against live PostgREST', () => {
 
   it('clears only the caller’s own reminder', async () => {
     await repo.delete(userId, messageId, chapterId);
-    const mine = await repo.findByUserAndChapter(
-      userId,
-      chapterId,
-      new Date().toISOString(),
-      50,
-    );
-    const theirs = await repo.findByUserAndChapter(
-      otherUserId,
-      chapterId,
-      new Date().toISOString(),
-      50,
-    );
+    const mine = await remindersOf(userId);
+    const theirs = await remindersOf(otherUserId);
     expect(mine.map((row) => row.message_id)).toEqual([laterMessageId]);
     expect(theirs.map((row) => row.message_id)).toEqual([messageId]);
   });

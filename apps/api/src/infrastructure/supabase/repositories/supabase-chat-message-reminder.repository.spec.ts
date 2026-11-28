@@ -23,17 +23,10 @@ const MESSAGE_B = '0b000000-0000-4000-8000-000000000260';
 const MESSAGE_A_OTHER_USER = '0a000000-0000-4000-8000-000000000262';
 const MESSAGE_B_OTHER_USER = '0b000000-0000-4000-8000-000000000262';
 
-/** After every seeded reminder's time: they are all due. */
-const NOW = '2026-01-03T00:00:00.000Z';
-
 const REMINDER_A = '0a000000-0000-4000-8000-000000000270';
 const REMINDER_B = '0b000000-0000-4000-8000-000000000270';
 const REMINDER_A_OTHER_USER = '0a000000-0000-4000-8000-000000000272';
 const REMINDER_B_OTHER_USER = '0b000000-0000-4000-8000-000000000272';
-const WAITING_SOON = '0a000000-0000-4000-8000-000000000273';
-const WAITING_LATER = '0a000000-0000-4000-8000-000000000274';
-const MESSAGE_WAITING_SOON = '0a000000-0000-4000-8000-000000000263';
-const MESSAGE_WAITING_LATER = '0a000000-0000-4000-8000-000000000264';
 
 /** The harness ignores `select()`, so the embed is seeded under its key. */
 const message = (id: string) => ({
@@ -78,23 +71,6 @@ describe('SupabaseChatMessageReminderRepository — tenant scope', () => {
     repo = new SupabaseChatMessageReminderRepository(harness.client);
   });
 
-  it('findByUserAndChapter does not return the same member’s reminder from another chapter', async () => {
-    const rows = await harness.expectTenantScoped(CHAPTER_A, () =>
-      repo.findByUserAndChapter(USER_SHARED, CHAPTER_A, NOW, 50),
-    );
-    expect(rows.map((r) => r.id)).toEqual([REMINDER_A]);
-  });
-
-  it('findByUserAndChapter excludes another member’s reminder in the same chapter', async () => {
-    const rows = await repo.findByUserAndChapter(
-      USER_SHARED,
-      CHAPTER_A,
-      NOW,
-      50,
-    );
-    expect(rows.map((r) => r.id)).not.toContain(REMINDER_A_OTHER_USER);
-  });
-
   it('delete removes only the caller’s own reminder in this chapter', async () => {
     await harness.expectTenantScoped(CHAPTER_A, () =>
       repo.delete(USER_SHARED, MESSAGE_A, CHAPTER_A),
@@ -107,58 +83,6 @@ describe('SupabaseChatMessageReminderRepository — tenant scope', () => {
     ).toEqual(
       [REMINDER_B, REMINDER_A_OTHER_USER, REMINDER_B_OTHER_USER].sort(),
     );
-  });
-
-  it('lists due reminders newest first, then waiting ones soonest first', async () => {
-    const ordered = [
-      {
-        ...row(REMINDER_A, USER_SHARED, MESSAGE_A),
-        remind_at: '2026-01-01T09:00:00.000Z',
-      },
-      {
-        ...row(REMINDER_A_OTHER_USER, USER_SHARED, MESSAGE_A_OTHER_USER),
-        remind_at: '2026-01-02T09:00:00.000Z',
-      },
-      {
-        ...row(WAITING_LATER, USER_SHARED, MESSAGE_WAITING_LATER),
-        remind_at: '2026-01-09T09:00:00.000Z',
-      },
-      {
-        ...row(WAITING_SOON, USER_SHARED, MESSAGE_WAITING_SOON),
-        remind_at: '2026-01-04T09:00:00.000Z',
-      },
-    ];
-    harness = createTenantHarness({
-      tables: {
-        // Chapter B holds the same four, so a lost chapter filter shows.
-        chat_message_reminders: [
-          ...ordered.map((r) => inA(r)),
-          ...ordered.map((r) => inB({ ...r, id: r.id.replace(/^0a/, '0b') })),
-        ],
-      },
-      collisionExempt: {
-        chat_message_reminders: [
-          'user_id',
-          'message_id',
-          'message',
-          'remind_at',
-        ],
-      },
-    });
-    repo = new SupabaseChatMessageReminderRepository(harness.client);
-
-    const rows = await harness.expectTenantScoped(CHAPTER_A, () =>
-      repo.findByUserAndChapter(USER_SHARED, CHAPTER_A, NOW, 50),
-    );
-
-    // A pile of old due reminders can't crowd out a newer one: each kind is
-    // read apart, due newest first.
-    expect(rows.map((r) => r.id)).toEqual([
-      REMINDER_A_OTHER_USER,
-      REMINDER_A,
-      WAITING_SOON,
-      WAITING_LATER,
-    ]);
   });
 
   it('setting a reminder again moves it and re-arms one that already fired', async () => {

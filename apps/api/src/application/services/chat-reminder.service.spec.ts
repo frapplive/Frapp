@@ -1,7 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
   ChatReminderService,
-  REMINDER_LIST_LIMIT,
   REMINDER_UNAVAILABLE_PREVIEW,
 } from './chat-reminder.service';
 import { BLOCKED_MESSAGE_CONTENT } from './chat-block-mask';
@@ -62,7 +61,6 @@ function build() {
       }),
     ),
     delete: jest.fn().mockResolvedValue(undefined),
-    findByUserAndChapter: jest.fn().mockResolvedValue([]),
     findDue: jest.fn(),
     claimDue: jest.fn(),
   };
@@ -172,18 +170,13 @@ describe('ChatReminderService', () => {
   });
 
   describe('listFor', () => {
-    it('reads the caller’s own reminders and names the author', async () => {
-      const { service, reminderRepo } = build();
-      reminderRepo.findByUserAndChapter.mockResolvedValue([stored()]);
+    it('lists the caller’s reminders from the page read and names the author', async () => {
+      const { service } = build();
 
-      const rows = await service.listFor(CHAPTER, USER, NOW.getTime(), READS);
+      // The rows are what Activity's page read returned
+      // (`activity_page_reads`); the service only presents them.
+      const rows = await service.listFor([stored()], NOW.getTime(), READS);
 
-      expect(reminderRepo.findByUserAndChapter).toHaveBeenCalledWith(
-        USER,
-        CHAPTER,
-        NOW.toISOString(),
-        REMINDER_LIST_LIMIT,
-      );
       expect(rows).toEqual([
         expect.objectContaining({
           id: 'rem-1',
@@ -199,37 +192,44 @@ describe('ChatReminderService', () => {
     });
 
     it('says what a message with no text sent, as its chat push does', async () => {
-      const { service, reminderRepo } = build();
-      reminderRepo.findByUserAndChapter.mockResolvedValue([
-        stored({
-          message: {
-            ...message({ content: '' }),
-            metadata: { attachment_count: 2 },
-          },
-        }),
-      ]);
-      const [row] = await service.listFor(CHAPTER, USER, NOW.getTime(), READS);
+      const { service } = build();
+      const [row] = await service.listFor(
+        [
+          stored({
+            message: {
+              ...message({ content: '' }),
+              metadata: { attachment_count: 2 },
+            },
+          }),
+        ],
+        NOW.getTime(),
+        READS,
+      );
       expect(row.preview).toBe('Sent 2 attachments');
     });
 
     it('marks a reminder whose time has come as due', async () => {
-      const { service, reminderRepo } = build();
-      reminderRepo.findByUserAndChapter.mockResolvedValue([
-        stored({
-          remind_at: new Date(NOW.getTime() - MINUTE).toISOString(),
-          fired_at: NOW.toISOString(),
-        }),
-      ]);
-      const [row] = await service.listFor(CHAPTER, USER, NOW.getTime(), READS);
+      const { service } = build();
+      const [row] = await service.listFor(
+        [
+          stored({
+            remind_at: new Date(NOW.getTime() - MINUTE).toISOString(),
+            fired_at: NOW.toISOString(),
+          }),
+        ],
+        NOW.getTime(),
+        READS,
+      );
       expect(row.due).toBe(true);
     });
 
     it('redacts a reminder in a channel the caller can no longer read, and keeps it so they can clear it', async () => {
-      const { service, reminderRepo } = build();
-      reminderRepo.findByUserAndChapter.mockResolvedValue([
-        stored({ message: message({ channel_id: 'ch-lost' }) }),
-      ]);
-      const [row] = await service.listFor(CHAPTER, USER, NOW.getTime(), READS);
+      const { service } = build();
+      const [row] = await service.listFor(
+        [stored({ message: message({ channel_id: 'ch-lost' }) })],
+        NOW.getTime(),
+        READS,
+      );
       expect(row).toEqual(
         expect.objectContaining({
           message_available: false,
@@ -243,9 +243,8 @@ describe('ChatReminderService', () => {
     });
 
     it('masks a blocked author’s message as the timeline does', async () => {
-      const { service, reminderRepo } = build();
-      reminderRepo.findByUserAndChapter.mockResolvedValue([stored()]);
-      const [row] = await service.listFor(CHAPTER, USER, NOW.getTime(), {
+      const { service } = build();
+      const [row] = await service.listFor([stored()], NOW.getTime(), {
         ...READS,
         blockedUserIds: [AUTHOR],
       });
@@ -256,9 +255,7 @@ describe('ChatReminderService', () => {
 
     it('reads no names when there are no reminders', async () => {
       const { service, userRepo } = build();
-      expect(
-        await service.listFor(CHAPTER, USER, NOW.getTime(), READS),
-      ).toEqual([]);
+      expect(await service.listFor([], NOW.getTime(), READS)).toEqual([]);
       expect(userRepo.findDisplayIdentitiesByIds).not.toHaveBeenCalled();
     });
   });
