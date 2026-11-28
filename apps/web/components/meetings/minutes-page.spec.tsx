@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   updateEvent: vi.fn(),
   update: vi.fn(),
   post: vi.fn(),
+  postPending: { current: false },
   remove: vi.fn(),
+  removePending: { current: false },
   refetch: vi.fn(),
   toast: vi.fn(),
   push: vi.fn(),
@@ -69,8 +71,14 @@ vi.mock("@repo/hooks", () => ({
     minutesDraftElapsed(at ?? null, Date.now()),
   useMeetingActionItemTasks: () => ({ data: mocks.actionItemTasks.current }),
   useUpdateMeeting: () => ({ mutateAsync: mocks.update, isPending: false }),
-  usePostMeeting: () => ({ mutateAsync: mocks.post, isPending: false }),
-  useDeleteMeeting: () => ({ mutateAsync: mocks.remove, isPending: false }),
+  usePostMeeting: () => ({
+    mutateAsync: mocks.post,
+    isPending: mocks.postPending.current,
+  }),
+  useDeleteMeeting: () => ({
+    mutateAsync: mocks.remove,
+    isPending: mocks.removePending.current,
+  }),
   useMeetingDraft: () => ({ isPending: false, data: mocks.draft.current }),
   useRequestMeetingDraft: () => ({
     mutateAsync: mocks.requestDraft,
@@ -269,6 +277,8 @@ function loaded(meeting: MeetingMinutes) {
 
 beforeEach(() => {
   mocks.datesReview.mockReset();
+  mocks.postPending.current = false;
+  mocks.removePending.current = false;
   mocks.notes.current = null;
   for (const fn of [
     mocks.saveNotes,
@@ -516,6 +526,69 @@ describe("MinutesPage", () => {
     expect(
       screen.getByRole("menuitem", { name: "Delete minutes" }).className,
     ).toContain("text-destructive-text");
+  });
+
+  it("draws the ⋯ as the one action menu: its order, and Open event and Transcript as real links (#5739)", () => {
+    loaded(
+      minutes({ can_edit: true, can_delete: true, transcript: TRANSCRIPT }),
+    );
+    render(<MinutesPage id="m-1" />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "More" }), {
+      key: "Enter",
+    });
+    // The phone's order (#5562). Notes and Attendance need a draft's notes
+    // and attendance to backfill, which these posted minutes don't have.
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual([
+      "Edit details",
+      "Edit minutes",
+      "Copy link",
+      "Open event",
+      "Transcript",
+      "Delete minutes",
+    ]);
+    // Delete sits apart, under a separator.
+    const separator = screen.getByRole("separator");
+    const deleteItem = screen.getByRole("menuitem", { name: "Delete minutes" });
+    expect(separator.nextElementSibling).toBe(deleteItem);
+    const event = screen.getByRole("menuitem", { name: "Open event" });
+    expect(event.getAttribute("href")).toMatch(/^\/events\?event=/);
+    const transcript = screen.getByRole("menuitem", { name: "Transcript" });
+    expect(transcript.getAttribute("href")).toBe("/meetings/m-1/transcript");
+    expect(transcript.getAttribute("target")).toBe("_blank");
+  });
+
+  it("keeps the transcript out of the ⋯ while the minutes are being edited", () => {
+    loaded(minutes({ can_edit: true, transcript: TRANSCRIPT }));
+    render(<MinutesPage id="m-1" />);
+    openMenuItem("Edit minutes");
+    fireEvent.keyDown(screen.getByRole("button", { name: "More" }), {
+      key: "Enter",
+    });
+    expect(screen.queryByRole("menuitem", { name: "Transcript" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Edit minutes" })).toBeNull();
+  });
+
+  it("disables the ⋯ while a post is under way, and Delete while a delete is", () => {
+    mocks.postPending.current = true;
+    loaded(minutes({ can_edit: true, can_delete: true }));
+    const { unmount } = render(<MinutesPage id="m-1" />);
+    const more = screen.getByRole("button", { name: "More" });
+    expect((more as HTMLButtonElement).disabled).toBe(true);
+    unmount();
+
+    mocks.postPending.current = false;
+    mocks.removePending.current = true;
+    render(<MinutesPage id="m-1" />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "More" }), {
+      key: "Enter",
+    });
+    expect(
+      screen
+        .getByRole("menuitem", { name: "Delete minutes" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 
   it("ticks an action item off once its task is done, and says so at a glance", () => {
@@ -817,6 +890,11 @@ describe("MinutesPage", () => {
     );
     expect(screen.getByText("Done.")).toBeTruthy();
     await waitFor(() => expect(mocks.post).toHaveBeenCalled());
+    // Nothing that changes the minutes is reachable mid-post: the ⋯ waits.
+    expect(
+      (screen.getByRole("button", { name: "More" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     loaded({
       ...draft,
       status: "posted",
