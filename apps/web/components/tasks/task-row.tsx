@@ -272,7 +272,7 @@ export function GroupTaskRow({
   );
 }
 
-/** Who a group task went to, and how far its copies are, as a row shows it. */
+/** Who a group task went to, and how far its copies are, as the task panel shows it. */
 export interface CopyAudience {
   label: string;
   done: number;
