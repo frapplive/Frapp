@@ -36,9 +36,9 @@ vi.mock("@/lib/providers/network-provider", () => ({
   useNetwork: () => ({ isOffline: false, probeOnce: vi.fn() }),
 }));
 
-const { AskDiagnosticsRow } = await import("./ask-diagnostics-row");
+const { AskDiagnosticsGroup } = await import("./ask-diagnostics-group");
 
-describe("AskDiagnosticsRow", () => {
+describe("AskDiagnosticsGroup", () => {
   beforeEach(() => {
     state.set.mockReset().mockResolvedValue(undefined);
     state.toast.mockReset();
@@ -46,19 +46,19 @@ describe("AskDiagnosticsRow", () => {
 
   it("draws nothing for a chapter the window is not offered to", () => {
     state.diagnostics = { offered: false, can_change: true, ends_at: null };
-    const { container } = render(<AskDiagnosticsRow />);
+    const { container } = render(<AskDiagnosticsGroup />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("draws nothing on a server with no AI", () => {
     state.diagnostics = null;
-    const { container } = render(<AskDiagnosticsRow />);
+    const { container } = render(<AskDiagnosticsGroup />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("starts only after the president confirms", async () => {
     state.diagnostics = { offered: true, can_change: true, ends_at: null };
-    render(<AskDiagnosticsRow />);
+    render(<AskDiagnosticsGroup />);
     const user = userEvent.setup();
     expect(screen.getByText(ASK_DIAGNOSTICS_COPY.off)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: ASK_DIAGNOSTICS_COPY.start }));
@@ -83,7 +83,7 @@ describe("AskDiagnosticsRow", () => {
       can_change: true,
       ends_at: "2026-11-26T12:00:00.000Z",
     };
-    render(<AskDiagnosticsRow />);
+    render(<AskDiagnosticsGroup />);
     expect(screen.getByText("Saving until November 26, 2026.")).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: ASK_DIAGNOSTICS_COPY.stop }));
@@ -102,8 +102,12 @@ describe("AskDiagnosticsRow", () => {
       can_change: false,
       ends_at: "2026-11-26T12:00:00.000Z",
     };
-    render(<AskDiagnosticsRow />);
+    render(<AskDiagnosticsGroup />);
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText(ASK_DIAGNOSTICS_COPY.presidentOnly)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `${ASK_DIAGNOSTICS_COPY.presidentOnly} ${ASK_DIAGNOSTICS_COPY.footnote}`,
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -856,8 +856,11 @@ export function askSourceKindLabel(kind: string): string | null {
  */
 export const ASK_DIAGNOSTICS_COPY = {
   label: "Save questions for the Frapp team",
-  description:
-    "For 14 days, questions members ask in Frapp Intelligence and the answers they get are saved, encrypted, so the Frapp team can fix wrong answers during the beta. Answers that used channel messages are never saved. It turns itself off on the end date and everything saved is deleted.",
+  /** The group's heading on Chapter settings → AI (#6028). */
+  heading: "Diagnostics",
+  /** Under the group: what every saved question shares. */
+  footnote:
+    "For 14 days, encrypted, then deleted. Answers that used channel messages are never saved.",
   start: "Start saving",
   stop: "Stop and delete",
   on: (endsOn: string) => `Saving until ${endsOn}.`,

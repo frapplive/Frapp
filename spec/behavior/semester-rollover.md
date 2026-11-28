@@ -6,7 +6,7 @@ Admins with `semester:rollover` permission can trigger a "New Semester" action f
 
 1. The current leaderboard period is archived with a label (e.g. "Fall 2025") and a date range. This is stored in a `semester_archives` table.
 2. A new leaderboard period begins. Points continue to accumulate in `point_transactions` (no data is deleted), but the leaderboard view defaults to the new period. Historical periods remain selectable in a dropdown. The active ("this semester") window is defined as point transactions created **after the end of** the most recent archive's `end_date` day, through now — not the archived range. The archived period covers the whole calendar days `[start_date, end_date]` (both stored as `date` values), so any transaction on the `end_date` day belongs to the archived period, not the active one.
-3. Admins are prompted with an option to bulk-transition members from the "New Member" role to the "Member" role (pledge promotion). This is optional and can be done individually as well. The prompt is a toggle on the rollover card, **off by default** — it is opted into per rollover, never remembered — and the confirmation dialog restates what it will do before it runs.
+3. Admins are prompted with an option to bulk-transition members from the "New Member" role to the "Member" role (pledge promotion). This is optional and can be done individually as well. The prompt is a switch on Chapter settings' new-semester page (`?tab=semester&page=new`, #6028; the rollover card until then), **off by default** — it is opted into per rollover, never remembered — and the confirmation dialog restates what it will do before it runs.
 
    Promotion semantics, since `members.role_ids` is an array rather than a single role:
 

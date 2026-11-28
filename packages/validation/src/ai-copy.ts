@@ -24,10 +24,10 @@ export type AiChapterSwitchKey =
 export interface AiSwitchCopy {
   key: AiChapterSwitchKey;
   label: string;
-  description: string;
   /**
-   * The phone's line under the switch: the same promise in a row's width
-   * (Chapter settings, #4789). Web draws `description`.
+   * The line under the switch, on web's AI page and the phone's AI screen
+   * alike: the promise in a row's width (#4789; web too since #6028, when
+   * the two-line `description` each switch carried for web went).
    */
   short: string;
   /** The switch this one only matters under, drawn nested beneath it. */
@@ -43,26 +43,18 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
   {
     key: "meeting_notes",
     label: "Minutes from notes",
-    description:
-      "An officer pastes or types the meeting's notes and gets a first draft of the minutes to fix and post, with tasks suggested from it. Never for Standards meetings.",
     short:
       "A first draft of the minutes from an officer's notes. Never for Standards.",
   },
   {
     key: "ask",
     label: "Questions and requests",
-    description:
-      // Announcements are chat (#4915): they reach Ask only with "Include
-      // channel messages" on, so this switch doesn't name them.
-      "Members ask a question and get an answer from the chapter's documents, posted minutes and records, with the sources it used.",
     short:
       "Members ask and get answers from the chapter's documents, minutes and records.",
   },
   {
     key: "chat_source",
     label: "Include channel messages",
-    description:
-      "Frapp Intelligence also reads messages in chapter channels, and members can ask for a summary of a channel's new messages or of a thread. Only messages from members who have Frapp Intelligence on. Never direct messages.",
     short:
       "Answers and channel summaries read chapter channels. Only members with Frapp Intelligence on, never DMs.",
     dependsOn: "ask",
@@ -70,8 +62,6 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
   {
     key: "nudges",
     label: "Nudges on Activity",
-    description:
-      "Frapp puts a short card on a member's Activity when one of their own tasks is coming due, late or sent back, with a place to start, and says thanks when they finish on time. It also judges a member's reason when they ask for a day more on a task; with this off, an officer decides every request.",
     short:
       "A short card on a member's Activity when one of their tasks could use a word.",
   },
@@ -117,14 +107,16 @@ export function aiSwitchesInEffect(
 export const AI_SETTINGS_COPY = {
   title: "AI",
   /**
-   * No company names (Paul, 2026-11-17: "we don't need to say it works with
-   * Anthropic, Google, and AssemblyAI ... that lives in the privacy policy").
-   * They stay on Meet Frapp Intelligence, where the member's yes is given.
+   * The switches' group heading, drawn only while the Diagnostics group
+   * shows under it (one beta chapter); otherwise the page is one group.
    */
-  description:
-    "Each is on unless the president turns it off, and each member chooses for themselves whether Frapp Intelligence is on.",
-  /** The phone's footnote under the switches in Chapter settings. */
-  phoneFootnote:
+  featuresHeading: "Features",
+  /**
+   * The footnote under the switches, on web's AI page and the phone's AI
+   * screen alike (#6028). No company names (Paul, 2026-11-17): they are on
+   * Meet Frapp Intelligence and in the privacy policy.
+   */
+  footnote:
     "Each member also chooses for themselves whether Frapp Intelligence is on.",
   /** The phone's row in a member's own Settings that opens these switches. */
   chapterRow: "Chapter AI",
@@ -137,10 +129,30 @@ export const AI_SETTINGS_COPY = {
   turnedOff: (label: string) => `${label} turned off`,
   saveFailed: "Couldn't change the AI setting",
   loadFailed: "Couldn't load the chapter's AI settings",
+  /** The phone's AI screen reached where the server has no AI, or by a viewer it doesn't open to. */
+  unavailable: "AI features aren't available here.",
   offlineTitle: "AI settings unavailable offline",
   offlineDescription: "Reconnect to see which AI features are on.",
   retryLater: "Retry in a moment.",
 } as const;
+
+/**
+ * The footnote under the chapter's AI switches, on web and the phone (#6028):
+ * who can change them, what each member chooses, and when they last changed.
+ * `lastChanged` is the formatted day, or null when they never have.
+ */
+export function aiSettingsFootnote(
+  canChange: boolean,
+  lastChanged: string | null,
+): string {
+  return [
+    canChange ? null : AI_SETTINGS_COPY.presidentOnly,
+    AI_SETTINGS_COPY.footnote,
+    lastChanged ? AI_SETTINGS_COPY.lastChanged(lastChanged) : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** One line of what Frapp Intelligence does, on the Meet Frapp Intelligence screen. */
 export interface FrappAiPoint {

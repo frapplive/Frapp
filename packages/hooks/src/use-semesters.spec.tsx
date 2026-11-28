@@ -41,4 +41,42 @@ describe("useSemesterRollover", () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey });
     }
   });
+
+  it("settles only once the archives are read again (#6028)", async () => {
+    // Chapter settings' Semester page goes back to its list when the
+    // rollover's promise settles, so the list must already be the new one.
+    const queryClient = new QueryClient();
+    let reread!: () => void;
+    vi.spyOn(queryClient, "invalidateQueries").mockImplementation((filters) =>
+      (filters as { queryKey: string[] }).queryKey[0] === "semesters"
+        ? new Promise<void>((resolve) => (reread = resolve))
+        : Promise.resolve(),
+    );
+    const POST = vi
+      .fn()
+      .mockResolvedValue({ data: { id: "a-1" }, error: null });
+    const { result } = renderHook(() => useSemesterRollover(), {
+      wrapper: createWrapper(queryClient, { POST }),
+    });
+
+    let settled = false;
+    let done!: Promise<unknown>;
+    act(() => {
+      done = result.current
+        .mutateAsync({
+          label: "Fall 2026",
+          start_date: "2026-08-25",
+          end_date: "2026-12-18",
+        })
+        .then(() => (settled = true));
+    });
+    await vi.waitFor(() => expect(reread).toBeTypeOf("function"));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    await act(async () => {
+      reread();
+      await done;
+    });
+    expect(settled).toBe(true);
+  });
 });

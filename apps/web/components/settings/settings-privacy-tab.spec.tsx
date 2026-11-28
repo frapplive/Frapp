@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { SettingsPrivacyTab } from "./settings-privacy-tab";
 
-const SWITCH = { name: /chapter analytics enabled/i };
+const SWITCH = { name: /^chapter analytics$/i };
 
 describe("SettingsPrivacyTab", () => {
   it("shows analytics as enabled when the chapter has not opted out", () => {
@@ -54,5 +54,23 @@ describe("SettingsPrivacyTab", () => {
       />,
     );
     expect(screen.getByRole("switch", SWITCH)).toBeDisabled();
+    // The footnote says why, rather than leaving a dead switch unexplained.
+    expect(screen.getByText(/Your role can't change this\./)).toBeTruthy();
+  });
+
+  it("is one row with one short line, and the facts in the footnote (#6028)", () => {
+    render(
+      <SettingsPrivacyTab
+        analyticsOptOut={false}
+        canManage
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      screen.getByText("Which features get used, never what's in them."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Changes are recorded in Logs\.$/)).toBeTruthy();
+    expect(screen.queryByText(/Your role can't/)).toBeNull();
   });
 });

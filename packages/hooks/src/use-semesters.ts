@@ -61,15 +61,20 @@ export function useSemesterRollover() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["semesters"] });
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
-      // Promotion rewrites members.role_ids across the chapter, so any cached
-      // roster or permission-derived view is stale once this succeeds.
-      queryClient.invalidateQueries({ queryKey: ["members"] });
-      // "This semester" totals are measured from the latest archive, which
-      // the rollover just wrote.
-      void invalidatePointReads(queryClient);
-    },
+    // Returned, so `mutateAsync` settles once the archives are read again:
+    // Chapter settings' Semester page goes back to its list after a rollover
+    // and must show the new archive and the month's limit, not the old list.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["semesters"] }),
+        queryClient.invalidateQueries({ queryKey: ["chapters"] }),
+        // Promotion rewrites members.role_ids across the chapter, so any
+        // cached roster or permission-derived view is stale once this
+        // succeeds.
+        queryClient.invalidateQueries({ queryKey: ["members"] }),
+        // "This semester" totals are measured from the latest archive, which
+        // the rollover just wrote.
+        invalidatePointReads(queryClient),
+      ]),
   });
 }

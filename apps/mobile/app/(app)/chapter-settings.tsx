@@ -12,7 +12,6 @@ import {
   useCategories,
   useChannelAccessOptions,
   useChapterChatBackground,
-  useUpdateAiChapterSettings,
 } from "@repo/hooks";
 import {
   CHAPTER_TAB_COPY,
@@ -26,9 +25,7 @@ import { shownModuleSettings } from "@repo/hooks/module-settings";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_SETTINGS_COPY,
-  AI_SWITCHES,
-  aiSwitchState,
-  type AiChapterSwitchKey,
+  aiSwitchesInEffect,
   CHAPTER_ABOUT_FOOTNOTE,
   CHAPTER_LOGS_TITLE,
   CHAPTER_LOOK_FOOTNOTE,
@@ -38,6 +35,7 @@ import {
   MEMBER_FIELDS_COPY,
   NAME_LOCK_COPY,
   PEOPLE_SETTINGS_COPY,
+  PRIVACY_SETTINGS_COPY,
 } from "@repo/validation";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
@@ -48,9 +46,11 @@ import {
   IdCardGlyph,
   ImageGlyph,
   LandmarkGlyph,
+  LockGlyph,
   PaletteGlyph,
   ScrollTextGlyph,
   ShieldGlyph,
+  SparklesGlyph,
   TypeGlyph,
   WallpaperGlyph,
 } from "@/components/settings-glyphs";
@@ -96,7 +96,11 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * - **About the chapter**: Identity & founding, Organization type and
  *   Vocabulary, each a pushed page.
  * - **Chapter**: Birthday posts (a channel sheet, Off or a channel), Members
- *   can change their own name (#5801), then Logs.
+ *   can change their own name (#5801), then Privacy, AI and Logs in web's
+ *   rail order (#6028), each pushing web's page as a screen: Privacy's one
+ *   switch (`chapter-privacy.tsx`) and the president's AI switches
+ *   (`chapter-ai.tsx`), which Settings' Chapter AI row opens too. AI draws
+ *   only where the server has AI and the switches have been read.
  *
  * A member who can't change something still reads every value: a row that
  * opens a sheet doesn't open for them and says an officer sets it; a row
@@ -105,14 +109,6 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * Then the rest:
  *
- * - **AI**: the president's three switches (#4789), the same ones and the
- *   same rules as web's AI tab (`settings-ai-tab.tsx`): every member here can
- *   read them, only the president changes them, and Include channel messages
- *   sits nested under Questions and requests and waits for it to be on before it can be
- *   turned on (never off), by `aiSwitchState`, which web's tab shares. For
- *   `chapter-config:view`, as web's tab is.
- *   Inline switches, as iOS Settings draws a short list of them, rather than
- *   a page of their own. Drawn only where the server has AI.
  * - **Chat**: New channel.
  * - **People**: Roles and groups, the chapter's tiers and their roles, then
  *   its groups (`app/(app)/chapter-roles.tsx`); Pledge class
@@ -125,8 +121,9 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *   page's rows: the switch, rules, goals and who can. Study zones' zone
  *   count moved there from Chapter. The officer tools stay on web.
  *
- * Web's other pages (Plan and billing, the semester, privacy) stay on web
- * for now: they are setup an officer does once, at a desk.
+ * Web's other pages (Plan and billing, the semester, Diagnostics) stay on
+ * web: they are setup an officer does once, at a desk (#4074; Paul,
+ * 2026-11-27, for the semester and Diagnostics).
  * Grouped rows with a chevron, as iOS Settings and Discord mobile's Server
  * Settings draw theirs.
  *
@@ -187,14 +184,6 @@ export default function ChapterSettingsScreen() {
   const aiAvailable = access.chapter && !!aiConsent.data;
   const aiSettingsQuery = useAiChapterSettings({ enabled: aiAvailable });
   const aiSettings = aiSettingsQuery.data;
-  const updateAi = useUpdateAiChapterSettings();
-  // The switch whose last save failed. The phone has no toast, so the failure
-  // is that row's second line, and the switch snaps back (navigation.md §
-  // Chapter settings).
-  const [aiFailedKey, setAiFailedKey] = useState<AiChapterSwitchKey | null>(
-    null,
-  );
-
   const readOnlyLine = canEditProfile ? null : CHAPTER_TAB_COPY.rowReadOnly;
   // Recruitment's screen reads only what `rush:view` opens, with the module
   // on, so a chair without the config key still reaches its interest form.
@@ -339,7 +328,7 @@ export default function ChapterSettingsScreen() {
                 ) : null}
                 {/* Every row below is conditional, so the group draws only
                     when one of them does, never as an empty card. */}
-                {config || access.logs ? (
+                {config || access.logs || (aiAvailable && aiSettings) ? (
                   <>
                     <SectionHeader>Chapter</SectionHeader>
                     <ListSection>
@@ -396,6 +385,36 @@ export default function ChapterSettingsScreen() {
                           />
                         </SettingAnchor>
                       ) : null}
+                      {config ? (
+                        // Web's rail order: Privacy, then AI, then Logs
+                        // (#6028). Each pushes web's page as a screen.
+                        <SettingAnchor id="analytics">
+                          <ListRow
+                            leading={<LockGlyph color={glyphColor} />}
+                            label={PRIVACY_SETTINGS_COPY.title}
+                            value={
+                              config.analytics_opt_out === true
+                                ? PRIVACY_SETTINGS_COPY.off
+                                : PRIVACY_SETTINGS_COPY.on
+                            }
+                            accessibilityHint="Opens whether the chapter shares usage analytics."
+                            onPress={() => router.push("/chapter-privacy")}
+                          />
+                        </SettingAnchor>
+                      ) : null}
+                      {aiAvailable && aiSettings ? (
+                        <SettingAnchor id="ai">
+                          <ListRow
+                            leading={<SparklesGlyph color={glyphColor} />}
+                            label={AI_SETTINGS_COPY.title}
+                            value={AI_SETTINGS_COPY.chapterRowValue(
+                              aiSwitchesInEffect(aiSettings),
+                            )}
+                            accessibilityHint="Opens the chapter's AI features."
+                            onPress={() => router.push("/chapter-ai")}
+                          />
+                        </SettingAnchor>
+                      ) : null}
                       {access.logs ? (
                         // Last in Chapter, as web's Logs row is (Paul,
                         // 2026-11-21): read when something needs looking into.
@@ -410,63 +429,6 @@ export default function ChapterSettingsScreen() {
                   </>
                 ) : null}
               </>
-            ) : null}
-
-            {aiAvailable && aiSettings ? (
-              <SettingAnchor id="ai">
-                <SectionHeader>{AI_SETTINGS_COPY.title}</SectionHeader>
-                <ListSection>
-                  {AI_SWITCHES.map((entry) => {
-                    const { checked, parentOff, waitsOnParent } = aiSwitchState(
-                      entry,
-                      aiSettings,
-                    );
-                    const failed = aiFailedKey === entry.key;
-                    return (
-                      <ListRow
-                        key={entry.key}
-                        label={entry.label}
-                        nested={entry.dependsOn !== undefined}
-                        muted={parentOff}
-                        description={
-                          failed
-                            ? `${AI_SETTINGS_COPY.saveFailed}. Try again.`
-                            : waitsOnParent
-                              ? `${entry.short} ${AI_SETTINGS_COPY.dependsOnAsk}`
-                              : entry.short
-                        }
-                        descriptionTone={failed ? "destructive" : "default"}
-                        trailing={
-                          <Toggle
-                            value={checked}
-                            disabled={
-                              !aiSettings.can_change ||
-                              // One save at a time: each answer replaces the whole
-                              // cached row, so two in flight could draw one wrong.
-                              updateAi.isPending ||
-                              // Waiting on Ask blocks turning it on, never off.
-                              waitsOnParent
-                            }
-                            onValueChange={(next) => {
-                              setAiFailedKey(null);
-                              updateAi.mutate(
-                                { [entry.key]: next },
-                                { onError: () => setAiFailedKey(entry.key) },
-                              );
-                            }}
-                            accessibilityLabel={entry.label}
-                          />
-                        }
-                      />
-                    );
-                  })}
-                </ListSection>
-                <Text style={styles.footnote}>
-                  {aiSettings.can_change
-                    ? AI_SETTINGS_COPY.phoneFootnote
-                    : `${AI_SETTINGS_COPY.presidentOnly} ${AI_SETTINGS_COPY.phoneFootnote}`}
-                </Text>
-              </SettingAnchor>
             ) : null}
           </>
         )}
@@ -501,7 +463,7 @@ export default function ChapterSettingsScreen() {
           />
         )}
         {/* Where the phone stops (Shawn, 2026-11-22): Plan and billing, the
-            semester, privacy and the officer tools are web's Settings, which an officer sets up once, at a
+            semester and the officer tools are web's Settings, which an officer sets up once, at a
             desk. One quiet line, as iOS Settings ends a group with its
             footnote. */}
         {search.searching ? null : (

@@ -126,16 +126,26 @@ describe("the Settings page keeps unsaved drafts across tab switches", () => {
   });
 
   it("keeps a half-filled rollover form", async () => {
+    const { followLink } = await import("@/tests/settings-harness");
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
+    const name = /name of the semester ending/i;
+    // The form is its own page since #6028, opened from Semester's row.
+    const openNewSemester = () =>
+      followLink(
+        screen.getByRole("link", { name: /start a new semester/i }),
+        () => rerender(<SettingsPage />),
+      );
 
     await user.click(screen.getByRole("tab", { name: /semester/i }));
-    await user.type(screen.getByLabelText(/^label$/i), "Fall 2026");
+    openNewSemester();
+    await user.type(screen.getByLabelText(name), "Fall 2026");
 
     await user.click(screen.getByRole("tab", { name: /^privacy$/i }));
-    expect(screen.queryByLabelText(/^label$/i)).toBeNull();
+    expect(screen.queryByLabelText(name)).toBeNull();
     await user.click(screen.getByRole("tab", { name: /semester/i }));
+    openNewSemester();
 
-    expect(screen.getByLabelText(/^label$/i)).toHaveValue("Fall 2026");
+    expect(screen.getByLabelText(name)).toHaveValue("Fall 2026");
   });
 });

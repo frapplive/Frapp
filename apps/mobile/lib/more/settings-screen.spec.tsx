@@ -813,9 +813,8 @@ describe("Settings copy", () => {
       const [row] = chapterRow(render(null, "ai"));
       expect(row.props.value).toBe("2 on");
       act(() => row.props.onPress());
-      expect(vi.mocked(useRouter().push)).toHaveBeenCalledWith(
-        "/chapter-settings",
-      );
+      // Straight to the AI screen, not the top of Chapter settings (#6028).
+      expect(vi.mocked(useRouter().push)).toHaveBeenCalledWith("/chapter-ai");
     });
 
     it("counts only the chapter's AI features that work", () => {

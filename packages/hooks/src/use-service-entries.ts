@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { isCardReadMiss } from "./card-read-miss";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { invalidatePointReads } from "./use-points";
-import { semesterSince } from "./document-library";
+import { currentSemesterStart } from "@repo/validation";
 
 /**
  * `userId` is not a convenience — on this endpoint it is the difference between
@@ -98,7 +98,8 @@ export function selectServiceLeaderboard(
 
 /**
  * The first day of "this semester" as a bare `YYYY-MM-DD`: the day after the
- * latest archive's `end_date` ({@link semesterSince}), which is the day the
+ * latest archive's `end_date` (`currentSemesterStart`, shared with Chapter
+ * settings' Semester page), which is the day the
  * Activity page's Service hours gauge counts from
  * (`ActivityStandingService`, `spec/behavior/semester-rollover.md`). `null`
  * when the chapter has never rolled over, so this semester is all time.
@@ -106,10 +107,7 @@ export function selectServiceLeaderboard(
 export function serviceSemesterStartDate(
   archives: readonly { end_date: string; created_at?: string }[],
 ): string | null {
-  const since = semesterSince(archives);
-  return since
-    ? new Date(since.getTime() + 1).toISOString().slice(0, 10)
-    : null;
+  return currentSemesterStart(archives);
 }
 
 /**

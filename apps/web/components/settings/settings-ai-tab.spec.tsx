@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   toast: vi.fn(),
   offline: false,
   saving: false,
+  diagnosticsOffered: false,
 }));
 
 const SHEET = {
@@ -36,8 +37,12 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       sheet_changed: false,
     },
   }),
-  // The diagnostics row has its own spec; here it is not offered.
-  useAskStatus: () => ({ data: null }),
+  // The diagnostics group has its own spec; here only whether it's offered.
+  useAskStatus: () => ({
+    data: state.diagnosticsOffered
+      ? { diagnostics: { offered: true, can_change: true, ends_at: null } }
+      : null,
+  }),
   useSetAskDiagnostics: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateAiChapterSettings: () => ({
     mutateAsync: state.update,
@@ -77,15 +82,36 @@ describe("the chapter's AI switches", () => {
     state.toast.mockReset();
     state.offline = false;
     state.saving = false;
+    state.diagnosticsOffered = false;
   });
 
-  it("says who turns them on, and names no AI company (Paul, 2026-11-17)", () => {
-    state.settings = settings();
+  it("says what every switch shares in its footnote, and names no AI company (Paul, 2026-11-17)", () => {
+    state.settings = settings({ updated_at: "2026-11-20T12:00:00Z" });
     render(<SettingsAiTab />);
     expect(
-      screen.getByText(/on unless the president turns it off/i),
+      screen.getByText(
+        /^Each member also chooses for themselves whether Frapp Intelligence is on\. Last changed November 20/,
+      ),
     ).toBeInTheDocument();
+    // One line per switch, the phone's words (#6028), and no title block.
+    expect(
+      screen.getByText(
+        "A first draft of the minutes from an officer's notes. Never for Standards.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByText(/anthropic|google|assemblyai/i)).toBeNull();
+  });
+
+  it("heads the switches Features only while Diagnostics shows under them", () => {
+    state.settings = settings();
+    const { unmount } = render(<SettingsAiTab />);
+    expect(screen.queryByText("Features")).toBeNull();
+    unmount();
+    state.diagnosticsOffered = true;
+    render(<SettingsAiTab />);
+    expect(screen.getByText("Features")).toBeInTheDocument();
+    expect(screen.getByText("Diagnostics")).toBeInTheDocument();
   });
 
   it("lets the president turn a feature on, and says so", async () => {
