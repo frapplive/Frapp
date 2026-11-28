@@ -681,6 +681,55 @@ describe("Directory on the greenfield shell", () => {
     ).toBeInTheDocument();
   });
 
+  // #5739: the rows stand in the order the chips did, and an "Any" row or a
+  // removed chip puts the whole list back.
+  it("lists its filter rows in the chips' order, and Any or a removed chip unsets one", async () => {
+    const user = userEvent.setup();
+    phoneReachRead.value = {
+      scope: "chapter",
+      byUserId: new Map([
+        [
+          "u-2",
+          {
+            user_id: "u-2",
+            state: "web_only",
+            platform: null,
+            last_opened_at: null,
+          },
+        ],
+      ]),
+    };
+    render(<MembersDirectory />);
+    await openFilterMenu(user);
+    const rows = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.querySelector("span")?.textContent);
+    await closeFilterMenu(user);
+    expect(rows).toEqual([
+      "Role",
+      "Group",
+      "Graduation year",
+      "Status",
+      "Phone app",
+      "Sort",
+    ]);
+
+    await pick(user, "Phone app", "Not reachable");
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
+    await pick(user, "Phone app", "Any");
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(filterButton()).toHaveAccessibleName("Filter members");
+
+    await pick(user, "Status", "Pending");
+    await user.click(
+      screen.getByRole("button", { name: "Remove filter Status: Pending" }),
+    );
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(filterButton()).toHaveAccessibleName("Filter members");
+  });
+
   // #3941: the options are graduation years, so the chapter's `class` word
   // ("Line" here) must not label them; one pledge class spans several years.
   it("labels the graduation-year filter as graduation year, not the chapter's class word", async () => {

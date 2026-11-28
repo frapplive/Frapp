@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { matchesWordStarts } from "@repo/hooks/fuzzy-match";
 import { ListFilter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { FILTER_SEARCH_THRESHOLD } from "@/components/shared/filter-chip";
@@ -52,6 +53,39 @@ export type FilterMenuFilter = {
   isSort?: boolean;
 };
 
+/** The "no filter" value `anyFilterRow` gives a row; no id or value can be it. */
+export const ANY_FILTER = "\u0000any";
+
+/**
+ * A filter whose state is `null` for "any", as one `FilterMenu` row: its
+ * "any" option leads the list. The Directory and Tasks keep their filters
+ * this way.
+ */
+export function anyFilterRow({
+  key,
+  label,
+  anyLabel,
+  options,
+  value,
+  onChange,
+}: {
+  key: string;
+  label: string;
+  anyLabel: string;
+  options: readonly { value: string; label: string }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}): FilterMenuFilter {
+  return {
+    key,
+    label,
+    options: [{ value: ANY_FILTER, label: anyLabel }, ...options],
+    value: value ?? ANY_FILTER,
+    anyValue: ANY_FILTER,
+    onChange: (next) => onChange(next === ANY_FILTER ? null : next),
+  };
+}
+
 export function FilterMenu({
   filters,
   thing,
@@ -83,8 +117,10 @@ export function FilterMenu({
       </Badge>
     ) : null;
 
+  const [open, setOpen] = useState(false);
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         {narrow ? (
           <IconButton
@@ -115,7 +151,11 @@ export function FilterMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-60">
         {filters.map((filter) => (
-          <FilterSubmenu key={filter.key} filter={filter} />
+          <FilterSubmenu
+            key={filter.key}
+            filter={filter}
+            close={() => setOpen(false)}
+          />
         ))}
         {on.length > 0 ? (
           <>
@@ -136,16 +176,28 @@ export function FilterMenu({
 
 /**
  * One filter's row and its options. Past `FILTER_SEARCH_THRESHOLD` options
- * the list gets a type-to-filter field (#3970: a chapter imported from
- * Discord can carry 100+ roles, and scrolling for one is slow).
+ * (the "any" row not counted) the list gets a type-to-filter field (#3970: a
+ * chapter imported from Discord can carry 100+ roles, and scrolling for one
+ * is slow). It searches as the filter chip did and as the phone does: every
+ * word typed starts a word of the label, case, accents and punctuation
+ * ignored (`matchesWordStarts`), and the "any" row steps aside while a query
+ * is typed, so a query never clears the filter by matching "Any role".
+ * Enter picks the first match; Escape clears a query before it closes.
  */
-function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
+function FilterSubmenu({
+  filter,
+  close,
+}: {
+  filter: FilterMenuFilter;
+  close: () => void;
+}) {
   const [query, setQuery] = useState("");
   const current = filter.options.find((o) => o.value === filter.value);
-  const searchable = filter.options.length > FILTER_SEARCH_THRESHOLD;
-  const needle = query.trim().toLowerCase();
-  const shown = needle
-    ? filter.options.filter((o) => o.label.toLowerCase().includes(needle))
+  const choices = filter.options.filter((o) => o.value !== filter.anyValue);
+  const searchable = !filter.isSort && choices.length > FILTER_SEARCH_THRESHOLD;
+  const typed = query.trim() !== "";
+  const shown = typed
+    ? choices.filter((o) => matchesWordStarts(o.label, query))
     : filter.options;
   return (
     <DropdownMenuSub onOpenChange={(open) => !open && setQuery("")}>
@@ -153,7 +205,14 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
         <span className="flex-1">{filter.label}</span>
         <span className="text-muted-foreground">{current?.label}</span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
+      <DropdownMenuSubContent
+        className="max-h-80 overflow-y-auto"
+        onEscapeKeyDown={(event) => {
+          if (!query) return;
+          event.preventDefault();
+          setQuery("");
+        }}
+      >
         {searchable ? (
           <Input
             value={query}
@@ -161,6 +220,14 @@ function FilterSubmenu({ filter }: { filter: FilterMenuFilter }) {
             // The menu's typeahead would take these keys; arrows and Escape
             // still reach it.
             onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const first = shown[0];
+                if (typed && first) {
+                  filter.onChange(first.value);
+                  close();
+                }
+              }
               if (
                 !["ArrowDown", "ArrowUp", "Escape", "Tab"].includes(event.key)
               ) {

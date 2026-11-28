@@ -44,6 +44,7 @@ import { Label } from "@/components/ui/label";
 import { FilterChip } from "@/components/shared/filter-chip";
 import {
   ActiveFilterChips,
+  anyFilterRow,
   FilterMenu,
   type FilterMenuFilter,
 } from "@/components/shared/filter-menu";
@@ -208,38 +209,6 @@ const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
 ] as const;
 
-/** A filter row's "no filter" value; no role, group or year id collides. */
-const ANY_FILTER = "__any__";
-
-/**
- * A Directory filter, whose state is `null` for "any", as one `FilterMenu`
- * row: its "any" option leads the list, as the chip's did.
- */
-function anyFilter({
-  key,
-  label,
-  anyLabel,
-  options,
-  value,
-  onChange,
-}: {
-  key: string;
-  label: string;
-  anyLabel: string;
-  options: readonly { value: string; label: string }[];
-  value: string | null;
-  onChange: (value: string | null) => void;
-}): FilterMenuFilter {
-  return {
-    key,
-    label,
-    options: [{ value: ANY_FILTER, label: anyLabel }, ...options],
-    value: value ?? ANY_FILTER,
-    anyValue: ANY_FILTER,
-    onChange: (next) => onChange(next === ANY_FILTER ? null : next),
-  };
-}
-
 function parseSort(value: SortValue): { key: SortKey; dir: SortDir } {
   const [key, dir] = value.split(":");
   return { key: key as SortKey, dir: dir as SortDir };
@@ -318,7 +287,7 @@ export function MembersDirectory() {
   // List or Grid (#4175), picked in the Directory's tab row.
   const [layout] = useListLayout("directory");
   const [query, setQuery] = useState("");
-  // `null` is "any" (`anyFilter` below draws it as the menu's first row).
+  // `null` is "any" (`anyFilterRow` below draws it as the menu's first row).
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [cohortFilter, setCohortFilter] = useState<string | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(null);
@@ -695,7 +664,7 @@ export function MembersDirectory() {
   // standing's Period. A filter with nothing to offer is left out, as its
   // chip was.
   const filters: FilterMenuFilter[] = [
-    anyFilter({
+    anyFilterRow({
       key: "role",
       label: "Role",
       anyLabel: "Any role",
@@ -705,7 +674,7 @@ export function MembersDirectory() {
     }),
     ...(groupChipOptions.length > 0
       ? [
-          anyFilter({
+          anyFilterRow({
             key: "group",
             label: "Group",
             anyLabel: "Any group",
@@ -715,7 +684,7 @@ export function MembersDirectory() {
           }),
         ]
       : []),
-    anyFilter({
+    anyFilterRow({
       key: "cohort",
       label: "Graduation year",
       anyLabel: "Any year",
@@ -728,7 +697,7 @@ export function MembersDirectory() {
     // for a chapter that keeps no classes.
     ...(classChipOptions.length > 0
       ? [
-          anyFilter({
+          anyFilterRow({
             key: "class",
             label: vocab("class", chapterWords),
             anyLabel: "Any",
@@ -738,7 +707,7 @@ export function MembersDirectory() {
           }),
         ]
       : []),
-    anyFilter({
+    anyFilterRow({
       key: "status",
       label: "Status",
       anyLabel: "Any status",
@@ -749,7 +718,7 @@ export function MembersDirectory() {
     }),
     ...(showsPhoneReach
       ? [
-          anyFilter({
+          anyFilterRow({
             key: "phone-reach",
             label: PHONE_REACH_LABEL,
             anyLabel: "Any",
