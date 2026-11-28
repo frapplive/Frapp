@@ -3,6 +3,8 @@ import {
   can,
   channelTakesBackground,
   MAX_UPLOAD_LABEL,
+  holidayFlairOn,
+  withHolidaySeason,
   type ChatBackgroundKey,
 } from "@repo/validation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -184,7 +186,13 @@ async function resolvePhotoPath(
   return storage_path;
 }
 
-/** The resolved background for one channel (the channel's own, else the chapter default). */
+/**
+ * The resolved background for one channel (the channel's own, else the
+ * chapter default), with the Holiday season applied by the viewer's own local
+ * date (#6149): from Dec 1 to 26 a Plain chapter default reads as Holiday,
+ * unless the chapter turned the season off. The date is read on every render,
+ * so the season starts and ends with no refetch and no deploy.
+ */
 export function useChatBackground(channelId: string | null | undefined) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
@@ -198,6 +206,7 @@ export function useChatBackground(channelId: string | null | undefined) {
       throwUnlessOk(result);
       return result.data!;
     },
+    select: (data) => withHolidaySeason(data, new Date()),
     // A background is decoration: it changes rarely, and a stale one for a
     // few minutes costs nothing. The signed photo URL lives for hours.
     staleTime: 5 * 60_000,
@@ -302,4 +311,82 @@ export function useSetChapterChatBackground() {
       }
     },
   });
+}
+
+/**
+ * The officer switch "Holiday background this season" (#6149), saved the
+ * moment it flips: the switch shows the new value at once, and puts the old
+ * one back if the save fails. Every channel's background is read again after,
+ * since a Plain default reads as Holiday only while the switch is on.
+ */
+export function useSetChatBackgroundHolidaySeason() {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: HOLIDAY_SEASON_MUTATION_KEY,
+    // Flips run in order, so the last one an officer makes is the one stored.
+    scope: { id: "chat-backgrounds:holiday-season" },
+    mutationFn: async (enabled: boolean) => {
+      const result = await client.PUT(
+        "/v1/chat-backgrounds/default/holiday-season",
+        { body: { enabled } },
+      );
+      throwUnlessOk(result);
+      return result.data!;
+    },
+    onMutate: async (enabled) => {
+      if (!chapterId) return undefined;
+      const key = chatBackgroundKeys.detail(chapterId, "default");
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<{ holiday_season: boolean }>(
+        key,
+      );
+      if (previous) {
+        queryClient.setQueryData(key, {
+          ...previous,
+          holiday_season: enabled,
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _enabled, context) => {
+      if (chapterId && context?.previous) {
+        queryClient.setQueryData(
+          chatBackgroundKeys.detail(chapterId, "default"),
+          context.previous,
+        );
+      }
+    },
+    onSettled: () => {
+      // While a later flip is still queued, a refetch would bring back the
+      // stored value and undo that flip's optimistic one: the last flip to
+      // settle reads everything again.
+      if (
+        chapterId &&
+        queryClient.isMutating({ mutationKey: HOLIDAY_SEASON_MUTATION_KEY }) <=
+          1
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: chatBackgroundKeys.chapter(chapterId),
+        });
+      }
+    },
+  });
+}
+
+const HOLIDAY_SEASON_MUTATION_KEY = [
+  "chat-backgrounds",
+  "set-holiday-season",
+] as const;
+
+/**
+ * Whether the Holiday season's flair shows right now (#6149): Dec 1 to 26,
+ * by the viewer's own date, while the chapter's season switch is on
+ * (`holidayFlairOn`). Reads the chapter default, which the first-screen batch
+ * already carries, so it costs no request of its own.
+ */
+export function useHolidayFlair(): boolean {
+  const chapterDefault = useChapterChatBackground();
+  return holidayFlairOn(chapterDefault.data, new Date());
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { ChapterLogoUpload } from "@repo/hooks";
 import {
   CHAPTER_TAB_COPY,
   chapterLettersHidden,
-  chapterMarkBrandingDiff,
+  chapterMarkLettersDiff,
+  chapterMarkShortNameDiff,
 } from "@repo/hooks/chapter-tab";
 import {
   CHAPTER_SHORT_NAME_MAX_LENGTH,
@@ -17,9 +18,9 @@ import {
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { ProfileSection } from "@/components/profile/profile-section";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { SettingsTextField } from "@/components/settings/settings-name-field";
 import { CrestTile } from "@/components/layout/crest-tile";
 import { inspectLogoFile } from "@/lib/chapter-logo";
 
@@ -45,8 +46,8 @@ type Props = {
   onUploadLogo: (upload: ChapterLogoUpload) => Promise<void>;
   onRemoveLogo: () => Promise<void>;
   logoPending?: boolean;
-  onPatchConfig: (diff: PatchChapterConfig) => Promise<void> | void;
-  savingConfig?: boolean;
+  /** The audited config PATCH; resolves whether it landed (a failure toasts). */
+  onPatchConfig: (diff: PatchChapterConfig) => Promise<boolean>;
   /** The permission line the tab shows under a form the caller can't save. */
   manageHint: React.ReactNode;
   profileHint: React.ReactNode;
@@ -58,13 +59,14 @@ type Props = {
  *
  * Two writes with two gates, because they are two routes. The logo uploads
  * the moment a file is chosen (mint, PUT, confirm; `useUploadChapterLogo`),
- * gated like the profile PATCH. The short name and the Greek-letters switch
- * save through the audited config PATCH, gated on `chapter-config:manage`
- * like the identity card below it. Greek letters themselves stay in that
+ * gated like the profile PATCH. The short name (on Enter or leaving the
+ * field) and the Greek-letters switch (when flipped) each save on their own
+ * through the audited config PATCH (#6033), gated on `chapter-config:manage`
+ * like the identity page. Greek letters themselves stay in that
  * card: they are identity data a chapter may keep while not showing them.
  *
- * The preview is the nav's own tile, fed the draft, so what an officer sees
- * here is what every member's nav will show once it saves.
+ * The preview is the nav's own tile, fed what is being typed, so what an
+ * officer sees here is what every member's nav will show once it saves.
  */
 export function SettingsChapterMarkCard({
   name,
@@ -76,7 +78,6 @@ export function SettingsChapterMarkCard({
   onRemoveLogo,
   logoPending,
   onPatchConfig,
-  savingConfig,
   manageHint,
   profileHint,
 }: Props) {
@@ -84,38 +85,36 @@ export function SettingsChapterMarkCard({
   // its letters stay off, and the next save writes that down even for a
   // chapter created before the profile turned them off.
   const lettersHidden = chapterLettersHidden(name);
-  const [shortName, setShortName] = useState(branding.short_name ?? "");
-  const [showLetters, setShowLetters] = useState(greekLettersShown(branding));
+  const storedShortName = branding.short_name ?? "";
+  const storedShowLetters = greekLettersShown(branding);
+  // What the short name field holds right now, for the preview.
+  const [typedShortName, setTypedShortName] = useState(storedShortName);
+  const [lettersSaving, setLettersSaving] = useState(false);
 
-  // Keyed on the stored values, not the `branding` object, which the page
-  // rebuilds on every render: an object dependency re-seeded on any re-render,
-  // a logo upload starting included, and wiped unsaved edits.
-  /* eslint-disable react-hooks/set-state-in-effect -- re-seed the drafts from the chapter config query */
-  useEffect(() => {
-    setShortName(branding.short_name ?? "");
-    setShowLetters(greekLettersShown(branding));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the two stored values are the dependency; see above
-  }, [branding.short_name, branding.show_greek_letters]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const mark = resolveChapterMark({
+    logoUrl,
+    branding: {
+      short_name: typedShortName,
+      greek_letters: branding.greek_letters,
+      show_greek_letters: storedShowLetters && !lettersHidden,
+    },
+    name,
+  });
 
-  const draft = {
-    short_name: shortName,
-    greek_letters: branding.greek_letters,
-    show_greek_letters: showLetters && !lettersHidden,
-  };
-  const mark = resolveChapterMark({ logoUrl, branding: draft, name });
-
-  function saveMark(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    // The switch always; the short name only to keep or clear one.
-    void onPatchConfig({
-      branding: chapterMarkBrandingDiff({
-        shortName,
-        showLetters,
-        lettersHidden,
-        stored: branding,
-      }),
+  // Each saves only its own key (`chapterMarkShortNameDiff`,
+  // `chapterMarkLettersDiff`), so neither re-sends the other from a cached
+  // config another officer may have changed since.
+  const saveShortName = (next: string) =>
+    onPatchConfig({
+      branding: chapterMarkShortNameDiff(next, branding, lettersHidden),
     });
+
+  async function flipLetters(next: boolean) {
+    setLettersSaving(true);
+    await onPatchConfig({
+      branding: chapterMarkLettersDiff(next, lettersHidden),
+    });
+    setLettersSaving(false);
   }
 
   return (
@@ -139,20 +138,19 @@ export function SettingsChapterMarkCard({
           hint={profileHint}
         />
 
-        <form
-          onSubmit={saveMark}
-          className="space-y-4 border-t border-border pt-4"
-        >
-          <div className="grid gap-1 md:max-w-xs">
-            <Label htmlFor="chapter-short-name">Short name</Label>
-            <Input
-              id="chapter-short-name"
-              value={shortName}
-              onChange={(event) => setShortName(event.target.value)}
-              maxLength={CHAPTER_SHORT_NAME_MAX_LENGTH}
-              placeholder="FIJI"
-            />
-          </div>
+        <div className="space-y-4 border-t border-border pt-4">
+          <SettingsTextField
+            id="chapter-short-name"
+            label="Short name"
+            value={storedShortName}
+            maxLength={CHAPTER_SHORT_NAME_MAX_LENGTH}
+            placeholder="FIJI"
+            className="md:max-w-xs"
+            allowBlank
+            disabled={!canManage}
+            onTextChange={setTypedShortName}
+            onSave={saveShortName}
+          />
           {lettersHidden ? null : (
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="chapter-show-letters" className="font-normal">
@@ -163,22 +161,14 @@ export function SettingsChapterMarkCard({
               </Label>
               <Switch
                 id="chapter-show-letters"
-                checked={showLetters}
-                onCheckedChange={setShowLetters}
-                disabled={!canManage}
+                checked={storedShowLetters}
+                onCheckedChange={(next) => void flipLetters(next)}
+                disabled={!canManage || lettersSaving}
               />
             </div>
           )}
-          <div className="flex items-center justify-between gap-3">
-            {manageHint ?? <span />}
-            <Button type="submit" disabled={!canManage || savingConfig}>
-              {savingConfig ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : null}
-              Save mark
-            </Button>
-          </div>
-        </form>
+          {manageHint}
+        </div>
       </div>
     </ProfileSection>
   );

@@ -3,21 +3,18 @@ import {
   BIRTHDAY_POSTS_COPY,
   birthdayPostChoices,
   chapterArchetypeSwitchPatch,
-  chapterIdentityBrandingDiff,
-  chapterIdentityChanged,
-  chapterIdentityDraftOf,
+  chapterIdentityFieldDiff,
   chapterIdentityValue,
-  chapterMarkBrandingDiff,
-  chapterMarkChanged,
+  chapterMarkLettersDiff,
+  chapterMarkShortNameDiff,
   chapterMarkDraftOf,
   chapterMarkValue,
-  chapterProfileChanged,
+  chapterProfileFieldBody,
   chapterProfileSaveBody,
-  chapterVocabularyChanged,
-  chapterVocabularyDraftOf,
-  chapterVocabularyPatch,
+  chapterVocabularyFieldPatch,
   chapterVocabularyValue,
   checkFoundedYear,
+  foundedYearProblem,
   offersBirthdayPosts,
   readChapterBranding,
 } from "./chapter-tab";
@@ -70,12 +67,12 @@ describe("chapterProfileSaveBody", () => {
   });
 });
 
-describe("chapterProfileChanged", () => {
-  it("waits for an edit", () => {
-    expect(chapterProfileChanged(STORED, { ...STORED })).toBe(false);
+describe("chapterProfileFieldBody", () => {
+  it("sends the one field typed, and nothing for one typed back", () => {
     expect(
-      chapterProfileChanged(STORED, { ...STORED, university: "Rensselaer" }),
-    ).toBe(true);
+      chapterProfileFieldBody(STORED, "university", " Rensselaer "),
+    ).toEqual({ university: "Rensselaer" });
+    expect(chapterProfileFieldBody(STORED, "name", STORED.name)).toEqual({});
   });
 });
 
@@ -104,44 +101,40 @@ describe("readChapterBranding", () => {
 });
 
 describe("Chapter mark", () => {
-  it("always sends the switch, and the short name only to keep or clear one", () => {
+  it("saves the short name alone, keeping or clearing one (#6033)", () => {
+    expect(chapterMarkShortNameDiff("  ", {}, false)).toEqual({});
+    expect(chapterMarkShortNameDiff(" SigEp ", {}, false)).toEqual({
+      short_name: "SigEp",
+    });
     expect(
-      chapterMarkBrandingDiff({
-        shortName: "  ",
-        showLetters: true,
-        lettersHidden: false,
-        stored: {},
-      }),
-    ).toEqual({ show_greek_letters: true });
-    expect(
-      chapterMarkBrandingDiff({
-        shortName: "",
-        showLetters: true,
-        lettersHidden: false,
-        stored: { short_name: "Sig Ep" },
-      }),
-    ).toEqual({ show_greek_letters: true, short_name: "" });
+      chapterMarkShortNameDiff("", { short_name: "Sig Ep" }, false),
+    ).toEqual({ short_name: "" });
+  });
+
+  it("saves the switch alone", () => {
+    expect(chapterMarkLettersDiff(false, false)).toEqual({
+      show_greek_letters: false,
+    });
+    expect(chapterMarkLettersDiff(true, false)).toEqual({
+      show_greek_letters: true,
+    });
   });
 
   it("writes the letters off for an organization that hides them", () => {
-    expect(
-      chapterMarkBrandingDiff({
-        shortName: "FIJI",
-        showLetters: true,
-        lettersHidden: true,
-        stored: {},
-      }),
-    ).toEqual({ show_greek_letters: false, short_name: "FIJI" });
+    expect(chapterMarkShortNameDiff("FIJI", {}, true)).toEqual({
+      show_greek_letters: false,
+      short_name: "FIJI",
+    });
+    expect(chapterMarkLettersDiff(true, true)).toEqual({
+      show_greek_letters: false,
+    });
   });
 
-  it("knows when the page holds an edit", () => {
-    const branding = { short_name: "Sig Ep" };
-    const draft = chapterMarkDraftOf(branding);
-    expect(draft).toEqual({ shortName: "Sig Ep", showLetters: true });
-    expect(chapterMarkChanged(draft, branding)).toBe(false);
-    expect(chapterMarkChanged({ ...draft, showLetters: false }, branding)).toBe(
-      true,
-    );
+  it("reads the stored mark as the page's two fields", () => {
+    expect(chapterMarkDraftOf({ short_name: "Sig Ep" })).toEqual({
+      shortName: "Sig Ep",
+      showLetters: true,
+    });
   });
 
   it("names what the mark draws", () => {
@@ -206,29 +199,31 @@ describe("Identity & founding", () => {
     expect(checkFoundedYear(String(NOW_YEAR + 2), undefined).valid).toBe(false);
   });
 
-  it("sends a cleared field as empty and leaves never-set ones out", () => {
-    const stored = { greek_letters: "ΣΦΕ", designation: "California Eta" };
-    expect(
-      chapterIdentityBrandingDiff(
-        {
-          greekLetters: " ΣΦΕ ",
-          designation: "",
-          schoolShort: "",
-          foundedYear: "1901",
-        },
-        stored,
-      ),
-    ).toEqual({ greek_letters: "ΣΦΕ", designation: "", founded_at: 1901 });
+  it("saves one field alone, a cleared one as empty, a never-set one as nothing (#6033)", () => {
+    const branding = { designation: "California Eta", founded_at: 1901 };
+    expect(chapterIdentityFieldDiff(branding, "schoolShort", " UCLA ")).toEqual(
+      {
+        school_short: "UCLA",
+      },
+    );
+    expect(chapterIdentityFieldDiff(branding, "designation", "")).toEqual({
+      designation: "",
+    });
+    expect(chapterIdentityFieldDiff(branding, "greekLetters", " ")).toEqual({});
+    expect(chapterIdentityFieldDiff(branding, "foundedYear", "1903")).toEqual({
+      founded_at: 1903,
+    });
   });
 
-  it("knows when the page holds an edit", () => {
-    const branding = { designation: "California Eta", founded_at: 1901 };
-    const draft = chapterIdentityDraftOf(branding);
-    expect(draft.foundedYear).toBe("1901");
-    expect(chapterIdentityChanged(draft, branding)).toBe(false);
-    expect(
-      chapterIdentityChanged({ ...draft, schoolShort: "UCLA" }, branding),
-    ).toBe(true);
+  it("says what's wrong with a founded year, or nothing", () => {
+    expect(foundedYearProblem("1901", undefined)).toBeNull();
+    expect(foundedYearProblem("", undefined)).toBeNull();
+    expect(foundedYearProblem("19", undefined)).toMatch(
+      /^Enter a year between 1776 and \d{4}\.$/,
+    );
+    expect(foundedYearProblem("", 1901)).toMatch(
+      /^A founded year can't be removed once saved\. Enter a year/,
+    );
   });
 
   it("shows the first fact filled in", () => {
@@ -254,32 +249,13 @@ describe("Organization type", () => {
 });
 
 describe("Vocabulary", () => {
-  it("sends every word trimmed, a cleared one as empty", () => {
-    const draft = chapterVocabularyDraftOf({ recruitment: "Rush" });
-    expect(
-      chapterVocabularyPatch({
-        ...draft,
-        recruitment: " ",
-        pledge: " Pledge ",
-      }),
-    ).toEqual({
-      vocabulary: {
-        recruitment: "",
-        pledge: "Pledge",
-        class: "",
-        order: "",
-        tier: "",
-      },
+  it("saves one word alone, trimmed, a cleared one as empty (#6033)", () => {
+    expect(chapterVocabularyFieldPatch("tier", " Board ")).toEqual({
+      vocabulary: { tier: "Board" },
     });
-  });
-
-  it("knows when the page holds an edit", () => {
-    const stored = { recruitment: "Rush" };
-    const draft = chapterVocabularyDraftOf(stored);
-    expect(chapterVocabularyChanged(draft, stored)).toBe(false);
-    expect(chapterVocabularyChanged({ ...draft, tier: "Board" }, stored)).toBe(
-      true,
-    );
+    expect(chapterVocabularyFieldPatch("recruitment", " ")).toEqual({
+      vocabulary: { recruitment: "" },
+    });
   });
 
   it("reads Custom once a word differs from the type's", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { InterestFormQuestion } from "@repo/hooks";
@@ -66,7 +67,7 @@ export function InterestFormQuestionsEditor({
       <p className="text-sm font-medium text-foreground">{COPY.questions}</p>
       <p className="text-caption text-muted-foreground">{COPY.questionsHint}</p>
       {questions.length > 0 ? (
-        <ol className="divide-y divide-border rounded-[14px] border border-border bg-card">
+        <ol className={SETTINGS_GROUP_FRAME}>
           {questions.map((question, index) => {
             const problem = problemOf(question);
             return (

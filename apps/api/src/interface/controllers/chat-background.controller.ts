@@ -36,6 +36,7 @@ import {
   ChatBackgroundResponseDto,
   SetChannelBackgroundDto,
   SetChapterChatBackgroundDto,
+  SetChatBackgroundHolidaySeasonDto,
 } from '../dtos/chat-background.dto';
 
 /**
@@ -134,6 +135,21 @@ export class ChatBackgroundController {
       dto.background,
       dto.storage_path,
     );
+  }
+
+  @Put('default/holiday-season')
+  @ThrottleFanOutWrite()
+  @RequirePermissions(...CHAPTER_PROFILE_PERMISSIONS)
+  @ApiOperation({
+    summary:
+      'Turn the Holiday season (a Plain default shows Holiday, Dec 1 to 26) on or off for the chapter',
+  })
+  @ApiOkResponse({ type: ChapterChatBackgroundResponseDto })
+  async setHolidaySeason(
+    @CurrentChapterId() chapterId: string,
+    @Body() dto: SetChatBackgroundHolidaySeasonDto,
+  ): Promise<ChapterChatBackgroundResponseDto> {
+    return this.backgrounds.setHolidaySeason(chapterId, dto.enabled);
   }
 
   @Post('default/photo-url')

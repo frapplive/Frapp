@@ -3,7 +3,10 @@
  * read: web turns it into CSS (`apps/web/components/chat/chat-background.tsx`)
  * and mobile into SVG (`apps/mobile/components/chat/chat-background.tsx`). The
  * values come from the chat concept page's backgrounds (Plain, Gold glow,
- * Midnight, Game day, Letters); the keys are `CHAT_BACKGROUND_BUILT_INS` in
+ * Midnight, Game day, Letters), and Holiday (#6149), which a channel that
+ * follows a Plain chapter default shows from Dec 1 to 26 unless an officer
+ * turned the season off (`withHolidaySeason` in `@repo/validation`); the
+ * keys are `CHAT_BACKGROUND_BUILT_INS` in
  * `@repo/validation`.
  *
  * Every one is dark, because Signet is dark-only and the thread's text tokens
@@ -17,7 +20,7 @@ import { mixHex } from "@repo/color";
 import { signetDarkTokens } from "./signet";
 
 export type ChatBackgroundBuiltInKey =
-  "plain" | "gold-glow" | "midnight" | "game-day" | "letters";
+  "plain" | "gold-glow" | "midnight" | "game-day" | "letters" | "holiday";
 
 export type ChatBackgroundLayer =
   /** A full-bleed gradient of opaque stops, at `angle` degrees (CSS convention). */
@@ -58,6 +61,19 @@ export type ChatBackgroundLayer =
       fontSize: number;
       color: string;
       alphas: readonly [number, number];
+    }
+  /**
+   * Snow: round flakes on a square `tile` px wide, repeated. In a thread it
+   * drifts down one tile every `fallSeconds`, slowly enough to sit behind
+   * the reading; it holds still under reduced motion, and in a swatch.
+   */
+  | {
+      kind: "snow";
+      tile: number;
+      flakes: readonly { x: number; y: number; r: number }[];
+      color: string;
+      alpha: number;
+      fallSeconds: number;
     };
 
 export interface ChatBackgroundPaint {
@@ -67,6 +83,30 @@ export interface ChatBackgroundPaint {
 }
 
 const GOLD = "#DDB844";
+const CRANBERRY = "#C4283F";
+
+/**
+ * Holiday's flakes on its 160px tile: sixteen, from 1 to 2.2px, spread so no
+ * two clump and the repeat doesn't read as a grid.
+ */
+const SNOW_FLAKES = [
+  { x: 12, y: 18, r: 1.6 },
+  { x: 47, y: 6, r: 1 },
+  { x: 83, y: 27, r: 2.2 },
+  { x: 128, y: 11, r: 1.3 },
+  { x: 150, y: 44, r: 1 },
+  { x: 29, y: 58, r: 1.2 },
+  { x: 66, y: 71, r: 1.8 },
+  { x: 109, y: 62, r: 1 },
+  { x: 140, y: 88, r: 1.6 },
+  { x: 8, y: 97, r: 1 },
+  { x: 44, y: 113, r: 2 },
+  { x: 92, y: 104, r: 1.2 },
+  { x: 121, y: 131, r: 1.4 },
+  { x: 21, y: 142, r: 1.1 },
+  { x: 71, y: 150, r: 1.5 },
+  { x: 154, y: 151, r: 1 },
+] as const;
 
 export const CHAT_BACKGROUND_PAINTS: Record<
   ChatBackgroundBuiltInKey,
@@ -140,6 +180,53 @@ export const CHAT_BACKGROUND_PAINTS: Record<
       },
     ],
   },
+  // Deep evergreen, a soft cranberry glow from the top right and a fainter
+  // one from the bottom left, and light snow (#6149). A flake at its peak, on
+  // the glow on the gradient's top stop, is the brightest pixel: snow at 0.11
+  // put `muted` text there at 4.47:1, so the flakes stay at 0.10 and the glow
+  // at 0.13 (the AA guard measures it).
+  holiday: {
+    base: "#07130D",
+    layers: [
+      {
+        kind: "linear",
+        angle: 170,
+        stops: [
+          { offset: 0, color: "#0E2219" },
+          { offset: 0.5, color: "#0A1912" },
+          { offset: 1, color: "#07130D" },
+        ],
+      },
+      {
+        kind: "radial",
+        cx: 0.9,
+        cy: 0,
+        rx: 1.1,
+        ry: 0.7,
+        color: CRANBERRY,
+        alpha: 0.13,
+        fade: 0.6,
+      },
+      {
+        kind: "radial",
+        cx: 0,
+        cy: 1,
+        rx: 0.8,
+        ry: 0.5,
+        color: CRANBERRY,
+        alpha: 0.08,
+        fade: 0.6,
+      },
+      {
+        kind: "snow",
+        tile: 160,
+        flakes: SNOW_FLAKES,
+        color: "#FFFFFF",
+        alpha: 0.1,
+        fallSeconds: 24,
+      },
+    ],
+  },
 };
 
 /**
@@ -159,21 +246,20 @@ function mix(a: string, b: string, weightOfB: number): string {
 
 /**
  * Every pixel colour a background can produce at its brightest, for the AA
- * guard. Glows are stacked at full strength (their peaks could overlap), and
- * a rule or a letter is laid over the brighter band.
+ * guard. Glows are stacked at full strength over every colour under them
+ * (their peaks could overlap, and could sit on a gradient's brightest stop),
+ * and a rule, a letter or a flake is laid over everything beneath it.
  */
 export function chatBackgroundSamples(key: ChatBackgroundBuiltInKey): string[] {
   const paint = CHAT_BACKGROUND_PAINTS[key];
   const samples = [paint.base];
-  let glowPeak = paint.base;
   for (const layer of paint.layers) {
     switch (layer.kind) {
       case "linear":
         samples.push(...layer.stops.map((s) => s.color));
         break;
       case "radial":
-        glowPeak = mix(glowPeak, layer.color, layer.alpha);
-        samples.push(glowPeak);
+        samples.push(...samples.map((s) => mix(s, layer.color, layer.alpha)));
         break;
       case "bands":
         samples.push(...layer.colors);
@@ -183,6 +269,9 @@ export function chatBackgroundSamples(key: ChatBackgroundBuiltInKey): string[] {
         break;
       case "letters":
         samples.push(mix(paint.base, layer.color, Math.max(...layer.alphas)));
+        break;
+      case "snow":
+        samples.push(...samples.map((s) => mix(s, layer.color, layer.alpha)));
         break;
     }
   }

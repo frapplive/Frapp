@@ -107,6 +107,24 @@ const DISCORD_IMPORT_TOOL = "discord-import";
 /** Discord import, opened in place of the Chat page. */
 export const DISCORD_IMPORT_SETTINGS_PATH = `${CHAT_MODULE_SETTINGS_PATH}&tool=${DISCORD_IMPORT_TOOL}`;
 
+/**
+ * The pages Discord import's rows open (#6031): what didn't come over, from
+ * a finished import's "Didn't come over" row.
+ */
+export const DISCORD_IMPORT_PAGES = ["issues"] as const;
+export type DiscordImportPage = (typeof DISCORD_IMPORT_PAGES)[number];
+
+function isDiscordImportPage(
+  value: string | null | undefined,
+): value is DiscordImportPage {
+  return (DISCORD_IMPORT_PAGES as readonly string[]).includes(value ?? "");
+}
+
+/** One of Discord import's own pages, with its way back to the import. */
+export function discordImportPagePath(page: DiscordImportPage): string {
+  return `${DISCORD_IMPORT_SETTINGS_PATH}&page=${page}`;
+}
+
 /** The export form, opened from the Reports page's row. */
 export const REPORTS_SETTINGS_PATH = moduleSettingsHref("reports", "reports");
 
@@ -222,7 +240,11 @@ export type SettingsSubpage =
       /** One of the channel's own pages, or null for its settings. */
       page: ChannelSettingsPage | null;
     }
-  | { kind: "discord-import" }
+  | {
+      kind: "discord-import";
+      /** One of the import's own pages, or null for the import. */
+      page: DiscordImportPage | null;
+    }
   | { kind: "chat-page"; page: ChatSettingsPage };
 
 /**
@@ -249,7 +271,10 @@ export function settingsSubpageFor(
     };
   }
   if (params.tool === DISCORD_IMPORT_TOOL && holdsTool("discord-import")) {
-    return { kind: "discord-import" };
+    return {
+      kind: "discord-import",
+      page: isDiscordImportPage(params.page) ? params.page : null,
+    };
   }
   // Each page gates itself as its section in Chat admin did: the
   // background for whoever edits the chapter profile, the queue for report

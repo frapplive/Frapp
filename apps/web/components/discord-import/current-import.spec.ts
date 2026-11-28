@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImportRow } from "./import-progress";
-import { currentImport, importStage } from "./current-import";
+import { currentImport, importRowState, importStage } from "./current-import";
 
 const row = (id: string, status: string, created_at: string) =>
   ({ id, status, created_at }) as unknown as ImportRow;
@@ -57,5 +57,71 @@ describe("importStage", () => {
     ["cancelled", "finished"],
   ])("puts a %s import on the %s page", (status, stage) => {
     expect(importStage(row("x", status, "2026-09-30T00:00:00Z"))).toBe(stage);
+  });
+});
+
+describe("importRowState (#6031)", () => {
+  const at = "2026-09-30T00:00:00Z";
+  const with_ = (status: string, fields: Partial<ImportRow> = {}) =>
+    ({ ...row("i", status, at), ...fields }) as ImportRow;
+
+  it("says Not started with nothing imported", () => {
+    expect(importRowState([])).toBe("Not started");
+    expect(importRowState([row("d", "draft", at)])).toBe("Not started");
+  });
+
+  it("says how far a running import is", () => {
+    expect(
+      importRowState([
+        with_("running", {
+          source: "upload",
+          imported_messages: 42,
+          total_messages: 100,
+          channels_total: null,
+        }),
+      ]),
+    ).toBe("Importing 42%");
+  });
+
+  it("counts a finished import's messages", () => {
+    expect(
+      importRowState([with_("completed", { imported_messages: 4120 })]),
+    ).toBe("4,120 messages");
+  });
+
+  it("says a failed import stopped on an error", () => {
+    expect(importRowState([with_("failed")])).toBe("Stopped on an error");
+  });
+
+  it("names one finished message in the singular", () => {
+    expect(importRowState([with_("completed", { imported_messages: 1 })])).toBe(
+      "1 message",
+    );
+  });
+
+  it("says a queued import is waiting, as the page does, not Importing 0%", () => {
+    expect(
+      importRowState([
+        with_("ready", {
+          source: "upload",
+          imported_messages: 0,
+          total_messages: 100,
+          channels_total: null,
+        }),
+      ]),
+    ).toBe("Waiting to start");
+  });
+
+  it("says a delete that stopped part-way stopped, not a resumable import", () => {
+    expect(
+      importRowState([
+        with_("failed", { purged_messages: 12, imported_messages: 40 }),
+      ]),
+    ).toBe("Deletion stopped");
+  });
+
+  it("says Deleting while a delete runs, and Stopped for one the admin stopped", () => {
+    expect(importRowState([with_("purging")])).toBe("Deleting");
+    expect(importRowState([with_("cancelled")])).toBe("Stopped");
   });
 });

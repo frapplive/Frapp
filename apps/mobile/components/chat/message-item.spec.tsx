@@ -2,7 +2,8 @@
 import React from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useHolidayFlairOn } from "@/components/chat/holiday-flair";
 import type { ChatMessage, ThreadLastReply } from "@repo/chat-core/types";
 import { reactionActionType } from "@repo/chat-core/types";
 import { FrappThemeProvider } from "@/lib/theme";
@@ -1715,5 +1716,34 @@ describe("thread chip (#3785)", () => {
       }) as StyleProp<TextStyle>,
     );
     expect(style.alignSelf).toBe("flex-end");
+  });
+});
+
+/** The Holiday season's flair (#6149): stubbed off in `vitest.setup.ts`. */
+describe("a row in the Holiday season", () => {
+  const flair = (tree: ReactTestRenderer, testID: string) =>
+    tree.root.findAll((node) => node.props.testID === testID).length > 0;
+  afterEach(() => vi.mocked(useHolidayFlairOn).mockReturnValue(false));
+
+  it("tips a Santa hat onto the author's photo and puts holly after the name", () => {
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    const tree = renderItem(message());
+    expect(flair(tree, "holiday-santa-hat")).toBe(true);
+    expect(flair(tree, "holiday-holly")).toBe(true);
+  });
+
+  it("dresses no system post", () => {
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    const tree = renderItem(
+      message({ sender_id: SYSTEM_SENDER_ID, kind: "system_audit" }),
+    );
+    expect(flair(tree, "holiday-santa-hat")).toBe(false);
+    expect(flair(tree, "holiday-holly")).toBe(false);
+  });
+
+  it("draws none of it out of season", () => {
+    const tree = renderItem(message());
+    expect(flair(tree, "holiday-santa-hat")).toBe(false);
+    expect(flair(tree, "holiday-holly")).toBe(false);
   });
 });

@@ -76,7 +76,7 @@ import {
   shownModuleSettings,
 } from "@repo/hooks/module-settings";
 import {
-  chapterProfileSaveBody,
+  chapterProfileFieldBody,
   readChapterBranding,
 } from "@repo/hooks/chapter-tab";
 import {
@@ -494,28 +494,27 @@ function SettingsPageContent() {
   const dues = config?.dues ?? DEFAULT_DUES;
   const semesters = asArray<SemesterArchive>(semestersQuery.data);
 
-  async function saveProfile(next: {
-    name: string;
-    university: string;
-    donation_url: string;
-  }) {
+  // One profile field, saved on its own (#6033): the field shows "Saved", so
+  // only a failure toasts. Resolves whether it landed.
+  async function saveProfileField(
+    field: keyof typeof profile,
+    next: string,
+  ): Promise<boolean> {
     // Only what the officer changed, so a name stored before the API's rule
     // never refuses an edit of the donation link.
-    const body = chapterProfileSaveBody(profile, next);
+    const body = chapterProfileFieldBody(profile, field, next);
     try {
       if (Object.keys(body).length > 0) {
         await updateChapter.mutateAsync(body);
       }
-      toast({
-        title: "Chapter profile saved",
-        description: "Everyone sees the changes on their next refresh.",
-      });
+      return true;
     } catch (error) {
       toast({
         title: "Couldn't save chapter profile",
         description: getErrorMessage(error, "Retry or check your connection."),
         variant: "destructive",
       });
+      return false;
     }
   }
 
@@ -555,13 +554,24 @@ function SettingsPageContent() {
     }
   }
 
-  async function patchConfig(diff: PatchChapterConfig, successTitle: string) {
+  /**
+   * The audited config PATCH. `successTitle` toasts once it lands; `null`
+   * for a field that saves on its own and says "Saved" itself (#6033).
+   * Resolves whether it landed.
+   */
+  async function patchConfig(
+    diff: PatchChapterConfig,
+    successTitle: string | null,
+  ): Promise<boolean> {
     try {
       await patchOrgConfig.mutateAsync(diff);
-      toast({
-        title: successTitle,
-        description: "An entry was written to the chapter audit log.",
-      });
+      if (successTitle) {
+        toast({
+          title: successTitle,
+          description: "An entry was written to the chapter audit log.",
+        });
+      }
+      return true;
     } catch (error) {
       toast({
         title: "Couldn't save settings",
@@ -571,6 +581,7 @@ function SettingsPageContent() {
         ),
         variant: "destructive",
       });
+      return false;
     }
   }
 
@@ -605,8 +616,9 @@ function SettingsPageContent() {
     permissionNotes?: Record<string, React.ReactNode>;
   } {
     const href = (page: string) => moduleSettingsHref(key, page);
-    const patchRules = (diff: PatchChapterConfig, title: string) =>
-      patchConfig(diff, title);
+    const patchRules = async (diff: PatchChapterConfig, title: string) => {
+      await patchConfig(diff, title);
+    };
     const pages: ModulePage[] = [];
     let rules: React.ReactNode = null;
     let goals: React.ReactNode = null;
@@ -861,16 +873,11 @@ function SettingsPageContent() {
                 canEditProfile={canEditProfile}
                 page={chapterPage}
                 pageHref={chapterSettingsHref}
-                onSaveProfile={saveProfile}
-                onPatchConfig={(diff) =>
-                  patchConfig(diff, "Organization settings saved")
+                onSaveProfileField={saveProfileField}
+                onPatchConfig={(diff, successTitle) =>
+                  patchConfig(diff, successTitle ?? null)
                 }
-                savingProfile={updateChapter.isPending}
-                savingConfig={
-                  pendingConfigKeys.has("branding") ||
-                  pendingConfigKeys.has("vocabulary") ||
-                  pendingConfigKeys.has("org_archetype")
-                }
+                switchingType={pendingConfigKeys.has("org_archetype")}
                 accentSection={
                   <SettingsAccentTab
                     draft={accentDraft}
@@ -982,11 +989,12 @@ function SettingsPageContent() {
               }
               defaultInviteRoleId={config?.default_invite_role_id ?? null}
               isSavingConfig={pendingConfigKeys.has("default_invite_role_id")}
-              onSaveDefaultInviteRole={(roleId) =>
-                patchConfig(
+              onSaveDefaultInviteRole={async (roleId) => {
+                await patchConfig(
                   { default_invite_role_id: roleId },
                   "Default invite role saved",
-                )
+                );
+              }
               }
             />
           </TabsContent>

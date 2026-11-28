@@ -24,6 +24,8 @@ const { hooks } = vi.hoisted(() => ({
     listCached: true,
     offline: false,
     loading: false,
+    // A delete in flight (`useDeleteDiscordImport().isPending`).
+    removePending: false,
     botAvailable: true,
     // The page's query string, for the `?wizard=bot` resume.
     search: "",
@@ -72,7 +74,7 @@ vi.mock("@repo/hooks", () => ({
   }),
   useDeleteDiscordImport: () => ({
     mutateAsync: hooks.remove,
-    isPending: false,
+    isPending: hooks.removePending,
   }),
 }));
 
@@ -162,12 +164,32 @@ const progress = {
 
 const n = (count: number) => count.toLocaleString("en-US");
 
+/**
+ * `--card` fills other than a settings group's own (#6031): the page is
+ * flush, and its rows sit in rounded settings groups, which are the one
+ * filled surface it draws.
+ */
+const strayCards = (container: HTMLElement) =>
+  cardFilledContainers(container).filter(
+    (element) =>
+      !element.className.includes("rounded-[14px]") &&
+      // A secondary button drawn as a link (Open chat), as a button is.
+      element.tagName !== "A",
+  );
+
+/** A value row's figure, by the row's label (#6031). */
+const rowValue = (label: string) =>
+  (screen.getByText(label).closest("li") as HTMLElement).querySelector(
+    ".tabular-nums",
+  )?.textContent;
+
 beforeEach(() => {
   vi.clearAllMocks();
   hooks.listError = false;
   hooks.listCached = true;
   hooks.offline = false;
   hooks.loading = false;
+  hooks.removePending = false;
   hooks.botAvailable = true;
   hooks.search = "";
   hooks.clear.mockResolvedValue(undefined);
@@ -184,33 +206,44 @@ beforeEach(() => {
 });
 
 describe("DiscordImportPage — nothing imported yet", () => {
-  it("says what comes over and offers the two ways in, on the page surface", () => {
+  it("offers the two ways in as rows, with what comes over in one footnote (#6031)", () => {
     const { container } = render(<DiscordImportPage />);
 
+    // The page's frame: back to Chat, its title, and no headline under it.
     expect(
-      screen.getByRole("heading", {
-        name: "Bring your chapter's Discord history into Frapp",
-      }),
+      screen.getByRole("heading", { name: "Discord import" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/settings?tab=chat",
+    );
     expect(
-      screen.getByRole("button", { name: /Connect Discord/ }),
-    ).toBeEnabled();
+      screen.queryByText("Bring your chapter's Discord history into Frapp"),
+    ).toBeNull();
+    const connect = screen.getByRole("button", { name: /Connect Discord/ });
+    expect(connect).toBeEnabled();
+    expect(connect).toHaveTextContent(
+      "Recommended. Needs the Manage Server permission.",
+    );
     expect(
       screen.getByRole("button", { name: /Upload an export/ }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Comes over")).toBeInTheDocument();
+    ).toHaveTextContent("From DiscordChatExporter on a computer.");
     expect(
-      screen.getByText("DMs, voice, and who holds which role"),
+      screen.getByText(
+        "Messages, threads, files, reaction counts and categories come over, and private channels stay private. DMs, voice and who holds which role stay behind.",
+      ),
     ).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("disables Connect Discord where the bot is unavailable", () => {
     hooks.botAvailable = false;
     render(<DiscordImportPage />);
-    expect(
-      screen.getByRole("button", { name: /Connect Discord/ }),
-    ).toBeDisabled();
+    const connect = screen.getByRole("button", { name: /Connect Discord/ });
+    expect(connect).toBeDisabled();
+    expect(connect).toHaveTextContent(
+      "Not available here. Upload an export instead.",
+    );
   });
 
   // The wizard's own first step is the landing's two cards, so a pick opens
@@ -238,9 +271,7 @@ describe("DiscordImportPage — nothing imported yet", () => {
     hooks.rows = [row("left", "draft", "Half-set-up server")];
     render(<DiscordImportPage />);
     expect(
-      screen.getByRole("heading", {
-        name: "Bring your chapter's Discord history into Frapp",
-      }),
+      screen.getByRole("button", { name: /Upload an export/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -280,9 +311,11 @@ describe("DiscordImportPage — reads", () => {
       screen.getByRole("heading", { name: "Couldn't load the import" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Couldn't reach Frapp. Check your connection and try again."),
+      screen.getByText(
+        "Couldn't reach Frapp. Check your connection and try again.",
+      ),
     ).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("says the import is unavailable offline when nothing is cached", () => {
@@ -292,7 +325,7 @@ describe("DiscordImportPage — reads", () => {
     expect(
       screen.getByRole("heading", { name: "Import unavailable offline" }),
     ).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("announces its loading state", () => {
@@ -300,7 +333,7 @@ describe("DiscordImportPage — reads", () => {
     hooks.listCached = false;
     const { container } = render(<DiscordImportPage />);
     expect(screen.getByText("Loading the import")).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("keeps the import and says it is the last that loaded when a refresh fails", () => {
@@ -309,7 +342,7 @@ describe("DiscordImportPage — reads", () => {
     render(<DiscordImportPage />);
 
     expect(
-      screen.getByRole("heading", { name: "Your Discord history is in Frapp" }),
+      screen.getByText("Your Discord history is in Frapp."),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(STALE);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -377,7 +410,7 @@ describe("DiscordImportPage — the wizard", () => {
     const { container, rerender } = render(<DiscordImportPage />);
     fireEvent.click(screen.getByRole("button", { name: /Connect Discord/ }));
     expect(screen.getByTestId("wizard")).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
 
     Object.assign(hooks, state, { listCached: false });
     rerender(<DiscordImportPage />);
@@ -435,7 +468,7 @@ describe("DiscordImportPage — importing", () => {
     ).toBeInTheDocument();
   });
 
-  it("names the channel importing now, and tiles each Discord category", () => {
+  it("names the channel importing now, and lists each Discord category as a row", () => {
     hooks.progress.mockReturnValue({
       data: {
         ...progress,
@@ -477,13 +510,13 @@ describe("DiscordImportPage — importing", () => {
       screen.getByRole("list", { name: "Progress by Discord category" }),
     ).getAllByRole("listitem");
     expect(tiles.map((tile) => tile.textContent)).toEqual([
-      "No category1/2",
-      "Notifications633/633",
-      "Committees8/39 · 1 failed",
+      "No category1 of 2 done",
+      "Notifications633 of 633 done",
+      "Committees8 of 39 done · 1 failed",
     ]);
     // The finished category reads as done; the others don't.
-    expect(tiles[1]).toHaveClass("bg-success-tint");
-    expect(tiles[2]).not.toHaveClass("bg-success-tint");
+    expect(tiles[1]!.querySelector(".text-success")).not.toBeNull();
+    expect(tiles[2]!.querySelector(".text-success")).toBeNull();
   });
 
   it("names no channel while the import waits to start", () => {
@@ -580,7 +613,7 @@ describe("DiscordImportPage — importing", () => {
         screen.getByRole("button", { name: "See every channel" }),
       );
       expect(screen.getByText(line)).toBeInTheDocument();
-      expect(cardFilledContainers(container)).toEqual([]);
+      expect(strayCards(container)).toEqual([]);
     },
   );
 
@@ -597,7 +630,7 @@ describe("DiscordImportPage — importing", () => {
     expect(
       screen.getByText("Channels unavailable offline"),
     ).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("says when the channels could not be loaded, and retries", () => {
@@ -638,15 +671,22 @@ describe("DiscordImportPage — finished", () => {
     hooks.rows = [done];
   });
 
-  it("says what came over, and opens chat", () => {
+  it("says what came over in the Import group's rows, and opens chat (#6031)", () => {
     render(<DiscordImportPage />);
 
     expect(
-      screen.getByRole("heading", { name: "Your Discord history is in Frapp" }),
+      screen.getByRole("heading", { name: "Discord import" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(n(145574))).toBeInTheDocument();
-    expect(screen.getByText(n(11612))).toBeInTheDocument();
-    expect(screen.getByText(n(1146))).toBeInTheDocument();
+    expect(
+      screen.getByText("Your Discord history is in Frapp."),
+    ).toBeInTheDocument();
+    const group = within(screen.getByRole("list", { name: "Import" }));
+    expect(group.getByText("Server")).toBeInTheDocument();
+    expect(rowValue("Server")).toBe("Tau Nu Discord");
+    expect(rowValue("Messages")).toBe(n(145574));
+    expect(rowValue("Files")).toBe(n(11612));
+    expect(rowValue("Channels and threads")).toBe(n(1146));
+    expect(rowValue("Finished")).toMatch(/^September 30/);
     expect(screen.getByRole("link", { name: "Open chat" })).toHaveAttribute(
       "href",
       "/chat",
@@ -685,9 +725,10 @@ describe("DiscordImportPage — finished", () => {
       active: false,
       enabled: true,
     });
-    expect(screen.getByText("channels").nextSibling?.textContent).toBe("78");
-    expect(screen.getByText("threads").nextSibling?.textContent).toBe(n(1068));
-    expect(screen.queryByText("channels and threads")).toBeNull();
+    expect(rowValue("Channels and threads")).toBe(n(78 + 1068));
+    expect(
+      screen.getByText(`78 channels and ${n(1068)} threads`),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("list", { name: "Progress by Discord category" }),
     ).toBeNull();
@@ -720,16 +761,32 @@ describe("DiscordImportPage — finished", () => {
       active: false,
       enabled: false,
     });
-    expect(
-      screen.getByText("channels and threads done").nextSibling?.textContent,
-    ).toBe("300");
-    expect(screen.queryByText("threads")).toBeNull();
+    expect(rowValue("Channels and threads")).toBe("300");
+    expect(screen.getByText("Done before it stopped")).toBeInTheDocument();
   });
 
-  it("groups what didn't come over by reason, in plain words", () => {
+  it("counts what didn't come over in a row that opens its own page (#6031)", () => {
     render(<DiscordImportPage />);
 
-    expect(screen.getByText("3 things didn't come over")).toBeInTheDocument();
+    const issues = screen.getByRole("link", { name: /Didn't come over/ });
+    expect(issues).toHaveAttribute(
+      "href",
+      "/settings?tab=chat&tool=discord-import&page=issues",
+    );
+    expect(issues).toHaveTextContent("3");
+    // The reasons themselves are on that page, not this one.
+    expect(screen.queryByText("File types Frapp doesn't store")).toBeNull();
+  });
+
+  it("groups what didn't come over by reason on its page, with a way back", () => {
+    render(<DiscordImportPage page="issues" />);
+
+    expect(
+      screen.getByRole("heading", { name: "Didn't come over" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Discord import" }),
+    ).toHaveAttribute("href", "/settings?tab=chat&tool=discord-import");
     expect(
       screen.getByText("File types Frapp doesn't store"),
     ).toBeInTheDocument();
@@ -739,6 +796,27 @@ describe("DiscordImportPage — finished", () => {
     expect(screen.getByText("Files storage couldn't take")).toBeInTheDocument();
     expect(screen.getByText("IMG_2231.heic")).toBeInTheDocument();
     expect(screen.queryByText(/Only the last/)).toBeNull();
+  });
+
+  it("opens what didn't come over only for a finished import (#6031)", () => {
+    // A stale `&page=issues` link to an import that is moving again (or
+    // being deleted) lands on that state, not on a list that's still growing.
+    hooks.rows = [{ ...done, status: "running", completed_at: null }];
+    render(<DiscordImportPage page="issues" />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Didn't come over" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop import" })).toBeVisible();
+  });
+
+  it("holds Delete import while a delete is already in flight", () => {
+    hooks.removePending = true;
+    render(<DiscordImportPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Delete import" }),
+    ).toBeDisabled();
   });
 
   it("offers to resume an import that failed, counting the channels it got through", async () => {
@@ -752,12 +830,12 @@ describe("DiscordImportPage — finished", () => {
     ];
     render(<DiscordImportPage />);
     expect(
-      screen.getByRole("heading", { name: "The import stopped on an error" }),
+      screen.getByText("The import stopped on an error."),
     ).toBeInTheDocument();
     expect(screen.getByText("Discord stopped answering.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open chat" })).toBeNull();
-    expect(screen.getByText("channels and threads done")).toBeInTheDocument();
-    expect(screen.getByText("300")).toBeInTheDocument();
+    expect(rowValue("Channels and threads")).toBe("300");
+    expect(screen.queryByText("Finished")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Resume import" }));
     await waitFor(() =>
@@ -768,9 +846,7 @@ describe("DiscordImportPage — finished", () => {
   it("offers no resume on an import the admin stopped", () => {
     hooks.rows = [{ ...done, status: "cancelled" }];
     render(<DiscordImportPage />);
-    expect(
-      screen.getByRole("heading", { name: "The import was stopped" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("The import was stopped.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume import" })).toBeNull();
   });
 
@@ -780,7 +856,7 @@ describe("DiscordImportPage — finished", () => {
     hooks.rows = [{ ...done, status: "failed", purged_messages: 5000 }];
     render(<DiscordImportPage />);
     expect(
-      screen.getByRole("heading", { name: "The deletion stopped on an error" }),
+      screen.getByText("The deletion stopped on an error."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume import" })).toBeNull();
     expect(
@@ -801,13 +877,13 @@ describe("DiscordImportPage — finished", () => {
         screen.getByRole("button", { name: "See every channel" }),
       );
     }
-    expect(cardFilledContainers(container)).toEqual([]);
+    expect(strayCards(container)).toEqual([]);
   });
 
   it("says when an import took only messages since a date (#2858)", () => {
     hooks.rows = [{ ...done, messages_after: "2024-06-01T12:00:00Z" }];
     render(<DiscordImportPage />);
-    expect(screen.getByText(/messages since/)).toBeInTheDocument();
+    expect(screen.getByText(/^Since June 1/)).toBeInTheDocument();
   });
 
   it("reads the channels once rather than polling them", () => {
@@ -850,11 +926,16 @@ describe("DiscordImportPage — the landing (#3493)", () => {
     );
   }
 
-  const messagesShown = () =>
-    screen
-      .getByText("messages")
-      .nextElementSibling?.querySelector('[aria-hidden="true"]')?.textContent ??
-    screen.getByText("messages").nextSibling?.textContent;
+  /** What the Messages row draws while its count runs up. */
+  const messagesShown = () => {
+    const value = (
+      screen.getByText("Messages").closest("li") as HTMLElement
+    ).querySelector(".tabular-nums");
+    return (
+      value?.querySelector('[aria-hidden="true"]')?.textContent ??
+      value?.textContent
+    );
+  };
 
   beforeEach(() => {
     window.localStorage.clear();
@@ -877,8 +958,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
     reducedMotion(false);
     const { container } = render(<DiscordImportPage />);
 
-    const list = screen.getByRole("heading", { name: "By Discord category" })
-      .nextElementSibling as HTMLElement;
+    const list = screen.getByRole("list", { name: "By Discord category" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows.map((item) => item.firstChild?.textContent)).toEqual([
       "No category",
@@ -927,9 +1007,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
 
     expect(screen.queryByTestId("discord-import-sweep")).toBeNull();
     expect(container.innerHTML).not.toContain("animate-signature");
-    expect(screen.getByText("messages").nextSibling?.textContent).toBe(
-      n(145574),
-    );
+    expect(rowValue("Messages")).toBe(n(145574));
     expect(window.localStorage.getItem("frapp:discord-import-landed:big")).toBe(
       "1",
     );
@@ -973,9 +1051,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
       vi.advanceTimersByTime(1000);
     });
     expect(container.innerHTML).not.toContain("animate-signature");
-    expect(screen.getByText("messages").nextSibling?.textContent).toBe(
-      n(145574),
-    );
+    expect(rowValue("Messages")).toBe(n(145574));
     expect(
       window.localStorage.getItem("frapp:discord-import-landed:big"),
     ).toBeNull();
@@ -1018,9 +1094,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
 
     expect(container.innerHTML).not.toContain("animate-signature");
     expect(screen.queryByTestId("discord-import-sweep")).toBeNull();
-    expect(screen.getByText("messages").nextSibling?.textContent).toBe(
-      n(145574),
-    );
+    expect(rowValue("Messages")).toBe(n(145574));
     // Still there at rest: the categories and the check mark.
     expect(
       screen.getByRole("heading", { name: "By Discord category" }),
@@ -1037,9 +1111,7 @@ describe("DiscordImportPage — the landing (#3493)", () => {
     const { container } = render(<DiscordImportPage />);
 
     expect(container.innerHTML).not.toContain("animate-signature");
-    expect(screen.getByText("messages").nextSibling?.textContent).toBe(
-      n(145574),
-    );
+    expect(rowValue("Messages")).toBe(n(145574));
   });
 
   it("plays for nothing that stopped part-way", () => {
@@ -1123,7 +1195,7 @@ describe("DiscordImportPage — deleting the import (#2944)", () => {
   it("says how many a failed deletion already removed, and asks about what is left", async () => {
     hooks.rows = [{ ...large, status: "failed", purged_messages: 100000 }];
     render(<DiscordImportPage />);
-    expect(screen.getByText(/100,000 already deleted/)).toBeInTheDocument();
+    expect(rowValue("Already deleted")).toBe("100,000");
 
     fireEvent.click(screen.getByRole("button", { name: "Delete import" }));
     const dialog = within(await screen.findByRole("dialog"));

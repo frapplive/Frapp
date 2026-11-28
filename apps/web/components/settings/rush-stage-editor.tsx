@@ -1,5 +1,6 @@
 "use client";
 
+import { SETTINGS_GROUP_FRAME } from "@/components/shared/settings-row";
 import { useId, useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
 import { useSaveRushStages, type RushStage } from "@repo/hooks";
@@ -137,7 +138,7 @@ function CategoryStages({
       <h3 id={headingId} className={cn(EYEBROW, "text-muted")}>
         {label}
       </h3>
-      <ul className="divide-y divide-border rounded-[14px] border border-border bg-card">
+      <ul className={SETTINGS_GROUP_FRAME}>
         {own.map((draft, index) => (
           <li
             key={draft.rowKey}

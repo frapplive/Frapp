@@ -1,6 +1,16 @@
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { Image } from "expo-image";
 import Svg, {
+  Circle,
   Defs,
   LinearGradient,
   Pattern,
@@ -16,6 +26,7 @@ import {
   CHAT_BACKGROUND_PHOTO_BLUR_PX,
   CHAT_BACKGROUND_PHOTO_SCRIM_ALPHA,
   type ChatBackgroundBuiltInKey,
+  type ChatBackgroundLayer,
 } from "@repo/theme/chat-backgrounds";
 import { useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -69,7 +80,83 @@ export function ChatBackground({ channelId }: { channelId: string | null }) {
       </View>
     );
   }
-  return <ChatBackgroundPaint paintKey={key} letters={letters} />;
+  return <ChatBackgroundPaint paintKey={key} letters={letters} snowFalls />;
+}
+
+type SnowLayer = Extract<ChatBackgroundLayer, { kind: "snow" }>;
+
+/**
+ * Holiday's snow in a thread (#6149), drifting down one tile every
+ * `fallSeconds`. One SVG drawn once, moved by a Reanimated transform on the
+ * UI thread, so the falling costs no JS work and no re-render; Reduce Motion
+ * holds it still.
+ */
+function Snowfall({ layer, id }: { layer: SnowLayer; id: string }) {
+  const reduceMotion = useReducedMotion();
+  const fall = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      fall.set(0);
+      return;
+    }
+    fall.set(
+      withRepeat(
+        withTiming(1, {
+          duration: layer.fallSeconds * 1000,
+          easing: Easing.linear,
+        }),
+        -1,
+        false,
+      ),
+    );
+  }, [fall, reduceMotion, layer.fallSeconds]);
+  const fallStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: fall.get() * layer.tile }],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      testID="chat-background-snowfall"
+      style={[
+        {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          top: -layer.tile,
+        },
+        fallStyle,
+      ]}
+    >
+      <Svg width="100%" height="100%">
+        <SnowFill layer={layer} id={id} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+function SnowFill({ layer, id }: { layer: SnowLayer; id: string }) {
+  return (
+    <Fill id={id}>
+      <Pattern
+        id={id}
+        patternUnits="userSpaceOnUse"
+        width={layer.tile}
+        height={layer.tile}
+      >
+        {layer.flakes.map((f) => (
+          <Circle
+            key={`${f.x}-${f.y}`}
+            cx={f.x}
+            cy={f.y}
+            r={f.r}
+            fill={layer.color}
+            fillOpacity={layer.alpha}
+          />
+        ))}
+      </Pattern>
+    </Fill>
+  );
 }
 
 /**
@@ -90,26 +177,37 @@ export function useChapterLetters(): string {
  * same component small, so what is picked is what members see.
  *
  * `idPrefix` keeps the SVG definition ids apart when several are on screen.
+ * `snowFalls` lets Holiday's snow drift (the thread); a swatch holds it still.
  */
 export function ChatBackgroundPaint({
   paintKey,
   letters,
   idPrefix = "bg",
   testID,
+  snowFalls = false,
 }: {
   paintKey: ChatBackgroundBuiltInKey;
   letters: string;
   idPrefix?: string;
   testID?: string;
+  snowFalls?: boolean;
 }) {
   // A key this build doesn't know (a newer API) draws plain, never throws,
   // whichever caller handed it in.
   const paint =
     CHAT_BACKGROUND_PAINTS[paintKey] ?? CHAT_BACKGROUND_PAINTS.plain;
+  const snowIndex = paint.layers.findIndex((layer) => layer.kind === "snow");
+  const snow =
+    snowFalls && snowIndex >= 0
+      ? (paint.layers[snowIndex] as SnowLayer)
+      : undefined;
   return (
     <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { backgroundColor: paint.base }]}
+      style={[
+        StyleSheet.absoluteFill,
+        { backgroundColor: paint.base, overflow: "hidden" },
+      ]}
       testID={testID ?? `chat-background-${paintKey}`}
     >
       <Svg width="100%" height="100%">
@@ -242,9 +340,16 @@ export function ChatBackgroundPaint({
                   </Pattern>
                 </Fill>
               );
+            case "snow":
+              // Drawn by `Snowfall` above the still layers when it falls.
+              if (snow) return null;
+              return <SnowFill key={id} layer={layer} id={id} />;
           }
         })}
       </Svg>
+      {snow ? (
+        <Snowfall layer={snow} id={`${idPrefix}-${paintKey}-${snowIndex}`} />
+      ) : null}
     </View>
   );
 }

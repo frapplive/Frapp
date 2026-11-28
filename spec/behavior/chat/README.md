@@ -246,7 +246,8 @@ A message thread (#3785) opened from the channel shows the same background behin
   The audit log and an archived channel take none.
   There is no per-member override.
 - **DMs and group DMs** are always plain.
-- **Choices:** the built-ins Plain, Gold glow, Midnight, Game day and Letters (the chapter's letters, else its initials, as a faint tile), or an uploaded photo.
+- **Choices:** the built-ins Plain, Gold glow, Midnight, Game day, Letters (the chapter's letters, else its initials, as a faint tile) and Holiday (deep evergreen, a soft cranberry glow and light snow, #6149), or an uploaded photo.
+  Any of them can be picked by hand at any time of year.
   Their looks live in `@repo/theme/chat-backgrounds`; the keys are `CHAT_BACKGROUND_KEYS` in `@repo/validation`.
 - **Photos** use the `image` upload allowlist and the private `branding` bucket, as the logo does.
   They are not plan-gated: photo upload is a candidate "Frat Max" feature, and `ChatBackgroundService.assertPhotoBackgroundAllowed` is the one hook to gate it once Paul defines that plan.
@@ -261,6 +262,14 @@ A message thread (#3785) opened from the channel shows the same background behin
   Built-ins are measured at their brightest pixel; a photo is blurred and sits under the thread's `--background` at a fixed opacity, chosen for the worst pixel a photo can hold (pure white), so no upload can drop text below AA.
   The guard is `apps/web/components/chat/chat-background-contrast.spec.ts`.
 - **Always formal** channels (#3787) get no exception: a channel shows its own background or the chapter default either way.
+- **The Holiday season** ([#6149](https://github.com/pdcarlson/Frapp/issues/6149), asked by Winston, 2026-11-26).
+  From December 1 to December 26, in the viewer's own local date, a channel that shows the chapter default while that default is Plain shows Holiday instead.
+  A channel or a chapter that chose any other background keeps it, a channel whose own choice is Plain stays Plain, and DMs stay plain.
+  On December 27 it goes back by itself: the window is computed from the date by the clients (`withHolidaySeason` in `@repo/validation`, read by `useChatBackground`), so nothing is deployed or written to start or stop it, and the API never swaps the stored key.
+  Whoever sets the chapter default (`CHAPTER_PROFILE_PERMISSIONS`) can turn it off for the chapter with one switch, "Holiday background this season": in Chat admin's Look group on web, and under the swatches in Settings → Chat background on the phone.
+  It saves the moment it flips, is stored as `chapters.chat_background_holiday` (on by default), and is read by every member through `holiday_season` on both background reads.
+  The season also dresses the app up (Winston, 2026-11-27): a Santa hat tipped onto the chapter crest (web's nav, the phone's Chat home title) and onto each message author's photo, and a holly sprig after each author's name, on every channel and DM, whatever the background, while the same switch is on (`holidayFlairOn` in `@repo/validation`; the shapes are `@repo/theme/holiday-flair`, drawn glyphs, never emoji). System posts get none. It sits beside the text, never behind it, so it changes no contrast, and it waits for the chapter's setting to load, so it never flashes on for a chapter that turned it off.
+  The snow drifts slowly behind the messages, by transform alone (a composited layer on web, a Reanimated transform on the phone), and holds still under reduced motion and in the pickers' swatches.
 
 ## Direct Messages
 

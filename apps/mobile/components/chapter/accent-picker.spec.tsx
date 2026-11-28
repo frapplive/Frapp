@@ -56,6 +56,47 @@ const FIJI = orgColorsFor("Phi Gamma Delta");
 const FOCUS = "#CB9FFF";
 
 describe("AccentPicker", () => {
+  it("commits a swatch at once and a typed hex only once the field is left (#6033)", () => {
+    const onCommit = vi.fn();
+    const { tree, onChange } = render({ onCommit });
+    act(() => swatches(tree)[1]!.props.onPress());
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenLastCalledWith(onChange.mock.calls[0]![0]);
+    act(() => byLabel(tree, "Custom color").props.onPress());
+    const field = () =>
+      tree.root.find(
+        (node) =>
+          node.type === ("TextInput" as unknown) &&
+          node.props.accessibilityLabel === "Custom color hex",
+      );
+    act(() => field().props.onChangeText("#2563EB"));
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    act(() => field().props.onBlur());
+    expect(onCommit).toHaveBeenLastCalledWith("#2563EB");
+    // Half a hex commits nothing.
+    act(() => field().props.onChangeText("#25"));
+    act(() => field().props.onSubmitEditing());
+    expect(onCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it("commits a typed colour still in the field when it unmounts (#6033)", () => {
+    const onCommit = vi.fn();
+    const { tree } = render({ onCommit });
+    act(() => byLabel(tree, "Custom color").props.onPress());
+    act(() =>
+      tree.root
+        .find(
+          (node) =>
+            node.type === ("TextInput" as unknown) &&
+            node.props.accessibilityLabel === "Custom color hex",
+        )
+        .props.onChangeText("#2563EB"),
+    );
+    expect(onCommit).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+    expect(onCommit).toHaveBeenCalledWith("#2563EB");
+  });
+
   it("focuses the hex field as it opens, and edges it in the caller's color while focused", () => {
     const { tree } = render();
     act(() => byLabel(tree, "Custom color").props.onPress());

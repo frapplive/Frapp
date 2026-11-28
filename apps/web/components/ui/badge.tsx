@@ -100,7 +100,7 @@ interface BadgeProps
  * compile error in each of them instead of a silent fallback. It lives on the
  * primitive because every status mapper needs it — `billing/invoice-status.ts`,
  * `events/attendance-status.ts`, `service/service-status.ts`,
- * `study/study-status.ts`, `geofences/geofence-status.ts` and
+ * `study/study-status.ts` and
  * `tasks/task-status.ts` among them — and a local copy per mapper is the drift
  * `ui/typography.ts` was hoisted to stop.
  */

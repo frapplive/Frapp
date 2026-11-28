@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { parseHex } from "@repo/color";
 import { useChatBackground, useCurrentChapter } from "@repo/hooks";
 import {
@@ -55,7 +55,49 @@ export function ChatBackground({ channelId }: { channelId: string | null }) {
       </div>
     );
   }
-  return <Layer style={paintStyle(key, letters)} keyName={key} />;
+  const snow = snowLayerOf(key);
+  return (
+    <Layer style={paintStyle(key, letters, { snow: false })} keyName={key}>
+      {snow ? <Snowfall layer={snow} /> : null}
+    </Layer>
+  );
+}
+
+function snowLayerOf(
+  key: ChatBackgroundBuiltInKey,
+): Extract<ChatBackgroundLayer, { kind: "snow" }> | undefined {
+  return CHAT_BACKGROUND_PAINTS[key].layers.find(
+    (layer): layer is Extract<ChatBackgroundLayer, { kind: "snow" }> =>
+      layer.kind === "snow",
+  );
+}
+
+/**
+ * Holiday's snow (#6149), drifting down one tile every `fallSeconds`. Its own
+ * layer, one tile taller than the column, moved by `transform` alone, so the
+ * browser composites it without repainting the thread. Still under reduced
+ * motion (`.chat-snowfall` in `globals.css`).
+ */
+function Snowfall({
+  layer,
+}: {
+  layer: Extract<ChatBackgroundLayer, { kind: "snow" }>;
+}) {
+  return (
+    <div
+      data-chat-snowfall=""
+      className="chat-snowfall absolute inset-x-0 bottom-0"
+      style={
+        {
+          top: -layer.tile,
+          backgroundImage: snowTile(layer),
+          backgroundSize: `${layer.tile}px ${layer.tile}px`,
+          "--snowfall-distance": `${layer.tile}px`,
+          "--snowfall-duration": `${layer.fallSeconds}s`,
+        } as CSSProperties
+      }
+    />
+  );
 }
 
 /** The chapter's mark (letters, else initials), for the Letters background. */
@@ -74,17 +116,21 @@ export function useChapterLetters(): string {
 function Layer({
   style,
   keyName = "plain",
+  children,
 }: {
   style: CSSProperties;
   keyName?: string;
+  children?: ReactNode;
 }) {
   return (
     <div
       aria-hidden="true"
       data-chat-background={keyName}
-      className="pointer-events-none absolute inset-0 -z-10"
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
       style={style}
-    />
+    >
+      {children}
+    </div>
   );
 }
 
@@ -106,10 +152,28 @@ function lettersTile(
   return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
 }
 
-/** The paint as CSS. CSS stacks the first image on top, so the layers go in reversed. */
+function snowTile(
+  layer: Extract<ChatBackgroundLayer, { kind: "snow" }>,
+): string {
+  const flakes = layer.flakes
+    .map(
+      (f) =>
+        `<circle cx="${f.x}" cy="${f.y}" r="${f.r}" fill="${layer.color}" fill-opacity="${layer.alpha}"/>`,
+    )
+    .join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${layer.tile}" height="${layer.tile}">${flakes}</svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+}
+
+/**
+ * The paint as CSS. CSS stacks the first image on top, so the layers go in
+ * reversed. `snow: false` leaves the snow out, for the thread, which draws it
+ * as its own moving layer; a swatch keeps it, still.
+ */
 export function paintStyle(
   key: ChatBackgroundBuiltInKey,
   letters: string,
+  { snow = true }: { snow?: boolean } = {},
 ): CSSProperties {
   const paint = CHAT_BACKGROUND_PAINTS[key];
   const images: string[] = [];
@@ -148,6 +212,11 @@ export function paintStyle(
         if (!letters) break;
         images.push(lettersTile(layer, letters));
         sizes.push(`${layer.width}px ${layer.height}px`);
+        break;
+      case "snow":
+        if (!snow) break;
+        images.push(snowTile(layer));
+        sizes.push(`${layer.tile}px ${layer.tile}px`);
         break;
     }
   }

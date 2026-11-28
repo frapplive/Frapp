@@ -67,8 +67,9 @@ function weeklySeries(name: string, count = 13) {
   }));
 }
 
-const eventsQuery: { data: unknown; isError?: boolean; isLoading?: boolean } =
-  { data: EVENTS };
+const eventsQuery: { data: unknown; isError?: boolean; isLoading?: boolean } = {
+  data: EVENTS,
+};
 // The list this browser kept for the shell cache (#5049); none unless set.
 const keptEventsRef = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/lib/shell-cache/shell-cache-sync", () => ({
@@ -956,7 +957,6 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
   }
 
   const today = () => localIsoDate(new Date());
-  const dayOf = (iso: string) => localIsoDate(new Date(iso));
   const markOf = (element: HTMLElement) =>
     within(element).getByTestId("agenda-mark").getAttribute("data-hue");
   const dotHue = (day: string, kind: string) =>
@@ -981,17 +981,17 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
   it("colours each row as its day's dot and its key swatch", () => {
     withBirthdayToday();
     withTasksToday();
+    // The event today, so its day's dot is in the month the navigator
+    // shows: three days out falls in next month in a month's last days,
+    // where the navigator draws no dot for it.
+    eventsQuery.data = [
+      { ...EVENTS[1], start_time: daysOut(0, 23), end_time: daysOut(0, 23) },
+    ];
     render(<EventsPage />);
 
     const event = screen.getByRole("button", { name: /^study night/i });
-    const eventDay = dayOf(EVENTS[1]!.start_time);
     expect(markOf(event)).toBe(CALENDAR_KIND_HUE.events);
-    // The rows sit three days out, which in a month's last days is next
-    // month: the grid draws dots for this month's days only, so the event's
-    // dot is checked when it is on the grid.
-    if (eventDay.slice(0, 7) === today().slice(0, 7)) {
-      expect(dotHue(eventDay, "events")).toBe(CALENDAR_KIND_HUE.events);
-    }
+    expect(dotHue(today(), "events")).toBe(CALENDAR_KIND_HUE.events);
 
     const task = screen.getByRole("button", { name: /^dues form/i });
     expect(markOf(task)).toBe(CALENDAR_KIND_HUE.tasks);
@@ -1111,7 +1111,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     }
     const picked = within(navigator).getByRole("button", {
       name: new RegExp(
-        `^${meetingDay.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`,
+        `^${meetingDay.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}(?!\\d)`,
       ),
     });
     await user.click(picked);
@@ -1135,7 +1135,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     await user.click(
       within(navigator).getByRole("button", {
         name: new RegExp(
-          `^${tomorrow.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`,
+          `^${tomorrow.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}(?!\\d)`,
         ),
       }),
     );
@@ -1161,7 +1161,7 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     await user.click(
       within(navigator).getByRole("button", {
         name: new RegExp(
-          `^${meetingDay.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`,
+          `^${meetingDay.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}(?!\\d)`,
         ),
       }),
     );
@@ -1182,17 +1182,32 @@ describe("EventsPage agenda kinds, navigator and key (#5560)", () => {
     day: Date,
   ) {
     const shown = screen.getByRole("complementary", { name: "Navigator" });
-    if (day.getMonth() !== new Date().getMonth()) {
+    // Turned from the month the navigator shows, which an earlier pick may
+    // have moved off today's: comparing with today's month left it a month
+    // out on a month's last day.
+    const monthOf = (at: Date) => at.getFullYear() * 12 + at.getMonth();
+    const title = within(shown).getByRole("heading", { level: 2 }).textContent;
+    const showing = Array.from({ length: 3 }, (_, i) => {
+      const at = new Date();
+      return new Date(at.getFullYear(), at.getMonth() + i - 1, 1);
+    }).find(
+      (at) =>
+        at.toLocaleDateString(undefined, { month: "long", year: "numeric" }) ===
+        title,
+    );
+    expect(showing, `the navigator's month, ${title}`).toBeDefined();
+    const steps = monthOf(day) - monthOf(showing!);
+    for (let i = 0; i < Math.abs(steps); i++) {
       await user.click(
         within(shown).getByRole("button", {
-          name: day < new Date() ? "Previous month" : "Next month",
+          name: steps < 0 ? "Previous month" : "Next month",
         }),
       );
     }
     await user.click(
       within(shown).getByRole("button", {
         name: new RegExp(
-          `^${day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`,
+          `^${day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}(?!\\d)`,
         ),
       }),
     );

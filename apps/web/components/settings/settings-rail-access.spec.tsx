@@ -243,6 +243,10 @@ describe("Settings shows each viewer what they can use", () => {
       ["Chat admin", "/settings?tab=chat&page=chat-admin"],
       ["Discord import", "/settings?tab=chat&tool=discord-import"],
     ]);
+    // The import's row says its state at its end (#6031).
+    expect(
+      screen.getByRole("link", { name: /^discord import/i }),
+    ).toHaveTextContent("Not started");
   });
 
   it("opens a tool's page from a search link made before the pages existed", () => {

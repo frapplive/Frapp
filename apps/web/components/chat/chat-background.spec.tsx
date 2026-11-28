@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { CHAT_BACKGROUND_PHOTO_SCRIM_ALPHA } from "@repo/theme/chat-backgrounds";
-import { ChatBackground } from "./chat-background";
+import { ChatBackground, paintStyle } from "./chat-background";
 
 const state = vi.hoisted(() => ({
   data: undefined as
@@ -61,6 +61,28 @@ describe("ChatBackground (#3973)", () => {
     expect(layer(container)?.dataset.chatBackground).toBe("midnight");
     expect(layer(container)?.style.backgroundImage).toContain(
       "linear-gradient",
+    );
+  });
+
+  it("draws Holiday's snow as its own moving layer, not baked into the paint (#6149)", () => {
+    state.data = { background: "holiday", source: "chapter", photo_url: null };
+    const { container } = render(<ChatBackground channelId="ch-1" />);
+    expect(layer(container)?.dataset.chatBackground).toBe("holiday");
+    expect(layer(container)?.style.backgroundImage).not.toContain("circle");
+    const snow = container.querySelector(
+      "[data-chat-snowfall]",
+    ) as HTMLElement | null;
+    // `.chat-snowfall` is what globals.css animates and stills under reduced motion.
+    expect(snow?.classList.contains("chat-snowfall")).toBe(true);
+    expect(decodeURIComponent(snow!.style.backgroundImage)).toContain(
+      "<circle",
+    );
+  });
+
+  it("keeps the snow, still, in a swatch's paint", () => {
+    // The tile is URI-encoded inside a value with gradient `%` stops.
+    expect(String(paintStyle("holiday", "").backgroundImage)).toContain(
+      encodeURIComponent("<circle"),
     );
   });
 });

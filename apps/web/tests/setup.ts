@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { dropAllKeptDrafts } from "@repo/hooks/kept-drafts";
 
 // Kept form drafts live in module memory for the tab (#4593); one test's
@@ -46,3 +46,10 @@ if (typeof window !== "undefined") {
       function releasePointerCapture() {};
   }
 }
+
+// The Holiday season's flair (#6149) reads the chapter's season switch; off in
+// every spec unless one turns it on (`holiday-flair.spec.tsx` does).
+vi.mock("@/components/chat/holiday-flair", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/holiday-flair")>()),
+  useHolidayFlairOn: vi.fn(() => false),
+}));

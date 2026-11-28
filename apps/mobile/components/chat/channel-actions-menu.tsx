@@ -18,6 +18,7 @@ import {
 import { EDIT_CHANNEL_LABEL } from "@repo/hooks/channel-start";
 import {
   CHAT_BACKGROUND_LABELS,
+  seasonalChapterDefault,
   type ChatBackgroundKey,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -561,7 +562,11 @@ function BackgroundView({
         <ChatBackgroundSwatches
           value={value}
           allowInherit
-          inheritPreview={chapterDefault.data?.background}
+          // The season applied, as the thread draws it (#6149).
+          inheritPreview={seasonalChapterDefault(
+            chapterDefault.data,
+            new Date(),
+          )}
           disabled={!loaded}
           onPick={onPick}
         />

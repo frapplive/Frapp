@@ -143,10 +143,6 @@ export function RolesGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.roles} {...props} />;
 }
 
-export function StudyZonesGlyph(props: NavGlyphProps) {
-  return <NavGlyph paths={NAV_GLYPHS.studyZones} {...props} />;
-}
-
 export function ReportsGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.reports} {...props} />;
 }

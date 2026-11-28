@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { EVENT_NAME_MAX_LENGTH } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
+import {
+  dateOrNull,
+  instantOrNull,
+} from '#domain/utils/ai-suggestion-payload-values';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
 import type {
   AiSuggestionChangeLog,
@@ -25,6 +29,13 @@ export interface EventSuggestionPayload {
   name: string;
   /** When the source event started, last year. */
   last_year_at: string | null;
+  /**
+   * A dated (all-day or time-TBD) source event's first day, `YYYY-MM-DD`
+   * with no zone (#6148): its `last_year_at` is only the saver's local
+   * midnight, which reads as the day before west of them. Absent for a timed
+   * event, and on suggestions stored before it.
+   */
+  last_year_date?: string;
   /** How many times it was held around then (a weekly series: six). */
   times: number;
   /**
@@ -35,14 +46,14 @@ export interface EventSuggestionPayload {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Longer than any ISO 8601 instant. */
-const INSTANT_MAX_LENGTH = 40;
 
-function instantOrNull(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length > INSTANT_MAX_LENGTH) {
-    return null;
-  }
-  return Number.isNaN(Date.parse(value)) ? null : value;
+/**
+ * The key only when it holds a day, so a timed event's payload, and those
+ * stored before #6148, keep their shape.
+ */
+function lastYearDate(value: unknown): { last_year_date?: string } {
+  const day = dateOrNull(value);
+  return day ? { last_year_date: day } : {};
 }
 
 /** Reads a stored payload back; the shape `normalizeProposal` wrote. */
@@ -53,6 +64,7 @@ export function readEventPayload(
   return {
     name: typeof payload.name === 'string' ? payload.name : '',
     last_year_at: instantOrNull(payload.last_year_at),
+    ...lastYearDate(payload.last_year_date),
     times:
       typeof times === 'number' && Number.isInteger(times) && times > 0
         ? times
@@ -113,7 +125,12 @@ export class EventSuggestionKind implements AiSuggestionKindHandler {
     if (!name) return null;
     const read = readEventPayload(input);
     // Never from a proposal: only an officer's accept names the event made.
-    return { name, last_year_at: read.last_year_at, times: read.times };
+    return {
+      name,
+      last_year_at: read.last_year_at,
+      ...lastYearDate(read.last_year_date),
+      times: read.times,
+    };
   }
 
   applyEdits(

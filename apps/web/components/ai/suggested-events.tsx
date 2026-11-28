@@ -24,7 +24,7 @@ import { SectionLabel } from "@/components/shared/section-label";
 import { isoToLocalInput } from "@/components/events/local-input";
 import {
   datedDaysThisYear,
-  lastYearDay,
+  lastYearEventDay,
   nameForThisYear,
   parseBareDateLocalNoon,
   sameWeekdayThisYear,
@@ -237,7 +237,7 @@ export function SuggestedEvents({
               </p>
               <p className="break-words text-caption text-muted-foreground">
                 {lastYearEventLine(
-                  lastYearDay(item.event.last_year_at),
+                  lastYearEventDay(item.event),
                   item.event.times,
                 )}
               </p>

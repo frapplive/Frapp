@@ -479,6 +479,7 @@ vi.mock("react-native-reanimated", () => {
     cancelAnimation: vi.fn(),
     useReducedMotion: vi.fn(() => false),
     Easing: {
+      linear: (t: number) => t,
       ease: (t: number) => t,
       sin: (t: number) => t,
       cubic: (t: number) => t,
@@ -708,4 +709,11 @@ vi.mock("react-native-svg", () => ({
   Pattern: "Pattern",
   Text: "SvgText",
   Stop: "Stop",
+}));
+
+// The Holiday season's flair (#6149) reads the chapter's season switch; off in
+// every spec unless one turns it on (`holiday-flair.spec.tsx` does).
+vi.mock("@/components/chat/holiday-flair", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/holiday-flair")>()),
+  useHolidayFlairOn: vi.fn(() => false),
 }));

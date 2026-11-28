@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { chapterSubscription } from "@/tests/chapter-subscription";
@@ -97,8 +97,6 @@ const rolloverButton = () => {
   });
   return screen.getByRole("button", { name: /^start new semester$/i });
 };
-const saveProfileButton = () =>
-  screen.getByRole("button", { name: /save profile/i });
 
 describe("settings semester rollover subscription gating", () => {
   beforeEach(() => {
@@ -152,10 +150,11 @@ describe("settings semester rollover subscription gating", () => {
     render(<SettingsPage />);
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
-    // A changed field first: an unchanged profile disables Save for its own
-    // reason.
-    await user.type(screen.getByLabelText("Chapter name"), " II");
-    expect(saveProfileButton()).toBeEnabled();
+    // The name saves on its own when it is left (#6033).
+    expect(screen.getByLabelText("Chapter name")).toBeEnabled();
+    await user.type(screen.getByLabelText("Chapter name"), "Tau Nu");
+    await user.tab();
+    expect(mockUpdateChapter).toHaveBeenCalledWith({ name: "Tau Nu" });
 
     await user.click(screen.getByRole("tab", { name: /plan and billing/i }));
     expect(screen.getByText("Plan and billing section")).toBeInTheDocument();
@@ -170,16 +169,14 @@ describe("settings semester rollover subscription gating", () => {
     const { rerender } = render(<SettingsPage />);
 
     await openAccentPage(user, rerender);
-    // A savable draft first: an empty one disables Save for its own reason
-    // (see "the accent save sends the colour the preview shows" below).
+    // A typed hex saves on its own when the field is left (#6033).
     await user.type(
       screen.getByLabelText(/accent color hex value/i),
       "#8B0000",
     );
+    await user.tab();
 
-    expect(
-      screen.getByRole("button", { name: /save accent color/i }),
-    ).toBeEnabled();
+    expect(mockUpdateChapter).toHaveBeenCalledWith({ accent_color: "#8B0000" });
   });
 
   it("never gates the rollover form's own fields", () => {
@@ -281,11 +278,9 @@ describe("the accent save sends the colour the preview shows", () => {
     });
   });
 
-  const saveButton = () =>
-    screen.getByRole("button", { name: /save accent color/i });
   const hexNeeded = () =>
     screen.queryByText(
-      /enter a hex code like #5AA9E6 to save an accent color/i,
+      /enter a hex code like #5AA9E6 to use it as the accent/i,
     );
 
   it("saves a shorthand or padded hex as the #RRGGBB it previewed", async () => {
@@ -300,14 +295,46 @@ describe("the accent save sends the colour the preview shows", () => {
     ] as const) {
       await user.clear(hex);
       await user.type(hex, draft);
-      await user.click(saveButton());
+      await user.keyboard("{Enter}");
       expect(mockUpdateChapter).toHaveBeenLastCalledWith({
         accent_color: saved,
       });
     }
+    // Each saved once: Enter, never a second send for the same colour.
+    expect(mockUpdateChapter).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Saved")).toBeInTheDocument();
   });
 
-  it("disables Save and says why for a draft that is not a hex code", async () => {
+  it("sends a colour once when Enter is followed by leaving the field", async () => {
+    // The chapter refetch that brings the saved colour back is still on its
+    // way when the field is left, so the field remembers what it sent.
+    const user = userEvent.setup();
+    const { rerender } = render(<SettingsPage />);
+    await openAccentPage(user, rerender);
+    await user.type(
+      screen.getByLabelText(/accent color hex value/i),
+      "#5AA9E6",
+    );
+    await user.keyboard("{Enter}");
+    await user.tab();
+    expect(mockUpdateChapter).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a swatch the moment it is picked", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<SettingsPage />);
+    await openAccentPage(user, rerender);
+    const swatch = within(
+      screen.getByRole("group", { name: /more colors/i }),
+    ).getAllByRole("button")[0]!;
+    await user.click(swatch);
+    expect(mockUpdateChapter).toHaveBeenCalledTimes(1);
+    expect(mockUpdateChapter.mock.calls[0]![0]).toEqual({
+      accent_color: expect.stringMatching(/^#[0-9A-F]{6}$/i),
+    });
+  });
+
+  it("sends nothing and says why for a draft that is not a hex code", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<SettingsPage />);
     await openAccentPage(user, rerender);
@@ -316,34 +343,34 @@ describe("the accent save sends the colour the preview shows", () => {
     for (const draft of ["#8B00", "crimson", "   "]) {
       await user.clear(hex);
       await user.type(hex, draft);
-      expect(saveButton()).toBeDisabled();
+      await user.keyboard("{Enter}");
+      expect(mockUpdateChapter).not.toHaveBeenCalled();
       expect(hexNeeded()).toHaveClass("text-warning");
-      // The reason reaches a screen reader on the control itself.
-      expect(saveButton()).toHaveAccessibleDescription(
-        /enter a hex code like #5AA9E6/i,
-      );
+      // The reason reaches a screen reader on the field itself.
+      expect(hex).toHaveAccessibleDescription(/enter a hex code like #5AA9E6/i);
     }
 
     await user.clear(hex);
     // The hint's own example: following it raises no other warning either.
     await user.type(hex, "#5AA9E6");
-    expect(saveButton()).toBeEnabled();
-    expect(saveButton()).not.toHaveAccessibleDescription();
+    expect(hex).not.toHaveAccessibleDescription();
     expect(hexNeeded()).toBeNull();
     expect(screen.queryByText(/hard to read on menus and dialogs/i)).toBeNull();
     expect(screen.queryByText(/under the 4\.5:1 minimum/i)).toBeNull();
   });
 
-  it("disables Save on an empty field and says what to enter, unstyled as a warning", async () => {
+  it("sends nothing for an empty field and says what to enter, unstyled as a warning", async () => {
     // What a chapter with no stored accent opens to, or a cleared input: the
-    // preview shows the fallback gold, so without the hint a disabled Save
-    // would look like a colour that can't be saved for no stated reason.
+    // preview shows the fallback gold, so without the hint a field that saves
+    // nothing would look like a colour that can't be saved for no stated
+    // reason.
     const user = userEvent.setup();
     const { rerender } = render(<SettingsPage />);
     await openAccentPage(user, rerender);
     await user.clear(screen.getByLabelText(/accent color hex value/i));
+    await user.tab();
 
-    expect(saveButton()).toBeDisabled();
+    expect(mockUpdateChapter).not.toHaveBeenCalled();
     expect(hexNeeded()).toHaveClass("text-muted-foreground");
     expect(hexNeeded()).not.toHaveClass("text-warning");
   });
@@ -370,9 +397,7 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     const hex = screen.getByLabelText(/accent color hex value/i);
     await user.clear(hex);
     await user.type(hex, "#222222");
-    await user.click(
-      screen.getByRole("button", { name: /save accent color/i }),
-    );
+    await user.keyboard("{Enter}");
   }
 
   it("names the failing role, its ratio, and a next action", async () => {
@@ -394,6 +419,8 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     expect(
       screen.getByText(/try a lighter or darker shade of this hue/i),
     ).toBeInTheDocument();
+    // The disclosure speaks for the save; no "Saved" beside it.
+    expect(screen.queryByText("Saved")).toBeNull();
   });
 
   it("never prints a failing reported ratio as 4.5:1", async () => {
@@ -451,6 +478,7 @@ describe("the accent form surfaces the server's own §8 disclosure (#1183)", () 
     await saveAccent(user, rerender);
 
     expect(screen.queryByText(/under the 4\.5:1 minimum/i)).toBeNull();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
   });
 
   it("clears the warning as soon as the officer edits the draft again", async () => {

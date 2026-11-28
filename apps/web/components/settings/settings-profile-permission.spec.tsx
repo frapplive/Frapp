@@ -12,9 +12,9 @@ import { chapterSubscription } from "@/tests/chapter-subscription";
  * `CHAPTER_PROFILE_PERMISSIONS`. Neither sees what `settings-page.tsx` derives
  * the prop from, and the other page-level specs grant permission sets that
  * would pass whichever gate it read. So this renders the real page per
- * permission set and asserts both saves the constant gates: Save profile on
- * the Chapter tab, and Save accent color on the Accent color page its row
- * opens.
+ * permission set and asserts both writes the constant gates: the profile
+ * fields on the Chapter tab, and the accent's hex field on the Accent color
+ * page its row opens (each saves on its own, #6033).
  */
 
 const { mockCurrentChapter, permissions } = vi.hoisted(() => ({
@@ -56,26 +56,27 @@ const { followLink } = await import("@/tests/settings-harness");
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
-/** Both saves `CHAPTER_PROFILE_PERMISSIONS` gates, read off the real page. */
+/**
+ * Both writes `CHAPTER_PROFILE_PERMISSIONS` gates, read off the real page.
+ * Each field saves on its own (#6033), so the gate is whether it can be typed
+ * in at all.
+ */
 async function profileSaves() {
   const user = userEvent.setup();
   const { rerender } = render(<SettingsPage />);
 
   await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
-  // A changed field first: an unchanged profile disables Save for its own
-  // reason.
-  await user.type(screen.getByLabelText("Chapter name"), " II");
-  const profile = screen.getByRole("button", { name: /save profile/i });
-  const profileEnabled = !(profile as HTMLButtonElement).disabled;
+  const profileEnabled = !(
+    screen.getByLabelText("Chapter name") as HTMLInputElement
+  ).disabled;
 
   // The accent has its own page, opened from its row on the Chapter tab.
   followLink(screen.getByRole("link", { name: /^accent color/i }), () =>
     rerender(<SettingsPage />),
   );
-  // A savable draft first: an empty one disables Save for its own reason.
-  await user.type(screen.getByLabelText(/accent color hex value/i), "#8B0000");
-  const accent = screen.getByRole("button", { name: /save accent color/i });
-  const accentEnabled = !(accent as HTMLButtonElement).disabled;
+  const accentEnabled = !(
+    screen.getByLabelText(/accent color hex value/i) as HTMLInputElement
+  ).disabled;
 
   return { profileEnabled, accentEnabled };
 }

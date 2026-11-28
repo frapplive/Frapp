@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   datedDaysThisYear,
+  lastYearEventDay,
   nameForThisYear,
   sameWeekdayThisYear,
 } from "./last-year";
@@ -80,5 +81,37 @@ describe("datedDaysThisYear (#6144)", () => {
     );
     expect(datedDaysThisYear("2025-02-30", null, now)).toBe(null);
     expect(datedDaysThisYear(null, null, now)).toBe(null);
+  });
+});
+
+// The suite runs in Los Angeles, west of a New York saver.
+describe("lastYearEventDay (#6148)", () => {
+  // An all-day retreat on November 22, 2025, saved in New York: its stored
+  // start is New York's midnight, still the 21st in California.
+  const NY_MIDNIGHT = "2025-11-22T05:00:00.000Z";
+
+  it("reads a dated event by its own day, not its stored midnight", () => {
+    expect(
+      lastYearEventDay({
+        last_year_at: NY_MIDNIGHT,
+        last_year_date: "2025-11-22",
+      }),
+    ).toBe("November 22, 2025");
+  });
+
+  it("reads a suggestion stored without the day as before", () => {
+    expect(lastYearEventDay({ last_year_at: NY_MIDNIGHT })).toBe(
+      "November 21, 2025",
+    );
+    expect(
+      lastYearEventDay({ last_year_at: NY_MIDNIGHT, last_year_date: null }),
+    ).toBe("November 21, 2025");
+  });
+
+  it("reads a timed event's start in the reader's zone", () => {
+    expect(lastYearEventDay({ last_year_at: "2025-11-22T03:00:00.000Z" })).toBe(
+      "November 21, 2025",
+    );
+    expect(lastYearEventDay({ last_year_at: null })).toBe("");
   });
 });
