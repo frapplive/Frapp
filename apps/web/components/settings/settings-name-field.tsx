@@ -62,7 +62,6 @@ export function SettingsTextField({
   const errorId = `${id}-error`;
   const [text, setText] = useState(value);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focused = useRef(false);
@@ -70,9 +69,19 @@ export function SettingsTextField({
   // then leaving the field would otherwise send it twice while a refetch is
   // still on its way.
   const sent = useRef<string | null>(null);
+  // A save on its way (through the re-read after it), and whether the field
+  // was committed again meanwhile: that commit runs once the first settles,
+  // with whatever the field holds then, rather than being dropped.
+  const inFlight = useRef(false);
+  const again = useRef(false);
+  const latest = useRef(text);
+  const stored = useRef(value);
+  useEffect(() => {
+    stored.current = value;
+  }, [value]);
   useEffect(() => {
     sent.current = null;
-    if (focused.current) return;
+    if (focused.current || inFlight.current || again.current) return;
     setText(value);
     onTextChange?.(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the saved value only
@@ -85,29 +94,39 @@ export function SettingsTextField({
   );
 
   function show(next: string) {
+    latest.current = next;
     setText(next);
     onTextChange?.(next);
   }
 
   async function commit() {
-    const next = text.trim();
+    if (inFlight.current) {
+      again.current = true;
+      return;
+    }
+    const next = latest.current.trim();
     if (!next && !allowBlank) {
-      show(value);
+      show(stored.current);
       setProblem(null);
       return;
     }
     const refused = validate?.(next) ?? null;
     setProblem(refused);
-    if (refused || next === value.trim() || next === sent.current || saving)
+    if (refused || next === stored.current.trim() || next === sent.current)
       return;
-    setSaving(true);
+    inFlight.current = true;
     const ok = await onSave(next);
-    setSaving(false);
-    if (!ok) return;
-    sent.current = next;
-    setSaved(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSaved(false), 2000);
+    inFlight.current = false;
+    if (ok) {
+      sent.current = next;
+      setSaved(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setSaved(false), 2000);
+    }
+    if (again.current) {
+      again.current = false;
+      if (latest.current.trim() !== next) void commit();
+    }
   }
 
   return (

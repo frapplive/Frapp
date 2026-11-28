@@ -361,17 +361,12 @@ describe("Chapter settings → Chapter (#6027)", () => {
 });
 
 describe("Chapter settings → Identity & founding (#6027)", () => {
-  it("saves a field on its own when it's left, the others as stored (#6033)", async () => {
+  it("saves a field on its own when it's left, sending only that field (#6033)", async () => {
     const tree = render(<ChapterIdentityScreen />);
     expect(hasSave(tree)).toBe(false);
     await enter(tree, "School (short)", "UCLA");
     expect(h.patchConfig).toHaveBeenCalledWith({
-      branding: {
-        greek_letters: "ΣΦΕ",
-        designation: "California Eta",
-        school_short: "UCLA",
-        founded_at: 1901,
-      },
+      branding: { school_short: "UCLA" },
     });
   });
 
@@ -391,7 +386,7 @@ describe("Chapter settings → Identity & founding (#6027)", () => {
     expect(screenText(tree)).toContain("Enter a year between 1776 and");
     await enter(tree, "Founded year", "1903");
     expect(h.patchConfig).toHaveBeenCalledWith({
-      branding: expect.objectContaining({ founded_at: 1903 }),
+      branding: { founded_at: 1903 },
     });
   });
 
@@ -458,14 +453,9 @@ describe("Chapter settings → Vocabulary (#6027)", () => {
     expect(hasSave(tree)).toBe(false);
     expect(field(tree, "New member term").props.placeholder).toBe("New member");
     await enter(tree, "Role tier", " Board ");
+    // That word alone, so another officer's newer words are never re-sent.
     expect(h.patchConfig).toHaveBeenCalledWith({
-      vocabulary: {
-        recruitment: "",
-        pledge: "",
-        class: "",
-        order: "",
-        tier: "Board",
-      },
+      vocabulary: { tier: "Board" },
     });
   });
 
@@ -475,14 +465,16 @@ describe("Chapter settings → Vocabulary (#6027)", () => {
     act(() => first.unmount());
     mounted.splice(mounted.indexOf(first), 1);
     expect(h.patchConfig).toHaveBeenCalledWith({
-      vocabulary: {
-        recruitment: "",
-        pledge: "",
-        class: "Line",
-        order: "",
-        tier: "",
-      },
+      vocabulary: { class: "Line" },
     });
+  });
+
+  it("is read-only for a member who can't manage it", () => {
+    h.permissions = READER;
+    const tree = render(<ChapterVocabularyScreen />);
+    expect(field(tree, "Role tier").props.editable).toBe(false);
+    expect(hasSave(tree)).toBe(false);
+    expect(screenText(tree)).toContain(CHAPTER_TAB_COPY.readOnly);
   });
 
   it("sends a cleared word as empty, so the type's word comes back", async () => {
@@ -490,19 +482,32 @@ describe("Chapter settings → Vocabulary (#6027)", () => {
     const tree = render(<ChapterVocabularyScreen />);
     await enter(tree, "New member term", "");
     expect(h.patchConfig).toHaveBeenCalledWith({
-      vocabulary: expect.objectContaining({ pledge: "" }),
+      vocabulary: { pledge: "" },
     });
   });
 });
 
 describe("Chapter settings → Chapter mark (#6027)", () => {
-  it("saves the short name on its own, with the switch as stored (#6033)", async () => {
+  it("saves the short name on its own, sending only it (#6033)", async () => {
     const tree = render(<ChapterMarkScreen />);
     expect(hasSave(tree)).toBe(false);
     await enter(tree, "Short name", "SigEp");
     expect(h.patchConfig).toHaveBeenCalledWith({
-      branding: { show_greek_letters: true, short_name: "SigEp" },
+      branding: { short_name: "SigEp" },
     });
+  });
+
+  it("reads the short name and the switch, unchangeable, for a member who can't manage", () => {
+    h.permissions = READER;
+    const tree = render(<ChapterMarkScreen />);
+    expect(field(tree, "Short name").props.editable).toBe(false);
+    const toggle = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Show Greek letters" &&
+        typeof node.props.onValueChange === "function",
+    );
+    expect(toggle.props.disabled).toBe(true);
+    expect(screenText(tree)).toContain(CHAPTER_TAB_COPY.readOnly);
   });
 
   it("saves the letters switch the moment it's flipped, and says why it didn't", async () => {
@@ -515,7 +520,7 @@ describe("Chapter settings → Chapter mark (#6027)", () => {
       );
     await act(async () => toggle().props.onValueChange(false));
     expect(h.patchConfig).toHaveBeenCalledWith({
-      branding: { show_greek_letters: false, short_name: "Sig Ep" },
+      branding: { show_greek_letters: false },
     });
     h.patchConfig.mockRejectedValueOnce(new Error("offline"));
     await act(async () => toggle().props.onValueChange(false));
@@ -572,7 +577,53 @@ describe("Chapter settings fields that save on their own (#6033)", () => {
     });
     await leave(tree, "School (short)");
     expect(field(tree, "School (short)").props.value).toBe("UCLA");
-    expect(screenText(tree)).toContain("Couldn't save the identity. Try again.");
+    expect(screenText(tree)).toContain(
+      "Couldn't save the identity. Try again.",
+    );
+  });
+
+  it("keeps an edit whose save fails after the officer left, and brings it back with why", async () => {
+    let fail!: (error: Error) => void;
+    h.patchConfig.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (fail = reject)),
+    );
+    const first = render(<ChapterVocabularyScreen />);
+    type(first, "Cohort label", "Line");
+    act(() => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    await act(async () => fail(new Error("offline")));
+    const again = render(<ChapterVocabularyScreen />);
+    expect(field(again, "Cohort label").props.value).toBe("Line");
+    expect(screenText(again)).toContain(
+      "Couldn't save the vocabulary. Try again.",
+    );
+    // Leaving the field then saves it.
+    await leave(again, "Cohort label");
+    expect(h.patchConfig).toHaveBeenLastCalledWith({
+      vocabulary: { class: "Line" },
+    });
+  });
+
+  it("keeps a refused year left on the way out, with what's wrong", () => {
+    const first = render(<ChapterIdentityScreen />);
+    type(first, "Founded year", "19");
+    act(() => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    expect(h.patchConfig).not.toHaveBeenCalled();
+    const again = render(<ChapterIdentityScreen />);
+    expect(field(again, "Founded year").props.value).toBe("19");
+    expect(screenText(again)).toContain("Enter a year between 1776 and");
+  });
+
+  it("lets a kept edit go once another officer has changed the value", async () => {
+    h.patchConfig.mockRejectedValueOnce(new Error("offline"));
+    const first = render(<ChapterVocabularyScreen />);
+    type(first, "Cohort label", "Line");
+    await act(async () => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    h.config = { ...h.config, vocabulary: { class: "Pledge class" } };
+    const again = render(<ChapterVocabularyScreen />);
+    expect(field(again, "Cohort label").props.value).toBe("Pledge class");
   });
 
   it("takes another officer's save into a field that isn't being edited", () => {

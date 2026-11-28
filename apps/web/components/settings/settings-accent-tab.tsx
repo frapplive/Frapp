@@ -129,8 +129,7 @@ export function SettingsAccentTab({
 }) {
   const { toast } = useToast();
   const accentDraft = draft.value;
-  // Ties the disabled Save to the hint that says why (design-system README:
-  // a disabled control is paired with its reason).
+  // Ties the hex field to the hint that says what it takes.
   const accentHexHintId = useId();
 
   // #1157: the WCAG check runs against a dark Signet surface, with a fallback
@@ -142,16 +141,16 @@ export function SettingsAccentTab({
     background: signetDarkTokens.color.surface.popover,
     fallbackAccent: signetDarkTokens.color.gold.house,
   });
-  // What Save sends: the draft as the `#RRGGBB` the API's DTO requires. The
+  // What a save sends: the draft as the `#RRGGBB` the API's DTO requires. The
   // resolver above already reads a 3-digit shorthand or a padded hex as that
   // colour, so saving the same normalization keeps the preview, the warnings
   // and the save describing one colour. Sending the raw draft let `#08E`
   // preview cleanly and then fail the save with a 400.
   const accentDraftHex = normalizeHex(accentDraft);
-  // Empty, blank or not a hex colour: Save is disabled and the tab says what to
-  // enter. An empty draft counts: it sends no `accent_color`, which the API
-  // treats as "no change" and answers with success, so the toast would claim a
-  // save that wrote nothing. The copy is an instruction rather than a complaint
+  // Empty, blank or not a hex colour: nothing is sent and the tab says what to
+  // enter. An empty draft counts: it would send no `accent_color`, which the
+  // API treats as "no change" and answers with success, so "Saved" would claim
+  // a save that wrote nothing. The copy is an instruction rather than a complaint
   // about "this color" because an empty field (a chapter with no stored
   // accent, or a cleared input) holds no colour to complain about, and it
   // takes warning styling only once something unsavable has been typed.
@@ -179,6 +178,13 @@ export function SettingsAccentTab({
   const previewInk = preview?.ink ?? signetDarkTokens.color.gold.onHouse;
 
   const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
   const savedColor = normalizeHex(draft.saved);
   // The colour last saved from here, until the chapter refetch brings it
   // back as `savedColor`: Enter then leaving the field would otherwise send
@@ -190,19 +196,22 @@ export function SettingsAccentTab({
 
   /*
     The accent saves on its own (#6033): a swatch the moment it is picked,
-    a typed hex or the colour picker on Enter or leaving the field, once it
-    is a hex. "Saved" shows under it; a failure toasts and leaves the draft
-    for another try.
+    a typed hex on Enter or leaving the field, a colour picker's pick when
+    the picker commits it, once it is a hex. "Saved" shows under it for a
+    moment, as every field that saves on its own does; a failure toasts and
+    leaves the draft for another try. A colour chosen while a save is still
+    on its way is saved once that one settles, never dropped.
   */
+  const inFlight = useRef(false);
+  const queued = useRef<string | null>(null);
   async function saveAccent(value: string) {
-    const hex = normalizeHex(value);
-    if (
-      !hex ||
-      hex === savedColor ||
-      hex === sentColor.current ||
-      updateChapter.isPending
-    )
+    if (inFlight.current) {
+      queued.current = value;
       return;
+    }
+    const hex = normalizeHex(value);
+    if (!hex || hex === savedColor || hex === sentColor.current) return;
+    inFlight.current = true;
     setSaved(false);
     try {
       const result = await updateChapter.mutateAsync({
@@ -211,14 +220,38 @@ export function SettingsAccentTab({
       sentColor.current = hex;
       draft.setContrastWarning(result?.failedContrastChecks ?? null);
       setSaved(true);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       toast({
         title: "Couldn't save accent color",
         description: getErrorMessage(error, "Retry, or check your connection."),
         variant: "destructive",
       });
+    } finally {
+      inFlight.current = false;
     }
+    const next = queued.current;
+    queued.current = null;
+    if (next !== null && normalizeHex(next) !== hex) void saveAccent(next);
   }
+
+  // A native colour picker fires `change` when the pick is committed (the
+  // dialog closes), and may never move focus onto the input, so it saves
+  // there rather than on blur. React's `onChange` is the `input` event,
+  // fired on every drag through the picker, which only moves the draft.
+  const colorInput = useRef<HTMLInputElement>(null);
+  const saveRef = useRef(saveAccent);
+  useEffect(() => {
+    saveRef.current = saveAccent;
+  });
+  useEffect(() => {
+    const input = colorInput.current;
+    if (!input) return;
+    const onCommit = () => void saveRef.current(input.value);
+    input.addEventListener("change", onCommit);
+    return () => input.removeEventListener("change", onCommit);
+  }, []);
 
   const accentContrastWarning = draft.contrastWarning;
 
@@ -296,6 +329,7 @@ export function SettingsAccentTab({
           <p className={`${EYEBROW} text-muted`}>Custom color</p>
           <div className="flex flex-wrap items-center gap-4">
             <Input
+              ref={colorInput}
               type="color"
               aria-label="Accent color picker"
               value={accentDraftHex || accent.resolvedAccent}

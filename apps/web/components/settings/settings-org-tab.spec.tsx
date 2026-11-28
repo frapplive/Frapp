@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { MAX_UPLOAD_LABEL } from "@repo/validation";
@@ -60,7 +60,7 @@ describe("SettingsOrgTab", () => {
     expect(screen.getByPlaceholderText("Line")).toBeInTheDocument();
   });
 
-  it("saves each word on its own with the other four as stored, and a cleared word as blank (#3939)", async () => {
+  it("saves each word on its own, alone, and a cleared word as blank (#3939)", async () => {
     const user = userEvent.setup();
     const onPatchConfig = landing();
     const stored = {
@@ -81,10 +81,10 @@ describe("SettingsOrgTab", () => {
     // What the chapter calls a tier of roles (#4068 decision 5).
     await user.type(screen.getByLabelText("Role tier"), "Level");
     await user.tab();
-    // The PATCH merges, so a word left out would keep its stored value: each
-    // save sends all five, the other four as stored.
+    // The PATCH deep-merges, so each save sends only its own word: the
+    // others keep their stored values without being re-sent from a cache.
     expect(onPatchConfig).toHaveBeenLastCalledWith({
-      vocabulary: { ...stored, tier: "Level" },
+      vocabulary: { tier: "Level" },
     });
     expect(savedNotes()).toHaveLength(1);
 
@@ -95,13 +95,13 @@ describe("SettingsOrgTab", () => {
     );
     await user.keyboard("{Enter}");
     expect(onPatchConfig).toHaveBeenLastCalledWith({
-      vocabulary: { ...stored, order: "Roll number", tier: "" },
+      vocabulary: { order: "Roll number" },
     });
 
     await user.clear(screen.getByLabelText("Cohort label"));
     await user.tab();
     expect(onPatchConfig).toHaveBeenLastCalledWith({
-      vocabulary: { ...stored, class: "", tier: "" },
+      vocabulary: { class: "" },
     });
     expect(onPatchConfig).toHaveBeenCalledTimes(3);
   });
@@ -194,6 +194,44 @@ describe("SettingsOrgTab", () => {
     expect(onSaveProfileField).toHaveBeenCalledTimes(2);
   });
 
+  it("saves a field committed again while its first save is on its way, with the newer text, once that one settles", async () => {
+    const user = userEvent.setup();
+    const pending: Array<(ok: boolean) => void> = [];
+    const onSaveProfileField = vi.fn(
+      () => new Promise<boolean>((resolve) => pending.push(resolve)),
+    );
+    render(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        onSaveProfileField={onSaveProfileField}
+      />,
+    );
+    const field = screen.getByLabelText(/chapter name/i);
+    await user.type(field, " II{Enter}");
+    expect(onSaveProfileField).toHaveBeenCalledTimes(1);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith(
+      "name",
+      "Test Chapter II",
+    );
+
+    await user.type(field, "I");
+    await user.tab();
+    // Held while the first is on its way, not dropped.
+    expect(onSaveProfileField).toHaveBeenCalledTimes(1);
+    expect(field).toHaveValue("Test Chapter III");
+
+    await act(async () => pending.shift()?.(true));
+    expect(onSaveProfileField).toHaveBeenCalledTimes(2);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith(
+      "name",
+      "Test Chapter III",
+    );
+    await act(async () => pending.shift()?.(true));
+    expect(field).toHaveValue("Test Chapter III");
+    expect(savedNotes()).toHaveLength(1);
+  });
+
   it("sends nothing for an unchanged field, and puts back a name left blank", async () => {
     const user = userEvent.setup();
     const onSaveProfileField = landing();
@@ -232,7 +270,7 @@ describe("SettingsOrgTab", () => {
     expect(onPatchConfig).not.toHaveBeenCalled();
   });
 
-  it("saves one identity field through onPatchConfig, the others as stored", async () => {
+  it("saves one identity field through onPatchConfig, alone", async () => {
     const user = userEvent.setup();
     const onPatchConfig = landing();
     render(
@@ -248,11 +286,7 @@ describe("SettingsOrgTab", () => {
     await user.tab();
     // No success title: the field says "Saved" itself.
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: {
-        greek_letters: "ΣΦΕ",
-        designation: "Cal Eta",
-        school_short: "UCLA",
-      },
+      branding: { school_short: "UCLA" },
     });
     expect(onPatchConfig.mock.calls[0]).toHaveLength(1);
     expect(await screen.findByText("Saved")).toBeInTheDocument();
@@ -339,6 +373,24 @@ describe("SettingsOrgTab", () => {
     expect(hints()).toHaveLength(1);
   });
 
+  it("tells a viewer who can't change the profile why the accent page is greyed", () => {
+    // The accent writes through the profile route, so it reads that gate.
+    render(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        accentSection={<div>Accent section</div>}
+        canEditProfile={false}
+        page="accent"
+      />,
+    );
+    expect(
+      screen
+        .getAllByText("Your role can't change chapter settings.")
+        .filter((node) => !node.closest("[hidden]")),
+    ).toHaveLength(1);
+  });
+
   it("sends an emptied identity field as an empty string, so the clear saves", async () => {
     // The config PATCH deep-merges: leaving the key out would keep the stored
     // letters, and the field the officer emptied would come back on reload.
@@ -356,7 +408,7 @@ describe("SettingsOrgTab", () => {
     await user.clear(screen.getByLabelText(/^greek letters/i));
     await user.tab();
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: { greek_letters: "", designation: "Tau Nu" },
+      branding: { greek_letters: "" },
     });
   });
 
@@ -486,7 +538,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
     );
   });
 
-  it("previews the short name as typed and saves it, with the stored switch, when left", async () => {
+  it("previews the short name as typed and saves it alone when left", async () => {
     const user = userEvent.setup();
     const onPatchConfig = landing();
     render(
@@ -503,12 +555,12 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
     expect(onPatchConfig).not.toHaveBeenCalled();
     await user.tab();
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: { short_name: "FIJI", show_greek_letters: true },
+      branding: { short_name: "FIJI" },
     });
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
-  it("flips the switch with the stored short name, not one still being typed", async () => {
+  it("flips the switch alone, sending no short name", async () => {
     const user = userEvent.setup();
     const onPatchConfig = landing();
     render(
@@ -524,7 +576,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
       screen.getByRole("switch", { name: /show greek letters/i }),
     );
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: { short_name: "FIJI", show_greek_letters: false },
+      branding: { show_greek_letters: false },
     });
   });
 
@@ -543,7 +595,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
     await user.clear(screen.getByLabelText(/short name/i));
     await user.keyboard("{Enter}");
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: { short_name: "", show_greek_letters: true },
+      branding: { short_name: "" },
     });
   });
 
@@ -936,7 +988,7 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
     });
   });
 
-  it("saves an identity field with the stored letters unchanged", async () => {
+  it("saves an identity field alone, leaving the stored letters untouched", async () => {
     const user = userEvent.setup();
     const onPatchConfig = landing();
     render(
@@ -950,10 +1002,7 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
     await user.type(screen.getByLabelText(/chapter designation/i), " II");
     await user.tab();
     expect(onPatchConfig).toHaveBeenCalledWith({
-      branding: expect.objectContaining({
-        greek_letters: "ΦΓΔ",
-        designation: "Tau Nu II",
-      }),
+      branding: { designation: "Tau Nu II" },
     });
   });
 });

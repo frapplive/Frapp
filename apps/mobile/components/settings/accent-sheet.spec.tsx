@@ -141,6 +141,40 @@ describe("AccentSheet saving on its own (#6033)", () => {
     act(() => tree.unmount());
   });
 
+  it("sends a colour once, though return and the blur it brings both commit it", async () => {
+    const save = vi.fn(() => Promise.resolve({}));
+    const { tree, picker } = open(save);
+    await act(async () => picker().props.onCommit("#2563EB"));
+    await act(async () => picker().props.onCommit("#2563EB"));
+    expect(save).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+
+  it("saves a colour chosen while a save is out once that one settles", async () => {
+    let land!: () => void;
+    const save = vi
+      .fn<(body: unknown) => Promise<unknown>>()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (land = () => resolve({}))),
+      )
+      .mockResolvedValue({});
+    const { tree, picker } = open(save);
+    act(() => void picker().props.onCommit("#2563EB"));
+    act(() => void picker().props.onCommit("#16A34A"));
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(async () => land());
+    expect(save).toHaveBeenLastCalledWith({ accent_color: "#16A34A" });
+    act(() => tree.unmount());
+  });
+
+  it("draws its title alone, as a picker does", () => {
+    const { tree } = open(() => Promise.resolve({}));
+    const text = screenText(tree);
+    expect(text).not.toContain("Done");
+    expect(text).not.toContain("Cancel");
+    act(() => tree.unmount());
+  });
+
   it("sends nothing for the colour the chapter already has", async () => {
     const save = vi.fn(() => Promise.resolve({}));
     const { tree, picker } = open(save);

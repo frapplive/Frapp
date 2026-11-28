@@ -3,18 +3,17 @@ import {
   BIRTHDAY_POSTS_COPY,
   birthdayPostChoices,
   chapterArchetypeSwitchPatch,
-  chapterIdentityBrandingDiff,
   chapterIdentityFieldDiff,
   chapterIdentityDraftOf,
   chapterIdentityValue,
-  chapterMarkBrandingDiff,
+  chapterMarkLettersDiff,
+  chapterMarkShortNameDiff,
   chapterMarkDraftOf,
   chapterMarkValue,
   chapterProfileFieldBody,
   chapterProfileSaveBody,
   chapterVocabularyFieldPatch,
   chapterVocabularyDraftOf,
-  chapterVocabularyPatch,
   chapterVocabularyValue,
   checkFoundedYear,
   foundedYearProblem,
@@ -72,9 +71,9 @@ describe("chapterProfileSaveBody", () => {
 
 describe("chapterProfileFieldBody", () => {
   it("sends the one field typed, and nothing for one typed back", () => {
-    expect(chapterProfileFieldBody(STORED, "university", " Rensselaer ")).toEqual(
-      { university: "Rensselaer" },
-    );
+    expect(
+      chapterProfileFieldBody(STORED, "university", " Rensselaer "),
+    ).toEqual({ university: "Rensselaer" });
     expect(chapterProfileFieldBody(STORED, "name", STORED.name)).toEqual({});
   });
 });
@@ -104,34 +103,33 @@ describe("readChapterBranding", () => {
 });
 
 describe("Chapter mark", () => {
-  it("always sends the switch, and the short name only to keep or clear one", () => {
+  it("saves the short name alone, keeping or clearing one (#6033)", () => {
+    expect(chapterMarkShortNameDiff("  ", {}, false)).toEqual({});
+    expect(chapterMarkShortNameDiff(" SigEp ", {}, false)).toEqual({
+      short_name: "SigEp",
+    });
     expect(
-      chapterMarkBrandingDiff({
-        shortName: "  ",
-        showLetters: true,
-        lettersHidden: false,
-        stored: {},
-      }),
-    ).toEqual({ show_greek_letters: true });
-    expect(
-      chapterMarkBrandingDiff({
-        shortName: "",
-        showLetters: true,
-        lettersHidden: false,
-        stored: { short_name: "Sig Ep" },
-      }),
-    ).toEqual({ show_greek_letters: true, short_name: "" });
+      chapterMarkShortNameDiff("", { short_name: "Sig Ep" }, false),
+    ).toEqual({ short_name: "" });
+  });
+
+  it("saves the switch alone", () => {
+    expect(chapterMarkLettersDiff(false, false)).toEqual({
+      show_greek_letters: false,
+    });
+    expect(chapterMarkLettersDiff(true, false)).toEqual({
+      show_greek_letters: true,
+    });
   });
 
   it("writes the letters off for an organization that hides them", () => {
-    expect(
-      chapterMarkBrandingDiff({
-        shortName: "FIJI",
-        showLetters: true,
-        lettersHidden: true,
-        stored: {},
-      }),
-    ).toEqual({ show_greek_letters: false, short_name: "FIJI" });
+    expect(chapterMarkShortNameDiff("FIJI", {}, true)).toEqual({
+      show_greek_letters: false,
+      short_name: "FIJI",
+    });
+    expect(chapterMarkLettersDiff(true, true)).toEqual({
+      show_greek_letters: false,
+    });
   });
 
   it("reads the stored mark as the page's two fields", () => {
@@ -203,31 +201,19 @@ describe("Identity & founding", () => {
     expect(checkFoundedYear(String(NOW_YEAR + 2), undefined).valid).toBe(false);
   });
 
-  it("sends a cleared field as empty and leaves never-set ones out", () => {
-    const stored = { greek_letters: "ΣΦΕ", designation: "California Eta" };
-    expect(
-      chapterIdentityBrandingDiff(
-        {
-          greekLetters: " ΣΦΕ ",
-          designation: "",
-          schoolShort: "",
-          foundedYear: "1901",
-        },
-        stored,
-      ),
-    ).toEqual({ greek_letters: "ΣΦΕ", designation: "", founded_at: 1901 });
-  });
-
-  it("saves one field with the others as stored", () => {
+  it("saves one field alone, a cleared one as empty, a never-set one as nothing (#6033)", () => {
     const branding = { designation: "California Eta", founded_at: 1901 };
-    expect(chapterIdentityFieldDiff(branding, "schoolShort", " UCLA ")).toEqual({
-      designation: "California Eta",
-      school_short: "UCLA",
-      founded_at: 1901,
-    });
+    expect(chapterIdentityFieldDiff(branding, "schoolShort", " UCLA ")).toEqual(
+      {
+        school_short: "UCLA",
+      },
+    );
     expect(chapterIdentityFieldDiff(branding, "designation", "")).toEqual({
       designation: "",
-      founded_at: 1901,
+    });
+    expect(chapterIdentityFieldDiff(branding, "greekLetters", " ")).toEqual({});
+    expect(chapterIdentityFieldDiff(branding, "foundedYear", "1903")).toEqual({
+      founded_at: 1903,
     });
   });
 
@@ -265,36 +251,12 @@ describe("Organization type", () => {
 });
 
 describe("Vocabulary", () => {
-  it("sends every word trimmed, a cleared one as empty", () => {
-    const draft = chapterVocabularyDraftOf({ recruitment: "Rush" });
-    expect(
-      chapterVocabularyPatch({
-        ...draft,
-        recruitment: " ",
-        pledge: " Pledge ",
-      }),
-    ).toEqual({
-      vocabulary: {
-        recruitment: "",
-        pledge: "Pledge",
-        class: "",
-        order: "",
-        tier: "",
-      },
+  it("saves one word alone, trimmed, a cleared one as empty (#6033)", () => {
+    expect(chapterVocabularyFieldPatch("tier", " Board ")).toEqual({
+      vocabulary: { tier: "Board" },
     });
-  });
-
-  it("saves one word with the others as stored", () => {
-    expect(
-      chapterVocabularyFieldPatch({ recruitment: "Rush" }, "tier", " Board "),
-    ).toEqual({
-      vocabulary: {
-        recruitment: "Rush",
-        pledge: "",
-        class: "",
-        order: "",
-        tier: "Board",
-      },
+    expect(chapterVocabularyFieldPatch("recruitment", " ")).toEqual({
+      vocabulary: { recruitment: "" },
     });
   });
 

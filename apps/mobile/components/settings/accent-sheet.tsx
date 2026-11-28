@@ -1,5 +1,5 @@
 import { errorCopy } from "@repo/hooks/error-copy";
-import { forwardRef, useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import {
   BottomSheetModal,
@@ -49,8 +49,10 @@ export function storedAccentOf(
  * color during onboarding could not fix it from the app.
  *
  * The accent saves on its own (#6033): a swatch the moment it is tapped, a
- * typed hex when the field is left, with a quiet "Saved" under it; the sheet
- * stays open, and Done closes it.
+ * typed hex when the field is left or the sheet closes, with a quiet "Saved"
+ * under it. It is a picker, so it draws its title alone: the grabber, the
+ * scrim, Android back and VoiceOver's escape close it (components.md § A
+ * sheet's header follows what the sheet is).
  *
  * Saves through `PATCH /v1/chapters/current`, the call web's Accent tab makes,
  * which recomputes the chapter's palette server-side; the current-chapter
@@ -58,27 +60,26 @@ export function storedAccentOf(
  * sheet only for a member who holds `CHAPTER_PROFILE_PERMISSIONS`, the route's
  * own guard.
  */
-export const AccentSheet = forwardRef<BottomSheetModal>(function AccentSheet(
-  _props,
-  ref,
-) {
-  const closeSheet = useSheetClose(ref);
-  const backgroundStyle = useSheetBackgroundStyle();
-  return (
-    <BottomSheetModal
-      ref={ref}
-      stackBehavior={SHEET_STACK_BEHAVIOR}
-      enableDynamicSizing
-      keyboardBehavior="interactive"
-      backgroundStyle={backgroundStyle}
-      handleComponent={SheetGrabber}
-      backdropComponent={SheetScrim}
-    >
-      <SheetBackToClose onClose={closeSheet} />
-      <AccentSheetBody onDone={closeSheet} />
-    </BottomSheetModal>
-  );
-});
+export const AccentSheet = forwardRef<BottomSheetModal>(
+  function AccentSheet(_props, ref) {
+    const closeSheet = useSheetClose(ref);
+    const backgroundStyle = useSheetBackgroundStyle();
+    return (
+      <BottomSheetModal
+        ref={ref}
+        stackBehavior={SHEET_STACK_BEHAVIOR}
+        enableDynamicSizing
+        keyboardBehavior="interactive"
+        backgroundStyle={backgroundStyle}
+        handleComponent={SheetGrabber}
+        backdropComponent={SheetScrim}
+      >
+        <SheetBackToClose onClose={closeSheet} />
+        <AccentSheetBody onDone={closeSheet} />
+      </BottomSheetModal>
+    );
+  },
+);
 
 function AccentSheetBody({ onDone }: { onDone: () => void }) {
   const { tokens } = useFrappTheme();
@@ -90,11 +91,8 @@ function AccentSheetBody({ onDone }: { onDone: () => void }) {
   // the chapter doesn't have.
   if (!chapter.data) {
     return (
-      <BottomSheetView
-        style={styles.body}
-        onAccessibilityEscape={onDone}
-      >
-        <SheetHeader title="Chapter accent" onCancel={onDone} cancelLabel="Done" />
+      <BottomSheetView style={styles.body} onAccessibilityEscape={onDone}>
+        <SheetHeader title="Chapter accent" />
         {chapter.isError ? (
           <Text style={styles.error}>
             Couldn&apos;t load the chapter. Check your connection and try again.
@@ -105,9 +103,7 @@ function AccentSheetBody({ onDone }: { onDone: () => void }) {
       </BottomSheetView>
     );
   }
-  return (
-    <AccentSheetForm chapter={chapter.data} onDone={onDone} />
-  );
+  return <AccentSheetForm chapter={chapter.data} onDone={onDone} />;
 }
 
 function AccentSheetForm({
@@ -129,26 +125,42 @@ function AccentSheetForm({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The colour last sent, so a return then the blur it brings (or a commit
+  // as the sheet closes) never sends it twice; and a colour chosen while a
+  // save is on its way, saved once that one settles rather than dropped.
+  const sent = useRef(stored.toUpperCase());
+  const inFlight = useRef(false);
+  const queued = useRef<string | null>(null);
+
   async function save(hex: string) {
-    if (hex.toUpperCase() === stored.toUpperCase()) return;
+    if (inFlight.current) {
+      queued.current = hex;
+      return;
+    }
+    if (hex.toUpperCase() === sent.current) return;
+    sent.current = hex.toUpperCase();
+    inFlight.current = true;
     setError(null);
     setSaved(false);
     try {
       await updateChapter.mutateAsync({ accent_color: hex });
       setSaved(true);
     } catch (caught) {
+      sent.current = stored.toUpperCase();
       setError(
         errorCopy(caught, "Couldn't save the accent. Try again in a moment."),
       );
+    } finally {
+      inFlight.current = false;
     }
+    const next = queued.current;
+    queued.current = null;
+    if (next !== null) void save(next);
   }
 
   return (
-    <BottomSheetView
-      style={styles.body}
-      onAccessibilityEscape={onDone}
-    >
-      <SheetHeader title="Chapter accent" onCancel={onDone} cancelLabel="Done" />
+    <BottomSheetView style={styles.body} onAccessibilityEscape={onDone}>
+      <SheetHeader title="Chapter accent" />
       {/* The one line the picker can't show: Settings is otherwise a screen
           of personal preferences, and this save repaints every member's app. */}
       <Text style={styles.helper}>

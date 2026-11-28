@@ -55,6 +55,7 @@ export function ChapterProfileForm({
       <SettingAnchor id="chapter-name">
         <SavedTextField
           label="Chapter name"
+          draftKey="chapter-name"
           value={stored.name}
           editable={canEdit}
           maxLength={CHAPTER_NAME_MAX_LENGTH}
@@ -65,6 +66,7 @@ export function ChapterProfileForm({
       <SettingAnchor id="university">
         <SavedTextField
           label="University"
+          draftKey="chapter-university"
           value={stored.university}
           editable={canEdit}
           maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
@@ -75,6 +77,7 @@ export function ChapterProfileForm({
       <SettingAnchor id="donation-link">
         <SavedTextField
           label="Donation link (optional)"
+          draftKey="chapter-donation"
           value={stored.donation_url}
           editable={canEdit}
           placeholder="https://give.youruniversity.edu/..."

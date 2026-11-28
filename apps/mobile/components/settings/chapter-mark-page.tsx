@@ -9,7 +9,9 @@ import {
 } from "@repo/hooks";
 import {
   CHAPTER_TAB_COPY,
-  chapterMarkBrandingDiff,
+  chapterMarkLettersDiff,
+  chapterMarkShortNameDiff,
+  type ChapterTabBranding,
   chapterMarkDraftOf,
 } from "@repo/hooks/chapter-tab";
 import { errorCopy } from "@repo/hooks/error-copy";
@@ -114,26 +116,21 @@ export function ChapterMarkPage() {
     });
   }
 
-  // The switch always goes with a save; the short name only to keep or
-  // clear one (`chapterMarkBrandingDiff`).
-  const saveMark = (shortName: string, showLetters: boolean) =>
+  // Each saves only its own key (`chapterMarkShortNameDiff`,
+  // `chapterMarkLettersDiff`), so neither re-sends the other from a cached
+  // config another officer may have changed since.
+  const saveBranding = (branding: ChapterTabBranding) =>
     saveSetting(
-      () =>
-        tab.patchConfig.mutateAsync({
-          branding: chapterMarkBrandingDiff({
-            shortName,
-            showLetters,
-            lettersHidden,
-            stored: branding,
-          }),
-        }),
+      () => tab.patchConfig.mutateAsync({ branding }),
       "Couldn't save the mark. Try again.",
     );
 
   async function flipLetters(next: boolean) {
     setLettersFailure(null);
     setLettersSaving(true);
-    const result = await saveMark(stored.shortName, next);
+    const result = await saveBranding(
+      chapterMarkLettersDiff(next, lettersHidden),
+    );
     setLettersSaving(false);
     if (result !== true) setLettersFailure(result);
   }
@@ -208,12 +205,17 @@ export function ChapterMarkPage() {
               <SettingAnchor id="short-name">
                 <SavedTextField
                   label="Short name"
+                  draftKey="chapter-short-name"
                   value={stored.shortName}
                   editable={canManage}
                   maxLength={CHAPTER_SHORT_NAME_MAX_LENGTH}
                   placeholder="FIJI"
                   allowBlank
-                  onSave={(next) => saveMark(next, stored.showLetters)}
+                  onSave={(next) =>
+                    saveBranding(
+                      chapterMarkShortNameDiff(next, branding, lettersHidden),
+                    )
+                  }
                 />
               </SettingAnchor>
               {lettersHidden ? null : (

@@ -6,7 +6,8 @@ import type { ChapterLogoUpload } from "@repo/hooks";
 import {
   CHAPTER_TAB_COPY,
   chapterLettersHidden,
-  chapterMarkBrandingDiff,
+  chapterMarkLettersDiff,
+  chapterMarkShortNameDiff,
 } from "@repo/hooks/chapter-tab";
 import {
   CHAPTER_SHORT_NAME_MAX_LENGTH,
@@ -100,22 +101,19 @@ export function SettingsChapterMarkCard({
     name,
   });
 
-  // The switch always goes with a save; the short name only to keep or
-  // clear one (`chapterMarkBrandingDiff`). Each save passes the other as
-  // stored.
-  const saveMark = (shortName: string, showLetters: boolean) =>
+  // Each saves only its own key (`chapterMarkShortNameDiff`,
+  // `chapterMarkLettersDiff`), so neither re-sends the other from a cached
+  // config another officer may have changed since.
+  const saveShortName = (next: string) =>
     onPatchConfig({
-      branding: chapterMarkBrandingDiff({
-        shortName,
-        showLetters,
-        lettersHidden,
-        stored: branding,
-      }),
+      branding: chapterMarkShortNameDiff(next, branding, lettersHidden),
     });
 
   async function flipLetters(next: boolean) {
     setLettersSaving(true);
-    await saveMark(storedShortName, next);
+    await onPatchConfig({
+      branding: chapterMarkLettersDiff(next, lettersHidden),
+    });
     setLettersSaving(false);
   }
 
@@ -151,7 +149,7 @@ export function SettingsChapterMarkCard({
             allowBlank
             disabled={!canManage}
             onTextChange={setTypedShortName}
-            onSave={(next) => saveMark(next, storedShowLetters)}
+            onSave={saveShortName}
           />
           {lettersHidden ? null : (
             <div className="flex items-center justify-between gap-3">

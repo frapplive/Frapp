@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -156,6 +156,23 @@ export function AccentPicker({
     const parsed = parseTypedHex(draft);
     if (parsed) onCommit?.(parsed);
   }
+
+  // Closing a sheet by a tap (its scrim, Android back) can unmount the field
+  // while it still has focus, before its blur reaches here: commit what it
+  // holds then too, so a typed colour is never dropped. A caller that saves
+  // skips a colour it has already sent.
+  const unmounting = useRef({ draft, onCommit });
+  useEffect(() => {
+    unmounting.current = { draft, onCommit };
+  });
+  useEffect(
+    () => () => {
+      const { draft: left, onCommit: commit } = unmounting.current;
+      const parsed = parseTypedHex(left);
+      if (parsed) commit?.(parsed);
+    },
+    [],
+  );
 
   function typeHex(text: string) {
     setDraft(text);

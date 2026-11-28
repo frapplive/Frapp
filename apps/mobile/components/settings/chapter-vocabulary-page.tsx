@@ -56,6 +56,7 @@ export function ChapterVocabularyPage() {
                 <SettingAnchor key={field.key} id={`vocab-${field.key}`}>
                   <SavedTextField
                     label={field.label}
+                    draftKey={`chapter-vocab-${field.key}`}
                     value={stored[field.key]}
                     editable={canManage}
                     placeholder={field.placeholder(archetype)}
@@ -65,11 +66,7 @@ export function ChapterVocabularyPage() {
                       saveSetting(
                         () =>
                           tab.patchConfig.mutateAsync(
-                            chapterVocabularyFieldPatch(
-                              vocabulary,
-                              field.key,
-                              next,
-                            ),
+                            chapterVocabularyFieldPatch(field.key, next),
                           ),
                         "Couldn't save the vocabulary. Try again.",
                       )

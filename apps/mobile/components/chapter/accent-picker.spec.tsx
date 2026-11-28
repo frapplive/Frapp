@@ -79,6 +79,24 @@ describe("AccentPicker", () => {
     expect(onCommit).toHaveBeenCalledTimes(2);
   });
 
+  it("commits a typed colour still in the field when it unmounts (#6033)", () => {
+    const onCommit = vi.fn();
+    const { tree } = render({ onCommit });
+    act(() => byLabel(tree, "Custom color").props.onPress());
+    act(() =>
+      tree.root
+        .find(
+          (node) =>
+            node.type === ("TextInput" as unknown) &&
+            node.props.accessibilityLabel === "Custom color hex",
+        )
+        .props.onChangeText("#2563EB"),
+    );
+    expect(onCommit).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+    expect(onCommit).toHaveBeenCalledWith("#2563EB");
+  });
+
   it("focuses the hex field as it opens, and edges it in the caller's color while focused", () => {
     const { tree } = render();
     act(() => byLabel(tree, "Custom color").props.onPress());

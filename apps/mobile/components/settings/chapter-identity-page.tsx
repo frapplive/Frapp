@@ -70,6 +70,7 @@ export function ChapterIdentityPage() {
                 <SettingAnchor id="greek-letters">
                   <SavedTextField
                     label="Greek letters"
+                    draftKey="chapter-greek-letters"
                     value={stored.greekLetters}
                     editable={canManage}
                     maxLength={8}
@@ -84,6 +85,7 @@ export function ChapterIdentityPage() {
               <SettingAnchor id="designation">
                 <SavedTextField
                   label="Chapter designation"
+                  draftKey="chapter-designation"
                   value={stored.designation}
                   editable={canManage}
                   placeholder="e.g. California Eta"
@@ -95,6 +97,7 @@ export function ChapterIdentityPage() {
               <SettingAnchor id="school-short">
                 <SavedTextField
                   label="School (short)"
+                  draftKey="chapter-school-short"
                   value={stored.schoolShort}
                   editable={canManage}
                   placeholder="e.g. UCLA"
@@ -106,6 +109,7 @@ export function ChapterIdentityPage() {
               <SettingAnchor id="founded-year">
                 <SavedTextField
                   label="Founded year"
+                  draftKey="chapter-founded-year"
                   value={stored.foundedYear}
                   editable={canManage}
                   placeholder="e.g. 1901"

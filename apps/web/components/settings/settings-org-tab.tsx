@@ -206,9 +206,9 @@ export function SettingsOrgTab({
   }, [page]);
 
   let content: ReactNode;
-  // The mark page stays mounted while hidden, so a short name typed there
-  // and left unsaved is still there on the way back, as the other pages' drafts
-  // are (they live in this component).
+  // The mark page stays mounted while hidden, so its preview keeps the short
+  // name being typed there if the officer steps back and returns before
+  // leaving the field (leaving it saves it).
   const markPage = (
     <div hidden={page !== "mark"}>
       {subpage(
@@ -234,7 +234,16 @@ export function SettingsOrgTab({
   if (page === "mark") {
     content = null;
   } else if (page === "accent") {
-    content = subpage("Accent color", accentSection);
+    // The accent writes through the profile route, so its line is the
+    // profile's: a viewer who can't change it is told why the swatches and
+    // fields are greyed, as on every other Chapter page.
+    content = subpage(
+      "Accent color",
+      <div className="space-y-3">
+        {accentSection}
+        {profileHint}
+      </div>,
+    );
   } else if (page === "identity") {
     content = subpage(
       "Identity & founding",
@@ -411,7 +420,7 @@ export function SettingsOrgTab({
                   disabled={!canManage}
                   onSave={(next) =>
                     onPatchConfig(
-                      chapterVocabularyFieldPatch(vocabulary, field.key, next),
+                      chapterVocabularyFieldPatch(field.key, next),
                     )
                   }
                 />
