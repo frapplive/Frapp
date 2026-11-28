@@ -1,5 +1,5 @@
 import { errorCopy } from "@repo/hooks/error-copy";
-import { forwardRef, useMemo, useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import {
   BottomSheetModal,
@@ -14,12 +14,10 @@ import { AccentPicker } from "@/components/chapter/accent-picker";
 import {
   SheetGrabber,
   SheetHeader,
-  SheetPrimaryButton,
   SheetScrim,
   useSheetBackgroundStyle,
   SheetBackToClose,
   useSheetClose,
-  useSheetVisit,
   SHEET_STACK_BEHAVIOR,
 } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -50,79 +48,51 @@ export function storedAccentOf(
  * swatch over "edited on the web dashboard", so an officer who set the wrong
  * color during onboarding could not fix it from the app.
  *
+ * The accent saves on its own (#6033): a swatch the moment it is tapped, a
+ * typed hex when the field is left or the sheet closes, with a quiet "Saved"
+ * under it. It is a picker, so it draws its title alone: the grabber, the
+ * scrim, Android back and VoiceOver's escape close it (components.md § A
+ * sheet's header follows what the sheet is).
+ *
  * Saves through `PATCH /v1/chapters/current`, the call web's Accent tab makes,
  * which recomputes the chapter's palette server-side; the current-chapter
  * refetch then repaints the whole app in the new accent. The row opens this
  * sheet only for a member who holds `CHAPTER_PROFILE_PERMISSIONS`, the route's
  * own guard.
  */
-export const AccentSheet = forwardRef<BottomSheetModal>(function AccentSheet(
-  _props,
-  ref,
-) {
-  const closeSheet = useSheetClose(ref);
-  const backgroundStyle = useSheetBackgroundStyle();
-  // A save can settle after the officer swiped the sheet away: see
-  // `useSheetVisit`. It closes only the visit it was sent from, and never a
-  // sheet that is already down (#3405).
-  const { onAnimate, markClosed, dismiss, visit, isSameVisit } =
-    useSheetVisit(ref);
-  const saving = useMemo(
-    () => ({
-      sentFrom: visit,
-      closeAfter: (token: number) => {
-        if (isSameVisit(token)) dismiss();
-      },
-    }),
-    [dismiss, isSameVisit, visit],
-  );
+export const AccentSheet = forwardRef<BottomSheetModal>(
+  function AccentSheet(_props, ref) {
+    const closeSheet = useSheetClose(ref);
+    const backgroundStyle = useSheetBackgroundStyle();
+    return (
+      <BottomSheetModal
+        ref={ref}
+        stackBehavior={SHEET_STACK_BEHAVIOR}
+        enableDynamicSizing
+        keyboardBehavior="interactive"
+        backgroundStyle={backgroundStyle}
+        handleComponent={SheetGrabber}
+        backdropComponent={SheetScrim}
+      >
+        <SheetBackToClose onClose={closeSheet} />
+        <AccentSheetBody onDone={closeSheet} />
+      </BottomSheetModal>
+    );
+  },
+);
 
-  return (
-    <BottomSheetModal
-      ref={ref}
-      stackBehavior={SHEET_STACK_BEHAVIOR}
-      enableDynamicSizing
-      keyboardBehavior="interactive"
-      backgroundStyle={backgroundStyle}
-      handleComponent={SheetGrabber}
-      backdropComponent={SheetScrim}
-      onAnimate={onAnimate}
-      onDismiss={markClosed}
-    >
-      <SheetBackToClose onClose={closeSheet} />
-      <AccentSheetBody onDone={closeSheet} saving={saving} />
-    </BottomSheetModal>
-  );
-});
-
-/** How a save closes the sheet: only the visit it was sent from. */
-type AccentSaving = {
-  sentFrom: () => number;
-  closeAfter: (token: number) => void;
-};
-
-function AccentSheetBody({
-  onDone,
-  saving,
-}: {
-  onDone: () => void;
-  saving: AccentSaving;
-}) {
+function AccentSheetBody({ onDone }: { onDone: () => void }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const chapter = useCurrentChapter();
 
-  // The draft starts from the stored accent, so the picker waits for it:
-  // starting from the house default while the read is in flight would
-  // enable Save on a color nobody picked, and saving it would overwrite the
-  // chapter's real accent.
+  // The picker starts from the stored accent, so it waits for it: starting
+  // from the house default while the read is in flight would show a color
+  // the chapter doesn't have.
   if (!chapter.data) {
     return (
-      <BottomSheetView
-        style={styles.body}
-        onAccessibilityEscape={onDone}
-      >
-        <SheetHeader title="Chapter accent" onCancel={onDone} />
+      <BottomSheetView style={styles.body} onAccessibilityEscape={onDone}>
+        <SheetHeader title="Chapter accent" />
         {chapter.isError ? (
           <Text style={styles.error}>
             Couldn&apos;t load the chapter. Check your connection and try again.
@@ -133,17 +103,13 @@ function AccentSheetBody({
       </BottomSheetView>
     );
   }
-  return (
-    <AccentSheetForm chapter={chapter.data} onDone={onDone} saving={saving} />
-  );
+  return <AccentSheetForm chapter={chapter.data} onDone={onDone} />;
 }
 
 function AccentSheetForm({
   chapter,
   onDone,
-  saving,
 }: {
-  saving: AccentSaving;
   chapter: NonNullable<ReturnType<typeof useCurrentChapter>["data"]>;
   onDone: () => void;
 }) {
@@ -156,35 +122,45 @@ function AccentSheetForm({
   // The modal mounts this form on every present, so the draft starts from
   // whatever is stored at that moment.
   const [draft, setDraft] = useState(stored);
-  const [draftValid, setDraftValid] = useState(true);
-  // Save pressed over a half-typed hex: the picker's hint shows at once.
-  const [saveTried, setSaveTried] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const unchanged = draft === stored;
 
-  async function save() {
-    if (!draftValid) {
-      setSaveTried(true);
+  // The colour last sent, so a return then the blur it brings (or a commit
+  // as the sheet closes) never sends it twice; and a colour chosen while a
+  // save is on its way, saved once that one settles rather than dropped.
+  const sent = useRef(stored.toUpperCase());
+  const inFlight = useRef(false);
+  const queued = useRef<string | null>(null);
+
+  async function save(hex: string) {
+    if (inFlight.current) {
+      queued.current = hex;
       return;
     }
+    if (hex.toUpperCase() === sent.current) return;
+    sent.current = hex.toUpperCase();
+    inFlight.current = true;
     setError(null);
-    const sentFrom = saving.sentFrom();
+    setSaved(false);
     try {
-      await updateChapter.mutateAsync({ accent_color: draft });
-      saving.closeAfter(sentFrom);
+      await updateChapter.mutateAsync({ accent_color: hex });
+      setSaved(true);
     } catch (caught) {
+      sent.current = stored.toUpperCase();
       setError(
         errorCopy(caught, "Couldn't save the accent. Try again in a moment."),
       );
+    } finally {
+      inFlight.current = false;
     }
+    const next = queued.current;
+    queued.current = null;
+    if (next !== null) void save(next);
   }
 
   return (
-    <BottomSheetView
-      style={styles.body}
-      onAccessibilityEscape={onDone}
-    >
-      <SheetHeader title="Chapter accent" onCancel={onDone} />
+    <BottomSheetView style={styles.body} onAccessibilityEscape={onDone}>
+      <SheetHeader title="Chapter accent" />
       {/* The one line the picker can't show: Settings is otherwise a screen
           of personal preferences, and this save repaints every member's app. */}
       <Text style={styles.helper}>
@@ -193,9 +169,11 @@ function AccentSheetForm({
       <AccentPicker
         label="Chapter accent"
         value={draft}
-        onChange={setDraft}
-        onValidityChange={setDraftValid}
-        showError={saveTried}
+        onChange={(hex) => {
+          setSaved(false);
+          setDraft(hex);
+        }}
+        onCommit={(hex) => void save(hex)}
         // Keyed by the chapter's name, which is its organization's name when
         // it was created from the directory. A chapter renamed since gets the
         // presets only (#3372).
@@ -204,19 +182,15 @@ function AccentSheetForm({
         inputComponent={BottomSheetTextInput}
         focusColor={accent}
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <SheetPrimaryButton
-        label={updateChapter.isPending ? "Saving…" : "Save"}
-        onPress={() => void save()}
-        // Pressable over a half-typed hex, so the press can say why
-        // (`showError`); a swatch the chapter already has is no change.
-        disabled={(unchanged && draftValid) || updateChapter.isPending}
-        accent={accent}
-        // `accent` is step 11 of the scale, and every mobile fill painted with
-        // it labels in the fixed `gold.onHouse` ink (chapter-branding.ts
-        // measures 7.2:1 or better), as the Start session and Pay buttons do.
-        onAccent={tokens.color.gold.onHouse}
-      />
+      {error ? (
+        <Text accessibilityLiveRegion="polite" style={styles.error}>
+          {error}
+        </Text>
+      ) : saved ? (
+        <Text accessibilityLiveRegion="polite" style={styles.helper}>
+          Saved
+        </Text>
+      ) : null}
     </BottomSheetView>
   );
 }

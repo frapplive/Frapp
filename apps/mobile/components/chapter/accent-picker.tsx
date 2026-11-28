@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -41,6 +41,13 @@ export type AccentPickerProps = {
   value: string;
   /** Called with a normalized `#RRGGBB` whenever a swatch or a valid hex is chosen. */
   onChange: (hex: string) => void;
+  /**
+   * Called with the colour once the member is done choosing it: a swatch the
+   * moment it is tapped, a typed hex when the field is left or submitted and
+   * holds a colour. A caller that saves on its own (Settings' accent sheet,
+   * #6033) saves here rather than on every keystroke's `onChange`.
+   */
+  onCommit?: (hex: string) => void;
   /**
    * Called with `false` while the custom field holds text that is not a color
    * yet, and `true` once it is again (or a swatch is tapped). `onChange` keeps
@@ -90,6 +97,7 @@ function sameHex(a: string, b: string): boolean {
 export function AccentPicker({
   value,
   onChange,
+  onCommit,
   onValidityChange,
   label = "Accent color",
   orgColors = [],
@@ -139,8 +147,32 @@ export function AccentPicker({
     if (disabled) return;
     setDraft("");
     onValidityChange?.(true);
-    onChange(normalizeAccentInput(hex));
+    const next = normalizeAccentInput(hex);
+    onChange(next);
+    onCommit?.(next);
   }
+
+  function commitTyped() {
+    const parsed = parseTypedHex(draft);
+    if (parsed) onCommit?.(parsed);
+  }
+
+  // Closing a sheet by a tap (its scrim, Android back) can unmount the field
+  // while it still has focus, before its blur reaches here: commit what it
+  // holds then too, so a typed colour is never dropped. A caller that saves
+  // skips a colour it has already sent.
+  const unmounting = useRef({ draft, onCommit });
+  useEffect(() => {
+    unmounting.current = { draft, onCommit };
+  });
+  useEffect(
+    () => () => {
+      const { draft: left, onCommit: commit } = unmounting.current;
+      const parsed = parseTypedHex(left);
+      if (parsed) commit?.(parsed);
+    },
+    [],
+  );
 
   function typeHex(text: string) {
     setDraft(text);
@@ -242,7 +274,9 @@ export function AccentPicker({
               onBlur={() => {
                 setHexFocused(false);
                 reveal.blur("hex");
+                commitTyped();
               }}
+              onSubmitEditing={commitTyped}
               style={[
                 styles.input,
                 styles.inputFlex,

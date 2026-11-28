@@ -22,32 +22,23 @@ import {
   type PatchChapterConfig,
 } from "@repo/validation";
 import {
-  FOUNDED_YEAR_MIN,
-  latestFoundedYear,
-} from "@repo/hooks/chapter-identity";
-import {
   CHAPTER_TAB_COPY,
   CHAPTER_VOCABULARY_FIELDS,
   chapterArchetypeSwitchPatch,
-  chapterIdentityBrandingDiff,
   chapterIdentityDraftOf,
+  chapterIdentityFieldDiff,
   chapterIdentityValue,
   chapterLettersHidden,
   chapterMarkValue,
-  chapterProfileChanged,
   chapterVocabularyDraftOf,
-  chapterVocabularyPatch,
+  chapterVocabularyFieldPatch,
   chapterVocabularyValue,
-  checkFoundedYear,
+  foundedYearProblem,
   type ChapterIdentityDraft,
   type ChapterTabBranding,
-  type ChapterVocabularyDraft,
 } from "@repo/hooks/chapter-tab";
-import { useFieldReveal } from "@repo/hooks/field-reveal";
 import { Button } from "@/components/ui/button";
 import { ProfileSection } from "@/components/profile/profile-section";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +51,7 @@ import { cn } from "@/lib/utils";
 import { FOCUS_RING } from "@/components/ui/focus";
 import type { ChapterLogoUpload } from "@repo/hooks";
 import { SettingsChapterMarkCard } from "@/components/settings/settings-chapter-mark-card";
+import { SettingsTextField } from "@/components/settings/settings-name-field";
 import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
@@ -92,16 +84,25 @@ type Props = {
    * (#2575).
    */
   canEditProfile: boolean;
-  /** Persist the core chapter profile (name/university/donation). */
-  onSaveProfile: (profile: {
-    name: string;
-    university: string;
-    donation_url: string;
-  }) => Promise<void> | void;
-  /** Persist a config diff (branding / archetype / vocabulary) through PATCH. */
-  onPatchConfig: (diff: PatchChapterConfig) => Promise<void> | void;
-  savingProfile?: boolean;
-  savingConfig?: boolean;
+  /**
+   * Save one profile field (name, university or donation link), typed in
+   * place (#6033). Resolves whether it landed; a failure toasts.
+   */
+  onSaveProfileField: (
+    field: "name" | "university" | "donation_url",
+    next: string,
+  ) => Promise<boolean>;
+  /**
+   * Persist a config diff (branding / archetype / vocabulary) through PATCH.
+   * `successTitle` toasts once it lands; a field that saves on its own
+   * passes none and says "Saved" itself. Resolves whether it landed.
+   */
+  onPatchConfig: (
+    diff: PatchChapterConfig,
+    successTitle?: string,
+  ) => Promise<boolean>;
+  /** An organization type switch is on its way. */
+  switchingType?: boolean;
   /**
    * The chapter's accent, opened from the Accent color row. Accent was its own
    * rail row until #3827 folded it into the chapter's profile, beside the
@@ -127,133 +128,42 @@ export function SettingsOrgTab({
   mark,
   canManage,
   canEditProfile,
-  onSaveProfile,
+  onSaveProfileField,
   onPatchConfig,
-  savingProfile,
-  savingConfig,
+  switchingType,
   accentSection,
   page = null,
   pageHref = chapterSettingsHref,
 }: Props) {
   const current = getArchetype(archetypeKey);
 
-  const [profileDraft, setProfileDraft] = useState(profile);
-  const [identity, setIdentity] = useState<ChapterIdentityDraft>(() =>
-    chapterIdentityDraftOf(branding),
-  );
-  const [words, setWords] = useState<ChapterVocabularyDraft>(() =>
-    chapterVocabularyDraftOf(vocabulary),
-  );
   const [pendingArchetype, setPendingArchetype] = useState<ArchetypeKey | null>(
     null,
   );
 
-  // Re-sync drafts whenever the server config changes (e.g. after an archetype
-  // switch resets vocabulary, or another officer edits the chapter).
-  //
-  // Keyed on the stored values, never on the objects that carry them: the page
-  // rebuilds `profile`, `branding` and `vocabulary` on every render, so an
-  // object dependency re-ran these on any unrelated re-render (a logo upload
-  // starting, another card saving) and threw away whatever the officer had
-  // typed but not saved.
-  const {
-    name: storedName,
-    university: storedUniversity,
-    donation_url: storedDonation,
-  } = profile;
+  const { name: storedName } = profile;
   // FIJI's chapters never show their letters, also when the chapter's name
   // adds to the organization's ("Phi Gamma Delta Tau Nu").
   const lettersHidden = chapterLettersHidden(storedName);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- re-seed profile draft from the chapter config query
-    setProfileDraft({
-      name: storedName,
-      university: storedUniversity,
-      donation_url: storedDonation,
-    });
-  }, [storedName, storedUniversity, storedDonation]);
-  /* eslint-disable react-hooks/set-state-in-effect -- re-seed branding fields from the chapter config query */
-  useEffect(() => {
-    setIdentity(
-      chapterIdentityDraftOf({
-        greek_letters: branding.greek_letters,
-        designation: branding.designation,
-        school_short: branding.school_short,
-        founded_at: branding.founded_at,
-      }),
-    );
-  }, [
-    branding.greek_letters,
-    branding.designation,
-    branding.school_short,
-    branding.founded_at,
-  ]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-  /* eslint-disable react-hooks/set-state-in-effect -- re-seed vocabulary drafts from the chapter config query */
-  useEffect(() => {
-    setWords(
-      chapterVocabularyDraftOf({
-        recruitment: vocabulary.recruitment,
-        pledge: vocabulary.pledge,
-        class: vocabulary.class,
-        order: vocabulary.order,
-        tier: vocabulary.tier,
-      }),
-    );
-  }, [
-    vocabulary.recruitment,
-    vocabulary.pledge,
-    vocabulary.class,
-    vocabulary.order,
-    vocabulary.tier,
-  ]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // Every field saves on its own (#6033), each read from what is stored, so
+  // there is no draft here to re-seed or lose.
+  const storedIdentity = chapterIdentityDraftOf(branding);
+  const storedWords = chapterVocabularyDraftOf(vocabulary);
 
-  // The wizards' rule, and no clearing a stored year (`checkFoundedYear`).
-  const { valid: foundedValid, cleared: foundedCleared } = checkFoundedYear(
-    identity.foundedYear,
-    branding.founded_at,
-  );
-  // "1" on its way to "1901" is not a mistake: the error waits for the member
-  // to leave the field or press Save (components.md § Text input, "When an
-  // error shows").
-  const reveal = useFieldReveal<"founded">();
-  const foundedError = !foundedValid && reveal.shows("founded");
-
-  function saveProfile(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void onSaveProfile({
-      name: profileDraft.name,
-      university: profileDraft.university,
-      donation_url: profileDraft.donation_url,
-    });
-  }
-
-  function saveIdentity(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!foundedValid) {
-      reveal.submit();
-      return;
-    }
-    // A cleared field is sent as "" so the clear reaches the server; one
-    // never set stays out (`chapterIdentityBrandingDiff`).
-    void onPatchConfig({
-      branding: chapterIdentityBrandingDiff(identity, branding),
-    });
-  }
-
-  function saveVocabulary(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    // Every word, a cleared one as "" so the type's word comes back
-    // (`chapterVocabularyPatch`, #3939).
-    void onPatchConfig(chapterVocabularyPatch(words));
-  }
+  const saveIdentityField =
+    (field: keyof ChapterIdentityDraft) => (next: string) =>
+      onPatchConfig({
+        branding: chapterIdentityFieldDiff(branding, field, next),
+      });
 
   function confirmArchetypeSwitch() {
     if (!pendingArchetype) return;
     // Modules and vocabulary reset to the new type's defaults; roles and
     // identity stay.
-    void onPatchConfig(chapterArchetypeSwitchPatch(pendingArchetype));
+    void onPatchConfig(
+      chapterArchetypeSwitchPatch(pendingArchetype),
+      "Organization type switched",
+    );
     setPendingArchetype(null);
   }
 
@@ -264,7 +174,6 @@ export function SettingsOrgTab({
   const manageHint = canManage ? null : readOnlyHint;
   const profileHint = canEditProfile ? null : readOnlyHint;
 
-  const profileChanged = chapterProfileChanged(profile, profileDraft);
   const identityValue = chapterIdentityValue(branding, storedName);
   // What the mark draws, read the way every surface reads it.
   const markValue = chapterMarkValue({
@@ -297,9 +206,9 @@ export function SettingsOrgTab({
   }, [page]);
 
   let content: ReactNode;
-  // The mark page stays mounted while hidden, so a short name typed there
-  // and left unsaved is still there on the way back, as the other pages' drafts
-  // are (they live in this component).
+  // The mark page stays mounted while hidden, so its preview keeps the short
+  // name being typed there if the officer steps back and returns before
+  // leaving the field (leaving it saves it).
   const markPage = (
     <div hidden={page !== "mark"}>
       {subpage(
@@ -314,7 +223,6 @@ export function SettingsOrgTab({
           onRemoveLogo={mark.onRemoveLogo}
           logoPending={mark.logoPending}
           onPatchConfig={onPatchConfig}
-          savingConfig={savingConfig}
           manageHint={manageHint}
           profileHint={profileHint}
         />,
@@ -326,7 +234,16 @@ export function SettingsOrgTab({
   if (page === "mark") {
     content = null;
   } else if (page === "accent") {
-    content = subpage("Accent color", accentSection);
+    // The accent writes through the profile route, so its line is the
+    // profile's: a viewer who can't change it is told why the swatches and
+    // fields are greyed, as on every other Chapter page.
+    content = subpage(
+      "Accent color",
+      <div className="space-y-3">
+        {accentSection}
+        {profileHint}
+      </div>,
+    );
   } else if (page === "identity") {
     content = subpage(
       "Identity & founding",
@@ -336,105 +253,64 @@ export function SettingsOrgTab({
           title="Identity & founding"
           hint={CHAPTER_TAB_COPY.identityHint(lettersHidden)}
         >
-          <form onSubmit={saveIdentity}>
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                {/*
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              {/*
                 FIJI never displays its letters, so Settings doesn't draw
-                them either. They stay stored: the hidden field's draft is
-                the stored value, so a save writes them back unchanged.
+                them either. They stay stored, untouched: each field saves
+                only itself.
               */}
-                {lettersHidden ? null : (
-                  <div className="grid gap-1">
-                    <Label htmlFor="greek-letters">Greek letters</Label>
-                    <Input
-                      id="greek-letters"
-                      value={identity.greekLetters}
-                      onChange={(event) =>
-                        setIdentity((prev) => ({
-                          ...prev,
-                          greekLetters: event.target.value,
-                        }))
-                      }
-                      maxLength={8}
-                      placeholder="e.g. ΣΦΕ"
-                      className="font-mono"
-                    />
-                  </div>
-                )}
-                <div className="grid gap-1">
-                  <Label htmlFor="designation">Chapter designation</Label>
-                  <Input
-                    id="designation"
-                    value={identity.designation}
-                    onChange={(event) =>
-                      setIdentity((prev) => ({
-                        ...prev,
-                        designation: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. California Eta"
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="school-short">School (short)</Label>
-                  <Input
-                    id="school-short"
-                    value={identity.schoolShort}
-                    onChange={(event) =>
-                      setIdentity((prev) => ({
-                        ...prev,
-                        schoolShort: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. UCLA"
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="founded-year">Founded year</Label>
-                  <Input
-                    id="founded-year"
-                    type="number"
-                    inputMode="numeric"
-                    value={identity.foundedYear}
-                    onChange={(event) =>
-                      setIdentity((prev) => ({
-                        ...prev,
-                        foundedYear: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. 1901"
-                    onBlur={() => reveal.blur("founded")}
-                    aria-invalid={foundedError}
-                    aria-describedby={
-                      foundedError ? "founded-year-error" : undefined
-                    }
-                  />
-                  {foundedError ? (
-                    <p
-                      id="founded-year-error"
-                      className="text-xs text-destructive"
-                    >
-                      {foundedCleared
-                        ? "A founded year can't be removed once saved. "
-                        : null}
-                      Enter a year between {FOUNDED_YEAR_MIN} and{" "}
-                      {latestFoundedYear()}.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
+              {lettersHidden ? null : (
+                <SettingsTextField
+                  id="greek-letters"
+                  label="Greek letters"
+                  value={storedIdentity.greekLetters}
+                  maxLength={8}
+                  placeholder="e.g. ΣΦΕ"
+                  inputClassName="font-mono"
+                  allowBlank
+                  disabled={!canManage}
+                  onSave={saveIdentityField("greekLetters")}
+                />
+              )}
+              <SettingsTextField
+                id="designation"
+                label="Chapter designation"
+                value={storedIdentity.designation}
+                placeholder="e.g. California Eta"
+                allowBlank
+                disabled={!canManage}
+                onSave={saveIdentityField("designation")}
+              />
+              <SettingsTextField
+                id="school-short"
+                label="School (short)"
+                value={storedIdentity.schoolShort}
+                placeholder="e.g. UCLA"
+                allowBlank
+                disabled={!canManage}
+                onSave={saveIdentityField("schoolShort")}
+              />
+              {/*
+                The wizards' rule, and no clearing a stored year: what's
+                wrong shows under the field once the officer leaves it or
+                presses Enter, and nothing is sent until it's a year.
+              */}
+              <SettingsTextField
+                id="founded-year"
+                label="Founded year"
+                value={storedIdentity.foundedYear}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="e.g. 1901"
+                allowBlank
+                validate={(next) => foundedYearProblem(next, branding.founded_at)}
+                disabled={!canManage}
+                onSave={saveIdentityField("foundedYear")}
+              />
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              {manageHint ?? <span />}
-              <Button type="submit" disabled={!canManage || savingConfig}>
-                {savingConfig ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
-                Save identity
-              </Button>
-            </div>
-          </form>
+            {manageHint}
+          </div>
         </ProfileSection>
       </>,
     );
@@ -526,39 +402,32 @@ export function SettingsOrgTab({
           title="Vocabulary"
           hint={CHAPTER_TAB_COPY.vocabularyHint(current)}
         >
-          <form onSubmit={saveVocabulary}>
+          <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               {/*
                 The tier word is what the chapter calls a tier of roles
                 (#4068 decision 5): Roles reads it in its headings and buttons.
+                A word cleared goes as "", and the type's word comes back.
               */}
               {CHAPTER_VOCABULARY_FIELDS.map((field) => (
-                <div key={field.key} className="grid gap-1">
-                  <Label htmlFor={`vocab-${field.key}`}>{field.label}</Label>
-                  <Input
-                    id={`vocab-${field.key}`}
-                    value={words[field.key]}
-                    onChange={(event) =>
-                      setWords((prev) => ({
-                        ...prev,
-                        [field.key]: event.target.value,
-                      }))
-                    }
-                    placeholder={field.placeholder(current)}
-                  />
-                </div>
+                <SettingsTextField
+                  key={field.key}
+                  id={`vocab-${field.key}`}
+                  label={field.label}
+                  value={storedWords[field.key]}
+                  placeholder={field.placeholder(current)}
+                  allowBlank
+                  disabled={!canManage}
+                  onSave={(next) =>
+                    onPatchConfig(
+                      chapterVocabularyFieldPatch(field.key, next),
+                    )
+                  }
+                />
               ))}
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              {manageHint ?? <span />}
-              <Button type="submit" disabled={!canManage || savingConfig}>
-                {savingConfig ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
-                Save vocabulary
-              </Button>
-            </div>
-          </form>
+            {manageHint}
+          </div>
         </ProfileSection>
       </>,
     );
@@ -566,69 +435,42 @@ export function SettingsOrgTab({
     content = (
       <div className="space-y-8">
         <section id="settings-chapter-profile" aria-label="Chapter profile">
-          <form onSubmit={saveProfile}>
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="grid gap-1">
-                  <Label htmlFor="chapter-name">Chapter name</Label>
-                  <Input
-                    id="chapter-name"
-                    maxLength={CHAPTER_NAME_MAX_LENGTH}
-                    value={profileDraft.name}
-                    onChange={(event) =>
-                      setProfileDraft((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="chapter-university">University</Label>
-                  <Input
-                    id="chapter-university"
-                    maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
-                    value={profileDraft.university}
-                    onChange={(event) =>
-                      setProfileDraft((prev) => ({
-                        ...prev,
-                        university: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="chapter-donation">
-                  Donation link (optional)
-                </Label>
-                <Input
-                  id="chapter-donation"
-                  type="url"
-                  value={profileDraft.donation_url}
-                  onChange={(event) =>
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      donation_url: event.target.value,
-                    }))
-                  }
-                  placeholder="https://give.youruniversity.edu/..."
-                />
-              </div>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <SettingsTextField
+                id="chapter-name"
+                label="Chapter name"
+                value={profile.name}
+                maxLength={CHAPTER_NAME_MAX_LENGTH}
+                disabled={!canEditProfile}
+                onSave={(next) => onSaveProfileField("name", next)}
+              />
+              <SettingsTextField
+                id="chapter-university"
+                label="University"
+                value={profile.university}
+                maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
+                disabled={!canEditProfile}
+                onSave={(next) => onSaveProfileField("university", next)}
+              />
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              {profileHint ?? <span />}
-              <Button
-                type="submit"
-                disabled={!canEditProfile || savingProfile || !profileChanged}
-              >
-                {savingProfile ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
-                Save profile
-              </Button>
-            </div>
-          </form>
+            {/*
+              A cleared link puts the saved one back: the API reads an empty
+              link as an invalid URL and has no way to clear one
+              (`chapterProfileSaveBody`).
+            */}
+            <SettingsTextField
+              id="chapter-donation"
+              label="Donation link (optional)"
+              type="url"
+              value={profile.donation_url}
+              placeholder="https://give.youruniversity.edu/..."
+              className="max-w-none"
+              disabled={!canEditProfile}
+              onSave={(next) => onSaveProfileField("donation_url", next)}
+            />
+            {profileHint}
+          </div>
         </section>
 
         <SettingsGroup heading="Look" footnote={CHAPTER_LOOK_FOOTNOTE}>
@@ -718,8 +560,8 @@ export function SettingsOrgTab({
             >
               Cancel
             </Button>
-            <Button onClick={confirmArchetypeSwitch} disabled={savingConfig}>
-              {savingConfig ? (
+            <Button onClick={confirmArchetypeSwitch} disabled={switchingType}>
+              {switchingType ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : null}
               {CHAPTER_TAB_COPY.typeConfirmAction}

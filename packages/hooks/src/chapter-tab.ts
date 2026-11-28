@@ -26,7 +26,11 @@ import {
   resolveChapterMark,
   type PatchChapterConfig,
 } from "@repo/validation";
-import { parseFoundedYear } from "./chapter-identity";
+import {
+  FOUNDED_YEAR_MIN,
+  latestFoundedYear,
+  parseFoundedYear,
+} from "./chapter-identity";
 
 /** The `branding` keys the Chapter tab reads and writes. */
 export type ChapterTabBranding = {
@@ -111,16 +115,17 @@ export function chapterProfileSaveBody(
   return body;
 }
 
-/** Whether any profile field differs from what is stored: Save waits on it. */
-export function chapterProfileChanged(
+/**
+ * One profile field's save, typed in place and saved on its own (#6033): the
+ * body `chapterProfileSaveBody` builds when only that field changed, so it
+ * sends nothing for a field typed back to what is stored.
+ */
+export function chapterProfileFieldBody(
   stored: ChapterProfileFields,
-  draft: ChapterProfileFields,
-): boolean {
-  return (
-    draft.name !== stored.name ||
-    draft.university !== stored.university ||
-    draft.donation_url !== stored.donation_url
-  );
+  field: keyof ChapterProfileFields,
+  next: string,
+): ChapterProfileSaveBody {
+  return chapterProfileSaveBody(stored, { ...stored, [field]: next });
 }
 
 // ── Chapter mark ────────────────────────────────────────────────────────
@@ -137,37 +142,34 @@ export function chapterMarkDraftOf(
   };
 }
 
-/** Whether the mark page holds an edit: the phone's Save waits on it. */
-export function chapterMarkChanged(
-  draft: ChapterMarkDraft,
-  branding: ChapterTabBranding,
-): boolean {
-  const stored = chapterMarkDraftOf(branding);
-  return (
-    draft.shortName.trim() !== stored.shortName.trim() ||
-    draft.showLetters !== stored.showLetters
-  );
+/**
+ * The mark's two saves (#6033), each sending only its own key: the config
+ * PATCH deep-merges, so a left-out key keeps its stored value, and sending
+ * the other field from a page's cached config could undo another officer's
+ * newer save. A cleared short name goes as "", which is how a field is
+ * removed. A chapter whose organization hides its letters writes them off
+ * with every save, so one created before the profile turned them off gets
+ * that written down.
+ */
+export function chapterMarkShortNameDiff(
+  next: string,
+  stored: ChapterTabBranding,
+  lettersHidden: boolean,
+): ChapterTabBranding {
+  const diff: ChapterTabBranding = lettersHidden
+    ? { show_greek_letters: false }
+    : {};
+  const trimmed = next.trim();
+  if (trimmed || stored.short_name) diff.short_name = trimmed;
+  return diff;
 }
 
-/**
- * What the mark's Save sends: the letters switch, always, and the short name
- * when there is one to keep or to clear. The config PATCH deep-merges, so a
- * left-out key keeps its stored value and an empty string is how a cleared
- * field is removed. A chapter whose organization hides its letters writes
- * them off on every save.
- */
-export function chapterMarkBrandingDiff(input: {
-  shortName: string;
-  showLetters: boolean;
-  lettersHidden: boolean;
-  stored: ChapterTabBranding;
-}): ChapterTabBranding {
-  const diff: ChapterTabBranding = {
-    show_greek_letters: input.showLetters && !input.lettersHidden,
-  };
-  const trimmed = input.shortName.trim();
-  if (trimmed || input.stored.short_name) diff.short_name = trimmed;
-  return diff;
+/** The Show Greek letters switch's save: its key alone. */
+export function chapterMarkLettersDiff(
+  showLetters: boolean,
+  lettersHidden: boolean,
+): ChapterTabBranding {
+  return { show_greek_letters: showLetters && !lettersHidden };
 }
 
 /**
@@ -235,39 +237,43 @@ export function checkFoundedYear(
 }
 
 /**
- * What Identity & founding's Save sends. A field emptied by the officer is
- * sent as "" so the clear reaches the server (the PATCH deep-merges); a field
- * that was never set stays out. Call only when `checkFoundedYear` is valid.
+ * One Identity & founding field's save (#6033): that field's key alone, so a
+ * page's cached config never re-sends (and undoes) another officer's newer
+ * save. A field emptied by the officer is sent as "" so the clear reaches the
+ * server (the PATCH deep-merges); one never set sends nothing. Call only once
+ * `foundedYearProblem` has nothing to say.
  */
-export function chapterIdentityBrandingDiff(
-  draft: ChapterIdentityDraft,
+export function chapterIdentityFieldDiff(
   stored: ChapterTabBranding,
+  field: keyof ChapterIdentityDraft,
+  next: string,
 ): ChapterTabBranding {
-  const diff: ChapterTabBranding = {};
-  const text = (value: string, was: string | undefined) => {
-    const trimmed = value.trim();
-    return trimmed || was ? trimmed : undefined;
-  };
-  const letters = text(draft.greekLetters, stored.greek_letters);
-  if (letters !== undefined) diff.greek_letters = letters;
-  const designation = text(draft.designation, stored.designation);
-  if (designation !== undefined) diff.designation = designation;
-  const schoolShort = text(draft.schoolShort, stored.school_short);
-  if (schoolShort !== undefined) diff.school_short = schoolShort;
-  const { year } = checkFoundedYear(draft.foundedYear, stored.founded_at);
-  if (year !== undefined) diff.founded_at = year;
-  return diff;
+  if (field === "foundedYear") {
+    const { year } = checkFoundedYear(next, stored.founded_at);
+    return year === undefined ? {} : { founded_at: year };
+  }
+  const key = (
+    {
+      greekLetters: "greek_letters",
+      designation: "designation",
+      schoolShort: "school_short",
+    } as const
+  )[field];
+  const trimmed = next.trim();
+  return trimmed || stored[key] ? { [key]: trimmed } : {};
 }
 
-/** Whether Identity & founding holds an edit: the phone's Save waits on it. */
-export function chapterIdentityChanged(
-  draft: ChapterIdentityDraft,
-  branding: ChapterTabBranding,
-): boolean {
-  const stored = chapterIdentityDraftOf(branding);
-  return (Object.keys(stored) as (keyof ChapterIdentityDraft)[]).some(
-    (key) => draft[key].trim() !== stored[key].trim(),
-  );
+/**
+ * What the founded year field says under itself when `checkFoundedYear`
+ * refuses what was typed, or `null` when it can be saved. Both apps' words.
+ */
+export function foundedYearProblem(
+  draft: string,
+  stored: number | undefined,
+): string | null {
+  const { valid, cleared } = checkFoundedYear(draft, stored);
+  if (valid) return null;
+  return `${cleared ? "A founded year can't be removed once saved. " : ""}Enter a year between ${FOUNDED_YEAR_MIN} and ${latestFoundedYear()}.`;
 }
 
 /** The Identity & founding row's value: the first fact the chapter filled in. */
@@ -350,33 +356,17 @@ export function chapterVocabularyDraftOf(
 }
 
 /**
- * What Vocabulary's Save sends: every word, trimmed. A cleared field is sent
- * as "", which `memberViewVocabulary` reads as "use the type's word"; leaving
- * it out, as this did before #3939, saved nothing and the old word came back.
+ * One word's save (#6033): that word alone, trimmed, so a page's cached
+ * config never re-sends another officer's newer words (the config PATCH
+ * deep-merges). A cleared word is sent as "", which `memberViewVocabulary`
+ * reads as "use the type's word"; leaving it out, as this did before #3939,
+ * saved nothing and the old word came back.
  */
-export function chapterVocabularyPatch(
-  draft: ChapterVocabularyDraft,
+export function chapterVocabularyFieldPatch(
+  key: ChapterVocabularyKey,
+  next: string,
 ): PatchChapterConfig {
-  return {
-    vocabulary: {
-      recruitment: draft.recruitment.trim(),
-      pledge: draft.pledge.trim(),
-      class: draft.class.trim(),
-      order: draft.order.trim(),
-      tier: draft.tier.trim(),
-    },
-  };
-}
-
-/** Whether Vocabulary holds an edit: the phone's Save waits on it. */
-export function chapterVocabularyChanged(
-  draft: ChapterVocabularyDraft,
-  vocabulary: Readonly<Record<string, string | undefined>>,
-): boolean {
-  const stored = chapterVocabularyDraftOf(vocabulary);
-  return CHAPTER_VOCABULARY_FIELDS.some(
-    ({ key }) => draft[key].trim() !== stored[key].trim(),
-  );
+  return { vocabulary: { [key]: next.trim() } };
 }
 
 /** The Vocabulary row's value: "Custom" once any word differs from the type's. */

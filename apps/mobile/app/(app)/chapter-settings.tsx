@@ -88,8 +88,8 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * Its top half is web's Chapter tab (#5965, #6027), in web's order and
  * words, its rules shared through `@repo/hooks/chapter-tab`:
  *
- * - **The profile** on top: Chapter name, University and Donation link, then
- *   Save profile, which waits for an edit (`ChapterProfileForm`).
+ * - **The profile** on top: Chapter name, University and Donation link, each
+ *   saved on its own when left (`ChapterProfileForm`, #6033).
  * - **Look**: Chapter mark (a pushed page: the logo from the photo library,
  *   the short name and Show Greek letters), Chapter accent and Chat
  *   background (each a sheet).
@@ -100,7 +100,8 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * A member who can't change something still reads every value: a row that
  * opens a sheet doesn't open for them and says an officer sets it; a row
- * that opens a page opens it read-only, saying so where Save would be.
+ * that opens a page opens it read-only, its fields muted, with a line saying
+ * the role can't change it.
  *
  * Then the rest:
  *

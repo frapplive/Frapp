@@ -93,25 +93,21 @@ describe("AccentSheet", () => {
 });
 
 /**
- * A save can settle after the officer swiped the sheet away. gorhom 5.2's
- * `dismiss()` on a dismissed modal leaves it stuck, so the next open draws
- * nothing; and a sheet reopened since is a new visit the save must not close
- * (#3405, `useSheetVisit`).
+ * The accent saves on its own (#6033): a swatch the moment it is tapped, a
+ * typed hex when the field is left, with "Saved" under it. The sheet stays
+ * open and never dismisses itself, so a save that settles after a swipe
+ * can't leave a dismissed modal stuck (#3405).
  */
-describe("AccentSheet closing after a save (#3405)", () => {
+describe("AccentSheet saving on its own (#6033)", () => {
   const dismiss = vi.fn();
 
-  function openWithPendingSave() {
+  function open(save: (body: unknown) => Promise<unknown>) {
     state.chapter = {
       name: "Beta Chapter",
       accent_color: "#4F2683",
       branding: {},
     };
-    let land = () => {};
-    state.save = () =>
-      new Promise<void>((resolve) => {
-        land = resolve;
-      });
+    state.save = save;
     dismiss.mockReset();
     let tree!: ReactTestRenderer;
     act(() => {
@@ -127,37 +123,72 @@ describe("AccentSheet closing after a save (#3405)", () => {
         },
       );
     });
-    const modal = tree.root.find(
-      (node) => node.type === ("BottomSheetModal" as never),
-    );
-    act(() => modal.props.onAnimate(-1, 0)); // presented
-    act(() => tree.root.findByType(AccentPicker).props.onChange("#2563EB"));
-    const save = tree.root.findByType(SheetPrimaryButton);
-    act(() => save.props.onPress());
-    return { tree, modal, land: () => act(async () => land()) };
+    const picker = () => tree.root.findByType(AccentPicker);
+    return { tree, picker };
   }
 
-  it("closes the sheet when the save lands", async () => {
-    const { tree, land } = openWithPendingSave();
-    await land();
-    expect(dismiss).toHaveBeenCalledTimes(1);
-    act(() => tree.unmount());
-  });
-
-  it("doesn't dismiss a sheet already swiped away when the save lands", async () => {
-    const { tree, modal, land } = openWithPendingSave();
-    act(() => modal.props.onDismiss());
-    await land();
+  it("saves a colour once it's chosen, says Saved, and stays open", async () => {
+    const save = vi.fn(() => Promise.resolve({}));
+    const { tree, picker } = open(save);
+    expect(tree.root.findAllByType(SheetPrimaryButton)).toHaveLength(0);
+    // A keystroke's colour isn't a choice yet.
+    act(() => picker().props.onChange("#2563EB"));
+    expect(save).not.toHaveBeenCalled();
+    await act(async () => picker().props.onCommit("#2563EB"));
+    expect(save).toHaveBeenCalledWith({ accent_color: "#2563EB" });
+    expect(screenText(tree)).toContain("Saved");
     expect(dismiss).not.toHaveBeenCalled();
     act(() => tree.unmount());
   });
 
-  it("leaves a sheet reopened mid-save open when the save lands", async () => {
-    const { tree, modal, land } = openWithPendingSave();
-    act(() => modal.props.onDismiss());
-    act(() => modal.props.onAnimate(-1, 0)); // reopened
-    await land();
-    expect(dismiss).not.toHaveBeenCalled();
+  it("sends a colour once, though return and the blur it brings both commit it", async () => {
+    const save = vi.fn(() => Promise.resolve({}));
+    const { tree, picker } = open(save);
+    await act(async () => picker().props.onCommit("#2563EB"));
+    await act(async () => picker().props.onCommit("#2563EB"));
+    expect(save).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+
+  it("saves a colour chosen while a save is out once that one settles", async () => {
+    let land!: () => void;
+    const save = vi
+      .fn<(body: unknown) => Promise<unknown>>()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (land = () => resolve({}))),
+      )
+      .mockResolvedValue({});
+    const { tree, picker } = open(save);
+    act(() => void picker().props.onCommit("#2563EB"));
+    act(() => void picker().props.onCommit("#16A34A"));
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(async () => land());
+    expect(save).toHaveBeenLastCalledWith({ accent_color: "#16A34A" });
+    act(() => tree.unmount());
+  });
+
+  it("draws its title alone, as a picker does", () => {
+    const { tree } = open(() => Promise.resolve({}));
+    const text = screenText(tree);
+    expect(text).not.toContain("Done");
+    expect(text).not.toContain("Cancel");
+    act(() => tree.unmount());
+  });
+
+  it("sends nothing for the colour the chapter already has", async () => {
+    const save = vi.fn(() => Promise.resolve({}));
+    const { tree, picker } = open(save);
+    await act(async () => picker().props.onCommit("#4f2683"));
+    expect(save).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+
+  it("says why a save didn't land", async () => {
+    const { tree, picker } = open(() => Promise.reject(new Error("offline")));
+    await act(async () => picker().props.onCommit("#2563EB"));
+    const text = screenText(tree);
+    expect(text).not.toContain("Saved");
+    expect(text).toMatch(/offline|Couldn't save the accent/);
     act(() => tree.unmount());
   });
 });
