@@ -42,12 +42,8 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilterChip } from "@/components/shared/filter-chip";
-import {
-  ActiveFilterChips,
-  anyFilterRow,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { anyFilterRow, type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { Badge } from "@/components/ui/badge";
 import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
@@ -388,12 +384,13 @@ export function MembersDirectory() {
     then an alumnus moves to the Alumni tab, and anyone else (left, or hidden
     from this viewer) is said and taken out of the address.
   */
-  const memberGone = useGoneAfterRecheck(memberParam, membersQuery, (data, id) =>
-    data.some((member) => member.user_id === id),
+  const memberGone = useGoneAfterRecheck(
+    memberParam,
+    membersQuery,
+    (data, id) => data.some((member) => member.user_id === id),
   );
   const alumniRead = useAlumni(undefined, {
-    enabled:
-      tenantKind === "chapter" && memberGone,
+    enabled: tenantKind === "chapter" && memberGone,
   });
   const isAlumnus =
     memberParam !== null &&
@@ -653,7 +650,7 @@ export function MembersDirectory() {
   // Graduation year, pledge class, Status, phone reach, then Sort and a
   // standing's Period. A filter with nothing to offer is left out, as its
   // chip was.
-  const filters: FilterMenuFilter[] = [
+  const filters: FilterRow[] = [
     anyFilterRow({
       key: "role",
       label: "Role",

@@ -230,9 +230,11 @@ vi.mock("@/components/roles/pick-roles-sheet", () => ({
   PickRolesSheet: () => null,
 }));
 
-// A props-only stand-in: the spec drives the filter it hands the screen.
-vi.mock("@/components/directory/actives-filter-sheet", () => ({
-  ActivesFilterSheet: () => null,
+// Props-only stand-ins: the spec drives the rows the screen hands the sheet
+// (its own behaviour is `components/filter-sheet.spec.tsx`'s).
+vi.mock("@/components/filter-sheet", () => ({
+  FilterSheet: () => null,
+  ActiveFilterChips: () => null,
 }));
 
 import DirectoryScreen, {
@@ -243,7 +245,13 @@ import DirectoryScreen, {
 import { ScreenReady } from "@/lib/sentry/screen-ready";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { InlineNote } from "@/components/inline-note";
-import { ActivesFilterSheet as ActivesFilterSheetStandIn } from "@/components/directory/actives-filter-sheet";
+import {
+  ActiveFilterChips as ActiveFilterChipsStandIn,
+  FilterSheet as FilterSheetStandIn,
+  type FilterSheetFilter,
+} from "@/components/filter-sheet";
+import { ANY_FILTER, filterValueLabel } from "@repo/hooks/filter-rows";
+import { NO_BASE_ROLE_FILTER } from "@repo/hooks/member-assignments";
 import type { ActivesFilter } from "@/lib/directory/actives-filter";
 import {
   FilterChips as FilterChipsStandIn,
@@ -339,24 +347,44 @@ type TrailingChip = React.ReactElement<{
   onPress: () => void;
 }>;
 
-/**
- * The chips after the tabs: the Alumni tab's one Filters chip, or the Actives
- * tab's Filters chip and, when offered, its sort (a fragment of both).
- */
-/** The option sheet titled `title` (Sort, Period), as the screen built it. */
-function sortSheet(tree: ReactTestRenderer, title: string) {
-  return tree.root.find(
-    (node) =>
-      node.props.title === title && typeof node.props.onSelect === "function",
-  ) as unknown as {
-    props: {
-      options: { value: string; label: string }[];
-      selected: string;
-      onSelect: (value: string | null) => void;
-    };
+/** The Actives tab's Filters sheet, as the screen built it (#5739). */
+function filterSheet(tree: ReactTestRenderer) {
+  return tree.root.findByType(
+    FilterSheetStandIn as unknown as React.ElementType,
+  ).props as {
+    title: string;
+    filters: FilterSheetFilter[];
+    showLabel: string;
   };
 }
 
+/** The sheet's row with this key, or `undefined` when it isn't offered. */
+function sheetRow(
+  tree: ReactTestRenderer,
+  key: string,
+): FilterSheetFilter | undefined {
+  return filterSheet(tree).filters.find((row) => row.key === key);
+}
+
+/** The sheet's Sort or Period row (#3939, #5950), drawn like the old sheets. */
+function sortSheet(tree: ReactTestRenderer, title: "Sort" | "Period") {
+  const row = sheetRow(tree, title.toLowerCase())!;
+  return {
+    props: {
+      options: row.options.map(({ value, label }) => ({ value, label })),
+      selected: row.value,
+      onSelect: (value: string) => row.onChange(value),
+    },
+  };
+}
+
+/** The Sort row's current order, or `null` when the sheet offers none. */
+function sortValue(tree: ReactTestRenderer): string | null {
+  const row = sheetRow(tree, "sort");
+  return row ? filterValueLabel(row) : null;
+}
+
+/** The chips after the tabs: the Alumni or the Actives tab's Filters chip. */
 function trailingChips(tree: ReactTestRenderer): TrailingChip[] {
   const trailing = chips(tree).trailing as React.ReactElement<{
     children?: React.ReactNode;
@@ -611,23 +639,60 @@ describe("s13's Actives filters (#3971)", () => {
     DANIEL,
   ];
 
+  /**
+   * The sheet's rows, read back as the filter they hold and what they offer,
+   * so these cases read as they did before the rows were one shared shape.
+   */
   function sheet(tree: ReactTestRenderer) {
-    return tree.root.findByType(
-      ActivesFilterSheetStandIn as unknown as React.ElementType,
-    ).props as {
-      filter: ActivesFilter;
-      onChange: (next: ActivesFilter) => void;
-      roles: { id: string; name: string }[];
-      years: number[];
-      classes: { id: string; name: string }[];
-      classWord: string;
-      rolesStatus: string;
-      offerNoBaseRole?: boolean;
+    const row = (key: string) => sheetRow(tree, key);
+    const picked = (key: string) => {
+      const r = row(key);
+      return !r || r.value === r.anyValue ? null : r.value;
+    };
+    const choices = (key: string) =>
+      (row(key)?.options ?? []).filter((o) => o.value !== ANY_FILTER);
+    const year = picked("year");
+    const note = row("role")!.optionsNote;
+    return {
+      filter: {
+        roleId: picked("role"),
+        groupId: picked("group"),
+        graduationYear: year === null ? null : Number(year),
+        pledgeClassId: picked("class"),
+        status: picked("status"),
+        phoneReach: picked("phone-reach"),
+      } as ActivesFilter,
+      roles: choices("role")
+        .filter((o) => o.value !== NO_BASE_ROLE_FILTER)
+        .map((o) => ({ id: o.value, name: o.label })),
+      offerNoBaseRole: choices("role").some(
+        (o) => o.value === NO_BASE_ROLE_FILTER,
+      ),
+      years: choices("year").map((o) => Number(o.value)),
+      classes: choices("class").map((o) => ({ id: o.value, name: o.label })),
+      classWord: row("class")?.label,
+      rolesStatus: !note ? "ready" : note.onRetry ? "error" : "loading",
+      showPhoneReach: row("phone-reach") !== undefined,
     };
   }
 
+  const ROW_KEYS: Record<keyof ActivesFilter, string> = {
+    roleId: "role",
+    groupId: "group",
+    graduationYear: "year",
+    pledgeClassId: "class",
+    status: "status",
+    phoneReach: "phone-reach",
+  };
+
+  /** Sets each field through its row, as a tap in the sheet would. */
   function pick(tree: ReactTestRenderer, patch: Partial<ActivesFilter>) {
-    act(() => sheet(tree).onChange({ ...sheet(tree).filter, ...patch }));
+    act(() => {
+      for (const [field, value] of Object.entries(patch)) {
+        const row = sheetRow(tree, ROW_KEYS[field as keyof ActivesFilter])!;
+        row.onChange(value === null ? row.anyValue : String(value));
+      }
+    });
   }
 
   beforeEach(() => {
@@ -666,6 +731,48 @@ describe("s13's Actives filters (#3971)", () => {
     // Marcus holds Actives; Andre holds Rush Chair alone.
     expect(listed(tree)).toEqual(["Andre Silva"]);
     state.permissions = [];
+  });
+
+  it("lists web's rows in web's order, under the title Filter actives (#5739)", () => {
+    state.classes = [{ id: "pc-alpha", name: "Alpha" }];
+    state.members = [
+      { ...ACTIVES[0]!, pledge_class_id: "pc-alpha" },
+      ...ACTIVES.slice(1),
+    ];
+    state.modules = { points: true, hours: false };
+    const tree = render();
+    expect(filterSheet(tree).title).toBe("Filter actives");
+    expect(filterSheet(tree).filters.map((row) => row.label)).toEqual([
+      "Role",
+      "Graduation year",
+      "Pledge class",
+      "Status",
+      "Sort",
+    ]);
+  });
+
+  it("shows the filters that are on as chips, and the pill counts who is left (#5739)", () => {
+    const tree = render();
+    const applied = () =>
+      inHeader(
+        tree,
+        (element) => (element.type as unknown) === ActiveFilterChipsStandIn,
+      ) as { filters: FilterSheetFilter[] };
+    // The chips take the sheet's own rows.
+    expect(applied().filters.map((row) => row.key)).toEqual(
+      filterSheet(tree).filters.map((row) => row.key),
+    );
+    expect(filterSheet(tree).showLabel).toBe("Show 2 members");
+    pick(tree, { roleId: "r-rush" });
+    expect(filterSheet(tree).showLabel).toBe("Show 1 member");
+  });
+
+  it("says the role list hasn't answered in the Role row's options", () => {
+    state.rolesError = true;
+    const note = sheetRow(render(), "role")!.optionsNote!;
+    expect(note.text).toBe("Couldn't load roles.");
+    note.onRetry!();
+    expect(refetches.roles).toHaveBeenCalled();
   });
 
   it("hands the sheet the actives' roles (not Alumni) and years, newest first", () => {
@@ -720,9 +827,7 @@ describe("s13's Actives filters (#3971)", () => {
 
   it("offers the Phone app filter only with the chapter's reach, and narrows to who a push can't reach", () => {
     const tree = render();
-    expect(
-      (sheet(tree) as unknown as { showPhoneReach?: boolean }).showPhoneReach,
-    ).toBe(false);
+    expect(sheet(tree).showPhoneReach).toBe(false);
     act(() => tree.unmount());
 
     state.phoneReach = {
@@ -749,10 +854,7 @@ describe("s13's Actives filters (#3971)", () => {
       ]),
     };
     const officer = render();
-    expect(
-      (sheet(officer) as unknown as { showPhoneReach?: boolean })
-        .showPhoneReach,
-    ).toBe(true);
+    expect(sheet(officer).showPhoneReach).toBe(true);
     pick(officer, { phoneReach: "unreachable" });
     expect(listed(officer)).toEqual(["Andre Silva"]);
     // The count line rides in the list's header, which the FlatList stand-in
@@ -856,28 +958,22 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     DANIEL,
   ];
 
-  function orderChip(tree: ReactTestRenderer) {
-    return (
-      trailingChips(tree).find((c) => c.props.label.startsWith("Sort:")) ?? null
-    );
-  }
-
   function metaOf(tree: ReactTestRenderer, name: string) {
     return (list(tree).props.data as DirectoryRow[]).find(
       (row) => row.displayName === name,
     )?.meta;
   }
 
-  /** Flip between name and the chapter's order, through the Sort sheet. */
+  /** Flip between name and the chapter's order, through the Sort row. */
   function toggleOrder(tree: ReactTestRenderer) {
-    const on = orderChip(tree)!.props.on;
+    const on = sheetRow(tree, "sort")!.value !== "name";
     act(() => sortSheet(tree, "Sort").props.onSelect(on ? "name" : "order"));
   }
 
   it("shows a chapter with no classes and no numbers none of it", () => {
     const tree = render();
 
-    expect(orderChip(tree)).toBeNull();
+    expect(sortValue(tree)).toBeNull();
     expect(metaOf(tree, "Marcus Reid")).toBeNull();
   });
 
@@ -890,12 +986,15 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     expect(metaOf(tree, "Andre Silva")).toBe("Beta");
   });
 
-  // #5568: the sort lights quietly, as the chips beside it do.
-  it("draws the sort chip quiet", () => {
+  // #5739: the sort is a row of the Filters sheet, never counted as a filter.
+  it("puts the sort in the Filters sheet, uncounted", () => {
     state.classes = CLASSES;
     state.members = WITH_CLASSES;
     const tree = render();
-    expect(orderChip(tree)!.props.quiet).toBe(true);
+    expect(sheetRow(tree, "sort")!.isSort).toBe(true);
+    toggleOrder(tree);
+    expect(activesFiltersChip(tree).props.label).toBe("Filters");
+    expect(trailingChips(tree).map((c) => c.props.label)).toEqual(["Filters"]);
   });
 
   it("offers the sort under the chapter's own word, as typed, and lists by it", () => {
@@ -904,9 +1003,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.vocabulary = { order: "roll number" };
     const tree = render();
 
-    const chip = orderChip(tree)!;
-    expect(chip.props.label).toBe("Sort: Name");
-    expect(chip.props.on).toBe(false);
+    expect(sortValue(tree)).toBe("Name");
     expect(sortSheet(tree, "Sort").props.options).toEqual([
       { value: "name", label: "Name" },
       { value: "order", label: "roll number" },
@@ -915,8 +1012,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
 
     toggleOrder(tree);
 
-    expect(orderChip(tree)!.props.on).toBe(true);
-    expect(orderChip(tree)!.props.label).toBe("Sort: roll number");
+    expect(sortValue(tree)).toBe("roll number");
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
     // Sorted by class, the rows still name it.
     expect(metaOf(tree, "Marcus Reid")).toBe("Alpha");
@@ -932,9 +1028,9 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     ];
     const tree = render();
 
-    expect(orderChip(tree)!.props.label).toBe("Sort: Name");
+    expect(sortValue(tree)).toBe("Name");
     toggleOrder(tree);
-    expect(orderChip(tree)!.props.label).toBe("Sort: Fraternal order");
+    expect(sortValue(tree)).toBe("Fraternal order");
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
   });
 
@@ -970,12 +1066,12 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     const tree = render();
 
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
-    expect(orderChip(tree)).toBeNull();
+    expect(sortValue(tree)).toBeNull();
     expect(metaOf(tree, "Marcus Reid")).toBeNull();
 
     state.classesPending = false;
     rerender(tree);
-    expect(orderChip(tree)).not.toBeNull();
+    expect(sortValue(tree)).not.toBeNull();
     expect(metaOf(tree, "Marcus Reid")).toBe("Alpha");
   });
 
@@ -985,7 +1081,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.classesFailed = "never";
     const tree = render();
 
-    expect(orderChip(tree)).toBeNull();
+    expect(sortValue(tree)).toBeNull();
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
     expect(metaOf(tree, "Marcus Reid")).toBeNull();
   });
@@ -999,7 +1095,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.classesFailed = "refetch";
     rerender(tree);
 
-    expect(orderChip(tree)!.props.on).toBe(true);
+    expect(sortValue(tree)).toBe("Fraternal order");
     expect(listed(tree)).toEqual(["Marcus Reid", "Andre Silva"]);
     expect(metaOf(tree, "Marcus Reid")).toBe("Alpha");
   });
@@ -1008,7 +1104,7 @@ describe("s13's pledge classes and fraternal order (#3939)", () => {
     state.members = [MARCUS, ANDRE, { ...CHARLES, order_number: 3 }, DANIEL];
     const tree = render();
 
-    expect(orderChip(tree)).toBeNull();
+    expect(sortValue(tree)).toBeNull();
   });
 
   it("lists a search by name even while the sort is on", () => {
@@ -1584,12 +1680,6 @@ describe("Add roles on the Directory (#4958, placement provisional)", () => {
 });
 
 describe("s13 standings (#5950)", () => {
-  function sortChip(tree: ReactTestRenderer) {
-    return (
-      trailingChips(tree).find((c) => c.props.label.startsWith("Sort:")) ?? null
-    );
-  }
-
   beforeEach(() => {
     state.modules = { points: true, hours: true };
   });
@@ -1609,13 +1699,17 @@ describe("s13 standings (#5950)", () => {
     act(() => sortSheet(tree, "Sort").props.onSelect("points"));
 
     expect(standingsAsked.at(-1)).toEqual(["points", "semester"]);
-    expect(sortChip(tree)!.props.label).toBe("Sort: Most points");
+    expect(sortValue(tree)).toBe("Most points");
     expect(listed(tree)).toEqual(["Andre Silva", "Marcus Reid"]);
-    // The period sits beside the order and opens its own sheet.
-    const period = trailingChips(tree).find(
-      (c) => c.props.label === "This semester",
-    );
-    expect(period).toBeDefined();
+    // The period is a row under Sort, uncounted, and the standing stays in
+    // sight under the search with the sheet closed, as web's count line.
+    expect(sheetRow(tree, "period")!.isSort).toBe(true);
+    expect(
+      inHeader(
+        tree,
+        (el) => el.props.children === "Most points · This semester",
+      ),
+    ).toBeTruthy();
     act(() => sortSheet(tree, "Period").props.onSelect("all"));
     expect(standingsAsked.at(-1)).toEqual(["points", "all"]);
   });
@@ -1636,15 +1730,15 @@ describe("s13 standings (#5950)", () => {
       isViewer: false,
     });
     // Marcus is the viewer here.
-    expect(renderItem({ item: rows[1]!, index: 1 }).props.standing).toMatchObject(
-      { rank: 2, isViewer: true },
-    );
+    expect(
+      renderItem({ item: rows[1]!, index: 1 }).props.standing,
+    ).toMatchObject({ rank: 2, isViewer: true });
   });
 
   it("opens on the standing a link names", () => {
     vi.mocked(useLocalSearchParams).mockReturnValueOnce({ sort: "points" });
     const tree = render();
-    expect(sortChip(tree)!.props.label).toBe("Sort: Most points");
+    expect(sortValue(tree)).toBe("Most points");
   });
 
   it("offers no standing whose module is off", () => {

@@ -2,10 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { markupLines } from "@/tests/stable-markup";
-import {
-  FILTER_SEARCH_THRESHOLD,
-  FilterChip,
-} from "@/components/shared/filter-chip";
+import { FILTER_SEARCH_THRESHOLD } from "@repo/hooks/filter-rows";
+import { FilterChip } from "@/components/shared/filter-chip";
 
 const SHORT = [
   { value: "active", label: "Active" },

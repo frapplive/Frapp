@@ -23,11 +23,8 @@ import { formatDay, formatTimestampFull } from "@repo/formatting";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ExportMenu } from "@/components/shared/export-menu";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { NestedError } from "@/components/shared/nested-states";
 import { SkeletonRows } from "@/components/shared/page-skeletons";
@@ -116,7 +113,7 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
   }, [transactions, search, category, amount]);
 
   const periodOptions = pointsPeriodOptions(archives);
-  const filters: FilterMenuFilter[] = [
+  const filters: FilterRow[] = [
     {
       key: "period",
       label: "Period",

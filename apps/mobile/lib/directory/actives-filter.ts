@@ -8,7 +8,6 @@
  * Client-side, as web's are: the Actives tab already holds the whole list, and
  * `GET /v1/members` takes no filter params.
  */
-import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import type { ChapterRole } from "@repo/hooks/chapter-roles";
 import { matchesRoleFilter } from "@repo/hooks/member-assignments";
 import {
@@ -71,26 +70,6 @@ export function activesFilterRoles(
     .map(({ id, name, color }) => ({ id, name, color }));
 }
 
-/**
- * The role list for a typed query, matched by `matchesWordStarts`, the rule
- * web's searchable role chip uses: every word typed starts a word of the name,
- * case and accents ignored, so "rec" finds "Rush/Recruitment Chair".
- */
-export function searchFilterRoles(
-  roles: readonly FilterRole[],
-  query: string,
-): FilterRole[] {
-  return roles.filter((role) => matchesWordStarts(role.name, query));
-}
-
-/**
- * Whether a typed role query narrows anything. Punctuation alone doesn't (the
- * matcher drops it), so "(" on the way to "(Exec)" still shows Any role.
- */
-export function hasRoleQuery(query: string): boolean {
-  return normalizeWords(query).length > 0;
-}
-
 /** The actives' graduation years, newest first, as web lists them. */
 export function graduationYearOptions(
   actives: readonly Record<string, unknown>[],
@@ -142,11 +121,6 @@ export function effectiveActivesFilter(
     status: filter.status,
     phoneReach: known.phoneReach ? filter.phoneReach : null,
   };
-}
-
-/** How many filters are set, for the Filters chip's count. */
-export function countActivesFilters(filter: ActivesFilter): number {
-  return Object.values(filter).filter((value) => value !== null).length;
 }
 
 /** The actives that pass every set filter. */

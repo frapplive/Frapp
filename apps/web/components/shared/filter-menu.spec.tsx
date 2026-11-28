@@ -2,13 +2,8 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  ActiveFilterChips,
-  ANY_FILTER,
-  anyFilterRow,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "./filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "./filter-menu";
 
 /*
  * The one web filter bar (rulebook § 9): a Filter button with a count, one
@@ -33,7 +28,7 @@ function Harness({
           label: `Role ${i}`,
         }))
       : [{ value: "chair", label: "Chair" }]);
-  const filters: FilterMenuFilter[] = [
+  const filters: FilterRow[] = [
     {
       key: "status",
       label: "Status",
@@ -222,25 +217,5 @@ describe("FilterMenu", () => {
       screen.getByRole("button", { name: "Remove filter Role: Treasurer" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-  });
-});
-
-describe("anyFilterRow", () => {
-  it("leads with the any row and maps it to and from null", () => {
-    const changes: (string | null)[] = [];
-    const row = anyFilterRow({
-      key: "role",
-      label: "Role",
-      anyLabel: "Any role",
-      options: [{ value: "r1", label: "Treasurer" }],
-      value: null,
-      onChange: (value) => changes.push(value),
-    });
-    expect(row.options[0]).toEqual({ value: ANY_FILTER, label: "Any role" });
-    expect(row.value).toBe(ANY_FILTER);
-    expect(row.anyValue).toBe(ANY_FILTER);
-    row.onChange("r1");
-    row.onChange(ANY_FILTER);
-    expect(changes).toEqual(["r1", null]);
   });
 });

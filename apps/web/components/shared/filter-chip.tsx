@@ -1,5 +1,6 @@
 "use client";
 
+import { FILTER_SEARCH_THRESHOLD } from "@repo/hooks/filter-rows";
 import { type ReactElement } from "react";
 import { ArrowUpDown, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,13 +19,6 @@ import { cn } from "@/lib/utils";
  * Cognitive Science" lists whole and reads "COGS 2120" on the chip.
  */
 export type FilterOption = { value: string; label: string; short?: string };
-
-/**
- * Past this many options the chip's list gets a type-to-filter field above
- * it (#3970). A status or a sort fits on screen and needs no box; a chapter
- * imported from Discord can carry 100+ roles, and scrolling for one is slow.
- */
-export const FILTER_SEARCH_THRESHOLD = 8;
 
 /** The chip's shape, shared with `DateFilterChip` so one toolbar row draws one chip. */
 export const FILTER_CHIP_CLASS = "gap-1 rounded-full font-semibold";

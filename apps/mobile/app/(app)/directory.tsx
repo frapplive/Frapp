@@ -23,7 +23,10 @@ import {
   type MemberAvatarTint,
   type StandingsMetric,
 } from "@repo/hooks";
-import { NO_BASE_ROLE_FILTER } from "@repo/hooks/member-assignments";
+import {
+  NO_BASE_ROLE_FILTER,
+  NO_BASE_ROLE_LABEL,
+} from "@repo/hooks/member-assignments";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   can,
@@ -65,24 +68,32 @@ import {
   ThemedRefreshControl,
   useRefetchAll,
 } from "@/components/pull-to-refresh";
-import { ActivesFilterSheet } from "@/components/directory/actives-filter-sheet";
-import { OptionSheet } from "@/components/option-sheet";
 import {
+  ActiveFilterChips,
+  FilterSheet,
+  type FilterSheetFilter,
+} from "@/components/filter-sheet";
+import { anyFilterRow, filtersOn } from "@repo/hooks/filter-rows";
+import {
+  PHONE_REACH_FILTER_OPTIONS,
+  PHONE_REACH_LABEL,
   phoneReachCountLineFor,
   phoneReachStaleNote,
   phoneReachStateLabel,
   type PhoneReach,
+  type PhoneReachFilter,
 } from "@repo/validation";
 import { PickRolesSheet } from "@/components/roles/pick-roles-sheet";
 import { usePickableRoles } from "@repo/hooks";
 import {
-  countActivesFilters,
   effectiveActivesFilter,
   filterActives,
   graduationYearOptions,
   NO_ACTIVES_FILTER,
   activesFilterRoles,
+  STATUS_OPTIONS,
   type ActivesFilter,
+  type ActivesStatus,
 } from "@/lib/directory/actives-filter";
 import {
   type DirectoryRow,
@@ -149,29 +160,30 @@ import { useIsCouncil, useServesChapterFeatures } from "@/lib/tenant-kind";
  * ## Pledge class and fraternal order (#3939)
  *
  * `spec/behavior/members.md` § Pledge class and order number. A member's class
- * leads their row's meta line, and the Actives tab's chip row ends with a
- * chip, "Sort:" and the chapter's word for a member's order number, that
- * lists the actives in fraternal order instead of by name. Canvas draws no
- * sort on this screen, so the chip is this file's addition: one toggle, on the
- * row that already carries the Alumni tab's Filters chip, because the list has
- * exactly two orders. As on web, all of it waits for the class list: a chapter
- * with no classes and no numbers sees none of it, and a class list that has
- * never answered drops the chip and the names rather than sort by a list it
- * doesn't have. The sort is the Actives tab's alone, by choice: the Alumni
- * tab's trailing chip is Filters, and web's Alumni tab has no sort either
- * (#4088). Alumni rows still name their class, since `GET /v1/alumni` returns
+ * leads their row's meta line, and the Actives tab's Filters sheet has a Sort
+ * row whose orders include the chapter's word for a member's order number,
+ * which lists the actives in fraternal order instead of by name. As on web,
+ * all of it waits for the class list: a chapter with no classes and no
+ * numbers sees none of it, and a class list that has never answered drops
+ * the order and the names rather than sort by a list it doesn't have. The
+ * sort is the Actives tab's alone, by choice: web's Alumni tab has no sort
+ * either (#4088). Alumni rows still name their class, since `GET /v1/alumni` returns
  * it. Read-only on the list; an officer holding `roles:manage` sets both from
  * the member profile a row opens (#3991), or on web.
  *
- * ## Actives filters (#3971)
+ * ## Actives filters (#3971, #5739)
  *
- * The Actives tab's chip row carries a Filters chip, before the sort, that
- * opens `ActivesFilterSheet`: Status, Graduation year, the chapter's pledge
- * class, Group and Role, web's Directory filters by web's rules
- * (`lib/directory/actives-filter.ts`). The Alumni tab keeps its own Filters
- * chip and fields, since `GET /v1/alumni` filters server-side by different
- * fields. Like the alumni filters, these stay set across a tab switch and
- * are left alone by a search, which looks across both lists.
+ * The Actives tab's chip row carries one Filters chip that opens the phone's
+ * one `FilterSheet` with web's Directory rows in web's order: Role, Group,
+ * Graduation year, the chapter's pledge class, Status, Phone app, then Sort
+ * and a standing's Period, filtered by web's rules
+ * (`lib/directory/actives-filter.ts`). The filters that are on show as
+ * removable chips under the search (`ActiveFilterChips`), and a standing
+ * keeps its order and period in sight on one line, as web's count line does.
+ * The Alumni tab keeps its own Filters chip and typed fields, since
+ * `GET /v1/alumni` filters server-side by free text. Like the alumni filters,
+ * these stay set across a tab switch and are left alone by a search, which
+ * looks across both lists.
  */
 type Tab = "actives" | "alumni";
 
@@ -187,13 +199,6 @@ export interface RowStanding {
   /** The period, for a screen reader: "This semester". */
   period: string;
   isViewer: boolean;
-}
-
-function sortLabel(
-  options: readonly { value: DirectorySort; label: string }[],
-  value: DirectorySort,
-): string {
-  return options.find((option) => option.value === value)?.label ?? "Name";
 }
 
 export default function DirectoryScreen() {
@@ -296,8 +301,6 @@ export default function DirectoryScreen() {
   const [standingsWindow, setStandingsWindow] = useState<string>(
     DEFAULT_STANDINGS_WINDOW,
   );
-  const sortSheetRef = useRef<BottomSheetModal>(null);
-  const periodSheetRef = useRef<BottomSheetModal>(null);
   // A module that is off offers no standing (P5.8) and its board is never
   // read. Unknown until the chapter has loaded, so nothing is offered and
   // then taken away.
@@ -373,7 +376,6 @@ export default function DirectoryScreen() {
       offersNoBaseRole,
     ],
   );
-  const activesFilterCount = countActivesFilters(activesFilter);
   const groupMemberIds = useMemo(() => {
     const group = (groupsQuery.data ?? []).find(
       (g) => g.id === activesFilter.groupId,
@@ -444,9 +446,151 @@ export default function DirectoryScreen() {
       : null;
   const standings = useStandings(standingsMetric, standingsWindow);
   const periodLabel =
-    standings.windowOptions.find((o) => o.value === standings.window)
-      ?.label ?? "";
+    standings.windowOptions.find((o) => o.value === standings.window)?.label ??
+    "";
   const standingTotalOf = standings.totalOf;
+
+  // The Filters sheet's rows, in the order web's Directory menu lists them
+  // (#5739): Role, Group, Graduation year, pledge class, Status, Phone app,
+  // then Sort and a standing's Period. A filter with nothing to offer is left
+  // out, as on web.
+  const setFilter = (patch: Partial<ActivesFilter>) =>
+    setActivesFilterPicks((picks) => ({ ...picks, ...patch }));
+  const rolesReady = rolesQuery.data !== undefined;
+  const roleRow: FilterSheetFilter = {
+    ...anyFilterRow({
+      key: "role",
+      label: "Role",
+      anyLabel: "Any role",
+      options: [
+        // "No base role" (#5802) carries no colour, so it takes no dot.
+        ...(offersNoBaseRole
+          ? [{ value: NO_BASE_ROLE_FILTER, label: NO_BASE_ROLE_LABEL }]
+          : []),
+        ...filterRoles.map((role) => ({
+          value: role.id,
+          label: role.name,
+          color: role.color ?? null,
+        })),
+      ],
+      value: activesFilter.roleId,
+      onChange: (roleId) => setFilter({ roleId }),
+    }),
+    // Data first: a failed refresh keeps the list it already read.
+    optionsNote: rolesReady
+      ? undefined
+      : rolesQuery.isError
+        ? {
+            text: "Couldn't load roles.",
+            onRetry: () => void rolesQuery.refetch(),
+          }
+        : { text: "Loading roles…" },
+    emptyNote: "This chapter has no roles yet.",
+  };
+  const activesFilters: FilterSheetFilter[] = [
+    roleRow,
+    ...(filterGroups.length > 0
+      ? [
+          anyFilterRow({
+            key: "group",
+            label: "Group",
+            anyLabel: "Any group",
+            options: filterGroups.map((g) => ({ value: g.id, label: g.name })),
+            value: activesFilter.groupId,
+            onChange: (groupId) => setFilter({ groupId }),
+          }),
+        ]
+      : []),
+    ...(yearOptions.length > 0
+      ? [
+          anyFilterRow({
+            key: "year",
+            label: "Graduation year",
+            anyLabel: "Any year",
+            options: yearOptions.map((year) => ({
+              value: String(year),
+              label: String(year),
+            })),
+            value:
+              activesFilter.graduationYear === null
+                ? null
+                : String(activesFilter.graduationYear),
+            onChange: (year) =>
+              setFilter({
+                graduationYear: year === null ? null : Number(year),
+              }),
+          }),
+        ]
+      : []),
+    ...(pledgeClasses && pledgeClasses.length > 0
+      ? [
+          anyFilterRow({
+            key: "class",
+            label: classTerm,
+            anyLabel: "Any",
+            options: pledgeClasses.map((c) => ({ value: c.id, label: c.name })),
+            value: activesFilter.pledgeClassId,
+            onChange: (pledgeClassId) => setFilter({ pledgeClassId }),
+          }),
+        ]
+      : []),
+    anyFilterRow({
+      key: "status",
+      label: "Status",
+      anyLabel: "Any status",
+      options: STATUS_OPTIONS,
+      value: activesFilter.status,
+      onChange: (status) =>
+        setFilter({ status: status as ActivesStatus | null }),
+    }),
+    ...(showsPhoneReach
+      ? [
+          anyFilterRow({
+            key: "phone-reach",
+            label: PHONE_REACH_LABEL,
+            anyLabel: "Any",
+            options: PHONE_REACH_FILTER_OPTIONS,
+            value: activesFilter.phoneReach,
+            onChange: (phoneReach) =>
+              setFilter({ phoneReach: phoneReach as PhoneReachFilter | null }),
+          }),
+        ]
+      : []),
+    ...(sortOptions.length > 1
+      ? [
+          {
+            key: "sort",
+            label: "Sort",
+            options: sortOptions,
+            value: effectiveSort,
+            anyValue: "name",
+            onChange: (value: string) => setSort(value as DirectorySort),
+            isSort: true,
+          },
+        ]
+      : []),
+    // A standing ranks over a period (#5950), picked under Sort.
+    ...(standingsMetric
+      ? [
+          {
+            key: "period",
+            label: "Period",
+            options: standings.windowOptions,
+            value: standings.window,
+            anyValue: standings.window,
+            onChange: setStandingsWindow,
+            isSort: true,
+          },
+        ]
+      : []),
+  ];
+  const activesFilterCount = filtersOn(activesFilters).length;
+  // A standing and its period stay in sight with the sheet closed, as web's
+  // count line names them.
+  const standingLine = standingsMetric
+    ? `${sortOptions.find((o) => o.value === effectiveSort)?.label ?? ""} · ${periodLabel}`
+    : null;
+  const shownActives = filteredActives.length;
   const rows = useMemo(() => {
     const selected = selectDirectoryRows(listData, {
       classNames,
@@ -565,62 +709,37 @@ export default function DirectoryScreen() {
                 onPress={() => setFiltersOpen((open) => !open)}
               />
             ) : (
-              <>
-                <Chip
-                  accessibilityRole="button"
-                  accessibilityState={{}}
-                  accessibilityLabel={
-                    activesFilterCount > 0
-                      ? `Filters, ${activesFilterCount} set`
-                      : "Filters"
-                  }
-                  accessibilityHint={
-                    showsPhoneReach
-                      ? "Narrows actives by status, phone app, graduation year, class or role."
-                      : "Narrows actives by status, graduation year, class or role."
-                  }
-                  label={
-                    activesFilterCount > 0
-                      ? `Filters · ${activesFilterCount}`
-                      : "Filters"
-                  }
-                  on={activesFilterCount > 0}
-                  quiet
-                  onPress={() => activesFilterSheetRef.current?.present()}
-                />
-                {sortOptions.length > 1 ? (
-                  <Chip
-                    accessibilityRole="button"
-                    accessibilityState={{}}
-                    accessibilityLabel={`Sort: ${sortLabel(sortOptions, effectiveSort)}`}
-                    accessibilityHint="Changes the order the actives are listed in."
-                    // "Sort:" leads, because beside Actives and Alumni a chip
-                    // reading only an order looks like a third tab.
-                    label={`Sort: ${sortLabel(sortOptions, effectiveSort)}`}
-                    on={effectiveSort !== "name"}
-                    quiet
-                    onPress={() => sortSheetRef.current?.present()}
-                  />
-                ) : null}
-                {/* A standing names its period, and changes it, beside the
-                    order (#5950). */}
-                {standingsMetric ? (
-                  <Chip
-                    accessibilityRole="button"
-                    accessibilityState={{}}
-                    accessibilityLabel={`Period: ${periodLabel}`}
-                    accessibilityHint="Changes which period the standings count."
-                    label={periodLabel}
-                    on
-                    quiet
-                    onPress={() => periodSheetRef.current?.present()}
-                  />
-                ) : null}
-              </>
+              <Chip
+                accessibilityRole="button"
+                accessibilityState={{}}
+                accessibilityLabel={
+                  activesFilterCount > 0
+                    ? `Filters, ${activesFilterCount} set`
+                    : "Filters"
+                }
+                accessibilityHint="Narrows the actives and changes their order."
+                label={
+                  activesFilterCount > 0
+                    ? `Filters · ${activesFilterCount}`
+                    : "Filters"
+                }
+                on={activesFilterCount > 0}
+                quiet
+                onPress={() => activesFilterSheetRef.current?.present()}
+              />
             )
           }
         />
       )}
+
+      {isSearching || tab !== "actives" ? null : (
+        <ActiveFilterChips filters={activesFilters} />
+      )}
+      {standingLine ? (
+        <Text accessibilityLiveRegion="polite" style={styles.reachLine}>
+          {standingLine}
+        </Text>
+      ) : null}
 
       {isSearching || tab !== "alumni" || !filtersOpen ? null : (
         <View style={styles.alumniFilters}>
@@ -809,42 +928,11 @@ export default function DirectoryScreen() {
           />
         </View>
         <PickRolesSheet ref={pickRolesSheetRef} roles={pickable.roles} />
-        <OptionSheet
-          ref={sortSheetRef}
-          title="Sort"
-          options={sortOptions}
-          selected={effectiveSort}
-          onSelect={(value) => setSort((value as DirectorySort | null) ?? "name")}
-        />
-        <OptionSheet
-          ref={periodSheetRef}
-          title="Period"
-          options={standings.windowOptions}
-          selected={standings.window}
-          onSelect={(value) =>
-            setStandingsWindow(value ?? DEFAULT_STANDINGS_WINDOW)
-          }
-        />
-        <ActivesFilterSheet
+        <FilterSheet
           ref={activesFilterSheetRef}
-          filter={activesFilter}
-          onChange={setActivesFilterPicks}
-          roles={filterRoles}
-          groups={filterGroups}
-          years={yearOptions}
-          classes={pledgeClasses ?? []}
-          classWord={classTerm}
-          // Data first: a failed refresh keeps the list it already read.
-          rolesStatus={
-            rolesQuery.data !== undefined
-              ? "ready"
-              : rolesQuery.isError
-                ? "error"
-                : "loading"
-          }
-          onRetryRoles={() => void rolesQuery.refetch()}
-          showPhoneReach={showsPhoneReach}
-          offerNoBaseRole={offersNoBaseRole}
+          title="Filter actives"
+          filters={activesFilters}
+          showLabel={`Show ${shownActives} ${shownActives === 1 ? "member" : "members"}`}
         />
       </SafeAreaView>
     </View>
