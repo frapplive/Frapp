@@ -1,1 +1,0 @@
-In Chapter settings, Privacy and AI are now short lists of switches with one line each, and on your phone each opens its own screen from Chapter settings, with Chapter AI in Settings going straight to it.
