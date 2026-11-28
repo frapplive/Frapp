@@ -95,11 +95,8 @@ import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
 import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { anyReadUncached } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
@@ -1089,7 +1086,7 @@ function AddressedEventsPage() {
 
   // The Filter menu's rows, also drawn as the chips of the filters that are
   // on. Upcoming is Time's resting value, so it counts as no filter.
-  const eventFilters: FilterMenuFilter[] = [
+  const eventFilters: FilterRow[] = [
     {
       key: "time",
       label: "Time",

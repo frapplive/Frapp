@@ -9,11 +9,8 @@ import {
 } from "@repo/hooks";
 import { statusLabel } from "@repo/validation";
 import { Button } from "@/components/ui/button";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { NestedError } from "@/components/shared/nested-states";
 import { SkeletonRows } from "@/components/shared/page-skeletons";
@@ -77,7 +74,7 @@ export function ServiceHistory() {
       (status === "ALL" || entry.status === status),
   );
 
-  const filters: FilterMenuFilter[] = [
+  const filters: FilterRow[] = [
     {
       key: "member",
       label: "Member",

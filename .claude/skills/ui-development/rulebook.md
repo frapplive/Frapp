@@ -346,9 +346,11 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
 - **Filtering a list:** web `FilterMenu` and `ActiveFilterChips` (`components/shared/filter-menu.tsx`):
   search, one Filter button with its count, and the view switch, in the page header; the filters that are
   on show as removable chips under the header, with Clear all once two or more are on (the menu always
-  has it). Sort is a row in the menu. Phone: the search field, one Filters chip, and a sheet with the
-  same rows in the same order ending in "Show 23 members"; the shared phone sheet doesn't exist yet and
-  is built from the Directory's in the filters PR (#5739). A list that splits into two or three named sets people switch between all day (Actives /
+  has it). Sort is a row in the menu. Phone: the search field, one Filters chip, and `FilterSheet`
+  (`components/filter-sheet.tsx`) with the same rows in the same order ending in "Show 23 members",
+  plus `ActiveFilterChips` under the search; both apps draw `FilterRow`s from `@repo/hooks/filter-rows`,
+  and a screen on both builds its rows in one shared function (the Directory's
+  `directoryFilterRows`, #5739). A list that splits into two or three named sets people switch between all day (Actives /
   Alumni, All / Unread) is a view, not a filter, and its views are the plain labels beside the title
   (§ 2), `ViewLabels` on both apps. *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
   longer a way to change views.*

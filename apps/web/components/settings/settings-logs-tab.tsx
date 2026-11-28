@@ -15,11 +15,8 @@ import {
 } from "@repo/hooks";
 import { CHAPTER_LOGS_COPY } from "@repo/validation";
 import { PageActions } from "@/components/layout/page-actions";
-import {
-  ActiveFilterChips,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { ErrorState } from "@/components/shared/async-states";
 import { SkeletonRows } from "@/components/shared/page-skeletons";
 import { SectionLabel } from "@/components/shared/section-label";
@@ -48,7 +45,7 @@ export function SettingsLogsTab() {
   const roster = useChapterRoster();
   const { nameFor } = useMemberDisplayNames();
 
-  const menuFilters: FilterMenuFilter[] = useMemo(
+  const menuFilters: FilterRow[] = useMemo(
     () =>
       chapterLogFilterRows(roster.data ?? []).map((row) => ({
         key: row.key,

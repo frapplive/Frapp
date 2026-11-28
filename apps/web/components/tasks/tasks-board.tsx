@@ -121,12 +121,8 @@ import { SuggestionsStrip } from "./suggestions-strip";
 import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
 
 import { TasksPageSkeleton } from "@/components/tasks/tasks-skeleton";
-import {
-  ActiveFilterChips,
-  anyFilterRow,
-  FilterMenu,
-  type FilterMenuFilter,
-} from "@/components/shared/filter-menu";
+import { anyFilterRow, type FilterRow } from "@repo/hooks/filter-rows";
+import { ActiveFilterChips, FilterMenu } from "@/components/shared/filter-menu";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
 
 /** The notifications Everyone's shows the subject of: suggested tasks. */
@@ -611,7 +607,7 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
   // on the chapter's board an officer's Assignee, Status and Due, each listing
   // only values some task has, then Group; on every view List or Grid. Group
   // and Layout are never counted or cleared, as Sort isn't on other lists.
-  const taskFilters: FilterMenuFilter[] = [
+  const taskFilters: FilterRow[] = [
     ...(canManage
       ? [
           anyFilterRow({

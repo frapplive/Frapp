@@ -2,13 +2,10 @@ import { parseChapterRoles } from "@repo/hooks/chapter-roles";
 import { describe, expect, it } from "vitest";
 import {
   activesFilterRoles,
-  countActivesFilters,
   effectiveActivesFilter,
   filterActives,
   graduationYearOptions,
-  hasRoleQuery,
   NO_ACTIVES_FILTER,
-  searchFilterRoles,
 } from "./actives-filter";
 
 const ROWS = [
@@ -152,29 +149,6 @@ describe("the filter's options", () => {
       { id: "r-2", name: "Off palette", color: null },
     ]);
   });
-
-  it("matches a typed role by word starts, case and accents ignored, as web does", () => {
-    const roles = [
-      { id: "1", name: "Rush Chair", color: null },
-      { id: "2", name: "Social Chair", color: null },
-      { id: "3", name: "Trésorier", color: null },
-      { id: "4", name: "Brush Captain", color: null },
-      { id: "5", name: "VP/Recruitment", color: null },
-      { id: "6", name: "(Exec) Treasurer", color: null },
-    ];
-    expect(searchFilterRoles(roles, "rush").map((r) => r.id)).toEqual(["1"]);
-    expect(searchFilterRoles(roles, "CH").map((r) => r.id)).toEqual(["1", "2"]);
-    expect(searchFilterRoles(roles, "treso").map((r) => r.id)).toEqual(["3"]);
-    expect(searchFilterRoles(roles, "rec").map((r) => r.id)).toEqual(["5"]);
-    expect(searchFilterRoles(roles, "exec").map((r) => r.id)).toEqual(["6"]);
-    expect(searchFilterRoles(roles, "  ")).toHaveLength(6);
-  });
-
-  it("counts punctuation alone as no role query", () => {
-    expect(hasRoleQuery("(")).toBe(false);
-    expect(hasRoleQuery(" / ")).toBe(false);
-    expect(hasRoleQuery("(e")).toBe(true);
-  });
 });
 
 describe("effectiveActivesFilter", () => {
@@ -195,7 +169,6 @@ describe("effectiveActivesFilter", () => {
       phoneReach: null,
     };
     expect(effectiveActivesFilter(filter, known)).toEqual(filter);
-    expect(countActivesFilters(filter)).toBe(5);
   });
 
   it("drops a deleted role, a vanished year and an unread class", () => {
@@ -208,7 +181,6 @@ describe("effectiveActivesFilter", () => {
       phoneReach: "web_only" as const,
     };
     expect(effectiveActivesFilter(filter, known)).toEqual(NO_ACTIVES_FILTER);
-    expect(countActivesFilters(NO_ACTIVES_FILTER)).toBe(0);
   });
 });
 
