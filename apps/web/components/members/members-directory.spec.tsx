@@ -72,13 +72,77 @@ const MEMBERS = [
 ];
 
 /** Opens a toolbar chip by its accessible name and picks one of its rows. */
-async function pick(
-  user: ReturnType<typeof userEvent.setup>,
-  chip: string | RegExp,
-  option: string,
-) {
+type User = ReturnType<typeof userEvent.setup>;
+
+/** The toolbar's one Filter button (#5739). */
+const filterButton = () =>
+  screen.getByRole("button", { name: /^Filter members/ });
+
+/** A row of the open Filter menu: its label, then its current value. */
+const filterRow = (row: string) =>
+  screen.queryByRole("menuitem", { name: new RegExp(`^${row}`) });
+
+async function openFilterMenu(user: User) {
+  if (screen.queryAllByRole("menu").length === 0) {
+    await user.click(filterButton());
+  }
+}
+
+async function closeFilterMenu(user: User) {
+  for (let i = 0; i < 3 && screen.queryAllByRole("menu").length > 0; i++) {
+    await user.keyboard("{Escape}");
+  }
+}
+
+/** Opens a row's options in the Filter menu. */
+async function openFilterRow(user: User, row: string) {
+  await openFilterMenu(user);
+  const item = filterRow(row);
+  if (!item) throw new Error(`No "${row}" row in the Filter menu`);
+  // The keyboard path: a pointer that leaves the row for its side list can
+  // close the list first in jsdom.
+  item.focus();
+  await user.keyboard("{ArrowRight}");
+}
+
+/** Picks one of a Filter menu row's options; picking closes the menu. */
+async function pick(user: User, row: string, option: string) {
+  await openFilterRow(user, row);
+  await user.click(await screen.findByRole("menuitemradio", { name: option }));
+  await closeFilterMenu(user);
+}
+
+/** Picks from the bulk bar's Assign role chip. */
+async function pickChip(user: User, chip: string, option: string) {
   await user.click(screen.getByRole("button", { name: chip }));
   await user.click(await screen.findByRole("menuitem", { name: option }));
+}
+
+/** A row's options, in order; the menu closes again. */
+async function rowOptions(user: User, row: string): Promise<string[]> {
+  await openFilterRow(user, row);
+  const options = (await screen.findAllByRole("menuitemradio")).map(
+    (item) => item.textContent ?? "",
+  );
+  await closeFilterMenu(user);
+  return options;
+}
+
+/** Whether the Filter menu has this row; the menu closes again. */
+async function hasFilterRow(user: User, row: string): Promise<boolean> {
+  await openFilterMenu(user);
+  const has = filterRow(row) !== null;
+  await closeFilterMenu(user);
+  return has;
+}
+
+/** The value a row shows beside its label; the menu closes again. */
+async function rowValue(user: User, row: string): Promise<string> {
+  await openFilterMenu(user);
+  const item = filterRow(row);
+  const value = item?.querySelectorAll("span")[1]?.textContent ?? "";
+  await closeFilterMenu(user);
+  return value;
 }
 
 const membersRead = read(MEMBERS);
@@ -374,11 +438,8 @@ describe("Directory on the greenfield shell", () => {
   it("filters by group, offering only groups with someone in them (2026-11-19)", async () => {
     const user = userEvent.setup();
     render(<MembersDirectory />);
-    await user.click(screen.getByRole("button", { name: /^Group/ }));
-    expect(
-      (await screen.findAllByRole("menuitem")).map((item) => item.textContent),
-    ).toEqual(["Any group", "In house"]);
-    await user.click(screen.getByRole("menuitem", { name: "In house" }));
+    expect(await rowOptions(user, "Group")).toEqual(["Any group", "In house"]);
+    await pick(user, "Group", "In house");
     expect(
       screen.getByRole("button", { name: /^Ada Lovelace,/ }),
     ).toBeInTheDocument();
@@ -551,12 +612,12 @@ describe("Directory on the greenfield shell", () => {
     // The line offers the way back, and the way back is every filter.
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.queryByText(/No actives match/)).toBeNull();
-    // An unset chip is named by its label alone; a set one names its value.
-    expect(screen.getByRole("button", { name: "Status" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Role" })).toBeInTheDocument();
+    // No filter is on: no applied chips, and Filter counts nothing.
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(filterButton()).toHaveAccessibleName("Filter members");
   });
 
-  it("offers the Phone app filter only when the server sends the whole chapter's reach", () => {
+  it("offers the Phone app filter only when the server sends the whole chapter's reach", async () => {
     phoneReachRead.value = {
       scope: "self",
       byUserId: new Map([
@@ -571,15 +632,14 @@ describe("Directory on the greenfield shell", () => {
         ],
       ]),
     };
+    const user = userEvent.setup();
     const { unmount } = render(<MembersDirectory />);
-    expect(screen.queryByRole("button", { name: "Phone app" })).toBeNull();
+    expect(await hasFilterRow(user, "Phone app")).toBe(false);
     unmount();
 
     phoneReachRead.value = { scope: "chapter", byUserId: new Map() };
     render(<MembersDirectory />);
-    expect(
-      screen.getByRole("button", { name: "Phone app" }),
-    ).toBeInTheDocument();
+    expect(await hasFilterRow(user, "Phone app")).toBe(true);
   });
 
   it("narrows to members notifications can't reach, says how many, and names each one's state", async () => {
@@ -621,21 +681,68 @@ describe("Directory on the greenfield shell", () => {
     ).toBeInTheDocument();
   });
 
+  // #5739: the rows stand in the order the chips did, and an "Any" row or a
+  // removed chip puts the whole list back.
+  it("lists its filter rows in the chips' order, and Any or a removed chip unsets one", async () => {
+    const user = userEvent.setup();
+    phoneReachRead.value = {
+      scope: "chapter",
+      byUserId: new Map([
+        [
+          "u-2",
+          {
+            user_id: "u-2",
+            state: "web_only",
+            platform: null,
+            last_opened_at: null,
+          },
+        ],
+      ]),
+    };
+    render(<MembersDirectory />);
+    await openFilterMenu(user);
+    const rows = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.querySelector("span")?.textContent);
+    await closeFilterMenu(user);
+    expect(rows).toEqual([
+      "Role",
+      "Group",
+      "Graduation year",
+      "Status",
+      "Phone app",
+      "Sort",
+    ]);
+
+    await pick(user, "Phone app", "Not reachable");
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
+    await pick(user, "Phone app", "Any");
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(filterButton()).toHaveAccessibleName("Filter members");
+
+    await pick(user, "Status", "Pending");
+    await user.click(
+      screen.getByRole("button", { name: "Remove filter Status: Pending" }),
+    );
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(filterButton()).toHaveAccessibleName("Filter members");
+  });
+
   // #3941: the options are graduation years, so the chapter's `class` word
   // ("Line" here) must not label them; one pledge class spans several years.
   it("labels the graduation-year filter as graduation year, not the chapter's class word", async () => {
     const user = userEvent.setup();
     render(<MembersDirectory />);
-    expect(screen.queryByRole("button", { name: /^Line/ })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Graduation year" }));
-    expect(
-      await screen.findByRole("menuitem", { name: "Any year" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "2027" })).toBeInTheDocument();
+    expect(await hasFilterRow(user, "Line")).toBe(false);
+    const years = await rowOptions(user, "Graduation year");
+    expect(years[0]).toBe("Any year");
+    expect(years).toContain("2027");
   });
 
   // #3970: the toolbar's controls are the shared chips, not native selects.
-  it("draws its filters and sort as chips, with no native select left", async () => {
+  it("draws its filters and sort with no native select left", async () => {
     const user = userEvent.setup();
     const { container } = render(<MembersDirectory />);
     expect(container.querySelector("select")).toBeNull();
@@ -664,17 +771,23 @@ describe("Directory on the greenfield shell", () => {
     );
     render(<MembersDirectory />);
 
-    await user.click(screen.getByRole("button", { name: "Role" }));
-    // Every option is there before anything is typed.
-    expect(await screen.findAllByRole("option")).toHaveLength(32);
+    await openFilterRow(user, "Role");
+    // Every option is there before anything is typed: Any role, then 31.
+    expect(await screen.findAllByRole("menuitemradio")).toHaveLength(32);
 
-    await user.type(screen.getByRole("combobox"), "trea");
-    expect(screen.getAllByRole("option")).toHaveLength(1);
-    await user.keyboard("{Enter}");
+    await user.type(
+      screen.getByRole("textbox", { name: "Search role" }),
+      "trea",
+    );
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(1);
+    await user.click(screen.getByRole("menuitemradio", { name: "Treasurer" }));
+    await closeFilterMenu(user);
 
+    // The filter that is on shows under the toolbar, and Filter counts it.
     expect(
-      screen.getByRole("button", { name: "Role: Treasurer" }),
+      screen.getByRole("button", { name: "Remove filter Role: Treasurer" }),
     ).toBeInTheDocument();
+    expect(filterButton()).toHaveAccessibleName("Filter members, 1 on");
     expect(screen.getByText("1 member")).toBeInTheDocument();
   });
 
@@ -694,10 +807,7 @@ describe("Directory on the greenfield shell", () => {
       ]),
     );
     const { unmount } = render(<MembersDirectory />);
-    await user.click(screen.getByRole("button", { name: "Role" }));
-    expect(
-      screen.queryByRole("menuitem", { name: "No base role" }),
-    ).not.toBeInTheDocument();
+    expect(await rowOptions(user, "Role")).not.toContain("No base role");
     unmount();
 
     // A chapter with no base roles has nothing to be missing.
@@ -709,10 +819,7 @@ describe("Directory on the greenfield shell", () => {
       ]),
     );
     const second = render(<MembersDirectory />);
-    await user.click(screen.getByRole("button", { name: "Role" }));
-    expect(
-      screen.queryByRole("menuitem", { name: "No base role" }),
-    ).not.toBeInTheDocument();
+    expect(await rowOptions(user, "Role")).not.toContain("No base role");
     second.unmount();
 
     Object.assign(
@@ -794,9 +901,9 @@ describe("Directory on the greenfield shell", () => {
 
     // Grace has no role. A sentinel string inside the comparator would put her
     // last ascending and FIRST descending; the partition keeps her last in both.
-    await pick(user, /^Sort:/, "Role A to Z");
+    await pick(user, "Sort", "Role A to Z");
     expect(rows()).toEqual(["Ada Lovelace", "Grace Hopper"]);
-    await pick(user, /^Sort:/, "Role Z to A");
+    await pick(user, "Sort", "Role Z to A");
     expect(rows()).toEqual(["Ada Lovelace", "Grace Hopper"]);
   });
 
@@ -823,23 +930,16 @@ describe("Directory on the greenfield shell", () => {
     it("no longer sorts by when a member joined Frapp", async () => {
       const user = userEvent.setup();
       render(<MembersDirectory />);
-      await user.click(screen.getByRole("button", { name: /^Sort:/ }));
-      expect(
-        screen.queryByRole("menuitem", { name: "Newest first" }),
-      ).toBeNull();
-      expect(
-        screen.queryByRole("menuitem", { name: "Oldest first" }),
-      ).toBeNull();
+      const sorts = await rowOptions(user, "Sort");
+      expect(sorts).not.toContain("Newest first");
+      expect(sorts).not.toContain("Oldest first");
     });
 
     it("shows no pledge class or order control to a chapter that uses neither", async () => {
       const user = userEvent.setup();
       render(<MembersDirectory />);
-      expect(screen.queryByRole("button", { name: /^Line/ })).toBeNull();
-      await user.click(screen.getByRole("button", { name: /^Sort:/ }));
-      expect(
-        screen.queryByRole("menuitem", { name: "Roll number" }),
-      ).toBeNull();
+      expect(await hasFilterRow(user, "Line")).toBe(false);
+      expect(await rowOptions(user, "Sort")).not.toContain("Roll number");
     });
 
     it("sorts by the chapter's class order, then number, under the chapter's word", async () => {
@@ -852,7 +952,7 @@ describe("Directory on the greenfield shell", () => {
       const user = userEvent.setup();
       render(<MembersDirectory />);
       expect(names()).toEqual(["Ada Lovelace", "Grace Hopper"]);
-      await pick(user, /^Sort:/, "Roll number");
+      await pick(user, "Sort", "Roll number");
       expect(names()).toEqual(["Grace Hopper", "Ada Lovelace"]);
     });
 
@@ -864,8 +964,8 @@ describe("Directory on the greenfield shell", () => {
       const user = userEvent.setup();
       render(<MembersDirectory />);
       // No classes, so no class filter; the number alone earns the sort.
-      expect(screen.queryByRole("button", { name: /^Line/ })).toBeNull();
-      await pick(user, /^Sort:/, "Roll number");
+      expect(await hasFilterRow(user, "Line")).toBe(false);
+      await pick(user, "Sort", "Roll number");
       expect(names()).toEqual(["Grace Hopper", "Ada Lovelace"]);
     });
 
@@ -878,18 +978,11 @@ describe("Directory on the greenfield shell", () => {
       const user = userEvent.setup();
       render(<MembersDirectory />);
       // The mocked chapter calls a class a "Line".
-      await user.click(screen.getByRole("button", { name: /^Line/ }));
-      expect(
-        (await screen.findAllByRole("menuitem")).map(
-          (item) => item.textContent,
-        ),
-      ).toEqual(["Any", "Beta", "Alpha"]);
-      await user.click(screen.getByRole("menuitem", { name: "Alpha" }));
+      expect(await rowOptions(user, "Line")).toEqual(["Any", "Beta", "Alpha"]);
+      await pick(user, "Line", "Alpha");
       expect(names()).toEqual(["Ada Lovelace"]);
       // Graduation year stays its own filter beside it.
-      expect(
-        screen.getByRole("button", { name: /Graduation year/ }),
-      ).toBeInTheDocument();
+      expect(await hasFilterRow(user, "Graduation year")).toBe(true);
     });
 
     it("clears the class filter with the others, and says a class with nobody in it matched nothing", async () => {
@@ -900,7 +993,7 @@ describe("Directory on the greenfield shell", () => {
       );
       const user = userEvent.setup();
       render(<MembersDirectory />);
-      await pick(user, /^Line/, "Beta");
+      await pick(user, "Line", "Beta");
       // An empty class is a filter that matched nothing, not an empty roster.
       await user.click(screen.getByRole("button", { name: "Clear filters" }));
       expect(names()).toEqual(["Ada Lovelace", "Grace Hopper"]);
@@ -916,11 +1009,8 @@ describe("Directory on the greenfield shell", () => {
       );
       const user = userEvent.setup();
       render(<MembersDirectory />);
-      expect(screen.queryByRole("button", { name: /^Line/ })).toBeNull();
-      await user.click(screen.getByRole("button", { name: /^Sort:/ }));
-      expect(
-        screen.queryByRole("menuitem", { name: "Roll number" }),
-      ).toBeNull();
+      expect(await hasFilterRow(user, "Line")).toBe(false);
+      expect(await rowOptions(user, "Sort")).not.toContain("Roll number");
     });
 
     it("falls back to the default sort and no class filter when the chapter's last class goes", async () => {
@@ -931,17 +1021,15 @@ describe("Directory on the greenfield shell", () => {
       );
       const user = userEvent.setup();
       const view = render(<MembersDirectory />);
-      await pick(user, /^Sort:/, "Roll number");
-      await pick(user, /^Line/, "Alpha");
+      await pick(user, "Sort", "Roll number");
+      await pick(user, "Line", "Alpha");
       expect(names()).toEqual(["Ada Lovelace"]);
       // Another officer deletes every class; the members lose theirs.
       Object.assign(classesRead, read([]));
       Object.assign(membersRead, read(MEMBERS));
       view.rerender(<MembersDirectory />);
       expect(names()).toEqual(["Ada Lovelace", "Grace Hopper"]);
-      expect(
-        screen.getByRole("button", { name: "Sort: Name A to Z" }),
-      ).toBeInTheDocument();
+      expect(await rowValue(user, "Sort")).toBe("Name A to Z");
     });
 
     it("names a member's class on their row, and in the row's label", () => {
@@ -975,12 +1063,11 @@ describe("Directory on the greenfield shell", () => {
   it("replaces the four sortable column headers with one sort control", async () => {
     const user = userEvent.setup();
     render(<MembersDirectory />);
-    await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
+    expect(await rowValue(user, "Sort")).toBe("Name A to Z");
     // Name and role in both directions, then the standings (#5950): most and
     // fewest points, most service hours. The join-date pair went with
     // #3939; the fraternal-order sort joins only a chapter that keeps one.
-    expect(await screen.findAllByRole("menuitem")).toHaveLength(7);
-    await user.keyboard("{Escape}");
+    expect(await rowOptions(user, "Sort")).toHaveLength(7);
     expect(screen.queryByRole("button", { name: /sort by name/i })).toBeNull();
   });
 
@@ -1033,11 +1120,9 @@ describe("Directory in a council (#5933)", () => {
       screen.getByRole("button", { name: /^Ada Lovelace,/ }),
     ).not.toHaveAccessibleName(/points/);
     expect(screen.getByText("Members")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
-    const sorts = (await screen.findAllByRole("menuitem")).map(
-      (item) => item.textContent,
-    );
-    expect(sorts.some((label) => /points/i.test(label ?? ""))).toBe(false);
+    expect(await rowValue(user, "Sort")).toBe("Name A to Z");
+    const sorts = await rowOptions(user, "Sort");
+    expect(sorts.some((label) => /points/i.test(label))).toBe(false);
   });
 });
 
@@ -1196,12 +1281,9 @@ describe("Actives on a chapter with alumni", () => {
     );
     render(<MembersDirectory />);
 
-    await user.click(screen.getByRole("button", { name: "Role" }));
-    expect(
-      await screen.findByRole("menuitem", { name: "Treasurer" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Alumni" })).toBeNull();
-    await user.keyboard("{Escape}");
+    const roles = await rowOptions(user, "Role");
+    expect(roles).toContain("Treasurer");
+    expect(roles).not.toContain("Alumni");
 
     await user.click(
       screen.getByRole("checkbox", {
@@ -1239,14 +1321,9 @@ describe("Actives on a chapter with alumni", () => {
     );
     render(<MembersDirectory />);
 
-    await user.click(screen.getByRole("button", { name: "Role" }));
-    expect(
-      await screen.findByRole("menuitem", { name: "President" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Old Admin" }),
-    ).toBeInTheDocument();
-    await user.keyboard("{Escape}");
+    const roles = await rowOptions(user, "Role");
+    expect(roles).toContain("President");
+    expect(roles).toContain("Old Admin");
 
     await user.click(
       screen.getByRole("checkbox", {
@@ -1317,15 +1394,15 @@ describe("Actives on a chapter with alumni", () => {
         name: /select all members on this page/i,
       }),
     );
-    await pick(user, "Assign role", "Treasurer");
+    await pickChip(user, "Assign role", "Treasurer");
     expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
 
     // Un-picking keeps the selection, which Clear would not.
-    await pick(user, "Assign role: Treasurer", "No role");
+    await pickChip(user, "Assign role: Treasurer", "No role");
     expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
     expect(screen.getByText("2 selected")).toBeInTheDocument();
 
-    await pick(user, "Assign role", "Treasurer");
+    await pickChip(user, "Assign role", "Treasurer");
     Object.assign(rolesRead, read([]));
     rerender(<MembersDirectory />);
     expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
@@ -1349,7 +1426,7 @@ describe("Actives on a chapter with alumni", () => {
       }),
     );
     expect(screen.getByText("2 selected")).toBeInTheDocument();
-    await pick(user, "Assign role", "Treasurer");
+    await pickChip(user, "Assign role", "Treasurer");
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     // Only Grace's assignment failed, so only Grace is left to retry.
@@ -1416,16 +1493,13 @@ describe("Actives on a chapter with alumni", () => {
     await pick(user, "Role", "Alumni");
     expect(screen.getByText(/1 member matching/)).toBeInTheDocument();
     expect(screen.getByText("Charles Whitmore III")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Graduation year" }));
-    expect(
-      await screen.findByRole("menuitem", { name: "2019" }),
-    ).toBeInTheDocument();
-    await user.keyboard("{Escape}");
+    expect(await rowOptions(user, "Graduation year")).toContain("2019");
 
     // Clearing the search takes the Alumni option away; the filter falls back
     // to all rather than silently filtering on an option no longer shown.
     await user.clear(screen.getByRole("searchbox"));
-    expect(screen.getByRole("button", { name: "Role" })).toBeInTheDocument();
+    expect(await rowValue(user, "Role")).toBe("Any role");
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
     expect(screen.getByText("2 members")).toBeInTheDocument();
   });
 
@@ -1460,11 +1534,12 @@ describe("MembersDirectory standings (#5950)", () => {
     const user = userEvent.setup();
     standings.boards.points = { "u-2": 30, "u-1": 12 };
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Most points");
+    await pick(user, "Sort", "Most points");
 
     expect(standings.asked.at(-1)).toEqual(["points", "semester"]);
+    // The standing and its period stay in sight on the count line.
     expect(
-      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
+      screen.getByText("2 members · Most points · This semester"),
     ).toBeInTheDocument();
     const rows = screen.getAllByRole("button", { name: /^ranked / });
     expect(rows[0]).toHaveAccessibleName(/^ranked 1, Grace Hopper/);
@@ -1477,27 +1552,32 @@ describe("MembersDirectory standings (#5950)", () => {
     const user = userEvent.setup();
     standings.boards.points = { "u-1": 5 };
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Most points");
-    await pick(user, /^Sort:/, "All time");
+    // No Period row until a standing is the sort.
+    expect(await hasFilterRow(user, "Period")).toBe(false);
+    await pick(user, "Sort", "Most points");
+    await pick(user, "Period", "All time");
     expect(standings.asked.at(-1)).toEqual(["points", "all"]);
+    // Sort and Period are orders, not filters: nothing is counted or chipped.
+    expect(filterButton()).toHaveAccessibleName("Filter members");
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
   });
 
   it("ranks by approved service hours too", async () => {
     const user = userEvent.setup();
     standings.boards.service = { "u-1": 150 };
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Most service hours");
+    await pick(user, "Sort", "Most service hours");
     const rows = screen.getAllByRole("button", { name: /^ranked / });
     expect(rows[0]).toHaveAccessibleName(/^ranked 1, Ada Lovelace/);
     expect(rows[0]).toHaveTextContent("2.5 hours");
   });
 
-  it("opens on the standing a link names", () => {
+  it("opens on the standing a link names", async () => {
+    const user = userEvent.setup();
     setAddress("/members?sort=points");
     render(<MembersDirectory />);
-    expect(
-      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
-    ).toBeInTheDocument();
+    expect(await rowValue(user, "Sort")).toBe("Most points");
+    expect(await rowValue(user, "Period")).toBe("This semester");
   });
 
   it("offers no standing, and no points on rows, while its module is off", async () => {
@@ -1506,13 +1586,10 @@ describe("MembersDirectory standings (#5950)", () => {
     setAddress("/members?sort=points");
     render(<MembersDirectory />);
     // A link to a standing whose module is off opens on the name instead.
-    await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
-    const items = (await screen.findAllByRole("menuitem")).map(
-      (item) => item.textContent,
-    );
+    expect(await rowValue(user, "Sort")).toBe("Name A to Z");
+    const items = await rowOptions(user, "Sort");
     expect(items).not.toContain("Most points");
     expect(items).not.toContain("Most service hours");
-    await user.keyboard("{Escape}");
     expect(screen.queryByText(/42 points/)).toBeNull();
   });
 
@@ -1520,7 +1597,7 @@ describe("MembersDirectory standings (#5950)", () => {
     const user = userEvent.setup();
     standings.boards.points = { "u-2": 30 };
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Most points");
+    await pick(user, "Sort", "Most points");
     expect(screen.getAllByRole("button", { name: /^ranked / })).toHaveLength(1);
     expect(
       screen.getByRole("button", { name: /^Ada Lovelace, you|^Ada Lovelace/ }),
@@ -1531,7 +1608,7 @@ describe("MembersDirectory standings (#5950)", () => {
     const user = userEvent.setup();
     standings.boards.points = { "u-2": 30 };
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Fewest points");
+    await pick(user, "Sort", "Fewest points");
     const rows = screen.getAllByRole("button", {
       name: /^(ranked \d+, )?(Ada Lovelace|Grace Hopper)/,
     });
@@ -1539,29 +1616,24 @@ describe("MembersDirectory standings (#5950)", () => {
     expect(rows[1]).toHaveAccessibleName(/^Ada Lovelace/);
   });
 
-  it("follows a later link's sort, since the page stays mounted", () => {
+  it("follows a later link's sort, since the page stays mounted", async () => {
+    const user = userEvent.setup();
     const { rerender } = render(<MembersDirectory />);
-    expect(
-      screen.getByRole("button", { name: "Sort: Name A to Z" }),
-    ).toBeInTheDocument();
+    expect(await rowValue(user, "Sort")).toBe("Name A to Z");
     setAddress("/members?sort=points");
     rerender(<MembersDirectory />);
-    expect(
-      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
-    ).toBeInTheDocument();
+    expect(await rowValue(user, "Sort")).toBe("Most points");
     // The sidebar's plain Directory link drops the param, and the sort with it.
     setAddress("/members");
     rerender(<MembersDirectory />);
-    expect(
-      screen.getByRole("button", { name: "Sort: Name A to Z" }),
-    ).toBeInTheDocument();
+    expect(await rowValue(user, "Sort")).toBe("Name A to Z");
   });
 
   it("says the standings didn't load rather than ranking everyone at 0", async () => {
     const user = userEvent.setup();
     standings.isError = true;
     render(<MembersDirectory />);
-    await pick(user, /^Sort:/, "Most points");
+    await pick(user, "Sort", "Most points");
     expect(screen.getByText("Couldn't load the standings")).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(
       0,

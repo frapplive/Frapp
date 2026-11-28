@@ -101,3 +101,40 @@ export function useDeadAddressParam(
   }, [name, value, dead]);
   return noted && noted.context === context ? noted.id : null;
 }
+
+/** The part of a TanStack read `useGoneAfterRecheck` looks at. */
+export interface RecheckableRead<Data> {
+  data: Data | undefined;
+  isFetching: boolean;
+  isError: boolean;
+  fetchStatus: "fetching" | "paused" | "idle";
+  refetch: () => Promise<unknown>;
+}
+
+/**
+ * Whether the record `id` names is gone from `read`: the read in hand
+ * doesn't hold it (`holds`), so it is read again once (it can be cached from
+ * before the record was added), and only a settled, successful read without
+ * it calls it gone. A failed, paused or in-flight read never does. Feed the
+ * answer to `useDeadAddressParam` (§ Addresses, "A dead or forbidden id").
+ */
+export function useGoneAfterRecheck<Data>(
+  id: string | null,
+  read: RecheckableRead<Data>,
+  holds: (data: Data, id: string) => boolean,
+): boolean {
+  const missing =
+    id !== null &&
+    read.data !== undefined &&
+    !read.isFetching &&
+    !read.isError &&
+    read.fetchStatus !== "paused" &&
+    !holds(read.data, id);
+  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
+  const { refetch } = read;
+  useEffect(() => {
+    if (!missing || recheckedFor === id) return;
+    void refetch().finally(() => setRecheckedFor(id));
+  }, [missing, recheckedFor, id, refetch]);
+  return missing && recheckedFor === id;
+}

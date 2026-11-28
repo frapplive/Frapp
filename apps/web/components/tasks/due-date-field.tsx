@@ -136,6 +136,7 @@ export function DueChip({
   note,
   disabled,
   now,
+  withoutTime = false,
   "aria-describedby": describedBy,
 }: {
   value: string;
@@ -150,6 +151,8 @@ export function DueChip({
   note?: string | null;
   disabled?: boolean;
   now?: Date;
+  /** A day only, no time of day (an action item's task, #6178). */
+  withoutTime?: boolean;
   /** The card's line saying what is wrong ({@link dueChipProblem}). */
   "aria-describedby"?: string;
 }) {
@@ -198,6 +201,7 @@ export function DueChip({
           onChange={onChange}
           disabled={disabled}
           now={now}
+          withoutTime={withoutTime}
         />
         {note && !problem ? (
           <p className="text-caption text-muted-foreground">{note}</p>
