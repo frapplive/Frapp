@@ -131,6 +131,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "You can link Google or Apple to the account you already have in Settings, so either one signs you in, and unlink one you no longer use.",
       "In Chapter settings, pledge classes and member fields are now lists where each one opens its own page, and a member field can now be renamed, reordered and have its options changed.",
       "Chat notifications for messages sent in a quiet hour no longer go missing: they now arrive, a few seconds late at most.",
+      "Officers can now make any action item in posted minutes a task and assign it to people, even after the suggested tasks were gone through or dismissed.",
     ],
     web: [
       "In Documents, Back now returns to the folder or file you had open, and a reload or a shared link lands on the same folder and file.",
@@ -142,6 +143,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "In Chat and Messages, Back now returns to the conversation or thread you were reading, and a reload or a copied address opens the same conversation and thread.",
       "When you come back to the dashboard, your name, your chapter, the sidebar, members' names and the calendar show right away while they refresh.",
       "In Chapter settings, Back now returns to the row or page you were on, and a reload or a copied address opens the same page, including a study zone's editor.",
+      "The Directory's filters and sort live in one Filter button beside the search, and the filters you've turned on show as chips you can remove.",
     ],
     phone: [
       "In Chapter settings, the Announcements page's channel row now opens that channel's settings.",
