@@ -10,6 +10,7 @@ import {
   RENAME_DOCUMENT_TITLE,
   mayRefileDocument,
   mayRenameDocument,
+  moveAccessNote,
 } from "@repo/hooks/document-library";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,9 @@ export type DocumentRefile = {
   onMove: (doc: ChapterDocument) => void;
 };
 
+/** A folder as the move needs it: its name, and its list when it has one. */
+type FolderRow = { name: string; who_can_see?: readonly string[] | null };
+
 type Asking = { kind: "rename" | "move"; doc: ChapterDocument } | null;
 
 /**
@@ -57,8 +61,8 @@ export function useDocumentRefile({
   manages,
 }: {
   gate: SubscriptionGate;
-  /** The chapter's folder names this member sees, in the rail's order. */
-  folders: readonly string[];
+  /** The chapter's folders this member sees, in the rail's order. */
+  folders: readonly FolderRow[];
   viewerId: string | null;
   /** Holds `chapter_docs:manage`. */
   manages: boolean;
@@ -71,24 +75,25 @@ export function useDocumentRefile({
     onMove: (doc) => setAsking({ kind: "move", doc }),
   };
   const close = () => setAsking(null);
-  const dialogs = (
-    <>
+  // Mounted only while asked, so a closed question holds no mutation and
+  // each one opens on its own file's name and folder.
+  const dialogs =
+    asking?.kind === "rename" ? (
       <RenameDocumentDialog
-        // A new question opens on the file's own name.
-        key={asking?.kind === "rename" ? `rename:${asking.doc.id}` : "rename"}
-        doc={asking?.kind === "rename" ? asking.doc : null}
+        key={asking.doc.id}
+        doc={asking.doc}
         gate={gate}
         onClose={close}
       />
+    ) : asking?.kind === "move" ? (
       <MoveDocumentDialog
-        key={asking?.kind === "move" ? `move:${asking.doc.id}` : "move"}
-        doc={asking?.kind === "move" ? asking.doc : null}
+        key={asking.doc.id}
+        doc={asking.doc}
         folders={folders}
         gate={gate}
         onClose={close}
       />
-    </>
-  );
+    ) : null;
   return { refile, dialogs };
 }
 
@@ -195,7 +200,7 @@ function MoveDocumentDialog({
   onClose,
 }: {
   doc: ChapterDocument | null;
-  folders: readonly string[];
+  folders: readonly FolderRow[];
   gate: SubscriptionGate;
   onClose: () => void;
 }) {
@@ -205,7 +210,14 @@ function MoveDocumentDialog({
   const [picked, setPicked] = useState<string | null>(current);
   const [problem, setProblem] = useState<string | null>(null);
   const unchanged = picked === current;
-  const choices: FolderChoice[] = folders.map((name) => ({ key: name, name }));
+  const choices: FolderChoice[] = folders.map(({ name }) => ({
+    key: name,
+    name,
+  }));
+  // Said before the move, as the spec asks: who sees it changes with its
+  // folder's list (`spec/behavior/chapter-docs.md` § Rename and move).
+  const accessNote =
+    doc && !unchanged ? moveAccessNote(doc, folders, current, picked) : null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -270,6 +282,11 @@ function MoveDocumentDialog({
                 </SelectFieldButton>
               }
             />
+            {accessNote ? (
+              <p className="text-caption text-muted" aria-live="polite">
+                {accessNote}
+              </p>
+            ) : null}
             {problem ? (
               <p className="text-caption text-destructive" role="alert">
                 {problem}

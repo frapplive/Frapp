@@ -44,6 +44,8 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
   const onDelete = vi.fn();
   const onOpenInDrive = vi.fn();
   const onUploadVersion = vi.fn();
+  const onRename = vi.fn();
+  const onMove = vi.fn();
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
@@ -57,6 +59,8 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
           onDelete={onDelete}
           onOpenInDrive={onOpenInDrive}
           onUploadVersion={onUploadVersion}
+          onRename={onRename}
+          onMove={onMove}
         />
       </FrappThemeProvider>,
       {
@@ -74,6 +78,8 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
     onDelete,
     onOpenInDrive,
     onUploadVersion,
+    onRename,
+    onMove,
   };
 }
 
@@ -166,7 +172,12 @@ describe("DocumentActionsSheet (#3934)", () => {
       driveUrl: "https://drive.google.com/file/d/abc/view",
     };
     const { tree, onOpenInDrive } = render(drive, false);
-    expect(rowLabels(tree)).toEqual(["Star", "Open in Google Drive"]);
+    // Renamed in Drive (#5563): said in Rename's place, and opens it there.
+    expect(rowLabels(tree)).toEqual([
+      "Star",
+      "Rename in Google Drive",
+      "Open in Google Drive",
+    ]);
     act(() => row(tree, "Open in Google Drive").props.onPress());
     finishClosing(tree);
     expect(onOpenInDrive).toHaveBeenCalledWith(drive.driveUrl);
@@ -192,5 +203,47 @@ describe("DocumentActionsSheet (#3934)", () => {
     expect(
       rowLabels(render({ ...FOLDER, canUploadVersion: true }, true).tree),
     ).not.toContain("Upload a new version");
+  });
+
+  // #5563: the screen decides who may (`mayRenameDocument`,
+  // `mayRefileDocument`); the sheet offers each row only then.
+  it("offers Rename and Move to folder on a file the member may change", () => {
+    const mine = { ...FILE, canRename: true, canMove: true };
+    const { tree, onRename, onMove } = render(mine, false);
+    expect(rowLabels(tree)).toEqual(["Star", "Rename", "Move to folder"]);
+
+    act(() => row(tree, "Rename").props.onPress());
+    expect(onRename).not.toHaveBeenCalled();
+    finishClosing(tree);
+    expect(onRename).toHaveBeenCalledWith(mine);
+
+    act(() => row(tree, "Move to folder").props.onPress());
+    finishClosing(tree);
+    expect(onMove).toHaveBeenCalledWith(mine);
+
+    // A linked Drive file moves, but is renamed in Drive.
+    expect(
+      rowLabels(
+        render(
+          {
+            ...FILE,
+            canMove: true,
+            driveUrl: "https://drive.google.com/file/d/abc/view",
+          },
+          false,
+        ).tree,
+      ),
+    ).toEqual([
+      "Star",
+      "Rename in Google Drive",
+      "Move to folder",
+      "Open in Google Drive",
+    ]);
+    expect(rowLabels(render(FILE, true).tree)).not.toContain("Rename");
+    expect(
+      rowLabels(
+        render({ ...FOLDER, canRename: true, canMove: true }, true).tree,
+      ),
+    ).toEqual(["Unstar", "Unpin for the chapter"]);
   });
 });

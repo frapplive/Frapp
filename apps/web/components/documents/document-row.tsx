@@ -363,10 +363,7 @@ function useRowActions({
   newVersion,
   onRename,
   onMove,
-}: Omit<
-  Parameters<typeof DocumentControls>[0],
-  "className" | "menuButton"
-> & {
+}: Omit<Parameters<typeof DocumentControls>[0], "className" | "menuButton"> & {
   onRename?: (doc: ChapterDocument) => void;
   onMove?: (doc: ChapterDocument) => void;
 }): RowMenuEntry[] {
@@ -538,119 +535,123 @@ function DocumentControls({
   return (
     <div className={cn("flex items-center gap-1", className)}>
       <div className="flex items-center gap-1 pointer-coarse:hidden">
-      {/*
+        {/*
         Star for everyone, Pin for whoever manages documents (#3934). Each
         stays lit while on, so a pinned or starred row says so in its
         controls rather than in another badge on the meta line. A member
         without `chapter_docs:manage` sees a pinned row's pin as a mark
         only, since they can't change it.
       */}
-      <IconButton
-        label={starred ? `Unstar ${doc.title}` : `Star ${doc.title}`}
-        aria-pressed={starred}
-        className={starred ? "text-accent-text" : undefined}
-        {...{ [KEEP_FOCUS_ATTRIBUTE]: `star:${doc.id}` }}
-        onClick={() => onToggleStar(doc)}
-        {...gate.controlProps()}
-      >
-        <StarGlyph active={starred} />
-      </IconButton>
-      <Can
-        permission="chapter_docs:manage"
-        deniedFallback={
-          pinned ? (
-            <span
-              className="inline-flex h-9 w-9 items-center justify-center text-accent-text"
-              title="Pinned for the chapter"
-            >
-              <PinGlyph className="h-4 w-4" active />
-              <span className="sr-only">Pinned for the chapter</span>
-            </span>
-          ) : null
-        }
-      >
         <IconButton
-          label={
-            pinned
-              ? `Unpin ${doc.title} for the chapter`
-              : `Pin ${doc.title} for the chapter`
-          }
-          aria-pressed={pinned}
-          className={pinned ? "text-accent-text" : undefined}
-          {...{ [KEEP_FOCUS_ATTRIBUTE]: `pin:${doc.id}` }}
-          onClick={() => onTogglePin(doc)}
-          {...gate.controlProps(pinBusy)}
+          label={starred ? `Unstar ${doc.title}` : `Star ${doc.title}`}
+          aria-pressed={starred}
+          className={starred ? "text-accent-text" : undefined}
+          {...{ [KEEP_FOCUS_ATTRIBUTE]: `star:${doc.id}` }}
+          onClick={() => onToggleStar(doc)}
+          {...gate.controlProps()}
         >
-          <PinGlyph active={pinned} />
+          <StarGlyph active={starred} />
         </IconButton>
-      </Can>
-      {/*
+        <Can
+          permission="chapter_docs:manage"
+          deniedFallback={
+            pinned ? (
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center text-accent-text"
+                title="Pinned for the chapter"
+              >
+                <PinGlyph className="h-4 w-4" active />
+                <span className="sr-only">Pinned for the chapter</span>
+              </span>
+            ) : null
+          }
+        >
+          <IconButton
+            label={
+              pinned
+                ? `Unpin ${doc.title} for the chapter`
+                : `Pin ${doc.title} for the chapter`
+            }
+            aria-pressed={pinned}
+            className={pinned ? "text-accent-text" : undefined}
+            {...{ [KEEP_FOCUS_ATTRIBUTE]: `pin:${doc.id}` }}
+            onClick={() => onTogglePin(doc)}
+            {...gate.controlProps(pinBusy)}
+          >
+            <PinGlyph active={pinned} />
+          </IconButton>
+        </Can>
+        {/*
         Who can see (#3642 piece 1), for its uploader and whoever manages
         documents, as Drive puts Share on each file's own row. The page
         decides who gets it, so it is absent rather than refused.
       */}
-      {onSetAccess ? (
-        <IconButton
-          label={`Who can see ${doc.title}`}
-          onClick={() => onSetAccess(doc)}
-          {...gate.controlProps()}
-        >
-          <Users />
-        </IconButton>
-      ) : null}
-      {/*
+        {onSetAccess ? (
+          <IconButton
+            label={`Who can see ${doc.title}`}
+            onClick={() => onSetAccess(doc)}
+            {...gate.controlProps()}
+          >
+            <Users />
+          </IconButton>
+        ) : null}
+        {/*
         A Drive file opens in Drive (#6055), where its working copy is:
         an edit there syncs back, and a downloaded copy would not.
       */}
-      {drive ? (
-        <IconButton label={`Open ${doc.title} in Google Drive`} asChild>
-          <a href={drive} target="_blank" rel="noopener noreferrer">
-            <DriveGlyph />
-          </a>
-        </IconButton>
-      ) : null}
-      {isMinutesDocument(doc) ? null : (
-        <DownloadButton id={doc.id} title={doc.title} />
-      )}
-      {/*
+        {drive ? (
+          <IconButton label={`Open ${doc.title} in Google Drive`} asChild>
+            <a href={drive} target="_blank" rel="noopener noreferrer">
+              <DriveGlyph />
+            </a>
+          </IconButton>
+        ) : null}
+        {isMinutesDocument(doc) ? null : (
+          <DownloadButton id={doc.id} title={doc.title} />
+        )}
+        {/*
         Upload a new version (#6055), beside Download: the way back for a
         file downloaded and changed. The picker opens at once and the file
         lands on this same row, as Drive's and Dropbox's do.
       */}
-      {newVersion ? (
-        <IconButton
-          label={`Upload a new version of ${doc.title}`}
-          onClick={newVersion.choose}
-          aria-busy={newVersion.busy}
-          {...gate.controlProps(newVersion.busy)}
-        >
-          {newVersion.busy ? <Loader2 className="animate-spin" /> : <FileUp />}
-        </IconButton>
-      ) : null}
-      {/*
+        {newVersion ? (
+          <IconButton
+            label={`Upload a new version of ${doc.title}`}
+            onClick={newVersion.choose}
+            aria-busy={newVersion.busy}
+            {...gate.controlProps(newVersion.busy)}
+          >
+            {newVersion.busy ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <FileUp />
+            )}
+          </IconButton>
+        ) : null}
+        {/*
         A copy of a Drive file (#5157) has no Delete: Drive owns it, the API
         refuses, and the next sync would bring it back. Nor do a meeting's
         minutes (#5949): they are deleted as minutes, from their own page.
       */}
-      <Can permission="chapter_docs:manage">
-        {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
-          <>
-            {/*
+        <Can permission="chapter_docs:manage">
+          {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
+            <>
+              {/*
         `DELETE /v1/documents/:id` sits behind the same guard
         as upload, so gating only the upload trigger would
         have the page claim writes are blocked while still
         offering one per row.
       */}
-            <IconButton
-              label={`Delete ${doc.title}`}
-              onClick={() => onDelete(doc)}
-              {...gate.controlProps(deleting)}
-            >
-              <Trash2 />
-            </IconButton>
-          </>
-        )}
-      </Can>
+              <IconButton
+                label={`Delete ${doc.title}`}
+                onClick={() => onDelete(doc)}
+                {...gate.controlProps(deleting)}
+              >
+                <Trash2 />
+              </IconButton>
+            </>
+          )}
+        </Can>
       </div>
       {menuButton}
     </div>

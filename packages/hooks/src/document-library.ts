@@ -971,6 +971,36 @@ export const LIMITED_LABEL = "Not everyone can see this";
 type AccessListed = { who_can_see?: readonly string[] | null };
 
 /**
+ * What moving a file from one folder to another does to who sees it (#5563,
+ * `spec/behavior/chapter-docs.md` § Rename and move), said before the move,
+ * or null when nothing changes. A file follows its folder's list, narrowed by
+ * its own: into a folder with a list, only that list's people see it; out of
+ * one into an open folder (or none), everyone in the chapter does, unless the
+ * file keeps a list of its own.
+ */
+export function moveAccessNote(
+  doc: AccessListed,
+  folders: readonly ({ name: string } & AccessListed)[],
+  from: string | null,
+  to: string | null,
+): string | null {
+  const listOf = (name: string | null) =>
+    name === null
+      ? null
+      : (folders.find((folder) => folder.name === name)?.who_can_see ?? null);
+  const key = (list: readonly string[] | null) =>
+    list === null ? null : [...list].sort().join("\u0000");
+  const fromList = listOf(from);
+  const toList = listOf(to);
+  if (key(fromList) === key(toList)) return null;
+  if (toList !== null && to !== null) {
+    return `Only people who can see ${to} will see it.`;
+  }
+  if (doc.who_can_see != null) return null;
+  return "Everyone in the chapter will see it.";
+}
+
+/**
  * Which files draw the lock (#5216), on web and the phone alike: a file with
  * its own list, one in a folder with a list, and one in a folder this member
  * can't see. The last is a file they uploaded before losing that folder

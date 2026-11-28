@@ -44,6 +44,7 @@ const {
   mockDeleteType,
   accessQuery,
   mockSetAccess,
+  mockUpdateDocument,
   mockRequestVersion,
   mockReplaceFile,
 } = vi.hoisted(() => ({
@@ -56,6 +57,8 @@ const {
     isError: false,
   },
   mockSetAccess: vi.fn().mockResolvedValue({}),
+  // Rename and Move to folder (#5563).
+  mockUpdateDocument: vi.fn().mockResolvedValue({}),
   // Upload a new version (#6055).
   mockRequestVersion: vi.fn(),
   mockReplaceFile: vi.fn(),
@@ -208,6 +211,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDocumentAccessOptions: () => accessQuery,
   useSetDocumentAccess: () => ({
     mutateAsync: mockSetAccess,
+    isPending: false,
+  }),
+  useUpdateDocument: () => ({
+    mutateAsync: mockUpdateDocument,
     isPending: false,
   }),
 }));
@@ -2970,10 +2977,13 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     });
   });
 
-  it("keeps a row's controls out of sight until hover or focus, and behind More on touch (#5576)", () => {
+  it("keeps a row's controls out of sight until hover or focus, and ends them in More, alone on touch (#5576, #5563)", () => {
     render(<DocumentsPage />);
     const star = screen.getByRole("button", { name: "Star Chapter bylaws" });
-    const controls = star.closest("div")!;
+    // The icons go on touch; More stays, so it is the touch door.
+    const icons = star.closest("div")!;
+    expect(icons.className).toContain("pointer-coarse:hidden");
+    const controls = icons.parentElement!;
     // jsdom can't run the media queries, so the classes are the contract.
     expect(controls.className).toContain("pointer-fine:opacity-0");
     expect(controls.className).toContain(
@@ -2982,13 +2992,14 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     expect(controls.className).toContain(
       "pointer-fine:group-focus-within/row:opacity-100",
     );
-    expect(controls.className).toContain("pointer-coarse:hidden");
+    expect(controls.className).not.toContain("pointer-coarse:hidden");
+    // With a mouse, More ends the hover controls (Rename and Move to folder
+    // have no icon of their own, so they are never right-click only).
     const more = screen.getByRole("button", {
       name: "More for Chapter bylaws",
     });
-    const slot = more.parentElement!;
-    expect(slot.className).toContain("pointer-coarse:inline-flex");
-    expect(slot.className).toMatch(/(^|\s)hidden(\s|$)/);
+    expect(controls.contains(more)).toBe(true);
+    expect(icons.contains(more)).toBe(false);
   });
 
   it("offers the row's actions from the touch More menu (#5576)", async () => {
@@ -3779,6 +3790,143 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).toBeInTheDocument();
     await waitFor(() => expect(window.location.search).toBe(""));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  describe("Rename and Move to folder (#5563)", () => {
+    const openMenu = async (title: string) => {
+      fireEvent.contextMenu(
+        screen.getByRole("button", { name: new RegExp(`^${title}`) }),
+      );
+      return screen.findAllByRole("menuitem");
+    };
+    const itemNamed = (items: HTMLElement[], label: string) =>
+      items.find((entry) => entry.textContent === label);
+
+    beforeEach(() => mockUpdateDocument.mockClear());
+
+    it("renames a file from its menu", async () => {
+      manageGate.granted = true;
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      const rename = itemNamed(await openMenu("Chapter bylaws"), "Rename");
+      await user.click(rename!);
+      const dialog = await screen.findByRole("dialog");
+      const field = within(dialog).getByLabelText("Name");
+      expect(field).toHaveValue("Chapter bylaws");
+      // The commit waits for a name that differs.
+      expect(
+        within(dialog).getByRole("button", { name: "Rename" }),
+      ).toBeDisabled();
+      await user.clear(field);
+      await user.type(field, "Bylaws 2026");
+      await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+      expect(mockUpdateDocument).toHaveBeenCalledWith({
+        id: "doc-1",
+        title: "Bylaws 2026",
+      });
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+    });
+
+    it("keeps a refusal in the dialog, in the server's words", async () => {
+      manageGate.granted = true;
+      mockUpdateDocument.mockRejectedValueOnce({
+        statusCode: 409,
+        message: "This file keeps its name from Google Drive.",
+      });
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      await user.click(itemNamed(await openMenu("Chapter bylaws"), "Rename")!);
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Name"), " v2");
+      await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+      expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("moves a file to another folder from its menu", async () => {
+      manageGate.granted = true;
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      await user.click(
+        itemNamed(await openMenu("Chapter bylaws"), "Move to folder")!,
+      );
+      const dialog = await screen.findByRole("dialog");
+      const move = within(dialog).getByRole("button", { name: "Move file" });
+      expect(move).toBeDisabled();
+      await user.click(within(dialog).getByRole("button", { name: "Folder" }));
+      await user.click(await screen.findByRole("option", { name: "Rush" }));
+      await user.click(move);
+      expect(mockUpdateDocument).toHaveBeenCalledWith({
+        id: "doc-1",
+        folder: "Rush",
+      });
+    });
+
+    it("says who will see it before a move into a limited folder", async () => {
+      manageGate.granted = true;
+      foldersQuery.data = [
+        { id: "f-1", name: "Governance", sort_order: 0 },
+        {
+          id: "f-2",
+          name: "Rush",
+          sort_order: 1,
+          who_can_see: ["tier:t-exec"],
+        },
+      ];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      await user.click(
+        itemNamed(await openMenu("Chapter bylaws"), "Move to folder")!,
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).queryByText(/will see it/)).not.toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Folder" }));
+      await user.click(await screen.findByRole("option", { name: "Rush" }));
+      expect(
+        within(dialog).getByText("Only people who can see Rush will see it."),
+      ).toBeInTheDocument();
+    });
+
+    it("offers neither to a member who didn't upload the file", async () => {
+      manageGate.granted = false;
+      render(<DocumentsPage />);
+      const items = await openMenu("Chapter bylaws");
+      expect(itemNamed(items, "Rename")).toBeUndefined();
+      expect(itemNamed(items, "Move to folder")).toBeUndefined();
+    });
+
+    it("offers both to the file's uploader", async () => {
+      manageGate.granted = false;
+      documentsQuery.data = [{ ...BYLAWS, uploaded_by: "viewer-1" }];
+      render(<DocumentsPage />);
+      const items = await openMenu("Chapter bylaws");
+      expect(itemNamed(items, "Rename")).toBeDefined();
+      expect(itemNamed(items, "Move to folder")).toBeDefined();
+    });
+
+    it("says a Drive file is renamed in Drive, and moves no Drive folder copy", async () => {
+      manageGate.granted = true;
+      documentsQuery.data = [
+        {
+          ...BYLAWS,
+          id: "doc-3",
+          title: "Synced minutes",
+          drive_file_id: "drive-1",
+          drive_url: "https://drive.google.com/file/d/drive-1/view",
+        },
+      ];
+      render(<DocumentsPage />);
+      const items = await openMenu("Synced minutes");
+      expect(itemNamed(items, "Rename")).toBeUndefined();
+      expect(itemNamed(items, "Move to folder")).toBeUndefined();
+      const inDrive = itemNamed(items, "Rename in Google Drive");
+      expect(inDrive?.closest("a") ?? inDrive).toHaveAttribute(
+        "href",
+        "https://drive.google.com/file/d/drive-1/view",
+      );
+    });
   });
 
   it("puts Who can see in the address", async () => {

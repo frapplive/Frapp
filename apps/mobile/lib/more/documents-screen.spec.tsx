@@ -99,6 +99,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: vi.fn(),
   }),
   useSetDocumentStar: () => ({ mutateAsync: setStar }),
+  useUpdateDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
   useSetDocumentPin: () => ({ mutateAsync: setPin, isPending: false }),
   useViewerUserId: () => viewerId,
   useRequestDocumentVersionUploadUrl: () => ({ mutateAsync: requestVersion }),

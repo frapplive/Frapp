@@ -23,6 +23,7 @@ import {
   mayRefileDocument,
   mayRenameDocument,
   mayUploadNewVersion,
+  moveAccessNote,
 } from "./document-library";
 
 type ChapterDocument = {
@@ -824,5 +825,40 @@ describe("rename and move (#5563)", () => {
     expect(mayRenameDocument(linked, "me", manager)).toBe(false);
     expect(mayRenameDocument(folderCopy, "me", manager)).toBe(false);
     expect(mayRenameDocument(minutes, "me", manager)).toBe(false);
+  });
+});
+
+describe("moveAccessNote (#5563)", () => {
+  const folders = [
+    { name: "Exec", who_can_see: ["tier:t-exec"] },
+    { name: "Officers", who_can_see: ["tier:t-exec"] },
+    { name: "Rush", who_can_see: null },
+  ];
+  const file = { who_can_see: null };
+
+  it("says nothing when who sees it stays the same", () => {
+    expect(moveAccessNote(file, folders, "Rush", null)).toBeNull();
+    expect(moveAccessNote(file, folders, "Exec", "Officers")).toBeNull();
+  });
+
+  it("names the list a move into a limited folder narrows it to", () => {
+    expect(moveAccessNote(file, folders, "Rush", "Exec")).toBe(
+      "Only people who can see Exec will see it.",
+    );
+  });
+
+  it("says a move out of a limited folder opens it to the chapter", () => {
+    expect(moveAccessNote(file, folders, "Exec", null)).toBe(
+      "Everyone in the chapter will see it.",
+    );
+    expect(moveAccessNote(file, folders, "Exec", "Rush")).toBe(
+      "Everyone in the chapter will see it.",
+    );
+  });
+
+  it("doesn't say everyone when the file keeps a list of its own", () => {
+    expect(
+      moveAccessNote({ who_can_see: ["role:r-1"] }, folders, "Exec", null),
+    ).toBeNull();
   });
 });

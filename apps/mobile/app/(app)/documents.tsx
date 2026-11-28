@@ -53,6 +53,7 @@ import {
   mayUploadNewVersion,
   markedItems,
   MOVE_DOCUMENT_TITLE,
+  moveAccessNote,
   NO_FOLDER_LABEL,
   NO_MARK_FILTER,
   tierRows,
@@ -110,6 +111,7 @@ import {
   ForwardGlyph,
 } from "@/components/control-glyphs";
 import { OptionSheet } from "@/components/option-sheet";
+import { confirmAlert } from "@/lib/minutes/meetings-on";
 import { RenameDocumentSheet } from "@/components/documents/rename-document-sheet";
 import { useListLayout } from "@/lib/list-layout";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -692,8 +694,26 @@ export default function DocumentsScreen() {
     [folders],
   );
 
-  async function moveDocument(target: DocumentActionsTarget, to: string | null) {
-    if (to === (target.folder ?? null)) return;
+  async function moveDocument(
+    target: DocumentActionsTarget,
+    to: string | null,
+  ) {
+    const from = target.folder ?? null;
+    if (to === from) return;
+    // Said before the move, as the spec asks: who sees it changes with its
+    // folder's list (`spec/behavior/chapter-docs.md` § Rename and move).
+    const doc = documents.find((row) => row.id === target.id);
+    const note = doc ? moveAccessNote(doc, folders, from, to) : null;
+    if (
+      note &&
+      !(await confirmAlert({
+        title: `Move to ${to ?? NO_FOLDER_LABEL}?`,
+        body: note,
+        confirmLabel: "Move",
+      }))
+    ) {
+      return;
+    }
     try {
       await updateDocument.mutateAsync({ id: target.id, folder: to });
       AccessibilityInfo.announceForAccessibility(
