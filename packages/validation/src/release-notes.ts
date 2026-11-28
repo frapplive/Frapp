@@ -120,6 +120,20 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-28",
+    title: "New in this update",
+    changes: [
+      "There's a new Holiday chat background, deep green with a soft red glow and gentle falling snow.",
+      "Chapter settings' name, identity, vocabulary, mark and accent now save as you go, with no Save button to press.",
+    ],
+    web: [
+      "Discord import, Reports and Study zones in Chapter settings now use the same tidy rows as the rest of settings, with Discord import's progress showing right on the Chat page.",
+    ],
+    phone: [
+      "The Directory's filters, sort and standings period are now in one Filters sheet, and the filters you turn on show as chips under the search, each one tap to remove.",
+    ],
+  },
+  {
     date: "2026-11-27",
     title: "New in this update",
     changes: [
