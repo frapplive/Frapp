@@ -141,6 +141,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "In the Calendar, Back now closes the event or the hour grid you opened, and a reload or a shared link lands on the same day and event.",
       "In Chat and Messages, Back now returns to the conversation or thread you were reading, and a reload or a copied address opens the same conversation and thread.",
       "When you come back to the dashboard, your name, your chapter, the sidebar, members' names and the calendar show right away while they refresh.",
+      "In Chapter settings, Back now returns to the row or page you were on, and a reload or a copied address opens the same page, including a study zone's editor.",
     ],
     phone: [
       "In Chapter settings, the Announcements page's channel row now opens that channel's settings.",
