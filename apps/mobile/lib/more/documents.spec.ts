@@ -6,6 +6,7 @@ import {
   toLibraryDocuments,
 } from "@repo/hooks/document-library";
 import {
+  documentActionsHint,
   documentMeta,
   documentOpenHint,
   selectDocumentFolders,
@@ -79,6 +80,7 @@ describe("selectDocuments", () => {
         pinned_at: "2026-11-11T00:00:00.000Z",
         drive_file_id: null,
         drive_url: null,
+        drive_link_status: null,
         meeting_id: null,
         minutes: null,
       },
@@ -334,5 +336,28 @@ describe("selectDownloadUrl", () => {
     expect(selectDownloadUrl(undefined)).toBeNull();
     expect(selectDownloadUrl({ id: "d-1" })).toBeNull();
     expect(selectDownloadUrl({ downloadUrl: "" })).toBeNull();
+  });
+});
+
+describe("documentActionsHint (#5563)", () => {
+  const none = {
+    canPin: false,
+    canRename: false,
+    canMove: false,
+    canDelete: false,
+  };
+  it("says what the long-press sheet holds, in its order", () => {
+    expect(documentActionsHint(none)).toBe("Star or unstar");
+    expect(
+      documentActionsHint({ ...none, canRename: true, canMove: true }),
+    ).toBe("Star, rename or move");
+    expect(
+      documentActionsHint({
+        canPin: true,
+        canRename: true,
+        canMove: true,
+        canDelete: true,
+      }),
+    ).toBe("Star, pin, rename, move or delete");
   });
 });

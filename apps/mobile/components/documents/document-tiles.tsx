@@ -58,8 +58,8 @@ export function DocumentTiles({
   busyIds: ReadonlySet<string>;
   /** Files being deleted take no long press either, as their rows don't. */
   deletingIds: ReadonlySet<string>;
-  /** The long press's spoken name, matched to what the viewer may do. */
-  actionsLabel: string;
+  /** Each tile's long press, spoken: what the viewer may do to that file (#5563). */
+  actionsLabel: (doc: MobileDocument) => string;
   onOpen: (doc: MobileDocument) => void;
   onActions: (doc: MobileDocument) => void;
 }) {
@@ -104,7 +104,7 @@ export function DocumentTiles({
                 accessibilityState={{ busy }}
                 accessibilityActions={
                   actionable
-                    ? [{ name: "longpress", label: actionsLabel }]
+                    ? [{ name: "longpress", label: actionsLabel(doc) }]
                     : undefined
                 }
                 onAccessibilityAction={(event) => {

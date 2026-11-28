@@ -19,7 +19,12 @@ import {
   kindOptions,
   isMarkFiltering,
   limitedDocumentCheck,
+  isDriveFolderCopy,
+  mayMoveDocument,
+  mayRefileDocument,
+  mayRenameDocument,
   mayUploadNewVersion,
+  moveAccessNote,
 } from "./document-library";
 
 type ChapterDocument = {
@@ -779,5 +784,121 @@ describe("mayUploadNewVersion", () => {
         manages,
       ),
     ).toBe(false);
+  });
+});
+
+describe("rename and move (#5563)", () => {
+  const upload = {
+    uploaded_by: "me",
+    drive_file_id: null,
+    drive_link_status: null,
+    meeting_id: null,
+  };
+  const folderCopy = { ...upload, drive_file_id: "drive-1" };
+  const linked = { ...folderCopy, drive_link_status: "active" };
+  const minutes = { ...upload, meeting_id: "mtg-1" };
+  const member = { manages: false };
+  const manager = { manages: true };
+
+  it("tells a Drive folder copy from a file added by its link", () => {
+    expect(isDriveFolderCopy(folderCopy)).toBe(true);
+    expect(isDriveFolderCopy(linked)).toBe(false);
+    expect(isDriveFolderCopy(upload)).toBe(false);
+  });
+
+  it("lets the uploader and whoever manages documents move a file", () => {
+    expect(mayRefileDocument(upload, "me", member)).toBe(true);
+    expect(mayRefileDocument(upload, "someone", manager)).toBe(true);
+    expect(mayRefileDocument(upload, "someone", member)).toBe(false);
+    expect(mayRefileDocument(upload, null, member)).toBe(false);
+  });
+
+  it("moves a linked file and minutes, never a Drive folder copy", () => {
+    expect(mayRefileDocument(linked, "me", member)).toBe(true);
+    expect(mayRefileDocument(minutes, "me", member)).toBe(true);
+    expect(mayRefileDocument(folderCopy, "someone", manager)).toBe(false);
+  });
+
+  it("moves only once folders load, and only out of a folder in sight", () => {
+    const filed = { ...upload, folder: "Exec" };
+    const seen = [{ name: "Exec" }, { name: "Rush" }];
+    expect(
+      mayMoveDocument(filed, "me", { manages: false, folders: seen }),
+    ).toBe(true);
+    expect(
+      mayMoveDocument({ ...upload, folder: null }, "me", {
+        manages: false,
+        folders: [],
+      }),
+    ).toBe(true);
+    // Folders not loaded yet: no Move to offer a pick from.
+    expect(mayMoveDocument(filed, "me", { manages: true, folders: null })).toBe(
+      false,
+    );
+    // An uploader left off Exec's list still sees their file there, but the
+    // server refuses moving it out.
+    expect(
+      mayMoveDocument(filed, "me", {
+        manages: false,
+        folders: [{ name: "Rush" }],
+      }),
+    ).toBe(false);
+    expect(
+      mayMoveDocument({ ...folderCopy, folder: "Exec" }, "me", {
+        manages: true,
+        folders: seen,
+      }),
+    ).toBe(false);
+  });
+
+  it("renames only a file that keeps its own name", () => {
+    expect(mayRenameDocument(upload, "me", member)).toBe(true);
+    expect(mayRenameDocument(upload, "someone", manager)).toBe(true);
+    expect(mayRenameDocument(upload, "someone", member)).toBe(false);
+    expect(mayRenameDocument(linked, "me", manager)).toBe(false);
+    expect(mayRenameDocument(folderCopy, "me", manager)).toBe(false);
+    expect(mayRenameDocument(minutes, "me", manager)).toBe(false);
+  });
+});
+
+describe("moveAccessNote (#5563)", () => {
+  const folders = [
+    { name: "Exec", who_can_see: ["tier:t-exec"] },
+    { name: "Officers", who_can_see: ["tier:t-exec"] },
+    { name: "Rush", who_can_see: null },
+  ];
+  const file = { who_can_see: null };
+
+  it("says nothing when who sees it stays the same", () => {
+    expect(moveAccessNote(file, folders, "Rush", null)).toBeNull();
+    expect(moveAccessNote(file, folders, "Exec", "Officers")).toBeNull();
+  });
+
+  it("names the list a move into a limited folder narrows it to", () => {
+    expect(moveAccessNote(file, folders, "Rush", "Exec")).toBe(
+      "Only people who can see Exec will see it.",
+    );
+  });
+
+  it("says a move out of a limited folder opens it to the chapter", () => {
+    expect(moveAccessNote(file, folders, "Exec", null)).toBe(
+      "Everyone in the chapter will see it.",
+    );
+    expect(moveAccessNote(file, folders, "Exec", "Rush")).toBe(
+      "Everyone in the chapter will see it.",
+    );
+  });
+
+  it("names the file's own list when it keeps one", () => {
+    const own = { who_can_see: ["role:r-1"] };
+    // Out of a limited folder, it widens to everyone on its own list.
+    expect(moveAccessNote(own, folders, "Exec", null)).toBe(
+      "Everyone on the file's own list will see it.",
+    );
+    // Into one, only who passes both.
+    expect(moveAccessNote(own, folders, null, "Exec")).toBe(
+      "Only people who can see Exec and are on the file's own list will see it.",
+    );
+    expect(moveAccessNote(own, folders, "Rush", null)).toBeNull();
   });
 });

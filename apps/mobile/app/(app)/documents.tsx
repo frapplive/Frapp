@@ -33,6 +33,7 @@ import {
   useMemberDisplayNames,
   useSetDocumentPin,
   useSetDocumentStar,
+  useUpdateDocument,
   usePermissionList,
   useSemesters,
 } from "@repo/hooks";
@@ -47,8 +48,13 @@ import {
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
+  mayMoveDocument,
+  mayRenameDocument,
   mayUploadNewVersion,
   markedItems,
+  MOVE_DOCUMENT_TITLE,
+  moveAccessNote,
+  NO_FOLDER_LABEL,
   NO_MARK_FILTER,
   tierRows,
   type DocumentMarkFilter,
@@ -105,6 +111,8 @@ import {
   ForwardGlyph,
 } from "@/components/control-glyphs";
 import { OptionSheet } from "@/components/option-sheet";
+import { confirmAlert } from "@/lib/minutes/meetings-on";
+import { RenameDocumentSheet } from "@/components/documents/rename-document-sheet";
 import { useListLayout } from "@/lib/list-layout";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import {
@@ -127,6 +135,7 @@ import {
 } from "@repo/validation";
 import {
   MINUTES_SPOKEN_KIND,
+  documentActionsHint,
   documentMeta,
   documentOpenHint,
   selectDocumentFolders,
@@ -342,6 +351,8 @@ export default function DocumentsScreen() {
     message: string;
   } | null>(null);
   const canManage = can("chapter_docs:manage", usePermissionList());
+  // A folder's long press, spoken: Star, and Pin for an officer.
+  const folderHint = canManage ? "Star or pin" : "Star or unstar";
   const { accent, accentOnPrimary } = useChapterBranding();
 
   // Pins and stars (#3934). A star moves on the tap and settles on the
@@ -583,7 +594,7 @@ export default function DocumentsScreen() {
             .filter(Boolean)
             .join(", ") || undefined,
       onLongPress: () => openActions(folderTarget(entry)),
-      longPressLabel: canManage ? "Star or pin" : "Star or unstar",
+      longPressLabel: folderHint,
     };
   }
   /*
@@ -642,6 +653,17 @@ export default function DocumentsScreen() {
     };
   }
 
+  // What a file's long press holds, spoken (#5563): the sheet's own rows.
+  function documentHint(doc: MobileDocument): string {
+    const target = documentTarget(doc);
+    return documentActionsHint({
+      canPin: canManage,
+      canRename: !!target.canRename,
+      canMove: !!target.canMove,
+      canDelete: canManage && !target.fromDrive && !target.minutes,
+    });
+  }
+
   function documentTarget(doc: MobileDocument) {
     return {
       kind: "document" as const,
@@ -656,7 +678,72 @@ export default function DocumentsScreen() {
         uploads: canUpload,
         manages: canManage,
       }),
+      canRename: mayRenameDocument(doc, viewerId, { manages: canManage }),
+      canMove: mayMoveDocument(doc, viewerId, {
+        manages: canManage,
+        folders: foldersQuery.data === undefined ? null : folders,
+      }),
+      folder: doc.folder ?? null,
     };
+  }
+
+  /*
+    Rename and Move to folder (#5563), from a file's long-press sheet. Rename
+    is its own sheet, mounted per file so it opens on that file's name; Move
+    is the folder pick, an option sheet whose pick moves the file at once, as
+    the Files app's Move does. A refusal comes back in the server's words.
+  */
+  const updateDocument = useUpdateDocument();
+  const [renameTarget, setRenameTarget] =
+    useState<DocumentActionsTarget | null>(null);
+  const [moveTarget, setMoveTarget] = useState<DocumentActionsTarget | null>(
+    null,
+  );
+  const moveSheetRef = useRef<BottomSheetModal>(null);
+  useEffect(() => {
+    if (moveTarget) moveSheetRef.current?.present();
+  }, [moveTarget]);
+  const moveOptions = useMemo(
+    () => [
+      { value: null, label: NO_FOLDER_LABEL },
+      ...folders.map((entry) => ({ value: entry.name, label: entry.name })),
+    ],
+    [folders],
+  );
+
+  async function moveDocument(
+    target: DocumentActionsTarget,
+    to: string | null,
+  ) {
+    const from = target.folder ?? null;
+    if (to === from) return;
+    // Said before the move, as the spec asks: who sees it changes with its
+    // folder's list (`spec/behavior/chapter-docs.md` § Rename and move).
+    const doc = documents.find((row) => row.id === target.id);
+    const note = doc ? moveAccessNote(doc, folders, from, to) : null;
+    if (
+      note &&
+      !(await confirmAlert({
+        title: `Move to ${to ?? NO_FOLDER_LABEL}?`,
+        body: note,
+        confirmLabel: "Move",
+      }))
+    ) {
+      return;
+    }
+    try {
+      await updateDocument.mutateAsync({ id: target.id, folder: to });
+      AccessibilityInfo.announceForAccessibility(
+        `Moved “${target.name}” to ${to ?? NO_FOLDER_LABEL.toLowerCase()}.`,
+      );
+    } catch (caught) {
+      Alert.alert(
+        "Couldn't move the file",
+        errorCopy(caught, "Try again in a moment.", {
+          serverWritesForMembers: true,
+        }),
+      );
+    }
   }
 
   /**
@@ -1040,7 +1127,7 @@ export default function DocumentsScreen() {
               )
             }
             deletingIds={deletingIds}
-            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            actionsLabel={documentHint}
             onOpen={(doc) => void open(doc)}
             onActions={(doc) => openActions(documentTarget(doc))}
           />
@@ -1071,9 +1158,7 @@ export default function DocumentsScreen() {
             // Star for everyone; Pin and Delete for `chapter_docs:manage`
             // (#3934). The row's pin or star shows in its label's tail.
             onLongPress={() => openActions(documentTarget(row.doc))}
-            longPressLabel={
-              canManage ? "Star, pin or delete" : "Star or unstar"
-            }
+            longPressLabel={documentHint(row.doc)}
             trailing={
               <DocumentMarks
                 limited={isLimited(row.doc)}
@@ -1273,7 +1358,9 @@ export default function DocumentsScreen() {
             }
             openingId={openingId}
             deletingIds={deletingIds}
-            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            actionsLabel={(item) =>
+              item.kind === "folder" ? folderHint : documentHint(item.doc)
+            }
             onOpenFolder={setFolder}
             onOpenDocument={(doc) => void open(doc)}
             onActions={(item) =>
@@ -1374,6 +1461,8 @@ export default function DocumentsScreen() {
           onTogglePin={(target) => void togglePin(target)}
           onDelete={(target) => confirmDelete(target.id, target.name)}
           onUploadVersion={(target) => void uploadVersion(target)}
+          onRename={setRenameTarget}
+          onMove={setMoveTarget}
           // The Drive app when it's installed (its links are universal
           // links), the browser otherwise.
           onOpenInDrive={(url) =>
@@ -1382,6 +1471,28 @@ export default function DocumentsScreen() {
             )
           }
         />
+
+        <OptionSheet
+          ref={moveSheetRef}
+          title={MOVE_DOCUMENT_TITLE}
+          options={moveOptions}
+          selected={moveTarget?.folder ?? null}
+          searchPlaceholder="Find a folder"
+          onSelect={(value) => {
+            if (moveTarget) void moveDocument(moveTarget, value);
+          }}
+          onDismiss={() => setMoveTarget(null)}
+        />
+        {renameTarget ? (
+          <RenameDocumentSheet
+            key={renameTarget.id}
+            name={renameTarget.name}
+            onSubmit={async (title) => {
+              await updateDocument.mutateAsync({ id: renameTarget.id, title });
+            }}
+            onClosed={() => setRenameTarget(null)}
+          />
+        ) : null}
 
         {canUpload ? (
           <UploadDocumentSheet

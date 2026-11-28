@@ -1,5 +1,6 @@
 "use client";
 
+import { NO_FOLDER_LABEL } from "@repo/hooks/document-library";
 import React, {
   useEffect,
   useLayoutEffect,
@@ -444,11 +445,11 @@ function ImportReview({
           <section
             key={folder || NONE}
             className="grid gap-2"
-            aria-label={folder ? `Folder ${folder}` : "No folder"}
+            aria-label={folder ? `Folder ${folder}` : NO_FOLDER_LABEL}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="flex min-w-0 items-center gap-2 text-label font-semibold">
-                <span className="truncate">{folder || "No folder"}</span>
+                <span className="truncate">{folder || NO_FOLDER_LABEL}</span>
                 {folder && !folders.includes(folder) ? (
                   <Badge variant="outline">New folder</Badge>
                 ) : null}
@@ -469,7 +470,7 @@ function ImportReview({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>No folder</SelectItem>
+                  <SelectItem value={NONE}>{NO_FOLDER_LABEL}</SelectItem>
                   {allFolders.map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}

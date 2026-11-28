@@ -9,6 +9,7 @@ import {
   useRequestDocumentVersionUploadUrl,
   useReplaceDocumentFile,
   useDocuments,
+  useUpdateDocument,
   useUpdateDocumentFolder,
   useDocumentStars,
   useSetDocumentPin,
@@ -426,6 +427,38 @@ describe("document folder mutations", () => {
       params: { path: { id: "f-1" } },
       body: { sort_order: 2 },
     });
+  });
+
+  it("renames or moves a file through PATCH /v1/documents/{id} (#5563)", async () => {
+    const mockPatch = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const { result } = renderHook(() => useUpdateDocument(), {
+      wrapper: chapterWrapper({ PATCH: mockPatch }),
+    });
+
+    await result.current.mutateAsync({ id: "d-1", title: "Bylaws 2026" });
+    await result.current.mutateAsync({ id: "d-1", folder: null });
+
+    expect(mockPatch).toHaveBeenNthCalledWith(1, "/v1/documents/{id}", {
+      params: { path: { id: "d-1" } },
+      body: { title: "Bylaws 2026" },
+    });
+    // `null` is No folder, sent as is.
+    expect(mockPatch).toHaveBeenNthCalledWith(2, "/v1/documents/{id}", {
+      params: { path: { id: "d-1" } },
+      body: { folder: null },
+    });
+  });
+
+  it("rejects with the API's refusal on a rename or move", async () => {
+    const refusal = { statusCode: 409, message: "Rename it in Drive" };
+    const mockPatch = vi.fn().mockResolvedValue({ data: null, error: refusal });
+    const { result } = renderHook(() => useUpdateDocument(), {
+      wrapper: chapterWrapper({ PATCH: mockPatch }),
+    });
+
+    await expect(
+      result.current.mutateAsync({ id: "d-1", title: "x" }),
+    ).rejects.toBe(refusal);
   });
 
   it("deletes a folder through DELETE /v1/documents/folders/{id}", async () => {

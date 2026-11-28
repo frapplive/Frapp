@@ -1,6 +1,15 @@
 "use client";
 
-import { Download, FileUp, Loader2, Trash2, Users } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  Download,
+  FileUp,
+  FolderInput,
+  Loader2,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { formatDay, formatWeekdayDay } from "@repo/formatting";
 import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
 import { can } from "@repo/validation";
@@ -9,7 +18,9 @@ import {
   driveLink,
   isDriveCopy,
   isMinutesDocument,
+  MOVE_DOCUMENT_TITLE,
   minutesDocumentFacts,
+  RENAME_IN_DRIVE_LABEL,
   uploadedLine,
 } from "@repo/hooks/document-library";
 import { IconButton } from "@/components/ui/icon-button";
@@ -124,13 +135,15 @@ function FolderHueTile({ hue, minutes }: { hue: string; minutes: boolean }) {
  * shows files rather than a strip of icons per file. Hidden by opacity, not
  * `invisible`, so Tab still reaches them and their focus brings them up;
  * `pointer-events-none` keeps a click at the end of a row from landing on a
- * control nobody can see. A touch screen has no hover, so there the same
- * actions sit behind one More button (`useRowActions` through `RowMenu`), as
- * Drive's and Dropbox's touch layouts put them. The same list opens on a
+ * control nobody can see. The row's More button (`useRowActions` through
+ * `RowMenu`) ends them, holding everything including what has no icon of its
+ * own (Rename, Move to folder, #5563), as Drive's row ends in its ⋮. A touch
+ * screen has no hover, so there the More button alone stays in sight, as
+ * Drive's and Dropbox's touch layouts put it. The same list opens on a
  * right-click or a long-press anywhere on the row.
  */
 const ROW_CONTROLS_CLASS = [
-  "shrink-0 pointer-coarse:hidden",
+  "shrink-0",
   "pointer-fine:absolute pointer-fine:inset-y-0 pointer-fine:right-0 pointer-fine:bg-card-hover pointer-fine:pl-2",
   "pointer-fine:pointer-events-none pointer-fine:opacity-0",
   "pointer-fine:group-hover/row:pointer-events-auto pointer-fine:group-hover/row:opacity-100",
@@ -185,6 +198,8 @@ function DocumentRowView({
   limited = false,
   onSetAccess,
   newVersion,
+  onRename,
+  onMove,
 }: {
   doc: ChapterDocument;
   /** Who uploaded it, when the roster can name them (#3852). */
@@ -208,6 +223,10 @@ function DocumentRowView({
   onSetAccess?: (doc: ChapterDocument) => void;
   /** Upload a new version (#6055), with its hidden picker; absent when not offered. */
   newVersion?: ReturnType<typeof useDocumentNewVersion>;
+  /** Opens Rename (#5563); absent for a member who may not rename it here. */
+  onRename?: (doc: ChapterDocument) => void;
+  /** Opens Move to folder (#5563); absent for a member who may not move it. */
+  onMove?: (doc: ChapterDocument) => void;
 }) {
   const facts = documentFacts(doc, uploader);
   const pinned = !!doc.pinned_at;
@@ -222,6 +241,8 @@ function DocumentRowView({
     onTogglePin,
     onSetAccess,
     newVersion,
+    onRename,
+    onMove,
   });
   return (
     /*
@@ -237,7 +258,7 @@ function DocumentRowView({
     */
     <RowMenu entries={entries} label={`More for ${doc.title}`}>
       {(menuButton) => (
-        <li className="group/row relative flex min-h-11 items-center gap-2 py-1 transition-colors hover:bg-card-hover focus-within:bg-card-hover">
+        <li className="group group/row relative flex min-h-11 items-center gap-2 py-1 transition-colors hover:bg-card-hover focus-within:bg-card-hover">
           {/*
         The tile and both lines are one button that opens the document
         (#3849), so the whole name is the target, not a word in it.
@@ -307,16 +328,10 @@ function DocumentRowView({
             onTogglePin={onTogglePin}
             onSetAccess={onSetAccess}
             newVersion={newVersion}
+            menuButton={menuButton}
             className={ROW_CONTROLS_CLASS}
           />
           {newVersion?.input}
-          {/*
-        Touch only: with a mouse the hover controls above are the visible
-        door, and the right-click menu holds the same list.
-      */}
-          <span className="hidden shrink-0 pointer-coarse:inline-flex">
-            {menuButton}
-          </span>
         </li>
       )}
     </RowMenu>
@@ -346,7 +361,12 @@ function useRowActions({
   onTogglePin,
   onSetAccess,
   newVersion,
-}: Omit<Parameters<typeof DocumentControls>[0], "className">): RowMenuEntry[] {
+  onRename,
+  onMove,
+}: Omit<Parameters<typeof DocumentControls>[0], "className" | "menuButton"> & {
+  onRename?: (doc: ChapterDocument) => void;
+  onMove?: (doc: ChapterDocument) => void;
+}): RowMenuEntry[] {
   const { download, fetchingId } = useDocumentDownload();
   const permissions = useMyPermissions().data?.permissions;
   const canManage = !!permissions && can("chapter_docs:manage", permissions);
@@ -389,10 +409,47 @@ function useRowActions({
       onSelect: () => onSetAccess(doc),
     });
   }
+  // Rename and Move to folder (#5563), as Drive's menu has them, for its
+  // uploader or whoever manages documents (`useDocumentRefile`). A Drive
+  // file takes its name from Drive, so its menu says where it is renamed and
+  // opens it there, as a synced folder's edit says it.
+  const drive = driveLink(doc);
+  if (onRename) {
+    entries.push({
+      type: "item",
+      key: "rename",
+      label: "Rename",
+      icon: Pencil,
+      disabled: !gate.allowed,
+      describedBy,
+      title,
+      onSelect: () => onRename(doc),
+    });
+  } else if (drive) {
+    entries.push({
+      type: "item",
+      key: "rename-in-drive",
+      label: RENAME_IN_DRIVE_LABEL,
+      icon: Pencil,
+      href: drive,
+      external: true,
+    });
+  }
+  if (onMove) {
+    entries.push({
+      type: "item",
+      key: "move",
+      label: MOVE_DOCUMENT_TITLE,
+      icon: FolderInput,
+      disabled: !gate.allowed,
+      describedBy,
+      title,
+      onSelect: () => onMove(doc),
+    });
+  }
   // A meeting's minutes (#5949) have no file to save, and are deleted as
   // minutes, from their own page.
   if (isMinutesDocument(doc)) return entries;
-  const drive = driveLink(doc);
   if (drive) {
     entries.push({
       type: "item",
@@ -455,6 +512,7 @@ function DocumentControls({
   onTogglePin,
   onSetAccess,
   newVersion,
+  menuButton,
   className,
 }: {
   doc: ChapterDocument;
@@ -468,125 +526,134 @@ function DocumentControls({
   onSetAccess?: (doc: ChapterDocument) => void;
   /** Upload a new version (#6055); absent for a member who may not. */
   newVersion?: { choose: () => void; busy: boolean };
+  /** The row's More button, last; the only control a touch screen shows. */
+  menuButton: ReactNode;
   className?: string;
 }) {
   const pinned = !!doc.pinned_at;
   const drive = driveLink(doc);
   return (
     <div className={cn("flex items-center gap-1", className)}>
-      {/*
+      <div className="flex items-center gap-1 pointer-coarse:hidden">
+        {/*
         Star for everyone, Pin for whoever manages documents (#3934). Each
         stays lit while on, so a pinned or starred row says so in its
         controls rather than in another badge on the meta line. A member
         without `chapter_docs:manage` sees a pinned row's pin as a mark
         only, since they can't change it.
       */}
-      <IconButton
-        label={starred ? `Unstar ${doc.title}` : `Star ${doc.title}`}
-        aria-pressed={starred}
-        className={starred ? "text-accent-text" : undefined}
-        {...{ [KEEP_FOCUS_ATTRIBUTE]: `star:${doc.id}` }}
-        onClick={() => onToggleStar(doc)}
-        {...gate.controlProps()}
-      >
-        <StarGlyph active={starred} />
-      </IconButton>
-      <Can
-        permission="chapter_docs:manage"
-        deniedFallback={
-          pinned ? (
-            <span
-              className="inline-flex h-9 w-9 items-center justify-center text-accent-text"
-              title="Pinned for the chapter"
-            >
-              <PinGlyph className="h-4 w-4" active />
-              <span className="sr-only">Pinned for the chapter</span>
-            </span>
-          ) : null
-        }
-      >
         <IconButton
-          label={
-            pinned
-              ? `Unpin ${doc.title} for the chapter`
-              : `Pin ${doc.title} for the chapter`
-          }
-          aria-pressed={pinned}
-          className={pinned ? "text-accent-text" : undefined}
-          {...{ [KEEP_FOCUS_ATTRIBUTE]: `pin:${doc.id}` }}
-          onClick={() => onTogglePin(doc)}
-          {...gate.controlProps(pinBusy)}
+          label={starred ? `Unstar ${doc.title}` : `Star ${doc.title}`}
+          aria-pressed={starred}
+          className={starred ? "text-accent-text" : undefined}
+          {...{ [KEEP_FOCUS_ATTRIBUTE]: `star:${doc.id}` }}
+          onClick={() => onToggleStar(doc)}
+          {...gate.controlProps()}
         >
-          <PinGlyph active={pinned} />
+          <StarGlyph active={starred} />
         </IconButton>
-      </Can>
-      {/*
+        <Can
+          permission="chapter_docs:manage"
+          deniedFallback={
+            pinned ? (
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center text-accent-text"
+                title="Pinned for the chapter"
+              >
+                <PinGlyph className="h-4 w-4" active />
+                <span className="sr-only">Pinned for the chapter</span>
+              </span>
+            ) : null
+          }
+        >
+          <IconButton
+            label={
+              pinned
+                ? `Unpin ${doc.title} for the chapter`
+                : `Pin ${doc.title} for the chapter`
+            }
+            aria-pressed={pinned}
+            className={pinned ? "text-accent-text" : undefined}
+            {...{ [KEEP_FOCUS_ATTRIBUTE]: `pin:${doc.id}` }}
+            onClick={() => onTogglePin(doc)}
+            {...gate.controlProps(pinBusy)}
+          >
+            <PinGlyph active={pinned} />
+          </IconButton>
+        </Can>
+        {/*
         Who can see (#3642 piece 1), for its uploader and whoever manages
         documents, as Drive puts Share on each file's own row. The page
         decides who gets it, so it is absent rather than refused.
       */}
-      {onSetAccess ? (
-        <IconButton
-          label={`Who can see ${doc.title}`}
-          onClick={() => onSetAccess(doc)}
-          {...gate.controlProps()}
-        >
-          <Users />
-        </IconButton>
-      ) : null}
-      {/*
+        {onSetAccess ? (
+          <IconButton
+            label={`Who can see ${doc.title}`}
+            onClick={() => onSetAccess(doc)}
+            {...gate.controlProps()}
+          >
+            <Users />
+          </IconButton>
+        ) : null}
+        {/*
         A Drive file opens in Drive (#6055), where its working copy is:
         an edit there syncs back, and a downloaded copy would not.
       */}
-      {drive ? (
-        <IconButton label={`Open ${doc.title} in Google Drive`} asChild>
-          <a href={drive} target="_blank" rel="noopener noreferrer">
-            <DriveGlyph />
-          </a>
-        </IconButton>
-      ) : null}
-      {isMinutesDocument(doc) ? null : (
-        <DownloadButton id={doc.id} title={doc.title} />
-      )}
-      {/*
+        {drive ? (
+          <IconButton label={`Open ${doc.title} in Google Drive`} asChild>
+            <a href={drive} target="_blank" rel="noopener noreferrer">
+              <DriveGlyph />
+            </a>
+          </IconButton>
+        ) : null}
+        {isMinutesDocument(doc) ? null : (
+          <DownloadButton id={doc.id} title={doc.title} />
+        )}
+        {/*
         Upload a new version (#6055), beside Download: the way back for a
         file downloaded and changed. The picker opens at once and the file
         lands on this same row, as Drive's and Dropbox's do.
       */}
-      {newVersion ? (
-        <IconButton
-          label={`Upload a new version of ${doc.title}`}
-          onClick={newVersion.choose}
-          aria-busy={newVersion.busy}
-          {...gate.controlProps(newVersion.busy)}
-        >
-          {newVersion.busy ? <Loader2 className="animate-spin" /> : <FileUp />}
-        </IconButton>
-      ) : null}
-      {/*
+        {newVersion ? (
+          <IconButton
+            label={`Upload a new version of ${doc.title}`}
+            onClick={newVersion.choose}
+            aria-busy={newVersion.busy}
+            {...gate.controlProps(newVersion.busy)}
+          >
+            {newVersion.busy ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <FileUp />
+            )}
+          </IconButton>
+        ) : null}
+        {/*
         A copy of a Drive file (#5157) has no Delete: Drive owns it, the API
         refuses, and the next sync would bring it back. Nor do a meeting's
         minutes (#5949): they are deleted as minutes, from their own page.
       */}
-      <Can permission="chapter_docs:manage">
-        {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
-          <>
-            {/*
+        <Can permission="chapter_docs:manage">
+          {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
+            <>
+              {/*
         `DELETE /v1/documents/:id` sits behind the same guard
         as upload, so gating only the upload trigger would
         have the page claim writes are blocked while still
         offering one per row.
       */}
-            <IconButton
-              label={`Delete ${doc.title}`}
-              onClick={() => onDelete(doc)}
-              {...gate.controlProps(deleting)}
-            >
-              <Trash2 />
-            </IconButton>
-          </>
-        )}
-      </Can>
+              <IconButton
+                label={`Delete ${doc.title}`}
+                onClick={() => onDelete(doc)}
+                {...gate.controlProps(deleting)}
+              >
+                <Trash2 />
+              </IconButton>
+            </>
+          )}
+        </Can>
+      </div>
+      {menuButton}
     </div>
   );
 }

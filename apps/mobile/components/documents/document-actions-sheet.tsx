@@ -12,7 +12,12 @@ import {
   useSheetBackgroundStyle,
   useSheetClose,
 } from "@/components/sheet-scaffold";
-import { UploadGlyph } from "@/components/control-glyphs";
+import { PencilGlyph, UploadGlyph } from "@/components/control-glyphs";
+import { FolderGlyph } from "@/components/settings-glyphs";
+import {
+  MOVE_DOCUMENT_TITLE,
+  RENAME_IN_DRIVE_LABEL,
+} from "@repo/hooks/document-library";
 import { DriveGlyph, PinGlyph, StarGlyph } from "./document-glyphs";
 
 /** The rows' leading glyph, at the composer + sheet's size. */
@@ -42,6 +47,16 @@ export interface DocumentActionsTarget {
    * on a Drive file or minutes.
    */
   canUploadVersion?: boolean;
+  /**
+   * The member may rename this file here (#5563, `mayRenameDocument`): its
+   * uploader or whoever manages documents, never a file that takes its name
+   * from Drive or its meeting.
+   */
+  canRename?: boolean;
+  /** The member may move it to another folder (#5563, `mayRefileDocument`). */
+  canMove?: boolean;
+  /** The folder it's filed in, `null` for none: Move to folder's current pick. */
+  folder?: string | null;
 }
 
 export interface DocumentActionsSheetProps {
@@ -57,6 +72,10 @@ export interface DocumentActionsSheetProps {
   onOpenInDrive: (url: string) => void;
   /** Opens the system picker for a new version of the file (#6055). */
   onUploadVersion?: (target: DocumentActionsTarget) => void;
+  /** Opens Rename for the file (#5563). */
+  onRename?: (target: DocumentActionsTarget) => void;
+  /** Opens Move to folder for the file (#5563). */
+  onMove?: (target: DocumentActionsTarget) => void;
 }
 
 /**
@@ -80,6 +99,8 @@ export const DocumentActionsSheet = forwardRef<
     onDelete,
     onOpenInDrive,
     onUploadVersion,
+    onRename,
+    onMove,
   },
   ref,
 ) {
@@ -154,6 +175,35 @@ export const DocumentActionsSheet = forwardRef<
                   />
                 }
                 onPress={() => choose(() => onTogglePin(target))}
+                styles={styles}
+              />
+            ) : null}
+            {/* Rename and Move to folder (#5563), as Drive's menu has them.
+                A Drive file takes its name from Drive, so in Rename's place
+                its sheet says where it is renamed and opens it there. */}
+            {target.kind === "document" && target.canRename && onRename ? (
+              <ActionRow
+                label="Rename"
+                glyph={<PencilGlyph color={muted} size={GLYPH_SIZE} />}
+                onPress={() => choose(() => onRename(target))}
+                styles={styles}
+              />
+            ) : target.kind === "document" && target.driveUrl ? (
+              <ActionRow
+                label={RENAME_IN_DRIVE_LABEL}
+                glyph={<PencilGlyph color={muted} size={GLYPH_SIZE} />}
+                onPress={() => {
+                  const url = target.driveUrl;
+                  if (url) choose(() => onOpenInDrive(url));
+                }}
+                styles={styles}
+              />
+            ) : null}
+            {target.kind === "document" && target.canMove && onMove ? (
+              <ActionRow
+                label={MOVE_DOCUMENT_TITLE}
+                glyph={<FolderGlyph color={muted} size={GLYPH_SIZE} />}
+                onPress={() => choose(() => onMove(target))}
                 styles={styles}
               />
             ) : null}

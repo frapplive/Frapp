@@ -1,5 +1,6 @@
 "use client";
 
+import { NO_FOLDER_LABEL } from "@repo/hooks/document-library";
 import { useNewIntent } from "@/components/layout/new-intent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { localIsoDate } from "@repo/formatting";
@@ -573,7 +574,7 @@ export function UploadDocumentPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_FOLDER}>No folder</SelectItem>
+                  <SelectItem value={NO_FOLDER}>{NO_FOLDER_LABEL}</SelectItem>
                   {folders.map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}

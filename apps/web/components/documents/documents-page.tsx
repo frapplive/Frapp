@@ -42,6 +42,7 @@ import {
   SubscriptionNotice,
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
+import { useDocumentRefile } from "@/components/documents/document-refile";
 import { DocumentList } from "@/components/documents/document-list";
 import {
   DELETE_DOCUMENT_BODY,
@@ -575,6 +576,13 @@ function ChapterDocumentsPage() {
     }),
     [typeOptions, folderNames, documents],
   );
+  // Rename and Move to folder (#5563), from a file's ⋯.
+  const refile = useDocumentRefile({
+    gate,
+    folders: foldersQuery.data === undefined ? null : folders,
+    viewerId,
+    manages: canManageTypes,
+  });
   const upload = useDocumentUpload(gate, {
     activeFolder,
     typeOptions,
@@ -854,6 +862,7 @@ function ChapterDocumentsPage() {
             canSetAccess={canSetAccess}
             canUploadVersion={canUploadVersion}
             onSetAccess={setAccessDoc}
+            refile={permissionsKnown ? refile.refile : undefined}
             folderHue={folderHue}
             folderPicker={
               <FolderMenu {...railProps} className="@2xl/docs:hidden" />
@@ -879,6 +888,7 @@ function ChapterDocumentsPage() {
         interaction the Chapter Ops slice shipped and its guard caught.
       */}
       <FolderDialog gate={gate} management={folderManagement} />
+      {refile.dialogs}
       <DocumentAccessDialog
         doc={accessDoc}
         gate={gate}

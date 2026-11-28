@@ -879,6 +879,103 @@ export function mayUploadNewVersion(
 }
 
 /**
+ * Whether the row is a copy from the chapter's connected Drive folder (#5157),
+ * as the API tells it (`isDriveFolderCopy`): it has a Drive file and no link
+ * status. A file added by its own Drive link (#5434) has a status. Drive
+ * names and files a folder copy, so the next sync undoes any change here.
+ */
+export function isDriveFolderCopy(doc: {
+  drive_file_id?: string | null;
+  drive_link_status?: string | null;
+}): boolean {
+  return isDriveCopy(doc) && !doc.drive_link_status;
+}
+
+/**
+ * Who may rename or move this file (#5563), as the API decides
+ * (`assertMayRefile` behind `PATCH /v1/documents/{id}`): its uploader, or a
+ * member who manages documents. Never a copy from the Drive folder, which is
+ * renamed and moved in Drive. A move also needs the folder it leaves in
+ * sight, which `mayMoveDocument` adds.
+ */
+export function mayRefileDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean },
+): boolean {
+  if (isDriveFolderCopy(doc)) return false;
+  if (access.manages) return true;
+  return !!userId && doc.uploaded_by === userId;
+}
+
+/**
+ * Whether the member may move this file to another folder (#5563): who may
+ * refile it (`mayRefileDocument`), once their folders have loaded and only
+ * while the file's folder is one of them. The server refuses a move out of a
+ * folder the mover can't see (`checkedMove`), and an uploader still sees
+ * their own file in a folder whose list later left them off, so that file
+ * offers no Move rather than one that is always refused. `folders` is `null`
+ * until the member's folders load.
+ */
+export function mayMoveDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+    folder?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean; folders: readonly { name: string }[] | null },
+): boolean {
+  if (access.folders === null) return false;
+  const folder = doc.folder ?? null;
+  if (folder !== null && !access.folders.some((row) => row.name === folder)) {
+    return false;
+  }
+  return mayRefileDocument(doc, userId, access);
+}
+
+/**
+ * Whether the member may rename this file here (#5563): who may refile it,
+ * except a file that takes its name from elsewhere. Minutes take their
+ * meeting's name, and a file added by its Drive link keeps Drive's.
+ */
+export function mayRenameDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+    meeting_id?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean },
+): boolean {
+  if (isMinutesDocument({ meeting_id: doc.meeting_id })) return false;
+  if (isDriveCopy(doc)) return false;
+  return mayRefileDocument(doc, userId, access);
+}
+
+/**
+ * Where a Drive file is renamed (#5563), said in its menu in place of
+ * Rename, the way a Drive folder's ⋯ says it (`drive-folder-panel.tsx`).
+ * The item opens the file in Drive.
+ */
+export const RENAME_IN_DRIVE_LABEL = "Rename in Google Drive";
+
+/** The Rename question's commit, and its title on both apps. */
+export const RENAME_DOCUMENT_TITLE = "Rename file";
+
+/** The Move question's title on both apps. */
+export const MOVE_DOCUMENT_TITLE = "Move to folder";
+
+/** The no-folder choice: the folder rail's row, the upload and import folder picks, and Move to folder. */
+export const NO_FOLDER_LABEL = "No folder";
+
+/**
  * A Drive file's page in Google Drive (#6055), where its working copy is, or
  * null. Only an https link: the address goes in a link both apps open, and
  * Drive's `webViewLink` is always one.
@@ -899,6 +996,43 @@ export const FILE_ALWAYS_LINE =
 export const LIMITED_LABEL = "Not everyone can see this";
 
 type AccessListed = { who_can_see?: readonly string[] | null };
+
+/**
+ * What moving a file from one folder to another does to who sees it (#5563,
+ * `spec/behavior/chapter-docs.md` § Rename and move), said before the move,
+ * or null when nothing changes. A file is seen by who passes its folder's list
+ * and its own (§ Who can see): into a folder with a list, only that list's
+ * people see it, narrowed by its own; out of one into an open folder (or
+ * none), everyone in the chapter does, or everyone on its own list.
+ *
+ * Both folders must be among `folders`, which `mayMoveDocument` holds to: a
+ * folder missing from the list would read as open.
+ */
+export function moveAccessNote(
+  doc: AccessListed,
+  folders: readonly ({ name: string } & AccessListed)[],
+  from: string | null,
+  to: string | null,
+): string | null {
+  const listOf = (name: string | null) =>
+    name === null
+      ? null
+      : (folders.find((folder) => folder.name === name)?.who_can_see ?? null);
+  const key = (list: readonly string[] | null) =>
+    list === null ? null : [...list].sort().join("\u0000");
+  const fromList = listOf(from);
+  const toList = listOf(to);
+  if (key(fromList) === key(toList)) return null;
+  const ownList = doc.who_can_see != null;
+  if (toList !== null && to !== null) {
+    return ownList
+      ? `Only people who can see ${to} and are on the file's own list will see it.`
+      : `Only people who can see ${to} will see it.`;
+  }
+  return ownList
+    ? "Everyone on the file's own list will see it."
+    : "Everyone in the chapter will see it.";
+}
 
 /**
  * Which files draw the lock (#5216), on web and the phone alike: a file with

@@ -152,7 +152,9 @@ export const OptionSheet = forwardRef<
       : option.value === selected;
     const row = (
       <Pressable
-        key={option.value ?? "any"}
+        // Prefixed, so a value that reads "any" (a folder a chapter named
+        // so) can't share the none row's key.
+        key={option.value === null ? "none" : `value:${option.value}`}
         accessibilityRole={many ? "checkbox" : "radio"}
         accessibilityState={{ checked: on }}
         accessibilityLabel={option.accessibilityLabel ?? option.label}
