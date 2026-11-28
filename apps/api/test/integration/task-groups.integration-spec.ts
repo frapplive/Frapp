@@ -14,7 +14,7 @@
 // serves them.
 //
 // Run: `npm run test:integration -w apps/api` (needs a local Supabase stack
-// with `20261127184500` applied; skips cleanly without a stack).
+// with `20261128043840` applied; skips cleanly without a stack).
 
 import { randomUUID } from 'node:crypto';
 import { SupabaseTaskRepository } from '../../src/infrastructure/supabase/repositories/supabase-task.repository';

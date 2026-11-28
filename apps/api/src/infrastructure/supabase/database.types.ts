@@ -381,7 +381,7 @@ export interface Database {
     };
     Functions: {
       /**
-       * `20261127184500` (#6061). Every task list Activity draws for one
+       * `20261128043840` (#6061). Every task list Activity draws for one
        * member, in one round trip; service role only.
        */
       activity_task_reads: {
