@@ -10,6 +10,7 @@ const hooks = vi.hoisted(() => ({
   },
   setDefault: vi.fn(),
   requestUrl: vi.fn(),
+  setHolidaySeason: vi.fn(),
 }));
 const save = vi.hoisted(() => vi.fn());
 
@@ -23,6 +24,9 @@ vi.mock("@repo/hooks", () => ({
   useChapterChatBackground: () => hooks.current,
   useSetChapterChatBackground: () => ({ mutateAsync: hooks.setDefault }),
   useRequestChatBackgroundPhotoUrl: () => ({ mutateAsync: hooks.requestUrl }),
+  useSetChatBackgroundHolidaySeason: () => ({
+    mutate: hooks.setHolidaySeason,
+  }),
 }));
 vi.mock("@/lib/chat/chat-background-photo", () => ({
   saveChatBackgroundPick: save,
@@ -119,6 +123,48 @@ describe("ChatBackgroundDefaultPicker", () => {
     });
     expect(onSaved).not.toHaveBeenCalled();
     expect(text(tree)).toContain("Not allowed.");
+  });
+});
+
+/** "Holiday background this season" (#6149), under the swatches. */
+describe("the Holiday season switch", () => {
+  const holidaySwitch = (tree: ReactTestRenderer) =>
+    tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Switch" &&
+        node.props.accessibilityLabel === "Holiday background this season",
+    );
+
+  beforeEach(() => {
+    hooks.setHolidaySeason.mockReset();
+    hooks.current = {
+      data: { background: "plain", photo_url: null, holiday_season: true },
+      isError: false,
+    };
+  });
+
+  it("is on for a chapter that never turned it off, and saves the moment it flips", () => {
+    const tree = render();
+    expect(holidaySwitch(tree).props.value).toBe(true);
+    act(() => holidaySwitch(tree).props.onValueChange(false));
+    expect(hooks.setHolidaySeason).toHaveBeenCalledWith(
+      false,
+      expect.anything(),
+    );
+  });
+
+  it("says a flip didn't save", () => {
+    hooks.setHolidaySeason.mockImplementation(
+      (_next: boolean, options: { onError: () => void }) => options.onError(),
+    );
+    const tree = render();
+    act(() => holidaySwitch(tree).props.onValueChange(false));
+    expect(text(tree)).toContain("Couldn't save. Try again.");
+  });
+
+  it("waits for the chapter's setting before it can flip", () => {
+    hooks.current = { data: undefined, isError: false };
+    expect(holidaySwitch(render()).props.disabled).toBe(true);
   });
 });
 

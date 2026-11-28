@@ -66,6 +66,7 @@ vi.mock("@/lib/backwork-bulk/session", () => ({
 }));
 
 import { ChapterLabel, useChapterSwitcher } from "./chapter-switcher";
+import { useHolidayFlairOn } from "@/components/chat/holiday-flair";
 
 function membership(id: string, name: string) {
   return { chapter_id: id, chapter: { id, name, university: "Test U" } };
@@ -105,6 +106,19 @@ describe("the chapter label and switching (#5946)", () => {
     render(<Label />);
     expect(screen.getByText("Alpha Chapter")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("tips a Santa hat onto the crest in the Holiday season (#6149)", () => {
+    const { unmount } = render(<Label />);
+    expect(screen.queryByTestId("holiday-santa-hat")).toBeNull();
+    unmount();
+    vi.mocked(useHolidayFlairOn).mockReturnValue(true);
+    try {
+      render(<Label />);
+      expect(screen.getByTestId("holiday-santa-hat")).toBeInTheDocument();
+    } finally {
+      vi.mocked(useHolidayFlairOn).mockReturnValue(false);
+    }
   });
 
   it("offers only the other chapters to switch to", () => {

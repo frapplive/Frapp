@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import type { SignetTokens } from "@repo/theme/signet";
 import { useChapterBranding } from "@/lib/chapter-branding";
+import { SantaHat, useHolidayFlairOn } from "@/components/chat/holiday-flair";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const LOGO_SIZE = 24;
@@ -32,9 +33,20 @@ export function ChapterMark() {
   // the query refetches.
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
   const showLogo = !!logoUrl && logoUrl !== failedLogoUrl;
+  const holidayFlair = useHolidayFlairOn();
+  // The Holiday season tips a Santa hat onto the crest (#6149).
+  const withHat = (mark: React.ReactNode) =>
+    holidayFlair ? (
+      <View style={styles.hatHolder}>
+        {mark}
+        <SantaHat size={18} />
+      </View>
+    ) : (
+      mark
+    );
 
   if (showLogo) {
-    return (
+    return withHat(
       <Image
         source={{ uri: logoUrl }}
         style={styles.logo}
@@ -44,13 +56,21 @@ export function ChapterMark() {
         // announcing it again would just make screen readers say it twice.
         accessibilityElementsHidden
         importantForAccessibility="no"
-      />
+      />,
     );
   }
 
-  if (!textMark) return null;
+  if (!textMark) {
+    // No crest to dress, so in the Holiday season the hat sits on the start
+    // of the chapter name beside this slot instead (#6149).
+    return holidayFlair ? (
+      <View style={markStyles.hatOnName} testID="chapter-mark-hat-only">
+        <SantaHat size={22} />
+      </View>
+    ) : null;
+  }
 
-  return (
+  return withHat(
     // Hidden from screen readers for the reason the logo is: the chapter
     // name beside it already says who this is.
     <View
@@ -68,11 +88,12 @@ export function ChapterMark() {
       >
         {textMark}
       </Text>
-    </View>
+    </View>,
   );
 }
 
 const styles = StyleSheet.create({
+  hatHolder: { position: "relative" },
   logo: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
@@ -89,6 +110,14 @@ const styles = StyleSheet.create({
  */
 function createMarkStyles(tokens: SignetTokens) {
   return StyleSheet.create({
+    // A slot that takes no room: it pulls the name back over itself by its
+    // own width and the title row's gap (`ScreenShell`, spacing.sm), so the
+    // hat lands on the name's first letter and the name doesn't move.
+    hatOnName: {
+      width: 30,
+      height: 34,
+      marginRight: -(30 + tokens.spacing.sm),
+    },
     tile: {
       minWidth: LOGO_SIZE,
       height: LOGO_SIZE,

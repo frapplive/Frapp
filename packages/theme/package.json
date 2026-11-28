@@ -11,6 +11,7 @@
     "./nav-glyphs": "./src/nav-glyphs.ts",
     "./signature": "./src/signature.ts",
     "./chat-backgrounds": "./src/chat-backgrounds.ts",
+    "./holiday-flair": "./src/holiday-flair.ts",
     "./crest": "./src/crest.ts",
     "./event-form-glyphs": "./src/event-form-glyphs.ts"
   },

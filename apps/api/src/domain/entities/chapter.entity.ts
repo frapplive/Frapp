@@ -49,6 +49,11 @@ export interface Chapter {
   chat_background_photo_path?: string | null;
   /** The chat line announcing that photo; a deleted line withdraws it. */
   chat_background_message_id?: string | null;
+  /**
+   * Whether the Holiday season (#6149) shows Holiday in place of a Plain
+   * default, Dec 1 to 26. On until an officer turns it off.
+   */
+  chat_background_holiday?: boolean;
   donation_url: string | null;
   created_at: string;
   updated_at: string;

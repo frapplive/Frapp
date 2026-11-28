@@ -22,6 +22,7 @@ import {
   useChannelAccessOptions,
   useChannels,
   useChapterChatBackground,
+  useSetChatBackgroundHolidaySeason,
   useChatReports,
   useCreateCategory,
   useDeleteCategory,
@@ -39,6 +40,7 @@ import {
   CHANNEL_SETTINGS_COPY,
   CHAPTER_PROFILE_PERMISSIONS,
   CHAT_BACKGROUND_LABELS,
+  HOLIDAY_SEASON_COPY,
   CHAT_REPORT_QUEUE_PERMISSIONS,
   openReportsValue,
   sameChannelAccessList,
@@ -131,7 +133,8 @@ function channelSeenBy(
  *   right-click, and New category as the group's last row. A channel row
  *   opens that channel's own page (`channel-settings-page.tsx`).
  * - **Look**: the chapter's chat background, a row with its current choice
- *   that opens the picker as a page of its own.
+ *   that opens the picker as a page of its own, and the Holiday season's
+ *   switch (#6149).
  * - **Moderation**: the report queue, a row with its open count that opens
  *   its page, so the queue stays out of the way (Paul, 2026-11-11) and still
  *   says when something is waiting. Discord import is a row on the Chat page
@@ -173,6 +176,7 @@ export function ChatAdminPage() {
 
 function LookGroup() {
   const background = useChapterChatBackground();
+  const setHolidaySeason = useSetChatBackgroundHolidaySeason();
   const value = background.data
     ? CHAT_BACKGROUND_LABELS[background.data.background]
     : undefined;
@@ -186,6 +190,19 @@ function LookGroup() {
         label="Chat background"
         value={value}
         href={chatSettingsPagePath("background")}
+      />
+      {/* The Holiday season (#6149): saved the moment it flips. */}
+      <SettingsRow
+        id="chat-background-holiday-season"
+        label={HOLIDAY_SEASON_COPY.label}
+        description={
+          setHolidaySeason.isError
+            ? HOLIDAY_SEASON_COPY.saveFailed
+            : HOLIDAY_SEASON_COPY.description
+        }
+        checked={background.data?.holiday_season ?? true}
+        disabled={background.data === undefined}
+        onCheckedChange={(next) => setHolidaySeason.mutate(next)}
       />
     </SettingsGroup>
   );

@@ -1,5 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const putSignedUpload = vi.hoisted(() => vi.fn());
 vi.mock("./put-signed-upload", async (importActual) => ({
@@ -12,9 +12,13 @@ import {
   CHAT_BACKGROUND_FAILURE_COPY,
   canSetChannelBackground,
   chatBackgroundErrorCopy,
+  chatBackgroundKeys,
+  useChapterChatBackground,
+  useChatBackground,
   useRequestChatBackgroundPhotoUrl,
   useSetChannelBackground,
   useSetChapterChatBackground,
+  useSetChatBackgroundHolidaySeason,
 } from "./use-chat-background";
 import { createHookWrapper, createTestQueryClient } from "./test-utils";
 
@@ -278,5 +282,147 @@ describe("chat background hooks", () => {
         CHAT_BACKGROUND_FAILURE_COPY.upload,
       );
     });
+  });
+});
+
+/** The Holiday season (#6149), as the thread reads it. */
+describe("the Holiday season", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function readOn(date: string, resolved: Record<string, unknown>) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(date));
+    const client = { GET: vi.fn().mockResolvedValue(ok(resolved)) };
+    return renderHook(() => useChatBackground("c-1"), {
+      wrapper: wrapper(client),
+    });
+  }
+
+  const plainDefault = {
+    background: "plain",
+    source: "chapter",
+    photo_url: null,
+    holiday_season: true,
+  };
+
+  it("reads a Plain chapter default as Holiday in the season", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", plainDefault);
+    await waitFor(() =>
+      expect(result.current.data?.background).toBe("holiday"),
+    );
+  });
+
+  it("leaves it Plain once the season is over", async () => {
+    const { result } = readOn("2026-12-27T00:00:00", plainDefault);
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  it("leaves it Plain where the chapter turned the season off", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", {
+      ...plainDefault,
+      holiday_season: false,
+    });
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  it("leaves a channel's own Plain alone", async () => {
+    const { result } = readOn("2026-12-10T12:00:00", {
+      ...plainDefault,
+      source: "channel",
+    });
+    await waitFor(() => expect(result.current.data?.background).toBe("plain"));
+  });
+
+  function setup() {
+    const queryClient = createTestQueryClient();
+    const key = chatBackgroundKeys.detail("chapter-1", "default");
+    queryClient.setQueryData(key, {
+      background: "plain",
+      photo_url: null,
+      holiday_season: true,
+    });
+    const answers: ((ok: boolean) => void)[] = [];
+    const client = {
+      GET: vi
+        .fn()
+        .mockResolvedValue(
+          ok({ background: "plain", photo_url: null, holiday_season: true }),
+        ),
+      PUT: vi.fn<
+        (path: string, init: { body: { enabled: boolean } }) => Promise<unknown>
+      >(
+        () =>
+          new Promise((resolve) =>
+            answers.push((saved) =>
+              resolve(
+                saved
+                  ? ok({})
+                  : {
+                      data: undefined,
+                      error: { message: "nope" },
+                      response: { ok: false, status: 500 },
+                    },
+              ),
+            ),
+          ),
+      ),
+    };
+    // The switch's own read is mounted, as on screen, so a refetch would run.
+    const { result: both } = renderHook(
+      () => ({
+        save: useSetChatBackgroundHolidaySeason(),
+        read: useChapterChatBackground(),
+      }),
+      {
+        wrapper: createHookWrapper({
+          client,
+          queryClient,
+          chapterId: "chapter-1",
+        }),
+      },
+    );
+    const result = {
+      get current() {
+        return both.current.save;
+      },
+    };
+    const shown = () =>
+      queryClient.getQueryData<{ holiday_season: boolean }>(key)
+        ?.holiday_season;
+    return { result, client, answers, shown };
+  }
+
+  it("shows a flip at once, and puts it back when the save fails", async () => {
+    const { result, client, answers, shown } = setup();
+    act(() => result.current.mutate(false));
+    await waitFor(() =>
+      expect(client.PUT).toHaveBeenCalledWith(
+        "/v1/chat-backgrounds/default/holiday-season",
+        { body: { enabled: false } },
+      ),
+    );
+    // Before the save answers, the switch already reads off.
+    expect(shown()).toBe(false);
+    await act(async () => answers[0]!(false));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(shown()).toBe(true);
+  });
+
+  it("sends quick flips in order and doesn't read the stored value back between them", async () => {
+    const { result, client, answers, shown } = setup();
+    act(() => result.current.mutate(false));
+    act(() => result.current.mutate(true));
+    await waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(1));
+    await act(async () => answers[0]!(true));
+    // The second flip goes only after the first settled, and the first's
+    // settle doesn't refetch over the second's optimistic value.
+    await waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(2));
+    expect(client.PUT.mock.calls.map((c) => c[1])).toEqual([
+      { body: { enabled: false } },
+      { body: { enabled: true } },
+    ]);
+    expect(client.GET).not.toHaveBeenCalled();
+    expect(shown()).toBe(true);
+    await act(async () => answers[1]!(true));
   });
 });

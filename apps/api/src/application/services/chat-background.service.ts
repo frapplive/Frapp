@@ -55,6 +55,31 @@ export interface ResolvedChatBackground {
   background: ChatBackgroundKey;
   source: 'channel' | 'chapter' | 'none';
   photo_url: string | null;
+  /**
+   * Whether the Holiday season (#6149) may swap this background: the
+   * chapter's switch on a chapter-default read, and always false for a
+   * channel's own choice or a DM, which the season never touches. The
+   * clients swap a Plain chapter default for Holiday from Dec 1 to 26 by the
+   * viewer's own date (`withHolidaySeason` in `@repo/validation`); the API
+   * never swaps it.
+   */
+  holiday_season: boolean;
+}
+
+export interface ChapterChatBackground {
+  background: ChatBackgroundKey;
+  photo_url: string | null;
+  holiday_season: boolean;
+}
+
+/**
+ * The chapter's Holiday season switch (#6149). A row from before the column,
+ * or a projection without it, reads as on: the column's own default.
+ */
+function holidaySeasonOn(
+  chapter: { chat_background_holiday?: boolean } | null,
+): boolean {
+  return chapter?.chat_background_holiday !== false;
 }
 
 interface StoredBackground {
@@ -117,11 +142,24 @@ export class ChatBackgroundService {
   }
 
   /** The chapter default, for the settings screen that edits it. */
-  async getChapterDefault(
-    chapterId: string,
-  ): Promise<{ background: ChatBackgroundKey; photo_url: string | null }> {
+  async getChapterDefault(chapterId: string): Promise<ChapterChatBackground> {
     const resolved = await this.resolveChapterDefault(chapterId);
-    return { background: resolved.background, photo_url: resolved.photo_url };
+    return {
+      background: resolved.background,
+      photo_url: resolved.photo_url,
+      holiday_season: resolved.holiday_season,
+    };
+  }
+
+  /** The officer switch "Holiday background this season" (#6149). */
+  async setHolidaySeason(
+    chapterId: string,
+    enabled: boolean,
+  ): Promise<ChapterChatBackground> {
+    await this.chapterRepo.update(chapterId, {
+      chat_background_holiday: enabled,
+    });
+    return this.getChapterDefault(chapterId);
   }
 
   async requestPhotoUploadUrl(
@@ -210,7 +248,7 @@ export class ChatBackgroundService {
     actorUserId: string,
     background: ChatBackgroundKey,
     storagePath: string | undefined,
-  ): Promise<{ background: ChatBackgroundKey; photo_url: string | null }> {
+  ): Promise<ChapterChatBackground> {
     if (background === CHAT_BACKGROUND_PHOTO) {
       const photoPath = await this.assertUploadedPhoto(chapterId, storagePath);
       const channel = await this.announcementChannel(chapterId);
@@ -252,7 +290,12 @@ export class ChatBackgroundService {
     chapterId: string,
   ): Promise<ResolvedChatBackground> {
     if (isDirectChannel(channel)) {
-      return { background: 'plain', source: 'none', photo_url: null };
+      return {
+        background: 'plain',
+        source: 'none',
+        photo_url: null,
+        holiday_season: false,
+      };
     }
     if (channel.background) {
       const own = await this.resolveStored({
@@ -260,8 +303,9 @@ export class ChatBackgroundService {
         photoPath: channel.background_photo_path,
         messageId: channel.background_message_id,
       });
-      // A withdrawn photo falls through to the chapter default.
-      if (own) return { ...own, source: 'channel' };
+      // A withdrawn photo falls through to the chapter default. A channel's
+      // own choice is never swapped by the season, so it reads no chapter.
+      if (own) return { ...own, source: 'channel', holiday_season: false };
     }
     return this.resolveChapterDefault(chapterId);
   }
@@ -280,6 +324,7 @@ export class ChatBackgroundService {
     return {
       ...(stored ?? { background: 'plain' as const, photo_url: null }),
       source: 'chapter',
+      holiday_season: holidaySeasonOn(chapter),
     };
   }
 
@@ -291,7 +336,10 @@ export class ChatBackgroundService {
     key,
     photoPath,
     messageId,
-  }: StoredBackground): Promise<Omit<ResolvedChatBackground, 'source'> | null> {
+  }: StoredBackground): Promise<Omit<
+    ResolvedChatBackground,
+    'source' | 'holiday_season'
+  > | null> {
     if (!isChatBackgroundKey(key)) return null;
     if (key !== CHAT_BACKGROUND_PHOTO)
       return { background: key, photo_url: null };

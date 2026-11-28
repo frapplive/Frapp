@@ -36,7 +36,9 @@ const {
   mockDeleteCategory,
   mockChatReports,
   mockMarkSeen,
+  mockSetHolidaySeason,
 } = vi.hoisted(() => ({
+  mockSetHolidaySeason: vi.fn(),
   mockOffline: { value: false },
   permissions: { current: [] as string[] },
   mockCreateChannel: vi.fn(),
@@ -63,6 +65,10 @@ vi.mock("@repo/hooks", async (importOriginal) => {
   return {
     ...actual,
     useChapterChatBackground: () => reads.background,
+    useSetChatBackgroundHolidaySeason: () => ({
+      mutate: mockSetHolidaySeason,
+      isError: false,
+    }),
     useCurrentChapter: () => ({ data: undefined }),
     useChannels: () => reads.channels,
     useCategories: () => reads.categories,
@@ -966,6 +972,30 @@ describe("ChatAdminPage — Look", () => {
     expect(
       screen.getByRole("link", { name: /^Chat background/ }),
     ).toHaveTextContent(/^Chat background$/);
+  });
+
+  it("turns the Holiday season off the moment the switch flips (#6149)", () => {
+    permissions.current = [...CHAPTER_PROFILE_PERMISSIONS];
+    reads.background = {
+      data: { background: "plain", photo_url: null, holiday_season: true },
+    };
+    render(<ChatAdminPage />);
+
+    const look = screen.getByRole("list", { name: "Look" });
+    const season = within(look).getByRole("switch", {
+      name: "Holiday background this season",
+    });
+    expect(season).toBeChecked();
+    fireEvent.click(season);
+    expect(mockSetHolidaySeason).toHaveBeenCalledWith(false);
+  });
+
+  it("holds the Holiday switch until the chapter's setting has loaded", () => {
+    permissions.current = [...CHAPTER_PROFILE_PERMISSIONS];
+    render(<ChatAdminPage />);
+    expect(
+      screen.getByRole("switch", { name: "Holiday background this season" }),
+    ).toBeDisabled();
   });
 });
 

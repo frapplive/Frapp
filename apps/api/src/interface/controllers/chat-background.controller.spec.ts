@@ -36,7 +36,7 @@ describe('ChatBackgroundController permissions (#3973)', () => {
     },
   );
 
-  it.each(['setDefault', 'defaultPhotoUrl'] as const)(
+  it.each(['setDefault', 'defaultPhotoUrl', 'setHolidaySeason'] as const)(
     '%s requires exactly CHAPTER_PROFILE_PERMISSIONS',
     (handler) => {
       expect(routeGate(handler)).toEqual([...CHAPTER_PROFILE_PERMISSIONS]);

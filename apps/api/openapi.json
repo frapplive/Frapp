@@ -8007,6 +8007,53 @@
         ]
       }
     },
+    "/v1/chat-backgrounds/default/holiday-season": {
+      "put": {
+        "operationId": "ChatBackgroundController_setHolidaySeason_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetChatBackgroundHolidaySeasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterChatBackgroundResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Turn the Holiday season (a Plain default shows Holiday, Dec 1 to 26) on or off for the chapter",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
     "/v1/chat-backgrounds/default/photo-url": {
       "post": {
         "operationId": "ChatBackgroundController_defaultPhotoUrl_v1",
@@ -33584,6 +33631,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "description": "What to draw behind the messages column."
@@ -33601,12 +33649,17 @@
             "type": "string",
             "nullable": true,
             "description": "A signed URL for the photo when `background` is `photo`; null otherwise, or when signing failed (draw plain)."
+          },
+          "holiday_season": {
+            "type": "boolean",
+            "description": "Whether the Holiday season (#6149) may swap this background: the chapter's switch when `source` is `chapter`, false for a channel's own choice or a DM. The clients show Holiday in place of a Plain chapter default from Dec 1 to 26 by the viewer's local date; the API never swaps the key."
           }
         },
         "required": [
           "background",
           "source",
-          "photo_url"
+          "photo_url",
+          "holiday_season"
         ]
       },
       "SetChannelBackgroundDto": {
@@ -33620,6 +33673,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "nullable": true,
@@ -33679,17 +33733,23 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ]
           },
           "photo_url": {
             "type": "string",
             "nullable": true
+          },
+          "holiday_season": {
+            "type": "boolean",
+            "description": "Whether the chapter shows Holiday in place of a Plain default from Dec 1 to 26 (#6149). The clients apply the season by the viewer's local date; the API never swaps the key."
           }
         },
         "required": [
           "background",
-          "photo_url"
+          "photo_url",
+          "holiday_season"
         ]
       },
       "SetChapterChatBackgroundDto": {
@@ -33703,6 +33763,7 @@
               "midnight",
               "game-day",
               "letters",
+              "holiday",
               "photo"
             ],
             "description": "A built-in key, or `photo` (with `storage_path`)."
@@ -33714,6 +33775,18 @@
         },
         "required": [
           "background"
+        ]
+      },
+      "SetChatBackgroundHolidaySeasonDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "On: a Plain default shows Holiday from Dec 1 to 26. Off: it stays Plain."
+          }
+        },
+        "required": [
+          "enabled"
         ]
       },
       "ReorderChannelsDto": {

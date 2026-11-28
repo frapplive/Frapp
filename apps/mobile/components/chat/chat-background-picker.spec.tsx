@@ -47,7 +47,7 @@ const radios = (tree: ReactTestRenderer) =>
   );
 
 describe("ChatBackgroundSwatches", () => {
-  it("offers Chapter default, the five built-ins and Photo, with the stored one checked", () => {
+  it("offers Chapter default, the six built-ins and Photo, with the stored one checked", () => {
     const tree = render({ value: "midnight" });
     expect(radios(tree).map((r) => r.props.accessibilityLabel)).toEqual([
       "Chapter default",
@@ -56,6 +56,7 @@ describe("ChatBackgroundSwatches", () => {
       "Midnight",
       "Game day",
       "Letters",
+      "Holiday",
       "Photo",
     ]);
     expect(
@@ -81,6 +82,7 @@ describe("ChatBackgroundSwatches", () => {
       "midnight",
       "game-day",
       "letters",
+      "holiday",
     ]);
   });
 

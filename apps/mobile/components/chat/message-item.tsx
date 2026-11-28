@@ -55,6 +55,11 @@ import {
 } from "@repo/hooks";
 import { useMentionChips } from "@repo/hooks/mention-chips";
 import { MemberAvatar } from "@/components/member-avatar";
+import {
+  HollySprig,
+  SantaHat,
+  useHolidayFlairOn,
+} from "@/components/chat/holiday-flair";
 import { SkeletonBlock } from "@/components/state-block";
 import { useRaisedSurfaces } from "@/lib/surfaces";
 import { AlertGlyph } from "@/components/control-glyphs";
@@ -445,6 +450,8 @@ export function MessageRowFrame({
   // two lookups would be two chances for them to drift apart. Both come from
   // `@repo/hooks`: `sender_id` is nullable, so an imported archive message has
   // no roster entry and names its author in `author_name`.
+  const holidayFlair = useHolidayFlairOn();
+  const isSystem = message.sender_id === SYSTEM_SENDER_ID;
   const { authorName, authorLabel, roleColor, namePending, avatarPending } =
     rowAuthor(message, nameFor, viewerId, roleColorFor, rosterLoading);
   const time = formatTimeOfDay(message.created_at);
@@ -628,6 +635,9 @@ export function MessageRowFrame({
                     {authorLabel}
                   </Text>
                 )}
+                {holidayFlair && !isSystem && !namePending ? (
+                  <HollySprig />
+                ) : null}
                 <Text style={styles.time}>{time}</Text>
                 {flag ? (
                   <FlagCaption view={flag} styles={styles} inline />
@@ -1235,6 +1245,7 @@ function RowAvatar({
   onOpenActions?: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
+  const holidayFlair = useHolidayFlairOn();
   if (message.sender_id === SYSTEM_SENDER_ID) {
     return (
       <View style={[styles.avatar, styles.systemAvatar]} testID="system-avatar">
@@ -1277,6 +1288,8 @@ function RowAvatar({
         textStyle={styles.avatarText}
         testID="message-avatar"
       />
+      {/* The Holiday season tips a Santa hat onto the photo (#6149). */}
+      {holidayFlair && !pending ? <SantaHat size={22} /> : null}
     </Pressable>
   );
 }
@@ -1329,6 +1342,8 @@ function BubbleRowFrame({
 }) {
   const mentionsViewer =
     !!viewerId && !message.is_deleted && message.mentions.includes(viewerId);
+  const holidayFlair = useHolidayFlairOn();
+  const isSystem = message.sender_id === SYSTEM_SENDER_ID;
   const { authorName, authorLabel, roleColor, namePending, avatarPending } =
     rowAuthor(message, nameFor, viewerId, roleColorFor, rosterLoading);
   const time = formatTimeOfDay(message.created_at);
@@ -1420,6 +1435,9 @@ function BubbleRowFrame({
                   {authorLabel}
                 </Text>
               )}
+              {holidayFlair && !mine && !isSystem && !namePending ? (
+                <HollySprig />
+              ) : null}
               <Text style={styles.time}>{time}</Text>
               {flag ? (
                 <FlagCaption
