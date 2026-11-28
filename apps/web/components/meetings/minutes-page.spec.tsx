@@ -518,6 +518,28 @@ describe("MinutesPage", () => {
     ).toContain("text-destructive-text");
   });
 
+  it("draws the ⋯ as the one action menu: its order, and Open event and Transcript as real links (#5739)", () => {
+    loaded(
+      minutes({ can_edit: true, can_delete: true, transcript: TRANSCRIPT }),
+    );
+    render(<MinutesPage id="m-1" />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "More" }), {
+      key: "Enter",
+    });
+    const names = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+    expect(names.indexOf("Copy link")).toBeLessThan(
+      names.indexOf("Open event"),
+    );
+    expect(names.at(-1)).toBe("Delete minutes");
+    const event = screen.getByRole("menuitem", { name: "Open event" });
+    expect(event.getAttribute("href")).toMatch(/^\/events\?event=/);
+    const transcript = screen.getByRole("menuitem", { name: "Transcript" });
+    expect(transcript.getAttribute("href")).toBe("/meetings/m-1/transcript");
+    expect(transcript.getAttribute("target")).toBe("_blank");
+  });
+
   it("ticks an action item off once its task is done, and says so at a glance", () => {
     mocks.actionItemTasks.current = [{ index: 0, done: true, group: null }];
     try {
