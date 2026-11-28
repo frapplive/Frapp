@@ -103,6 +103,9 @@ export const FilterSheet = forwardRef<
     setOpenKey(null);
     setQuery("");
   };
+  // Back and VoiceOver's escape step out of a row's options to the rows, and
+  // out of the rows close the sheet.
+  const backOrClose = open ? back : closeSheet;
 
   return (
     <BottomSheetModal
@@ -127,13 +130,13 @@ export const FilterSheet = forwardRef<
         </BottomSheetFooter>
       )}
     >
-      <SheetBackToClose onClose={open ? back : closeSheet} />
+      <SheetBackToClose onClose={backOrClose} />
       {open ? (
         <FilterOptions
           filter={open}
           query={query}
           onQuery={setQuery}
-          onBack={back}
+          onEscape={backOrClose}
           onClose={closeSheet}
           onPick={(value) => {
             open.onChange(value);
@@ -145,7 +148,7 @@ export const FilterSheet = forwardRef<
           title={title}
           filters={filters}
           onOpen={setOpenKey}
-          onClose={closeSheet}
+          onEscape={backOrClose}
         />
       )}
     </BottomSheetModal>
@@ -156,12 +159,13 @@ function FilterRows({
   title,
   filters,
   onOpen,
-  onClose,
+  onEscape,
 }: {
   title: string;
   filters: readonly FilterSheetFilter[];
   onOpen: (key: string) => void;
-  onClose: () => void;
+  /** Closes the sheet: its X and VoiceOver's escape. */
+  onEscape: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const brand = useChapterBranding();
@@ -179,14 +183,14 @@ function FilterRows({
   );
   return (
     <BottomSheetScrollView
-      onAccessibilityEscape={onClose}
+      onAccessibilityEscape={onEscape}
       contentContainerStyle={[
         styles.content,
         styles.rows,
         styles.contentWithFooter,
       ]}
     >
-      <TallSheetHeader title={title} onClose={onClose} />
+      <TallSheetHeader title={title} onClose={onEscape} />
       {narrowing.length > 0 ? (
         <ListSection>{narrowing.map(row)}</ListSection>
       ) : null}
@@ -213,14 +217,15 @@ function FilterOptions({
   filter,
   query,
   onQuery,
-  onBack,
+  onEscape,
   onClose,
   onPick,
 }: {
   filter: FilterSheetFilter;
   query: string;
   onQuery: (next: string) => void;
-  onBack: () => void;
+  /** Back to the rows: the back row and VoiceOver's escape. */
+  onEscape: () => void;
   onClose: () => void;
   onPick: (value: string) => void;
 }) {
@@ -239,7 +244,7 @@ function FilterOptions({
 
   return (
     <BottomSheetFlatList
-      onAccessibilityEscape={onBack}
+      onAccessibilityEscape={onEscape}
       accessibilityRole="radiogroup"
       accessibilityLabel={filter.label}
       data={shown}
@@ -252,7 +257,7 @@ function FilterOptions({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back to filters"
-              onPress={onBack}
+              onPress={onEscape}
               hitSlop={tokens.spacing.sm}
               style={styles.back}
             >
