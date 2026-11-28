@@ -9,6 +9,7 @@ import {
   usePermissionList,
 } from "@repo/hooks";
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
+import { SEE_ROLES_PERMISSIONS } from "@/lib/roles/can-see-roles";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
 import {
   addsTiers,
@@ -160,10 +161,7 @@ function RolesAndGroups() {
   const filtering = normalizeWords(query).length > 0;
   const permissions = usePermissionList();
   const isHidden = useIsPermissionHidden();
-  const canSeeRoles = canAny(
-    ["roles:manage", "chapter-config:view"],
-    permissions,
-  );
+  const canSeeRoles = canAny(SEE_ROLES_PERMISSIONS, permissions);
   const groupsQuery = useGroups({ enabled: true });
   const groups = groupsQuery.data ?? [];
 

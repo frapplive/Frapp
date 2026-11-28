@@ -22,11 +22,13 @@ import {
  *
  * Only this build's own dashboard origin (`webAppOrigin`): on a staging build
  * a production link names records the staging API doesn't have. A web-only
- * page (Backwork, Chapter settings) and a path no page owns are not the
- * app's: `null`, so the link stays a web page. So is an address the phone
- * would open without what it points at (a document, a folder, Alumni, a
- * message with no channel): a parameter the chosen screen drops, unless it
- * only picks a less specific screen of the same page (an event link's day).
+ * page (Backwork, any Chapter settings page but a role's or a tier's) and a
+ * path no page owns are not the app's: `null`, so the link stays a web page.
+ * So is an address the phone would open without what it points at (a
+ * document, a folder, Alumni, a message with no channel): a parameter the
+ * chosen screen drops, unless it only picks a less specific screen of the
+ * same page (an event link's day) or only places the page on web (the
+ * screen's `matches`, such as `tab=roles` in front of a role, #6049).
  * Ids are trimmed, and an empty one counts as absent.
  *
  * A message thread opens over its channel, as a thread notification does

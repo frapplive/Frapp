@@ -74,6 +74,7 @@ import {
   type RolesData,
 } from "@/lib/roles/use-roles-data";
 import { useFrappTheme } from "@/lib/theme";
+import { ROLES_HIDDEN_TITLE, useCanSeeRoles } from "@/lib/roles/can-see-roles";
 
 type Failure = { permission: string; message: string } | null;
 
@@ -108,6 +109,7 @@ export default function RoleScreen() {
     ? params.roleId[0]
     : (params.roleId ?? "");
   const data = useRolesData();
+  const canSeeRoles = useCanSeeRoles();
   const { rolesQuery, tiersQuery, roles, words } = data;
   const role = roles.find((candidate) => candidate.id === roleId) ?? null;
 
@@ -139,6 +141,16 @@ export default function RoleScreen() {
             ))}
           </ListSection>
         </SkeletonRegion>
+      </ScreenShell>
+    );
+  }
+  if (canSeeRoles === false) {
+    return (
+      <ScreenShell back={BACK_TO_ROLES} title="Role">
+        <ErrorState
+          title={ROLES_HIDDEN_TITLE}
+          body="Ask an officer who manages roles if you need to see this."
+        />
       </ScreenShell>
     );
   }

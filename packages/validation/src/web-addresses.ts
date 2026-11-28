@@ -116,9 +116,11 @@ export interface WebAddressRow {
   params: readonly string[];
   /**
    * The phone screens this page's addresses open, most specific first: the
-   * first whose `when` parameters are all present wins. `null` is a web-only
-   * page (Backwork, Chapter settings, Plan and billing), which the phone
-   * doesn't claim, so its link stays in the browser.
+   * first whose `when` parameters are all present and whose `matches` all
+   * hold wins (`phoneRowFits`); an address none fits stays in the browser.
+   * `null` is a web-only page (Backwork, Plan and billing), which the phone
+   * doesn't claim. Chapter settings is web only but for Roles and groups'
+   * role and tier pages (#6049).
    */
   phone: readonly (PhoneAddress & { when?: readonly string[] })[] | null;
 }
@@ -309,11 +311,6 @@ export function webAddressRow(pathname: string): WebAddressRow | null {
 }
 
 /**
- * The phone screen a web address opens, or `null` for a web-only page or an
- * address no page owns. `pathname` and `search` are a URL's own
- * (`/events`, `?event=…`).
- */
-/**
  * Whether `query` picks `candidate`: each of its `when` parameters present,
  * and each of its `matches` holding its value.
  */
@@ -328,6 +325,12 @@ export function phoneRowFits(
     )
   );
 }
+
+/**
+ * The phone screen a web address opens, or `null` for a web-only page or an
+ * address no page owns. `pathname` and `search` are a URL's own
+ * (`/events`, `?event=…`).
+ */
 
 export function phoneAddressFor(
   pathname: string,

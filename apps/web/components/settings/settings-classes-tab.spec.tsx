@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   params: "tab=classes",
   push: vi.fn(),
+  close: vi.fn(),
   replace: vi.fn(),
 }));
 
@@ -41,7 +42,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/address/address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/address/address")>()),
   pushAddressTo: (href: string) => h.push(href),
-  closeToAddress: (href: string) => h.push(href),
+  closeToAddress: (href: string) => h.close(href),
   replaceAddress: (changes: Record<string, string | null>) =>
     h.replace(
       `${LIST}${Object.entries(changes)
@@ -517,7 +518,7 @@ describe("SettingsClassesTab", () => {
       await userEvent.click(
         within(dialog).getByRole("button", { name: "Delete Alpha" }),
       );
-      await waitFor(() => expect(h.push).toHaveBeenCalledWith(LIST));
+      await waitFor(() => expect(h.close).toHaveBeenCalledWith(LIST));
       expect(mockDelete).toHaveBeenCalledWith("alpha");
     });
 
@@ -536,6 +537,7 @@ describe("SettingsClassesTab", () => {
         ),
       );
       expect(h.push).not.toHaveBeenCalled();
+      expect(h.close).not.toHaveBeenCalled();
     });
 
     it("lists the class's members in fraternal order, numbered by the list", () => {
@@ -694,6 +696,7 @@ describe("SettingsClassesTab", () => {
       expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
       expect(screen.getByRole("list", { name: "Members of Alpha" }));
       expect(h.push).not.toHaveBeenCalled();
+      expect(h.close).not.toHaveBeenCalled();
       expect(mockAssign).not.toHaveBeenCalled();
     });
 

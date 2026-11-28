@@ -18,6 +18,7 @@ import type { ChapterCustomField } from "@repo/validation";
 const h = vi.hoisted(() => ({
   params: "tab=fields",
   push: vi.fn(),
+  close: vi.fn(),
   replace: vi.fn(),
 }));
 
@@ -38,7 +39,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/address/address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/address/address")>()),
   pushAddressTo: (href: string) => h.push(href),
-  closeToAddress: (href: string) => h.push(href),
+  closeToAddress: (href: string) => h.close(href),
   replaceAddress: (changes: Record<string, string | null>) =>
     h.replace(
       `${LIST}${Object.entries(changes)
@@ -306,6 +307,7 @@ describe("SettingsFieldsTab: the list", () => {
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith("f1"));
     // From the list, nowhere to go back to.
     expect(h.push).not.toHaveBeenCalled();
+    expect(h.close).not.toHaveBeenCalled();
   });
 });
 
@@ -517,7 +519,7 @@ describe("SettingsFieldsTab: a field's page", () => {
         name: "Delete field",
       }),
     );
-    await waitFor(() => expect(h.push).toHaveBeenCalledWith(LIST));
+    await waitFor(() => expect(h.close).toHaveBeenCalledWith(LIST));
     expect(mockDelete).toHaveBeenCalledWith("f1");
   });
 
@@ -532,6 +534,7 @@ describe("SettingsFieldsTab: a field's page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mockDelete).not.toHaveBeenCalled();
     expect(h.push).not.toHaveBeenCalled();
+    expect(h.close).not.toHaveBeenCalled();
   });
 
   it("says a field someone deleted is gone", () => {

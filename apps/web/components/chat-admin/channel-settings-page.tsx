@@ -1,8 +1,8 @@
 "use client";
 
-import { closeToAddress } from "@/lib/address/address";
+import { closeToAddress, consumeAddressParam } from "@/lib/address/address";
 import { SETTINGS_BACK_LINK_ATTR } from "@/components/settings/settings-address-links";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -334,9 +334,14 @@ function ChannelSettings({
     }
   }
   // "Add a description" on the channel's start sends the officer here to
-  // type one: the field takes focus once, on that way in only.
-  const focusDescription =
-    useSearchParams().get(FOCUS_DESCRIPTION_PARAM) === "description";
+  // type one: the field takes focus once, on that way in only. The mark is
+  // one-shot, taken off once read, so the channel's address is the one its
+  // pages' back arrows close to (#6049).
+  const focusParam = useSearchParams().get(FOCUS_DESCRIPTION_PARAM);
+  const [focusDescription] = useState(() => focusParam === "description");
+  useEffect(() => {
+    if (focusParam !== null) consumeAddressParam(FOCUS_DESCRIPTION_PARAM);
+  }, [focusParam]);
   const nameChanged = nameDraft.trim() !== channel.name;
   const descriptionChanged = descriptionDraft.trim() !== descriptionSeed;
   const fieldsDirty = nameChanged || descriptionChanged;

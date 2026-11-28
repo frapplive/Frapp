@@ -1,7 +1,12 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { closeToAddress, pushAddressTo } from "@/lib/address/address";
+import {
+  addressWith,
+  closeToAddress,
+  pushAddressTo,
+} from "@/lib/address/address";
+import { SETTINGS_SUBPAGE_PARAMS } from "@/components/settings/settings-paths";
 
 /**
  * Marks a link as a page's back arrow (`SettingsBackLink`): it closes to
@@ -45,5 +50,40 @@ function followSettingsLink(event: MouseEvent<HTMLDivElement>): void {
   const href = `${url.pathname}${url.search}${url.hash}`;
   if (anchor.hasAttribute(SETTINGS_BACK_LINK_ATTR)) closeToAddress(href);
   else pushAddressTo(href);
+  scrollToolPageToTop();
+}
+
+/**
+ * Opens a rail row (Chapter settings' or a council's): pushes `?tab=` with
+ * none of the params that opened a page inside the last row and no `#…`, so
+ * Chat shows its own page when the officer comes back to it. The entry is a
+ * sibling of the row before (`fresh`), so Back walks the rows visited while a
+ * back arrow inside a row only ever closes to that row.
+ */
+export function pushRailRow(tab: string): void {
+  pushAddressTo(railRowAddress(tab), { fresh: true });
+}
+
+/**
+ * Clicking the lit rail row: closes whatever page is open inside it, by the
+ * address's rule (Back when this tab opened it, else a replace).
+ */
+export function closeRailRow(tab: string): void {
+  closeToAddress(railRowAddress(tab));
+}
+
+/** A rail row's own address: `?tab=`, no page inside it and no `#…`. */
+function railRowAddress(tab: string): string {
+  return addressWith(`${window.location.pathname}${window.location.search}`, {
+    tab,
+    ...Object.fromEntries(SETTINGS_SUBPAGE_PARAMS.map((name) => [name, null])),
+  });
+}
+
+/**
+ * Starts the settings panel at its top, not wherever the last page was
+ * scrolled to: it scrolls inside the shell's tool pane.
+ */
+export function scrollToolPageToTop(): void {
   document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
 }

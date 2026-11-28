@@ -1,6 +1,10 @@
 "use client";
 
-import { pushAddress } from "@/lib/address/address";
+import {
+  closeRailRow,
+  pushRailRow,
+  scrollToolPageToTop,
+} from "@/components/settings/settings-address-links";
 import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -100,8 +104,8 @@ export function CouncilSettingsPage() {
   // rows visited and a reload lands on the one open (#6049).
   const activeTab = tabParam ?? "council";
   const changeTab = useCallback((next: string) => {
-    pushAddress({ tab: next, tier: null, role: null });
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
+    pushRailRow(next);
+    scrollToolPageToTop();
   }, []);
 
   if (chapterQuery.isError && !chapterQuery.data) {
@@ -138,6 +142,10 @@ export function CouncilSettingsPage() {
         visibleTabs={visibleTabs}
         groupLabels={{ chapter: COPY.group }}
         search={false}
+        // The lit row closes a tier or role page opened inside it.
+        onRowClick={(value) => {
+          if (value === activeTab) closeRailRow(value);
+        }}
       />
       <div className="w-full min-w-0 max-w-[960px] flex-1">
         <TabsContent value="council" className="mt-0">

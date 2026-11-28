@@ -950,6 +950,20 @@ describe("A role's permissions (#4074)", () => {
   });
 });
 
+describe("A role or tier opened from a web link (#6049)", () => {
+  it("tells a member who may not see the roles so, and shows none of it", () => {
+    h.permissions = ["members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-bro" });
+    const role = render(<RoleScreen />);
+    expect(screenText(role)).toContain("Your role can't see roles");
+    expect(screenText(role)).not.toContain("Starts from Brothers.");
+    vi.mocked(useLocalSearchParams).mockReturnValue({ tierId: "t-bro" });
+    const tier = render(<RoleTierScreen />);
+    expect(screenText(tier)).toContain("Your role can't see roles");
+    expect(screenText(tier)).not.toContain("Brothers");
+  });
+});
+
 describe("Non-chapter business on the phone (#4958)", () => {
   const pickSwitch = (tree: ReactTestRenderer) =>
     tree.root.findAll(

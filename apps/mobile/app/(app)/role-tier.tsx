@@ -46,6 +46,7 @@ import {
   useRolesData,
 } from "@/lib/roles/use-roles-data";
 import { useFrappTheme } from "@/lib/theme";
+import { ROLES_HIDDEN_TITLE, useCanSeeRoles } from "@/lib/roles/can-see-roles";
 
 /**
  * A tier's page on the phone (#4074; web's in the same rows and words since
@@ -71,6 +72,7 @@ export default function RoleTierScreen() {
     ? params.tierId[0]
     : (params.tierId ?? "");
   const data = useRolesData();
+  const canSeeRoles = useCanSeeRoles();
   const { rolesQuery, tiersQuery, roles, tiers, reach, canManage, words } =
     data;
   const tier = tiers.find((candidate) => candidate.id === tierId) ?? null;
@@ -125,6 +127,16 @@ export default function RoleTierScreen() {
             ))}
           </ListSection>
         </SkeletonRegion>
+      </ScreenShell>
+    );
+  }
+  if (canSeeRoles === false) {
+    return (
+      <ScreenShell back={BACK_TO_ROLES} title={words.Singular}>
+        <ErrorState
+          title={ROLES_HIDDEN_TITLE}
+          body="Ask an officer who manages roles if you need to see this."
+        />
       </ScreenShell>
     );
   }

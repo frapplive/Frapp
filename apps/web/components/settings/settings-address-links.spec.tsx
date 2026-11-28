@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ADDRESS_FROM_KEY } from "@/lib/address/address";
-import { SettingsAddressLinks } from "./settings-address-links";
+import {
+  SettingsAddressLinks,
+  closeRailRow,
+  pushRailRow,
+} from "./settings-address-links";
 import { SettingsBackLink } from "./settings-subpage";
 
 function here(): string {
@@ -75,5 +79,28 @@ describe("SettingsAddressLinks (#6049)", () => {
     fireEvent.click(screen.getByRole("link", { name: "Exec" }));
     fireEvent.click(screen.getByRole("link", { name: "Zones" }));
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("pushes a rail row without the last row's page or a #, as a sibling", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/settings?tab=roles&group=g1&groups=automatic&from=automatic#reported-messages",
+    );
+    pushRailRow("logs");
+    expect(`${here()}${window.location.hash}`).toBe("/settings?tab=logs");
+    expect(window.history.state[ADDRESS_FROM_KEY]).toEqual([]);
+  });
+
+  it("closes the page open inside the lit row by the rule", () => {
+    pushRailRow("roles");
+    window.history.pushState(
+      { [ADDRESS_FROM_KEY]: ["/settings?tab=roles"] },
+      "",
+      "/settings?tab=roles&tier=t1",
+    );
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    closeRailRow("roles");
+    expect(go).toHaveBeenCalledWith(-1);
   });
 });

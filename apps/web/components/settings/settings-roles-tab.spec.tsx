@@ -11,6 +11,7 @@ const mockPermissions = vi.fn();
 const mockInvitableRoleIds = vi.fn<() => string[] | undefined>();
 const mockParams = { value: new URLSearchParams("tab=roles") };
 const mockPush = vi.fn();
+const mockClose = vi.fn();
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -33,7 +34,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/address/address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/address/address")>()),
   pushAddressTo: (href: string) => mockPush(href),
-  closeToAddress: (href: string) => mockPush(href),
+  closeToAddress: (href: string) => mockClose(href),
 }));
 
 // The page head's count and search read the roles pages' data; the pages
@@ -242,7 +243,7 @@ describe("SettingsRolesTab", () => {
     );
     expect(screen.queryByTestId("overview")).toBeNull();
     await user.click(screen.getByRole("button", { name: "deleted" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(mockClose).toHaveBeenCalledWith("/settings?tab=roles");
   });
 
   it("opens a role from ?role=, and goes back to the list once it's deleted", async () => {
@@ -253,7 +254,7 @@ describe("SettingsRolesTab", () => {
     expect(page).toHaveTextContent("role-3");
     expect(page).toHaveAttribute("data-back", "/settings?tab=roles");
     await user.click(screen.getByRole("button", { name: "deleted" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(mockClose).toHaveBeenCalledWith("/settings?tab=roles");
   });
 
   it("opens a group from ?group=, back to Roles and groups", async () => {
@@ -266,7 +267,7 @@ describe("SettingsRolesTab", () => {
     expect(page).toHaveAttribute("data-back-label", "Roles and groups");
     expect(page).toHaveAttribute("data-can-manage", "false");
     await user.click(screen.getByRole("button", { name: "done" }));
-    expect(mockPush).toHaveBeenCalledWith("/settings?tab=roles");
+    expect(mockClose).toHaveBeenCalledWith("/settings?tab=roles");
   });
 
   it("opens the automatic groups, and a group from there goes back to them", async () => {
@@ -297,7 +298,7 @@ describe("SettingsRolesTab", () => {
       "Pledge classes, class years and majors",
     );
     await user.click(screen.getByRole("button", { name: "done" }));
-    expect(mockPush).toHaveBeenCalledWith(
+    expect(mockClose).toHaveBeenCalledWith(
       "/settings?tab=roles&groups=automatic",
     );
   });

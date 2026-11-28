@@ -91,19 +91,19 @@ import {
 } from "@/components/settings/settings-tool-views";
 import {
   CHAT_REPORTS_ANCHOR,
-  SETTINGS_SUBPAGE_PARAMS,
   chapterSettingsHref,
   isChapterSettingsPage,
   moduleSettingsHref,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
+import { replaceAddress } from "@/lib/address/address";
 import {
-  closeAddress,
-  pushAddress,
-  replaceAddress,
-} from "@/lib/address/address";
-import { SettingsAddressLinks } from "@/components/settings/settings-address-links";
+  SettingsAddressLinks,
+  closeRailRow,
+  pushRailRow,
+  scrollToolPageToTop,
+} from "@/components/settings/settings-address-links";
 import { settingEntryById } from "@repo/hooks/settings-search";
 import { rushPipelineAccess } from "@repo/hooks/rush-pipeline";
 import {
@@ -296,8 +296,8 @@ function SettingsPageContent() {
   // Back walks the rows visited (iOS Settings, Discord's server settings),
   // and a refresh or a copied link lands on the row they were on (#6049).
   const changeTab = useCallback((next: string) => {
-    pushAddress({ tab: next, ...SUBPAGE_CLEARED });
-    document.querySelector("[data-tool-page]")?.scrollTo?.({ top: 0 });
+    pushRailRow(next);
+    scrollToolPageToTop();
   }, []);
 
   /**
@@ -839,16 +839,10 @@ function SettingsPageContent() {
           visibleTabs={visibleTabs}
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import, the plan table) and goes back to the
-            // row's own page.
-            // It closes by the address's rule: Back when this tab opened
-            // the page, else a replace with the row's own address.
-            if (
-              value === shownTab &&
-              (channelParam || toolParam || searchParams.get("page"))
-            ) {
-              closeAddress(SETTINGS_SUBPAGE_PARAMS);
-            }
+            // settings, Discord import, a role, a class, the plan table)
+            // and goes back to the row's own page, by the address's rule:
+            // Back when this tab opened the page, else a replace.
+            if (value === shownTab) closeRailRow(value);
           }}
         />
 
@@ -1088,11 +1082,6 @@ function SettingsPageContent() {
     </div>
   );
 }
-
-/** Each page-in-place parameter, removed: a rail row's address drops them. */
-const SUBPAGE_CLEARED = Object.fromEntries(
-  SETTINGS_SUBPAGE_PARAMS.map((param) => [param, null]),
-);
 
 // `SettingsPageContent` reads `?tab=` via `useSearchParams`, which Next requires
 // to sit under a Suspense boundary (matches the sign-in/sign-up/join pattern).

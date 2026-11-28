@@ -61,6 +61,9 @@ import {
   type StudyZone,
 } from "@/components/geofences/study-zone-editor";
 
+/** `&zone=<id>`: a study zone's editor, open in place of the page. */
+const ZONE_PARAM = WEB_ADDRESS_PARAMS.settings.zone;
+
 /**
  * The chapter's study zones, inside Chapter settings' Study zones page.
  *
@@ -74,9 +77,6 @@ import {
  * Who can manage zones is the page's own Who can section, so the drawer that
  * repeated it is gone.
  */
-/** `&zone=<id>`: a study zone's editor, open in place of the page. */
-const ZONE_PARAM = WEB_ADDRESS_PARAMS.settings.zone;
-
 export function StudyZonesManager() {
   const { toast } = useToast();
   const { isOffline } = useNetwork();
@@ -191,14 +191,18 @@ export function StudyZonesManager() {
     // Only a move of the address acts here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoneParam]);
-  // Waits for the zones and the permission, then opens once, for someone
-  // who may manage zones; a `zone=` they may not use is taken out.
+  // Waits for the zones, the permission and the subscription's verdict (a
+  // check still loading or a dropped connection is not one), then opens
+  // once, for someone who may manage zones; a `zone=` they may not use is
+  // taken out.
+  const gateSettled = !gate.isPending && !gate.isOffline;
   useEffect(() => {
     if (!zoneWanted || !zonesLoaded || !permissionsLoaded) return;
+    if (canManageZones && !gateSettled) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- acted on once
     setZoneWanted(null);
     if (!zones.some((zone) => zone.id === zoneWanted)) return;
-    if (!canManageZones || !gate.allowed) {
+    if (!canManageZones || !gate.state.allowed) {
       replaceAddress({ [ZONE_PARAM]: null });
       return;
     }
@@ -207,7 +211,7 @@ export function StudyZonesManager() {
     setEditorOpen(true);
     // The setters are stable in what they do.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneWanted, zonesLoaded, permissionsLoaded]);
+  }, [zoneWanted, zonesLoaded, permissionsLoaded, gateSettled]);
 
   function openEditor(zone: StudyZone | null) {
     if (zone) pushAddress({ [ZONE_PARAM]: zone.id });

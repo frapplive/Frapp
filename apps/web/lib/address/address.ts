@@ -78,8 +78,21 @@ function ownState(): Record<string, unknown> {
  * Opens something: merges `changes` into the address and pushes it, marked
  * with the address it was pushed from. Does nothing when nothing changes.
  */
-export function pushAddress(changes: AddressChanges): void {
-  pushAddressTo(addressWith(currentAddress(), changes));
+export function pushAddress(
+  changes: AddressChanges,
+  options?: PushOptions,
+): void {
+  pushAddressTo(addressWith(currentAddress(), changes), options);
+}
+
+export interface PushOptions {
+  /**
+   * A sibling, not a layer: the new entry is marked as pushed over nothing,
+   * so no back arrow under it closes past it to the entries before it.
+   * Chapter settings' rail rows (#6049): each row is a page of its own, and
+   * a page opened inside it closes to that row, never to the row before.
+   */
+  fresh?: boolean;
 }
 
 /**
@@ -88,13 +101,16 @@ export function pushAddress(changes: AddressChanges): void {
  * and marked with the address it was pushed from, so its back arrow can go
  * Back to it (`closeToAddress`).
  */
-export function pushAddressTo(href: string): void {
+export function pushAddressTo(href: string, options?: PushOptions): void {
   const from = currentAddress();
   const to = addressWith(href, {});
   if (to === from) return;
   const state = ownState();
   window.history.pushState(
-    { ...state, [ADDRESS_FROM_KEY]: [...pushedOver(state), from] },
+    {
+      ...state,
+      [ADDRESS_FROM_KEY]: options?.fresh ? [] : [...pushedOver(state), from],
+    },
     "",
     to,
   );
