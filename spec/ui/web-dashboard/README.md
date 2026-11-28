@@ -860,14 +860,15 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   With nothing to hold the `⋯` is not drawn ([`components.md` § Shared rules](../design-system/components.md#2-shared-rules), 2026-11-11).
   _(Changed 2026-11-11: it was a full-width red button in the footer for any `members:remove` holder, on their own profile too.)_
   Mobile's Block / Unblock is not on web's sheet; web blocks from a message's More menu and undoes it in `/profile`.
-- **One sort chip** in the toolbar row carries every (key, direction) pair, in place of sortable column headers.
+- **One Sort row** in the toolbar's Filter menu (below) carries every (key, direction) pair, in place of sortable column headers.
   The pairs, the standings and the fraternal-order sort a chapter with pledge classes or order numbers also gets, are listed in [`members.md` § Directory](../../behavior/members.md#directory).
-  **A standing** (#5950: Most points, Fewest points, Most service hours) adds a **Period** group under the orders in the same menu and names its period on the chip; each row then leads with `#rank` in a narrow mono column, the viewer's row carries an outlined **You** badge after the name (Strava's and Duolingo's boards mark it the same way), and the period's total ends the row in the foreground at 600 weight, where outside a standing the all-time points are one more muted fact.
+  **A standing** (#5950: Most points, Fewest points, Most service hours) adds a **Period** row under Sort, and the list's count line names the standing and its period ("23 members · Most points · This semester"); each row then leads with `#rank` in a narrow mono column, the viewer's row carries an outlined **You** badge after the name (Strava's and Duolingo's boards mark it the same way), and the period's total ends the row in the foreground at 600 weight, where outside a standing the all-time points are one more muted fact.
   These are the leaderboards the Points and Service hours pages drew (the service board's Strava-style pinned row and top ten went with its page).
-- **The filters are chips** (Role, Group, Graduation year, Status, and the pledge class one a chapter with classes gets;
-  [`members.md` § Directory](../../behavior/members.md#directory) owns the set), and so is the bulk bar's Assign role picker ([`components.md` §4](../design-system/components.md#4-inputs-and-selection);
-  native selects until [#3970](https://github.com/pdcarlson/Frapp/issues/3970)).
+- **The filters are one Filter menu** beside the search ([`components.md` § Filter bar](../design-system/components.md#filter-bar)): a row each for Role, Group, Graduation year, the pledge class one a chapter with classes gets, Status and Phone app ([`members.md` § Directory](../../behavior/members.md#directory) owns the set), then Sort and a standing's Period, which are never counted or cleared.
+  The filters that are on show as removable chips under the toolbar, with Clear all once two are on, and the Filter button counts them.
   A chapter imported from Discord can hold 100+ roles, so a long list opens with a type-to-filter field above it and stays scrollable.
+  The bulk bar's Assign role picker is still a filter chip ([`components.md` §4](../design-system/components.md#4-inputs-and-selection)), a form picker #5739 moves to the picking standard.
+  _(Changed in #5739 by shawnatomklein-eng, 2026-11-28: the filters and the sort were a row of chips from [#3970](https://github.com/pdcarlson/Frapp/issues/3970), native selects before that.)_
 - **No card-grid view.**
   Its tile was a wrapper card per member, showed strictly less than the row, and made selection unreachable while the bulk bar still rendered.
   A second rendering of one list is chrome.
