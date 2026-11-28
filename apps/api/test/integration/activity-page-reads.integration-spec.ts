@@ -293,7 +293,7 @@ describeIntegration(
         .delete()
         .in('id', [channelId, otherChannelId]);
       await supabase.from('members').delete().in('chapter_id', chapters);
-    await supabase.from('users').delete().in('id', [me, other]);
+      await supabase.from('users').delete().in('id', [me, other]);
       await supabase.from('chapters').delete().in('id', chapters);
     });
 
