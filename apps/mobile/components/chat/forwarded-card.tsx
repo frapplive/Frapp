@@ -7,7 +7,11 @@ import {
 } from "@repo/chat-core/forwarded";
 import type { ForwardedFrom } from "@repo/chat-core/types";
 import { formatRelativeDayTime } from "@repo/formatting";
-import { resolveAuthorLabel, useChannels } from "@repo/hooks";
+import {
+  authorNameAwaitsRoster,
+  resolveAuthorLabel,
+  useChannels,
+} from "@repo/hooks";
 import { SignetTokens } from "@repo/theme/signet";
 import { isDirectChannel, selectChannels } from "@/lib/chat/channel-list";
 import { italicFontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
@@ -26,6 +30,11 @@ export interface ForwardedCardProps {
    */
   hidden: string | null;
   nameFor: (userId: string) => string | null;
+  /**
+   * The first roster read is in flight: an original author it hasn't named
+   * yet is left out until it lands, never `Member 2f4a1c` (#6127).
+   */
+  rosterLoading?: boolean;
   viewerId: string | null;
   /** The row's long-press, since the GIF is its own pressable. */
   onLongPress?: () => void;
@@ -63,6 +72,7 @@ export function ForwardedCard({
   forwarded,
   hidden,
   nameFor,
+  rosterLoading = false,
   viewerId,
   onLongPress,
 }: ForwardedCardProps) {
@@ -77,7 +87,14 @@ export function ForwardedCard({
     () => (text ? parseMessageMarkdown(text, NO_CHIPS) : null),
     [text],
   );
-  const author = resolveAuthorLabel(forwarded, nameFor, viewerId);
+  const author = authorNameAwaitsRoster(
+    forwarded,
+    nameFor,
+    viewerId,
+    rosterLoading,
+  )
+    ? null
+    : resolveAuthorLabel(forwarded, nameFor, viewerId);
   const when = formatRelativeDayTime(forwarded.created_at);
   const files = forwardedAttachmentLabel(forwarded.attachment_count);
 
@@ -91,8 +108,10 @@ export function ForwardedCard({
       ) : (
         <>
           <Text style={styles.meta} numberOfLines={1}>
-            <Text style={styles.author}>{author}</Text>
-            {when ? `  ${when}` : ""}
+            {author === null ? null : (
+              <Text style={styles.author}>{author}</Text>
+            )}
+            {when ? `${author === null ? "" : "  "}${when}` : ""}
             {channelName ? ` · in #${channelName}` : ""}
           </Text>
           {parsed && !parsed.empty ? (

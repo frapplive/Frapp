@@ -43,6 +43,7 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
   const onTogglePin = vi.fn();
   const onDelete = vi.fn();
   const onOpenInDrive = vi.fn();
+  const onUploadVersion = vi.fn();
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
@@ -55,6 +56,7 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
           onTogglePin={onTogglePin}
           onDelete={onDelete}
           onOpenInDrive={onOpenInDrive}
+          onUploadVersion={onUploadVersion}
         />
       </FrappThemeProvider>,
       {
@@ -65,7 +67,14 @@ function render(target: DocumentActionsTarget, canManage: boolean) {
       },
     );
   });
-  return { tree, onToggleStar, onTogglePin, onDelete, onOpenInDrive };
+  return {
+    tree,
+    onToggleStar,
+    onTogglePin,
+    onDelete,
+    onOpenInDrive,
+    onUploadVersion,
+  };
 }
 
 const rowLabels = (tree: ReactTestRenderer) =>
@@ -163,5 +172,25 @@ describe("DocumentActionsSheet (#3934)", () => {
     expect(onOpenInDrive).toHaveBeenCalledWith(drive.driveUrl);
     // An upload has no Drive page.
     expect(rowLabels(render(FILE, false).tree)).toEqual(["Star"]);
+  });
+
+  // #6055: the screen decides who may (`mayUploadNewVersion`); the sheet
+  // offers the row only then, and runs it once it has closed.
+  it("offers Upload a new version only on a file the member may replace", () => {
+    const mine = { ...FILE, canUploadVersion: true };
+    const { tree, onUploadVersion } = render(mine, false);
+    expect(rowLabels(tree)).toEqual(["Star", "Upload a new version"]);
+
+    act(() => row(tree, "Upload a new version").props.onPress());
+    expect(onUploadVersion).not.toHaveBeenCalled();
+    finishClosing(tree);
+    expect(onUploadVersion).toHaveBeenCalledWith(mine);
+
+    expect(rowLabels(render(FILE, true).tree)).not.toContain(
+      "Upload a new version",
+    );
+    expect(
+      rowLabels(render({ ...FOLDER, canUploadVersion: true }, true).tree),
+    ).not.toContain("Upload a new version");
   });
 });

@@ -591,3 +591,23 @@ describe("peopleToAdd (#5905)", () => {
     ).toEqual(["u-alex", "u-blank"]);
   });
 });
+
+describe("buildWhoDirectory's alumni (#6190)", () => {
+  const rows = [
+    { user_id: "u-sam", display_name: "Sam Lee" },
+    { user_id: "u-old", display_name: "Old Timer", is_alumni: true },
+  ];
+
+  it("leaves alumni out for a task", () => {
+    expect(
+      buildWhoDirectory({ roster: rows, viewerUserId: null }).activeIds,
+    ).toEqual(["u-sam"]);
+  });
+
+  it("keeps them for New message, which may message an alumnus", () => {
+    expect(
+      buildWhoDirectory({ roster: rows, viewerUserId: null, alumni: true })
+        .activeIds,
+    ).toEqual(["u-old", "u-sam"]);
+  });
+});

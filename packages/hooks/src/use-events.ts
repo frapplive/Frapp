@@ -8,11 +8,16 @@ import {
   type components,
 } from "@repo/api-sdk";
 
+/** The key {@link useEvents} reads, for writers and the web's shell cache. */
+export function eventsQueryKey(chapterId: string | null | undefined) {
+  return ["events", chapterId] as const;
+}
+
 export function useEvents(options?: { enabled?: boolean }) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
-    queryKey: ["events", chapterId],
+    queryKey: eventsQueryKey(chapterId),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/events", { signal });
       if (error) throw error;
@@ -132,7 +137,7 @@ export function useCreateEvent() {
     // member is told to check the calendar instead.
     retry: false,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
     onError: (error) => {
       // The event may exist, and the copy says to check for it: refetch the
@@ -141,7 +146,9 @@ export function useCreateEvent() {
         error instanceof Error &&
         error.message === EVENT_CREATE_UNCONFIRMED
       ) {
-        void queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+        void queryClient.invalidateQueries({
+          queryKey: eventsQueryKey(chapterId),
+        });
       }
     },
   });
@@ -194,7 +201,7 @@ export function useUpdateEvent() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
   });
 }
@@ -219,7 +226,7 @@ export function useDeleteEvent() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events", chapterId] });
+      queryClient.invalidateQueries({ queryKey: eventsQueryKey(chapterId) });
     },
   });
 }

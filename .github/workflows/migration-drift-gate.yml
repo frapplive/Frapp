@@ -59,8 +59,10 @@ on:
   push:
     branches: [main]
   # The merge queue (#4795). `migration-order` and `migration-replay` are
-  # required, so they must report on the queue's test commit, measured against
-  # `merge_group.base_sha` as a PR is against its base. `migration-drift` skips
+  # required, so they must report on the queue's test commit. `migration-replay`
+  # measures against `merge_group.base_sha` as a PR is against its base;
+  # `migration-order` against `main`'s tip, and the entry's own migrations
+  # against `merge_group.base_sha` as well (its job). `migration-drift` skips
   # there: it reports on main and staging, which the PR already showed.
   # Pinned by merge-queue-triggers.test.mjs.
   merge_group:
@@ -557,6 +559,12 @@ jobs:
       - name: Check migration ordering
         env:
           ORDER_GATE_BASE_REF: ${{ steps.base.outputs.ref }}
+          # Merge queue only (empty elsewhere): the commit this entry was built
+          # on, `main` plus the entries ahead. The base above is `main`'s tip, so
+          # the entries ahead read as introduced and are never compared with this
+          # PR's migrations; against this ref they are base, and this PR's must
+          # sort after them (#4795).
+          ORDER_GATE_QUEUE_BASE_REF: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
           if [ -n "${MIGRATION_SNAPSHOT:-}" ]; then

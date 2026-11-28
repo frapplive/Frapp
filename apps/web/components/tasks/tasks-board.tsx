@@ -123,6 +123,7 @@ import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
 import { TasksPageSkeleton } from "@/components/tasks/tasks-skeleton";
 import {
   ActiveFilterChips,
+  anyFilterRow,
   FilterMenu,
   type FilterMenuFilter,
 } from "@/components/shared/filter-menu";
@@ -199,7 +200,8 @@ function isOpenStatus(status: TaskStatus): boolean {
  *   The member's own tasks are Activity's To do; the board's My tasks list
  *   (Overdue, Today, This week, Later) is gone, so no task is listed twice.
  *
- * Who sees Everyone's: `everyoneOffered` (`./everyones-tasks.ts`).
+ * Who sees Everyone's: `everyoneOffered` (`@repo/hooks` `everyones-tasks.ts`,
+ * shared with the phone).
  */
 export type TasksBoardPart = "mine" | "everyone";
 /** How the chapter's board groups: its status lanes, or one group a person. */
@@ -210,9 +212,6 @@ type DueFilter = Exclude<TaskDueBucket, "earlier">;
 
 /** A filter's value as its menu lists it. */
 type FilterOption = { value: string; label: string };
-
-/** The menu's "any" value for a filter; no task value can be it. */
-const ANY_FILTER = "\u0000any";
 
 const GROUP_BY_OPTIONS = [
   { value: "status", label: "By status" },
@@ -612,48 +611,33 @@ function AddressedTasksBoard({ part, onShowEveryone }: TasksBoardProps) {
   // on the chapter's board an officer's Assignee, Status and Due, each listing
   // only values some task has, then Group; on every view List or Grid. Group
   // and Layout are never counted or cleared, as Sort isn't on other lists.
-  const filterRow = (
-    key: string,
-    label: string,
-    anyLabel: string,
-    options: FilterOption[],
-    value: string | null,
-    onChange: (next: string | null) => void,
-  ): FilterMenuFilter => ({
-    key,
-    label,
-    options: [{ value: ANY_FILTER, label: anyLabel }, ...options],
-    value: value ?? ANY_FILTER,
-    anyValue: ANY_FILTER,
-    onChange: (next) => onChange(next === ANY_FILTER ? null : next),
-  });
   const taskFilters: FilterMenuFilter[] = [
     ...(canManage
       ? [
-          filterRow(
-            "assignee",
-            "Assignee",
-            "Anyone",
-            filterOptions.assignee,
-            assigneeFilter,
-            setAssigneeFilter,
-          ),
-          filterRow(
-            "status",
-            "Status",
-            "Any status",
-            filterOptions.status,
-            statusFilter,
-            (next) => setStatusFilter(next as StatusFilter | null),
-          ),
-          filterRow(
-            "due",
-            "Due",
-            "Any time",
-            filterOptions.due,
-            dueFilter,
-            (next) => setDueFilter(next as DueFilter | null),
-          ),
+          anyFilterRow({
+            key: "assignee",
+            label: "Assignee",
+            anyLabel: "Anyone",
+            options: filterOptions.assignee,
+            value: assigneeFilter,
+            onChange: setAssigneeFilter,
+          }),
+          anyFilterRow({
+            key: "status",
+            label: "Status",
+            anyLabel: "Any status",
+            options: filterOptions.status,
+            value: statusFilter,
+            onChange: (next) => setStatusFilter(next as StatusFilter | null),
+          }),
+          anyFilterRow({
+            key: "due",
+            label: "Due",
+            anyLabel: "Any time",
+            options: filterOptions.due,
+            value: dueFilter,
+            onChange: (next) => setDueFilter(next as DueFilter | null),
+          }),
           {
             key: "group",
             label: "Group",

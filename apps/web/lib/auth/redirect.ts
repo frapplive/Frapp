@@ -176,8 +176,18 @@ export function magicLinkRedirectUrl(origin: string, redirectTo: string): string
  *   address with the Confirm signup email, whose `?code=` can't be exchanged in
  *   another browser, and that still means the address is confirmed. A plain
  *   magic link on the hosted `token_hash` template never takes the code path.
+ * - `link`, on Link Google or Apple from Settings → Account (#2223). The member
+ *   is already signed in, so a failed return goes back to `next` with
+ *   {@link LINK_ERROR_PARAM} rather than to `/sign-in`, which would bounce a
+ *   signed-in member straight back without saying why.
  */
-export type AuthCallbackIntent = "sign-in" | "confirm" | "sign-in-link";
+export type AuthCallbackIntent =
+  | "sign-in"
+  | "confirm"
+  | "sign-in-link"
+  | "link";
+/** The GoTrue code a failed link carries back to Settings → Account (#2223). */
+export const LINK_ERROR_PARAM = "linkError";
 export const AUTH_CALLBACK_INTENT_PARAM = "intent";
 
 /**

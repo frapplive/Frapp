@@ -213,7 +213,7 @@ describe("Notifications row target", () => {
     data: { target: { screen: target } },
   });
 
-  it("pushes the screen each target names, the task board included (#4610)", () => {
+  it("opens the screen each target names, a task's on Activity (#5948)", () => {
     inbox.data = [read("n-tasks", "tasks"), read("n-dues", "billing")];
     const router = vi.mocked(useRouter)();
     vi.mocked(router.push).mockClear();
@@ -227,8 +227,8 @@ describe("Notifications row target", () => {
       );
 
     act(() => row("About tasks").props.onPress());
-    expect(router.push).toHaveBeenCalledWith("/tasks");
-    expect(router.dismissTo).not.toHaveBeenCalled();
+    // Activity is a tab: the inbox goes back down to it, never stacks it.
+    expect(router.dismissTo).toHaveBeenCalledWith("/activity");
 
     act(() => row("About billing").props.onPress());
     expect(router.push).toHaveBeenCalledWith("/dues");

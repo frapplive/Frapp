@@ -41,7 +41,13 @@ import { Button } from "@/components/ui/button";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FilterChip, SortChip } from "@/components/shared/filter-chip";
+import { FilterChip } from "@/components/shared/filter-chip";
+import {
+  ActiveFilterChips,
+  anyFilterRow,
+  FilterMenu,
+  type FilterMenuFilter,
+} from "@/components/shared/filter-menu";
 import { Badge } from "@/components/ui/badge";
 import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
@@ -113,6 +119,7 @@ import {
 import {
   useAddressParams,
   useDeadAddressParam,
+  useGoneAfterRecheck,
 } from "@/lib/address/use-address-params";
 import {
   closeAddress,
@@ -281,7 +288,7 @@ export function MembersDirectory() {
   // List or Grid (#4175), picked in the Directory's tab row.
   const [layout] = useListLayout("directory");
   const [query, setQuery] = useState("");
-  // `null` is "any", the shape `FilterChip` speaks.
+  // `null` is "any" (`anyFilterRow` below draws it as the menu's first row).
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [cohortFilter, setCohortFilter] = useState<string | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(null);
@@ -381,22 +388,12 @@ export function MembersDirectory() {
     then an alumnus moves to the Alumni tab, and anyone else (left, or hidden
     from this viewer) is said and taken out of the address.
   */
-  const memberListed =
-    memberParam !== null &&
-    (membersQuery.data ?? []).some((member) => member.user_id === memberParam);
-  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
-  const memberMissing =
-    memberParam !== null &&
-    membersQuery.data !== undefined &&
-    !membersQuery.isFetching &&
-    !memberListed;
-  useEffect(() => {
-    if (!memberMissing || recheckedFor === memberParam) return;
-    void membersQuery.refetch().finally(() => setRecheckedFor(memberParam));
-  }, [memberMissing, recheckedFor, memberParam, membersQuery]);
+  const memberGone = useGoneAfterRecheck(memberParam, membersQuery, (data, id) =>
+    data.some((member) => member.user_id === id),
+  );
   const alumniRead = useAlumni(undefined, {
     enabled:
-      tenantKind === "chapter" && memberMissing && recheckedFor === memberParam,
+      tenantKind === "chapter" && memberGone,
   });
   const isAlumnus =
     memberParam !== null &&
@@ -411,8 +408,7 @@ export function MembersDirectory() {
   const deadMember = useDeadAddressParam(
     MEMBER_PARAM,
     memberParam,
-    memberMissing &&
-      recheckedFor === memberParam &&
+    memberGone &&
       (tenantKind !== "chapter" ||
         (alumniRead.data !== undefined &&
           !alumniRead.isFetching &&
@@ -653,6 +649,106 @@ export function MembersDirectory() {
     standings.windowOptions.find((o) => o.value === standings.window)?.label ??
     "";
 
+  // The toolbar's filters, in the order the chips stood (#5739): Role, Group,
+  // Graduation year, pledge class, Status, phone reach, then Sort and a
+  // standing's Period. A filter with nothing to offer is left out, as its
+  // chip was.
+  const filters: FilterMenuFilter[] = [
+    anyFilterRow({
+      key: "role",
+      label: "Role",
+      anyLabel: "Any role",
+      options: filterRoleChipOptions,
+      value: effectiveRoleFilter,
+      onChange: setRoleFilter,
+    }),
+    ...(groupChipOptions.length > 0
+      ? [
+          anyFilterRow({
+            key: "group",
+            label: "Group",
+            anyLabel: "Any group",
+            options: groupChipOptions,
+            value: effectiveGroupFilter,
+            onChange: setGroupFilter,
+          }),
+        ]
+      : []),
+    anyFilterRow({
+      key: "cohort",
+      label: "Graduation year",
+      anyLabel: "Any year",
+      options: cohortChipOptions,
+      value: effectiveCohortFilter,
+      onChange: setCohortFilter,
+    }),
+    // Separate from graduation year: one pledge class can span several
+    // (#3939, #3941). The chapter's own word, in its own order, and absent
+    // for a chapter that keeps no classes.
+    ...(classChipOptions.length > 0
+      ? [
+          anyFilterRow({
+            key: "class",
+            label: vocab("class", chapterWords),
+            anyLabel: "Any",
+            options: classChipOptions,
+            value: effectiveClassFilter,
+            onChange: setClassFilter,
+          }),
+        ]
+      : []),
+    anyFilterRow({
+      key: "status",
+      label: "Status",
+      anyLabel: "Any status",
+      options: STATUS_OPTIONS,
+      value: statusFilter,
+      onChange: (value) =>
+        setStatusFilter(value as "active" | "pending" | null),
+    }),
+    ...(showsPhoneReach
+      ? [
+          anyFilterRow({
+            key: "phone-reach",
+            label: PHONE_REACH_LABEL,
+            anyLabel: "Any",
+            options: PHONE_REACH_FILTER_OPTIONS,
+            value: effectivePhoneReachFilter,
+            onChange: (value) =>
+              setPhoneReachFilter(value as PhoneReachFilter | null),
+          }),
+        ]
+      : []),
+    {
+      key: "sort",
+      label: "Sort",
+      options: sortOptions,
+      value: effectiveSort,
+      anyValue: DEFAULT_SORT,
+      onChange: (value) => setSort(value as SortValue),
+      isSort: true,
+    },
+    // A standing ranks over a period (#5950), picked under Sort.
+    ...(standingsMetric
+      ? [
+          {
+            key: "period",
+            label: "Period",
+            options: standings.windowOptions,
+            value: standings.window,
+            anyValue: standings.window,
+            onChange: setStandingsWindow,
+            isSort: true,
+          },
+        ]
+      : []),
+  ];
+
+  // A standing and its period stay in sight with the Filter menu closed, on
+  // the count line, as the sort chip named them until #5739.
+  const standingLine = standingsMetric
+    ? `${sortOptions.find((o) => o.value === effectiveSort)?.label ?? ""} · ${standingsPeriodLabel}`
+    : null;
   const pointsOf = (member: MemberProfile) =>
     pointsByUserId.get(member.user_id) ?? 0;
   const standingTotalOf = (member: MemberProfile) =>
@@ -1141,7 +1237,7 @@ export function MembersDirectory() {
           count={
             activeQuery.isLoading
               ? null
-              : `${sortedMembers.length} member${sortedMembers.length === 1 ? "" : "s"}${usingSearch ? ` matching “${deferredQuery}”` : ""}`
+              : `${sortedMembers.length} member${sortedMembers.length === 1 ? "" : "s"}${usingSearch ? ` matching “${deferredQuery}”` : ""}${standingLine ? ` · ${standingLine}` : ""}`
           }
         >
           {/* A search spans both tabs (see `members` above), so say so. */}
@@ -1186,89 +1282,11 @@ export function MembersDirectory() {
             />
           </div>
           {/*
-          The shared filter chips, as `/backwork` and `/documents` use them
-          (#3970; native selects until then). Role is the long one: past
-          `FILTER_SEARCH_THRESHOLD` options its list opens with a
-          type-to-filter field, so a chapter with 100+ imported roles can
-          type for one instead of scrolling.
-        */}
-          <FilterChip
-            label="Role"
-            anyLabel="Any role"
-            options={filterRoleChipOptions}
-            value={effectiveRoleFilter}
-            onChange={setRoleFilter}
-          />
-          {groupChipOptions.length > 0 ? (
-            <FilterChip
-              label="Group"
-              anyLabel="Any group"
-              options={groupChipOptions}
-              value={effectiveGroupFilter}
-              onChange={setGroupFilter}
-            />
-          ) : null}
-          <FilterChip
-            label="Graduation year"
-            anyLabel="Any year"
-            options={cohortChipOptions}
-            value={effectiveCohortFilter}
-            onChange={setCohortFilter}
-          />
-          {/*
-            Beside graduation year, and separate from it: one pledge class can
-            span several graduation years (#3939, #3941). Labelled with the
-            chapter's own word, in the chapter's own order, and absent for a
-            chapter that keeps no classes.
+            The one Filter button (rulebook § 9, `components.md` § Filter
+            bar), as Tasks, Events and the points ledger filter. Sort and a
+            standing's Period are rows in it, never counted or cleared.
           */}
-          {classChipOptions.length > 0 ? (
-            <FilterChip
-              label={vocab("class", chapterWords)}
-              anyLabel="Any"
-              options={classChipOptions}
-              value={effectiveClassFilter}
-              onChange={setClassFilter}
-            />
-          ) : null}
-          <FilterChip
-            label="Status"
-            anyLabel="Any status"
-            options={STATUS_OPTIONS}
-            value={statusFilter}
-            onChange={(value) =>
-              setStatusFilter(value as "active" | "pending" | null)
-            }
-          />
-          {showsPhoneReach ? (
-            <FilterChip
-              label={PHONE_REACH_LABEL}
-              anyLabel="Any"
-              options={PHONE_REACH_FILTER_OPTIONS}
-              value={effectivePhoneReachFilter}
-              onChange={(value) =>
-                setPhoneReachFilter(value as PhoneReachFilter | null)
-              }
-            />
-          ) : null}
-          {/*
-            A standings sort names its period on the chip and lists the
-            periods under the orders, in the same menu (#5950).
-          */}
-          <SortChip
-            options={sortOptions}
-            value={effectiveSort}
-            onChange={setSort}
-            detail={
-              standingsMetric
-                ? {
-                    label: "Period",
-                    options: standings.windowOptions,
-                    value: standings.window,
-                    onChange: setStandingsWindow,
-                  }
-                : undefined
-            }
-          />
+          <FilterMenu filters={filters} thing="members" />
           {/*
           The route's primary action, at the trailing edge of the one toolbar
           row `1f` pin 2 describes. It renders above the empty state as well
@@ -1285,6 +1303,8 @@ export function MembersDirectory() {
           />
         </div>
       </div>
+
+      <ActiveFilterChips filters={filters} />
 
       {/*
         The selection bar `1f` pin 4 names, in place of the accent-tinted

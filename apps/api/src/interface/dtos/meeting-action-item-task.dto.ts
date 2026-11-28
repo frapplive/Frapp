@@ -1,5 +1,23 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { TASK_GROUP_AUDIENCES, type TaskGroupAudience } from '@repo/validation';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import {
+  MEETING_ITEM_TEXT_MAX_LENGTH,
+  TASK_GROUP_AUDIENCES,
+  TASK_PEOPLE_MAX,
+  TASK_TITLE_MAX_LENGTH,
+  type TaskGroupAudience,
+} from '@repo/validation';
 import type { ActionItemTask } from '../../application/services/meeting-task-suggestions.service';
 
 /** A task for everyone's progress: copies done out of all of them. */
@@ -137,4 +155,54 @@ export class SeriesOpenActionItemsDto {
 
   @ApiProperty({ type: [OpenActionItemDto] })
   items!: OpenActionItemDto[];
+}
+
+/**
+ * Makes an action item of posted minutes a task from the minutes (#6062):
+ * the people it goes to, and the task's words, prefilled from the item.
+ */
+export class MakeActionItemTaskDto {
+  @ApiProperty({
+    description:
+      'The item’s text as the officer saw it, so an edit to the minutes meanwhile is caught.',
+    maxLength: MEETING_ITEM_TEXT_MAX_LENGTH,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MEETING_ITEM_TEXT_MAX_LENGTH)
+  text!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: TASK_PEOPLE_MAX,
+    description: 'One member gets the task; several each get their own copy.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TASK_PEOPLE_MAX)
+  @IsUUID(undefined, { each: true })
+  assignee_ids!: string[];
+
+  @ApiPropertyOptional({
+    maxLength: TASK_TITLE_MAX_LENGTH,
+    description: 'Defaults to the item’s text.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(TASK_TITLE_MAX_LENGTH)
+  title?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      '`YYYY-MM-DD`, or null for none. Defaults to the day the minutes named.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  due_date?: string | null;
 }

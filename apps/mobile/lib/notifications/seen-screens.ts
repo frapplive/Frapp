@@ -13,7 +13,9 @@
 const SCREENS_BY_PATHNAME: Record<string, readonly string[]> = {
   "/events": ["events"],
   "/event-details": ["events"],
-  "/tasks": ["tasks"],
+  // A task push opens the task's own screen since the Tasks screen folded
+  // into Activity (#5948).
+  "/task-details": ["tasks"],
   // The member's own points, where a points notification opens (#5950).
   "/points": ["points"],
   // A submitted task's review opens from here (`?review=`, which pushes the

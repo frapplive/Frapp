@@ -7,8 +7,6 @@ import * as expoRouter from "expo-router";
 import { AppState, StyleSheet } from "react-native";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
-import { expectBackRow } from "@/test/back-row";
-import { FloatingCreateButton } from "@/components/floating-create-button";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
 import { MODULE_REFUSAL_COPY } from "@/lib/module-refusal";
 import { moduleDisabledMessage } from "@repo/validation";
@@ -27,8 +25,11 @@ import { resetListLayoutsForTests, setListLayout } from "@/lib/list-layout";
  * why and stops offering a toggle that cannot win, and that an ordinary
  * failure keeps its quiet revert and retap.
  *
- * It renders `app/(app)/tasks.tsx` but lives here: a spec under `app/` ships
- * as a route module (`lib/routes.spec.ts`).
+ * It renders Activity's Everyone's (`components/tasks/everyones-tasks.tsx`),
+ * which took the board's rows when the Tasks screen folded into Activity
+ * (#5948), and Mine's Up for grabs card; `app/(app)/tasks.tsx` only
+ * redirects now. A spec under `app/` ships as a route module
+ * (`lib/routes.spec.ts`).
  */
 
 /** What `ChapterGuard` throws for a chapter that never finished checkout. */
@@ -104,10 +105,6 @@ let chapterId: string | null = "chapter-1";
 /** The board's rows, the viewer's grants and the chapter, per spec. */
 let tasks: unknown[] = TASKS;
 let permissions: string[] = [];
-let enabledModules: Record<string, boolean> | undefined = undefined;
-let events: unknown[] | undefined = [];
-/** Each `useEvents` call's `enabled`, so a spec can see whether it read. */
-const eventsEnabled: (boolean | undefined)[] = [];
 
 /** Each query's `refetch`, kept across renders so a pull can be asserted on. */
 /** Up for grabs: the postings read, and each open-task write. */
@@ -122,8 +119,6 @@ const deleteTask = vi.fn(async () => ({}));
 const refetch = vi.hoisted(() => ({
   viewer: vi.fn(async () => undefined),
   tasks: vi.fn(async () => undefined),
-  points: vi.fn(async () => undefined),
-  leaderboard: vi.fn(async () => undefined),
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -139,17 +134,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isFetching: false,
     refetch: refetch.tasks,
   }),
-  useMyPoints: () => ({ data: undefined, refetch: refetch.points }),
-  useLeaderboard: () => ({ data: undefined, refetch: refetch.leaderboard }),
   usePermissionList: () => permissions,
-  useCurrentChapter: () => ({
-    isSuccess: true,
-    data: { enabled_modules: enabledModules },
-  }),
-  useEvents: (options?: { enabled?: boolean }) => {
-    eventsEnabled.push(options?.enabled);
-    return { data: options?.enabled ? events : undefined };
-  },
   useUpdateTaskStatus: () => ({ mutateAsync }),
   useDeleteTask: () => ({ mutateAsync: deleteTask, isPending: false }),
   useConfirmTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -203,7 +188,18 @@ vi.mock("@/lib/haptics", () => ({
   pressHaptic: () => undefined,
 }));
 
-import TasksScreen from "@/app/(app)/tasks";
+import TasksRedirect from "@/app/(app)/tasks";
+import {
+  EVERYONES_LANE_LABELS,
+  EVERYONES_TASKS_EMPTY,
+  EveryonesTasks,
+} from "@/components/tasks/everyones-tasks";
+import {
+  UP_FOR_GRABS_LINE_MS,
+  UpForGrabs,
+} from "@/components/tasks/up-for-grabs";
+import { InlineNote } from "@/components/inline-note";
+import { SectionHeader } from "@/components/list-section";
 import { UndoBar } from "@/components/tasks/undo-bar";
 import { OpenTaskRow } from "@/components/tasks/open-task-row";
 import { TASK_AUDIENCE_COPY } from "@repo/validation";
@@ -211,12 +207,36 @@ import { TASK_AUDIENCE_COPY } from "@repo/validation";
 /** "The member came back to this screen": an export of the mocked `expo-router` (vitest.setup.ts). */
 const refocus = (expoRouter as unknown as { __refocus: () => void }).__refocus;
 
+const VIEWS = {
+  accessibilityLabel: "Whose tasks",
+  options: [
+    { value: "mine", label: "Mine" },
+    { value: "everyone", label: "Everyone's" },
+  ],
+  value: "everyone",
+  onChange: () => undefined,
+} as const;
+
+/** Activity's Everyone's: the board these specs pin (#5948). */
 function render(): ReactTestRenderer {
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
       <FrappThemeProvider>
-        <TasksScreen />
+        <EveryonesTasks views={VIEWS} />
+      </FrappThemeProvider>,
+    );
+  });
+  return tree;
+}
+
+/** Mine's Up for grabs card (#5948). */
+function renderUpForGrabs(): ReactTestRenderer {
+  let tree!: ReactTestRenderer;
+  act(() => {
+    tree = create(
+      <FrappThemeProvider>
+        <UpForGrabs now={new Date("2026-10-01T12:00:00Z")} />
       </FrappThemeProvider>,
     );
   });
@@ -531,8 +551,8 @@ describe("Tasks board rows", () => {
   });
 });
 
-describe("Tasks board pull-to-refresh", () => {
-  it("refreshes the board, the viewer, the points and the leaderboard on a pull (#3385)", async () => {
+describe("Everyone's pull-to-refresh", () => {
+  it("reads the chapter's tasks again on a pull (#3385)", async () => {
     for (const each of Object.values(refetch)) each.mockClear();
     const tree = render();
     // The ScrollView stand-in is a string, so it never renders the control it
@@ -548,222 +568,130 @@ describe("Tasks board pull-to-refresh", () => {
       await control.props.refresh();
     });
 
-    for (const each of Object.values(refetch)) {
-      expect(each).toHaveBeenCalledTimes(1);
-      expect(each).toHaveBeenCalledWith({ cancelRefetch: true });
-    }
-    act(() => tree.unmount());
-  });
-
-  it("leaves the board out of a pull with no chapter, since its read has no gate (#3385)", async () => {
-    for (const each of Object.values(refetch)) each.mockClear();
-    chapterId = null;
-    const tree = render();
-    const control = tree.root.find(
-      (node) =>
-        (node.type as unknown) === "ScrollView" && node.props.refreshControl,
-    ).props.refreshControl as React.ReactElement<{
-      refresh: () => Promise<unknown>;
-    }>;
-
-    await act(async () => {
-      await control.props.refresh();
-    });
-
-    expect(refetch.tasks).not.toHaveBeenCalled();
-    expect(refetch.viewer).toHaveBeenCalledTimes(1);
+    expect(refetch.tasks).toHaveBeenCalledTimes(1);
+    expect(refetch.tasks).toHaveBeenCalledWith({ cancelRefetch: true });
     act(() => tree.unmount());
   });
 });
 
-/**
- * The board left the tab bar for Activity's place there (#4610): it is pushed
- * from Activity, goes back to it, and carries its own + for New task, since a
- * pushed screen covers the tab bar's.
- */
-describe("Tasks as a pushed screen (#4610)", () => {
-  afterEach(() => {
-    permissions = [];
-    enabledModules = undefined;
-  });
-
-  it("goes back to Activity", () => {
-    const tree = render();
-    expectBackRow(tree, "Activity", "/activity");
-    act(() => tree.unmount());
-  });
-
-  it("draws its own New task + for a role that can assign", () => {
-    permissions = ["tasks:manage", "members:view"];
-    const tree = render();
-    const [plus] = tree.root.findAllByType(FloatingCreateButton);
-    expect(plus!.props.label).toBe("New task");
-    act(() => tree.unmount());
-  });
-
-  it("opens New task from its +, and says where the task went", () => {
-    permissions = ["tasks:manage", "members:view"];
-    const tree = render();
-    const [plus] = tree.root.findAllByType(FloatingCreateButton);
-    act(() => plus!.props.onPress());
-    const [sheet] = tree.root.findAll(
-      (node) => (node.type as unknown) === "NewTaskSheet",
-    );
-    expect(sheet).toBeDefined();
-    act(() => sheet!.props.onCreated("Sam Lee", false));
-    expect(screenText(tree)).toContain("Assigned to Sam Lee.");
-    act(() => tree.unmount());
-  });
-
-  it("pushes the task's screen for a task link it can read (#5492)", () => {
-    const router = vi.mocked(expoRouter.useRouter)();
-    vi.mocked(router.push).mockClear();
-    vi.mocked(router.setParams).mockClear();
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
-      task: "task-2",
-    });
-    const tree = render();
-    expect(router.setParams).toHaveBeenCalledWith({ task: undefined });
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: "/task-details",
-      params: { id: "task-2" },
-    });
-    act(() => tree.unmount());
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
-  });
-
-  it("stays on the board for a task link its read doesn't hold", () => {
-    const router = vi.mocked(expoRouter.useRouter)();
-    vi.mocked(router.push).mockClear();
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
-      task: "someone-elses",
-    });
-    const tree = render();
-    expect(router.push).not.toHaveBeenCalled();
-    act(() => tree.unmount());
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
-  });
-
-  it("says a task given back from its screen is up for grabs again, through the focus that lands here", async () => {
-    const router = vi.mocked(expoRouter.useRouter)();
-    vi.mocked(router.setParams).mockClear();
-    // The board is under the task's screen; going back to it brings the
-    // param and a focus together.
-    const tree = render();
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
-      released: "1",
-    });
-    act(() => refocus());
-    expect(screenText(tree)).toContain(
-      `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
-    );
-    expect(router.setParams).toHaveBeenCalledWith({
-      released: undefined,
-      assigned: undefined,
-    });
-    // The next focus takes it down, as any line under the points line.
-    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(screenText(tree)).toContain(
-      `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
-    );
-    act(() => refocus());
-    expect(screenText(tree)).not.toContain(
-      `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
-    );
-    act(() => tree.unmount());
-  });
-
-  it("draws no + while the chapter has Tasks off", () => {
-    permissions = ["tasks:manage", "members:view"];
-    enabledModules = { tasks: false };
-    const tree = render();
-    expect(tree.root.findAllByType(FloatingCreateButton)).toHaveLength(0);
-    act(() => tree.unmount());
-  });
-
-  it("draws no + for a member who can't assign", () => {
-    const tree = render();
-    expect(tree.root.findAllByType(FloatingCreateButton)).toHaveLength(0);
-    act(() => tree.unmount());
-  });
-});
-
-/**
- * Rule 7 of the empty-states plan: a member with nothing assigned reads one
- * line under the points line, the same line web's board writes, rather than a
- * card. The + is the board's own (New task), so only an officer hears about
- * it.
- */
-describe("Tasks with nothing assigned", () => {
-  const soon = (hours: number) =>
-    new Date(Date.now() + hours * 3_600_000).toISOString();
-  const text = (tree: ReactTestRenderer) => screenText(tree);
-
+describe("Everyone's lanes (#5948)", () => {
   afterEach(() => {
     tasks = TASKS;
-    permissions = [];
-    enabledModules = undefined;
-    events = [];
-    eventsEnabled.length = 0;
   });
 
-  it("says the plate is clear and names the next event", () => {
-    tasks = [];
-    events = [
-      { name: "Formal", start_time: soon(72) },
-      { name: "Chapter meeting", start_time: soon(2) },
+  it("lists the chapter's tasks by status, each led by whose it is", () => {
+    tasks = [
+      ...TASKS,
+      {
+        id: "task-3",
+        title: "Book the bus",
+        stored_status: "IN_PROGRESS",
+        status: "IN_PROGRESS",
+        due_date: "2026-10-05",
+        assignee_id: "user-3",
+        point_reward: 0,
+        points_awarded: false,
+      },
     ];
     const tree = render();
-
-    expect(text(tree)).toMatch(
-      /Nothing on your plate\. Next up: Chapter meeting, /,
+    const headings = tree.root
+      .findAllByType(SectionHeader)
+      .map((node) => node.props.children);
+    expect(headings).toEqual(
+      expect.arrayContaining([
+        EVERYONES_LANE_LABELS.in_progress,
+      ]),
     );
-    expect(text(tree)).not.toContain("all clear");
-    expect(text(tree)).not.toContain("Tap +");
+    const sams = rows(tree).find((node) => node.props.row.id === "task-3")!;
+    expect(sams.props.who).toBe("Sam Rivera");
     act(() => tree.unmount());
   });
 
-  it("tells an officer the + assigns a task", () => {
+  it("says so in one line when the chapter has no tasks", () => {
     tasks = [];
-    permissions = ["tasks:manage", "members:view"];
     const tree = render();
-
-    expect(text(tree)).toContain(
-      "Nothing on your plate. Tap + to assign a task.",
-    );
+    expect(screenText(tree)).toContain(EVERYONES_TASKS_EMPTY);
     act(() => tree.unmount());
   });
+});
 
-  it("points at no + for a role the quick actions don't offer New task (#3865)", () => {
-    // `POST /v1/tasks` also needs members:view, so the + has no New task.
-    tasks = [];
-    permissions = ["tasks:manage"];
-    const tree = render();
+describe("The Tasks screen's redirect (#5948)", () => {
+  it.each([
+    [{ task: "task-2", other: "dropped" }, { task: "task-2" }],
+    [{ released: "1" }, { released: "1" }],
+    [{ assigned: "user-3" }, { assigned: "user-3" }],
+  ])(
+    "pops down to Activity with %o, never stacking a second tab bar",
+    (given, kept) => {
+      const router = vi.mocked(expoRouter.useRouter)();
+      vi.mocked(router.dismissTo).mockClear();
+      vi.mocked(router.replace).mockClear();
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue(given);
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(<TasksRedirect />);
+      });
+      expect(router.dismissTo).toHaveBeenCalledWith({
+        pathname: "/activity",
+        params: kept,
+      });
+      expect(router.replace).not.toHaveBeenCalled();
+      act(() => tree.unmount());
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+    },
+  );
+});
 
-    expect(text(tree)).not.toContain("Tap + to assign a task.");
-    act(() => tree.unmount());
+describe("Everyone's box is the assignee's (#5948)", () => {
+  afterEach(() => {
+    tasks = TASKS;
   });
 
-  it("leaves the events read off when Events is off", () => {
-    tasks = [];
-    enabledModules = { events: false };
-    events = [{ name: "Chapter meeting", start_time: soon(2) }];
+  it("offers the box on the viewer's own task and on no one else's", () => {
+    tasks = [
+      ...TASKS,
+      {
+        id: "task-3",
+        title: "Sam's task",
+        stored_status: "TODO",
+        status: "TODO",
+        due_date: "2026-10-05",
+        assignee_id: "user-3",
+        point_reward: 0,
+        points_awarded: false,
+      },
+    ];
     const tree = render();
-
-    expect(eventsEnabled.every((enabled) => !enabled)).toBe(true);
-    expect(text(tree)).toContain("Nothing on your plate.");
-    expect(text(tree)).not.toContain("Next up");
+    const byId = (id: string) =>
+      rows(tree).find((node) => node.props.row.id === id)!;
+    expect(byId("task-1").props.onToggle).toBeDefined();
+    expect(byId("task-3").props.onToggle).toBeUndefined();
     act(() => tree.unmount());
   });
+});
 
-  it("reads no events while the board has rows", () => {
-    const tree = render();
-
-    expect(eventsEnabled.every((enabled) => !enabled)).toBe(true);
-    act(() => tree.unmount());
+describe("Up for grabs' line (#5948)", () => {
+  it("goes after a few seconds, Give it back with it", () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+        released: "1",
+      });
+      const tree = renderUpForGrabs();
+      vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+      expect(screenText(tree)).toContain(
+        `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+      );
+      act(() => {
+        vi.advanceTimersByTime(UP_FOR_GRABS_LINE_MS);
+      });
+      expect(screenText(tree)).not.toContain(
+        `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+      );
+      act(() => tree.unmount());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -967,20 +895,17 @@ describe("Up for grabs", () => {
   };
 
   it("draws nothing while nothing is open", () => {
-    const tree = render();
+    const tree = renderUpForGrabs();
     expect(openRows(tree)).toHaveLength(0);
-    expect(screenText(tree)).not.toContain("UP FOR GRABS");
+    expect(screenText(tree)).not.toContain(TASK_AUDIENCE_COPY.upForGrabs);
     act(() => tree.unmount());
   });
 
-  it("sits above the board with its points, group and due, and a Claim", () => {
+  it("is a card with its points, group and due, and a Claim", () => {
     openTasks = [POSTING, { ...POSTING, id: "open-2", status: "claimed" }];
-    const tree = render();
+    const tree = renderUpForGrabs();
     const text = screenText(tree);
-    expect(text).toContain("UP FOR GRABS");
-    expect(text.indexOf("UP FOR GRABS")).toBeLessThan(
-      text.indexOf("Sweep the porch"),
-    );
+    expect(text).toContain(TASK_AUDIENCE_COPY.upForGrabs);
     // A claimed posting is not drawn.
     expect(openRows(tree)).toHaveLength(1);
     expect(text).toMatch(/10 points · Philanthropy · Due /);
@@ -990,30 +915,36 @@ describe("Up for grabs", () => {
 
   it("draws no Claim on a posting the viewer may not claim", () => {
     openTasks = [{ ...POSTING, viewer_can_claim: false }];
-    const tree = render();
+    const tree = renderUpForGrabs();
     expect(openRows(tree)[0]!.props.onClaim).toBeUndefined();
     act(() => tree.unmount());
   });
 
   it("claims, says it's yours, and Give it back releases the new task", () => {
     openTasks = [POSTING];
-    const tree = render();
+    const tree = renderUpForGrabs();
     act(() => openRows(tree)[0]!.props.onClaim());
     expect(claimMutate).toHaveBeenCalledWith("open-1", expect.anything());
     const options = claimMutate.mock.calls[0]![1] as MutateOptions;
     act(() => options.onSuccess?.({ id: "task-9" }));
-    const bar = tree.root.findByType(UndoBar);
-    expect(bar.props.message).toMatch(/^It's yours\. Due /);
-    expect(bar.props.actionLabel).toBe(TASK_AUDIENCE_COPY.release);
-    act(() => bar.props.onUndo());
+    // The card's own line, with Give it back beside it.
+    const note = tree.root.findByType(InlineNote);
+    expect(screenText(tree)).toMatch(/It's yours\. Due /);
+    const action = note.props.action as { label: string; onPress: () => void };
+    expect(action.label).toBe(TASK_AUDIENCE_COPY.release);
+    act(() => action.onPress());
     expect(releaseMutate).toHaveBeenCalledWith("task-9", expect.anything());
-    expect(tree.root.findAllByType(UndoBar)).toHaveLength(0);
+    const released = releaseMutate.mock.calls[0]![1] as MutateOptions;
+    act(() => released.onSuccess?.(undefined));
+    expect(screenText(tree)).toContain(
+      `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+    );
     act(() => tree.unmount());
   });
 
   it("says another member claimed it first, and drops the row", () => {
     openTasks = [POSTING];
-    const tree = render();
+    const tree = renderUpForGrabs();
     act(() => openRows(tree)[0]!.props.onClaim());
     const options = claimMutate.mock.calls[0]![1] as MutateOptions;
     act(() => options.onError?.({ statusCode: 409, message: "Claimed" }));
@@ -1025,7 +956,7 @@ describe("Up for grabs", () => {
   it("says so in one line when the read fails", () => {
     openTasks = undefined;
     openTasksError = true;
-    const tree = render();
+    const tree = renderUpForGrabs();
     expect(screenText(tree)).toContain(
       `Couldn't load ${TASK_AUDIENCE_COPY.upForGrabs}`,
     );
@@ -1037,7 +968,7 @@ describe("Up for grabs", () => {
     const router = vi.mocked(expoRouter.useRouter)();
     vi.mocked(router.push).mockClear();
     openTasks = [POSTING];
-    const tree = render();
+    const tree = renderUpForGrabs();
     act(() => openRows(tree)[0]!.props.onOpen());
     expect(router.push).toHaveBeenCalledWith({
       pathname: "/task-details",
@@ -1046,20 +977,42 @@ describe("Up for grabs", () => {
     act(() => tree.unmount());
   });
 
+  it("says a task given back from its screen is up for grabs again", () => {
+    const router = vi.mocked(expoRouter.useRouter)();
+    vi.mocked(router.setParams).mockClear();
+    // Activity, under the task's screen, comes back with the param.
+    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
+      released: "1",
+    });
+    const tree = renderUpForGrabs();
+    expect(screenText(tree)).toContain(
+      `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`,
+    );
+    expect(router.setParams).toHaveBeenCalledWith({
+      released: undefined,
+      assigned: undefined,
+    });
+    vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({});
+    act(() => tree.unmount());
+  });
+
   it("says who a posting went to when its screen handed it over", () => {
     const router = vi.mocked(expoRouter.useRouter)();
     vi.mocked(router.setParams).mockClear();
-    const tree = render();
     vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
       assigned: "user-1",
     });
-    act(() => refocus());
+    const tree = renderUpForGrabs();
     expect(screenText(tree)).toContain("Added to your tasks.");
     // Someone else's hand-over names them.
     vi.mocked(expoRouter.useLocalSearchParams).mockReturnValue({
       assigned: "user-3",
     });
-    act(() => refocus());
+    act(() => tree.update(
+      <FrappThemeProvider>
+        <UpForGrabs now={new Date("2026-10-01T12:00:00Z")} />
+      </FrappThemeProvider>,
+    ));
     expect(screenText(tree)).toContain("Assigned to Sam Rivera.");
     expect(router.setParams).toHaveBeenCalledWith({
       released: undefined,

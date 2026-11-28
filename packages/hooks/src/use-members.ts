@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import {
   useQuery,
   useMutation,
@@ -20,7 +27,11 @@ import {
   resolveDisplayName,
   type DisplayNameMap,
 } from "./display-names";
-import { PROFILE_QUERY_FILTERS, useViewerUserId } from "./use-user";
+import {
+  myPermissionsQueryKey,
+  PROFILE_QUERY_FILTERS,
+  useViewerUserId,
+} from "./use-user";
 import {
   memberAvatarHue,
   memberAvatarTint,
@@ -69,6 +80,24 @@ export function useMembers(options?: { enabled?: boolean }) {
   });
 }
 
+/** The key {@link useChapterRoster} reads; the web's shell cache keeps its answer. */
+export function rosterQueryKey(chapterId: string | null | undefined) {
+  return ["members", chapterId, "roster"] as const;
+}
+
+/**
+ * The roster this device last saw for the signed-in member's chapter, offered
+ * by a client that keeps one (web's shell cache, #5049), or null. Names and
+ * photos only, for drawing while the live roster is out; never written into
+ * the query cache.
+ */
+type RosterRow = components["schemas"]["MemberRosterEntryDto"];
+
+const CachedRosterContext = createContext<readonly RosterRow[] | null>(null);
+
+/** Offers a kept roster to {@link useMemberDisplayNames}. */
+export const CachedRosterProvider = CachedRosterContext.Provider;
+
 /**
  * The chapter roster projected to display fields only — `GET /v1/members/roster`.
  *
@@ -85,7 +114,7 @@ export function useChapterRoster() {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
-    queryKey: ["members", chapterId, "roster"],
+    queryKey: rosterQueryKey(chapterId),
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/members/roster", {
         signal,
@@ -214,6 +243,18 @@ export interface MemberDisplayNames {
    * visitor; prefer degrading to {@link memberFallbackLabel} over waiting.
    */
   isPending: boolean;
+  /**
+   * No roster has landed yet and the first read is still under way: fetching,
+   * or paused offline with nothing cached (`spec/ui/design-system/README.md`
+   * gates a loading state on `isLoading` or a paused fetch). Unlike
+   * {@link isPending} it goes false, and stays false through later retries,
+   * once the read has failed, and it is never true for a disabled read (no
+   * active chapter). So a row that draws a name placeholder on it falls back
+   * to {@link memberFallbackLabel} then, rather than holding a skeleton
+   * forever or flashing one on each retry (#6127). Pass it to
+   * `authorAwaitsRoster`.
+   */
+  rosterLoading: boolean;
   isError: boolean;
   /**
    * Whether a roster read has ever landed. TanStack keeps the last good data
@@ -239,15 +280,21 @@ export interface MemberDisplayNames {
  */
 export function useMemberDisplayNames(): MemberDisplayNames {
   const query = useChapterRoster();
+  // While the live roster is out, the names this device last saw (#5049): a
+  // revisit names people at once instead of "Member 2f4a1c". A failed or
+  // finished read never falls back to it.
+  const kept = useContext(CachedRosterContext);
+  const rows: readonly RosterRow[] | undefined =
+    query.data ?? (query.isLoading && kept ? kept : undefined);
 
   // No `unknown`-parsing here, unlike the channel selectors: this route ships a
   // response DTO, so the SDK gives the rows a real type.
   const byId = useMemo<DisplayNameMap>(
     () =>
       Object.fromEntries(
-        (query.data ?? []).map((row) => [row.user_id, row.display_name]),
+        (rows ?? []).map((row) => [row.user_id, row.display_name]),
       ),
-    [query.data],
+    [rows],
   );
 
   const nameFor = useCallback(
@@ -268,10 +315,8 @@ export function useMemberDisplayNames(): MemberDisplayNames {
 
   const avatarById = useMemo(
     () =>
-      new Map(
-        (query.data ?? []).map((row) => [row.user_id, row.avatar_url ?? null]),
-      ),
-    [query.data],
+      new Map((rows ?? []).map((row) => [row.user_id, row.avatar_url ?? null])),
+    [rows],
   );
   const avatarFor = useCallback(
     (userId: string) => avatarById.get(userId) ?? null,
@@ -281,12 +326,12 @@ export function useMemberDisplayNames(): MemberDisplayNames {
   const roleColorById = useMemo(
     () =>
       new Map(
-        (query.data ?? []).map((row) => [
+        (rows ?? []).map((row) => [
           row.user_id,
           roleColorOrNull(row.role_color),
         ]),
       ),
-    [query.data],
+    [rows],
   );
   const roleColorFor = useCallback(
     (userId: string) => roleColorById.get(userId) ?? null,
@@ -316,6 +361,12 @@ export function useMemberDisplayNames(): MemberDisplayNames {
     roleColorFor,
     avatarTintFor,
     isPending: query.isPending,
+    // `errorUpdateCount`, not `isError`: a refetch of a read with no data
+    // puts it back to `pending`, so `isError` drops for every retry.
+    rosterLoading:
+      query.data === undefined &&
+      query.errorUpdateCount === 0 &&
+      (query.isFetching || query.fetchStatus === "paused"),
     isError: query.isError,
     hasData: query.data !== undefined,
     isFetching: query.isFetching,
@@ -428,7 +479,7 @@ export function useUpdateMemberRoles() {
       // An officer editing their own roles can change what they may do, so
       // their permission list is re-read rather than kept for its stale time.
       queryClient.invalidateQueries({
-        queryKey: ["user", "me", "permissions", chapterId],
+        queryKey: myPermissionsQueryKey(chapterId),
       });
     },
     onError: (error) => {

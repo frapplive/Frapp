@@ -14,6 +14,7 @@ import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { Skeleton } from "@/components/shared/async-states";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { councilTypeLabel } from "@/lib/hooks/use-tenant-kind";
+import { useShellCached } from "@/lib/shell-cache/shell-cache-sync";
 
 /**
  * The line under a tenant in the switch list: a chapter's school, a council's
@@ -71,10 +72,21 @@ export type ChapterSwitcher = {
 
 export function useChapterSwitcher(): ChapterSwitcher {
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
-  const { data: chapterData, isError: failed } = useCurrentChapter({
+  const {
+    data: chapterData,
+    isError: failed,
+    isLoading: chapterLoading,
+  } = useCurrentChapter({
     chapterId: activeChapterId,
     enabled: !!activeChapterId,
   });
+  // The chapter's name and mark as this browser last saw them, drawn while
+  // the read is out (#5049); the live answer replaces them.
+  const keptChapter = useShellCached<{
+    name?: unknown;
+    logo_url?: string | null;
+    branding?: Parameters<typeof chapterMarkFor>[0]["branding"];
+  }>("chapter");
   const { data: membershipData, isSuccess } = useAccessibleChapters();
   const selectChapter = useSelectChapter();
   const { toast } = useToast();
@@ -99,9 +111,19 @@ export function useChapterSwitcher(): ChapterSwitcher {
 
   // The crest is the chapter mark (`chapterMarkFor`, `crest-tile.tsx`).
   const identity = useMemo(() => {
-    if (!chapterData) return null;
-    return { mark: chapterMarkFor(chapterData), name: chapterData.name };
-  }, [chapterData]);
+    if (chapterData) {
+      return { mark: chapterMarkFor(chapterData), name: chapterData.name };
+    }
+    if (chapterLoading && typeof keptChapter?.name === "string") {
+      const kept = {
+        name: keptChapter.name,
+        logo_url: keptChapter.logo_url ?? null,
+        branding: keptChapter.branding ?? undefined,
+      };
+      return { mark: chapterMarkFor(kept), name: kept.name };
+    }
+    return null;
+  }, [chapterData, chapterLoading, keptChapter]);
 
   const { confirmDrop, confirmDropDialog } = useConfirmDropBulkUploads();
 

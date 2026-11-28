@@ -72,6 +72,10 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // A recording upload without the officer's "the room was told" (#712).
   // The upload step can't be submitted without it.
   "meeting.recording_notice_required",
+  // Make an action item a task (#6062) on minutes not posted, or on an item
+  // of only punctuation: the row never offers either.
+  "meeting.action_item.not_posted",
+  "meeting.action_item.empty",
 ] as const;
 
 export const MEMBER_CAUSED_ERROR_CODES = [
@@ -191,6 +195,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "ai.suggestion.decided",
   "ai.suggestion.accepting",
   "ai.suggestion.incomplete",
+  // Make an action item a task (#6062): the minutes were edited since they
+  // were read, or another officer made it a task at the same moment.
+  "meeting.action_item.changed",
+  "meeting.action_item.already_task",
   // Add to next meeting's agenda (#5790) on a suggestion that isn't a task
   // from minutes (only an old or hand-made request), or from minutes whose
   // meeting was deleted since (the menu offers it; the refusal says why).

@@ -243,7 +243,8 @@ export const ACT_COPY = {
   self_left_out: "You can't change your own points, so you are left out.",
   done_task: "Task created.",
   done_event: "Event created.",
-  open_tasks: "Open Tasks",
+  /** A created task's link: Activity, where tasks live since #5948. */
+  open_activity: "Open Activity",
   open_events: "Open Events",
   /**
    * After points are given: the chapter ledger for a role that reads it,

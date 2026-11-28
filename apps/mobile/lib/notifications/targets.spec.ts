@@ -24,7 +24,7 @@ describe("resolveNotificationTarget", () => {
       resolveNotificationTarget(payload({ screen: "events", eventId: "e1" })),
     ).toEqual({ pathname: "/event-details", params: { id: "e1" } });
     expect(resolveNotificationTarget(payload({ screen: "tasks" }))).toEqual({
-      pathname: "/tasks",
+      pathname: "/activity",
     });
     expect(resolveNotificationTarget(payload({ screen: "billing" }))).toEqual({
       pathname: "/dues",
@@ -63,10 +63,10 @@ describe("resolveNotificationTarget", () => {
     // Only an events target names minutes this way.
     expect(
       resolveNotificationTarget(payload({ screen: "tasks", meetingId: "m1" })),
-    ).toEqual({ pathname: "/tasks" });
+    ).toEqual({ pathname: "/activity" });
   });
 
-  it("opens a submitted task's review, and the reader's own task on their board", () => {
+  it("opens a submitted task's review on Activity, and the reader's own task on its screen (#5948)", () => {
     // "Shawn submitted: Clean his room" goes to the officer who assigned it;
     // their board lists only their own tasks, so the review opens on Activity.
     expect(
@@ -77,7 +77,7 @@ describe("resolveNotificationTarget", () => {
     // Assigned, confirmed, sent back: the reader's own task, opened.
     expect(
       resolveNotificationTarget(payload({ screen: "tasks", taskId: "t1" })),
-    ).toEqual({ pathname: "/tasks", params: { task: "t1" } });
+    ).toEqual({ pathname: "/task-details", params: { id: "t1" } });
     expect(
       notificationHref({ pathname: "/activity", params: { review: "t1" } }),
     ).toBe("/activity?review=t1");
@@ -94,12 +94,12 @@ describe("resolveNotificationTarget", () => {
     ).toBe("/activity?extension=t1");
   });
 
-  it("opens the board for a task up for grabs, where Up for grabs sits on top", () => {
+  it("opens Activity for a task up for grabs, where Up for grabs is a card", () => {
     // "New task up for grabs" (tasks.md § Up for grabs) carries the posting's
-    // id; the board lists it above Today, so the board is the place.
+    // id; Mine lists it after Now (#5948), so Activity is the place.
     expect(
       resolveNotificationTarget(payload({ screen: "tasks", openTaskId: "o1" })),
-    ).toEqual({ pathname: "/tasks" });
+    ).toEqual({ pathname: "/activity" });
   });
 
   it("sends points to the member's own points (#5950)", () => {

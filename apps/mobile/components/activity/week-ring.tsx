@@ -234,7 +234,8 @@ function createStyles(tokens: SignetTokens) {
   const surfaces = pageSurfaces(tokens);
   const meter = meterStyles(tokens, surfaces.card);
   return StyleSheet.create({
-    // The header round's fill, in a worded capsule, as Task board's.
+    // The header round's fill, in a worded capsule (Task board's, until
+    // #5948).
     pill: {
       flexDirection: "row",
       alignItems: "center",

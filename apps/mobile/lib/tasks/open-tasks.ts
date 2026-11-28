@@ -1,7 +1,7 @@
 /**
- * Up for grabs on the phone's Tasks screen (Paul, 2026-11-18, the Tasks
+ * Up for grabs, a card on the phone's Activity (Paul, 2026-11-18, the Tasks
  * overhaul § 3): open tasks a member in the right set may claim, often for
- * points. Pure, so the screen only composes; the reads and the optimistic
+ * points; the Tasks screen's head until #5948. Pure, so the card only composes; the reads and the optimistic
  * claim live in `@repo/hooks` (`use-open-tasks.ts`).
  */
 
@@ -87,19 +87,19 @@ export function claimedTaskId(data: unknown): string | null {
 }
 
 /**
- * Said once Give it back lands, as the board's line under its points line:
- * from the board's own toast, and from the task's screen, which returns to
- * the board with {@link RELEASED_PARAM} so the line shows there (and
- * announces it before it goes).
+ * Said once Give it back lands, on Activity's Up for grabs card: from the
+ * card's own line, and from the task's screen, which returns to Activity
+ * with {@link RELEASED_PARAM} so the line shows there (and announces it
+ * before it goes).
  */
 export const RELEASED_LINE = `It's back on ${TASK_AUDIENCE_COPY.upForGrabs}.`;
 
-/** `/tasks?released=1`: the task screen's Give it back landed. */
+/** `/activity?released=1`: the task screen's Give it back landed (#5948). */
 export const RELEASED_PARAM = "released";
 
 /**
- * `/tasks?assigned=<userId>`: a posting's screen handed it to that member
- * (#5570), and the board says who has it in its line, as after New task.
+ * `/activity?assigned=<userId>`: a posting's screen handed it to that member
+ * (#5570), and Up for grabs says who has it in its line, as after New task.
  */
 export const ASSIGNED_PARAM = "assigned";
 

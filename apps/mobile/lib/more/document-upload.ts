@@ -319,6 +319,54 @@ const DOCUMENT_GATE_COPY: GateCopy = {
   module: MODULE_REFUSAL_COPY.document,
 };
 
+/** The two calls a new version takes (#6055), bound to its document. */
+export interface DocumentVersionMutations {
+  /** `POST /v1/documents/{id}/version-upload-url`. */
+  requestUploadUrl: RequestSignedUpload;
+  /** `PUT /v1/documents/{id}/file`. */
+  replace: (
+    body: components["schemas"]["ReplaceDocumentFileDto"],
+  ) => Promise<unknown>;
+}
+
+/**
+ * Put a picked file in place of a document's own (#6055): the same document,
+ * name, folder, who can see it, pin and stars, with the new file. The same
+ * gate and PUT as an upload; nothing is filed anew, so there is no draft to
+ * keep. Never rejects. A confirm that fails leaves the bytes it sent in the
+ * bucket, as an upload's does, and the document keeps its earlier file.
+ */
+export async function uploadDocumentVersion(
+  image: PickedImage,
+  mutations: DocumentVersionMutations,
+): Promise<{ status: "uploaded" } | { status: "refused"; reason: string }> {
+  const put = await uploadPickedImageGated(
+    image,
+    mutations.requestUploadUrl,
+    DOCUMENT_GATE_COPY,
+    DOCUMENT_UPLOAD_FAILED,
+  );
+  if (put.status !== "uploaded") {
+    return { status: "refused", reason: put.reason };
+  }
+  try {
+    await mutations.replace({
+      storage_path: put.image.storagePath,
+      content_type: put.image.contentType,
+      byte_size: put.image.byteSize,
+    });
+    return { status: "uploaded" };
+  } catch (error) {
+    return {
+      status: "refused",
+      reason:
+        gateRefusalOf(error, DOCUMENT_GATE_COPY) ??
+        definitiveRefusalMessage(error) ??
+        DOCUMENT_UPLOAD_FAILED,
+    };
+  }
+}
+
 /**
  * Upload a picked photo and file it, or, given `sent` from a refusal whose
  * confirm failed on this same photo, file those bytes again with the title

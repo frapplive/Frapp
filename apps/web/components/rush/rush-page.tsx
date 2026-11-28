@@ -3,10 +3,11 @@
 import {
   useAddressParams,
   useDeadAddressParam,
+  useGoneAfterRecheck,
 } from "@/lib/address/use-address-params";
 
 import { localIsoDate } from "@repo/formatting";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import {
   rushPipelineAccess,
   useMyPermissions,
@@ -219,22 +220,13 @@ function AddressedRushPage() {
     cached from before they were added); only a settled, successful read
     without them calls them gone (removed, or not this role's, #4084).
   */
-  const prospectMissing =
-    openId !== null &&
-    pipeline.data !== undefined &&
-    !pipeline.isFetching &&
-    !pipeline.isError &&
-    pipeline.fetchStatus !== "paused" &&
-    !pipeline.data.candidates.some((c) => c.id === openId);
-  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (!prospectMissing || recheckedFor === openId) return;
-    void pipeline.refetch().finally(() => setRecheckedFor(openId));
-  }, [prospectMissing, recheckedFor, openId, pipeline]);
+  const prospectGone = useGoneAfterRecheck(openId, pipeline, (data, id) =>
+    data.candidates.some((c) => c.id === id),
+  );
   const deadProspect = useDeadAddressParam(
     R.prospect,
     openId,
-    prospectMissing && recheckedFor === openId,
+    prospectGone,
     // The note goes once the member moves on to another view.
     viewParam ?? "",
   );

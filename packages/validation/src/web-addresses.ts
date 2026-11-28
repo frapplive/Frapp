@@ -16,8 +16,9 @@ import {
  *
  * The parameter names live here, not in `apps/web`: the web's own names
  * (`EVENT_PARAM`, `TASKS_TASK_PARAM` and the rest) are read from here, and
- * the phone maps a web link to its own screen from the same rows once #6050
- * lands, so a rename can't split the two apps.
+ * the phone maps a web link to its own screen from the same rows
+ * (`apps/mobile/lib/links/web-address-link.ts`: a link tapped in a message,
+ * and `app/+native-intent.tsx`, #6050), so a rename can't split the two apps.
  * The chat names stay `CHAT_LINK_*` (`./message-link`), which the phone
  * already mints in copied message links.
  */
@@ -31,6 +32,7 @@ export const WEB_ADDRESS_PARAMS = {
   },
   messages: {
     channel: CHAT_LINK_CHANNEL_PARAM,
+    thread: "thread",
     message: CHAT_LINK_MESSAGE_PARAM,
   },
   documents: {
@@ -67,7 +69,13 @@ export const WEB_ADDRESS_PARAMS = {
     tool: "tool",
     tier: "tier",
     role: "role",
+    group: "group",
+    groups: "groups",
+    // Where a group's page was opened from (`from=automatic`), its back
+    // arrow's parent.
+    from: "from",
     class: "class",
+    field: "field",
     zone: "zone",
     member: "member",
   },
@@ -89,6 +97,10 @@ export const ONE_SHOT_ADDRESS_PARAMS = {
   message: CHAT_LINK_MESSAGE_PARAM,
   excuse: "excuse",
   setting: "setting",
+  // Chapter settings: a module's switch focused (chat's setup nudge), and a
+  // channel's Description focused ("Add a description"), #6049.
+  module: "module",
+  focus: "focus",
 } as const;
 
 /** A phone route a web address opens: its pathname and parameter names. */
@@ -97,6 +109,12 @@ export interface PhoneAddress {
   pathname: string;
   /** Web parameter name → the phone screen's parameter name. */
   params?: Readonly<Record<string, string>>;
+  /**
+   * Web parameters this screen's address always carries and the phone
+   * screen doesn't need: `tab=roles` beside Chapter settings' `role=`. The
+   * phone drops them rather than leaving the link in the browser.
+   */
+  implied?: readonly string[];
 }
 
 /** One web address shape: a path, and the parameters that pick a phone screen. */
@@ -107,9 +125,13 @@ export interface WebAddressRow {
   params: readonly string[];
   /**
    * The phone screens this page's addresses open, most specific first: the
-   * first whose `when` parameters are all present wins. `null` is a web-only
-   * page (Backwork, Chapter settings, Plan and billing), which the phone
-   * doesn't claim, so its link stays in the browser.
+   * first whose `when` parameters are all present wins, and the last has no
+   * `when`. `phoneAddressFor` matches on those parameters alone; the phone's
+   * reader (`apps/mobile/lib/links/web-address-link.ts`) also keeps a link in
+   * the browser when the chosen screen would drop one of its parameters
+   * (`/settings?tab=chat` isn't Chapter settings' first screen). `null` is a
+   * web-only page (Backwork, Meeting minutes), which the phone doesn't
+   * claim, so its link stays in the browser.
    */
   phone: readonly (PhoneAddress & { when?: readonly string[] })[] | null;
 }
@@ -161,6 +183,7 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
         pathname: "/chat-thread",
         params: {
           [P.messages.channel]: "channelId",
+          [P.messages.thread]: "threadRootId",
           [P.messages.message]: "focusMessageId",
         },
       },
@@ -170,7 +193,12 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
   {
     path: "/documents",
     params: Object.values(P.documents),
-    phone: [{ pathname: "/documents" }],
+    phone: [
+      {
+        pathname: "/documents",
+        params: { [P.documents.type]: DOCUMENTS_TYPE_PARAM },
+      },
+    ],
   },
   {
     path: "/events",
@@ -195,13 +223,18 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
     phone: [
       {
         when: [P.activity.task],
-        pathname: "/tasks",
+        pathname: "/activity",
         params: { [P.activity.task]: "task" },
       },
       {
         when: [P.activity.review],
         pathname: "/activity",
         params: { [P.activity.review]: "review" },
+      },
+      {
+        when: [P.activity.extension],
+        pathname: "/activity",
+        params: { [P.activity.extension]: "extension" },
       },
       { pathname: "/activity" },
     ],
@@ -240,7 +273,30 @@ export const WEB_ADDRESSES: readonly WebAddressRow[] = [
     params: Object.values(P.preferences),
     phone: [{ pathname: "/preferences" }],
   },
-  { path: "/settings", params: Object.values(P.settings), phone: null },
+  {
+    path: "/settings",
+    params: Object.values(P.settings),
+    // Only the pages the phone has too (#6049): a role and a tier of Roles
+    // and groups, and Chapter settings itself.
+    phone: [
+      {
+        when: [P.settings.role],
+        pathname: "/role",
+        params: { [P.settings.role]: "roleId" },
+        implied: [P.settings.tab],
+      },
+      {
+        when: [P.settings.tier],
+        pathname: "/role-tier",
+        params: { [P.settings.tier]: "tierId" },
+        implied: [P.settings.tab],
+      },
+      // The bare address. With any other parameter the phone keeps the link
+      // in the browser (`web-address-link.ts`), so a page it lacks isn't
+      // opened as Chapter settings' first screen.
+      { pathname: "/chapter-settings" },
+    ],
+  },
   // Pages with no address of their own below the path yet. Frapp
   // Intelligence (`/ask`) gets one when its conversations get ids (#4704).
   { path: "/ask", params: [], phone: [{ pathname: "/ask" }] },

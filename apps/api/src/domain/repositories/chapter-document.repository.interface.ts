@@ -103,6 +103,21 @@ export interface IChapterDocumentRepository {
     chapterId: string,
     folder: string | null,
   ): Promise<ChapterDocument[]>;
+  /**
+   * Points an uploaded file at a new version's stored file (#6055), only
+   * while it still files `currentPath`, so two versions racing can't both
+   * win. Never a Drive copy, a linked file or a meeting's minutes. `null`
+   * when no such row matched.
+   */
+  replaceFile(
+    id: string,
+    chapterId: string,
+    currentPath: string,
+    file: Pick<
+      Partial<ChapterDocument>,
+      'storage_path' | 'content_type' | 'byte_size'
+    >,
+  ): Promise<ChapterDocument | null>;
   /** Sets one file's own who can see (`null`: the same as its folder). */
   setWhoCanSee(
     id: string,

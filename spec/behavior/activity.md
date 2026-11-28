@@ -281,8 +281,11 @@ Calendar is the chapter's**. Paul: "we need to rethink the entire framework and 
 Activity/Events/Tasks because currently they all overlap and it's not really clear what each one
 brings to the table.")
 
-The Tasks page folded into Activity. On web this landed with #5948's first slice; the phone's
-board folds into its Activity tab in a later slice.
+The Tasks page folded into Activity: on web with #5948's first slice, and the phone's task board
+into its Activity tab with the third (2026-11-27). On the phone, Everyone's groups by status only,
+as a list or a grid, until By person and the Filters chip arrive
+([#6198](https://github.com/frapplive/Frapp/issues/6198)); its view is never stored (the tab opens
+on Mine), New task stays the tab bar's quick action, and the board's points line moved to You.
 
 - **Mine** is the page this spec describes: Now, the member's cards (To do, Running), Snoozed and
   the Archive. It also holds what only the Tasks page used to have for the member: **New task** in

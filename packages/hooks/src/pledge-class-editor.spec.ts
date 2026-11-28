@@ -4,7 +4,7 @@ import {
   classAssignments,
   renumberRows,
   type ClassEditorRow,
-} from "./pledge-classes";
+} from "./pledge-class-editor";
 
 const row = (memberId: string, number: string): ClassEditorRow => ({
   memberId,

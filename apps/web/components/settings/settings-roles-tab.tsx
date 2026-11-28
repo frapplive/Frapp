@@ -1,7 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  closeToAddress,
+  pushAddressHref,
+  replaceAddress,
+} from "@/lib/address/address";
 import { Search, UserPlus } from "lucide-react";
 import { defaultInviteRoleChoices } from "@repo/hooks/chapter-roles";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -27,7 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SETTINGS_VALUE_TRIGGER,
+} from "@/components/shared/settings-row";
 import {
   PresidencyClaimBanner,
   TransferPresidencyRow,
@@ -94,7 +103,6 @@ export function SettingsRolesTab({
   isSavingConfig,
 }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { data: permissionsPayload } = useMyPermissions();
   const permissions = permissionsPayload?.permissions;
   const [query, setQuery] = useState("");
@@ -121,9 +129,23 @@ export function SettingsRolesTab({
     }),
     [],
   );
-  const backToRoles = () => router.push(BASE);
+  // A page closes by the address's rule (#6049): Back when this tab opened
+  // it, else a replace. A row opens its page with a marked push.
+  const backToRoles = () => closeToAddress(BASE);
 
-  if (tierId) {
+  // A tier's or role's page is the roles part of this row, which the
+  // overview shows only to `roles:manage` or `chapter-config:view`. A
+  // `groups:manage` holder reaching the row for its groups gets neither
+  // page from a link: the address is put back to the row (#6049).
+  const rolesHidden = permissions !== undefined && !canSeeRoles;
+  const roleAddressed = tierId !== null || roleId !== null;
+  useEffect(() => {
+    if (rolesHidden && roleAddressed) {
+      replaceAddress({ tier: null, role: null });
+    }
+  }, [rolesHidden, roleAddressed]);
+
+  if (tierId && canSeeRoles) {
     return (
       <TierPermissionsPage
         tierId={tierId}
@@ -133,7 +155,7 @@ export function SettingsRolesTab({
       />
     );
   }
-  if (roleId) {
+  if (roleId && canSeeRoles) {
     return (
       <RolePage
         roleId={roleId}
@@ -155,7 +177,7 @@ export function SettingsRolesTab({
             ? PEOPLE_SETTINGS_COPY.autoGroupsRow
             : PEOPLE_SETTINGS_COPY.pageTitle
         }
-        onDone={() => router.push(backHref)}
+        onDone={() => closeToAddress(backHref)}
       />
     );
   }
@@ -181,7 +203,7 @@ export function SettingsRolesTab({
         <RolesOverview
           query={query}
           links={links}
-          onOpenRole={(id) => router.push(links.role(id))}
+          onOpenRole={(id) => pushAddressHref(links.role(id))}
         />
       ) : null}
       {/*
@@ -193,7 +215,7 @@ export function SettingsRolesTab({
         canManage={canManageGroups}
         query={query}
         links={links}
-        onCreated={(id) => router.push(links.group(id))}
+        onCreated={(id) => pushAddressHref(links.group(id))}
       />
       {normalizeWords(query).length === 0 &&
       (!configUnavailable || isPresident) ? (
@@ -289,9 +311,6 @@ function PageHead({
  */
 const NO_DEFAULT_INVITE_ROLE = "__no-default__";
 
-const VALUE_TRIGGER =
-  "h-8 w-auto max-w-[14rem] gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground hover:bg-card-hover";
-
 /**
  * Default invite role (#422), a row of Invites and presidency (#6029; a
  * section of its own until then): the role an invite grants when it picks
@@ -363,7 +382,7 @@ function DefaultInviteRoleRow({
         >
           <SelectTrigger
             aria-label={PEOPLE_SETTINGS_COPY.defaultInviteRole}
-            className={VALUE_TRIGGER}
+            className={SETTINGS_VALUE_TRIGGER}
           >
             <SelectValue
               placeholder={

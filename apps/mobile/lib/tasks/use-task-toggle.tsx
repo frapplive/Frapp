@@ -80,12 +80,8 @@ export interface TaskToggle {
     id: string;
     message: string;
     key: number;
-    action: "undo" | "release";
+    action: "undo";
   } | null;
-  /** Offers Give it back on a task just claimed, in the same bar. */
-  offerRelease: (id: string, message: string) => void;
-  /** Takes the bar down, as its action is pressed. */
-  clearUndo: () => void;
   /** Whether a toggle may be offered on this row now. */
   canToggle: (row: TaskRowModel) => boolean;
   /** Mark done, or Mark not done on a done task, as the checkbox does. */
@@ -301,15 +297,6 @@ export function useTaskToggle(
   );
   const closeMarking = useCallback(() => setMarking(null), []);
 
-  const offerRelease = useCallback((id: string, message: string) => {
-    setUndo((open) => ({
-      id,
-      message,
-      key: (open?.key ?? 0) + 1,
-      action: "release",
-    }));
-  }, []);
-  const clearUndo = useCallback(() => setUndo(null), []);
 
   return {
     pendingId,
@@ -317,8 +304,6 @@ export function useTaskToggle(
     notice,
     setNotice,
     undo,
-    offerRelease,
-    clearUndo,
     canToggle,
     toggle,
     takeBack,

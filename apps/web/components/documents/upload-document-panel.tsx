@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { localIsoDate } from "@repo/formatting";
 import { ChevronRight, Loader2, Upload } from "lucide-react";
 import {
-  putSignedUpload,
   useConfirmDocumentUpload,
   useRequestDocumentUploadUrl,
   type DocumentTypeRow,
@@ -60,35 +59,11 @@ import {
   useKeptPanel,
 } from "@repo/hooks/kept-drafts";
 import { KeptDraftNote } from "@/components/shared/kept-draft-note";
-import { ZIP_REFUSAL } from "@/lib/documents/folder-import";
+import { MAX_UPLOAD_LABEL, acceptAttribute } from "@repo/validation";
 import {
-  MAX_UPLOAD_LABEL,
-  acceptAttribute,
-  inspectUploadFile,
-  readSignedUpload,
-} from "@repo/validation";
-
-/*
-  The signed-URL flow blocks SVG + executables. Kind `document` in
-  `@repo/validation` is shared with Backwork and chat so the three cannot drift.
-
-  Each string names the verdict, because it is the whole inline error under the
-  file field rather than a toast body under a title that named it.
-*/
-function uploadRejectionDescription(
-  reason: "type" | "size",
-  filename: string,
-): string {
-  if (reason === "size") {
-    return `That file is too large. Chapter documents accept files up to ${MAX_UPLOAD_LABEL}.`;
-  }
-  // A zipped folder is a way forward, not a dead end (#5331): Import a folder
-  // takes the folder once it's unzipped.
-  if (/\.zip$/i.test(filename)) {
-    return ZIP_REFUSAL;
-  }
-  return "That file type is not allowed. Chapter documents accept PDFs, Office files, text, CSV, and common images (no SVG).";
-}
+  inspectDocumentFile,
+  putDocumentFile,
+} from "@/lib/documents/document-upload";
 
 type UploadDraft = {
   title: string;
@@ -319,9 +294,9 @@ export function useDocumentUpload(
     // The API refuses an empty Chosen list, and only after the file is in
     // the bucket, so the panel waits for an entry (its field says so).
     if (isEmptyChannelAccessChoice(uploadDraft.whoCanSee ?? null)) return;
-    const inspected = inspectUploadFile("document", file);
+    const inspected = inspectDocumentFile(file);
     if (!inspected.ok) {
-      setUploadError(uploadRejectionDescription(inspected.reason, file.name));
+      setUploadError(inspected.description);
       return;
     }
     setUploadError(null);
@@ -331,20 +306,12 @@ export function useDocumentUpload(
     // before it lands mustn't be offered the same file to upload twice.
     kept.hold();
     try {
-      const signed = await requestUpload.mutateAsync({
-        filename: file.name,
-        content_type: contentType,
-      });
-      const { signedUrl, storagePath } = readSignedUpload(signed);
-
-      await putSignedUpload({
-        signedUrl,
-        body: file,
-        contentType,
-        upsert: true,
-        describeRejection: () =>
-          "The file didn't upload. Check its size and try again.",
-      });
+      const storagePath = await putDocumentFile(file, contentType, () =>
+        requestUpload.mutateAsync({
+          filename: file.name,
+          content_type: contentType,
+        }),
+      );
 
       await confirmUpload.mutateAsync({
         storage_path: storagePath,

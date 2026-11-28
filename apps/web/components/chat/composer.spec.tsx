@@ -319,10 +319,11 @@ describe("Composer slash palette (#396)", () => {
     // `findBy`, not `getBy`: the palette is a `next/dynamic` boundary now
     // (`cmdk` and a Radix Dialog are `chat-extras` under the board's `1s`
     // split), so the first open resolves a module before the dialog exists.
-    expect(await screen.findByRole("dialog")).toHaveAttribute(
-      "aria-modal",
-      "true",
-    );
+    // A cold import on a loaded CI runner can take longer than `findBy`'s
+    // default second, so it gets room.
+    expect(
+      await screen.findByRole("dialog", {}, { timeout: 5000 }),
+    ).toHaveAttribute("aria-modal", "true");
   });
 });
 

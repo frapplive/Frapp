@@ -364,13 +364,21 @@ describe("AskSheet", () => {
     expect(text).not.toContain(ASK_STARTER.answer);
     expect(text).toContain(EVENT.text);
     expect(text).not.toContain("answered on its own");
-    // Read to a screen reader as Ask's header, with the greeting.
+    // The sheet's header names Frapp Intelligence from the first frame
+    // (#5983), and the greeting is read as a header of its own.
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === "header" &&
+          node.props.children === ASK_COPY.name,
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       tree.root.findAll(
         (node) =>
           node.props.accessibilityRole === "header" &&
           typeof node.props.accessibilityLabel === "string" &&
-          node.props.accessibilityLabel.startsWith(`${ASK_COPY.name}. Good `),
+          node.props.accessibilityLabel.startsWith("Good "),
       ).length,
     ).toBeGreaterThan(0);
     // The rows fade in at the bottom, where nothing sits below them.
@@ -790,9 +798,10 @@ describe("AskSheet", () => {
       const onClosed = vi.fn();
       const tree = render(onClosed);
       expect(screenText(tree)).toContain(ACT_COPY.done_task);
-      act(() => byLabel(tree, ACT_COPY.open_tasks)[0].props.onPress());
+      act(() => byLabel(tree, ACT_COPY.open_activity)[0].props.onPress());
       expect(modal.dismiss).toHaveBeenCalled();
-      expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/tasks");
+      // Activity is a tab: the sheet goes back to it, never stacks it.
+      expect(vi.mocked(useRouter)().dismissTo).toHaveBeenCalledWith("/activity");
       act(() => sheet(tree).props.onDismiss());
       expect(onClosed).toHaveBeenLastCalledWith(true);
     });

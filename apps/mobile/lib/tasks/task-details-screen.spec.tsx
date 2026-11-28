@@ -457,9 +457,9 @@ describe("A member's own plain task: a little", () => {
     expect(screenText(render())).not.toContain("Minutes");
   });
 
-  it("goes back to Tasks", () => {
+  it("goes back to Activity", () => {
     const tree = render();
-    expectBackRow(tree, "Tasks", "/tasks");
+    expectBackRow(tree, "Activity", "/activity");
     act(() => tree.unmount());
   });
 
@@ -577,13 +577,13 @@ describe("The task's states", () => {
     task = undefined;
     tree = render();
     expect(screenText(tree)).toContain("Couldn't load this task");
-    expectBackRow(tree, "Tasks", "/tasks");
+    expectBackRow(tree, "Activity", "/activity");
     act(() => tree.unmount());
   });
 
   it("says where to open a task from without an id", () => {
     const tree = render(null);
-    expect(screenText(tree)).toContain("Open a task from Tasks.");
+    expect(screenText(tree)).toContain("Open a task from Activity.");
     act(() => tree.unmount());
   });
 });
@@ -746,7 +746,7 @@ describe("An officer on a task for everyone: a lot", () => {
     act(() => tree.unmount());
   });
 
-  it("deletes for everyone after the platform alert, then goes back to Tasks", async () => {
+  it("deletes for everyone after the platform alert, then goes back to Activity", async () => {
     const tree = render();
     press(tree, "More");
     expect(moreRowLabels().at(-1)).toBe("Delete for everyone");
@@ -762,7 +762,7 @@ describe("An officer on a task for everyone: a lot", () => {
       scope: "group",
     });
     expect(vi.mocked(expoRouter.useRouter)().dismissTo).toHaveBeenCalledWith(
-      "/tasks",
+      "/activity",
     );
     act(() => tree.unmount());
   });
@@ -872,7 +872,7 @@ describe("An officer on a task for everyone: a lot", () => {
         buttons.find((button) => button.style === "destructive")!.onPress?.();
       });
       expect(vi.mocked(expoRouter.useRouter)().dismissTo).toHaveBeenCalledWith(
-        "/tasks",
+        "/activity",
       );
       act(() => tree.unmount());
     });
@@ -921,7 +921,7 @@ describe("A member on a task for everyone", () => {
 });
 
 describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
-  it("is in More until the task is done, and goes back to Tasks once it lands", () => {
+  it("is in More until the task is done, and goes back to Activity once it lands", () => {
     task = { ...PLAIN, open_task_id: "open-1" };
     const tree = render();
     press(tree, "More");
@@ -934,7 +934,7 @@ describe("Give it back, on a task claimed from Up for grabs (#5503)", () => {
     act(() => onSuccess());
     // To the board, which says so in its line (`tasks-screen.spec.tsx`).
     expect(vi.mocked(expoRouter.useRouter)().dismissTo).toHaveBeenCalledWith({
-      pathname: "/tasks",
+      pathname: "/activity",
       params: { released: "1" },
     });
     expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(

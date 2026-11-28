@@ -96,16 +96,34 @@ export const STORE_LISTING_URLS: Readonly<Record<NativePlatform, string>> = {
  * once the installed builds have its route, or they open it on Chat home.
  * Android claims each path in `apps/mobile/app.json`'s `intentFilters`, which
  * is native, so a new Android path waits on the next native version
- * (`app.config.spec.ts` lists the ones waiting). A message's link (`/chat`,
- * `./message-link`) waits on both (#4869).
+ * (`app.config.spec.ts` lists the ones waiting). The dashboard's other
+ * addresses (`./web-addresses`), a message's link among them, wait on both:
+ * the phone's `+native-intent` handler reads them (#6050), and when to claim
+ * them is #6185.
  */
 export const APP_LINK_PATHS = ["/join", "/check-in"] as const;
 
 /**
+ * Whether `url` is on one of `origins` (a caller's dashboard origin). The one
+ * origin check behind every reader of the app's own links (`appLinkParams`,
+ * `./frapp-link`, and the phone's `lib/links/web-address-link.ts`), so they
+ * agree on which links are the app's own. An origin that doesn't parse
+ * matches nothing.
+ */
+export function isOnOneOfOrigins(url: URL, origins: readonly string[]): boolean {
+  return origins.some((origin) => {
+    try {
+      return new URL(origin).origin === url.origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * The search parameters of `raw` when it is a link to `path` on one of
- * `origins` (a caller's dashboard origin), or null for any other text. The one
- * matcher behind every app-link parser (`./check-in-link`, `./message-link`),
- * so they agree on which links are the app's own.
+ * `origins` (a caller's dashboard origin), or null for any other text. The
+ * matcher behind the single-path app-link parsers (`./check-in-link`).
  */
 export function appLinkParams(
   raw: string,
@@ -118,14 +136,7 @@ export function appLinkParams(
   } catch {
     return null;
   }
-  const allowed = origins.map((origin) => {
-    try {
-      return new URL(origin).origin;
-    } catch {
-      return null;
-    }
-  });
-  if (!allowed.includes(url.origin)) return null;
+  if (!isOnOneOfOrigins(url, origins)) return null;
   if (url.pathname.replace(/\/+$/, "") !== path) return null;
   return url.searchParams;
 }
