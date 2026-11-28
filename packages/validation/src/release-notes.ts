@@ -125,9 +125,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     changes: [
       "There's a new Holiday chat background, deep green with a soft red glow and gentle falling snow.",
       "Chapter settings' name, identity, vocabulary, mark and accent now save as you go, with no Save button to press.",
+      "Rename a file or move it to another folder from its menu, without uploading it again.",
+      "In Chapter settings, Privacy and AI are now short lists of switches with one line each, and on your phone each opens its own screen from Chapter settings, with Chapter AI in Settings going straight to it.",
     ],
     web: [
       "Discord import, Reports and Study zones in Chapter settings now use the same tidy rows as the rest of settings, with Discord import's progress showing right on the Chat page.",
+      "In Resources, Back now closes the Upload, Import a folder and clean-up panels, and a reload opens the same panel again.",
+      "Chapter settings' Semester page now shows when the current semester started and when the next can begin, and starting a new one opens its own page with the dates filled in.",
     ],
     phone: [
       "The Directory's filters, sort and standings period are now in one Filters sheet, and the filters you turn on show as chips under the search, each one tap to remove.",
