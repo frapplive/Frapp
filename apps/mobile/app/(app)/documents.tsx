@@ -48,7 +48,7 @@ import {
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
-  mayRefileDocument,
+  mayMoveDocument,
   mayRenameDocument,
   mayUploadNewVersion,
   markedItems,
@@ -135,6 +135,7 @@ import {
 } from "@repo/validation";
 import {
   MINUTES_SPOKEN_KIND,
+  documentActionsHint,
   documentMeta,
   documentOpenHint,
   selectDocumentFolders,
@@ -350,6 +351,8 @@ export default function DocumentsScreen() {
     message: string;
   } | null>(null);
   const canManage = can("chapter_docs:manage", usePermissionList());
+  // A folder's long press, spoken: Star, and Pin for an officer.
+  const folderHint = canManage ? "Star or pin" : "Star or unstar";
   const { accent, accentOnPrimary } = useChapterBranding();
 
   // Pins and stars (#3934). A star moves on the tap and settles on the
@@ -591,7 +594,7 @@ export default function DocumentsScreen() {
             .filter(Boolean)
             .join(", ") || undefined,
       onLongPress: () => openActions(folderTarget(entry)),
-      longPressLabel: canManage ? "Star or pin" : "Star or unstar",
+      longPressLabel: folderHint,
     };
   }
   /*
@@ -650,6 +653,17 @@ export default function DocumentsScreen() {
     };
   }
 
+  // What a file's long press holds, spoken (#5563): the sheet's own rows.
+  function documentHint(doc: MobileDocument): string {
+    const target = documentTarget(doc);
+    return documentActionsHint({
+      canPin: canManage,
+      canRename: !!target.canRename,
+      canMove: !!target.canMove,
+      canDelete: canManage && !target.fromDrive && !target.minutes,
+    });
+  }
+
   function documentTarget(doc: MobileDocument) {
     return {
       kind: "document" as const,
@@ -665,7 +679,10 @@ export default function DocumentsScreen() {
         manages: canManage,
       }),
       canRename: mayRenameDocument(doc, viewerId, { manages: canManage }),
-      canMove: mayRefileDocument(doc, viewerId, { manages: canManage }),
+      canMove: mayMoveDocument(doc, viewerId, {
+        manages: canManage,
+        folders: foldersQuery.data === undefined ? null : folders,
+      }),
       folder: doc.folder ?? null,
     };
   }
@@ -1110,7 +1127,7 @@ export default function DocumentsScreen() {
               )
             }
             deletingIds={deletingIds}
-            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            actionsLabel={documentHint}
             onOpen={(doc) => void open(doc)}
             onActions={(doc) => openActions(documentTarget(doc))}
           />
@@ -1141,9 +1158,7 @@ export default function DocumentsScreen() {
             // Star for everyone; Pin and Delete for `chapter_docs:manage`
             // (#3934). The row's pin or star shows in its label's tail.
             onLongPress={() => openActions(documentTarget(row.doc))}
-            longPressLabel={
-              canManage ? "Star, pin or delete" : "Star or unstar"
-            }
+            longPressLabel={documentHint(row.doc)}
             trailing={
               <DocumentMarks
                 limited={isLimited(row.doc)}
@@ -1343,7 +1358,9 @@ export default function DocumentsScreen() {
             }
             openingId={openingId}
             deletingIds={deletingIds}
-            actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
+            actionsLabel={(item) =>
+              item.kind === "folder" ? folderHint : documentHint(item.doc)
+            }
             onOpenFolder={setFolder}
             onOpenDocument={(doc) => void open(doc)}
             onActions={(item) =>

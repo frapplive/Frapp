@@ -3906,6 +3906,35 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
       expect(itemNamed(items, "Move to folder")).toBeDefined();
     });
 
+    it("moves a file added by its Drive link, renamed only in Drive", async () => {
+      manageGate.granted = true;
+      documentsQuery.data = [
+        {
+          ...BYLAWS,
+          drive_file_id: "drive-9",
+          drive_link_status: "active",
+          drive_url: "https://drive.google.com/file/d/drive-9/view",
+        },
+      ];
+      render(<DocumentsPage />);
+      const items = await openMenu("Chapter bylaws");
+      expect(itemNamed(items, "Rename")).toBeUndefined();
+      expect(itemNamed(items, "Rename in Google Drive")).toBeDefined();
+      expect(itemNamed(items, "Move to folder")).toBeDefined();
+    });
+
+    it("offers no Move out of a folder the uploader can no longer see", async () => {
+      manageGate.granted = false;
+      // Their own file still shows, but Exec isn't among their folders.
+      documentsQuery.data = [
+        { ...BYLAWS, folder: "Exec", uploaded_by: "viewer-1" },
+      ];
+      render(<DocumentsPage />);
+      const items = await openMenu("Chapter bylaws");
+      expect(itemNamed(items, "Rename")).toBeDefined();
+      expect(itemNamed(items, "Move to folder")).toBeUndefined();
+    });
+
     it("says a Drive file is renamed in Drive, and moves no Drive folder copy", async () => {
       manageGate.granted = true;
       documentsQuery.data = [

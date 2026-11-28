@@ -54,8 +54,8 @@ export function MarkedCards({
   openingId: string | null;
   /** Files being deleted: their cards take no press, as their rows don't. */
   deletingIds: ReadonlySet<string>;
-  /** The long press's spoken name, matched to what the viewer may do. */
-  actionsLabel: string;
+  /** Each card's long press, spoken: what the viewer may do to that item (#5563). */
+  actionsLabel: (item: MarkedCardItem) => string;
   onOpenFolder: (name: string) => void;
   onOpenDocument: (doc: MobileDocument) => void;
   onActions: (item: MarkedCardItem) => void;
@@ -124,7 +124,7 @@ function CardList({
   isLimited: (item: MarkedCardItem) => boolean;
   openingId: string | null;
   deletingIds: ReadonlySet<string>;
-  actionsLabel: string;
+  actionsLabel: (item: MarkedCardItem) => string;
   onOpenFolder: (name: string) => void;
   onOpenDocument: (doc: MobileDocument) => void;
   onActions: (item: MarkedCardItem) => void;
@@ -208,7 +208,7 @@ function CardList({
             accessibilityActions={
               deleting
                 ? undefined
-                : [{ name: "longpress", label: actionsLabel }]
+                : [{ name: "longpress", label: actionsLabel(item) }]
             }
             onAccessibilityAction={(event) => {
               if (!deleting && event.nativeEvent.actionName === "longpress") {

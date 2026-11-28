@@ -20,6 +20,7 @@ import {
   isMarkFiltering,
   limitedDocumentCheck,
   isDriveFolderCopy,
+  mayMoveDocument,
   mayRefileDocument,
   mayRenameDocument,
   mayUploadNewVersion,
@@ -818,6 +819,38 @@ describe("rename and move (#5563)", () => {
     expect(mayRefileDocument(folderCopy, "someone", manager)).toBe(false);
   });
 
+  it("moves only once folders load, and only out of a folder in sight", () => {
+    const filed = { ...upload, folder: "Exec" };
+    const seen = [{ name: "Exec" }, { name: "Rush" }];
+    expect(
+      mayMoveDocument(filed, "me", { manages: false, folders: seen }),
+    ).toBe(true);
+    expect(
+      mayMoveDocument({ ...upload, folder: null }, "me", {
+        manages: false,
+        folders: [],
+      }),
+    ).toBe(true);
+    // Folders not loaded yet: no Move to offer a pick from.
+    expect(mayMoveDocument(filed, "me", { manages: true, folders: null })).toBe(
+      false,
+    );
+    // An uploader left off Exec's list still sees their file there, but the
+    // server refuses moving it out.
+    expect(
+      mayMoveDocument(filed, "me", {
+        manages: false,
+        folders: [{ name: "Rush" }],
+      }),
+    ).toBe(false);
+    expect(
+      mayMoveDocument({ ...folderCopy, folder: "Exec" }, "me", {
+        manages: true,
+        folders: seen,
+      }),
+    ).toBe(false);
+  });
+
   it("renames only a file that keeps its own name", () => {
     expect(mayRenameDocument(upload, "me", member)).toBe(true);
     expect(mayRenameDocument(upload, "someone", manager)).toBe(true);
@@ -856,9 +889,16 @@ describe("moveAccessNote (#5563)", () => {
     );
   });
 
-  it("doesn't say everyone when the file keeps a list of its own", () => {
-    expect(
-      moveAccessNote({ who_can_see: ["role:r-1"] }, folders, "Exec", null),
-    ).toBeNull();
+  it("names the file's own list when it keeps one", () => {
+    const own = { who_can_see: ["role:r-1"] };
+    // Out of a limited folder, it widens to everyone on its own list.
+    expect(moveAccessNote(own, folders, "Exec", null)).toBe(
+      "Everyone on the file's own list will see it.",
+    );
+    // Into one, only who passes both.
+    expect(moveAccessNote(own, folders, null, "Exec")).toBe(
+      "Only people who can see Exec and are on the file's own list will see it.",
+    );
+    expect(moveAccessNote(own, folders, "Rush", null)).toBeNull();
   });
 });

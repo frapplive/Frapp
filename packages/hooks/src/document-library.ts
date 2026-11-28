@@ -892,11 +892,11 @@ export function isDriveFolderCopy(doc: {
 }
 
 /**
- * Whether `userId` may move this file to another folder (#5563), as the API
- * decides (`PATCH /v1/documents/{id}`): its uploader, or a member who manages
- * documents. Never a copy from the Drive folder, which is moved in Drive.
- * The server also asks that the mover see both folders, which the list a
- * member sees already holds to.
+ * Who may rename or move this file (#5563), as the API decides
+ * (`assertMayRefile` behind `PATCH /v1/documents/{id}`): its uploader, or a
+ * member who manages documents. Never a copy from the Drive folder, which is
+ * renamed and moved in Drive. A move also needs the folder it leaves in
+ * sight, which `mayMoveDocument` adds.
  */
 export function mayRefileDocument(
   doc: {
@@ -913,7 +913,34 @@ export function mayRefileDocument(
 }
 
 /**
- * Whether the member may rename this file here (#5563): who may move it,
+ * Whether the member may move this file to another folder (#5563): who may
+ * refile it (`mayRefileDocument`), once their folders have loaded and only
+ * while the file's folder is one of them. The server refuses a move out of a
+ * folder the mover can't see (`checkedMove`), and an uploader still sees
+ * their own file in a folder whose list later left them off, so that file
+ * offers no Move rather than one that is always refused. `folders` is `null`
+ * until the member's folders load.
+ */
+export function mayMoveDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+    folder?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean; folders: readonly { name: string }[] | null },
+): boolean {
+  if (access.folders === null) return false;
+  const folder = doc.folder ?? null;
+  if (folder !== null && !access.folders.some((row) => row.name === folder)) {
+    return false;
+  }
+  return mayRefileDocument(doc, userId, access);
+}
+
+/**
+ * Whether the member may rename this file here (#5563): who may refile it,
  * except a file that takes its name from elsewhere. Minutes take their
  * meeting's name, and a file added by its Drive link keeps Drive's.
  */
@@ -945,7 +972,7 @@ export const RENAME_DOCUMENT_TITLE = "Rename file";
 /** The Move question's title on both apps. */
 export const MOVE_DOCUMENT_TITLE = "Move to folder";
 
-/** The no-folder choice in Move to folder, as the upload form's folder pick says it. */
+/** The no-folder choice: the folder rail's row, the upload and import folder picks, and Move to folder. */
 export const NO_FOLDER_LABEL = "No folder";
 
 /**
@@ -973,10 +1000,13 @@ type AccessListed = { who_can_see?: readonly string[] | null };
 /**
  * What moving a file from one folder to another does to who sees it (#5563,
  * `spec/behavior/chapter-docs.md` § Rename and move), said before the move,
- * or null when nothing changes. A file follows its folder's list, narrowed by
- * its own: into a folder with a list, only that list's people see it; out of
- * one into an open folder (or none), everyone in the chapter does, unless the
- * file keeps a list of its own.
+ * or null when nothing changes. A file is seen by who passes its folder's list
+ * and its own (§ Who can see): into a folder with a list, only that list's
+ * people see it, narrowed by its own; out of one into an open folder (or
+ * none), everyone in the chapter does, or everyone on its own list.
+ *
+ * Both folders must be among `folders`, which `mayMoveDocument` holds to: a
+ * folder missing from the list would read as open.
  */
 export function moveAccessNote(
   doc: AccessListed,
@@ -993,11 +1023,15 @@ export function moveAccessNote(
   const fromList = listOf(from);
   const toList = listOf(to);
   if (key(fromList) === key(toList)) return null;
+  const ownList = doc.who_can_see != null;
   if (toList !== null && to !== null) {
-    return `Only people who can see ${to} will see it.`;
+    return ownList
+      ? `Only people who can see ${to} and are on the file's own list will see it.`
+      : `Only people who can see ${to} will see it.`;
   }
-  if (doc.who_can_see != null) return null;
-  return "Everyone in the chapter will see it.";
+  return ownList
+    ? "Everyone on the file's own list will see it."
+    : "Everyone in the chapter will see it.";
 }
 
 /**

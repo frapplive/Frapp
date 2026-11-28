@@ -8,7 +8,7 @@ import {
   useUpdateDocumentFolder,
 } from "@repo/hooks";
 import { isEmptyChannelAccessChoice } from "@repo/hooks/channel-access";
-import { tierByMarks } from "@repo/hooks/document-library";
+import { NO_FOLDER_LABEL, tierByMarks } from "@repo/hooks/document-library";
 import { sameChannelAccessList } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -227,7 +227,7 @@ export function useFolderManagement({
       await deleteFolder.mutateAsync(folder.id);
       toast({
         title: "Folder deleted",
-        description: `Documents from ${folder.name} are now under "No folder".`,
+        description: `Documents from ${folder.name} are now under "${NO_FOLDER_LABEL}".`,
       });
       // The server moved the documents; a tab pointing at the deleted name
       // would filter to nothing, so fall back to the unfiltered view.

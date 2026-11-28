@@ -37,6 +37,8 @@ let starRows: { folder_ids: string[]; document_ids: string[] } = {
   document_ids: [],
 };
 const setStar = vi.fn(async () => undefined);
+// Rename and Move to folder (#5563).
+const updateDocument = vi.fn(async () => ({}));
 let starsFailed = false;
 const setPin = vi.fn(async () => undefined);
 // Upload a new version (#6055).
@@ -99,7 +101,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: vi.fn(),
   }),
   useSetDocumentStar: () => ({ mutateAsync: setStar }),
-  useUpdateDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+  useUpdateDocument: () => ({ mutateAsync: updateDocument }),
   useSetDocumentPin: () => ({ mutateAsync: setPin, isPending: false }),
   useViewerUserId: () => viewerId,
   useRequestDocumentVersionUploadUrl: () => ({ mutateAsync: requestVersion }),
@@ -173,6 +175,8 @@ import { ListRow, PressableRow } from "@/components/list-section";
 import { InlineNote } from "@/components/inline-note";
 import { UploadDocumentSheet } from "@/components/documents/upload-document-sheet";
 import { DocumentActionsSheet } from "@/components/documents/document-actions-sheet";
+import { RenameDocumentSheet } from "@/components/documents/rename-document-sheet";
+import { OptionSheet } from "@/components/option-sheet";
 import { MarkedCards } from "@/components/documents/marked-cards";
 import { DocumentTiles } from "@/components/documents/document-tiles";
 import { PinGlyph, StarGlyph } from "@/components/documents/document-glyphs";
@@ -230,6 +234,8 @@ afterEach(() => {
   refetchDocuments.mockClear();
   starRows = { folder_ids: [], document_ids: [] };
   setStar.mockReset();
+  updateDocument.mockReset();
+  updateDocument.mockResolvedValue({});
   starsFailed = false;
   setPin.mockReset();
   viewerId = "u-viewer";
@@ -1093,7 +1099,7 @@ describe("Documents search, filters, sort and delete, as web's (#3938)", () => {
       officer.root
         .findAllByType(ListRow)
         .find((row) => row.props.label === "Chapter bylaws")!;
-    expect(bylaws().props.longPressLabel).toBe("Star, pin or delete");
+    expect(bylaws().props.longPressLabel).toBe("Star, pin, rename or delete");
 
     act(() => bylaws().props.onLongPress());
     const sheet = officer.root.findByType(DocumentActionsSheet);
@@ -1476,7 +1482,7 @@ describe("Documents pinned and starred (#3934)", () => {
     permissions = ["chapter_docs:manage"];
     const officer = loaded();
     expect(card(officer, "Chapter bylaws").props.accessibilityActions).toEqual([
-      { name: "longpress", label: "Star, pin or delete" },
+      { name: "longpress", label: "Star, pin, rename, move or delete" },
     ]);
   });
 
@@ -2337,5 +2343,148 @@ describe("Documents upload a new version (#6055)", () => {
     expect(screenText(tree)).toContain(
       "Couldn't upload a new version of “Chapter bylaws”.",
     );
+  });
+});
+
+describe("Documents rename and move (#5563)", () => {
+  const MINE = {
+    id: "d-1",
+    title: "Chapter bylaws",
+    folder: "Bylaws",
+    uploaded_by: "u-viewer",
+    created_at: "2026-10-03T14:00:00.000Z",
+  };
+  const THEIRS = {
+    id: "d-2",
+    title: "Budget FY2026",
+    folder: "Bylaws",
+    uploaded_by: "u-ana",
+    created_at: "2026-10-01T14:00:00.000Z",
+  };
+  const LINKED = {
+    id: "d-3",
+    title: "Rush schedule",
+    uploaded_by: "u-viewer",
+    drive_file_id: "drive-3",
+    drive_link_status: "active",
+    created_at: "2026-10-02T14:00:00.000Z",
+  };
+  const FOLDER_COPY = {
+    id: "d-4",
+    title: "Synced minutes",
+    uploaded_by: "u-viewer",
+    drive_file_id: "drive-4",
+    created_at: "2026-10-04T14:00:00.000Z",
+  };
+  const BYLAWS = { id: "f-1", name: "Bylaws", sort_order: 0 };
+  const EXEC = {
+    id: "f-2",
+    name: "Exec",
+    sort_order: 1,
+    who_can_see: ["tier:t-exec"],
+  };
+
+  const longPress = (tree: ReactTestRenderer, label: string) => {
+    act(() =>
+      tree.root
+        .findAllByType(ListRow)
+        .find((row) => row.props.label === label)!
+        .props.onLongPress(),
+    );
+    return tree.root.findByType(DocumentActionsSheet);
+  };
+  const moveSheet = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAllByType(OptionSheet)
+      .find((sheet) => sheet.props.title === "Move to folder")!;
+
+  it("offers Rename and Move to the uploader, and neither to another member", () => {
+    folderRows = [BYLAWS];
+    documentRows = [MINE, THEIRS];
+    const tree = render();
+    const mine = longPress(tree, "Chapter bylaws").props.target;
+    expect([mine.canRename, mine.canMove]).toEqual([true, true]);
+    const theirs = longPress(tree, "Budget FY2026").props.target;
+    expect([theirs.canRename, theirs.canMove]).toEqual([false, false]);
+  });
+
+  it("moves a file added by its Drive link, never a Drive folder copy", () => {
+    permissions = ["chapter_docs:manage"];
+    documentRows = [LINKED, FOLDER_COPY];
+    const tree = render();
+    const linked = longPress(tree, "Rush schedule").props.target;
+    expect([linked.canRename, linked.canMove]).toEqual([false, true]);
+    const copy = longPress(tree, "Synced minutes").props.target;
+    expect([copy.canRename, copy.canMove]).toEqual([false, false]);
+  });
+
+  it("offers no Move out of a folder the uploader can no longer see", () => {
+    // Bylaws isn't among this member's folders: its list left them off.
+    folderRows = [EXEC];
+    documentRows = [MINE];
+    const tree = render();
+    const target = longPress(tree, "Chapter bylaws").props.target;
+    expect([target.canRename, target.canMove]).toEqual([true, false]);
+  });
+
+  it("names the actions the long press holds, to a screen reader", () => {
+    folderRows = [BYLAWS];
+    documentRows = [MINE];
+    const tree = render();
+    expect(
+      tree.root
+        .findAllByType(ListRow)
+        .find((row) => row.props.label === "Chapter bylaws")!.props
+        .longPressLabel,
+    ).toBe("Star, rename or move");
+  });
+
+  it("moves the file on the folder's tap", async () => {
+    folderRows = [BYLAWS, { id: "f-3", name: "Rush", sort_order: 2 }];
+    documentRows = [MINE];
+    const tree = render();
+    const sheet = longPress(tree, "Chapter bylaws");
+    act(() => sheet.props.onMove(sheet.props.target));
+    await act(async () => moveSheet(tree).props.onSelect("Rush"));
+    expect(updateDocument).toHaveBeenCalledWith({ id: "d-1", folder: "Rush" });
+  });
+
+  it("asks first when the move changes who can see it", async () => {
+    folderRows = [BYLAWS, EXEC];
+    documentRows = [{ ...MINE, folder: "Exec" }];
+    const alert = vi.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const tree = render();
+    const sheet = longPress(tree, "Chapter bylaws");
+    act(() => sheet.props.onMove(sheet.props.target));
+    await act(async () => {
+      void moveSheet(tree).props.onSelect(null);
+    });
+    expect(alert.mock.calls[0]?.slice(0, 2)).toEqual([
+      "Move to No folder?",
+      "Everyone in the chapter will see it.",
+    ]);
+    expect(updateDocument).not.toHaveBeenCalled();
+    const buttons = alert.mock.calls[0]![2] as {
+      text: string;
+      onPress: () => void;
+    }[];
+    await act(async () => buttons.find((b) => b.text === "Move")!.onPress());
+    expect(updateDocument).toHaveBeenCalledWith({ id: "d-1", folder: null });
+    alert.mockRestore();
+  });
+
+  it("renames the file from its Rename sheet", async () => {
+    folderRows = [BYLAWS];
+    documentRows = [MINE];
+    const tree = render();
+    const sheet = longPress(tree, "Chapter bylaws");
+    act(() => sheet.props.onRename(sheet.props.target));
+    const rename = tree.root.findByType(RenameDocumentSheet);
+    expect(rename.props.name).toBe("Chapter bylaws");
+    await act(async () => rename.props.onSubmit("Bylaws 2026"));
+    expect(updateDocument).toHaveBeenCalledWith({
+      id: "d-1",
+      title: "Bylaws 2026",
+    });
   });
 });

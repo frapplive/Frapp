@@ -579,7 +579,7 @@ function ChapterDocumentsPage() {
   // Rename and Move to folder (#5563), from a file's ⋯.
   const refile = useDocumentRefile({
     gate,
-    folders,
+    folders: foldersQuery.data === undefined ? null : folders,
     viewerId,
     manages: canManageTypes,
   });

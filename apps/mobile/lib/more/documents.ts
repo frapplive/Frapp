@@ -45,6 +45,12 @@ export interface MobileDocument {
   /** The file's page in Google Drive (#6055), or null for an upload. */
   drive_url: string | null;
   /**
+   * Set on a file added by its own Drive link (#5434), null on a copy from
+   * the connected Drive folder: a linked file can be moved, a folder copy
+   * can't (#5563, `isDriveFolderCopy`).
+   */
+  drive_link_status: string | null;
+  /**
    * The file's own who-can-see list (#5216), left out when it follows its
    * folder. The API only sends what this member may see, so it is only
    * ever drawn as a lock.
@@ -124,6 +130,7 @@ export function selectDocuments(data: unknown): MobileDocument[] {
         pinned_at: str(row, "pinned_at"),
         drive_file_id: str(row, "drive_file_id"),
         drive_url: str(row, "drive_url"),
+        drive_link_status: str(row, "drive_link_status"),
         ...(accessList(row) ? { who_can_see: accessList(row) } : {}),
         meeting_id: str(row, "meeting_id"),
         minutes: selectMinutes(row.minutes),
@@ -246,3 +253,29 @@ export function selectDocumentFolders(data: unknown): DocumentFolder[] {
  * cannot break either client.
  */
 export { selectDownloadUrl } from "@repo/hooks";
+
+/**
+ * What a file row's long press offers, said to a screen reader (#5563): the
+ * long-press sheet's own rows, in its order, so a member hears that Rename
+ * or Move to folder is there. Open in Google Drive and Upload a new version
+ * stay in the sheet without being named, to keep the hint short.
+ */
+export function documentActionsHint(target: {
+  canPin: boolean;
+  canRename: boolean;
+  canMove: boolean;
+  canDelete: boolean;
+}): string {
+  const verbs = [
+    "star",
+    target.canPin ? "pin" : null,
+    target.canRename ? "rename" : null,
+    target.canMove ? "move" : null,
+    target.canDelete ? "delete" : null,
+  ].filter((verb): verb is string => verb !== null);
+  const said =
+    verbs.length === 1
+      ? "star or unstar"
+      : `${verbs.slice(0, -1).join(", ")} or ${verbs[verbs.length - 1]}`;
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}

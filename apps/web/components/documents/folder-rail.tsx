@@ -1,5 +1,6 @@
 "use client";
 
+import { NO_FOLDER_LABEL } from "@repo/hooks/document-library";
 import { createContext, useContext, useId, useMemo, useState } from "react";
 import {
   ChevronDown,
@@ -292,7 +293,7 @@ export function FolderRail({
             className={folderRowClassName(activeFolder === "")}
           >
             <DocumentsGlyph className="h-4 w-4" active={activeFolder === ""} />{" "}
-            No folder
+            {NO_FOLDER_LABEL}
           </button>
           {groups.map((group) => (
             <div
@@ -688,7 +689,7 @@ export function FolderMenu({
     activeFolder === null
       ? "All files"
       : activeFolder === ""
-        ? "No folder"
+        ? NO_FOLDER_LABEL
         : folderPlace(
             activeFolder,
             new Set(railFolders.map((folder) => folder.name)),

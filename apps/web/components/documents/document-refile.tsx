@@ -8,7 +8,7 @@ import {
   MOVE_DOCUMENT_TITLE,
   NO_FOLDER_LABEL,
   RENAME_DOCUMENT_TITLE,
-  mayRefileDocument,
+  mayMoveDocument,
   mayRenameDocument,
   moveAccessNote,
 } from "@repo/hooks/document-library";
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectFieldButton } from "@/components/ui/select";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
+import { FieldError } from "@/components/shared/short-form";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import type { ChapterDocument } from "@/components/documents/document-types";
 import { toast } from "@/lib/hooks/use-toast";
@@ -61,8 +62,11 @@ export function useDocumentRefile({
   manages,
 }: {
   gate: SubscriptionGate;
-  /** The chapter's folders this member sees, in the rail's order. */
-  folders: readonly FolderRow[];
+  /**
+   * The chapter's folders this member sees, in the rail's order; `null`
+   * until they load, and Move waits for them (`mayMoveDocument`).
+   */
+  folders: readonly FolderRow[] | null;
   viewerId: string | null;
   /** Holds `chapter_docs:manage`. */
   manages: boolean;
@@ -70,7 +74,7 @@ export function useDocumentRefile({
   const [asking, setAsking] = useState<Asking>(null);
   const refile: DocumentRefile = {
     canRename: (doc) => mayRenameDocument(doc, viewerId, { manages }),
-    canMove: (doc) => mayRefileDocument(doc, viewerId, { manages }),
+    canMove: (doc) => mayMoveDocument(doc, viewerId, { manages, folders }),
     onRename: (doc) => setAsking({ kind: "rename", doc }),
     onMove: (doc) => setAsking({ kind: "move", doc }),
   };
@@ -89,7 +93,7 @@ export function useDocumentRefile({
       <MoveDocumentDialog
         key={asking.doc.id}
         doc={asking.doc}
-        folders={folders}
+        folders={folders ?? []}
         gate={gate}
         onClose={close}
       />
@@ -155,11 +159,7 @@ function RenameDocumentDialog({
               }}
               aria-invalid={problem ? true : undefined}
             />
-            {problem ? (
-              <p className="text-caption text-destructive" role="alert">
-                {problem}
-              </p>
-            ) : null}
+            {problem ? <FieldError>{problem}</FieldError> : null}
           </div>
           <DialogFooter>
             <Button
@@ -289,11 +289,7 @@ function MoveDocumentDialog({
                 {accessNote}
               </p>
             ) : null}
-            {problem ? (
-              <p className="text-caption text-destructive" role="alert">
-                {problem}
-              </p>
-            ) : null}
+            {problem ? <FieldError>{problem}</FieldError> : null}
           </div>
           <DialogFooter>
             <Button
