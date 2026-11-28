@@ -18,6 +18,7 @@ import {
 import { ACTIVITY_ITEM_READ_REPOSITORY } from '#domain/repositories/activity-item-read.repository.interface';
 import type {
   ActivityItemRef,
+  ActivityPageReads,
   IActivityItemReadRepository,
 } from '#domain/repositories/activity-item-read.repository.interface';
 import type {
@@ -81,6 +82,7 @@ import {
 } from './activity-standing.service';
 import type { ActivityLink, ChatReads } from './activity-link.service';
 import { ChatReminderService } from './chat-reminder.service';
+import { REMINDER_LIST_LIMIT } from './chat-reminder.service';
 import type { ActivityReminder } from './chat-reminder.service';
 import { displayNamesById } from './display-names';
 import { maskBlockedMessages } from './chat-block-mask';
@@ -1099,9 +1101,22 @@ export class ActivityService {
         ).toISOString(),
       }));
 
-    // The member's snoozes, read beside the sections. A failure serves
-    // nothing as snoozed rather than failing the page.
-    const snoozesRead = this.readSnoozes(chapterId, userId, now);
+    // The chat cards, the member's reminders, snoozes and unread start, in
+    // one request (`activity_page_reads`, #6061 step 2), shared by the
+    // sections below. Each reader settles its own failure: the chat sections
+    // are served empty and named unavailable, the snoozes and the dots are
+    // left out, as each failed alone before.
+    const pageRead = this.readRepo.readPage(chapterId, userId, {
+      now: nowDate.toISOString(),
+      snoozesEndedAfter: new Date(now - SNOOZE_LOOKBACK_MS).toISOString(),
+      polls: on('polls'),
+      pollLimit: POLL_SCAN_LIMIT,
+      cardLimit: CARD_SCAN_LIMIT,
+      reminderLimit: REMINDER_LIST_LIMIT,
+    });
+    // Nothing else may await it first: this reader settles its rejection,
+    // so a failed read is never an unhandled one.
+    const snoozesRead = this.readSnoozes(chapterId, pageRead, now);
 
     const [
       tasks,
@@ -1147,6 +1162,7 @@ export class ActivityService {
               userId,
               now,
               chatReads,
+              pageRead,
               weekStart,
               chapter,
             )
@@ -1155,7 +1171,7 @@ export class ActivityService {
       // Sign-ups and forms are chat cards with no module switch, as a
       // message has none (#3926).
       this.settle('cards', chapterId, () =>
-        this.readCards(chapterId, userId, now, chatReads, weekStart),
+        this.readCards(chapterId, userId, now, chatReads, pageRead, weekStart),
       ),
       this.settle('coming_up', chapterId, () =>
         on('events')
@@ -1182,8 +1198,8 @@ export class ActivityService {
       ),
       // The member's own, and chat has no module switch.
       this.settle('reminders', chapterId, () =>
-        chatReads().then((reads) =>
-          this.reminderService.listFor(chapterId, userId, now, reads),
+        Promise.all([chatReads(), pageRead]).then(([reads, page]) =>
+          this.reminderService.listFor(page.reminders, now, reads),
         ),
       ),
       this.settle('week_events', chapterId, () =>
@@ -1306,7 +1322,7 @@ export class ActivityService {
       // events, which Coming up's event snooze would collide with.
       minutesWaiting(myMinutes);
 
-    return this.withUnread(chapterId, userId, snoozes.ended, {
+    return this.withUnread(chapterId, userId, pageRead, snoozes.ended, {
       needs_you: {
         tasks: awakeFirst(myTasks).slice(0, LIST_LIMIT),
         task_confirmations: awakeFirst(confirmations).slice(0, LIST_LIMIT),
@@ -1415,16 +1431,12 @@ export class ActivityService {
    */
   private async readSnoozes(
     chapterId: string,
-    userId: string,
+    pageRead: Promise<ActivityPageReads>,
     now: number,
   ): Promise<Snoozes> {
     let rows: ActivityItemSnooze[];
     try {
-      rows = await this.readRepo.findSnoozes(
-        chapterId,
-        userId,
-        new Date(now - SNOOZE_LOOKBACK_MS).toISOString(),
-      );
+      rows = (await pageRead).snoozes;
     } catch (error) {
       reportCaughtFailure(this.logger, {
         level: 'warning',
@@ -1488,12 +1500,13 @@ export class ActivityService {
   private async withUnread(
     chapterId: string,
     userId: string,
+    pageRead: Promise<ActivityPageReads>,
     cameBack: Map<string, number>,
     view: ActivityView,
   ): Promise<ActivityView> {
     let unreadSince: string | null;
     try {
-      unreadSince = await this.readRepo.findUnreadStart(chapterId, userId);
+      unreadSince = (await pageRead).unread_since;
     } catch (error) {
       this.reportUnreadFailure(chapterId, error);
       return view;
@@ -2027,8 +2040,8 @@ export class ActivityService {
   }
 
   /**
-   * The poll cards Activity reads: the chapter's 100 newest, and the caller's
-   * own 100 newest, so the caller's own are found however busy the chapter.
+   * The poll cards the Archive reads: the chapter's 100 newest, and the
+   * caller's own 100 newest, as `activity_page_reads` reads them for the page.
    */
   private pollScans(
     chapterId: string,
@@ -2230,6 +2243,7 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<PollChatReads>,
+    pageRead: Promise<ActivityPageReads>,
     weekStart: number,
     chapter: ChapterReads,
   ): Promise<{
@@ -2247,10 +2261,10 @@ export class ActivityService {
     // that cannot be read is not an empty block list", so a failure fails the
     // section (served empty and named `unavailable`) rather than listing a
     // blocked member's question.
-    const [{ channels, blockedUserIds }, [recent, own]] = await Promise.all([
-      chatReads(),
-      this.pollScans(chapterId, userId),
-    ]);
+    // The chapter's `POLL_SCAN_LIMIT` newest polls, and the caller's own as
+    // many, so the caller's own are found however busy the chapter.
+    const [{ channels, blockedUserIds }, { polls: recent, own_polls: own }] =
+      await Promise.all([chatReads(), pageRead]);
     const nowDate = new Date(now);
     // No deadline sorts last: it is the least pressing.
     const closesAtMs = (row: ActivityPoll) =>
@@ -2411,23 +2425,16 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<ChatReads>,
+    pageRead: Promise<ActivityPageReads>,
     weekStart: number,
   ): Promise<{
     open: ActivityCard[];
     /** Other members' cards the caller first answered since the week began. */
     answeredThisWeek: number;
   }> {
-    const [{ channels, blockedUserIds }, signups, forms] = await Promise.all([
-      chatReads(),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'signup',
-        limit: CARD_SCAN_LIMIT,
-      }),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'form',
-        limit: CARD_SCAN_LIMIT,
-      }),
-    ]);
+    // The chapter's newest sign-ups and forms, `CARD_SCAN_LIMIT` of each.
+    const [{ channels, blockedUserIds }, { signups, forms }] =
+      await Promise.all([chatReads(), pageRead]);
     const channelById = new Map(
       channels.map((channel) => [channel.id, channel]),
     );

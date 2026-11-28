@@ -167,6 +167,7 @@ import type {
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
+import type { ActivityPageReads } from '#domain/repositories/activity-item-read.repository.interface';
 import type { RushCandidateTableRow } from '#domain/entities/rush-candidate.entity';
 import type { RushBidConfirmation } from '#domain/repositories/rush-bid.repository.interface';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
@@ -380,6 +381,24 @@ export interface Database {
       };
     };
     Functions: {
+      /**
+       * `20261128174544` (#6061 step 2). Activity's chat cards, the member's
+       * reminders, snoozes and unread start, in one round trip; service role
+       * only.
+       */
+      activity_page_reads: {
+        Args: {
+          p_chapter_id: string;
+          p_user_id: string;
+          p_now: string;
+          p_snoozes_ended_after: string;
+          p_polls: boolean;
+          p_poll_limit: number;
+          p_card_limit: number;
+          p_reminder_limit: number;
+        };
+        Returns: ActivityPageReads;
+      };
       /**
        * `20261128043840` (#6061). Every task list Activity draws for one
        * member, in one round trip; service role only.

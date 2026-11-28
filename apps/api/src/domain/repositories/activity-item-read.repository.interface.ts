@@ -3,6 +3,8 @@ import type {
   ActivityItemRead,
   ActivityItemSnooze,
 } from '../entities/activity-item-read.entity';
+import type { ChatMessage } from '../entities/chat.entity';
+import type { StoredChatMessageReminder } from './chat-message-reminder.repository.interface';
 
 export const ACTIVITY_ITEM_READ_REPOSITORY = 'ACTIVITY_ITEM_READ_REPOSITORY';
 
@@ -13,14 +15,57 @@ export interface ActivityItemRef {
 }
 
 /**
+ * What `GET /v1/activity` reads beside its tasks and events, in one round
+ * trip (`activity_page_reads`, #6061 step 2): the chat cards it lists, the
+ * caller's reminders, and the caller's snoozes and unread start. Each list is
+ * filtered, ordered and capped in SQL as its own read was. The cards are the
+ * chapter's; which of them the caller may see is still the API's decision
+ * (the channel list and the block list).
+ */
+export interface ActivityPageReads {
+  /** The chapter's newest polls; empty when polls weren't asked for. */
+  polls: ChatMessage[];
+  /** The caller's own newest polls; empty when polls weren't asked for. */
+  own_polls: ChatMessage[];
+  /** The chapter's newest sign-up sheets and headcounts. */
+  signups: ChatMessage[];
+  /** The chapter's newest forms. */
+  forms: ChatMessage[];
+  /**
+   * The caller's latest due reminders, latest first, then their soonest
+   * waiting ones, soonest first, each `limit` long at most.
+   */
+  reminders: StoredChatMessageReminder[];
+  /** The caller's snoozes that end after `snoozesEndedAfter`. */
+  snoozes: ActivityItemSnooze[];
+  /** When the caller's unread dots began; null when they haven't. */
+  unread_since: string | null;
+}
+
+/**
  * Which Activity items each member opened, and when, and when their unread
- * dots began (#4173, `spec/behavior/activity.md` § Unread). Every method is
- * scoped by chapter and member: this state is the member's own and nobody
- * else ever reads it.
+ * dots began (#4173, `spec/behavior/activity.md` § Unread), and what they
+ * snoozed (#4982). Every method is scoped by chapter and member: this state is
+ * the member's own and nobody else ever reads it. {@link readPage} also reads
+ * the chapter's chat cards, so Activity's page costs one request for both.
  */
 export interface IActivityItemReadRepository {
-  /** When the member's dots began in the chapter; null when they haven't. */
-  findUnreadStart(chapterId: string, userId: string): Promise<string | null>;
+  /**
+   * Everything {@link ActivityPageReads} names, for one member in one
+   * chapter, in one request. `polls: false` leaves both poll lists empty.
+   */
+  readPage(
+    chapterId: string,
+    userId: string,
+    query: {
+      now: string;
+      snoozesEndedAfter: string;
+      polls: boolean;
+      pollLimit: number;
+      cardLimit: number;
+      reminderLimit: number;
+    },
+  ): Promise<ActivityPageReads>;
   /** Begins the member's dots at `startedAt`, unless they already began. */
   startUnread(
     chapterId: string,
@@ -43,16 +88,6 @@ export interface IActivityItemReadRepository {
     items: ActivityItemRef[],
     readAt: string,
   ): Promise<void>;
-  /**
-   * The member's snoozes in the chapter that end after `endedAfter`: the
-   * active ones and those that ended since, whose end decides whether their
-   * row came back unread (`spec/behavior/activity.md` § Snooze).
-   */
-  findSnoozes(
-    chapterId: string,
-    userId: string,
-    endedAfter: string,
-  ): Promise<ActivityItemSnooze[]>;
   /** Snoozes the item until `until`, replacing any snooze it had. */
   snooze(
     chapterId: string,

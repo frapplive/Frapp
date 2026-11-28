@@ -48,18 +48,6 @@ export interface IChatMessageReminderRepository {
   ): Promise<ChatMessageReminder>;
   /** Removes the caller's reminder on a message. Idempotent. */
   delete(userId: string, messageId: string, chapterId: string): Promise<void>;
-  /**
-   * The caller's reminders in one chapter: those due at `now`, newest first,
-   * then those still waiting, soonest first, at most `limit` of each. Read
-   * apart so a pile of old due reminders the member never cleared can't
-   * crowd a new one off the list.
-   */
-  findByUserAndChapter(
-    userId: string,
-    chapterId: string,
-    now: string,
-    limit: number,
-  ): Promise<StoredChatMessageReminder[]>;
   /** Unfired reminders due at `now`, oldest first, across every chapter. */
   findDue(now: string, limit: number): Promise<StoredChatMessageReminder[]>;
   /**

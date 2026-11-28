@@ -79,38 +79,6 @@ export class SupabaseChatMessageReminderRepository implements IChatMessageRemind
     if (error) throw new SupabaseQueryError(error);
   }
 
-  async findByUserAndChapter(
-    userId: string,
-    chapterId: string,
-    now: string,
-    limit: number,
-  ): Promise<StoredChatMessageReminder[]> {
-    const mine = () =>
-      this.supabase
-        .from('chat_message_reminders')
-        .select(REMINDER_WITH_MESSAGE_SELECT)
-        .eq('user_id', userId)
-        .eq('chapter_id', chapterId);
-    const [due, waiting] = await Promise.all([
-      mine()
-        .lte('remind_at', now)
-        .order('remind_at', { ascending: false })
-        .limit(limit),
-      mine()
-        .gt('remind_at', now)
-        .order('remind_at', { ascending: true })
-        .limit(limit),
-    ]);
-    if (due.error) throw new SupabaseQueryError(due.error);
-    if (waiting.error) throw new SupabaseQueryError(waiting.error);
-    // PostgREST types an embed as `T | GenericStringError`, which it is only
-    // when `error` is set, thrown above.
-    return [
-      ...(due.data ?? []),
-      ...(waiting.data ?? []),
-    ] as unknown as StoredChatMessageReminder[];
-  }
-
   async findDue(
     now: string,
     limit: number,

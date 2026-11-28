@@ -3,6 +3,7 @@ import { CHAT_MESSAGE_REMINDER_REPOSITORY } from '#domain/repositories/chat-mess
 import type {
   ChatMessageReminder,
   IChatMessageReminderRepository,
+  StoredChatMessageReminder,
 } from '#domain/repositories/chat-message-reminder.repository.interface';
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
@@ -117,26 +118,20 @@ export class ChatReminderService {
   }
 
   /**
-   * The caller's reminders for Activity: due ones newest first, then waiting
-   * ones soonest first (see {@link REMINDER_LIST_LIMIT}). Channel access and
-   * the block list are applied on every read, as for bookmarks, because the
-   * embed reads the message as it is now: a channel the member lost redacts
-   * the row (it stays, so they can clear it), and a blocked author's message
-   * reads as the timeline's tombstone. A channel left out of Activity still
-   * lists: the member asked for this one.
+   * The caller's reminders as Activity lists them, from the rows Activity's
+   * page read returned (`activity_page_reads`, #6061 step 2): due ones newest
+   * first, then waiting ones soonest first (see {@link REMINDER_LIST_LIMIT}).
+   * Channel access and the block list are applied on every read, as for
+   * bookmarks, because the embed reads the message as it is now: a channel
+   * the member lost redacts the row (it stays, so they can clear it), and a
+   * blocked author's message reads as the timeline's tombstone. A channel
+   * left out of Activity still lists: the member asked for this one.
    */
   async listFor(
-    chapterId: string,
-    userId: string,
+    rows: StoredChatMessageReminder[],
     now: number,
     { channels, blockedUserIds }: ChatReads,
   ): Promise<ActivityReminder[]> {
-    const rows = await this.reminderRepo.findByUserAndChapter(
-      userId,
-      chapterId,
-      new Date(now).toISOString(),
-      REMINDER_LIST_LIMIT,
-    );
     if (rows.length === 0) return [];
     const readable = new Map(channels.map((channel) => [channel.id, channel]));
     const blocked = new Set(blockedUserIds);

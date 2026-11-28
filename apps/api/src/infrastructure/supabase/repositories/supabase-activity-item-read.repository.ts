@@ -3,12 +3,10 @@ import { SUPABASE_CLIENT } from '../supabase.provider';
 import type { FrappSupabaseClient, TablesInsert } from '../database.types';
 import type {
   ActivityItemRef,
+  ActivityPageReads,
   IActivityItemReadRepository,
 } from '#domain/repositories/activity-item-read.repository.interface';
-import type {
-  ActivityItemRead,
-  ActivityItemSnooze,
-} from '#domain/entities/activity-item-read.entity';
+import type { ActivityItemRead } from '#domain/entities/activity-item-read.entity';
 import { SupabaseQueryError } from '../supabase-query-error';
 import { chunkIds } from '#domain/utils/chunk-ids';
 
@@ -37,18 +35,35 @@ export class SupabaseActivityItemReadRepository implements IActivityItemReadRepo
     private readonly supabase: FrappSupabaseClient,
   ) {}
 
-  async findUnreadStart(
+  /**
+   * One call to `activity_page_reads` (#6061 step 2). The function's rows are
+   * the columns the separate reads selected, so they are served as typed.
+   */
+  async readPage(
     chapterId: string,
     userId: string,
-  ): Promise<string | null> {
-    const { data, error } = await this.supabase
-      .from('activity_unread_starts')
-      .select('started_at')
-      .eq('chapter_id', chapterId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    query: {
+      now: string;
+      snoozesEndedAfter: string;
+      polls: boolean;
+      pollLimit: number;
+      cardLimit: number;
+      reminderLimit: number;
+    },
+  ): Promise<ActivityPageReads> {
+    const { data, error } = await this.supabase.rpc('activity_page_reads', {
+      p_chapter_id: chapterId,
+      p_user_id: userId,
+      p_now: query.now,
+      p_snoozes_ended_after: query.snoozesEndedAfter,
+      p_polls: query.polls,
+      p_poll_limit: query.pollLimit,
+      p_card_limit: query.cardLimit,
+      p_reminder_limit: query.reminderLimit,
+    });
     if (error) throw new SupabaseQueryError(error);
-    return data?.started_at ?? null;
+    if (!data) throw new Error('activity_page_reads returned nothing');
+    return data;
   }
 
   async startUnread(
@@ -114,21 +129,6 @@ export class SupabaseActivityItemReadRepository implements IActivityItemReadRepo
       .from('activity_item_reads')
       .upsert(rows, { onConflict: ACTIVITY_ITEM_READS_CONFLICT });
     if (error) throw new SupabaseQueryError(error);
-  }
-
-  async findSnoozes(
-    chapterId: string,
-    userId: string,
-    endedAfter: string,
-  ): Promise<ActivityItemSnooze[]> {
-    const { data, error } = await this.supabase
-      .from('activity_item_snoozes')
-      .select('*')
-      .eq('chapter_id', chapterId)
-      .eq('user_id', userId)
-      .gt('until', endedAfter);
-    if (error) throw new SupabaseQueryError(error);
-    return data ?? [];
   }
 
   async snooze(
