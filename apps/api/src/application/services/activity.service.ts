@@ -24,13 +24,10 @@ import type {
   ActivityItemKind,
   ActivityItemSnooze,
 } from '#domain/entities/activity-item-read.entity';
-import { CHAT_FORM_RESPONSE_REPOSITORY } from '#domain/repositories/chat-form-response.repository.interface';
-import type { IChatFormResponseRepository } from '#domain/repositories/chat-form-response.repository.interface';
 import { isCardClosed } from '#domain/utils/card-closing';
 import { formQuestions } from '#domain/utils/form-card-rules';
 import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import {
-  SIGNUP_ACTION_TYPE,
   isHeadcountCard,
   signupClaimSlotIds,
 } from '#domain/utils/signup-card-rules';
@@ -49,6 +46,7 @@ import type {
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type {
+  ActivityCardReads,
   ChannelType,
   ChatChannelView,
   ChatMessage,
@@ -622,9 +620,10 @@ function minutesWaiting(minutes: ActivityMinutes): number {
 }
 /** Members a task-for-everyone row names for its faces. */
 const GROUP_FACES = 5;
-/** How many of the chapter's newest poll cards are checked for "open and unvoted". */
-const POLL_SCAN_LIMIT = 100;
-/** The same, for each of sign-up and form cards. */
+/**
+ * How many of the chapter's newest cards of each kind (polls, sign-ups,
+ * forms) are checked for "open and unanswered", and of the caller's own polls.
+ */
 const CARD_SCAN_LIMIT = 100;
 /** How far ahead "coming up" looks. */
 const COMING_UP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -752,6 +751,24 @@ function pollCardClosed(card: PollCardFields, now: Date): boolean {
 /** The Activity read kind a card's id is recorded under. */
 function cardReadKind(card: Pick<ActivityCard, 'kind'>): ActivityItemKind {
   return card.kind === 'form' ? 'form' : 'signup';
+}
+
+/**
+ * The caller's votes, of those `activity_card_reads` read, on `messages`. A
+ * vote row with no picks is a cleared vote, not a vote: a member who clears
+ * every pick on a multi-choice card keeps the row with an empty list (#3793),
+ * and the poll goes back to needing them.
+ */
+function votesOn(
+  votes: ActivityCardReads['votes'],
+  messages: ChatMessage[],
+): ActivityCardReads['votes'] {
+  const ids = new Set(messages.map((message) => message.id));
+  return votes.filter(
+    (row) =>
+      ids.has(row.message_id) &&
+      cardVoteSelection(row.payload ?? undefined).length > 0,
+  );
 }
 
 /**
@@ -1025,8 +1042,6 @@ export class ActivityService {
     private readonly attendanceRepo: IAttendanceRepository,
     @Inject(ACTIVITY_ITEM_READ_REPOSITORY)
     private readonly readRepo: IActivityItemReadRepository,
-    @Inject(CHAT_FORM_RESPONSE_REPOSITORY)
-    private readonly formResponseRepo: IChatFormResponseRepository,
     private readonly channelAccess: ChannelAccessService,
     private readonly minutesService: ActivityMinutesService,
   ) {}
@@ -1099,6 +1114,17 @@ export class ActivityService {
         ).toISOString(),
       }));
 
+    // The chat cards and what the caller did on them, one function call
+    // (#6061) read once for the polls and cards sections, and only when one
+    // of them runs.
+    let cardRead: Promise<ActivityCardReads> | null = null;
+    const cardReads = () =>
+      (cardRead ??= this.messageRepo.readActivityCards(
+        chapterId,
+        userId,
+        CARD_SCAN_LIMIT,
+      ));
+
     // The member's snoozes, read beside the sections. A failure serves
     // nothing as snoozed rather than failing the page.
     const snoozesRead = this.readSnoozes(chapterId, userId, now);
@@ -1147,6 +1173,7 @@ export class ActivityService {
               userId,
               now,
               chatReads,
+              cardReads,
               weekStart,
               chapter,
             )
@@ -1155,7 +1182,7 @@ export class ActivityService {
       // Sign-ups and forms are chat cards with no module switch, as a
       // message has none (#3926).
       this.settle('cards', chapterId, () =>
-        this.readCards(chapterId, userId, now, chatReads, weekStart),
+        this.readCards(chapterId, userId, now, chatReads, cardReads, weekStart),
       ),
       this.settle('coming_up', chapterId, () =>
         on('events')
@@ -1965,11 +1992,13 @@ export class ActivityService {
     now: number,
   ): Promise<ActivityPoll[]> {
     const nowDate = new Date(now);
-    const [channels, blockedUserIds, [recent, own]] = await Promise.all([
+    const [channels, blockedUserIds, cards] = await Promise.all([
       this.chatService.getChannels(chapterId, userId),
       this.chatBlocks.listBlockedUserIds(chapterId, userId),
-      this.pollScans(chapterId, userId),
+      this.messageRepo.readActivityCards(chapterId, userId, CARD_SCAN_LIMIT),
     ]);
+    const recent = cards.polls;
+    const own = cards.own_polls;
     const channelById = new Map(
       channels.map((channel) => [channel.id, channel]),
     );
@@ -1985,9 +2014,7 @@ export class ActivityService {
       closed,
     );
     const voted = new Set(
-      (await this.votesOn([...mine, ...others], userId)).map(
-        (row) => row.message_id,
-      ),
+      votesOn(cards.votes, [...mine, ...others]).map((row) => row.message_id),
     );
     return pollRowsOf(
       [...mine, ...others.filter((message) => voted.has(message.id))],
@@ -2024,44 +2051,6 @@ export class ActivityService {
       });
       return { ok: false };
     }
-  }
-
-  /**
-   * The poll cards Activity reads: the chapter's 100 newest, and the caller's
-   * own 100 newest, so the caller's own are found however busy the chapter.
-   */
-  private pollScans(
-    chapterId: string,
-    userId: string,
-  ): Promise<[ChatMessage[], ChatMessage[]]> {
-    return Promise.all([
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'poll',
-        limit: POLL_SCAN_LIMIT,
-      }),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'poll',
-        senderId: userId,
-        limit: POLL_SCAN_LIMIT,
-      }),
-    ]);
-  }
-
-  /**
-   * The caller's votes on `messages`. A vote row with no picks is a cleared
-   * vote, not a vote: a member who clears every pick on a multi-choice card
-   * keeps the row with an empty list (#3793), and the poll goes back to
-   * needing them.
-   */
-  private async votesOn(messages: ChatMessage[], userId: string) {
-    const rows = await this.actionRepo.findActionsOnMessages(
-      messages.map((message) => message.id),
-      userId,
-      CARD_VOTE_ACTION_TYPE,
-    );
-    return rows.filter(
-      (row) => cardVoteSelection(row.payload ?? undefined).length > 0,
-    );
   }
 
   private async readTasks(
@@ -2230,6 +2219,7 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<PollChatReads>,
+    cardReads: () => Promise<ActivityCardReads>,
     weekStart: number,
     chapter: ChapterReads,
   ): Promise<{
@@ -2247,10 +2237,12 @@ export class ActivityService {
     // that cannot be read is not an empty block list", so a failure fails the
     // section (served empty and named `unavailable`) rather than listing a
     // blocked member's question.
-    const [{ channels, blockedUserIds }, [recent, own]] = await Promise.all([
+    const [{ channels, blockedUserIds }, cards] = await Promise.all([
       chatReads(),
-      this.pollScans(chapterId, userId),
+      cardReads(),
     ]);
+    const recent = cards.polls;
+    const own = cards.own_polls;
     const nowDate = new Date(now);
     // No deadline sorts last: it is the least pressing.
     const closesAtMs = (row: ActivityPoll) =>
@@ -2271,10 +2263,7 @@ export class ActivityService {
     });
     const mine = own.filter(readable);
 
-    // A vote row with no picks is a cleared vote, not a vote: a member who
-    // clears every pick on a multi-choice card keeps the row with an empty
-    // list (#3793), and the poll goes back to needing them.
-    const voteRows = await this.votesOn([...others, ...mine], userId);
+    const voteRows = votesOn(cards.votes, [...others, ...mine]);
     const votedIds = new Set(voteRows.map((row) => row.message_id));
     // By the vote row's `created_at`, which is when the member last voted:
     // changing a vote rewrites it (`updateForVote`, ADR-07). So a vote counts
@@ -2411,23 +2400,18 @@ export class ActivityService {
     userId: string,
     now: number,
     chatReads: () => Promise<ChatReads>,
+    cardReads: () => Promise<ActivityCardReads>,
     weekStart: number,
   ): Promise<{
     open: ActivityCard[];
     /** Other members' cards the caller first answered since the week began. */
     answeredThisWeek: number;
   }> {
-    const [{ channels, blockedUserIds }, signups, forms] = await Promise.all([
+    const [{ channels, blockedUserIds }, cards] = await Promise.all([
       chatReads(),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'signup',
-        limit: CARD_SCAN_LIMIT,
-      }),
-      this.messageRepo.findCardsByChapter(chapterId, {
-        kind: 'form',
-        limit: CARD_SCAN_LIMIT,
-      }),
+      cardReads(),
     ]);
+    const { signups, forms } = cards;
     const channelById = new Map(
       channels.map((channel) => [channel.id, channel]),
     );
@@ -2450,21 +2434,22 @@ export class ActivityService {
     // slot is at its limit can't be signed up for, so it no longer waits on
     // anyone who doesn't hold a slot. Claims are channel-readable (the card
     // names each holder), so reading them all reveals nothing.
-    const [claims, closedClaims, answeredForms] = await Promise.all([
-      this.actionRepo.findAllActionsOnMessages(
-        openSignups.map((message) => message.id),
-        SIGNUP_ACTION_TYPE,
-      ),
-      this.actionRepo.findActionsOnMessages(
-        closedSignups.map((message) => message.id),
-        userId,
-        SIGNUP_ACTION_TYPE,
-      ),
-      this.formResponseRepo.findAnswered(
-        forms.filter(fromOthers).map((message) => message.id),
-        userId,
-      ),
-    ]);
+    // The function read every claim on every sign-up it scanned and every
+    // answer on every form; only the cards kept here count.
+    const idsOf = (messages: ChatMessage[]) =>
+      new Set(messages.map((message) => message.id));
+    const openIds = idsOf(openSignups);
+    const closedIds = idsOf(closedSignups);
+    const formIds = idsOf(forms.filter(fromOthers));
+    const claims = cards.signup_claims.filter((row) =>
+      openIds.has(row.message_id),
+    );
+    const closedClaims = cards.signup_claims.filter(
+      (row) => row.user_id === userId && closedIds.has(row.message_id),
+    );
+    const answeredForms = cards.form_answers.filter((row) =>
+      formIds.has(row.message_id),
+    );
     const heldBySlot = new Map<string, number>();
     const answered = new Set<string>(
       answeredForms.map((row) => row.message_id),

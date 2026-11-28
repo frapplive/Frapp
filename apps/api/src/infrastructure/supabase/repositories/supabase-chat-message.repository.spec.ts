@@ -87,14 +87,13 @@ const POLL_A_OPEN = '0a000000-0000-4000-8000-000000000171';
 const POLL_A_CLOSED_EARLY = '0a000000-0000-4000-8000-000000000172';
 const POLL_A_EXPIRED = '0a000000-0000-4000-8000-000000000173';
 
-// Poll cards (`kind: 'poll'`), one per chapter, for `findCardsByChapter`.
-// `type` is TEXT, as a card's is, so `findPollsByChapter` never sees them.
+// Poll cards (`kind: 'poll'`), one per chapter. `type` is TEXT, as a card's
+// is, so `findPollsByChapter` never sees them.
 const CARD_A = '0a000000-0000-4000-8000-000000000181';
 const CARD_B = '0b000000-0000-4000-8000-000000000181';
 const CARD_B_DELETED = '0b000000-0000-4000-8000-000000000182';
 const CARD_A_DELETED = '0a000000-0000-4000-8000-000000000182';
-const OTHER_SENDER = '0c000000-0000-4000-8000-000000000183';
-// A sign-up card beside them, which only a `kind: 'signup'` read returns.
+// A sign-up card beside them.
 const SIGNUP_B = '0b000000-0000-4000-8000-000000000184';
 const pollCard = (
   id: string,
@@ -209,47 +208,6 @@ describe('SupabaseChatMessageRepository — tenant scope', () => {
     expect(
       harness.ops[0].filters.map((f) => [f.column, f.value]),
     ).toContainEqual(['chat_channels.chapter_id', CHAPTER_B]);
-  });
-
-  it('findCardsByChapter returns only live poll cards of the chapter asked about', async () => {
-    const cards = await repo.findCardsByChapter(CHAPTER_B, {
-      kind: 'poll',
-      limit: 10,
-    });
-
-    // Not chapter A's card, not the deleted one, and not the old-format poll
-    // (`type: 'POLL'` with no `kind`), which no card can draw.
-    expect(cards.map((c) => c.id)).toEqual([CARD_B]);
-    // The join that scopes the read is not served with the row.
-    expect(cards[0]).not.toHaveProperty('chat_channels');
-    expect(
-      harness.ops[0].filters.map((f) => [f.column, f.value]),
-    ).toContainEqual(['chat_channels.chapter_id', CHAPTER_B]);
-  });
-
-  it('findCardsByChapter returns only the kind asked for', async () => {
-    const signups = await repo.findCardsByChapter(CHAPTER_B, {
-      kind: 'signup',
-      limit: 10,
-    });
-    expect(signups.map((c) => c.id)).toEqual([SIGNUP_B]);
-  });
-
-  it('findCardsByChapter keeps the chapter filter when narrowed to a sender', async () => {
-    const mine = await repo.findCardsByChapter(CHAPTER_B, {
-      kind: 'poll',
-      senderId: USER_SHARED,
-      limit: 10,
-    });
-    const theirs = await repo.findCardsByChapter(CHAPTER_B, {
-      kind: 'poll',
-      senderId: OTHER_SENDER,
-      limit: 10,
-    });
-
-    // The same member posted a card in each chapter; only the join separates them.
-    expect(mine.map((c) => c.id)).toEqual([CARD_B]);
-    expect(theirs).toEqual([]);
   });
 
   it('findByChannel narrows to the channel, which is what carries the chapter', async () => {
@@ -686,5 +644,56 @@ describe('SupabaseChatMessageRepository — findLatestPerChannel read status (#5
       null,
       null,
     ]);
+  });
+});
+
+describe('SupabaseChatMessageRepository — Activity’s cards in one read (#6061)', () => {
+  const READS = {
+    polls: [{ id: 'poll-1' }],
+    own_polls: [],
+    signups: [],
+    forms: [],
+    votes: [],
+    signup_claims: [],
+    form_answers: [],
+  };
+
+  it('calls activity_card_reads once, inside the chapter, for the caller', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: { activity_card_reads: { data: READS } },
+    });
+    const repo = new SupabaseChatMessageRepository(harness.client);
+
+    const reads = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.readActivityCards(CHAPTER_B, USER_SHARED, 100),
+    );
+
+    expect(reads).toEqual(READS);
+    expect(harness.ops).toHaveLength(0);
+    expect(harness.rpcCalls).toEqual([
+      {
+        fn: 'activity_card_reads',
+        args: {
+          p_chapter_id: CHAPTER_B,
+          p_user_id: USER_SHARED,
+          p_limit: 100,
+        },
+      },
+    ]);
+  });
+
+  it('throws on a database error rather than reading it as no cards', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: {
+        activity_card_reads: { error: { message: 'boom', code: 'XX000' } },
+      },
+    });
+    const repo = new SupabaseChatMessageRepository(harness.client);
+
+    await expect(
+      repo.readActivityCards(CHAPTER_B, USER_SHARED, 100),
+    ).rejects.toThrow('boom');
   });
 });

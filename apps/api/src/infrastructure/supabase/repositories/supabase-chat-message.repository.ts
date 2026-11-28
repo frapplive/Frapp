@@ -7,16 +7,14 @@ import type {
   TablesInsert,
   TablesUpdate,
 } from '../database.types';
-import type {
-  ChatCardKind,
-  IChatMessageRepository,
-} from '#domain/repositories/chat.repository.interface';
+import type { IChatMessageRepository } from '#domain/repositories/chat.repository.interface';
 import {
   ChatMessageCursorNotFoundError,
   ChatMessageDuplicateError,
 } from '#domain/repositories/chat.repository.interface';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import {
+  ActivityCardReads,
   ChannelLatestMessage,
   ChatMessage,
 } from '#domain/entities/chat.entity';
@@ -296,35 +294,19 @@ export class SupabaseChatMessageRepository implements IChatMessageRepository {
     return data || [];
   }
 
-  async findCardsByChapter(
+  async readActivityCards(
     chapterId: string,
-    options: { kind: ChatCardKind; senderId?: string; limit: number },
-  ): Promise<ChatMessage[]> {
-    // Chapter scope through the channel join, as `findPollsByChapter` does:
-    // `chat_messages` carries no `chapter_id` of its own.
-    let query = this.supabase
-      .from('chat_messages')
-      .select(
-        `${CHAT_MESSAGE_COLUMNS}, chat_channels!chat_messages_channel_id_fkey!inner(chapter_id)`,
-      )
-      .eq('kind', options.kind)
-      .eq('is_deleted', false)
-      .eq('chat_channels.chapter_id', chapterId)
-      .order('created_at', { ascending: false });
-
-    if (options.senderId) {
-      query = query.eq('sender_id', options.senderId);
-    }
-
-    const { data, error } = await query.limit(options.limit);
-    if (error) throw new SupabaseQueryError(error);
-    // The joined channel is only the chapter filter. It is dropped here so a
-    // caller that serves the row serves a chat message and nothing else.
-    return (data || []).map((row) => {
-      const message: ChatMessage & { chat_channels?: unknown } = { ...row };
-      delete message.chat_channels;
-      return message;
+    userId: string,
+    limit: number,
+  ): Promise<ActivityCardReads> {
+    const { data, error } = await this.supabase.rpc('activity_card_reads', {
+      p_chapter_id: chapterId,
+      p_user_id: userId,
+      p_limit: limit,
     });
+    if (error) throw new SupabaseQueryError(error);
+    if (!data) throw new Error('activity_card_reads returned nothing');
+    return data;
   }
 
   async findByClientMessageId(

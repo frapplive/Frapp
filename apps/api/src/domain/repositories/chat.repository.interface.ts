@@ -1,5 +1,6 @@
 import type { ChatMessageFlag } from '@repo/validation';
 import {
+  ActivityCardReads,
   ChatChannel,
   ChatChannelCategory,
   ChatChannelPushRouting,
@@ -234,9 +235,6 @@ export interface IChatCategoryRepository {
   ): Promise<string[]>;
 }
 
-/** The chat card kinds Activity lists (`findCardsByChapter`). */
-export type ChatCardKind = 'poll' | 'signup' | 'form';
-
 export interface IChatMessageRepository {
   findById(id: string): Promise<ChatMessage | null>;
   /**
@@ -286,20 +284,21 @@ export interface IChatMessageRepository {
     options?: { channelId?: string; limit?: number; active?: boolean },
   ): Promise<ChatMessage[]>;
   /**
-   * Newest-first chat **cards** of one kind across the chapter: poll cards
-   * (`kind = 'poll'`, the format every client posts), sign-up sheets and
-   * headcounts (`'signup'`) or forms (`'form'`), deleted rows left out.
-   * `senderId` keeps one
-   * member's. Whether a card is still open is not decided here: its deadline
-   * is an ISO string inside `payload`, and comparing those as text is wrong
-   * across offsets, so the caller parses it. Every channel's rows come back,
-   * readable or not; the caller filters by access, as with
-   * {@link findPollsByChapter}.
+   * Activity's chat cards in one round trip (`activity_card_reads`, #6061
+   * step 2): the chapter's `limit` newest poll cards, the caller's own
+   * `limit` newest, the `limit` newest sign-up sheets and forms, the caller's
+   * votes on those polls, every claim on those sign-ups, and which of those
+   * forms the caller answered. Deleted rows are left out. Whether a card is
+   * still open is not decided here: its deadline is an ISO string inside
+   * `payload`, and comparing those as text is wrong across offsets, so the
+   * caller parses it. Every channel's rows come back, readable or not; the
+   * caller filters by access, as with {@link findPollsByChapter}.
    */
-  findCardsByChapter(
+  readActivityCards(
     chapterId: string,
-    options: { kind: ChatCardKind; senderId?: string; limit: number },
-  ): Promise<ChatMessage[]>;
+    userId: string,
+    limit: number,
+  ): Promise<ActivityCardReads>;
   /**
    * Locate an already-persisted message by its idempotency triple. Used by
    * the hot-path send to reconcile a duplicate `(channel_id, sender_id,

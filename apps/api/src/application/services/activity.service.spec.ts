@@ -156,12 +156,63 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     // so (`asAlumnus`).
     getAlumniRoleId: jest.fn().mockResolvedValue('role-alumni'),
   };
-  const messageRepo = {
-    findCardsByChapter: jest.fn().mockResolvedValue([]),
-  };
+  // `activity_card_reads` (#6061) is one call; this fake answers it from
+  // fixtures named for the reads it replaced, so a test serves the chapter's
+  // cards of one kind (`findCardsByChapter`), the caller's actions
+  // (`findActionsOnMessages`), every member's claims
+  // (`findAllActionsOnMessages`) or the caller's form answers (`findAnswered`)
+  // as before. Like the function, it reads the actions and answers on every
+  // card it scanned.
   const actionRepo = {
     findActionsOnMessages: jest.fn().mockResolvedValue([]),
     findAllActionsOnMessages: jest.fn().mockResolvedValue([]),
+  };
+  const formResponseRepo = {
+    findAnswered: jest.fn().mockResolvedValue([]),
+  };
+  const findCardsByChapter = jest.fn().mockResolvedValue([]);
+  const messageRepo = {
+    findCardsByChapter,
+    readActivityCards: jest.fn(
+      async (chapterId: string, userId: string, limit: number) => {
+        const scan = (
+          kind: string,
+          senderId?: string,
+        ): Promise<ChatMessage[]> =>
+          findCardsByChapter(chapterId, {
+            kind,
+            limit,
+            ...(senderId ? { senderId } : {}),
+          }) as Promise<ChatMessage[]>;
+        const [polls, own_polls, signups, forms] = await Promise.all([
+          scan('poll'),
+          scan('poll', userId),
+          scan('signup'),
+          scan('form'),
+        ]);
+        const idsOf = (messages: ChatMessage[]) => [
+          ...new Set(messages.map((message) => message.id)),
+        ];
+        const [votes, signup_claims, form_answers] = await Promise.all([
+          actionRepo.findActionsOnMessages(
+            idsOf([...polls, ...own_polls]),
+            userId,
+            'vote',
+          ),
+          actionRepo.findAllActionsOnMessages(idsOf(signups), 'signup'),
+          formResponseRepo.findAnswered(idsOf(forms), userId),
+        ]);
+        return {
+          polls,
+          own_polls,
+          signups,
+          forms,
+          votes,
+          signup_claims,
+          form_answers,
+        };
+      },
+    ),
   };
   const linkService = { listFor: jest.fn().mockResolvedValue([]) };
   const reminderService = { listFor: jest.fn().mockResolvedValue([]) };
@@ -180,9 +231,6 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
   const attendanceRepo = {
     findByEventAndUser: jest.fn().mockResolvedValue(null),
     findByUserForEvents: jest.fn().mockResolvedValue([]),
-  };
-  const formResponseRepo = {
-    findAnswered: jest.fn().mockResolvedValue([]),
   };
   const readRepo = {
     // No client has begun this member's dots: every row is read.
@@ -216,7 +264,6 @@ function build(permissions: string[] = [SystemPermissions.MEMBERS_VIEW]) {
     memberRepo as never,
     attendanceRepo as never,
     readRepo,
-    formResponseRepo as never,
     channelAccess as never,
     minutesService as never,
   );
@@ -485,9 +532,10 @@ describe('ActivityService', () => {
       expect(view.needs_you.polls).toEqual([]);
       expect(view.made_by_you.polls).toEqual([]);
       expect(view.needs_you_count).toBe(0);
-      // Nothing about the hidden polls is even asked of the vote table.
+      // `activity_card_reads` reads the caller's own votes on every poll it
+      // scanned (#6061); a vote on a hidden poll still draws nothing.
       expect(actionRepo.findActionsOnMessages).toHaveBeenCalledWith(
-        [],
+        ['poll-hidden', 'poll-mine-hidden'],
         ME,
         'vote',
       );
@@ -625,8 +673,13 @@ describe('ActivityService', () => {
       );
 
       try {
-        await service.getActivity(CHAPTER, ME, null);
-        expect(reported).toHaveBeenCalledTimes(1);
+        const view = await service.getActivity(CHAPTER, ME, null);
+        // One read serves the polls and the cards (#6061), so both sections
+        // fail with it, and each is reported.
+        expect(view.unavailable).toEqual(
+          expect.arrayContaining(['polls', 'cards']),
+        );
+        expect(reported).toHaveBeenCalledTimes(2);
         expect(reported).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
@@ -761,16 +814,24 @@ describe('ActivityService', () => {
       });
     });
 
-    it('reads no polls while the Polls module is off', async () => {
-      const { service, messageRepo, chatService } = build();
-      servePolls(messageRepo, [pollCard({ id: 'poll-1' })]);
+    it('lists no polls while the Polls module is off', async () => {
+      const { service, messageRepo, actionRepo } = build();
+      servePolls(
+        messageRepo,
+        [pollCard({ id: 'poll-1' })],
+        [pollCard({ id: 'poll-mine', sender_id: ME })],
+      );
 
       const view = await service.getActivity(CHAPTER, ME, { polls: false });
 
+      // The cards' one read still runs for sign-ups and forms, which have no
+      // module switch (#6061), but no poll row, count or progress is drawn.
       expect(view.needs_you.polls).toEqual([]);
-      expect(messageRepo.findCardsByChapter).not.toHaveBeenCalledWith(
-        CHAPTER,
-        expect.objectContaining({ kind: 'poll' }),
+      expect(view.made_by_you.polls).toEqual([]);
+      expect(view.week.polls).toBeNull();
+      expect(actionRepo.findAllActionsOnMessages).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'vote',
       );
     });
   });
@@ -2787,16 +2848,23 @@ describe('ActivityService', () => {
           payload: { slot_ids: ['fri'] },
           created_at: iso(-HOUR),
         },
-      ]);
-      actionRepo.findActionsOnMessages.mockResolvedValue([
         {
           message_id: 'closed-sheet',
+          user_id: ME,
+          payload: { slot_ids: ['sat'] },
+          created_at: iso(-2 * HOUR),
+        },
+        // Nor on a sheet that has closed since.
+        {
+          message_id: 'closed-sheet',
+          user_id: OTHER,
           payload: { slot_ids: ['sat'] },
           created_at: iso(-2 * HOUR),
         },
         // Gave every slot back before the sheet closed: not an answer.
         {
           message_id: 'gave-up-sheet',
+          user_id: ME,
           payload: { slot_ids: [] },
           created_at: iso(-2 * HOUR),
         },
@@ -2812,12 +2880,8 @@ describe('ActivityService', () => {
         'open-sheet',
         'open-form',
       ]);
-      // The closed sheet's claims are read for the caller alone.
-      expect(actionRepo.findActionsOnMessages).toHaveBeenCalledWith(
-        ['closed-sheet', 'gave-up-sheet'],
-        ME,
-        'signup',
-      );
+      // Every claim on every sheet is one read (#6061); the closed sheets
+      // count only the caller's own.
       expect(view.week.cards).toEqual({ done: 3, total: 5 });
     });
 

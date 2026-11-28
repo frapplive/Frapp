@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FrappLink } from '@repo/validation';
 import type {
+  ActivityCardReads,
   ActivityItemRead,
   ActivityItemSnooze,
   ActivityLayout,
@@ -380,6 +381,19 @@ export interface Database {
       };
     };
     Functions: {
+      /**
+       * `20261128174419` (#6061 step 2). Activity's poll, sign-up and form
+       * cards, the caller's votes and answers on them and every claim on the
+       * sign-ups, in one round trip; service role only.
+       */
+      activity_card_reads: {
+        Args: {
+          p_chapter_id: string;
+          p_user_id: string;
+          p_limit: number;
+        };
+        Returns: ActivityCardReads;
+      };
       /**
        * `20261128043840` (#6061). Every task list Activity draws for one
        * member, in one round trip; service role only.

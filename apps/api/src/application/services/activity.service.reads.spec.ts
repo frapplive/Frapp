@@ -272,15 +272,23 @@ function load(permissions: string[]) {
     listBlockedUserIds: stub([]),
     getEffectivePermissions: stub(permissions),
     getAlumniRoleId: stub('role-alumni'),
-    findCardsByChapter: stub([]),
-    findActionsOnMessages: stub([]),
+    // The polls, sign-ups and forms with the caller's votes, every claim
+    // and the caller's form answers: one function call (#6061).
+    readActivityCards: stub({
+      polls: [],
+      own_polls: [],
+      signups: [],
+      forms: [],
+      votes: [],
+      signup_claims: [],
+      form_answers: [],
+    }),
     findAllActionsOnMessages: stub([]),
     linksListFor: stub([]),
     remindersListFor: stub([]),
     membersByChapter: stub([]),
     findByUserAndChapter: stub({ user_id: ME, role_ids: ['role-member'] }),
     findByUserForEvents: stub([]),
-    findAnswered: stub([]),
     findUnreadStart: stub(null),
     findReads: stub([]),
     findSnoozes: stub([]),
@@ -301,11 +309,8 @@ function load(permissions: string[]) {
     } as never,
     { listFor: reads.linksListFor } as never,
     { listFor: reads.remindersListFor } as never,
-    { findCardsByChapter: reads.findCardsByChapter } as never,
-    {
-      findActionsOnMessages: reads.findActionsOnMessages,
-      findAllActionsOnMessages: reads.findAllActionsOnMessages,
-    } as never,
+    { readActivityCards: reads.readActivityCards } as never,
+    { findAllActionsOnMessages: reads.findAllActionsOnMessages } as never,
     userRepo as never,
     {
       findByChapter: reads.membersByChapter,
@@ -317,7 +322,6 @@ function load(permissions: string[]) {
       findReads: reads.findReads,
       findSnoozes: reads.findSnoozes,
     } as never,
-    { findAnswered: reads.findAnswered } as never,
     { readersOf: jest.fn() } as never,
     // Meetings rows (#5949) are their own service's reads, not counted here.
     {
@@ -354,7 +358,11 @@ describe('ActivityService reads per load (#5746)', () => {
   // sections' 14): every list read its
   // subtasks, photos, series, groups and open tasks, and ended on an empty
   // page, and two counts went on their own. #5746 brought it to 13 and 4;
-  // #6061 to one function call for both.
+  // #6061 to one function call for both. #6061 step 2 read the four card
+  // scans (the chapter's polls, the caller's own, sign-ups and forms) and the
+  // votes, claims and form answers on them in one call too: 15 for the page
+  // in this seed became 12, and more in a chapter with cards, whose action
+  // reads this seed never reaches.
   it('an officer with tasks:manage: the task section in 1 request', async () => {
     const page = load([
       SystemPermissions.MEMBERS_VIEW,
@@ -378,7 +386,7 @@ describe('ActivityService reads per load (#5746)', () => {
         p_limit: 25,
       },
     });
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    expect(page.taskRequests + page.otherReads).toBe(12);
     // What the page shows is what it showed before.
     expect(
       view.needs_you.tasks.map((task) => [task.title, task.group?.total]),
@@ -415,7 +423,7 @@ describe('ActivityService reads per load (#5746)', () => {
     // Their tasks with this week's done ones, and the group, in one call
     // that reads nothing of anyone else's.
     expect(page.taskRequests).toBe(1);
-    expect(page.taskRequests + page.otherReads).toBe(15);
+    expect(page.taskRequests + page.otherReads).toBe(12);
     expect(page.harness.rpcCalls[0].args).toEqual(
       expect.objectContaining({ p_user_id: ME, p_can_manage: false }),
     );
