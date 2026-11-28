@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeToAddress, pushAddressHref } from "@/lib/address/address";
 import { Loader2, X } from "lucide-react";
 import {
   addableClassMembers,
@@ -124,7 +125,6 @@ type ClassDraft = {
  */
 export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const classId = searchParams.get("class");
   const classesQuery = usePledgeClasses();
   const membersQuery = useMembers();
@@ -250,7 +250,7 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
         orderTerm={orderTerm}
         onMove={(by) => move(entry, by)}
         onDelete={async () => {
-          if (await deleteClass(entry)) router.push(BASE);
+          if (await deleteClass(entry)) closeToAddress(BASE);
         }}
       />
     ) : (
@@ -302,7 +302,7 @@ export function SettingsClassesTab({ canManage, classTerm, orderTerm }: Props) {
                                 key: "rename",
                                 label: PLEDGE_CLASS_SETTINGS_COPY.rename,
                                 onSelect: () =>
-                                  router.push(classHref(entry.id)),
+                                  pushAddressHref(classHref(entry.id)),
                               },
                               {
                                 type: "item",

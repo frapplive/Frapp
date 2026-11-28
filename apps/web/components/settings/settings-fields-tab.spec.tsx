@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   params: "tab=fields",
   push: vi.fn(),
   replace: vi.fn(),
+  close: vi.fn(),
 }));
 
 // Mock the data hooks so the tab renders without a query client / network.
@@ -27,6 +28,14 @@ const mockCreate = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockToast = vi.fn();
+
+// Opens and closes go through the address (#6049); these record them.
+vi.mock("@/lib/address/address", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/address/address")>()),
+  pushAddressHref: h.push,
+  closeToAddress: h.close,
+  replaceAddress: h.replace,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push, replace: h.replace }),
@@ -504,7 +513,7 @@ describe("SettingsFieldsTab: a field's page", () => {
         name: "Delete field",
       }),
     );
-    await waitFor(() => expect(h.push).toHaveBeenCalledWith(LIST));
+    await waitFor(() => expect(h.close).toHaveBeenCalledWith(LIST));
     expect(mockDelete).toHaveBeenCalledWith("f1");
   });
 
@@ -518,7 +527,7 @@ describe("SettingsFieldsTab: a field's page", () => {
     );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mockDelete).not.toHaveBeenCalled();
-    expect(h.push).not.toHaveBeenCalled();
+    expect(h.close).not.toHaveBeenCalled();
   });
 
   it("says a field someone deleted is gone", () => {
@@ -587,7 +596,7 @@ describe("SettingsFieldsTab: a new field (?field=new)", () => {
       options: { max_length: 4 },
     });
     await waitFor(() =>
-      expect(h.replace).toHaveBeenCalledWith(`${LIST}&field=new-id`),
+      expect(h.replace).toHaveBeenCalledWith({ field: "new-id" }),
     );
   });
 

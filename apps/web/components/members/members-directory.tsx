@@ -113,6 +113,7 @@ import {
 import {
   useAddressParams,
   useDeadAddressParam,
+  useGoneAfterRecheck,
 } from "@/lib/address/use-address-params";
 import {
   closeAddress,
@@ -381,22 +382,12 @@ export function MembersDirectory() {
     then an alumnus moves to the Alumni tab, and anyone else (left, or hidden
     from this viewer) is said and taken out of the address.
   */
-  const memberListed =
-    memberParam !== null &&
-    (membersQuery.data ?? []).some((member) => member.user_id === memberParam);
-  const [recheckedFor, setRecheckedFor] = useState<string | null>(null);
-  const memberMissing =
-    memberParam !== null &&
-    membersQuery.data !== undefined &&
-    !membersQuery.isFetching &&
-    !memberListed;
-  useEffect(() => {
-    if (!memberMissing || recheckedFor === memberParam) return;
-    void membersQuery.refetch().finally(() => setRecheckedFor(memberParam));
-  }, [memberMissing, recheckedFor, memberParam, membersQuery]);
+  const memberGone = useGoneAfterRecheck(memberParam, membersQuery, (data, id) =>
+    data.some((member) => member.user_id === id),
+  );
   const alumniRead = useAlumni(undefined, {
     enabled:
-      tenantKind === "chapter" && memberMissing && recheckedFor === memberParam,
+      tenantKind === "chapter" && memberGone,
   });
   const isAlumnus =
     memberParam !== null &&
@@ -411,8 +402,7 @@ export function MembersDirectory() {
   const deadMember = useDeadAddressParam(
     MEMBER_PARAM,
     memberParam,
-    memberMissing &&
-      recheckedFor === memberParam &&
+    memberGone &&
       (tenantKind !== "chapter" ||
         (alumniRead.data !== undefined &&
           !alumniRead.isFetching &&

@@ -95,8 +95,26 @@ describe("web addresses", () => {
     ).toEqual({ pathname: "/rush-prospect", params: { candidateId: "p1" } });
   });
 
+  it("opens a role or a tier of Chapter settings on the phone's own screen (#6049)", () => {
+    expect(phoneAddressFor("/settings", "?tab=roles&role=r1")).toEqual({
+      pathname: "/role",
+      params: { roleId: "r1" },
+    });
+    expect(phoneAddressFor("/settings", "?tab=roles&tier=t1")).toEqual({
+      pathname: "/role-tier",
+      params: { tierId: "t1" },
+    });
+    // A role opened from its tier is the role.
+    expect(
+      phoneAddressFor("/settings", "?tab=roles&tier=t1&role=r1")?.pathname,
+    ).toBe("/role");
+    expect(phoneAddressFor("/settings", "")).toEqual({
+      pathname: "/chapter-settings",
+      params: {},
+    });
+  });
+
   it("leaves web-only pages and unknown paths in the browser", () => {
-    expect(phoneAddressFor("/settings", "?tab=chat")).toBeNull();
     expect(phoneAddressFor("/backwork", "")).toBeNull();
     expect(phoneAddressFor("/meetings/abc/notes", "")).toBeNull();
     expect(phoneAddressFor("/nowhere", "")).toBeNull();
