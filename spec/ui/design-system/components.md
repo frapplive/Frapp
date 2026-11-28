@@ -802,9 +802,11 @@ _Added 2026-11-22 (Paul, at web's old "Edit types" popover: "yo what is this?").
 |          | Web                                                                                        | Phone                                          |
 | -------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
 | Header   | Search field, `FilterMenu` (one Filter button with its count), the view switch             | Search field under the title, one Filters chip |
-| Rows     | One menu row per filter, each opening its options (searchable past 8); Sort is a row; Clear all last | A sheet with the same rows in the same order (not built yet; the filters PR makes it from the Directory's sheet) |
-| Applied  | `ActiveFilterChips` under the header, removable, with Clear all once two are on; nothing while none are on | Chips under the search field                   |
-| Applying | Live; the list never jumps to the top                                                      | The sheet ends in "Show 23 members"            |
+| Rows     | One menu row per filter, each opening its options (searchable past 8); Sort is a row; Clear all last | `FilterSheet` (`components/filter-sheet.tsx`): the same rows in the same order, each with its value, opening its options in the same sheet with a back row (searchable past 8); Sort rows in a group apart; Clear all last |
+| Applied  | `ActiveFilterChips` under the header, removable, with Clear all once two are on; nothing while none are on | `ActiveFilterChips` under the search field, the same rules |
+| Applying | Live; the list never jumps to the top                                                      | Live, a pick returns to the rows; the sheet ends in one pill, "Show 23 members", that closes it |
+
+- Both apps build the rows once, as `FilterRow`s from `@repo/hooks/filter-rows` (`anyFilterRow` for a filter whose state is `null` for "any"), which also holds the search rule (`searchFilterOptions`: word starts, the "any" row stepping aside while a query is typed) and the past-8 threshold. First phone user: the Directory's Actives tab (#5739, 2026-11-28); Documents' and Logs' `MenuChip` rows and the Alumni tab's typed fields are not on it yet.
 
 - Applied filters stay visible: Baymard's testing found people lose track when they hide behind the button, worse on phones. The count on the button alone is not enough.
 - A list that splits into two or three named sets people switch between all day (Actives / Alumni, All / Unread) is a view, not a filter, and its views are **plain words beside the page title**: after a hairline, the current view in the foreground colour at weight 600 and the others in the muted colour, with no box, fill or accent, and none at all for a member who has one view. Nothing sits over a list to change what it lists; a different list is a different row or page.
