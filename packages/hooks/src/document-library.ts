@@ -879,6 +879,76 @@ export function mayUploadNewVersion(
 }
 
 /**
+ * Whether the row is a copy from the chapter's connected Drive folder (#5157),
+ * as the API tells it (`isDriveFolderCopy`): it has a Drive file and no link
+ * status. A file added by its own Drive link (#5434) has a status. Drive
+ * names and files a folder copy, so the next sync undoes any change here.
+ */
+export function isDriveFolderCopy(doc: {
+  drive_file_id?: string | null;
+  drive_link_status?: string | null;
+}): boolean {
+  return isDriveCopy(doc) && !doc.drive_link_status;
+}
+
+/**
+ * Whether `userId` may move this file to another folder (#5563), as the API
+ * decides (`PATCH /v1/documents/{id}`): its uploader, or a member who manages
+ * documents. Never a copy from the Drive folder, which is moved in Drive.
+ * The server also asks that the mover see both folders, which the list a
+ * member sees already holds to.
+ */
+export function mayRefileDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean },
+): boolean {
+  if (isDriveFolderCopy(doc)) return false;
+  if (access.manages) return true;
+  return !!userId && doc.uploaded_by === userId;
+}
+
+/**
+ * Whether the member may rename this file here (#5563): who may move it,
+ * except a file that takes its name from elsewhere. Minutes take their
+ * meeting's name, and a file added by its Drive link keeps Drive's.
+ */
+export function mayRenameDocument(
+  doc: {
+    uploaded_by?: string | null;
+    drive_file_id?: string | null;
+    drive_link_status?: string | null;
+    meeting_id?: string | null;
+  },
+  userId: string | null,
+  access: { manages: boolean },
+): boolean {
+  if (isMinutesDocument({ meeting_id: doc.meeting_id })) return false;
+  if (isDriveCopy(doc)) return false;
+  return mayRefileDocument(doc, userId, access);
+}
+
+/**
+ * Where a Drive file is renamed (#5563), said in its menu in place of
+ * Rename, the way a Drive folder's ⋯ says it (`drive-folder-panel.tsx`).
+ * The item opens the file in Drive.
+ */
+export const RENAME_IN_DRIVE_LABEL = "Rename in Google Drive";
+
+/** The Rename question's commit, and its title on both apps. */
+export const RENAME_DOCUMENT_TITLE = "Rename file";
+
+/** The Move question's title on both apps. */
+export const MOVE_DOCUMENT_TITLE = "Move to folder";
+
+/** The no-folder choice in Move to folder, as the upload form's folder pick says it. */
+export const NO_FOLDER_LABEL = "No folder";
+
+/**
  * A Drive file's page in Google Drive (#6055), where its working copy is, or
  * null. Only an https link: the address goes in a link both apps open, and
  * Drive's `webViewLink` is always one.

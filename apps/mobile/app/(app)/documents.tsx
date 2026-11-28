@@ -33,6 +33,7 @@ import {
   useMemberDisplayNames,
   useSetDocumentPin,
   useSetDocumentStar,
+  useUpdateDocument,
   usePermissionList,
   useSemesters,
 } from "@repo/hooks";
@@ -47,8 +48,12 @@ import {
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
+  mayRefileDocument,
+  mayRenameDocument,
   mayUploadNewVersion,
   markedItems,
+  MOVE_DOCUMENT_TITLE,
+  NO_FOLDER_LABEL,
   NO_MARK_FILTER,
   tierRows,
   type DocumentMarkFilter,
@@ -105,6 +110,7 @@ import {
   ForwardGlyph,
 } from "@/components/control-glyphs";
 import { OptionSheet } from "@/components/option-sheet";
+import { RenameDocumentSheet } from "@/components/documents/rename-document-sheet";
 import { useListLayout } from "@/lib/list-layout";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import {
@@ -656,7 +662,51 @@ export default function DocumentsScreen() {
         uploads: canUpload,
         manages: canManage,
       }),
+      canRename: mayRenameDocument(doc, viewerId, { manages: canManage }),
+      canMove: mayRefileDocument(doc, viewerId, { manages: canManage }),
+      folder: doc.folder ?? null,
     };
+  }
+
+  /*
+    Rename and Move to folder (#5563), from a file's long-press sheet. Rename
+    is its own sheet, mounted per file so it opens on that file's name; Move
+    is the folder pick, an option sheet whose pick moves the file at once, as
+    the Files app's Move does. A refusal comes back in the server's words.
+  */
+  const updateDocument = useUpdateDocument();
+  const [renameTarget, setRenameTarget] =
+    useState<DocumentActionsTarget | null>(null);
+  const [moveTarget, setMoveTarget] = useState<DocumentActionsTarget | null>(
+    null,
+  );
+  const moveSheetRef = useRef<BottomSheetModal>(null);
+  useEffect(() => {
+    if (moveTarget) moveSheetRef.current?.present();
+  }, [moveTarget]);
+  const moveOptions = useMemo(
+    () => [
+      { value: null, label: NO_FOLDER_LABEL },
+      ...folders.map((entry) => ({ value: entry.name, label: entry.name })),
+    ],
+    [folders],
+  );
+
+  async function moveDocument(target: DocumentActionsTarget, to: string | null) {
+    if (to === (target.folder ?? null)) return;
+    try {
+      await updateDocument.mutateAsync({ id: target.id, folder: to });
+      AccessibilityInfo.announceForAccessibility(
+        `Moved “${target.name}” to ${to ?? NO_FOLDER_LABEL.toLowerCase()}.`,
+      );
+    } catch (caught) {
+      Alert.alert(
+        "Couldn't move the file",
+        errorCopy(caught, "Try again in a moment.", {
+          serverWritesForMembers: true,
+        }),
+      );
+    }
   }
 
   /**
@@ -1374,6 +1424,8 @@ export default function DocumentsScreen() {
           onTogglePin={(target) => void togglePin(target)}
           onDelete={(target) => confirmDelete(target.id, target.name)}
           onUploadVersion={(target) => void uploadVersion(target)}
+          onRename={setRenameTarget}
+          onMove={setMoveTarget}
           // The Drive app when it's installed (its links are universal
           // links), the browser otherwise.
           onOpenInDrive={(url) =>
@@ -1382,6 +1434,28 @@ export default function DocumentsScreen() {
             )
           }
         />
+
+        <OptionSheet
+          ref={moveSheetRef}
+          title={MOVE_DOCUMENT_TITLE}
+          options={moveOptions}
+          selected={moveTarget?.folder ?? null}
+          searchPlaceholder="Find a folder"
+          onSelect={(value) => {
+            if (moveTarget) void moveDocument(moveTarget, value);
+          }}
+          onDismiss={() => setMoveTarget(null)}
+        />
+        {renameTarget ? (
+          <RenameDocumentSheet
+            key={renameTarget.id}
+            name={renameTarget.name}
+            onSubmit={async (title) => {
+              await updateDocument.mutateAsync({ id: renameTarget.id, title });
+            }}
+            onClosed={() => setRenameTarget(null)}
+          />
+        ) : null}
 
         {canUpload ? (
           <UploadDocumentSheet

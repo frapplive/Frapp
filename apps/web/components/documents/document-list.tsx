@@ -9,6 +9,7 @@ import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { SearchGlyph } from "@/components/documents/resources-glyphs";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { DocumentRow } from "@/components/documents/document-row";
+import type { DocumentRefile } from "@/components/documents/document-refile";
 import type { ChapterDocument } from "@/components/documents/document-types";
 import { DocumentFilterMenu } from "@/components/documents/document-filters";
 import {
@@ -67,6 +68,7 @@ export function DocumentList({
   canSetAccess,
   canUploadVersion,
   onSetAccess,
+  refile,
   folderPicker,
   folderLine,
   folderHue,
@@ -128,6 +130,11 @@ export function DocumentList({
   canUploadVersion?: (doc: ChapterDocument) => boolean;
   /** Opens Who can see for a file. */
   onSetAccess?: (doc: ChapterDocument) => void;
+  /**
+   * Rename and Move to folder (#5563): who may do which to a file, and what
+   * opens each question. Absent rows get neither.
+   */
+  refile?: DocumentRefile;
   /**
    * The folder control the page draws at the toolbar's start where the page
    * is too narrow for its folder rail (#5576).
@@ -412,6 +419,12 @@ export function DocumentList({
                       ? onSetAccess
                       : undefined,
                   canUploadVersion: canUploadVersion?.(doc) ?? false,
+                  onRename:
+                    refile && refile.canRename(doc)
+                      ? refile.onRename
+                      : undefined,
+                  onMove:
+                    refile && refile.canMove(doc) ? refile.onMove : undefined,
                 };
                 return <DocumentRow key={doc.id} {...props} />;
               })}

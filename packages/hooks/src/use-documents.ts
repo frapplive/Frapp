@@ -230,6 +230,35 @@ export function useSetDocumentAccess() {
   });
 }
 
+/**
+ * Rename a file, move it to another folder, or both (#5563): `PATCH
+ * /v1/documents/{id}` with a new `title`, a `folder` (`null` for no folder),
+ * or both. Who may is `mayRefileDocument` and `mayRenameDocument`
+ * (`document-library.ts`); the server answers a refusal in a member's words.
+ */
+export function useUpdateDocument() {
+  const client = useFrappClient();
+  const invalidate = useInvalidateDocumentFolders();
+  return useMutation({
+    mutationKey: ["documents", "update-document"],
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & components["schemas"]["UpdateDocumentDto"]) => {
+      const { data, error } = await client.PATCH("/v1/documents/{id}", {
+        params: { path: { id } },
+        body,
+      });
+      if (error) throw error;
+      return data;
+    },
+    // Folders too: a move into a new name makes that folder.
+    onSuccess: invalidate,
+  });
+}
+
 export function useDeleteDocumentFolder() {
   const client = useFrappClient();
   const invalidate = useInvalidateDocumentFolders();

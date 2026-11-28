@@ -19,6 +19,9 @@ import {
   kindOptions,
   isMarkFiltering,
   limitedDocumentCheck,
+  isDriveFolderCopy,
+  mayRefileDocument,
+  mayRenameDocument,
   mayUploadNewVersion,
 } from "./document-library";
 
@@ -779,5 +782,47 @@ describe("mayUploadNewVersion", () => {
         manages,
       ),
     ).toBe(false);
+  });
+});
+
+describe("rename and move (#5563)", () => {
+  const upload = {
+    uploaded_by: "me",
+    drive_file_id: null,
+    drive_link_status: null,
+    meeting_id: null,
+  };
+  const folderCopy = { ...upload, drive_file_id: "drive-1" };
+  const linked = { ...folderCopy, drive_link_status: "active" };
+  const minutes = { ...upload, meeting_id: "mtg-1" };
+  const member = { manages: false };
+  const manager = { manages: true };
+
+  it("tells a Drive folder copy from a file added by its link", () => {
+    expect(isDriveFolderCopy(folderCopy)).toBe(true);
+    expect(isDriveFolderCopy(linked)).toBe(false);
+    expect(isDriveFolderCopy(upload)).toBe(false);
+  });
+
+  it("lets the uploader and whoever manages documents move a file", () => {
+    expect(mayRefileDocument(upload, "me", member)).toBe(true);
+    expect(mayRefileDocument(upload, "someone", manager)).toBe(true);
+    expect(mayRefileDocument(upload, "someone", member)).toBe(false);
+    expect(mayRefileDocument(upload, null, member)).toBe(false);
+  });
+
+  it("moves a linked file and minutes, never a Drive folder copy", () => {
+    expect(mayRefileDocument(linked, "me", member)).toBe(true);
+    expect(mayRefileDocument(minutes, "me", member)).toBe(true);
+    expect(mayRefileDocument(folderCopy, "someone", manager)).toBe(false);
+  });
+
+  it("renames only a file that keeps its own name", () => {
+    expect(mayRenameDocument(upload, "me", member)).toBe(true);
+    expect(mayRenameDocument(upload, "someone", manager)).toBe(true);
+    expect(mayRenameDocument(upload, "someone", member)).toBe(false);
+    expect(mayRenameDocument(linked, "me", manager)).toBe(false);
+    expect(mayRenameDocument(folderCopy, "me", manager)).toBe(false);
+    expect(mayRenameDocument(minutes, "me", manager)).toBe(false);
   });
 });
