@@ -36,6 +36,7 @@ import {
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
+import { useRolesVisibility } from "@/lib/roles/roles-visibility";
 import { BACK_TO_ROLES } from "@/components/back-row";
 import { HeaderButton } from "@/components/header-button";
 import { MoreGlyph } from "@/components/control-glyphs";
@@ -110,6 +111,20 @@ export default function RoleScreen() {
   const data = useRolesData();
   const { rolesQuery, tiersQuery, roles, words } = data;
   const role = roles.find((candidate) => candidate.id === roleId) ?? null;
+  const visibility = useRolesVisibility();
+
+  // A web link opens this screen from a message (#6049), so it checks what
+  // Roles and groups' list checks before drawing the tier list.
+  if (visibility === "hidden") {
+    return (
+      <ScreenShell back={BACK_TO_ROLES} title="Role">
+        <ErrorState
+          title="Your role can't see roles"
+          body="Ask your chapter president for access."
+        />
+      </ScreenShell>
+    );
+  }
 
   if (
     (rolesQuery.isError && rolesQuery.data === undefined) ||
@@ -129,7 +144,11 @@ export default function RoleScreen() {
       </ScreenShell>
     );
   }
-  if (!rolesQuery.isSuccess || !tiersQuery.isSuccess) {
+  if (
+    visibility === "loading" ||
+    !rolesQuery.isSuccess ||
+    !tiersQuery.isSuccess
+  ) {
     return (
       <ScreenShell back={BACK_TO_ROLES} title="Role">
         <SkeletonRegion label="Loading role" style={styles.skeleton}>

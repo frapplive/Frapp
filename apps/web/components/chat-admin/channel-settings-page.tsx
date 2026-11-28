@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { closeToAddress, consumeAddressParam } from "@/lib/address/address";
+import { ADDRESS_CLOSE_ATTR, closeToLink } from "@/lib/address/address-links";
 import {
   ArrowLeft,
   Bell,
@@ -242,7 +244,11 @@ function ChannelSettingsBody({
           This channel isn&apos;t here anymore. It may have been deleted.
         </InlineNote>
         <Button asChild variant="secondary" size="sm" className="gap-1.5">
-          <Link href={CHAT_SETTINGS_PATH}>
+          <Link
+            href={CHAT_SETTINGS_PATH}
+            {...{ [ADDRESS_CLOSE_ATTR]: "" }}
+            onClick={closeToLink}
+          >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Chat admin
           </Link>
@@ -272,7 +278,6 @@ function ChannelSettings({
   page: ChannelSettingsPage | null;
 }) {
   const { toast } = useToast();
-  const router = useRouter();
   const { confirm, confirmDialog } = useConfirmDialog();
   const deleteChannelFlow = useDeleteChannelFlow(confirm);
   const updateChannel = useUpdateChannel();
@@ -333,6 +338,14 @@ function ChannelSettings({
   // type one: the field takes focus once, on that way in only.
   const focusDescription =
     useSearchParams().get(FOCUS_DESCRIPTION_PARAM) === "description";
+  // A one-shot (#6049): off the address once the field has taken focus on
+  // mount, so a reload doesn't focus it again, and a page opened from here
+  // records the channel's own address, which its back arrow closes to.
+  useEffect(() => {
+    if (focusDescription) {
+      consumeAddressParam(FOCUS_DESCRIPTION_PARAM, "description");
+    }
+  }, [focusDescription]);
   const nameChanged = nameDraft.trim() !== channel.name;
   const descriptionChanged = descriptionDraft.trim() !== descriptionSeed;
   const fieldsDirty = nameChanged || descriptionChanged;
@@ -419,7 +432,8 @@ function ChannelSettings({
       delete next[question];
       return next;
     });
-    router.push(channelSettingsPath(channel.id));
+    // Saved: the page closes to the channel by the address's rule.
+    closeToAddress(channelSettingsPath(channel.id));
   }
 
   const backToChannel = channelSettingsPath(channel.id);
@@ -766,7 +780,7 @@ function ChannelSettings({
             value=""
             onClick={() =>
               void deleteChannelFlow(channel, () =>
-                router.replace(CHAT_SETTINGS_PATH),
+                closeToAddress(CHAT_SETTINGS_PATH),
               )
             }
           />

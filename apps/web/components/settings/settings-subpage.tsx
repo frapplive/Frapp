@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { SectionTitledByPage } from "@/components/profile/profile-section";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { ADDRESS_CLOSE_ATTR, closeToLink } from "@/lib/address/address-links";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,6 +14,11 @@ import { cn } from "@/lib/utils";
  * the Chat page. A quiet line above the page's heading, the way Discord's
  * channel settings and iOS Settings put the parent's name behind a back arrow,
  * so the rail row stays lit and nothing else moves.
+ *
+ * It closes by the address's rule (#6049, `spec/ui/web-dashboard/README.md`
+ * § Addresses): Back when this tab opened the page, so Forward reopens it,
+ * and otherwise a replace with `href`. Still a link, so a modified click
+ * opens the parent in a new tab.
  */
 export function SettingsBackLink({
   href,
@@ -24,6 +30,8 @@ export function SettingsBackLink({
   return (
     <Link
       href={href}
+      {...{ [ADDRESS_CLOSE_ATTR]: "" }}
+      onClick={closeToLink}
       className={cn(
         "-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-muted-foreground transition hover:text-foreground",
         FOCUS_RING,

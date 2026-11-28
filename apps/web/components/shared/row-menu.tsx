@@ -77,7 +77,10 @@ export type RowMenuEntry =
            * the address is still loading, alongside `disabled`.
            */
           href: string | undefined;
-          /** Opens in a new tab, for a page outside Frapp. */
+          /**
+           * Opens in a new tab: a page outside Frapp, or a Frapp page meant
+           * to sit beside this one (a meeting's transcript).
+           */
           external?: boolean;
           onSelect?: never;
         }
@@ -303,6 +306,10 @@ function MoreButton({
               ? cn(headingControlClassName, "p-0")
               : compactControlClassName,
             "shrink-0",
+            // Disabled, it still takes the pointer, as IconButton does: the
+            // shared recipe's `pointer-events: none` would stop the hover
+            // that shows its tooltip and the not-allowed cursor.
+            "disabled:pointer-events-auto disabled:cursor-not-allowed",
             onRow && ROW_REVEAL,
           )}
         >

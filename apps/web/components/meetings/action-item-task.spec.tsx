@@ -18,11 +18,19 @@ const mocks = vi.hoisted(() => ({
   tasks: { current: [] as { id: string; title: string; status: string }[] },
   suggestionsEnabled: [] as boolean[],
   currentChapter: vi.fn(),
+  make: vi.fn(),
+  /** `tasks:manage` with Tasks on (#6178). */
+  canManage: { current: false },
   react: null as unknown as typeof import("react"),
   similarTask: null as unknown as typeof import("@repo/validation").similarTask,
 }));
 
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async () => ({
+  actionItemTaskIsFor: (
+    await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks")
+  ).actionItemTaskIsFor,
+  useCanManageTasks: () => mocks.canManage.current,
+  useMakeActionItemTask: () => ({ mutateAsync: mocks.make, isPending: false }),
   useRequestTaskPhotoUploadUrl: () => ({ mutateAsync: vi.fn() }),
   useTaskPhotoUrl: () => ({ data: undefined }),
   // The Who picker reads roles, tiers and groups.
@@ -94,16 +102,20 @@ function Checklist({
   items,
   tasks = new Map(),
   enabled = true,
+  marksRead = true,
 }: {
   items: Items;
   tasks?: Tasks;
   enabled?: boolean;
+  /** The marks' read has answered. */
+  marksRead?: boolean;
 }) {
   const taskRow = useActionItemTaskRow({
     meetingId: "m-1",
     items,
     meetingStart: "2026-11-09T19:00:00",
     enabled,
+    marks: marksRead ? tasks : undefined,
   });
   return (
     <ActionChecklist
@@ -146,6 +158,17 @@ function suggestion(id: string, quote: string, task: object = {}) {
   };
 }
 
+/** The mark the item's route answers with: a task for these people. */
+const markFor = (index: number, assigneeIds: string[]) => ({
+  index,
+  done: false,
+  group: null,
+  task: {
+    id: `t-${index}`,
+    who: { audience: null, audience_name: null, assignee_ids: assigneeIds },
+  },
+});
+
 const rowOf = (text: string) => screen.getByText(text).closest("li")!;
 
 describe("Create task from an action item's row (#6051)", () => {
@@ -156,6 +179,18 @@ describe("Create task from an action item's row (#6051)", () => {
     mocks.tasks.current = [];
     mocks.toast.mockReset();
     mocks.suggestionsEnabled.length = 0;
+    mocks.make
+      .mockReset()
+      .mockImplementation(
+        ({
+          index,
+          body,
+        }: {
+          index: number;
+          body: { assignee_ids: string[] };
+        }) => Promise.resolve(markFor(index, body.assignee_ids)),
+      );
+    mocks.canManage.current = false;
     chapter.active();
   });
 
@@ -359,5 +394,201 @@ describe("Create task from an action item's row (#6051)", () => {
     render(<Checklist items={[item("Order shirts")]} enabled={false} />);
     expect(mocks.suggestionsEnabled).toEqual([false]);
     expect(screen.queryByRole("button", { name: /Create task/ })).toBeNull();
+  });
+
+  describe("an item with no suggestion waiting (#6178)", () => {
+    beforeEach(() => {
+      mocks.canManage.current = true;
+    });
+
+    it("makes it a task from the row through the item's own route, the minutes' owner and day picked", async () => {
+      render(
+        <Checklist
+          items={[{ ...item("Call the DJ", "u-sam"), due_date: "2026-12-04" }]}
+        />,
+      );
+      fireEvent.click(
+        within(rowOf("Call the DJ")).getByRole("button", {
+          name: "Create task: Call the DJ",
+        }),
+      );
+      const form = await screen.findByRole("form", {
+        name: "Create task: Call the DJ",
+      });
+      expect(
+        within(form).getByRole("button", { name: /^Assignee for Call the DJ/ })
+          .textContent,
+      ).toContain("Sam Lee");
+      fireEvent.click(
+        within(form).getByRole("button", { name: "Create task" }),
+      );
+
+      await waitFor(() => expect(mocks.make).toHaveBeenCalledTimes(1));
+      expect(mocks.make).toHaveBeenCalledWith({
+        meetingId: "m-1",
+        index: 0,
+        body: {
+          text: "Call the DJ",
+          assignee_ids: ["u-sam"],
+          due_date: "2026-12-04",
+        },
+      });
+      expect(mocks.accept).not.toHaveBeenCalled();
+      expect(mocks.toast).toHaveBeenCalledWith({
+        title: "Task created",
+        description: "Call the DJ",
+      });
+    });
+
+    it("asks who when the minutes named nobody, and makes nothing", async () => {
+      render(<Checklist items={[item("Call the DJ")]} />);
+      fireEvent.click(
+        within(rowOf("Call the DJ")).getByRole("button", {
+          name: "Create task: Call the DJ",
+        }),
+      );
+      const form = await screen.findByRole("form", {
+        name: "Create task: Call the DJ",
+      });
+      fireEvent.click(
+        within(form).getByRole("button", { name: "Create task" }),
+      );
+      expect(await within(form).findByRole("alert")).toBeTruthy();
+      expect(mocks.make).not.toHaveBeenCalled();
+    });
+
+    it("says so when another officer made it a task first", async () => {
+      mocks.make.mockRejectedValue({
+        statusCode: 409,
+        code: "meeting.action_item.already_task",
+      });
+      render(<Checklist items={[item("Call the DJ", "u-sam")]} />);
+      fireEvent.click(
+        within(rowOf("Call the DJ")).getByRole("button", {
+          name: "Create task: Call the DJ",
+        }),
+      );
+      const form = await screen.findByRole("form", {
+        name: "Create task: Call the DJ",
+      });
+      await act(async () => {
+        fireEvent.click(
+          within(form).getByRole("button", { name: "Create task" }),
+        );
+      });
+      await waitFor(() =>
+        expect(mocks.toast).toHaveBeenCalledWith({
+          title: "Couldn't create the task",
+          description: "This action item is already a task.",
+          variant: "destructive",
+        }),
+      );
+    });
+
+    async function openMake(text: string) {
+      fireEvent.click(
+        within(rowOf(text)).getByRole("button", {
+          name: `Create task: ${text}`,
+        }),
+      );
+      return screen.findByRole("form", { name: `Create task: ${text}` });
+    }
+
+    it("says it is already a task, not created, when the route answers with someone else's task", async () => {
+      // Another officer made it Jake's a moment ago; this page hadn't read it.
+      mocks.make.mockResolvedValue(markFor(0, ["u-jake"]));
+      render(<Checklist items={[item("Call the DJ", "u-sam")]} />);
+      const form = await openMake("Call the DJ");
+      fireEvent.click(
+        within(form).getByRole("button", { name: "Create task" }),
+      );
+      await waitFor(() =>
+        expect(mocks.toast).toHaveBeenCalledWith({
+          title: "This action item is already a task.",
+          description: "Call the DJ",
+        }),
+      );
+      expect(mocks.toast).not.toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Task created" }),
+      );
+    });
+
+    it("closes on a refusal, and stops offering an item the server says is a task with nothing to show (#5508)", async () => {
+      mocks.make.mockRejectedValue({
+        statusCode: 409,
+        code: "meeting.action_item.already_task",
+      });
+      render(<Checklist items={[item("Call the DJ", "u-sam")]} />);
+      const form = await openMake("Call the DJ");
+      await act(async () => {
+        fireEvent.click(
+          within(form).getByRole("button", { name: "Create task" }),
+        );
+      });
+      await waitFor(() =>
+        expect(screen.queryByRole("form", { name: /Create task/ })).toBeNull(),
+      );
+      expect(
+        within(rowOf("Call the DJ")).queryByRole("button", {
+          name: /Create task/,
+        }),
+      ).toBeNull();
+    });
+
+    it("keeps the minutes' owner when the people picker closes without Done", async () => {
+      render(<Checklist items={[item("Call the DJ", "u-sam")]} />);
+      const form = await openMake("Call the DJ");
+      const who = within(form).getByRole("button", {
+        name: /^Assignee for Call the DJ/,
+      });
+      fireEvent.click(who);
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: "Escape",
+      });
+      await waitFor(() => expect(who.textContent).toContain("Sam Lee"));
+      fireEvent.click(
+        within(form).getByRole("button", { name: "Create task" }),
+      );
+      await waitFor(() => expect(mocks.make).toHaveBeenCalledTimes(1));
+      expect(mocks.make.mock.calls[0]![0].body.assignee_ids).toEqual(["u-sam"]);
+    });
+
+    it("offers no item its own create until the marks are read, nor a second item that reads the same", () => {
+      const { rerender } = render(
+        <Checklist
+          items={[item("Call the DJ"), item("call the DJ.")]}
+          marksRead={false}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: /Create task/ })).toBeNull();
+      rerender(
+        <Checklist items={[item("Call the DJ"), item("call the DJ.")]} />,
+      );
+      expect(
+        screen.getAllByRole("button", { name: /^Create task: /i }),
+      ).toHaveLength(1);
+    });
+
+    it("offers nothing on an item already a task the reader isn't told about", () => {
+      const tasks: Tasks = new Map([
+        [0, { index: 0, done: false, group: null, task: null }],
+      ]);
+      render(
+        <Checklist
+          items={[item("Order shirts"), item("Call the DJ")]}
+          tasks={tasks}
+        />,
+      );
+      expect(
+        within(rowOf("Order shirts")).queryByRole("button", {
+          name: /Create task/,
+        }),
+      ).toBeNull();
+      expect(
+        within(rowOf("Call the DJ")).getByRole("button", {
+          name: "Create task: Call the DJ",
+        }),
+      ).toBeTruthy();
+    });
   });
 });

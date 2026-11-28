@@ -5,6 +5,7 @@ import type {
   ActivityItemSnooze,
   ActivityLayout,
   ActivityRecapPush,
+  ActivityTaskReads,
   ActivityUnreadStart,
   AiReport,
   AiRun,
@@ -379,6 +380,20 @@ export interface Database {
       };
     };
     Functions: {
+      /**
+       * `20261128043840` (#6061). Every task list Activity draws for one
+       * member, in one round trip; service role only.
+       */
+      activity_task_reads: {
+        Args: {
+          p_chapter_id: string;
+          p_user_id: string;
+          p_can_manage: boolean;
+          p_week_start: string;
+          p_limit: number;
+        };
+        Returns: ActivityTaskReads;
+      };
       /**
        * `20260928170000` (#1302). Atomically appends `p_user_id` to a PRIVATE
        * channel's `member_ids` unless already listed. Empty result set means
