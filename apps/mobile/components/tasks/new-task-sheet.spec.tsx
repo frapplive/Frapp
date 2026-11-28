@@ -986,6 +986,49 @@ describe("Accepting a suggested task through the form (#4313)", () => {
     act(() => tree.unmount());
   });
 
+  it("opens an action item's own form people only, a day only, with its route's refusal words (#6178)", async () => {
+    accept.mockRejectedValue({ code: "meeting.action_item.changed" });
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <NewTaskSheet
+            now={new Date("2026-09-27T12:00:00Z")}
+            offerGroups
+            suggestion={{
+              title: "Book the hall",
+              who: { kind: "person", userId: "user-2" },
+              dueDay: "2026-10-02",
+              dueAt: null,
+              subtasks: [],
+              peopleOnly: true,
+              dayOnly: true,
+              refusalLine: (code) =>
+                code === "meeting.action_item.changed"
+                  ? "These minutes changed."
+                  : null,
+              accept,
+            }}
+          />
+        </FrappThemeProvider>,
+      );
+    });
+    // People only: the picker's Add people shape, no roles or up for grabs.
+    expect(whoPicker(tree).props.add).toBeDefined();
+    // A day only, and no subtasks: the route takes neither.
+    expect(screenText(tree)).not.toContain("Add a time");
+    expect(
+      tree.root.findAll(
+        (node) => node.props.accessibilityLabel === "Add a subtask",
+      ),
+    ).toHaveLength(0);
+
+    await act(async () => acceptButton(tree).props.onPress());
+    expect(screenText(tree)).toContain("These minutes changed.");
+    expect(acceptButton(tree).props.disabled).toBe(true);
+    act(() => tree.unmount());
+  });
+
   it("leaves photos and the proof control off a suggestion's form", () => {
     const tree = renderSuggestion("user-2");
     expect(screenText(tree)).not.toContain("Proof");

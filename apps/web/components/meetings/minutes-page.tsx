@@ -623,6 +623,7 @@ function Minutes({
     items: view.content.action_items,
     meetingStart: meeting.event_start_time,
     enabled: !isDraft && !editing && !posting,
+    marks: actionItemTasksQuery.isSuccess ? actionItemTasks : undefined,
   });
   const showsAttendance =
     !editing &&
